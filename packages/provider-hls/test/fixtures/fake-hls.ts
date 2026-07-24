@@ -1,4 +1,10 @@
-import type { HlsInstanceLike, HlsLevelLike } from '../../src/index';
+import type {
+  HlsConfigLike,
+  HlsInstanceLike,
+  HlsLevelLike,
+  HlsParsedCueLike,
+  HlsSubtitleTrackLike
+} from '../../src/index';
 
 type FakeHlsListener = (event: string, data: unknown) => void;
 
@@ -9,7 +15,10 @@ export class FakeHls implements HlsInstanceLike {
     ERROR: 'hlsError',
     LEVEL_SWITCHED: 'hlsLevelSwitched',
     LEVEL_UPDATED: 'hlsLevelUpdated',
-    MANIFEST_PARSED: 'hlsManifestParsed'
+    MANIFEST_PARSED: 'hlsManifestParsed',
+    SUBTITLE_TRACKS_UPDATED: 'hlsSubtitleTracksUpdated',
+    SUBTITLE_TRACK_SWITCH: 'hlsSubtitleTrackSwitch',
+    CUES_PARSED: 'hlsCuesParsed'
   };
   static readonly ErrorTypes = {
     NETWORK_ERROR: 'networkError',
@@ -30,11 +39,44 @@ export class FakeHls implements HlsInstanceLike {
   startLoadCalls = 0;
   recoverMediaErrorCalls = 0;
   swapAudioCodecCalls = 0;
+  subtitleTracks: HlsSubtitleTrackLike[] = [];
+  config: HlsConfigLike | undefined;
   readonly #listeners = new Map<string, Set<FakeHlsListener>>();
 
-  constructor() {
+  constructor(config?: HlsConfigLike) {
+    this.config = config;
     FakeHls.instances.push(this);
   }
+
+  // Mirrors the real hls.js `subtitleTrack` getter/setter: switching tracks
+  // fires `SUBTITLE_TRACK_SWITCH`. With `renderTextTracksNatively: false`
+  // (what the provider constructs this with, see index.ts's `startHlsJs`),
+  // real hls.js does not touch `media.textTracks` for this at all — it only
+  // starts loading/parsing the newly selected subtitle's fragments, whose
+  // cues later arrive via `CUES_PARSED` (drive that with `emitCuesParsed`).
+  #subtitleTrack = -1;
+
+  get subtitleTrack(): number {
+    return this.#subtitleTrack;
+  }
+
+  set subtitleTrack(value: number) {
+    this.#subtitleTrack = value;
+    this.emit(FakeHls.Events.SUBTITLE_TRACK_SWITCH, { id: value });
+  }
+
+  emitSubtitleTracksUpdated = (): void => {
+    this.emit(FakeHls.Events.SUBTITLE_TRACKS_UPDATED, {
+      subtitleTracks: this.subtitleTracks
+    });
+  };
+
+  emitCuesParsed = (
+    cues: readonly HlsParsedCueLike[],
+    type: 'captions' | 'subtitles' = 'subtitles'
+  ): void => {
+    this.emit(FakeHls.Events.CUES_PARSED, { type, cues, track: 'default' });
+  };
 
   on = (event: string, listener: FakeHlsListener): void => {
     const listeners = this.#listeners.get(event) ?? new Set();

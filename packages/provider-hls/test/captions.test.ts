@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { afterEach, expect, test, vi } from 'vitest';
-import { createHlsProvider } from '../src/index';
-import { fakeHlsLoader } from './fixtures/fake-hls';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { createHlsProvider, type HlsSubtitleTrackLike } from '../src/index';
+import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 import {
   createFakeTrack,
   createFakeTrackList,
@@ -10,6 +10,10 @@ import {
 } from './fixtures/fake-text-tracks';
 
 const source = { type: 'hls', src: '/hls/master.m3u8' } as const;
+
+beforeEach(() => {
+  FakeHls.reset();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -23,6 +27,46 @@ const stubNativeHlsSupport = (media: HTMLVideoElement): void => {
     type === 'application/vnd.apple.mpegurl' ? 'maybe' : ''
   );
   vi.stubGlobal('MediaSource', undefined);
+};
+
+// Forces `selectHlsEngine` onto the hls.js engine, the same way
+// packages/provider-hls/test/index.test.ts's `stubMseOnlySupport` does.
+const stubMseOnlySupport = (media: HTMLVideoElement): void => {
+  vi.spyOn(media, 'canPlayType').mockReturnValue('');
+  vi.stubGlobal('MediaSource', { isTypeSupported: () => true });
+};
+
+const currentFakeHls = (): FakeHls => {
+  const instance = FakeHls.instances.at(-1);
+  if (!instance) throw new Error('No fake hls.js instance was created.');
+  return instance;
+};
+
+// Mounts the hls.js engine. Unlike the native engine above, this never
+// touches `media.textTracks` — see index.ts's `startHlsJs` for why the
+// hls.js engine constructs its `Hls` instance with
+// `renderTextTracksNatively: false` and drives captions purely off
+// `SUBTITLE_TRACKS_UPDATED`/`CUES_PARSED`.
+const mountHlsEngineHls = async () => {
+  const media = document.createElement('video');
+  stubMseOnlySupport(media);
+  const loader = fakeHlsLoader();
+  const provider = createHlsProvider(media, source, {
+    loadHls: loader.loadHls
+  });
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch as Record<string, unknown>));
+  await provider.attach();
+  await provider.load();
+  return { media, provider, patches, hls: currentFakeHls() };
+};
+
+const discoverHlsSubtitles = (
+  hls: FakeHls,
+  subtitleTracks: readonly HlsSubtitleTrackLike[]
+): void => {
+  hls.subtitleTracks = [...subtitleTracks];
+  hls.emitSubtitleTracksUpdated();
 };
 
 const mountNativeEngineHls = (trackInits: readonly FakeTrackInit[]) => {
@@ -125,10 +169,10 @@ test('subscribeCues receives a normalized TextCue when the selected track fires 
   expect(cueFrames[0]?.[0]).not.toBe(fakeCue);
 });
 
-test('does not expose caption commands on the hls.js engine path', async () => {
+test('does not expose caption commands on an unresolved HLS engine', async () => {
   const media = document.createElement('video');
   vi.spyOn(media, 'canPlayType').mockReturnValue('');
-  vi.stubGlobal('MediaSource', { isTypeSupported: () => true });
+  vi.stubGlobal('MediaSource', undefined);
   const loader = fakeHlsLoader();
   const provider = createHlsProvider(media, source, {
     loadHls: loader.loadHls
@@ -139,4 +183,196 @@ test('does not expose caption commands on the hls.js engine path', async () => {
   expect(provider.selectTextTrack).toBeUndefined();
   expect(provider.subscribeCues).toBeUndefined();
   expect(provider.setCaptionRenderer).toBeUndefined();
+});
+
+// --- hls.js engine ---------------------------------------------------------
+
+test('constructs hls.js with renderTextTracksNatively off to avoid colliding with the native caption subsystem', async () => {
+  const { hls } = await mountHlsEngineHls();
+
+  expect(hls.config).toEqual({ renderTextTracksNatively: false });
+});
+
+test('discovers hls.js subtitle tracks and honors the default selection', async () => {
+  const { provider, patches, hls } = await mountHlsEngineHls();
+
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: false, type: 'SUBTITLES' },
+    { id: 1, name: 'Spanish', lang: 'es', default: true, type: 'SUBTITLES' }
+  ]);
+
+  const last = latest(patches);
+  expect(last.textTracks).toEqual([
+    {
+      id: 'hls:0',
+      label: 'English',
+      language: 'en',
+      kind: 'subtitles',
+      readiness: 'loaded'
+    },
+    {
+      id: 'hls:1',
+      label: 'Spanish',
+      language: 'es',
+      kind: 'subtitles',
+      readiness: 'loaded'
+    }
+  ]);
+  expect(last.selectedTextTrackId).toBe('hls:1');
+  expect(last.captionRendering).toBe('custom');
+  expect(hls.subtitleTrack).toBe(1);
+  expect(last.capabilities).toMatchObject({
+    selectTextTrack: { status: 'available' }
+  });
+  expect(provider.selectTextTrack).toBeInstanceOf(Function);
+  expect(provider.subscribeCues).toBeInstanceOf(Function);
+  expect(provider.setCaptionRenderer).toBeInstanceOf(Function);
+});
+
+test('falls back to a CLOSED-CAPTIONS kind and an index-based id when hls.js omits one', async () => {
+  const { patches, hls } = await mountHlsEngineHls();
+
+  discoverHlsSubtitles(hls, [
+    { name: 'CC1', default: false, type: 'CLOSED-CAPTIONS' }
+  ]);
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 'hls:0',
+      label: 'CC1',
+      language: null,
+      kind: 'captions',
+      readiness: 'loaded'
+    }
+  ]);
+});
+
+test('reports captionRendering as unavailable when hls.js has no subtitle tracks', async () => {
+  const { patches, hls } = await mountHlsEngineHls();
+
+  discoverHlsSubtitles(hls, []);
+
+  expect(latest(patches).captionRendering).toBe('unavailable');
+  expect(latest(patches).selectedTextTrackId).toBeNull();
+});
+
+test('selectTextTrack sets hls.js subtitleTrack, and null turns captions off with no cues', async () => {
+  const { provider, patches, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: false, type: 'SUBTITLES' },
+    { id: 1, name: 'Spanish', lang: 'es', default: false, type: 'SUBTITLES' }
+  ]);
+  patches.length = 0;
+
+  const result = await provider.selectTextTrack?.('hls:1');
+
+  expect(result).toEqual({ ok: true });
+  expect(hls.subtitleTrack).toBe(1);
+  expect(latest(patches).selectedTextTrackId).toBe('hls:1');
+  expect(latest(patches).captionRendering).toBe('custom');
+
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+
+  const nullResult = await provider.selectTextTrack?.(null);
+
+  expect(nullResult).toEqual({ ok: true });
+  expect(hls.subtitleTrack).toBe(-1);
+  expect(cueFrames).toEqual([[]]);
+});
+
+test('selectTextTrack rejects an id hls.js does not know about', async () => {
+  const { provider, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: false, type: 'SUBTITLES' }
+  ]);
+
+  await expect(provider.selectTextTrack?.('hls:99')).resolves.toEqual({
+    ok: false,
+    reason: 'unsupported'
+  });
+});
+
+test('subscribeCues normalizes CUES_PARSED cues windowed to the current time, and leaks no hls.js cue reference', async () => {
+  const { provider, media, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: true, type: 'SUBTITLES' }
+  ]);
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  const rawCue = {
+    id: 'cue-1',
+    startTime: 1,
+    endTime: 2,
+    text: 'Hello',
+    extra: 'leak-check'
+  };
+
+  media.currentTime = 1.5;
+  hls.emitCuesParsed([rawCue]);
+
+  expect(cueFrames.at(-1)).toEqual([
+    { id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }
+  ]);
+  expect(cueFrames.at(-1)?.[0]).not.toBe(rawCue);
+
+  media.currentTime = 5;
+  media.dispatchEvent(new Event('timeupdate'));
+
+  expect(cueFrames.at(-1)).toEqual([]);
+});
+
+test('ignores CUES_PARSED cues once no text track is selected', async () => {
+  const { provider, media, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: false, type: 'SUBTITLES' }
+  ]);
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+
+  media.currentTime = 1.5;
+  hls.emitCuesParsed([
+    { id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }
+  ]);
+
+  expect(cueFrames).toEqual([]);
+});
+
+test('selection persists across a later SUBTITLE_TRACKS_UPDATED and resets once the track disappears', async () => {
+  const { provider, patches, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: false, type: 'SUBTITLES' },
+    { id: 1, name: 'Spanish', lang: 'es', default: false, type: 'SUBTITLES' }
+  ]);
+  await provider.selectTextTrack?.('hls:1');
+  patches.length = 0;
+
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: false, type: 'SUBTITLES' },
+    { id: 1, name: 'Spanish', lang: 'es', default: false, type: 'SUBTITLES' }
+  ]);
+  expect(latest(patches).selectedTextTrackId).toBe('hls:1');
+  expect(hls.subtitleTrack).toBe(1);
+
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: false, type: 'SUBTITLES' }
+  ]);
+  expect(latest(patches).selectedTextTrackId).toBeNull();
+  expect(hls.subtitleTrack).toBe(-1);
+});
+
+test('setCaptionRenderer accepts native but honestly keeps reporting custom rendering', async () => {
+  const { provider, patches, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: true, type: 'SUBTITLES' }
+  ]);
+  patches.length = 0;
+
+  provider.setCaptionRenderer?.('native');
+
+  expect(latest(patches).captionRendering).toBe('custom');
+
+  provider.setCaptionRenderer?.('custom');
+
+  expect(latest(patches).captionRendering).toBe('custom');
 });
