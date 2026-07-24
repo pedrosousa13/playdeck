@@ -61,6 +61,34 @@ const mountHlsEngineHls = async () => {
   return { media, provider, patches, hls: currentFakeHls() };
 };
 
+// Same as `mountHlsEngineHls`, but with a sidecar `<track>` present on the
+// media element: `Player.Media` renders `<track>` children for both `video`
+// and `hls` sources, and provider-native stays attached on the hls.js path.
+const mountHlsEngineHlsWithSidecarTracks = async (
+  trackInits: readonly FakeTrackInit[]
+) => {
+  const media = document.createElement('video');
+  stubMseOnlySupport(media);
+  const trackList = createFakeTrackList([]);
+  const tracks = trackInits.map((init) =>
+    createFakeTrack(init, () => trackList.dispatch('change'))
+  );
+  trackList.push(...tracks);
+  Object.defineProperty(media, 'textTracks', {
+    configurable: true,
+    value: trackList
+  });
+  const loader = fakeHlsLoader();
+  const provider = createHlsProvider(media, source, {
+    loadHls: loader.loadHls
+  });
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch as Record<string, unknown>));
+  await provider.attach();
+  await provider.load();
+  return { media, provider, patches, hls: currentFakeHls() };
+};
+
 const discoverHlsSubtitles = (
   hls: FakeHls,
   subtitleTracks: readonly HlsSubtitleTrackLike[]
@@ -227,6 +255,49 @@ test('discovers hls.js subtitle tracks and honors the default selection', async 
   expect(provider.selectTextTrack).toBeInstanceOf(Function);
   expect(provider.subscribeCues).toBeInstanceOf(Function);
   expect(provider.setCaptionRenderer).toBeInstanceOf(Function);
+});
+
+test('keeps native caption state out of the hls.js engine path so hls.js is the only caption owner', async () => {
+  const { patches, hls } = await mountHlsEngineHlsWithSidecarTracks([
+    {
+      kind: 'captions',
+      label: 'Sidecar English',
+      language: 'en',
+      id: 'sidecar',
+      default: true,
+      hasCues: true
+    }
+  ]);
+
+  // provider-native discovered the sidecar `<track>` and emitted it, but on
+  // the hls.js engine hls.js owns captions: nothing native says about them
+  // may reach the state.
+  const beforeHls = latest(patches);
+  expect(beforeHls.textTracks).toBeUndefined();
+  expect(beforeHls.selectedTextTrackId).toBeUndefined();
+  expect(beforeHls.captionRendering).toBeUndefined();
+  expect(beforeHls.capabilities).toMatchObject({
+    selectTextTrack: { status: 'unknown', reason: 'provider-check' }
+  });
+  // Non-caption native state still comes through unchanged.
+  expect(beforeHls.muted).toBe(false);
+
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: true, type: 'SUBTITLES' }
+  ]);
+
+  const afterHls = latest(patches);
+  expect(afterHls.textTracks).toEqual([
+    {
+      id: 'hls:0',
+      label: 'English',
+      language: 'en',
+      kind: 'subtitles',
+      readiness: 'loaded'
+    }
+  ]);
+  expect(afterHls.selectedTextTrackId).toBe('hls:0');
+  expect(afterHls.captionRendering).toBe('custom');
 });
 
 test('falls back to a CLOSED-CAPTIONS kind and an index-based id when hls.js omits one', async () => {

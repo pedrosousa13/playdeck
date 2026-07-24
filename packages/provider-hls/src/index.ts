@@ -246,6 +246,21 @@ const defaultLoadHls: HlsModuleLoader = () =>
     readonly default: HlsConstructorLike;
   }>;
 
+// On the hls.js engine the native adapter stays attached for media-element
+// state, but hls.js is the sole caption owner: `Player.Media` cannot know the
+// engine at render time, so it renders sidecar `<track>` children for `hls`
+// sources too and the native caption subsystem discovers them. Forwarding
+// those discoveries would give the state two competing owners, so they are
+// dropped here. (`selectTextTrack` needs no stripping — `decorateCapabilities`
+// already replaces it with the hls.js availability on this engine.)
+const withoutCaptionState = (patch: ProviderStatePatch): ProviderStatePatch => {
+  const rest = { ...patch };
+  delete rest.textTracks;
+  delete rest.selectedTextTrackId;
+  delete rest.captionRendering;
+  return rest;
+};
+
 export const createHlsProvider = (
   media: HTMLVideoElement,
   source: HlsSource,
@@ -390,7 +405,10 @@ export const createHlsProvider = (
       return;
     }
     if (patch.capabilities) lastCapabilities = patch.capabilities;
-    emit(syncLive(patch), event);
+    emit(
+      syncLive(engine === 'hls.js' ? withoutCaptionState(patch) : patch),
+      event
+    );
   });
 
   const teardownHls = (): void => {
