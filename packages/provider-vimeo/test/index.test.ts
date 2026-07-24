@@ -275,9 +275,13 @@ test('emits confirmed ready state from the embedded player', async () => {
 
 test('reports text-track selection unavailable when the video has no tracks', async () => {
   const { patches } = await setup({ fake: { textTracks: [] } });
-  expect(readyPatch(patches).capabilities).toMatchObject({
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
     selectTextTrack: { status: 'unavailable', reason: 'source' }
   });
+  expect(ready.textTracks).toEqual([]);
+  expect(ready.selectedTextTrackId).toBeNull();
+  expect(ready.captionRendering).toBe('unavailable');
 });
 
 // --- plan-gated chromeless controls ---
@@ -429,9 +433,57 @@ test('clamps seekTo to the confirmed timeline', async () => {
 });
 
 // --- captions ---
+// Vimeo renders captions inside its own iframe, so this provider only wires
+// track discovery and language selection (captionRendering: 'provider') --
+// no cue overlay, no subscribeCues. Track ids are normalized to
+// `vimeo:<language>`, disambiguated with the array index only when two
+// tracks share a language.
 
-test('selects a discovered caption track by language', async () => {
-  const { provider, sdk } = await setup({
+test('discovers caption tracks and normalizes them to the core text-track contract', async () => {
+  const { patches } = await setup({
+    fake: {
+      textTracks: [
+        {
+          language: 'en',
+          kind: 'subtitles',
+          label: 'English',
+          mode: 'disabled' as const
+        },
+        {
+          language: 'fr',
+          kind: 'captions',
+          label: 'Français',
+          mode: 'showing' as const
+        }
+      ]
+    }
+  });
+  const ready = readyPatch(patches);
+  expect(ready.textTracks).toEqual([
+    {
+      id: 'vimeo:en',
+      label: 'English',
+      language: 'en',
+      kind: 'subtitles',
+      readiness: 'loaded'
+    },
+    {
+      id: 'vimeo:fr',
+      label: 'Français',
+      language: 'fr',
+      kind: 'captions',
+      readiness: 'loaded'
+    }
+  ]);
+  expect(ready.selectedTextTrackId).toBe('vimeo:fr');
+  expect(ready.captionRendering).toBe('provider');
+  expect(ready.capabilities).toMatchObject({
+    selectTextTrack: { status: 'available' }
+  });
+});
+
+test('selects a discovered caption track by its normalized id', async () => {
+  const { patches, provider, sdk } = await setup({
     fake: {
       textTracks: [
         {
@@ -450,19 +502,111 @@ test('selects a discovered caption track by language', async () => {
     }
   });
   const player = sdk.instances[0]!;
-  await expect(provider.selectTextTrack('fr')).resolves.toEqual({ ok: true });
+  await expect(provider.selectTextTrack('vimeo:fr')).resolves.toEqual({
+    ok: true
+  });
   expect(player.enableTextTrack).toHaveBeenCalledWith('fr', 'captions');
+  expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: 'vimeo:fr' });
+
   await expect(provider.selectTextTrack(null)).resolves.toEqual({ ok: true });
   expect(player.disableTextTrack).toHaveBeenCalled();
+  expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: null });
 });
 
 test('rejects selecting a caption track the video does not have', async () => {
   const { provider, sdk } = await setup({ fake: { textTracks: [] } });
-  await expect(provider.selectTextTrack('en')).resolves.toMatchObject({
+  await expect(provider.selectTextTrack('vimeo:en')).resolves.toMatchObject({
     ok: false,
     reason: 'unsupported'
   });
   expect(sdk.instances[0]!.enableTextTrack).not.toHaveBeenCalled();
+});
+
+test('re-resolves the active track when Vimeo reports a texttrackchange', async () => {
+  const { patches, sdk } = await setup({
+    fake: {
+      textTracks: [
+        {
+          language: 'en',
+          kind: 'subtitles',
+          label: 'English',
+          mode: 'showing' as const
+        },
+        {
+          language: 'fr',
+          kind: 'captions',
+          label: 'Français',
+          mode: 'disabled' as const
+        }
+      ]
+    }
+  });
+  expect(readyPatch(patches).selectedTextTrackId).toBe('vimeo:en');
+  const player = sdk.instances[0]!;
+  player.emit('texttrackchange', {
+    kind: 'captions',
+    label: 'Français',
+    language: 'fr'
+  });
+  expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: 'vimeo:fr' });
+  player.emit('texttrackchange', { kind: '', label: '', language: '' });
+  expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: null });
+});
+
+test('refreshes the discovered tracks when texttrackchange reports an unknown track', async () => {
+  const { patches, sdk } = await setup({
+    fake: {
+      textTracks: [
+        {
+          language: 'en',
+          kind: 'subtitles',
+          label: 'English',
+          mode: 'disabled' as const
+        }
+      ]
+    }
+  });
+  const player = sdk.instances[0]!;
+  player.setTextTracks([
+    {
+      language: 'en',
+      kind: 'subtitles',
+      label: 'English',
+      mode: 'disabled' as const
+    },
+    {
+      language: 'es',
+      kind: 'captions',
+      label: 'Español',
+      mode: 'showing' as const
+    }
+  ]);
+  player.emit('texttrackchange', {
+    kind: 'captions',
+    label: 'Español',
+    language: 'es'
+  });
+  await flushMicrotasks();
+  expect(patches.at(-1)).toMatchObject({
+    selectedTextTrackId: 'vimeo:es',
+    captionRendering: 'provider',
+    textTracks: [
+      {
+        id: 'vimeo:en',
+        label: 'English',
+        language: 'en',
+        kind: 'subtitles',
+        readiness: 'loaded'
+      },
+      {
+        id: 'vimeo:es',
+        label: 'Español',
+        language: 'es',
+        kind: 'captions',
+        readiness: 'loaded'
+      }
+    ]
+  });
 });
 
 // --- fullscreen and picture-in-picture quirks ---

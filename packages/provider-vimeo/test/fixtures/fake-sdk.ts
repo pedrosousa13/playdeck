@@ -28,6 +28,7 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
   playbackRate: number;
   readonly #options: FakePlayerOptions;
   readonly #listeners = new Map<string, Set<VimeoSdkEventListener>>();
+  #textTracks: ReadonlyArray<VimeoSdkTextTrack>;
 
   constructor(element: HTMLIFrameElement, options: FakePlayerOptions) {
     this.element = element;
@@ -35,6 +36,13 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
     this.muted = options.muted ?? false;
     this.volume = options.volume ?? 1;
     this.playbackRate = options.playbackRate ?? 1;
+    this.#textTracks = options.textTracks ?? [];
+  }
+
+  // Lets tests simulate Vimeo's track list changing after ready (e.g. a
+  // texttrackchange for a track that wasn't part of the initial discovery).
+  setTextTracks(tracks: ReadonlyArray<VimeoSdkTextTrack>): void {
+    this.#textTracks = tracks;
   }
 
   emit(event: string, data?: unknown): void {
@@ -112,7 +120,7 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
   });
 
   getTextTracks: Mock<() => Promise<ReadonlyArray<VimeoSdkTextTrack>>> = vi.fn(
-    () => Promise.resolve(this.#options.textTracks ?? [])
+    () => Promise.resolve(this.#textTracks)
   );
 
   enableTextTrack: Mock<(language: string, kind?: string) => Promise<unknown>> =
