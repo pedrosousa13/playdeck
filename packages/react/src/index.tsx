@@ -1139,6 +1139,89 @@ export const ErrorDisplay = ({
   );
 };
 
+export type CaptionsProps = Omit<ComponentPropsWithRef<'div'>, 'children'> & {
+  readonly renderCue?: (cue: TextCue) => ReactNode;
+};
+
+// User-themeable CSS custom properties consumed by the default cue text box
+// below. Set these on `Player.Captions` (or an ancestor) to theme the
+// overlay without overriding its structure:
+//   --reely-caption-font-size  - cue text font size (default: 1.05rem)
+//   --reely-caption-color      - cue text color (default: #fff)
+//   --reely-caption-background - cue text box background (default: rgba(0, 0, 0, 0.75))
+//   --reely-caption-edge       - cue text edge, a text-shadow value (default: none)
+const captionsOverlayStyle: CSSProperties = {
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 20,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '0.3em',
+  paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.2em)',
+  paddingLeft: 'env(safe-area-inset-left, 0px)',
+  paddingRight: 'env(safe-area-inset-right, 0px)',
+  pointerEvents: 'none'
+};
+
+const captionCueBoxStyle: CSSProperties = {
+  fontSize: 'var(--reely-caption-font-size, 1.05rem)',
+  color: 'var(--reely-caption-color, #fff)',
+  backgroundColor: 'var(--reely-caption-background, rgba(0, 0, 0, 0.75))',
+  textShadow: 'var(--reely-caption-edge, none)',
+  padding: '0.15em 0.4em',
+  borderRadius: '0.2em'
+};
+
+// Strips a cue down to its public shape before handing it to consumer code
+// (renderCue), so engine-only fields on a provider's cue objects never leak.
+const normalizeCue = (cue: TextCue): TextCue => ({
+  id: cue.id,
+  startTime: cue.startTime,
+  endTime: cue.endTime,
+  text: cue.text
+});
+
+const isRenderableCue = (cue: TextCue): boolean =>
+  typeof cue?.text === 'string' && cue.text.trim().length > 0;
+
+const defaultCueRenderer = (cue: TextCue): ReactNode =>
+  cue.text.split('\n').map((line, index) => (
+    <div data-reely-part="caption-line" key={index}>
+      {line}
+    </div>
+  ));
+
+export const Captions = ({ renderCue, style, ...props }: CaptionsProps) => {
+  const captionRendering = usePlayerState((state) => state.captionRendering);
+  const cues = useActiveCues();
+  if (captionRendering !== 'custom') return null;
+
+  return (
+    <div
+      {...props}
+      data-reely-part="captions"
+      data-state="custom"
+      style={{ ...captionsOverlayStyle, ...style }}
+    >
+      {cues.filter(isRenderableCue).map((cue, index) => {
+        const normalized = normalizeCue(cue);
+        return (
+          <div
+            data-reely-part="caption-cue"
+            key={`${normalized.id ?? ''}:${normalized.startTime}:${normalized.endTime}:${index}`}
+            style={renderCue ? undefined : captionCueBoxStyle}
+          >
+            {renderCue ? renderCue(normalized) : defaultCueRenderer(normalized)}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 type PosterImageState = 'idle' | 'loading' | 'loaded' | 'error';
 
 const posterRequestKey = ({ src, srcSet, sizes }: PosterImageProps): string =>
