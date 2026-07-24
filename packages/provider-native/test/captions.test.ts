@@ -41,15 +41,30 @@ type FakeTrackList = FakeTrack[] & {
 // `default` is only set when the init explicitly provides it, so tests can
 // produce a fake track that omits the property entirely (as real `TextTrack`
 // objects do) rather than defaulting it to `false`.
-const createFakeTrack = (init: FakeTrackInit): FakeTrack => {
+//
+// `mode` is a real accessor (not a plain field) that calls `onModeChange`
+// when assigned — mirroring the DOM spec, where assigning `TextTrack.mode`
+// queues a `change` event on the owning `TextTrackList`. Tests that don't
+// care about that cascade can ignore the callback entirely.
+const createFakeTrack = (
+  init: FakeTrackInit,
+  onModeChange?: () => void
+): FakeTrack => {
   const listeners = new Map<string, Set<() => void>>();
+  let mode = 'disabled';
   return {
     kind: init.kind,
     label: init.label,
     language: init.language,
     id: init.id ?? '',
     ...(init.default !== undefined ? { default: init.default } : {}),
-    mode: 'disabled',
+    get mode() {
+      return mode;
+    },
+    set mode(value: string) {
+      mode = value;
+      onModeChange?.();
+    },
     cues: init.hasCues ? { length: 1 } : null,
     activeCues: null,
     addEventListener: (type, listener) => {
@@ -85,8 +100,11 @@ const createFakeTrackList = (tracks: readonly FakeTrack[]): FakeTrackList => {
 
 const mountNative = (trackInits: readonly FakeTrackInit[]) => {
   const media = document.createElement('video');
-  const tracks = trackInits.map(createFakeTrack);
-  const trackList = createFakeTrackList(tracks);
+  const trackList = createFakeTrackList([]);
+  const tracks = trackInits.map((init) =>
+    createFakeTrack(init, () => trackList.dispatch('change'))
+  );
+  trackList.push(...tracks);
   Object.defineProperty(media, 'textTracks', {
     configurable: true,
     value: trackList
@@ -157,7 +175,11 @@ test('excludes non-caption kinds and leaves their mode untouched', async () => {
       readiness: 'loading'
     }
   ]);
-  expect(tracks[0]?.mode).toBe('hidden');
+  // s1 has no `default` flag and nothing has been explicitly selected, so it
+  // is not the held selection — mode now reflects actual selection state
+  // (`disabled`) rather than the old blanket `hidden` applied to every
+  // caption/subtitle entry regardless of selection.
+  expect(tracks[0]?.mode).toBe('disabled');
   expect(tracks[1]?.mode).toBe('disabled');
   expect(tracks[2]?.mode).toBe('disabled');
 });
@@ -372,5 +394,55 @@ test('cuechange clearing active cues emits an empty array', async () => {
   if (track) track.activeCues = [];
   track?.dispatch('cuechange');
 
+  expect(cueFrames).toEqual([[]]);
+});
+
+test('keeps an explicit selection across a re-discovery triggered by a change event', async () => {
+  const { provider, patches, trackList } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' },
+    { kind: 'subtitles', label: 'Spanish', language: 'es', id: 't2' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t2');
+  patches.length = 0;
+
+  // Simulates an unrelated `change` event on the TextTrackList (e.g. one
+  // queued by the engine itself) rather than one caused by our own writes.
+  trackList.dispatch('change');
+
+  expect(latest(patches).selectedTextTrackId).toBe('t2');
+});
+
+test('selectTextTrack settles on the chosen id even when assigning mode self-triggers a change cascade', async () => {
+  const { provider, patches, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' },
+    { kind: 'subtitles', label: 'Spanish', language: 'es', id: 't2' }
+  ]);
+  await provider.attach();
+  patches.length = 0;
+
+  const result = await provider.selectTextTrack?.('t2');
+
+  expect(result).toEqual({ ok: true });
+  expect(tracks[0]?.mode).toBe('disabled');
+  expect(tracks[1]?.mode).toBe('hidden');
+  expect(latest(patches).selectedTextTrackId).toBe('t2');
+});
+
+test('removing the currently-selected track clears the selection and the cue channel', async () => {
+  const { provider, patches, trackList } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' },
+    { kind: 'subtitles', label: 'Spanish', language: 'es', id: 't2' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t2');
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  patches.length = 0;
+
+  trackList.pop();
+  trackList.dispatch('removetrack');
+
+  expect(latest(patches).selectedTextTrackId).toBeNull();
   expect(cueFrames).toEqual([[]]);
 });

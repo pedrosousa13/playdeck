@@ -245,6 +245,19 @@ export const createNativeProvider = (
   let hasSelectableTextTracks = false;
   let textTrackList: globalThis.TextTrackList | undefined;
   let cueChangeTrack: NativeTextTrack | undefined;
+  // Holds the current caption selection — the single source of truth for
+  // `selectedTextTrackId`. `hasExplicitSelection` distinguishes "never
+  // selected yet" (discovery may still apply the `<track default>` rule)
+  // from "explicitly selected `null`" (user turned captions off; discovery
+  // must not resurrect the default). Per spec, user selection always
+  // overrides and persists until source switch.
+  let selectedTextTrackId: string | null = null;
+  let hasExplicitSelection = false;
+  // Suppresses re-entrant discovery while we assign `track.mode` ourselves.
+  // Per spec, assigning `TextTrack.mode` queues a `change` event on the
+  // TextTrackList, so our own mode writes would otherwise self-trigger
+  // `discoverTextTracks` and reset selection state mid-write.
+  let suppressDiscovery = false;
   const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
 
   const emit = (
@@ -356,18 +369,65 @@ export const createNativeProvider = (
     return undefined;
   };
 
-  // Sets discovered caption/subtitle tracks to `hidden` so native cue
-  // rendering never fires — cues are surfaced through the custom pipeline
-  // that later tasks add (subscribeCues/setCaptionRenderer).
-  const discoverTextTracks = (): void => {
-    const entries = captionTrackEntries();
-    hasSelectableTextTracks = entries.length > 0;
-    entries.forEach(({ track }) => {
-      track.mode = 'hidden';
-    });
+  // Reapplies every caption/subtitle track's mode from the given selection
+  // (the selected track is `hidden` so cues are processed without native
+  // rendering — that pipeline is custom, via subscribeCues; everything else
+  // is `disabled`) and refreshes the cuechange listener to match. Mode
+  // writes are wrapped so a self-triggered `change` event (assigning
+  // `.mode` queues one per spec) cannot re-enter discovery mid-write.
+  const applySelection = (
+    entries: Array<{ track: NativeTextTrack; index: number }>,
+    selected: string | null
+  ): void => {
+    suppressDiscovery = true;
+    try {
+      entries.forEach(({ track, index }) => {
+        track.mode =
+          nativeTextTrackId(track, index) === selected ? 'hidden' : 'disabled';
+      });
+    } finally {
+      suppressDiscovery = false;
+    }
+    const matchEntry =
+      selected === null
+        ? undefined
+        : entries.find(
+            ({ track, index }) => nativeTextTrackId(track, index) === selected
+          );
+    if (matchEntry) {
+      attachCueChangeTrack(matchEntry.track);
+    } else if (cueChangeTrack) {
+      detachCueChangeTrack();
+      emitCues([]);
+    }
+  };
+
+  // Selection precedence on (re-)discovery: keep the held selection if it
+  // still names an existing caption/subtitle track — user selection always
+  // overrides and persists; otherwise, if nothing has been explicitly
+  // selected yet, fall back to the `<track default>` rule; otherwise (the
+  // selected track was removed) selection resets to null.
+  const resolveSelection = (
+    entries: Array<{ track: NativeTextTrack; index: number }>
+  ): string | null => {
+    if (hasExplicitSelection) {
+      const stillExists = entries.some(
+        ({ track, index }) =>
+          nativeTextTrackId(track, index) === selectedTextTrackId
+      );
+      return stillExists ? selectedTextTrackId : null;
+    }
     const defaultEntry =
       defaultCaptionTrackEntry(entries) ??
       entries.find(({ track }) => track.default === true);
+    return defaultEntry
+      ? nativeTextTrackId(defaultEntry.track, defaultEntry.index)
+      : null;
+  };
+
+  const discoverTextTracks = (): void => {
+    const entries = captionTrackEntries();
+    hasSelectableTextTracks = entries.length > 0;
     const textTracks: TextTrack[] = entries.map(({ track, index }) => ({
       id: nativeTextTrackId(track, index),
       label: track.label,
@@ -375,17 +435,20 @@ export const createNativeProvider = (
       kind: track.kind as TextTrackKind,
       readiness: nativeTextTrackReadiness(track)
     }));
+    selectedTextTrackId = resolveSelection(entries);
+    applySelection(entries, selectedTextTrackId);
     emit({
       textTracks,
-      selectedTextTrackId: defaultEntry
-        ? nativeTextTrackId(defaultEntry.track, defaultEntry.index)
-        : null,
+      selectedTextTrackId,
       captionRendering: 'custom',
       capabilities: mediaCapabilities()
     });
   };
 
-  const onTextTracksChange = (): void => discoverTextTracks();
+  const onTextTracksChange = (): void => {
+    if (suppressDiscovery) return;
+    discoverTextTracks();
+  };
 
   const emitCues = (cues: readonly TextCue[]): void =>
     cueListeners.forEach((listener) => listener(cues));
@@ -909,24 +972,18 @@ export const createNativeProvider = (
     },
     selectTextTrack: async (id) => {
       const entries = captionTrackEntries();
-      if (id === null) {
-        entries.forEach(({ track }) => {
-          track.mode = 'disabled';
-        });
-        detachCueChangeTrack();
-        emit({ selectedTextTrackId: null });
-        emitCues([]);
-        return { ok: true };
+      if (
+        id !== null &&
+        !entries.some(
+          ({ track, index }) => nativeTextTrackId(track, index) === id
+        )
+      ) {
+        return { ok: false, reason: 'unsupported' };
       }
-      const match = entries.find(
-        ({ track, index }) => nativeTextTrackId(track, index) === id
-      );
-      if (!match) return { ok: false, reason: 'unsupported' };
-      entries.forEach(({ track }) => {
-        track.mode = track === match.track ? 'hidden' : 'disabled';
-      });
-      attachCueChangeTrack(match.track);
-      emit({ selectedTextTrackId: id });
+      hasExplicitSelection = true;
+      selectedTextTrackId = id;
+      applySelection(entries, selectedTextTrackId);
+      emit({ selectedTextTrackId });
       return { ok: true };
     }
   };
