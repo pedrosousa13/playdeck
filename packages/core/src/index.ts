@@ -589,6 +589,7 @@ export class PlayerController {
   #generation = 0;
   #autoplayMode: AutoplayMode = false;
   #autoplayControlledMuted: boolean | undefined;
+  #captionRenderer: 'custom' | 'native' = 'custom';
   #hasAutoplayConfigurationError = false;
   #autoplayConfigurationRevision = 0;
   #autoplayAttemptGeneration: number | undefined;
@@ -738,6 +739,11 @@ export class PlayerController {
         this.#setActiveCues(cues);
       });
     }
+    try {
+      provider.setCaptionRenderer?.(this.#captionRenderer);
+    } catch {
+      // Re-applying the remembered mode must not crash provider wiring.
+    }
     let attachResult: void | Promise<void>;
     try {
       attachResult = provider.attach();
@@ -774,6 +780,7 @@ export class PlayerController {
   getActiveCues = (): readonly TextCue[] => this.#activeCues;
 
   setCaptionRenderer = (mode: 'custom' | 'native'): void => {
+    this.#captionRenderer = mode;
     this.#provider?.setCaptionRenderer?.(mode);
   };
 

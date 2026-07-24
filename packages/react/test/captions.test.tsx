@@ -297,6 +297,40 @@ describe('Player.Root captionRenderer', () => {
     rerenderWithCaptionRenderer('native');
     expect(setCaptionRenderer).toHaveBeenCalledWith('native');
   });
+
+  // Real usage attaches the provider asynchronously (`await loadProvider(...)`
+  // in use-activation.ts), which runs well after Root's mount effects have
+  // already called `controller.setCaptionRenderer`. Attaching here via a
+  // separate `act()` call after render — rather than the ref callback above —
+  // reproduces that ordering: no provider exists yet when the mount effect
+  // fires.
+  test('still applies captionRenderer="native" when the provider attaches after mount', () => {
+    const handle = createRef<Player.PlayerHandle>();
+    const setCaptionRenderer = vi.fn();
+    const adapter: ProviderAdapter = {
+      provider: 'native',
+      attach: () => {},
+      load: () => {},
+      destroy: () => {},
+      subscribe: () => () => {},
+      setCaptionRenderer
+    };
+    render(
+      <Player.Root
+        captionRenderer="native"
+        loading="interaction"
+        ref={handle}
+        source="/tracer.mp4"
+      >
+        {null}
+      </Player.Root>
+    );
+    const controller = handle.current as unknown as PlayerController;
+    act(() => {
+      controller.setProvider(adapter);
+    });
+    expect(setCaptionRenderer).toHaveBeenCalledWith('native');
+  });
 });
 
 describe('Player.CaptionsButton', () => {

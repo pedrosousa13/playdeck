@@ -56,8 +56,18 @@ describe('controller cue channel', () => {
   test('setCaptionRenderer forwards to the provider', () => {
     const modes: string[] = [];
     const c = new PlayerController();
+    // Attaching a provider re-applies the (default 'custom') stored mode, so
+    // it appears here before the explicit 'native' call.
     c.setProvider(noopAdapter({ setCaptionRenderer: (m) => modes.push(m) }));
     c.setCaptionRenderer('native');
+    expect(modes).toEqual(['custom', 'native']);
+  });
+
+  test('remembers the renderer mode set before a provider attaches and re-applies it on attach', () => {
+    const modes: string[] = [];
+    const c = new PlayerController();
+    c.setCaptionRenderer('native');
+    c.setProvider(noopAdapter({ setCaptionRenderer: (m) => modes.push(m) }));
     expect(modes).toEqual(['native']);
   });
 });
