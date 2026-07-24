@@ -1,6 +1,7 @@
 import type {
   Availability,
   CommandResult,
+  PlayerCapabilities,
   PlayerError,
   PlayerEventDetailMap,
   PlayerEventType,
@@ -8,6 +9,9 @@ import type {
   ProviderEvent,
   ProviderEventFor,
   ProviderStateListener,
+  TextTrack,
+  TextTrackKind,
+  TextTrackReadiness,
   TimeRange
 } from '@reely/core';
 
@@ -48,6 +52,10 @@ type WebKitHTMLVideoElement = HTMLVideoElement & {
   readonly disableRemotePlayback?: boolean;
 };
 
+// The `default` IDL attribute lives on HTMLTrackElement per spec, but engines
+// commonly surface it on the associated TextTrack too; treat it as optional.
+type NativeTextTrack = globalThis.TextTrack & { readonly default?: boolean };
+
 export type NativePlaybackOptions = {
   readonly loop?: boolean;
   readonly startTime?: number;
@@ -74,6 +82,17 @@ export type NativeProviderAdapter = ProviderAdapter &
   Required<Pick<ProviderAdapter, NativeCommand>> & {
     readonly provider: 'native';
   };
+
+const isCaptionTrackKind = (kind: string): kind is TextTrackKind =>
+  kind === 'captions' || kind === 'subtitles';
+
+const nativeTextTrackId = (track: NativeTextTrack, index: number): string =>
+  track.id || `native:${index}`;
+
+const nativeTextTrackReadiness = (
+  track: NativeTextTrack
+): TextTrackReadiness =>
+  track.cues && track.cues.length > 0 ? 'loaded' : 'loading';
 
 const toRanges = (ranges: globalThis.TimeRanges): ReadonlyArray<TimeRange> =>
   Array.from({ length: ranges.length }, (_, index) => ({
@@ -218,6 +237,8 @@ export const createNativeProvider = (
   let boundaryEnded = false;
   let seekingFromEnded = false;
   let replayGeneration = 0;
+  let hasSelectableTextTracks = false;
+  let textTrackList: globalThis.TextTrackList | undefined;
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
@@ -276,6 +297,63 @@ export const createNativeProvider = (
     return airPlayDisallowed() ? policyDisallowed : available;
   };
 
+  const mediaCapabilities = (): PlayerCapabilities => ({
+    seek: available,
+    setVolume: available,
+    setPlaybackRate: available,
+    selectQuality: { status: 'unknown', reason: 'provider-check' },
+    selectTextTrack: hasSelectableTextTracks
+      ? available
+      : { status: 'unavailable', reason: 'provider' },
+    fullscreen: fullscreenAvailability(),
+    pictureInPicture: pictureInPictureAvailability(),
+    airPlay: airPlayAvailability(),
+    customControls: available
+  });
+
+  const captionTrackEntries = (): Array<{
+    track: NativeTextTrack;
+    index: number;
+  }> => {
+    const nativeTracks = media.textTracks;
+    const entries: Array<{ track: NativeTextTrack; index: number }> = [];
+    for (let index = 0; index < nativeTracks.length; index += 1) {
+      const track = nativeTracks[index] as NativeTextTrack | undefined;
+      if (track && isCaptionTrackKind(track.kind))
+        entries.push({ track, index });
+    }
+    return entries;
+  };
+
+  // Sets discovered caption/subtitle tracks to `hidden` so native cue
+  // rendering never fires — cues are surfaced through the custom pipeline
+  // that later tasks add (subscribeCues/setCaptionRenderer).
+  const discoverTextTracks = (): void => {
+    const entries = captionTrackEntries();
+    hasSelectableTextTracks = entries.length > 0;
+    entries.forEach(({ track }) => {
+      track.mode = 'hidden';
+    });
+    const defaultEntry = entries.find(({ track }) => track.default === true);
+    const textTracks: TextTrack[] = entries.map(({ track, index }) => ({
+      id: nativeTextTrackId(track, index),
+      label: track.label,
+      language: track.language || null,
+      kind: track.kind as TextTrackKind,
+      readiness: nativeTextTrackReadiness(track)
+    }));
+    emit({
+      textTracks,
+      selectedTextTrackId: defaultEntry
+        ? nativeTextTrackId(defaultEntry.track, defaultEntry.index)
+        : null,
+      captionRendering: 'custom',
+      capabilities: mediaCapabilities()
+    });
+  };
+
+  const onTextTracksChange = (): void => discoverTextTracks();
+
   const emitMediaState = (originalEvent?: Event): void =>
     emit(
       {
@@ -294,17 +372,7 @@ export const createNativeProvider = (
         muted: media.muted,
         volume: media.volume,
         playbackRate: media.playbackRate,
-        capabilities: {
-          seek: available,
-          setVolume: available,
-          setPlaybackRate: available,
-          selectQuality: { status: 'unknown', reason: 'provider-check' },
-          selectTextTrack: { status: 'unavailable', reason: 'provider' },
-          fullscreen: fullscreenAvailability(),
-          pictureInPicture: pictureInPictureAvailability(),
-          airPlay: airPlayAvailability(),
-          customControls: available
-        }
+        capabilities: mediaCapabilities()
       },
       originalEvent ? event('ready', originalEvent, undefined) : undefined
     );
@@ -527,6 +595,10 @@ export const createNativeProvider = (
       'webkitpresentationmodechanged',
       onWebKitPresentationModeChange
     );
+    textTrackList = media.textTracks;
+    textTrackList.addEventListener('addtrack', onTextTracksChange);
+    textTrackList.addEventListener('removetrack', onTextTracksChange);
+    textTrackList.addEventListener('change', onTextTracksChange);
   };
 
   const removeListeners = (): void => {
@@ -562,6 +634,10 @@ export const createNativeProvider = (
       'webkitpresentationmodechanged',
       onWebKitPresentationModeChange
     );
+    textTrackList?.removeEventListener('addtrack', onTextTracksChange);
+    textTrackList?.removeEventListener('removetrack', onTextTracksChange);
+    textTrackList?.removeEventListener('change', onTextTracksChange);
+    textTrackList = undefined;
   };
 
   return {
@@ -570,6 +646,7 @@ export const createNativeProvider = (
       if (attached || destroyed) return;
       attached = true;
       addListeners();
+      discoverTextTracks();
       emitMediaState();
     },
     load: () => {
