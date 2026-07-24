@@ -681,6 +681,12 @@ test('retry reports a contained failure while the API stays unreachable', async 
   });
 });
 
+test('proactively loads the captions module once the player reports ready', async () => {
+  const { harness } = await readyAdapter();
+
+  expect(harness.player.loadModule).toHaveBeenCalledWith('captions');
+});
+
 test('discovers caption tracks from the captions module and reports provider rendering', async () => {
   const { harness, patches } = await readyAdapter();
   harness.captionsTracklist = [
@@ -798,4 +804,37 @@ test('selectTextTrack rejects an id that is not in the current tracklist', async
     reason: 'unsupported'
   });
   expect(harness.player.setOption).not.toHaveBeenCalled();
+});
+
+test('retry clears stale caption state before the new player reports ready', async () => {
+  const { fake, harness, patches, provider } = await readyAdapter();
+  harness.captionsTracklist = [{ languageCode: 'en', displayName: 'English' }];
+  harness.fireApiChange();
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      capabilities: expect.objectContaining({
+        selectTextTrack: { status: 'available' }
+      })
+    })
+  );
+
+  await provider.retry?.();
+  const retriedHarness = fake.players[1]!;
+  const patchCountBeforeReady = patches.length;
+  retriedHarness.fireReady();
+
+  // The retried player has not fired its own onApiChange yet, so its
+  // caption state must be empty, not the previous player's stale tracklist.
+  expect(patches.slice(patchCountBeforeReady)).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'ready',
+      capabilities: expect.objectContaining({
+        selectTextTrack: { status: 'unavailable', reason: 'provider' }
+      })
+    })
+  );
+  await expect(provider.selectTextTrack?.('youtube:en')).resolves.toEqual({
+    ok: false,
+    reason: 'unsupported'
+  });
 });

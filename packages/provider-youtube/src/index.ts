@@ -507,6 +507,10 @@ export const createYouTubeProvider = (
     settlePendingPlays({ ok: false, reason: 'not-ready' });
     stopTimePolling();
     ready = false;
+    // A retry recreates the player, so cached caption state must not leak
+    // into the new session's capabilities before its own onApiChange fires.
+    textTracks = [];
+    selectedTextTrackId = null;
     const current = player;
     player = undefined;
     if (current) {
@@ -544,6 +548,17 @@ export const createYouTubeProvider = (
         onReady: () => {
           if (destroyed || forGeneration !== generation) return;
           ready = true;
+          // The captions module's own discovery signal (onApiChange) is
+          // undocumented and not guaranteed to fire on its own, so proactively
+          // load it as a safety net; unverified against a real player (see
+          // issue #11).
+          if (typeof player?.loadModule === 'function') {
+            try {
+              player.loadModule('captions');
+            } catch {
+              // Best-effort; must not block emitting ready state.
+            }
+          }
           emitReadyState();
         },
         onStateChange: ({ data }) => {
