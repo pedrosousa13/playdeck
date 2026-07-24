@@ -1,6 +1,5 @@
 import type {
   Availability,
-  CaptionRendering,
   CommandResult,
   PlayerCapabilities,
   PlayerError,
@@ -10,12 +9,11 @@ import type {
   ProviderEvent,
   ProviderEventFor,
   ProviderStateListener,
-  TextCue,
-  TextTrack,
-  TextTrackKind,
-  TextTrackReadiness,
   TimeRange
 } from '@reely/core';
+import { createNativeTextTracks, type NativeTextTracks } from './text-tracks';
+
+export { createNativeTextTracks, type NativeTextTracks } from './text-tracks';
 
 const available: Availability = { status: 'available' };
 const unsupported: Availability = {
@@ -54,14 +52,6 @@ type WebKitHTMLVideoElement = HTMLVideoElement & {
   readonly disableRemotePlayback?: boolean;
 };
 
-// The `default` IDL attribute lives on HTMLTrackElement per spec, but engines
-// commonly surface it on the associated TextTrack too; treat it as optional.
-type NativeTextTrack = globalThis.TextTrack & { readonly default?: boolean };
-
-// `text` is a VTTCue-specific member absent from the base TextTrackCue
-// interface that `TextTrack.activeCues` is typed with.
-type NativeTextTrackCue = globalThis.TextTrackCue & { readonly text: string };
-
 export type NativePlaybackOptions = {
   readonly loop?: boolean;
   readonly startTime?: number;
@@ -88,17 +78,6 @@ export type NativeProviderAdapter = ProviderAdapter &
   Required<Pick<ProviderAdapter, NativeCommand>> & {
     readonly provider: 'native';
   };
-
-const isCaptionTrackKind = (kind: string): kind is TextTrackKind =>
-  kind === 'captions' || kind === 'subtitles';
-
-const nativeTextTrackId = (track: NativeTextTrack, index: number): string =>
-  track.id || `native:${index}`;
-
-const nativeTextTrackReadiness = (
-  track: NativeTextTrack
-): TextTrackReadiness =>
-  track.cues && track.cues.length > 0 ? 'loaded' : 'loading';
 
 const toRanges = (ranges: globalThis.TimeRanges): ReadonlyArray<TimeRange> =>
   Array.from({ length: ranges.length }, (_, index) => ({
@@ -243,27 +222,6 @@ export const createNativeProvider = (
   let boundaryEnded = false;
   let seekingFromEnded = false;
   let replayGeneration = 0;
-  let hasSelectableTextTracks = false;
-  let textTrackList: globalThis.TextTrackList | undefined;
-  let cueChangeTrack: NativeTextTrack | undefined;
-  // Holds the current caption selection — the single source of truth for
-  // `selectedTextTrackId`. `hasExplicitSelection` distinguishes "never
-  // selected yet" (discovery may still apply the `<track default>` rule)
-  // from "explicitly selected `null`" (user turned captions off; discovery
-  // must not resurrect the default). Per spec, user selection always
-  // overrides and persists until source switch.
-  let selectedTextTrackId: string | null = null;
-  let hasExplicitSelection = false;
-  // 'custom' (default): the selected track is `hidden` and cues are drawn by
-  // the consumer via `subscribeCues`. 'native': the selected track is
-  // `showing` and the browser draws its own caption UI.
-  let captionRendererMode: 'custom' | 'native' = 'custom';
-  // Suppresses re-entrant discovery while we assign `track.mode` ourselves.
-  // Per spec, assigning `TextTrack.mode` queues a `change` event on the
-  // TextTrackList, so our own mode writes would otherwise self-trigger
-  // `discoverTextTracks` and reset selection state mid-write.
-  let suppressDiscovery = false;
-  const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
@@ -322,202 +280,27 @@ export const createNativeProvider = (
     return airPlayDisallowed() ? policyDisallowed : available;
   };
 
-  const mediaCapabilities = (): PlayerCapabilities => ({
-    seek: available,
-    setVolume: available,
-    setPlaybackRate: available,
-    selectQuality: { status: 'unknown', reason: 'provider-check' },
-    selectTextTrack: hasSelectableTextTracks
-      ? available
-      : { status: 'unavailable', reason: 'provider' },
-    fullscreen: fullscreenAvailability(),
-    pictureInPicture: pictureInPictureAvailability(),
-    airPlay: airPlayAvailability(),
-    customControls: available
-  });
+  const textTracks: NativeTextTracks = createNativeTextTracks(
+    media,
+    (patch) => emit(patch),
+    () => mediaCapabilities()
+  );
 
-  const captionTrackEntries = (): Array<{
-    track: NativeTextTrack;
-    index: number;
-  }> => {
-    const nativeTracks = media.textTracks;
-    const entries: Array<{ track: NativeTextTrack; index: number }> = [];
-    for (let index = 0; index < nativeTracks.length; index += 1) {
-      const track = nativeTracks[index] as NativeTextTrack | undefined;
-      if (track && isCaptionTrackKind(track.kind))
-        entries.push({ track, index });
-    }
-    return entries;
-  };
-
-  // `default` is an HTMLTrackElement IDL attribute per spec — it is not
-  // exposed on the associated TextTrack, so real `<track default>` markup
-  // must be read from the DOM element, not the track object. Matches by
-  // object identity first (holds in spec-conformant engines), falling back
-  // to id equality for engines/environments where `HTMLTrackElement.track`
-  // does not return a stable reference.
-  const defaultCaptionTrackEntry = (
-    entries: Array<{ track: NativeTextTrack; index: number }>
-  ): { track: NativeTextTrack; index: number } | undefined => {
-    const trackElements = media.querySelectorAll('track');
-    for (let index = 0; index < trackElements.length; index += 1) {
-      const element = trackElements[index];
-      if (!element.default) continue;
-      const elementTrack = element.track;
-      const match =
-        entries.find(({ track }) => track === elementTrack) ??
-        (element.id
-          ? entries.find(({ track }) => track.id === element.id)
-          : undefined);
-      if (match) return match;
-    }
-    return undefined;
-  };
-
-  // Derives the `captionRendering` patch value from the current renderer
-  // mode, the selected track, and whether any caption/subtitle tracks exist
-  // at all: no tracks is always `unavailable`; a native renderer with a
-  // selection is `native` (the browser is drawing); everything else falls
-  // back to `custom` (our `subscribeCues` pipeline is the one drawing, even
-  // if nothing is currently selected to draw).
-  const resolveCaptionRendering = (
-    entries: Array<{ track: NativeTextTrack; index: number }>,
-    selected: string | null
-  ): CaptionRendering => {
-    if (entries.length === 0) return 'unavailable';
-    return captionRendererMode === 'native' && selected !== null
-      ? 'native'
-      : 'custom';
-  };
-
-  // Reapplies every caption/subtitle track's mode from the given selection
-  // (the selected track is `hidden` in custom-renderer mode so cues are
-  // processed without native rendering — that pipeline is custom, via
-  // subscribeCues — or `showing` in native-renderer mode so the browser
-  // draws it; everything else is `disabled`) and refreshes the cuechange
-  // listener to match. Mode writes are wrapped so a self-triggered `change`
-  // event (assigning `.mode` queues one per spec) cannot re-enter discovery
-  // mid-write.
-  const applySelection = (
-    entries: Array<{ track: NativeTextTrack; index: number }>,
-    selected: string | null
-  ): void => {
-    suppressDiscovery = true;
-    try {
-      entries.forEach(({ track, index }) => {
-        track.mode =
-          nativeTextTrackId(track, index) === selected
-            ? captionRendererMode === 'native'
-              ? 'showing'
-              : 'hidden'
-            : 'disabled';
-      });
-    } finally {
-      suppressDiscovery = false;
-    }
-    const matchEntry =
-      selected === null
-        ? undefined
-        : entries.find(
-            ({ track, index }) => nativeTextTrackId(track, index) === selected
-          );
-    if (matchEntry) {
-      attachCueChangeTrack(matchEntry.track);
-    } else if (cueChangeTrack) {
-      detachCueChangeTrack();
-      emitCues([]);
-    }
-  };
-
-  // Selection precedence on (re-)discovery: keep the held selection if it
-  // still names an existing caption/subtitle track — user selection always
-  // overrides and persists; otherwise, if nothing has been explicitly
-  // selected yet, fall back to the `<track default>` rule; otherwise (the
-  // selected track was removed) selection resets to null.
-  const resolveSelection = (
-    entries: Array<{ track: NativeTextTrack; index: number }>
-  ): string | null => {
-    if (hasExplicitSelection) {
-      const stillExists = entries.some(
-        ({ track, index }) =>
-          nativeTextTrackId(track, index) === selectedTextTrackId
-      );
-      return stillExists ? selectedTextTrackId : null;
-    }
-    const defaultEntry =
-      defaultCaptionTrackEntry(entries) ??
-      entries.find(({ track }) => track.default === true);
-    return defaultEntry
-      ? nativeTextTrackId(defaultEntry.track, defaultEntry.index)
-      : null;
-  };
-
-  const discoverTextTracks = (): void => {
-    const entries = captionTrackEntries();
-    hasSelectableTextTracks = entries.length > 0;
-    const textTracks: TextTrack[] = entries.map(({ track, index }) => ({
-      id: nativeTextTrackId(track, index),
-      label: track.label,
-      language: track.language || null,
-      kind: track.kind as TextTrackKind,
-      readiness: nativeTextTrackReadiness(track)
-    }));
-    selectedTextTrackId = resolveSelection(entries);
-    applySelection(entries, selectedTextTrackId);
-    emit({
-      textTracks,
-      selectedTextTrackId,
-      captionRendering: resolveCaptionRendering(entries, selectedTextTrackId),
-      capabilities: mediaCapabilities()
-    });
-  };
-
-  const onTextTracksChange = (): void => {
-    if (suppressDiscovery) return;
-    discoverTextTracks();
-  };
-
-  const emitCues = (cues: readonly TextCue[]): void =>
-    cueListeners.forEach((listener) => listener(cues));
-
-  // Normalizes a cue's text so downstream overlay rendering never has to
-  // guard against a missing, empty, or whitespace-only value: all three
-  // collapse to `''` rather than throwing or leaking `undefined`.
-  const cueText = (cue: NativeTextTrackCue): string => {
-    const text = typeof cue.text === 'string' ? cue.text : '';
-    return text.trim().length === 0 ? '' : text;
-  };
-
-  // Builds plain TextCue objects so no VTTCue reference escapes the adapter.
-  const activeTextCues = (track: NativeTextTrack): TextCue[] => {
-    const activeCues = track.activeCues;
-    if (!activeCues) return [];
-    return Array.from({ length: activeCues.length }, (_, index) => {
-      const cue = activeCues[index] as NativeTextTrackCue;
-      return {
-        id: cue.id,
-        startTime: cue.startTime,
-        endTime: cue.endTime,
-        text: cueText(cue)
-      };
-    });
-  };
-
-  const onCueChange = (): void => {
-    if (!cueChangeTrack) return;
-    emitCues(activeTextCues(cueChangeTrack));
-  };
-
-  const detachCueChangeTrack = (): void => {
-    cueChangeTrack?.removeEventListener('cuechange', onCueChange);
-    cueChangeTrack = undefined;
-  };
-
-  const attachCueChangeTrack = (track: NativeTextTrack): void => {
-    detachCueChangeTrack();
-    cueChangeTrack = track;
-    track.addEventListener('cuechange', onCueChange);
-  };
+  function mediaCapabilities(): PlayerCapabilities {
+    return {
+      seek: available,
+      setVolume: available,
+      setPlaybackRate: available,
+      selectQuality: { status: 'unknown', reason: 'provider-check' },
+      selectTextTrack: textTracks.hasSelectableTextTracks()
+        ? available
+        : { status: 'unavailable', reason: 'provider' },
+      fullscreen: fullscreenAvailability(),
+      pictureInPicture: pictureInPictureAvailability(),
+      airPlay: airPlayAvailability(),
+      customControls: available
+    };
+  }
 
   const emitMediaState = (originalEvent?: Event): void =>
     emit(
@@ -760,10 +543,6 @@ export const createNativeProvider = (
       'webkitpresentationmodechanged',
       onWebKitPresentationModeChange
     );
-    textTrackList = media.textTracks;
-    textTrackList.addEventListener('addtrack', onTextTracksChange);
-    textTrackList.addEventListener('removetrack', onTextTracksChange);
-    textTrackList.addEventListener('change', onTextTracksChange);
   };
 
   const removeListeners = (): void => {
@@ -799,10 +578,6 @@ export const createNativeProvider = (
       'webkitpresentationmodechanged',
       onWebKitPresentationModeChange
     );
-    textTrackList?.removeEventListener('addtrack', onTextTracksChange);
-    textTrackList?.removeEventListener('removetrack', onTextTracksChange);
-    textTrackList?.removeEventListener('change', onTextTracksChange);
-    textTrackList = undefined;
   };
 
   return {
@@ -811,30 +586,14 @@ export const createNativeProvider = (
       if (attached || destroyed) return;
       attached = true;
       addListeners();
-      discoverTextTracks();
+      textTracks.attachListeners();
+      textTracks.discover();
       emitMediaState();
     },
     load: () => {
       if (destroyed || loaded) return;
       loaded = true;
-      // A new source invalidates any caption state discovered for the
-      // previous one: clear the held selection (including the "explicit"
-      // flag, so the next discovery honors *this* source's `<track
-      // default>` rather than resurrecting the old selection) and stop
-      // emitting cues for the now-stale selected track. Re-discovery for the
-      // new source's tracks (via addtrack/change events as it loads)
-      // repopulates everything from here.
-      hasExplicitSelection = false;
-      selectedTextTrackId = null;
-      hasSelectableTextTracks = false;
-      detachCueChangeTrack();
-      emitCues([]);
-      emit({
-        textTracks: [],
-        selectedTextTrackId: null,
-        captionRendering: 'unavailable',
-        capabilities: mediaCapabilities()
-      });
+      textTracks.reset();
       media.load();
     },
     destroy: () => {
@@ -842,8 +601,7 @@ export const createNativeProvider = (
       destroyed = true;
       ++replayGeneration;
       if (attached) removeListeners();
-      detachCueChangeTrack();
-      cueListeners.clear();
+      textTracks.destroy();
       if (!media.paused) {
         try {
           media.pause();
@@ -857,10 +615,7 @@ export const createNativeProvider = (
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    subscribeCues: (listener) => {
-      cueListeners.add(listener);
-      return () => cueListeners.delete(listener);
-    },
+    subscribeCues: textTracks.subscribeCues,
     play: () =>
       runCommand(() => {
         if (
@@ -1023,32 +778,7 @@ export const createNativeProvider = (
         media.load();
       });
     },
-    selectTextTrack: async (id) => {
-      const entries = captionTrackEntries();
-      if (
-        id !== null &&
-        !entries.some(
-          ({ track, index }) => nativeTextTrackId(track, index) === id
-        )
-      ) {
-        return { ok: false, reason: 'unsupported' };
-      }
-      hasExplicitSelection = true;
-      selectedTextTrackId = id;
-      applySelection(entries, selectedTextTrackId);
-      emit({
-        selectedTextTrackId,
-        captionRendering: resolveCaptionRendering(entries, selectedTextTrackId)
-      });
-      return { ok: true };
-    },
-    setCaptionRenderer: (mode) => {
-      captionRendererMode = mode;
-      const entries = captionTrackEntries();
-      applySelection(entries, selectedTextTrackId);
-      emit({
-        captionRendering: resolveCaptionRendering(entries, selectedTextTrackId)
-      });
-    }
+    selectTextTrack: textTracks.selectTextTrack,
+    setCaptionRenderer: textTracks.setCaptionRenderer
   };
 };
