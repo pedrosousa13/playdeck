@@ -1725,7 +1725,10 @@ export const CaptionsButton = ({
           void controller.selectTextTrack(null);
           return;
         }
-        const next = lastSelectedId.current ?? textTracks[0]?.id ?? null;
+        const remembered = textTracks.find(
+          (t) => t.id === lastSelectedId.current
+        )?.id;
+        const next = remembered ?? textTracks[0]?.id ?? null;
         if (next !== null) void controller.selectTextTrack(next);
       }}
       style={{ ...controlTargetStyle, ...style }}

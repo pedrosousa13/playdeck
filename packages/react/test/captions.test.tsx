@@ -358,6 +358,47 @@ describe('Player.CaptionsButton', () => {
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith('en');
   });
+
+  test('toggling off then on restores the previously selected non-first track', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English'), track('es', 'Spanish')],
+      selectedTextTrackId: 'es'
+    });
+    const button = container.querySelector(
+      '[data-reely-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+    emitState({ selectedTextTrackId: null });
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith('es');
+  });
+
+  test('falls back to the first track of a new list when the remembered track no longer exists', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English'), track('es', 'Spanish')],
+      selectedTextTrackId: 'es'
+    });
+    const button = container.querySelector(
+      '[data-reely-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+    emitState({
+      selectedTextTrackId: null,
+      textTracks: [track('fr', 'French'), track('de', 'German')]
+    });
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith('fr');
+  });
 });
 
 describe('Player.CaptionsMenu', () => {
