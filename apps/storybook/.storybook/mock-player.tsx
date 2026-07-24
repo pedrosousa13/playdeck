@@ -4,7 +4,8 @@ import type {
   PlayerController,
   ProviderAdapter,
   ProviderStateListener,
-  ProviderStatePatch
+  ProviderStatePatch,
+  TextCue
 } from '@reely/core';
 import { Root, type PlayerHandle, type RootProps } from '@reely/react';
 import type { Decorator } from '@storybook/react-vite';
@@ -19,6 +20,9 @@ import { useEffect, useRef, type ReactNode } from 'react';
  *   failing `playResult` (`{ ok: false, reason: 'blocked' }`) and a ready
  *   `state` to reproduce blocked autoplay.
  * - `playResult` — what the fake provider's `play()` resolves to.
+ * - `cues` — active `TextCue[]` emitted through the fake provider's cue
+ *   channel after mount, so a story can drive `Player.Captions` without a
+ *   real track.
  * - `rootProps` — overrides for the `Player.Root` the decorator renders.
  *   Use the `autoplay` knob above rather than `rootProps.autoplay`: the Root
  *   prop re-applies its own `configureAutoplay` and collides with the mock.
@@ -27,6 +31,7 @@ export type MockPlayerParameters = {
   readonly state?: ProviderStatePatch;
   readonly autoplay?: AutoplayMode;
   readonly playResult?: CommandResult;
+  readonly cues?: readonly TextCue[];
   readonly rootProps?: Partial<Omit<RootProps, 'children' | 'ref'>>;
 };
 
@@ -43,6 +48,7 @@ const mockSource: RootProps['source'] = {
  */
 const createMockAdapter = (playResult: CommandResult) => {
   const listeners = new Set<ProviderStateListener>();
+  const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
   const ok = async (): Promise<CommandResult> => ({ ok: true });
   const adapter: ProviderAdapter = {
     provider: 'native',
@@ -52,6 +58,10 @@ const createMockAdapter = (playResult: CommandResult) => {
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    subscribeCues: (listener) => {
+      cueListeners.add(listener);
+      return () => cueListeners.delete(listener);
     },
     play: async () => playResult,
     pause: ok,
@@ -64,6 +74,9 @@ const createMockAdapter = (playResult: CommandResult) => {
     adapter,
     emit: (patch: ProviderStatePatch) => {
       listeners.forEach((listener) => listener(patch));
+    },
+    emitCues: (cues: readonly TextCue[]) => {
+      cueListeners.forEach((listener) => listener(cues));
     }
   };
 };
@@ -76,10 +89,11 @@ const MockPlayerRoot = ({
   readonly parameters: MockPlayerParameters;
 }) => {
   const handleRef = useRef<PlayerHandle>(null);
-  const { autoplay, playResult, rootProps, state } = parameters;
+  const { autoplay, cues, playResult, rootProps, state } = parameters;
 
   useEffect(() => {
-    if (autoplay === undefined && playResult === undefined && !state) return;
+    if (autoplay === undefined && playResult === undefined && !state && !cues)
+      return;
     // Player.Root's imperative handle is its PlayerController; the cast opens
     // the provider-facing surface (setProvider) that PlayerHandle omits.
     const controller = handleRef.current as PlayerController | null;
@@ -88,10 +102,11 @@ const MockPlayerRoot = ({
     controller.setProvider(mock.adapter);
     if (autoplay !== undefined) controller.configureAutoplay(autoplay);
     if (state) mock.emit(state);
+    if (cues) mock.emitCues(cues);
     return () => {
       controller.setProvider(undefined);
     };
-  }, [autoplay, playResult, state]);
+  }, [autoplay, cues, playResult, state]);
 
   return (
     <Root
