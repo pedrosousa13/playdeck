@@ -453,7 +453,10 @@ test('reports native text tracks as unavailable when the command is unsupported'
       selectTextTrack: { status: 'unavailable', reason: 'provider' }
     }
   });
-  expect(provider.selectTextTrack).toBeUndefined();
+  await expect(provider.selectTextTrack?.('missing')).resolves.toEqual({
+    ok: false,
+    reason: 'unsupported'
+  });
 });
 
 const createTimeRanges = (

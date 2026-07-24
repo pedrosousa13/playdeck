@@ -9,6 +9,7 @@ import type {
   ProviderEvent,
   ProviderEventFor,
   ProviderStateListener,
+  TextCue,
   TextTrack,
   TextTrackKind,
   TextTrackReadiness,
@@ -55,6 +56,10 @@ type WebKitHTMLVideoElement = HTMLVideoElement & {
 // The `default` IDL attribute lives on HTMLTrackElement per spec, but engines
 // commonly surface it on the associated TextTrack too; treat it as optional.
 type NativeTextTrack = globalThis.TextTrack & { readonly default?: boolean };
+
+// `text` is a VTTCue-specific member absent from the base TextTrackCue
+// interface that `TextTrack.activeCues` is typed with.
+type NativeTextTrackCue = globalThis.TextTrackCue & { readonly text: string };
 
 export type NativePlaybackOptions = {
   readonly loop?: boolean;
@@ -239,6 +244,8 @@ export const createNativeProvider = (
   let replayGeneration = 0;
   let hasSelectableTextTracks = false;
   let textTrackList: globalThis.TextTrackList | undefined;
+  let cueChangeTrack: NativeTextTrack | undefined;
+  const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
@@ -379,6 +386,40 @@ export const createNativeProvider = (
   };
 
   const onTextTracksChange = (): void => discoverTextTracks();
+
+  const emitCues = (cues: readonly TextCue[]): void =>
+    cueListeners.forEach((listener) => listener(cues));
+
+  // Builds plain TextCue objects so no VTTCue reference escapes the adapter.
+  const activeTextCues = (track: NativeTextTrack): TextCue[] => {
+    const activeCues = track.activeCues;
+    if (!activeCues) return [];
+    return Array.from({ length: activeCues.length }, (_, index) => {
+      const cue = activeCues[index] as NativeTextTrackCue;
+      return {
+        id: cue.id,
+        startTime: cue.startTime,
+        endTime: cue.endTime,
+        text: cue.text
+      };
+    });
+  };
+
+  const onCueChange = (): void => {
+    if (!cueChangeTrack) return;
+    emitCues(activeTextCues(cueChangeTrack));
+  };
+
+  const detachCueChangeTrack = (): void => {
+    cueChangeTrack?.removeEventListener('cuechange', onCueChange);
+    cueChangeTrack = undefined;
+  };
+
+  const attachCueChangeTrack = (track: NativeTextTrack): void => {
+    detachCueChangeTrack();
+    cueChangeTrack = track;
+    track.addEventListener('cuechange', onCueChange);
+  };
 
   const emitMediaState = (originalEvent?: Event): void =>
     emit(
@@ -685,6 +726,8 @@ export const createNativeProvider = (
       destroyed = true;
       ++replayGeneration;
       if (attached) removeListeners();
+      detachCueChangeTrack();
+      cueListeners.clear();
       if (!media.paused) {
         try {
           media.pause();
@@ -697,6 +740,10 @@ export const createNativeProvider = (
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    subscribeCues: (listener) => {
+      cueListeners.add(listener);
+      return () => cueListeners.delete(listener);
     },
     play: () =>
       runCommand(() => {
@@ -859,6 +906,28 @@ export const createNativeProvider = (
         boundaryEnded = false;
         media.load();
       });
+    },
+    selectTextTrack: async (id) => {
+      const entries = captionTrackEntries();
+      if (id === null) {
+        entries.forEach(({ track }) => {
+          track.mode = 'disabled';
+        });
+        detachCueChangeTrack();
+        emit({ selectedTextTrackId: null });
+        emitCues([]);
+        return { ok: true };
+      }
+      const match = entries.find(
+        ({ track, index }) => nativeTextTrackId(track, index) === id
+      );
+      if (!match) return { ok: false, reason: 'unsupported' };
+      entries.forEach(({ track }) => {
+        track.mode = track === match.track ? 'hidden' : 'disabled';
+      });
+      attachCueChangeTrack(match.track);
+      emit({ selectedTextTrackId: id });
+      return { ok: true };
     }
   };
 };

@@ -26,8 +26,10 @@ type FakeTrack = {
   default?: boolean;
   mode: string;
   cues: { length: number } | null;
-  addEventListener: () => void;
-  removeEventListener: () => void;
+  activeCues: readonly unknown[] | null;
+  addEventListener: (type: string, listener: () => void) => void;
+  removeEventListener: (type: string, listener: () => void) => void;
+  dispatch: (type: string) => void;
 };
 
 type FakeTrackList = FakeTrack[] & {
@@ -39,17 +41,30 @@ type FakeTrackList = FakeTrack[] & {
 // `default` is only set when the init explicitly provides it, so tests can
 // produce a fake track that omits the property entirely (as real `TextTrack`
 // objects do) rather than defaulting it to `false`.
-const createFakeTrack = (init: FakeTrackInit): FakeTrack => ({
-  kind: init.kind,
-  label: init.label,
-  language: init.language,
-  id: init.id ?? '',
-  ...(init.default !== undefined ? { default: init.default } : {}),
-  mode: 'disabled',
-  cues: init.hasCues ? { length: 1 } : null,
-  addEventListener: () => undefined,
-  removeEventListener: () => undefined
-});
+const createFakeTrack = (init: FakeTrackInit): FakeTrack => {
+  const listeners = new Map<string, Set<() => void>>();
+  return {
+    kind: init.kind,
+    label: init.label,
+    language: init.language,
+    id: init.id ?? '',
+    ...(init.default !== undefined ? { default: init.default } : {}),
+    mode: 'disabled',
+    cues: init.hasCues ? { length: 1 } : null,
+    activeCues: null,
+    addEventListener: (type, listener) => {
+      const set = listeners.get(type) ?? new Set<() => void>();
+      set.add(listener);
+      listeners.set(type, set);
+    },
+    removeEventListener: (type, listener) => {
+      listeners.get(type)?.delete(listener);
+    },
+    dispatch: (type) => {
+      listeners.get(type)?.forEach((listener) => listener());
+    }
+  };
+};
 
 const createFakeTrackList = (tracks: readonly FakeTrack[]): FakeTrackList => {
   const listeners = new Map<string, Set<() => void>>();
@@ -276,4 +291,86 @@ test('reads the default flag from a real <track> element rather than the TextTra
 
   const last = latest(patches);
   expect(last.selectedTextTrackId).toBe('t1');
+});
+
+test('selectTextTrack(id) hides the chosen track, disables the rest, and emits the selection', async () => {
+  const { provider, patches, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' },
+    { kind: 'subtitles', label: 'Spanish', language: 'es', id: 't2' }
+  ]);
+  await provider.attach();
+  patches.length = 0;
+
+  const result = await provider.selectTextTrack?.('t2');
+
+  expect(result).toEqual({ ok: true });
+  expect(tracks[0]?.mode).toBe('disabled');
+  expect(tracks[1]?.mode).toBe('hidden');
+  expect(latest(patches).selectedTextTrackId).toBe('t2');
+});
+
+test('selectTextTrack(null) disables all caption tracks and clears the cue channel', async () => {
+  const { provider, patches, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t1');
+  patches.length = 0;
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+
+  const result = await provider.selectTextTrack?.(null);
+
+  expect(result).toEqual({ ok: true });
+  expect(tracks[0]?.mode).toBe('disabled');
+  expect(latest(patches).selectedTextTrackId).toBeNull();
+  expect(cueFrames).toEqual([[]]);
+});
+
+test('subscribeCues receives a normalized TextCue when the selected track fires cuechange', async () => {
+  const { provider, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t1');
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  // Extra property proves the mapper builds a plain object instead of
+  // forwarding the VTTCue-like reference itself.
+  const fakeCue = {
+    id: 'cue-1',
+    startTime: 1,
+    endTime: 2,
+    text: 'Hello',
+    extra: 'leak-check'
+  };
+  const track = tracks[0];
+  if (track) track.activeCues = [fakeCue];
+  track?.dispatch('cuechange');
+
+  expect(cueFrames).toEqual([
+    [{ id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }]
+  ]);
+  expect(cueFrames[0]?.[0]).not.toBe(fakeCue);
+});
+
+test('cuechange clearing active cues emits an empty array', async () => {
+  const { provider, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t1');
+  const track = tracks[0];
+  if (track)
+    track.activeCues = [
+      { id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }
+    ];
+  track?.dispatch('cuechange');
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+
+  if (track) track.activeCues = [];
+  track?.dispatch('cuechange');
+
+  expect(cueFrames).toEqual([[]]);
 });
