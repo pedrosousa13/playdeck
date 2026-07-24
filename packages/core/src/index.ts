@@ -20,6 +20,25 @@ export type PlayerError = {
   readonly cause?: unknown;
 };
 
+export type TextTrackKind = 'subtitles' | 'captions';
+export type TextTrackReadiness = 'idle' | 'loading' | 'loaded' | 'error';
+export type CaptionRendering = 'custom' | 'native' | 'provider' | 'unavailable';
+
+export type TextTrack = {
+  readonly id: string;
+  readonly label: string;
+  readonly language: string | null;
+  readonly kind: TextTrackKind;
+  readonly readiness: TextTrackReadiness;
+};
+
+export type TextCue = {
+  readonly id: string | null;
+  readonly startTime: number;
+  readonly endTime: number;
+  readonly text: string;
+};
+
 export type CommandResult =
   | { ok: true }
   | { ok: false; reason: CommandFailureReason; error?: PlayerError };
@@ -98,6 +117,9 @@ export type PlayerState = {
   readonly quality: PlayerQuality | null;
   readonly capabilities: PlayerCapabilities;
   readonly error: PlayerError | null;
+  readonly textTracks: readonly TextTrack[];
+  readonly selectedTextTrackId: string | null;
+  readonly captionRendering: CaptionRendering;
 };
 
 export type PreProviderActivation =
@@ -285,7 +307,10 @@ export const createInitialPlayerState = (): PlayerState =>
     hlsEngine: null,
     quality: null,
     capabilities: initialCapabilities(),
-    error: null
+    error: null,
+    textTracks: Object.freeze([]),
+    selectedTextTrackId: null,
+    captionRendering: 'unavailable'
   });
 
 const orderedRanges = (
