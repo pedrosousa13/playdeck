@@ -559,6 +559,74 @@ describe('Player.Controls captions shortcut', () => {
   });
 });
 
+describe('Player.Media textTracks', () => {
+  const renderMedia = (props?: Player.MediaProps) => {
+    const utils = render(
+      <Player.Root loading="eager" source="/tracer.mp4">
+        <Player.Media {...props} />
+      </Player.Root>
+    );
+    const video = utils.container.querySelector('video') as HTMLVideoElement;
+    return { ...utils, video };
+  };
+
+  test('renders a <track> per entry with correct src, srclang, label, and kind', () => {
+    const { video } = renderMedia({
+      textTracks: [
+        {
+          src: '/captions/en.vtt',
+          srcLang: 'en',
+          label: 'English',
+          kind: 'subtitles'
+        }
+      ]
+    });
+    const tracks = video.querySelectorAll('track');
+    expect(tracks.length).toBe(1);
+    expect(tracks[0]?.getAttribute('src')).toBe('/captions/en.vtt');
+    expect(tracks[0]?.getAttribute('srclang')).toBe('en');
+    expect(tracks[0]?.getAttribute('label')).toBe('English');
+    expect(tracks[0]?.getAttribute('kind')).toBe('subtitles');
+  });
+
+  test('defaults kind to "captions" when omitted', () => {
+    const { video } = renderMedia({
+      textTracks: [{ src: '/captions/en.vtt', srcLang: 'en', label: 'English' }]
+    });
+    const track = video.querySelector('track');
+    expect(track?.getAttribute('kind')).toBe('captions');
+  });
+
+  test('sets the default attribute when default is true, and omits it otherwise', () => {
+    const { video } = renderMedia({
+      textTracks: [
+        {
+          src: '/captions/en.vtt',
+          srcLang: 'en',
+          label: 'English',
+          default: true
+        },
+        { src: '/captions/es.vtt', srcLang: 'es', label: 'Spanish' }
+      ]
+    });
+    const tracks = video.querySelectorAll('track');
+    expect(tracks[0]?.hasAttribute('default')).toBe(true);
+    expect(tracks[1]?.hasAttribute('default')).toBe(false);
+  });
+
+  test('renders no <track> elements when textTracks is omitted', () => {
+    const { video } = renderMedia();
+    expect(video.querySelectorAll('track').length).toBe(0);
+  });
+
+  test('does not leak textTracks onto the <video> element as a DOM attribute', () => {
+    const { video } = renderMedia({
+      textTracks: [{ src: '/captions/en.vtt', srcLang: 'en', label: 'English' }]
+    });
+    expect(video.hasAttribute('texttracks')).toBe(false);
+  });
+});
+
 describe('Player.CaptionsMenu', () => {
   test('renders nothing when there are no tracks', () => {
     const { container, emitState } = renderWithPlayer(<Player.CaptionsMenu />);

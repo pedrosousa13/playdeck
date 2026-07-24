@@ -91,6 +91,13 @@ export type MediaProps = Omit<
   'children' | 'src' | 'muted' | 'autoPlay' | 'preload' | 'poster'
 > & {
   readonly nativePoster?: string;
+  readonly textTracks?: ReadonlyArray<{
+    readonly src: string;
+    readonly srcLang: string;
+    readonly label: string;
+    readonly kind?: 'captions' | 'subtitles';
+    readonly default?: boolean;
+  }>;
 };
 
 export const normalizePoster = (input: PosterInput): NormalizedPoster => {
@@ -861,6 +868,7 @@ export const Media = ({
   nativePoster,
   ref,
   style,
+  textTracks,
   'aria-label': ariaLabel,
   ...rest
 }: MediaProps) => {
@@ -955,6 +963,16 @@ export const Media = ({
         : // The HLS provider owns the media source: the native engine assigns
           // the manifest URL and hls.js attaches Media Source Extensions.
           null}
+      {textTracks?.map(({ src, srcLang, label, kind, default: isDefault }) => (
+        <track
+          key={`${src}:${srcLang}`}
+          default={isDefault}
+          kind={kind ?? 'captions'}
+          label={label}
+          src={src}
+          srcLang={srcLang}
+        />
+      ))}
     </video>
   );
 };
