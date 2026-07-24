@@ -256,6 +256,48 @@ test('reports captionRendering as unavailable when hls.js has no subtitle tracks
   expect(latest(patches).selectedTextTrackId).toBeNull();
 });
 
+test('reports the selectTextTrack capability as unavailable with zero tracks and available once tracks appear', async () => {
+  const { patches, hls } = await mountHlsEngineHls();
+
+  discoverHlsSubtitles(hls, []);
+
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'unavailable', reason: 'provider' }
+  });
+
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: false, type: 'SUBTITLES' }
+  ]);
+
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'available' }
+  });
+});
+
+test('retry() clears the selectTextTrack capability instead of leaving it stale until tracks are rediscovered', async () => {
+  const { provider, patches, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: true, type: 'SUBTITLES' }
+  ]);
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'available' }
+  });
+
+  await provider.retry?.();
+  patches.length = 0;
+  const retriedHls = currentFakeHls();
+  // A capabilities-emitting event (e.g. MANIFEST_PARSED) can fire on the
+  // fresh instance before SUBTITLE_TRACKS_UPDATED repopulates the track
+  // list; the capability must not still read 'available' from before the
+  // retry in that window — it resets to 'unknown', mirroring how
+  // selectQualityAvailability is reset on retry.
+  retriedHls.emit(FakeHls.Events.MANIFEST_PARSED, {});
+
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'unknown', reason: 'provider-check' }
+  });
+});
+
 test('selectTextTrack sets hls.js subtitleTrack, and null turns captions off with no cues', async () => {
   const { provider, patches, hls } = await mountHlsEngineHls();
   discoverHlsSubtitles(hls, [

@@ -534,7 +534,10 @@ export const createHlsProvider = (
   // time — mirrors what a native `TextTrack`'s `activeCues`/`cuechange`
   // would give us, computed by hand since `CUES_PARSED` delivers cues as
   // they are parsed (which can be well ahead of playback), not as they
-  // become active.
+  // become active. Driven by `timeupdate`, which the HTML spec fires at
+  // roughly 4Hz — cue enter/exit precision is bounded by that cadence, an
+  // accepted limitation for this hand-rolled windowing (a real `cuechange`
+  // event would be exact).
   const recomputeActiveHlsCues = (): void => {
     const currentTime = media.currentTime;
     emitHlsCues(
@@ -658,7 +661,13 @@ export const createHlsProvider = (
       }));
       const defaultIndex = rawTracks.findIndex((track) => track.default);
       hlsSelectedTextTrackId = resolveHlsTextTrackSelection(ids, defaultIndex);
-      selectTextTrackAvailability = { status: 'available' };
+      // Mirrors the native engine's `hasSelectableTextTracks()` rule: the
+      // capability is only 'available' once there is at least one track to
+      // select among.
+      selectTextTrackAvailability =
+        hlsTextTracks.length > 0
+          ? { status: 'available' }
+          : { status: 'unavailable', reason: 'provider' };
       applyHlsTextTrackSelection();
       emit({
         textTracks: hlsTextTracks,
@@ -736,6 +745,7 @@ export const createHlsProvider = (
         media.load();
       }
       listeners.clear();
+      hlsCueListeners.clear();
     },
     subscribe: (listener) => {
       listeners.add(listener);
@@ -778,6 +788,10 @@ export const createHlsProvider = (
       networkRecoveries = 0;
       mediaRecoveries = 0;
       selectQualityAvailability = {
+        status: 'unknown',
+        reason: 'provider-check'
+      };
+      selectTextTrackAvailability = {
         status: 'unknown',
         reason: 'provider-check'
       };
