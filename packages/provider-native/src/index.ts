@@ -1,5 +1,6 @@
 import type {
   Availability,
+  CaptionRendering,
   CommandResult,
   PlayerCapabilities,
   PlayerError,
@@ -253,6 +254,10 @@ export const createNativeProvider = (
   // overrides and persists until source switch.
   let selectedTextTrackId: string | null = null;
   let hasExplicitSelection = false;
+  // 'custom' (default): the selected track is `hidden` and cues are drawn by
+  // the consumer via `subscribeCues`. 'native': the selected track is
+  // `showing` and the browser draws its own caption UI.
+  let captionRendererMode: 'custom' | 'native' = 'custom';
   // Suppresses re-entrant discovery while we assign `track.mode` ourselves.
   // Per spec, assigning `TextTrack.mode` queues a `change` event on the
   // TextTrackList, so our own mode writes would otherwise self-trigger
@@ -369,12 +374,30 @@ export const createNativeProvider = (
     return undefined;
   };
 
+  // Derives the `captionRendering` patch value from the current renderer
+  // mode, the selected track, and whether any caption/subtitle tracks exist
+  // at all: no tracks is always `unavailable`; a native renderer with a
+  // selection is `native` (the browser is drawing); everything else falls
+  // back to `custom` (our `subscribeCues` pipeline is the one drawing, even
+  // if nothing is currently selected to draw).
+  const resolveCaptionRendering = (
+    entries: Array<{ track: NativeTextTrack; index: number }>,
+    selected: string | null
+  ): CaptionRendering => {
+    if (entries.length === 0) return 'unavailable';
+    return captionRendererMode === 'native' && selected !== null
+      ? 'native'
+      : 'custom';
+  };
+
   // Reapplies every caption/subtitle track's mode from the given selection
-  // (the selected track is `hidden` so cues are processed without native
-  // rendering — that pipeline is custom, via subscribeCues; everything else
-  // is `disabled`) and refreshes the cuechange listener to match. Mode
-  // writes are wrapped so a self-triggered `change` event (assigning
-  // `.mode` queues one per spec) cannot re-enter discovery mid-write.
+  // (the selected track is `hidden` in custom-renderer mode so cues are
+  // processed without native rendering — that pipeline is custom, via
+  // subscribeCues — or `showing` in native-renderer mode so the browser
+  // draws it; everything else is `disabled`) and refreshes the cuechange
+  // listener to match. Mode writes are wrapped so a self-triggered `change`
+  // event (assigning `.mode` queues one per spec) cannot re-enter discovery
+  // mid-write.
   const applySelection = (
     entries: Array<{ track: NativeTextTrack; index: number }>,
     selected: string | null
@@ -383,7 +406,11 @@ export const createNativeProvider = (
     try {
       entries.forEach(({ track, index }) => {
         track.mode =
-          nativeTextTrackId(track, index) === selected ? 'hidden' : 'disabled';
+          nativeTextTrackId(track, index) === selected
+            ? captionRendererMode === 'native'
+              ? 'showing'
+              : 'hidden'
+            : 'disabled';
       });
     } finally {
       suppressDiscovery = false;
@@ -440,7 +467,7 @@ export const createNativeProvider = (
     emit({
       textTracks,
       selectedTextTrackId,
-      captionRendering: 'custom',
+      captionRendering: resolveCaptionRendering(entries, selectedTextTrackId),
       capabilities: mediaCapabilities()
     });
   };
@@ -453,6 +480,14 @@ export const createNativeProvider = (
   const emitCues = (cues: readonly TextCue[]): void =>
     cueListeners.forEach((listener) => listener(cues));
 
+  // Normalizes a cue's text so downstream overlay rendering never has to
+  // guard against a missing, empty, or whitespace-only value: all three
+  // collapse to `''` rather than throwing or leaking `undefined`.
+  const cueText = (cue: NativeTextTrackCue): string => {
+    const text = typeof cue.text === 'string' ? cue.text : '';
+    return text.trim().length === 0 ? '' : text;
+  };
+
   // Builds plain TextCue objects so no VTTCue reference escapes the adapter.
   const activeTextCues = (track: NativeTextTrack): TextCue[] => {
     const activeCues = track.activeCues;
@@ -463,7 +498,7 @@ export const createNativeProvider = (
         id: cue.id,
         startTime: cue.startTime,
         endTime: cue.endTime,
-        text: cue.text
+        text: cueText(cue)
       };
     });
   };
@@ -782,6 +817,24 @@ export const createNativeProvider = (
     load: () => {
       if (destroyed || loaded) return;
       loaded = true;
+      // A new source invalidates any caption state discovered for the
+      // previous one: clear the held selection (including the "explicit"
+      // flag, so the next discovery honors *this* source's `<track
+      // default>` rather than resurrecting the old selection) and stop
+      // emitting cues for the now-stale selected track. Re-discovery for the
+      // new source's tracks (via addtrack/change events as it loads)
+      // repopulates everything from here.
+      hasExplicitSelection = false;
+      selectedTextTrackId = null;
+      hasSelectableTextTracks = false;
+      detachCueChangeTrack();
+      emitCues([]);
+      emit({
+        textTracks: [],
+        selectedTextTrackId: null,
+        captionRendering: 'unavailable',
+        capabilities: mediaCapabilities()
+      });
       media.load();
     },
     destroy: () => {
@@ -983,8 +1036,19 @@ export const createNativeProvider = (
       hasExplicitSelection = true;
       selectedTextTrackId = id;
       applySelection(entries, selectedTextTrackId);
-      emit({ selectedTextTrackId });
+      emit({
+        selectedTextTrackId,
+        captionRendering: resolveCaptionRendering(entries, selectedTextTrackId)
+      });
       return { ok: true };
+    },
+    setCaptionRenderer: (mode) => {
+      captionRendererMode = mode;
+      const entries = captionTrackEntries();
+      applySelection(entries, selectedTextTrackId);
+      emit({
+        captionRendering: resolveCaptionRendering(entries, selectedTextTrackId)
+      });
     }
   };
 };

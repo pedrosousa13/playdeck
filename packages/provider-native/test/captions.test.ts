@@ -232,7 +232,7 @@ test('reports unavailable text-track selection and no tracks when none are disco
   const last = latest(patches);
   expect(last.textTracks).toEqual([]);
   expect(last.selectedTextTrackId).toBeNull();
-  expect(last.captionRendering).toBe('custom');
+  expect(last.captionRendering).toBe('unavailable');
   expect(
     (
       last.capabilities as {
@@ -445,4 +445,101 @@ test('removing the currently-selected track clears the selection and the cue cha
 
   expect(latest(patches).selectedTextTrackId).toBeNull();
   expect(cueFrames).toEqual([[]]);
+});
+
+test('setCaptionRenderer toggles the selected track between hidden and showing and updates captionRendering', async () => {
+  const { provider, patches, tracks } = mountNative([
+    {
+      kind: 'captions',
+      label: 'English',
+      language: 'en',
+      id: 't1',
+      default: true
+    }
+  ]);
+  await provider.attach();
+  patches.length = 0;
+
+  provider.setCaptionRenderer?.('native');
+
+  expect(tracks[0]?.mode).toBe('showing');
+  expect(latest(patches).captionRendering).toBe('native');
+
+  provider.setCaptionRenderer?.('custom');
+
+  expect(tracks[0]?.mode).toBe('hidden');
+  expect(latest(patches).captionRendering).toBe('custom');
+});
+
+test('load() resets caption state and re-honors the new source default on rediscovery', async () => {
+  const { provider, patches, trackList } = mountNative([
+    {
+      kind: 'captions',
+      label: 'English',
+      language: 'en',
+      id: 't1',
+      default: true
+    },
+    { kind: 'subtitles', label: 'Spanish', language: 'es', id: 't2' }
+  ]);
+  await provider.attach();
+  // Explicitly select the non-default track, so the reset below is
+  // observably distinct from a fresh discovery: if `hasExplicitSelection`
+  // survived the reset, resolving selection against the new source's tracks
+  // would try to keep 't2' (not found -> null) instead of honoring the new
+  // default.
+  await provider.selectTextTrack?.('t2');
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  patches.length = 0;
+
+  await provider.load();
+
+  expect(latest(patches).textTracks).toEqual([]);
+  expect(latest(patches).selectedTextTrackId).toBeNull();
+  expect(cueFrames).toEqual([[]]);
+
+  // Simulate the new source's tracks arriving, with a different default.
+  trackList.length = 0;
+  trackList.push(
+    createFakeTrack({
+      kind: 'captions',
+      label: 'French',
+      language: 'fr',
+      id: 't3',
+      default: true
+    })
+  );
+  trackList.dispatch('addtrack');
+
+  expect(latest(patches).selectedTextTrackId).toBe('t3');
+});
+
+test('cuechange with an empty, whitespace-only, or missing cue text normalizes to an empty string without throwing', async () => {
+  const { provider, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t1');
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  const track = tracks[0];
+
+  expect(() => {
+    if (track)
+      track.activeCues = [
+        { id: 'cue-empty', startTime: 0, endTime: 1, text: '' },
+        { id: 'cue-whitespace', startTime: 1, endTime: 2, text: '   ' },
+        { id: 'cue-missing', startTime: 2, endTime: 3 }
+      ];
+    track?.dispatch('cuechange');
+  }).not.toThrow();
+
+  expect(cueFrames).toEqual([
+    [
+      { id: 'cue-empty', startTime: 0, endTime: 1, text: '' },
+      { id: 'cue-whitespace', startTime: 1, endTime: 2, text: '' },
+      { id: 'cue-missing', startTime: 2, endTime: 3, text: '' }
+    ]
+  ]);
 });
