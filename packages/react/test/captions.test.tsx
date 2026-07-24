@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { createRef, type ReactNode } from 'react';
+import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   PlayerController,
@@ -126,6 +127,19 @@ describe('useActiveCues', () => {
       { id: 'c2', startTime: 1, endTime: 2, text: 'world' }
     ]);
     expect(getByTestId('cues').textContent).toBe('hello|world');
+  });
+
+  test('renders on the server without throwing', () => {
+    const markup = renderToString(
+      <Player.Root source="/server.mp4">
+        <Player.Viewport>
+          <Player.Media />
+          <Probe />
+          <Player.Captions />
+        </Player.Viewport>
+      </Player.Root>
+    );
+    expect(markup).toContain('data-testid="cues"');
   });
 });
 

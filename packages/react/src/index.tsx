@@ -274,9 +274,16 @@ export const usePlayerState = <Selected,>(
 
 export const useActiveCues = (): readonly TextCue[] => {
   const { controller } = usePlayer();
+  const getSnapshot = useCallback(
+    () => controller.getActiveCues(),
+    [controller]
+  );
+  // The cue list is a stable frozen array, so the server snapshot is the same
+  // getter -- without it, any server render of a cue consumer throws.
   return useSyncExternalStore(
     useCallback((cb) => controller.subscribeCues(cb), [controller]),
-    () => controller.getActiveCues()
+    getSnapshot,
+    getSnapshot
   );
 };
 
