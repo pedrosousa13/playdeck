@@ -19,6 +19,14 @@ const playerStates = {
   CUED: 5
 } as const;
 
+type FakeCaptionTrack = {
+  languageCode: string;
+  displayName?: string;
+  languageName?: string;
+  vssId?: string;
+  kind?: string;
+};
+
 type FakePlayerHarness = {
   readonly element: HTMLElement;
   readonly iframe: HTMLIFrameElement;
@@ -30,10 +38,13 @@ type FakePlayerHarness = {
   muted: boolean;
   volume: number;
   rate: number;
+  captionsTracklist: FakeCaptionTrack[];
+  captionsTrack: { languageCode?: string };
   fireReady: () => void;
   fireStateChange: (data: number) => void;
   fireError: (data: number) => void;
   fireRateChange: (data: number) => void;
+  fireApiChange: () => void;
 };
 
 const createFakeYouTube = () => {
@@ -58,6 +69,8 @@ const createFakeYouTube = () => {
       muted: false,
       volume: 100,
       rate: 1,
+      captionsTracklist: [],
+      captionsTrack: {},
       player: {
         playVideo: vi.fn(),
         pauseVideo: vi.fn(),
@@ -94,6 +107,23 @@ const createFakeYouTube = () => {
         getIframe: () => iframe,
         destroy: vi.fn(() => {
           iframe.remove();
+        }),
+        // Unofficial "module" API backing the captions/cc module.
+        loadModule: vi.fn(),
+        unloadModule: vi.fn(),
+        getOptions: vi.fn((module: string) =>
+          module === 'captions' ? ['tracklist', 'track'] : []
+        ),
+        getOption: vi.fn((module: string, option: string) => {
+          if (module !== 'captions') return undefined;
+          if (option === 'tracklist') return harness.captionsTracklist;
+          if (option === 'track') return harness.captionsTrack;
+          return undefined;
+        }),
+        setOption: vi.fn((module: string, option: string, value: unknown) => {
+          if (module === 'captions' && option === 'track') {
+            harness.captionsTrack = value as { languageCode?: string };
+          }
         })
       },
       fireReady: () => options.events?.onReady?.({ target: harness.player }),
@@ -109,7 +139,9 @@ const createFakeYouTube = () => {
           data,
           target: harness.player
         });
-      }
+      },
+      fireApiChange: () =>
+        options.events?.onApiChange?.({ target: harness.player })
     };
     players.push(harness);
     return harness.player;
@@ -647,4 +679,123 @@ test('retry reports a contained failure while the API stays unreachable', async 
     reason: 'provider-error',
     error: { message: 'still offline' }
   });
+});
+
+test('discovers caption tracks from the captions module and reports provider rendering', async () => {
+  const { harness, patches } = await readyAdapter();
+  harness.captionsTracklist = [
+    { languageCode: 'en', displayName: 'English' },
+    { languageCode: 'fr', languageName: 'French' }
+  ];
+
+  harness.fireApiChange();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      textTracks: [
+        {
+          id: 'youtube:en',
+          label: 'English',
+          language: 'en',
+          kind: 'captions',
+          readiness: 'loaded'
+        },
+        {
+          id: 'youtube:fr',
+          label: 'French',
+          language: 'fr',
+          kind: 'captions',
+          readiness: 'loaded'
+        }
+      ],
+      captionRendering: 'provider',
+      capabilities: expect.objectContaining({
+        selectTextTrack: { status: 'available' }
+      })
+    })
+  );
+});
+
+test('reports caption rendering as unavailable when the video has no caption tracks', async () => {
+  const { harness, patches } = await readyAdapter();
+  harness.captionsTracklist = [];
+
+  harness.fireApiChange();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      textTracks: [],
+      captionRendering: 'unavailable',
+      capabilities: expect.objectContaining({
+        selectTextTrack: { status: 'unavailable', reason: 'provider' }
+      })
+    })
+  );
+});
+
+test('reflects the caption track already active in the player on discovery', async () => {
+  const { harness, patches } = await readyAdapter();
+  harness.captionsTracklist = [
+    { languageCode: 'en', displayName: 'English' },
+    { languageCode: 'fr', displayName: 'French' }
+  ];
+  harness.captionsTrack = { languageCode: 'fr' };
+
+  harness.fireApiChange();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({ selectedTextTrackId: 'youtube:fr' })
+  );
+});
+
+test('selectTextTrack maps a track id onto a YouTube language code', async () => {
+  const { harness, patches, provider } = await readyAdapter();
+  harness.captionsTracklist = [
+    { languageCode: 'en', displayName: 'English' },
+    { languageCode: 'fr', displayName: 'French' }
+  ];
+  harness.fireApiChange();
+
+  await expect(provider.selectTextTrack?.('youtube:fr')).resolves.toEqual({
+    ok: true
+  });
+
+  expect(harness.player.setOption).toHaveBeenCalledWith('captions', 'track', {
+    languageCode: 'fr'
+  });
+  expect(patches).toContainEqual(
+    expect.objectContaining({ selectedTextTrackId: 'youtube:fr' })
+  );
+});
+
+test('selectTextTrack(null) turns captions off', async () => {
+  const { harness, patches, provider } = await readyAdapter();
+  harness.captionsTracklist = [{ languageCode: 'en', displayName: 'English' }];
+  harness.fireApiChange();
+  await provider.selectTextTrack?.('youtube:en');
+
+  await expect(provider.selectTextTrack?.(null)).resolves.toEqual({
+    ok: true
+  });
+
+  expect(harness.player.setOption).toHaveBeenLastCalledWith(
+    'captions',
+    'track',
+    {}
+  );
+  expect(patches).toContainEqual(
+    expect.objectContaining({ selectedTextTrackId: null })
+  );
+});
+
+test('selectTextTrack rejects an id that is not in the current tracklist', async () => {
+  const { harness, provider } = await readyAdapter();
+  harness.captionsTracklist = [{ languageCode: 'en', displayName: 'English' }];
+  harness.fireApiChange();
+
+  await expect(provider.selectTextTrack?.('youtube:de')).resolves.toEqual({
+    ok: false,
+    reason: 'unsupported'
+  });
+  expect(harness.player.setOption).not.toHaveBeenCalled();
 });
