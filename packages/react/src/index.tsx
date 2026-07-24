@@ -10,6 +10,7 @@ import {
   type PlayerError,
   type PlayerSource,
   type PlayerState,
+  type TextCue,
   type TimeRange
 } from '@reely/core';
 import type { NativePlaybackOptions } from '@reely/provider-native';
@@ -260,6 +261,14 @@ export const usePlayerState = <Selected,>(
     return nextSelection;
   }, [controller, selector]);
   return useSyncExternalStore(controller.subscribe, getSnapshot, getSnapshot);
+};
+
+export const useActiveCues = (): readonly TextCue[] => {
+  const { controller } = usePlayer();
+  return useSyncExternalStore(
+    useCallback((cb) => controller.subscribeCues(cb), [controller]),
+    () => controller.getActiveCues()
+  );
 };
 
 export const usePlayerActions = (): PlayerActions => {
