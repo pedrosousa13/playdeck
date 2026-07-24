@@ -1,14 +1,18 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { createRef, type ReactNode } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   PlayerController,
+  type Availability,
+  type CommandResult,
+  type PlayerCapabilities,
   type ProviderAdapter,
   type ProviderStateListener,
   type ProviderStatePatch,
-  type TextCue
+  type TextCue,
+  type TextTrack
 } from '@reely/core';
 import * as Player from '../src/index';
 
@@ -17,6 +21,9 @@ const ok = async () => ({ ok: true as const });
 const createMockAdapter = () => {
   let cueListener: ((cues: readonly TextCue[]) => void) | undefined;
   let stateListener: ProviderStateListener | undefined;
+  const selectTextTrack = vi.fn(async (): Promise<CommandResult> => ({
+    ok: true
+  }));
   const adapter: ProviderAdapter = {
     provider: 'native',
     attach: () => {},
@@ -30,6 +37,7 @@ const createMockAdapter = () => {
     },
     play: ok,
     pause: ok,
+    selectTextTrack,
     subscribeCues: (listener) => {
       cueListener = listener;
       return () => {
@@ -39,6 +47,7 @@ const createMockAdapter = () => {
   };
   return {
     adapter,
+    selectTextTrack,
     emitCues: (cues: readonly TextCue[]) => cueListener?.(cues),
     emitState: (patch: ProviderStatePatch) => stateListener?.(patch)
   };
@@ -59,10 +68,41 @@ const renderWithPlayer = (ui: ReactNode) => {
   return {
     ...utils,
     controller,
+    selectTextTrack: mock.selectTextTrack,
     emitCues: (cues: readonly TextCue[]) => act(() => mock.emitCues(cues)),
     emitState: (patch: ProviderStatePatch) => act(() => mock.emitState(patch))
   };
 };
+
+const notReadyAvailability: Availability = {
+  status: 'unknown',
+  reason: 'not-ready'
+};
+const available: Availability = { status: 'available' };
+
+const withSelectTextTrack = (status: Availability): PlayerCapabilities => ({
+  seek: notReadyAvailability,
+  setVolume: notReadyAvailability,
+  setPlaybackRate: notReadyAvailability,
+  selectQuality: notReadyAvailability,
+  selectTextTrack: status,
+  fullscreen: notReadyAvailability,
+  pictureInPicture: notReadyAvailability,
+  airPlay: notReadyAvailability,
+  customControls: notReadyAvailability
+});
+
+const track = (
+  id: string,
+  label: string,
+  language: string | null = null
+): TextTrack => ({
+  id,
+  label,
+  language,
+  kind: 'subtitles',
+  readiness: 'loaded'
+});
 
 const Probe = () => {
   const cues = Player.useActiveCues();
@@ -256,5 +296,148 @@ describe('Player.Root captionRenderer', () => {
     setCaptionRenderer.mockClear();
     rerenderWithCaptionRenderer('native');
     expect(setCaptionRenderer).toHaveBeenCalledWith('native');
+  });
+});
+
+describe('Player.CaptionsButton', () => {
+  test('renders nothing when the selectTextTrack capability is not available', () => {
+    const { container } = renderWithPlayer(<Player.CaptionsButton />);
+    expect(container.querySelector('[data-reely-part="captions-button"]')).toBe(
+      null
+    );
+  });
+
+  test('data-state reflects on/off from selectedTextTrackId', () => {
+    const { container, emitState } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: null
+    });
+    const button = container.querySelector(
+      '[data-reely-part="captions-button"]'
+    );
+    expect(button?.getAttribute('data-state')).toBe('off');
+    expect(button?.getAttribute('aria-pressed')).toBe('false');
+
+    emitState({ selectedTextTrackId: 'en' });
+    expect(button?.getAttribute('data-state')).toBe('on');
+    expect(button?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test('clicking turns captions off when a track is selected', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: 'en'
+    });
+    const button = container.querySelector(
+      '[data-reely-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+  });
+
+  test('clicking turns captions on by selecting a track when none is selected', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English'), track('es', 'Spanish')],
+      selectedTextTrackId: null
+    });
+    const button = container.querySelector(
+      '[data-reely-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+  });
+});
+
+describe('Player.CaptionsMenu', () => {
+  test('renders nothing when there are no tracks', () => {
+    const { container, emitState } = renderWithPlayer(<Player.CaptionsMenu />);
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: []
+    });
+    expect(
+      container.querySelector('[data-reely-part="settings-menu-root"]')
+    ).toBe(null);
+  });
+
+  test('lists each track plus Off as menuitemradio with aria-checked reflecting selection', () => {
+    const { container, emitState } = renderWithPlayer(<Player.CaptionsMenu />);
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English'), track('es', 'Spanish')],
+      selectedTextTrackId: 'en'
+    });
+    const trigger = container.querySelector(
+      '[data-reely-part="settings-menu-trigger"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(trigger);
+    const items = Array.from(
+      container.querySelectorAll('[role="menuitemradio"]')
+    );
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Off',
+      'English',
+      'Spanish'
+    ]);
+    const off = items.find((item) => item.textContent === 'Off');
+    const english = items.find((item) => item.textContent === 'English');
+    const spanish = items.find((item) => item.textContent === 'Spanish');
+    expect(off?.getAttribute('aria-checked')).toBe('false');
+    expect(english?.getAttribute('aria-checked')).toBe('true');
+    expect(spanish?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  test('selecting a track calls controller.selectTextTrack with its id', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsMenu />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English'), track('es', 'Spanish')],
+      selectedTextTrackId: 'en'
+    });
+    fireEvent.click(
+      container.querySelector(
+        '[data-reely-part="settings-menu-trigger"]'
+      ) as HTMLButtonElement
+    );
+    const spanish = Array.from(
+      container.querySelectorAll('[role="menuitemradio"]')
+    ).find((item) => item.textContent === 'Spanish') as HTMLButtonElement;
+    fireEvent.click(spanish);
+    expect(selectTextTrack).toHaveBeenCalledWith('es');
+  });
+
+  test('selecting Off calls controller.selectTextTrack with null', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsMenu />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: 'en'
+    });
+    fireEvent.click(
+      container.querySelector(
+        '[data-reely-part="settings-menu-trigger"]'
+      ) as HTMLButtonElement
+    );
+    const off = Array.from(
+      container.querySelectorAll('[role="menuitemradio"]')
+    ).find((item) => item.textContent === 'Off') as HTMLButtonElement;
+    fireEvent.click(off);
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
   });
 });

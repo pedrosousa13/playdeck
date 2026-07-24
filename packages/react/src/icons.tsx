@@ -112,3 +112,11 @@ export const ReplayIcon = (props: IconProps): ReactElement => (
     <path d="M12 5V2L7 6l5 4V7a5 5 0 11-5 5H5a7 7 0 107-7z" />
   </Icon>
 );
+
+export const CaptionsIcon = (props: IconProps): ReactElement => (
+  <Icon {...props}>
+    <path d="M3 6a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6zm2 0v12h14V6H5z" />
+    <path d="M9.5 9.5a2 2 0 00-2 2v1a2 2 0 002 2h.75a.75.75 0 000-1.5H9.5a.5.5 0 01-.5-.5v-1a.5.5 0 01.5-.5h.75a.75.75 0 000-1.5H9.5z" />
+    <path d="M15.5 9.5a2 2 0 00-2 2v1a2 2 0 002 2h.75a.75.75 0 000-1.5h-.75a.5.5 0 01-.5-.5v-1a.5.5 0 01.5-.5h.75a.75.75 0 000-1.5h-.75z" />
+  </Icon>
+);

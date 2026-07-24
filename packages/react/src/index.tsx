@@ -11,10 +11,11 @@ import {
   type PlayerSource,
   type PlayerState,
   type TextCue,
+  type TextTrack,
   type TimeRange
 } from '@reely/core';
 import type { NativePlaybackOptions } from '@reely/provider-native';
-import { CheckIcon, SettingsIcon } from './icons.js';
+import { CaptionsIcon, CheckIcon, SettingsIcon } from './icons.js';
 import {
   useActivation,
   type ActivationBindings,
@@ -1685,6 +1686,56 @@ export const PipButton = ({
   );
 };
 
+export type CaptionsButtonProps = ComponentPropsWithRef<'button'>;
+
+export const CaptionsButton = ({
+  children,
+  onClick,
+  style,
+  ...props
+}: CaptionsButtonProps) => {
+  const { provider, selectedId, status, textTracks } = usePlayerState(
+    (state) => ({
+      provider: state.provider,
+      selectedId: state.selectedTextTrackId,
+      status: state.capabilities.selectTextTrack.status,
+      textTracks: state.textTracks
+    })
+  );
+  const { controller } = usePlayer();
+  const lastSelectedId = useRef<string | null>(null);
+  /* eslint-disable react-hooks/refs -- remember the last non-null selection synchronously so toggling captions back on restores it. */
+  if (selectedId !== null) lastSelectedId.current = selectedId;
+  /* eslint-enable react-hooks/refs */
+  if (status !== 'available') return null;
+  const on = selectedId !== null;
+
+  return (
+    <button
+      {...props}
+      aria-label={on ? 'Captions on' : 'Captions off'}
+      aria-pressed={on}
+      data-provider={provider ?? undefined}
+      data-reely-part="captions-button"
+      data-state={on ? 'on' : 'off'}
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented) return;
+        if (on) {
+          void controller.selectTextTrack(null);
+          return;
+        }
+        const next = lastSelectedId.current ?? textTracks[0]?.id ?? null;
+        if (next !== null) void controller.selectTextTrack(next);
+      }}
+      style={{ ...controlTargetStyle, ...style }}
+      type="button"
+    >
+      {children ?? <CaptionsIcon />}
+    </button>
+  );
+};
+
 type ShortcutEvent = {
   readonly key: string;
   readonly altKey: boolean;
@@ -2214,6 +2265,62 @@ export const MenuRadioItem = ({
       </span>
       {children}
     </button>
+  );
+};
+
+// Disambiguates tracks that share a label (e.g. two "English" tracks with
+// different kinds) by appending the language, rather than always showing it.
+const disambiguateTrackLabel = (
+  track: TextTrack,
+  tracks: readonly TextTrack[]
+): string => {
+  const sharesLabel =
+    tracks.filter((candidate) => candidate.label === track.label).length > 1;
+  if (!sharesLabel || !track.language) return track.label;
+  return `${track.label} (${track.language})`;
+};
+
+export type CaptionsMenuProps = ComponentPropsWithRef<'div'>;
+
+/**
+ * Preset assembly over `SettingsMenu`/`MenuRadioGroup`: lists the current
+ * text tracks plus an "Off" option. Pass children to fully customize the
+ * trigger/content; omit them to get the default track list.
+ */
+export const CaptionsMenu = ({ children, ...props }: CaptionsMenuProps) => {
+  const { selectedId, status, textTracks } = usePlayerState((state) => ({
+    selectedId: state.selectedTextTrackId,
+    status: state.capabilities.selectTextTrack.status,
+    textTracks: state.textTracks
+  }));
+  const { controller } = usePlayer();
+  if (status !== 'available' || textTracks.length === 0) return null;
+
+  return (
+    <SettingsMenu {...props}>
+      {children ?? (
+        <>
+          <SettingsMenuTrigger aria-label="Captions">
+            <CaptionsIcon />
+          </SettingsMenuTrigger>
+          <SettingsMenuContent>
+            <MenuRadioGroup
+              onValueChange={(value) => {
+                void controller.selectTextTrack(value === '' ? null : value);
+              }}
+              value={selectedId ?? ''}
+            >
+              <MenuRadioItem value="">Off</MenuRadioItem>
+              {textTracks.map((track) => (
+                <MenuRadioItem key={track.id} value={track.id}>
+                  {disambiguateTrackLabel(track, textTracks)}
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+          </SettingsMenuContent>
+        </>
+      )}
+    </SettingsMenu>
   );
 };
 
