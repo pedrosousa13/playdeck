@@ -43,9 +43,9 @@ export type TextTrackKind = 'subtitles' | 'captions';
 export type TextTrackReadiness = 'idle' | 'loading' | 'loaded' | 'error';
 
 export type TextTrack = {
-  readonly id: string;                // provider-namespaced, stable for the loaded source's lifetime
-  readonly label: string;             // human label; falls back to a language-derived label
-  readonly language: string | null;   // BCP-47 or null
+  readonly id: string; // provider-namespaced, stable for the loaded source's lifetime
+  readonly label: string; // human label; falls back to a language-derived label
+  readonly language: string | null; // BCP-47 or null
   readonly kind: TextTrackKind;
   readonly readiness: TextTrackReadiness;
 };
@@ -54,7 +54,7 @@ export type TextCue = {
   readonly id: string | null;
   readonly startTime: number;
   readonly endTime: number;
-  readonly text: string;              // plain text; newlines preserved for multi-line cues
+  readonly text: string; // plain text; newlines preserved for multi-line cues
 };
 ```
 
