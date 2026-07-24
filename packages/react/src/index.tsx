@@ -144,6 +144,7 @@ export type PlayerActivationProps = {
 export type RootProps = NativePlaybackOptions &
   PlayerActivationProps & {
     readonly autoplay?: AutoplayMode;
+    readonly captionRenderer?: 'custom' | 'native';
     readonly children: ReactNode;
     readonly defaultMuted?: boolean;
     readonly mediaMetadata?: MediaMetadataInput | null;
@@ -300,6 +301,7 @@ export const usePlayerActions = (): PlayerActions => {
 
 export const Root = ({
   autoplay = false,
+  captionRenderer,
   children,
   defaultMuted = false,
   defaultPlaybackRate = 1,
@@ -678,6 +680,10 @@ export const Root = ({
   useEffect(() => {
     controller.configureAutoplay(autoplay, { controlledMuted: muted });
   }, [autoplay, controller, muted]);
+
+  useEffect(() => {
+    controller.setCaptionRenderer(captionRenderer ?? 'custom');
+  }, [captionRenderer, controller]);
 
   useEffect(() => {
     if (muted === undefined) {

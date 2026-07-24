@@ -2,7 +2,7 @@
 
 import { act, cleanup, render } from '@testing-library/react';
 import { createRef, type ReactNode } from 'react';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   PlayerController,
   type ProviderAdapter,
@@ -192,5 +192,69 @@ describe('Player.Captions', () => {
     expect(overlay?.classList.contains('my-captions')).toBe(true);
     expect((overlay as HTMLElement | null)?.style.color).toBe('red');
     expect(ref.current).toBe(overlay);
+  });
+});
+
+describe('Player.Root captionRenderer', () => {
+  // The provider is attached from the ref callback so it is in place before
+  // Root's mount effects run (ref attachment is a layout effect, which
+  // commits before passive effects), making the mount-time call observable.
+  const renderWithCaptionSpy = (captionRenderer?: 'custom' | 'native') => {
+    const setCaptionRenderer = vi.fn();
+    const adapter: ProviderAdapter = {
+      provider: 'native',
+      attach: () => {},
+      load: () => {},
+      destroy: () => {},
+      subscribe: () => () => {},
+      setCaptionRenderer
+    };
+    const attachProvider = (instance: Player.PlayerHandle | null) => {
+      (instance as unknown as PlayerController | null)?.setProvider(adapter);
+    };
+    const utils = render(
+      <Player.Root
+        captionRenderer={captionRenderer}
+        loading="interaction"
+        ref={attachProvider}
+        source="/tracer.mp4"
+      >
+        {null}
+      </Player.Root>
+    );
+    return {
+      ...utils,
+      setCaptionRenderer,
+      rerenderWithCaptionRenderer: (next?: 'custom' | 'native') =>
+        utils.rerender(
+          <Player.Root
+            captionRenderer={next}
+            loading="interaction"
+            ref={attachProvider}
+            source="/tracer.mp4"
+          >
+            {null}
+          </Player.Root>
+        )
+    };
+  };
+
+  test('calls setCaptionRenderer with "native" when captionRenderer="native"', () => {
+    const { setCaptionRenderer } = renderWithCaptionSpy('native');
+    expect(setCaptionRenderer).toHaveBeenCalledWith('native');
+  });
+
+  test('defaults to "custom" when captionRenderer is omitted', () => {
+    const { setCaptionRenderer } = renderWithCaptionSpy(undefined);
+    expect(setCaptionRenderer).toHaveBeenCalledWith('custom');
+  });
+
+  test('re-calls setCaptionRenderer when the prop changes', () => {
+    const { rerenderWithCaptionRenderer, setCaptionRenderer } =
+      renderWithCaptionSpy('custom');
+    expect(setCaptionRenderer).toHaveBeenCalledWith('custom');
+    setCaptionRenderer.mockClear();
+    rerenderWithCaptionRenderer('native');
+    expect(setCaptionRenderer).toHaveBeenCalledWith('native');
   });
 });
