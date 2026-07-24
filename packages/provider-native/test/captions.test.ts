@@ -23,7 +23,7 @@ type FakeTrack = {
   label: string;
   language: string | null;
   id: string;
-  default: boolean;
+  default?: boolean;
   mode: string;
   cues: { length: number } | null;
   addEventListener: () => void;
@@ -36,12 +36,15 @@ type FakeTrackList = FakeTrack[] & {
   dispatch: (type: string) => void;
 };
 
+// `default` is only set when the init explicitly provides it, so tests can
+// produce a fake track that omits the property entirely (as real `TextTrack`
+// objects do) rather than defaulting it to `false`.
 const createFakeTrack = (init: FakeTrackInit): FakeTrack => ({
   kind: init.kind,
   label: init.label,
   language: init.language,
   id: init.id ?? '',
-  default: init.default ?? false,
+  ...(init.default !== undefined ? { default: init.default } : {}),
   mode: 'disabled',
   cues: init.hasCues ? { length: 1 } : null,
   addEventListener: () => undefined,
@@ -250,4 +253,27 @@ test('stops re-discovering tracks after destroy', async () => {
   trackList.dispatch('addtrack');
 
   expect(patches).toEqual([]);
+});
+
+// `default` is an HTMLTrackElement IDL attribute per spec, not exposed on the
+// associated TextTrack — real browsers never put it on the track object. This
+// appends a real <track default> element (the DOM signal the fix must read)
+// while the corresponding fake TextTrack entry carries no `default` property
+// at all, proving discovery reads the flag from the <track> element rather
+// than the (spec-inaccurate) track object.
+test('reads the default flag from a real <track> element rather than the TextTrack object', async () => {
+  const { media, provider, patches } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'captions');
+  trackElement.id = 't1';
+  trackElement.default = true;
+  media.appendChild(trackElement);
+
+  await provider.attach();
+
+  const last = latest(patches);
+  expect(last.selectedTextTrackId).toBe('t1');
 });

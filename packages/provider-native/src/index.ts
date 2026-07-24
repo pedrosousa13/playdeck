@@ -325,6 +325,30 @@ export const createNativeProvider = (
     return entries;
   };
 
+  // `default` is an HTMLTrackElement IDL attribute per spec — it is not
+  // exposed on the associated TextTrack, so real `<track default>` markup
+  // must be read from the DOM element, not the track object. Matches by
+  // object identity first (holds in spec-conformant engines), falling back
+  // to id equality for engines/environments where `HTMLTrackElement.track`
+  // does not return a stable reference.
+  const defaultCaptionTrackEntry = (
+    entries: Array<{ track: NativeTextTrack; index: number }>
+  ): { track: NativeTextTrack; index: number } | undefined => {
+    const trackElements = media.querySelectorAll('track');
+    for (let index = 0; index < trackElements.length; index += 1) {
+      const element = trackElements[index];
+      if (!element.default) continue;
+      const elementTrack = element.track;
+      const match =
+        entries.find(({ track }) => track === elementTrack) ??
+        (element.id
+          ? entries.find(({ track }) => track.id === element.id)
+          : undefined);
+      if (match) return match;
+    }
+    return undefined;
+  };
+
   // Sets discovered caption/subtitle tracks to `hidden` so native cue
   // rendering never fires — cues are surfaced through the custom pipeline
   // that later tasks add (subscribeCues/setCaptionRenderer).
@@ -334,7 +358,9 @@ export const createNativeProvider = (
     entries.forEach(({ track }) => {
       track.mode = 'hidden';
     });
-    const defaultEntry = entries.find(({ track }) => track.default === true);
+    const defaultEntry =
+      defaultCaptionTrackEntry(entries) ??
+      entries.find(({ track }) => track.default === true);
     const textTracks: TextTrack[] = entries.map(({ track, index }) => ({
       id: nativeTextTrackId(track, index),
       label: track.label,
