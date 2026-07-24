@@ -244,6 +244,8 @@ export type ProviderAdapter = {
   exitPictureInPicture?: () => Promise<CommandResult>;
   showAirPlayPicker?: () => Promise<CommandResult>;
   retry?: () => Promise<CommandResult>;
+  subscribeCues?: (listener: (cues: readonly TextCue[]) => void) => () => void;
+  setCaptionRenderer?: (mode: 'custom' | 'native') => void;
 };
 
 const freezeAvailability = (availability: Availability): Availability =>
@@ -575,6 +577,9 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
 export class PlayerController {
   #provider: ProviderAdapter | undefined;
   #unsubscribe: (() => void) | undefined;
+  #cueUnsubscribe: (() => void) | undefined;
+  #activeCues: readonly TextCue[] = Object.freeze([]);
+  #cueListeners = new Set<(cues: readonly TextCue[]) => void>();
   #listeners = new Set<(state: PlayerState) => void>();
   #eventListeners = new Map<
     PlayerEventType,
@@ -657,10 +662,14 @@ export class PlayerController {
     this.#pendingPlaybackOrigin = undefined;
     const generation = ++this.#generation;
     const unsubscribe = this.#unsubscribe;
+    const cueUnsubscribe = this.#cueUnsubscribe;
     const previousProvider = this.#provider;
     this.#unsubscribe = undefined;
+    this.#cueUnsubscribe = undefined;
     this.#provider = undefined;
     unsubscribeSafely(unsubscribe);
+    unsubscribeSafely(cueUnsubscribe);
+    this.#setActiveCues([]);
     if (previousProvider) {
       destroyProviderSafely(previousProvider);
     }
@@ -722,6 +731,13 @@ export class PlayerController {
       return;
     }
     this.#unsubscribe = nextUnsubscribe;
+    if (provider.subscribeCues) {
+      this.#cueUnsubscribe = provider.subscribeCues((cues) => {
+        if (generation !== this.#generation || provider !== this.#provider)
+          return;
+        this.#setActiveCues(cues);
+      });
+    }
     let attachResult: void | Promise<void>;
     try {
       attachResult = provider.attach();
@@ -745,6 +761,20 @@ export class PlayerController {
     this.#listeners.add(listener);
     listener(this.#state);
     return () => this.#listeners.delete(listener);
+  };
+
+  subscribeCues = (
+    listener: (cues: readonly TextCue[]) => void
+  ): (() => void) => {
+    this.#cueListeners.add(listener);
+    listener(this.#activeCues);
+    return () => this.#cueListeners.delete(listener);
+  };
+
+  getActiveCues = (): readonly TextCue[] => this.#activeCues;
+
+  setCaptionRenderer = (mode: 'custom' | 'native'): void => {
+    this.#provider?.setCaptionRenderer?.(mode);
   };
 
   on = <Type extends PlayerEventType>(
@@ -923,6 +953,11 @@ export class PlayerController {
     const snapshot = Object.freeze(state);
     this.#state = snapshot;
     this.#listeners.forEach((listener) => listener(snapshot));
+  };
+
+  #setActiveCues = (cues: readonly TextCue[]): void => {
+    this.#activeCues = Object.freeze(cues.map((c) => Object.freeze({ ...c })));
+    this.#cueListeners.forEach((l) => l(this.#activeCues));
   };
 
   #applyPatch = (patch: ProviderStatePatch, acceptAutoplay = true): void => {
