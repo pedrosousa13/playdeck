@@ -369,10 +369,14 @@ describe('Player.CaptionsButton', () => {
     );
     expect(button?.getAttribute('data-state')).toBe('off');
     expect(button?.getAttribute('aria-pressed')).toBe('false');
+    // The accessible name states the action, not the state, like every other
+    // toggle in the package ('Play'/'Pause', 'Mute'/'Unmute', ...).
+    expect(button?.getAttribute('aria-label')).toBe('Enable captions');
 
     emitState({ selectedTextTrackId: 'en' });
     expect(button?.getAttribute('data-state')).toBe('on');
     expect(button?.getAttribute('aria-pressed')).toBe('true');
+    expect(button?.getAttribute('aria-label')).toBe('Disable captions');
   });
 
   test('clicking turns captions off when a track is selected', () => {

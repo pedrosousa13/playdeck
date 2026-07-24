@@ -1781,7 +1781,7 @@ export const CaptionsButton = ({
     <>
       <button
         {...props}
-        aria-label={on ? 'Captions on' : 'Captions off'}
+        aria-label={on ? 'Disable captions' : 'Enable captions'}
         aria-pressed={on}
         data-provider={provider ?? undefined}
         data-reely-part="captions-button"
