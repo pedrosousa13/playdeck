@@ -593,7 +593,10 @@ export const createNativeProvider = (
     load: () => {
       if (destroyed || loaded) return;
       loaded = true;
-      textTracks.reset();
+      // Caption state is deliberately left alone: `load()` runs once, right
+      // after `attach()` discovered this source's tracks. A source switch
+      // creates a new provider, and the controller clears caption state on
+      // the swap.
       media.load();
     },
     destroy: () => {

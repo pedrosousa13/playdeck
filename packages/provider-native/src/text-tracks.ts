@@ -25,9 +25,6 @@ export type NativeTextTracks = {
   readonly setCaptionRenderer: (mode: 'custom' | 'native') => void;
   // Initial discovery — call once after attach.
   readonly discover: () => void;
-  // load()/source-switch reset: clears tracks/selection/hasExplicitSelection
-  // and the cue channel, and emits the cleared state.
-  readonly reset: () => void;
   readonly attachListeners: () => void;
   readonly destroy: () => void;
   readonly hasSelectableTextTracks: () => boolean;
@@ -293,26 +290,6 @@ export const createNativeTextTracks = (
       });
     },
     discover: () => discoverTextTracks(),
-    reset: () => {
-      // A new source invalidates any caption state discovered for the
-      // previous one: clear the held selection (including the "explicit"
-      // flag, so the next discovery honors *this* source's `<track
-      // default>` rather than resurrecting the old selection) and stop
-      // emitting cues for the now-stale selected track. Re-discovery for the
-      // new source's tracks (via addtrack/change events as it loads)
-      // repopulates everything from here.
-      hasExplicitSelection = false;
-      selectedTextTrackId = null;
-      hasSelectableTextTracks = false;
-      detachCueChangeTrack();
-      emitCues([]);
-      emit({
-        textTracks: [],
-        selectedTextTrackId: null,
-        captionRendering: 'unavailable',
-        capabilities: getCapabilities()
-      });
-    },
     attachListeners: () => {
       textTrackList = media.textTracks;
       textTrackList.addEventListener('addtrack', onTextTracksChange);

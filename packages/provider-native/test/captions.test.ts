@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { expect, test } from 'vitest';
+import { PlayerController } from '@reely/core';
 import { createNativeProvider } from '../src/index';
 
 // happy-dom's real TextTrack/TextTrackList implementation is too limited to
@@ -471,8 +472,11 @@ test('setCaptionRenderer toggles the selected track between hidden and showing a
   expect(latest(patches).captionRendering).toBe('custom');
 });
 
-test('load() resets caption state and re-honors the new source default on rediscovery', async () => {
-  const { provider, patches, trackList } = mountNative([
+// `load()` is guarded by an internal `loaded` flag and providers are created
+// per source, so it only ever runs once -- right after `attach()`, on the same
+// source discovery just read. It must therefore leave caption state alone.
+test('load() keeps the tracks and selection discovered by attach()', async () => {
+  const { provider, patches } = mountNative([
     {
       kind: 'captions',
       label: 'English',
@@ -483,36 +487,70 @@ test('load() resets caption state and re-honors the new source default on redisc
     { kind: 'subtitles', label: 'Spanish', language: 'es', id: 't2' }
   ]);
   await provider.attach();
-  // Explicitly select the non-default track, so the reset below is
-  // observably distinct from a fresh discovery: if `hasExplicitSelection`
-  // survived the reset, resolving selection against the new source's tracks
-  // would try to keep 't2' (not found -> null) instead of honoring the new
-  // default.
   await provider.selectTextTrack?.('t2');
   const cueFrames: Array<readonly unknown[]> = [];
   provider.subscribeCues?.((cues) => cueFrames.push(cues));
-  patches.length = 0;
 
   await provider.load();
 
-  expect(latest(patches).textTracks).toEqual([]);
-  expect(latest(patches).selectedTextTrackId).toBeNull();
-  expect(cueFrames).toEqual([[]]);
+  expect(
+    (latest(patches).textTracks as ReadonlyArray<{ id: string }>).map(
+      ({ id }) => id
+    )
+  ).toEqual(['t1', 't2']);
+  expect(latest(patches).selectedTextTrackId).toBe('t2');
+  expect(latest(patches).captionRendering).toBe('custom');
+  expect(cueFrames).toEqual([]);
+});
 
-  // Simulate the new source's tracks arriving, with a different default.
-  trackList.length = 0;
-  trackList.push(
-    createFakeTrack({
+// The genuine source-switch boundary: React recreates the provider per source
+// and hands it to the controller, which clears caption state (and the cue
+// channel) on the swap.
+test('swapping the provider through the controller clears caption state', async () => {
+  const controller = new PlayerController();
+  const first = mountNative([
+    {
       kind: 'captions',
+      label: 'English',
+      language: 'en',
+      id: 't1',
+      default: true
+    }
+  ]);
+  const cueFrames: Array<readonly unknown[]> = [];
+  controller.subscribeCues((cues) => cueFrames.push(cues));
+  controller.setProvider(first.provider);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(controller.getState().selectedTextTrackId).toBe('t1');
+
+  const second = mountNative([
+    {
+      kind: 'subtitles',
       label: 'French',
       language: 'fr',
       id: 't3',
       default: true
-    })
-  );
-  trackList.dispatch('addtrack');
+    }
+  ]);
+  controller.setProvider(second.provider);
 
-  expect(latest(patches).selectedTextTrackId).toBe('t3');
+  expect(cueFrames.at(-1)).toEqual([]);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  // The new source's own default is honored -- nothing leaks from the old one.
+  expect(controller.getState().selectedTextTrackId).toBe('t3');
+  expect(
+    controller.getState().textTracks.map((textTrack) => textTrack.id)
+  ).toEqual(['t3']);
+
+  controller.setProvider(undefined);
+
+  expect(controller.getState().textTracks).toEqual([]);
+  expect(controller.getState().selectedTextTrackId).toBeNull();
+  expect(controller.getState().captionRendering).toBe('unavailable');
 });
 
 test('cuechange with an empty, whitespace-only, or missing cue text normalizes to an empty string without throwing', async () => {
