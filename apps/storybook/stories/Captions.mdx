@@ -1,0 +1,82 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Overview/Captions" />
+
+# Captions
+
+Reely's caption system is a hybrid: by default Reely draws WebVTT cues itself,
+but hands drawing off to the browser or an embedding provider whenever they
+own it instead. `PlayerState.captionRendering` always reports the mode that is
+**actually in effect** — the combination of what was requested and what the
+attached provider is capable of — never merely what was asked for.
+
+## Rendering modes
+
+`captionRendering` is one of four values:
+
+- **`custom`** (default) — Reely renders the active WebVTT cues itself, in
+  `Player.Captions`. Fully styleable via the `--reely-caption-*` CSS custom
+  properties (`--reely-caption-font-size`, `--reely-caption-color`,
+  `--reely-caption-background`, `--reely-caption-edge`) or replaceable
+  per-cue with the `renderCue` render prop — see the `Player/Captions` story
+  docs for the full contract.
+- **`native`** — opt in with `<Player.Root captionRenderer="native">`. The
+  browser's own `<track>` rendering draws the cues, and `Player.Captions`
+  renders nothing, so there is never double rendering. This mode only takes
+  effect once a track is actually selected; with nothing selected there is
+  nothing for the browser to draw, so the effective mode falls back to
+  `custom` (harmless, since there are also no cues to draw there either).
+- **`provider`** — YouTube and Vimeo draw captions inside their own iframe.
+  Reely reports the effective mode honestly as `provider`: it still exposes
+  the track list and language selection, but renders no overlay and emits no
+  cues, because the embed is the one drawing.
+- **`unavailable`** — there are no selectable text tracks.
+
+**Engine caveat:** requesting `captionRenderer="native"` while the HLS
+provider is running its hls.js engine is honored without pretending it did
+something it can't — hls.js's own text-track rendering has to stay off (it's
+needed to feed the `subscribeCues` pipeline), so there's no native surface to
+hand the request to, and `captionRendering` keeps honestly reporting `custom`.
+Cues keep flowing through `Player.Captions` either way. The native `<video>`
+engine (used when the browser can play HLS natively) doesn't have this
+limitation.
+
+## Declaring and selecting tracks
+
+`Player.Media` accepts a `textTracks` prop — an array of
+`{ src, srcLang, label, kind?, default? }` — which renders real `<track>`
+elements for native playback and the HLS provider's native engine. Embedded
+WebVTT in an HLS manifest, and YouTube/Vimeo's own caption tracks, are
+discovered automatically with no extra configuration.
+
+Selection is a single control point regardless of source:
+`controller.selectTextTrack(id | null)`, or the `Player.CaptionsButton` +
+`Player.CaptionsMenu` primitives. `null` means captions off. On load, the
+`<track default>` attribute (or the provider/manifest's own default flag)
+selects a track; otherwise captions start off.
+
+## Accessibility model
+
+Caption cues are visual media content, not announcements — cue text never
+enters an `aria-live` region, since a screen reader would otherwise read out
+the entire film as it plays. `Player.CaptionsButton` announces only the
+_control_ change, once per transition, in its own polite live region
+(`data-reely-part="captions-announcer"`): `"<label> captions on"` or
+`"Captions off"`. The `C` keyboard shortcut toggles captions the same way the
+button does, restoring the last-selected track.
+
+## Author responsibilities
+
+Reely provides the mechanics: discovery, selection, rendering, and styling of
+caption tracks. It does not — and cannot — provide the caption content
+itself. Shipping captions that are inaccurate, out of sync, mislabeled, or
+otherwise non-conformant does not satisfy accessibility requirements just
+because the player supports captions. It remains the content author's
+responsibility to ensure:
+
+- **Accuracy** — captions match the spoken/audible content.
+- **Synchronization** — cue timing matches the audio.
+- **Language labeling** — each track's declared language matches its actual
+  content.
+- **WCAG conformance** — captions meet the applicable conformance level for
+  the content being published.
