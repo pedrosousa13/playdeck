@@ -401,6 +401,164 @@ describe('Player.CaptionsButton', () => {
   });
 });
 
+describe('Player.CaptionsButton announcer', () => {
+  const announcerText = (container: HTMLElement) =>
+    container.querySelector('[data-reely-part="captions-announcer"]')
+      ?.textContent;
+
+  test('announces "<label> captions on" once when a track becomes selected', () => {
+    const { container, emitState } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: null
+    });
+    expect(announcerText(container)).toBe('');
+    emitState({ selectedTextTrackId: 'en' });
+    expect(announcerText(container)).toBe('English captions on');
+  });
+
+  test('announces "Captions off" once when the selection is cleared', () => {
+    const { container, emitState } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: null
+    });
+    emitState({ selectedTextTrackId: 'en' });
+    expect(announcerText(container)).toBe('English captions on');
+    emitState({ selectedTextTrackId: null });
+    expect(announcerText(container)).toBe('Captions off');
+  });
+
+  test('does not re-announce when the selection is unchanged', () => {
+    const { container, emitState } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: null
+    });
+    emitState({ selectedTextTrackId: 'en' });
+    expect(announcerText(container)).toBe('English captions on');
+    emitState({ selectedTextTrackId: 'en' });
+    expect(announcerText(container)).toBe('English captions on');
+  });
+
+  test('exposes the announcer as aria-live="polite"', () => {
+    const { container, emitState } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({ capabilities: withSelectTextTrack(available) });
+    const announcer = container.querySelector(
+      '[data-reely-part="captions-announcer"]'
+    );
+    expect(announcer?.getAttribute('aria-live')).toBe('polite');
+  });
+});
+
+describe('Player.Controls captions shortcut', () => {
+  test('pressing "c" turns captions off when a track is selected', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: 'en'
+    });
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'c' });
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+  });
+
+  test('pressing "C" selects a track when none is selected', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English'), track('es', 'Spanish')],
+      selectedTextTrackId: null
+    });
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'C' });
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+  });
+
+  test('does nothing when the selectTextTrack capability is unavailable', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>
+    );
+    emitState({
+      capabilities: withSelectTextTrack(notReadyAvailability),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: null
+    });
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'c' });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('ignores the shortcut while an open menu has focus', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.Controls>
+        <div role="menu">
+          <button role="menuitem" type="button">
+            item
+          </button>
+        </div>
+      </Player.Controls>
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: 'en'
+    });
+    const item = container.querySelector<HTMLElement>('[role="menuitem"]')!;
+    item.focus();
+    fireEvent.keyDown(item, { key: 'c' });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('ignores the shortcut while an editable target is focused', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.Controls>
+        <input aria-label="note" />
+      </Player.Controls>
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: 'en'
+    });
+    const input = container.querySelector('input')!;
+    input.focus();
+    fireEvent.keyDown(input, { key: 'c' });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+});
+
 describe('Player.CaptionsMenu', () => {
   test('renders nothing when there are no tracks', () => {
     const { container, emitState } = renderWithPlayer(<Player.CaptionsMenu />);

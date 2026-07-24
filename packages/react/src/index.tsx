@@ -1686,6 +1686,34 @@ export const PipButton = ({
   );
 };
 
+/**
+ * Resolves what a captions toggle (button click or `C` shortcut) should do
+ * next, given the current tracks/selection and the last non-null selection
+ * remembered across toggles. Returns `null` to turn captions off, a track id
+ * to turn them on, or `undefined` when there is nothing to select (no
+ * remembered or first track) — the caller should no-op in that case.
+ */
+const resolveCaptionToggle = (
+  textTracks: readonly TextTrack[],
+  selectedId: string | null,
+  rememberedId: string | null
+): string | null | undefined => {
+  if (selectedId !== null) return null;
+  return textTracks.find((t) => t.id === rememberedId)?.id ?? textTracks[0]?.id;
+};
+
+const visuallyHiddenStyle: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: 'hidden',
+  clip: 'rect(0, 0, 0, 0)',
+  whiteSpace: 'nowrap',
+  border: 0
+};
+
 export type CaptionsButtonProps = ComponentPropsWithRef<'button'>;
 
 export const CaptionsButton = ({
@@ -1707,35 +1735,57 @@ export const CaptionsButton = ({
   /* eslint-disable react-hooks/refs -- remember the last non-null selection synchronously so toggling captions back on restores it. */
   if (selectedId !== null) lastSelectedId.current = selectedId;
   /* eslint-enable react-hooks/refs */
+  // One-time announcement: track the previously seen selection so the live
+  // region text only changes (and is only announced) on an actual
+  // transition, not on every unrelated re-render.
+  const previousSelectedId = useRef<string | null>(selectedId);
+  const announcement = useRef<string>('');
+  /* eslint-disable react-hooks/refs -- computed synchronously per render, mirroring lastSelectedId above, so the announcement updates on the same render as the transition. */
+  if (previousSelectedId.current !== selectedId) {
+    const label = textTracks.find((t) => t.id === selectedId)?.label;
+    announcement.current =
+      selectedId !== null ? `${label ?? ''} captions on` : 'Captions off';
+    previousSelectedId.current = selectedId;
+  }
+  const announcementText = announcement.current;
+  /* eslint-enable react-hooks/refs */
   if (status !== 'available') return null;
   const on = selectedId !== null;
 
   return (
-    <button
-      {...props}
-      aria-label={on ? 'Captions on' : 'Captions off'}
-      aria-pressed={on}
-      data-provider={provider ?? undefined}
-      data-reely-part="captions-button"
-      data-state={on ? 'on' : 'off'}
-      onClick={(event) => {
-        onClick?.(event);
-        if (event.defaultPrevented) return;
-        if (on) {
-          void controller.selectTextTrack(null);
-          return;
-        }
-        const remembered = textTracks.find(
-          (t) => t.id === lastSelectedId.current
-        )?.id;
-        const next = remembered ?? textTracks[0]?.id ?? null;
-        if (next !== null) void controller.selectTextTrack(next);
-      }}
-      style={{ ...controlTargetStyle, ...style }}
-      type="button"
-    >
-      {children ?? <CaptionsIcon />}
-    </button>
+    <>
+      <button
+        {...props}
+        aria-label={on ? 'Captions on' : 'Captions off'}
+        aria-pressed={on}
+        data-provider={provider ?? undefined}
+        data-reely-part="captions-button"
+        data-state={on ? 'on' : 'off'}
+        onClick={(event) => {
+          onClick?.(event);
+          if (event.defaultPrevented) return;
+          const next = resolveCaptionToggle(
+            textTracks,
+            selectedId,
+            lastSelectedId.current
+          );
+          if (next !== undefined) void controller.selectTextTrack(next);
+        }}
+        style={{ ...controlTargetStyle, ...style }}
+        type="button"
+      >
+        {children ?? <CaptionsIcon />}
+      </button>
+      {/* Announces only the control-change message ("<label> captions on" /
+          "Captions off"); cue text must never enter a live region. */}
+      <div
+        aria-live="polite"
+        data-reely-part="captions-announcer"
+        style={visuallyHiddenStyle}
+      >
+        {announcementText}
+      </div>
+    </>
   );
 };
 
@@ -1798,6 +1848,9 @@ export const Controls = ({
     pipStatus,
     provider,
     seekStatus,
+    selectedTextTrackId,
+    selectTextTrackStatus,
+    textTracks,
     volume,
     volumeStatus
   } = usePlayerState((state) => ({
@@ -1807,12 +1860,23 @@ export const Controls = ({
     pipStatus: state.capabilities.pictureInPicture.status,
     provider: state.provider,
     seekStatus: state.capabilities.seek.status,
+    selectedTextTrackId: state.selectedTextTrackId,
+    selectTextTrackStatus: state.capabilities.selectTextTrack.status,
+    textTracks: state.textTracks,
     volume: state.volume,
     volumeStatus: state.capabilities.setVolume.status
   }));
   const { controller } = usePlayer();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hadFocusWithin = useRef(false);
+  // Remember the last non-null caption selection, same as CaptionsButton, so
+  // the `C` shortcut restores the same track the button would when toggling
+  // captions back on — sharing resolveCaptionToggle keeps the two in sync.
+  const lastSelectedTextTrackId = useRef<string | null>(null);
+  /* eslint-disable react-hooks/refs -- mirrors CaptionsButton's lastSelectedId ref. */
+  if (selectedTextTrackId !== null)
+    lastSelectedTextTrackId.current = selectedTextTrackId;
+  /* eslint-enable react-hooks/refs */
   // Signature of the capabilities that gate whether a child control is
   // rendered. Focus restoration keys off changes here so it fires only on a
   // capability transition (a gated control appearing or disappearing) and
@@ -1885,10 +1949,17 @@ export const Controls = ({
             : controller.requestFullscreen());
           return;
         case 'c':
-        case 'C':
-          // Captions toggle is owned by the captions issue; the key is
-          // reserved here so the shortcut map stays complete.
+        case 'C': {
+          if (selectTextTrackStatus !== 'available') return;
+          event.preventDefault();
+          const next = resolveCaptionToggle(
+            textTracks,
+            selectedTextTrackId,
+            lastSelectedTextTrackId.current
+          );
+          if (next !== undefined) void controller.selectTextTrack(next);
           return;
+        }
         default:
           return;
       }
@@ -1899,6 +1970,9 @@ export const Controls = ({
       fullscreenStatus,
       muted,
       seekStatus,
+      selectedTextTrackId,
+      selectTextTrackStatus,
+      textTracks,
       volume,
       volumeStatus
     ]
