@@ -561,6 +561,20 @@ export const createHlsProvider = (
     requestPictureInPicture: native.requestPictureInPicture,
     exitPictureInPicture: native.exitPictureInPicture,
     showAirPlayPicker: native.showAirPlayPicker,
+    // Embedded WebVTT on the native HLS engine surfaces through the same
+    // `HTMLMediaElement.textTracks` API the native provider already
+    // handles — `native.attach()`/`load()`/`destroy()` above already drive
+    // its caption subsystem, so exposing its own selection/cue/renderer
+    // commands here reuses it directly rather than standing up a second,
+    // competing text-track owner over the same media element. The hls.js
+    // engine has no equivalent yet (tracked separately).
+    ...(engine === 'native'
+      ? {
+          selectTextTrack: native.selectTextTrack,
+          subscribeCues: native.subscribeCues,
+          setCaptionRenderer: native.setCaptionRenderer
+        }
+      : {}),
     retry: async (): Promise<CommandResult> => {
       if (destroyed) return { ok: false, reason: 'not-ready' };
       if (!engine) {
