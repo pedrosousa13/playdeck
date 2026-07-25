@@ -29,16 +29,21 @@ describe('icons', () => {
   test('are re-exported from the package entry', () => {
     expect(Player.SettingsIcon).toBe(SettingsIcon);
     expect(Player.PlayIcon).toBe(PlayIcon);
-    expect(Player.AirPlayIcon).toBeDefined();
     expect(Player.AirPlayIcon).toBe(AirPlayIcon);
   });
 
-  test('AirPlayIcon follows the shared icon shape', () => {
+  test('AirPlayIcon draws a glyph', () => {
+    // Asserting fill/aria-hidden/viewBox here would only re-test the shared
+    // `Icon` wrapper: any component that renders `<Icon>` passes that whether
+    // or not it draws anything. Nothing else in the repo renders this icon --
+    // AirPlayButton falls back to a text label -- so this is the only thing
+    // standing between a blank glyph and a release.
     const { container } = render(<AirPlayIcon />);
-    const svg = container.querySelector('svg');
-    expect(svg).not.toBeNull();
-    expect(svg?.getAttribute('fill')).toBe('currentColor');
-    expect(svg?.getAttribute('aria-hidden')).toBe('true');
-    expect(svg?.getAttribute('viewBox')).toBe('0 0 24 24');
+    const paths = [...container.querySelectorAll('svg > path')];
+    expect(paths.length).toBeGreaterThan(0);
+    for (const path of paths) {
+      const d = path.getAttribute('d') ?? '';
+      expect(d.length).toBeGreaterThan(10);
+    }
   });
 });

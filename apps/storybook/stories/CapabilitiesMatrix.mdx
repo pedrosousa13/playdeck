@@ -21,8 +21,12 @@ renders nothing.
 | `Player.Time`             | — (display)                                           | always                                |
 | `Player.Controls`         | `seek`, `setVolume`, `fullscreen`, `pictureInPicture` | container; children gate individually |
 
-`airPlay` resolves `available` only where the platform has AirPlay — Safari and
-iOS — so `Player.AirPlayButton` renders nothing in every other browser.
+`airPlay` reports whether the engine exposes a route picker, not whether there
+is anything to cast to: it resolves `available` when WebKit's
+`webkitShowPlaybackTargetPicker` exists and the media does not opt out via
+`x-webkit-airplay="deny"` or `disableRemotePlayback`. So `Player.AirPlayButton`
+renders nothing outside Safari and iOS, but inside them it renders even when no
+receiver is on the network, and opens an empty picker.
 
 `selectTextTrack` gates `Player.CaptionsButton` — see the Captions docs.
 

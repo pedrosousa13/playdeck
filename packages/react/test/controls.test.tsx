@@ -518,11 +518,31 @@ describe('AirPlayButton', () => {
     );
     const button = screen.getByRole('button', { name: 'AirPlay' });
     expect(attr(button, 'aria-pressed')).toBeNull();
+    // The documented contract, and the whole reason this control differs from
+    // PipButton: no invented state attribute. Without this assertion a
+    // `data-state` could be added and every other test would still pass.
+    expect(attr(button, 'data-state')).toBeNull();
     fireEvent.click(button);
     emit({ playback: 'playing' });
     expect(
       screen.getByRole('button', { name: 'AirPlay' }).getAttribute('aria-label')
     ).toBe('AirPlay');
+  });
+
+  test('passes className, style and ref through, with a 44px target', () => {
+    const ref = createRef<HTMLButtonElement>();
+    renderWithPlayer(
+      <Player.AirPlayButton className="c" ref={ref} style={{ color: 'red' }} />,
+      capabilities({ airPlay: available })
+    );
+    const button = screen.getByRole('button', { name: 'AirPlay' });
+    expect(ref.current).toBe(button);
+    expect(button.classList.contains('c')).toBe(true);
+    expect(button.style.color).toBe('red');
+    expect(button.style.minWidth).toBe('44px');
+    expect(button.style.minHeight).toBe('44px');
+    // A bare <button> inside a form submits it.
+    expect(button.getAttribute('type')).toBe('button');
   });
 
   test('a consumer onClick that prevents default suppresses the picker', () => {

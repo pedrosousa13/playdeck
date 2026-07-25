@@ -40,6 +40,7 @@ const ThemedPlayer = () => (
       <Player.VolumeSlider />
       <Player.CaptionsButton />
       <Player.PipButton />
+      <Player.AirPlayButton />
       <Player.FullscreenButton />
     </Player.Controls>
   </Player.Viewport>
@@ -50,6 +51,7 @@ const fullyCapable = ready({
   setVolume: available,
   selectTextTrack: available,
   pictureInPicture: available,
+  airPlay: available,
   fullscreen: available
 });
 

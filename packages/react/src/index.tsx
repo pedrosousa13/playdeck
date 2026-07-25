@@ -1717,10 +1717,15 @@ export type AirPlayButtonProps = ComponentPropsWithRef<'button'>;
  * Opens the platform AirPlay route picker. Gated on the `airPlay` capability,
  * so it renders nothing outside Safari/iOS where AirPlay does not exist.
  *
- * Unlike `FullscreenButton` and `PipButton` this is **not** a toggle: the page
- * is never told which route the user picked, so there is no on/off state to
- * expose. Hence no `aria-pressed`, one static label, and no `data-state` —
- * an invented state value would be a styling hook that never changes.
+ * Unlike `FullscreenButton` and `PipButton` this is **not** a toggle. Which
+ * device the user picked is never exposed, and Reely does not currently
+ * surface an active-route flag either: WebKit's
+ * `webkitCurrentPlaybackTargetIsWireless` is deliberately unplumbed (see
+ * `provider-native`). So there is no state to render today — no `aria-pressed`,
+ * one static label, no `data-state`.
+ *
+ * That last part is current behaviour, not a permanent guarantee: if the
+ * wireless-route flag is ever surfaced, this control gains a state.
  */
 export const AirPlayButton = ({
   children,

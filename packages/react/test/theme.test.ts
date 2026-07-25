@@ -86,8 +86,14 @@ describe('theme contract', () => {
       'airplay-button',
       'settings-menu-trigger'
     ];
-    const buttonRules = selectorLists.filter((selector) =>
-      selector.includes("data-reely-part='play-button'")
+    // Anchored on "mentions two or more button parts" rather than on one named
+    // part: anchoring on `play-button` made a new rule listing only, say,
+    // mute-button and pip-button invisible to this check.
+    const buttonRules = selectorLists.filter(
+      (selector) =>
+        buttonParts.filter((part) =>
+          selector.includes(`data-reely-part='${part}'`)
+        ).length >= 2
     );
     expect(buttonRules.length).toBeGreaterThan(0);
     const missing = buttonRules.flatMap((rule) =>
