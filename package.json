@@ -18,7 +18,11 @@
     "test:packages": "node scripts/verify-packaging.mjs",
     "test:budgets": "node scripts/check-bundle-budgets.mjs",
     "test:bundle": "turbo run build --filter=@reely/bundle-native-only && pnpm --filter @reely/bundle-native-only test",
-    "build": "turbo run build"
+    "build": "turbo run build",
+    "changeset": "changeset",
+    "version:packages": "changeset version",
+    "prerelease:enter": "changeset pre enter next",
+    "prerelease:exit": "changeset pre exit"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
