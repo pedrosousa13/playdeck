@@ -32,6 +32,30 @@ export type TextTrack = {
   readonly readiness: TextTrackReadiness;
 };
 
+// `TextTrack.label` is a human label, so it must never be empty: providers
+// hand their raw label through here and get a language-derived one back when
+// there is nothing usable. A `<track srclang="en">` with no `label` would
+// otherwise render a menu item with an empty accessible name.
+//
+// The language is rendered in itself ("français", not "French"), which keeps
+// the result independent of the page locale and matches how caption menus
+// name languages elsewhere.
+export const textTrackLabel = (
+  label: string | null | undefined,
+  language: string | null | undefined
+): string => {
+  const trimmedLabel = label?.trim();
+  if (trimmedLabel) return trimmedLabel;
+  const code = language?.trim();
+  if (!code) return 'Unknown';
+  try {
+    return new Intl.DisplayNames([code], { type: 'language' }).of(code) ?? code;
+  } catch {
+    // A malformed language tag throws; the raw code still beats an empty name.
+    return code;
+  }
+};
+
 export type TextCue = {
   readonly id: string | null;
   readonly startTime: number;
@@ -988,6 +1012,12 @@ export class PlayerController {
         patch.capabilities === undefined
           ? this.#state.capabilities
           : freezeCapabilities(patch.capabilities),
+      textTracks:
+        patch.textTracks === undefined
+          ? this.#state.textTracks
+          : Object.freeze(
+              patch.textTracks.map((track) => Object.freeze({ ...track }))
+            ),
       quality:
         patch.quality === undefined
           ? this.#state.quality

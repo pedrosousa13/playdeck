@@ -2,8 +2,11 @@ import { describe, expect, test } from 'vitest';
 import {
   createInitialPlayerState,
   PlayerController,
+  textTrackLabel,
   type ProviderAdapter,
-  type TextCue
+  type ProviderStatePatch,
+  type TextCue,
+  type TextTrack
 } from '../src/index';
 
 describe('caption initial state', () => {
@@ -13,6 +16,27 @@ describe('caption initial state', () => {
     expect(state.selectedTextTrackId).toBeNull();
     expect(state.captionRendering).toBe('unavailable');
     expect(Object.isFrozen(state.textTracks)).toBe(true);
+  });
+});
+
+describe('textTrackLabel', () => {
+  test('keeps a usable label, trimmed', () => {
+    expect(textTrackLabel('  English  ', 'en')).toBe('English');
+  });
+
+  test('names the language in itself when the label is missing or blank', () => {
+    expect(textTrackLabel('', 'fr')).toBe('français');
+    expect(textTrackLabel(null, 'de')).toBe('Deutsch');
+    expect(textTrackLabel(undefined, '  en ')).toBe('English');
+  });
+
+  test('falls back to the raw code for an untranslatable tag', () => {
+    expect(textTrackLabel('', 'not a tag!')).toBe('not a tag!');
+  });
+
+  test('falls back to Unknown with neither a label nor a language', () => {
+    expect(textTrackLabel('', null)).toBe('Unknown');
+    expect(textTrackLabel(undefined, undefined)).toBe('Unknown');
   });
 });
 
@@ -69,5 +93,44 @@ describe('controller cue channel', () => {
     c.setCaptionRenderer('native');
     c.setProvider(noopAdapter({ setCaptionRenderer: (m) => modes.push(m) }));
     expect(modes).toEqual(['native']);
+  });
+});
+
+describe('published textTracks', () => {
+  test('copies and freezes the patched list and its entries', () => {
+    let emit: ((patch: ProviderStatePatch) => void) | undefined;
+    const c = new PlayerController();
+    c.setProvider(
+      noopAdapter({
+        subscribe: (listener) => {
+          emit = listener;
+          return () => {};
+        }
+      })
+    );
+    const providerTracks: TextTrack[] = [
+      {
+        id: 't1',
+        label: 'English',
+        language: 'en',
+        kind: 'captions',
+        readiness: 'loaded'
+      }
+    ];
+    emit?.({ textTracks: providerTracks });
+
+    const published = c.getState().textTracks;
+    expect(Object.isFrozen(published)).toBe(true);
+    expect(Object.isFrozen(published[0])).toBe(true);
+    // The provider keeps mutating its own array; the published snapshot must
+    // not follow it.
+    providerTracks.push({
+      id: 't2',
+      label: 'French',
+      language: 'fr',
+      kind: 'captions',
+      readiness: 'loaded'
+    });
+    expect(c.getState().textTracks).toHaveLength(1);
   });
 });

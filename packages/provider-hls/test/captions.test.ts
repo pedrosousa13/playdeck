@@ -318,6 +318,24 @@ test('falls back to a CLOSED-CAPTIONS kind and an index-based id when hls.js omi
   ]);
 });
 
+test('names an unnamed hls.js subtitle track after its language', async () => {
+  const { patches, hls } = await mountHlsEngineHls();
+
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: '', lang: 'fr', default: false, type: 'SUBTITLES' }
+  ]);
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 'hls:0',
+      label: 'français',
+      language: 'fr',
+      kind: 'subtitles',
+      readiness: 'loaded'
+    }
+  ]);
+});
+
 test('reports captionRendering as unavailable when hls.js has no subtitle tracks', async () => {
   const { patches, hls } = await mountHlsEngineHls();
 
@@ -333,7 +351,7 @@ test('reports the selectTextTrack capability as unavailable with zero tracks and
   discoverHlsSubtitles(hls, []);
 
   expect(latest(patches).capabilities).toMatchObject({
-    selectTextTrack: { status: 'unavailable', reason: 'provider' }
+    selectTextTrack: { status: 'unavailable', reason: 'source' }
   });
 
   discoverHlsSubtitles(hls, [

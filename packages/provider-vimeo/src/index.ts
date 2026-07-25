@@ -13,6 +13,7 @@ import type {
   TextTrackKind,
   VimeoSource
 } from '@reely/core';
+import { textTrackLabel } from '@reely/core';
 import {
   loadVimeoSdk,
   type VimeoSdkPlayer,
@@ -266,7 +267,7 @@ const toCoreTextTracks = (
 ): TextTrack[] =>
   tracks.map((track, index) => ({
     id: vimeoTextTrackId(track, index, tracks),
-    label: track.label,
+    label: textTrackLabel(track.label, track.language),
     language: track.language || null,
     kind: vimeoTextTrackKind(track.kind),
     readiness: 'loaded'

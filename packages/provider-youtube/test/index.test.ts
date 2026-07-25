@@ -271,7 +271,7 @@ test('maps player ready onto confirmed state and honest capabilities', async () 
         setVolume: { status: 'available' },
         setPlaybackRate: { status: 'available' },
         selectQuality: { status: 'unavailable', reason: 'provider' },
-        selectTextTrack: { status: 'unavailable', reason: 'provider' },
+        selectTextTrack: { status: 'unavailable', reason: 'source' },
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
@@ -722,6 +722,27 @@ test('discovers caption tracks from the captions module and reports provider ren
   );
 });
 
+test('names a caption track with no display name after its language', async () => {
+  const { harness, patches } = await readyAdapter();
+  harness.captionsTracklist = [{ languageCode: 'fr' }];
+
+  harness.fireApiChange();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      textTracks: [
+        {
+          id: 'youtube:fr',
+          label: 'français',
+          language: 'fr',
+          kind: 'captions',
+          readiness: 'loaded'
+        }
+      ]
+    })
+  );
+});
+
 test('reports caption rendering as unavailable when the video has no caption tracks', async () => {
   const { harness, patches } = await readyAdapter();
   harness.captionsTracklist = [];
@@ -733,7 +754,7 @@ test('reports caption rendering as unavailable when the video has no caption tra
       textTracks: [],
       captionRendering: 'unavailable',
       capabilities: expect.objectContaining({
-        selectTextTrack: { status: 'unavailable', reason: 'provider' }
+        selectTextTrack: { status: 'unavailable', reason: 'source' }
       })
     })
   );
@@ -829,7 +850,7 @@ test('retry clears stale caption state before the new player reports ready', asy
     expect.objectContaining({
       lifecycle: 'ready',
       capabilities: expect.objectContaining({
-        selectTextTrack: { status: 'unavailable', reason: 'provider' }
+        selectTextTrack: { status: 'unavailable', reason: 'source' }
       })
     })
   );

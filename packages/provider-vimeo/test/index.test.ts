@@ -482,6 +482,30 @@ test('discovers caption tracks and normalizes them to the core text-track contra
   });
 });
 
+test('names an unlabelled caption track after its language', async () => {
+  const { patches } = await setup({
+    fake: {
+      textTracks: [
+        {
+          language: 'fr',
+          kind: 'captions',
+          label: '',
+          mode: 'disabled' as const
+        }
+      ]
+    }
+  });
+  expect(readyPatch(patches).textTracks).toEqual([
+    {
+      id: 'vimeo:fr',
+      label: 'français',
+      language: 'fr',
+      kind: 'captions',
+      readiness: 'loaded'
+    }
+  ]);
+});
+
 test('selects a discovered caption track by its normalized id', async () => {
   const { patches, provider, sdk } = await setup({
     fake: {

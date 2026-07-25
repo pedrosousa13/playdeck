@@ -225,6 +225,24 @@ test('normalizes an empty language to null and reports no default selection', as
   expect(last.selectedTextTrackId).toBeNull();
 });
 
+test('names an unlabelled track after its language', async () => {
+  const { provider, patches } = mountNative([
+    { kind: 'captions', label: '', language: 'fr', id: 't1' }
+  ]);
+
+  await provider.attach();
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'français',
+      language: 'fr',
+      kind: 'captions',
+      readiness: 'loading'
+    }
+  ]);
+});
+
 test('reports unavailable text-track selection and no tracks when none are discovered', async () => {
   const { provider, patches } = mountNative([]);
 
@@ -240,7 +258,7 @@ test('reports unavailable text-track selection and no tracks when none are disco
         selectTextTrack: { status: string; reason?: string };
       }
     ).selectTextTrack
-  ).toEqual({ status: 'unavailable', reason: 'provider' });
+  ).toEqual({ status: 'unavailable', reason: 'source' });
 });
 
 test('re-discovers tracks when the native track list changes after attach', async () => {

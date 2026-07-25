@@ -11,6 +11,7 @@ import type {
   ProviderStateListener,
   TextTrack
 } from '@reely/core';
+import { textTrackLabel } from '@reely/core';
 import {
   loadYouTubeIframeApi,
   type YouTubeIframeApi,
@@ -74,6 +75,12 @@ const notReady: Availability = { status: 'unknown', reason: 'not-ready' };
 const providerUnavailable: Availability = {
   status: 'unavailable',
   reason: 'provider'
+};
+// A video without caption tracks is a property of the source, not of the
+// provider — every provider reports the empty-track case the same way.
+const sourceUnavailable: Availability = {
+  status: 'unavailable',
+  reason: 'source'
 };
 const policyUnavailable: Availability = {
   status: 'unavailable',
@@ -233,7 +240,10 @@ const toCoreTextTracks = (
 ): TextTrack[] =>
   tracks.map((track, index) => ({
     id: youtubeTextTrackId(track, index, tracks),
-    label: track.displayName || track.languageName || track.languageCode,
+    label: textTrackLabel(
+      track.displayName || track.languageName,
+      track.languageCode
+    ),
     language: track.languageCode,
     kind: 'captions',
     readiness: 'loaded'
@@ -357,7 +367,7 @@ export const createYouTubeProvider = (
   };
 
   const textTrackAvailability = (): Availability =>
-    textTracks.length > 0 ? available : providerUnavailable;
+    textTracks.length > 0 ? available : sourceUnavailable;
 
   const emitReadyState = (): void => {
     const current = player;

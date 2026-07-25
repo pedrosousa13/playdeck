@@ -16,6 +16,7 @@ import type {
   TextTrackKind,
   TimeRange
 } from '@reely/core';
+import { textTrackLabel } from '@reely/core';
 import {
   createNativeProvider,
   type NativePlaybackOptions
@@ -672,7 +673,7 @@ export const createHlsProvider = (
       );
       hlsTextTracks = rawTracks.map((track, index) => ({
         id: ids[index],
-        label: track.name,
+        label: textTrackLabel(track.name, track.lang),
         language: track.lang || null,
         kind: hlsSubtitleTrackKind(track),
         readiness: 'loaded'
@@ -685,7 +686,7 @@ export const createHlsProvider = (
       selectTextTrackAvailability =
         hlsTextTracks.length > 0
           ? { status: 'available' }
-          : { status: 'unavailable', reason: 'provider' };
+          : { status: 'unavailable', reason: 'source' };
       applyHlsTextTrackSelection();
       emit({
         textTracks: hlsTextTracks,

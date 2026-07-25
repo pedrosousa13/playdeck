@@ -49,6 +49,11 @@ elements for native playback and the HLS provider's native engine. Embedded
 WebVTT in an HLS manifest, and YouTube/Vimeo's own caption tracks, are
 discovered automatically with no extra configuration.
 
+Every discovered track carries a non-empty `label`, so menu items always have
+an accessible name: a track with no label of its own is named after its
+language in that language ("français"), falling back to the raw language code
+and then to "Unknown".
+
 Selection is a single control point regardless of source:
 `controller.selectTextTrack(id | null)`, or the `Player.CaptionsButton` +
 `Player.CaptionsMenu` primitives. `null` means captions off. On load, the

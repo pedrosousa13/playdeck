@@ -13,8 +13,6 @@ import type {
 } from '@reely/core';
 import { createNativeTextTracks, type NativeTextTracks } from './text-tracks';
 
-export { createNativeTextTracks, type NativeTextTracks } from './text-tracks';
-
 const available: Availability = { status: 'available' };
 const unsupported: Availability = {
   status: 'unavailable',
@@ -294,7 +292,7 @@ export const createNativeProvider = (
       selectQuality: { status: 'unknown', reason: 'provider-check' },
       selectTextTrack: textTracks.hasSelectableTextTracks()
         ? available
-        : { status: 'unavailable', reason: 'provider' },
+        : { status: 'unavailable', reason: 'source' },
       fullscreen: fullscreenAvailability(),
       pictureInPicture: pictureInPictureAvailability(),
       airPlay: airPlayAvailability(),

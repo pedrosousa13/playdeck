@@ -8,6 +8,7 @@ import type {
   TextTrackKind,
   TextTrackReadiness
 } from '@reely/core';
+import { textTrackLabel } from '@reely/core';
 
 // The `default` IDL attribute lives on HTMLTrackElement per spec, but engines
 // commonly surface it on the associated TextTrack too; treat it as optional.
@@ -195,7 +196,7 @@ export const createNativeTextTracks = (
     hasSelectableTextTracks = entries.length > 0;
     const textTracks: TextTrack[] = entries.map(({ track, index }) => ({
       id: nativeTextTrackId(track, index),
-      label: track.label,
+      label: textTrackLabel(track.label, track.language),
       language: track.language || null,
       kind: track.kind as TextTrackKind,
       readiness: nativeTextTrackReadiness(track)
