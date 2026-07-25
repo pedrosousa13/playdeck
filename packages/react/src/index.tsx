@@ -45,7 +45,10 @@ import {
 // HTMLMediaElement.HAVE_CURRENT_DATA, inlined for the same reason
 // provider-native inlines HAVE_METADATA: some DOM test environments omit the
 // static readyState constants, and `x >= undefined` is silently always false.
-const HAVE_CURRENT_DATA = 2;
+// Typed against the DOM lib, which declares it as the literal 2, so a wrong
+// value is a compile error rather than a silently-never-taken branch — the
+// annotation adds no runtime reference to the global.
+const HAVE_CURRENT_DATA: HTMLMediaElement['HAVE_CURRENT_DATA'] = 2;
 
 type PlayerContextValue = ActivationBindings & {
   controller: PlayerController;
