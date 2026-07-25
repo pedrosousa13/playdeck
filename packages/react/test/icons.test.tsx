@@ -44,15 +44,17 @@ describe('icons', () => {
     // the count catches one being deleted.
     expect(paths.length).toBe(2);
     for (const path of paths) {
-      // Measuring the extent the path covers, not its string length: a long
-      // `d` of repeated `M0 0z` is 15 characters and draws nothing at all.
-      const numbers = (path.getAttribute('d') ?? '')
-        .match(/-?\d+(\.\d+)?/g)
-        ?.map(Number);
-      expect(numbers?.length).toBeGreaterThan(3);
-      const spread =
-        Math.max(...(numbers ?? [0])) - Math.min(...(numbers ?? [0]));
-      expect(spread).toBeGreaterThan(5);
+      const d = path.getAttribute('d') ?? '';
+      // Counting drawing segments rather than string length or coordinate
+      // extent, both of which a shape with no area satisfies: `M0 0z` is short
+      // but `M0 0zM0 0z` is not, and `M0 0L24 0z` spans 24 units while being
+      // collinear and rendering nothing. A closed shape needs at least three.
+      const segments = d.replace(/[MmZz]/g, '').match(/[A-Za-z]/g) ?? [];
+      expect(segments.length).toBeGreaterThanOrEqual(3);
+      // And it has to cover ground on both axes, so a run of segments along a
+      // single line still fails.
+      const numbers = (d.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+      expect(Math.max(...numbers) - Math.min(...numbers)).toBeGreaterThan(5);
     }
   });
 });

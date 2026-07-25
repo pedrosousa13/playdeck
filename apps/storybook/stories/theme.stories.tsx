@@ -27,8 +27,8 @@ const viewportStyle = {
   // Wide enough for the full control row at the largest size these stories
   // demonstrate (`--reely-control-size: 3.5rem` in AccentAndSizeTokens). The
   // buttons are `flex: 0 0 auto` so they push out of the box rather than
-  // shrink, and at 480 the row already overflowed once AirPlayButton made it
-  // seven buttons.
+  // shrink, and at 480 the row overflowed by 49px once AirPlayButton made it
+  // six buttons.
   width: 640
 };
 
