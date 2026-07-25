@@ -9,26 +9,17 @@ type CapabilityValue = {
   readonly reason?: string;
 };
 
-type SdkPlayerLike = {
-  ready: () => Promise<void>;
-  setMuted: (muted: boolean) => Promise<unknown>;
-  setCurrentTime: (seconds: number) => Promise<unknown>;
-  enableTextTrack: (language: string) => Promise<unknown>;
-  on: (event: string, listener: (data: unknown) => void) => void;
-};
-
 declare global {
   interface Window {
     reelyHandle?: {
       getState: () => {
         activation: string;
         playback: string;
+        captionRendering: string;
         capabilities: Record<string, CapabilityValue>;
       };
       selectTextTrack: (track: string | null) => Promise<{ ok: boolean }>;
-    };
-    Vimeo?: {
-      Player: new (element: Element) => SdkPlayerLike;
+      seekTo: (seconds: number) => Promise<{ ok: boolean }>;
     };
   }
 }
@@ -73,30 +64,27 @@ test(
     );
     expect(selection).toMatchObject({ ok: true });
 
-    // De-risk #16: prove cue text actually arrives over cuechange on the
-    // exact chromeless embed the adapter builds.
-    await page.addScriptTag({ url: 'https://player.vimeo.com/api/player.js' });
-    const cue = await page.evaluate(async () => {
-      const element = document.querySelector(
-        '[data-reely-part="media"] iframe'
-      );
-      if (!element || !window.Vimeo) return undefined;
-      const player = new window.Vimeo.Player(element);
-      await player.ready();
-      const cuePromise = new Promise<unknown>((resolve) => {
-        player.on('cuechange', (data) => resolve(data));
-      });
-      await player.enableTextTrack('en');
-      await player.setCurrentTime(10);
-      return Promise.race([
-        cuePromise,
-        new Promise((resolve) => setTimeout(() => resolve(undefined), 30_000))
-      ]);
-    });
-    expect(cue, 'cuechange must deliver cue payloads').toBeDefined();
-    const cues = (cue as { cues?: Array<{ text?: string }> }).cues ?? [];
-    expect(cues.length).toBeGreaterThan(0);
-    expect(cues[0]?.text ?? '').not.toBe('');
+    // #16: Vimeo hands its cues over rather than drawing them, so the whole
+    // chain has to work on the real embed — `cuechange` fires with the track
+    // enabled `showing: false`, the payload's markup normalizes to plain text,
+    // and the result reaches Reely's own overlay. Asserting on the overlay
+    // covers all three at once, and avoids a second Vimeo Player instance
+    // competing with the adapter for ownership of the same track.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => window.reelyHandle?.getState().captionRendering),
+        { timeout: 30_000 }
+      )
+      .toBe('custom');
+    await page.evaluate(() => window.reelyHandle?.seekTo(10));
+
+    const cue = page.locator('[data-reely-part="caption-cue"]').first();
+    await expect(cue).toHaveText(/\S/, { timeout: 30_000 });
+    // Normalization ran: no WebVTT tag or Vimeo's U+21B5 line separator
+    // survives into what the viewer reads.
+    const text = (await cue.textContent()) ?? '';
+    expect(text).not.toMatch(/[<>↵]/);
   }
 );
 

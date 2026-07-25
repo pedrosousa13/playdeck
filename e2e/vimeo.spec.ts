@@ -171,10 +171,11 @@ test('caption tracks discovered from the embed are selectable', async ({
       )
     )
     .toEqual({ status: 'available' });
-  // Vimeo draws captions inside its own iframe, so the effective rendering
-  // mode is `provider` and tracks are addressed by their normalized id.
+  // Vimeo hands its cues over rather than drawing them (the track is enabled
+  // with `showing: false`), so Reely owns rendering and reports `custom`.
+  // Tracks are addressed by their normalized id.
   const state = await page.evaluate(() => window.reelyHandle?.getState());
-  expect(state?.captionRendering).toBe('provider');
+  expect(state?.captionRendering).toBe('custom');
   expect(state?.textTracks).toEqual([
     {
       id: 'vimeo:en',

@@ -8,6 +8,7 @@ import {
   type ProviderEvent,
   type ProviderStateListener,
   type ProviderStatePatch,
+  type TextCue,
   type VimeoSource
 } from '@reely/core';
 import {
@@ -476,7 +477,7 @@ test('discovers caption tracks and normalizes them to the core text-track contra
     }
   ]);
   expect(ready.selectedTextTrackId).toBe('vimeo:fr');
-  expect(ready.captionRendering).toBe('provider');
+  expect(ready.captionRendering).toBe('custom');
   expect(ready.capabilities).toMatchObject({
     selectTextTrack: { status: 'available' }
   });
@@ -529,7 +530,7 @@ test('selects a discovered caption track by its normalized id', async () => {
   await expect(provider.selectTextTrack('vimeo:fr')).resolves.toEqual({
     ok: true
   });
-  expect(player.enableTextTrack).toHaveBeenCalledWith('fr', 'captions');
+  expect(player.enableTextTrack).toHaveBeenCalledWith('fr', 'captions', false);
   expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: 'vimeo:fr' });
 
   await expect(provider.selectTextTrack(null)).resolves.toEqual({ ok: true });
@@ -613,7 +614,7 @@ test('refreshes the discovered tracks when texttrackchange reports an unknown tr
   await flushMicrotasks();
   expect(patches.at(-1)).toMatchObject({
     selectedTextTrackId: 'vimeo:es',
-    captionRendering: 'provider',
+    captionRendering: 'custom',
     textTracks: [
       {
         id: 'vimeo:en',
@@ -631,6 +632,225 @@ test('refreshes the discovered tracks when texttrackchange reports an unknown tr
       }
     ]
   });
+});
+
+// --- captions: cue channel (#16) ---
+// Vimeo's `enableTextTrack(language, kind, showing)` fires `cuechange` without
+// drawing the cues itself when `showing` is false, so Reely can own rendering
+// and report `captionRendering: 'custom'`. Verified against the real embed:
+// with `showing: false` the paused frame is pixel-identical to no track at all.
+
+const enTrack = {
+  language: 'en',
+  kind: 'subtitles',
+  label: 'English',
+  mode: 'disabled' as const
+};
+
+const cueChangePayload = (
+  cues: ReadonlyArray<{ text: string; html?: string }>
+) => ({
+  language: 'en',
+  kind: 'subtitles',
+  label: 'English',
+  cues: cues.map((cue) => ({ text: cue.text, html: cue.html ?? cue.text }))
+});
+
+test('reports custom caption rendering so cues reach the overlay', async () => {
+  const { patches } = await setup({ fake: { textTracks: [enTrack] } });
+
+  expect(readyPatch(patches).captionRendering).toBe('custom');
+});
+
+test('enables the selected track without Vimeo drawing it', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+
+  await provider.selectTextTrack!('vimeo:en');
+
+  expect(sdk.instances[0]!.enableTextTrack).toHaveBeenCalledWith(
+    'en',
+    'subtitles',
+    false
+  );
+});
+
+test('fans cuechange payloads out to cue subscribers', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+
+  sdk.instances[0]!.emit(
+    'cuechange',
+    cueChangePayload([{ text: 'first line' }])
+  );
+
+  expect(seen.at(-1)).toEqual([
+    { id: null, startTime: 0, endTime: 0, text: 'first line' }
+  ]);
+});
+
+test('normalizes Vimeo cue markup and line separators into plain text', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+
+  // Real payload shape: WebVTT tags survive in `text`, and Vimeo joins the
+  // cue's lines with U+21B5 rather than a newline.
+  sdk.instances[0]!.emit(
+    'cuechange',
+    cueChangePayload([
+      { text: '<i>how to make your videos</i>↵<i>look amazing.</i>' }
+    ])
+  );
+
+  expect(seen.at(-1)).toEqual([
+    {
+      id: null,
+      startTime: 0,
+      endTime: 0,
+      text: 'how to make your videos\nlook amazing.'
+    }
+  ]);
+});
+
+test('decodes the entities WebVTT requires cue text to escape', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+
+  sdk.instances[0]!.emit(
+    'cuechange',
+    cueChangePayload([{ text: 'rock &amp; roll &lt;loud&gt;&nbsp;now' }])
+  );
+
+  expect(seen.at(-1)?.[0]?.text).toBe('rock & roll <loud>\u00a0now');
+});
+
+test('stamps cues with the playback position they became active at', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const player = sdk.instances[0]!;
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+
+  player.emit('timeupdate', { seconds: 12.5, percent: 0.1, duration: 120 });
+  player.emit('cuechange', cueChangePayload([{ text: 'at twelve' }]));
+
+  // Vimeo's payload carries no cue timings at all, so the position where the
+  // cue became active is the only honest thing to report.
+  expect(seen.at(-1)).toEqual([
+    { id: null, startTime: 12.5, endTime: 12.5, text: 'at twelve' }
+  ]);
+});
+
+test('clears the active cues when the track goes empty', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const player = sdk.instances[0]!;
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+
+  player.emit('cuechange', cueChangePayload([{ text: 'visible' }]));
+  player.emit('cuechange', cueChangePayload([]));
+
+  expect(seen.at(-1)).toEqual([]);
+});
+
+test('drops cues whose text is empty once normalized', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+
+  sdk.instances[0]!.emit(
+    'cuechange',
+    cueChangePayload([{ text: '<i></i>' }, { text: 'kept' }])
+  );
+
+  expect(seen.at(-1)).toEqual([
+    { id: null, startTime: 0, endTime: 0, text: 'kept' }
+  ]);
+});
+
+test('stops fanning out cues once the subscriber unsubscribes', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const seen: (readonly TextCue[])[] = [];
+  const unsubscribe = provider.subscribeCues!((cues) => seen.push(cues));
+
+  unsubscribe();
+  sdk.instances[0]!.emit('cuechange', cueChangePayload([{ text: 'ignored' }]));
+
+  expect(seen).toEqual([]);
+});
+
+test('hands caption rendering back to Vimeo in native renderer mode', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const player = sdk.instances[0]!;
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  provider.setCaptionRenderer!('native');
+
+  // Vimeo drawing the cues in its own iframe is exactly what 'provider'
+  // means, and it is the fallback for anything our overlay cannot render.
+  expect(patches.at(-1)?.captionRendering).toBe('provider');
+  await provider.selectTextTrack!('vimeo:en');
+  expect(player.enableTextTrack).toHaveBeenCalledWith('en', 'subtitles', true);
+});
+
+test('re-enables the active track when the renderer mode flips', async () => {
+  const { provider, sdk } = await setup({
+    fake: {
+      textTracks: [{ ...enTrack, mode: 'showing' as const }]
+    }
+  });
+  const player = sdk.instances[0]!;
+  player.enableTextTrack.mockClear();
+
+  provider.setCaptionRenderer!('native');
+  await flushMicrotasks();
+
+  expect(player.enableTextTrack).toHaveBeenCalledWith('en', 'subtitles', true);
+});
+
+test('reports unavailable rendering with no tracks whatever the renderer mode', async () => {
+  const { provider, patches } = await setup({ fake: { textTracks: [] } });
+
+  provider.setCaptionRenderer!('native');
+
+  expect(patches.at(-1)?.captionRendering).toBe('unavailable');
+});
+
+test('clears active cues when captions are turned off', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+  sdk.instances[0]!.emit('cuechange', cueChangePayload([{ text: 'visible' }]));
+
+  await provider.selectTextTrack!(null);
+
+  expect(seen.at(-1)).toEqual([]);
+});
+
+test('clears active cues when the player is torn down for a retry', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+  sdk.instances[0]!.emit('cuechange', cueChangePayload([{ text: 'stale' }]));
+
+  await provider.retry!();
+
+  expect(seen.at(-1)).toEqual([]);
+});
+
+test('ignores cuechange from a player replaced by a retry', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const stalePlayer = sdk.instances[0]!;
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+  await provider.retry!();
+  seen.length = 0;
+
+  stalePlayer.emit('cuechange', cueChangePayload([{ text: 'from the past' }]));
+
+  expect(seen).toEqual([]);
 });
 
 // --- fullscreen and picture-in-picture quirks ---

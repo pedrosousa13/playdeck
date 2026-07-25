@@ -123,8 +123,9 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
     () => Promise.resolve(this.#textTracks)
   );
 
-  enableTextTrack: Mock<(language: string, kind?: string) => Promise<unknown>> =
-    vi.fn(() => Promise.resolve());
+  enableTextTrack: Mock<
+    (language: string, kind?: string, showing?: boolean) => Promise<unknown>
+  > = vi.fn(() => Promise.resolve());
 
   disableTextTrack: Mock<() => Promise<unknown>> = vi.fn(() =>
     Promise.resolve()
