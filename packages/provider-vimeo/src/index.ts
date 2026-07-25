@@ -280,25 +280,52 @@ const showingVimeoTextTrackId = (
   return index === -1 ? null : vimeoTextTrackId(tracks[index]!, index, tracks);
 };
 
-const findVimeoTextTrackIndex = (
+const vimeoTextTrackCandidates = (
   language: string,
   kind: string,
   tracks: ReadonlyArray<VimeoSdkTextTrack>
-): number =>
+): Array<{ id: string; mode: string }> =>
   language === ''
-    ? -1
-    : tracks.findIndex(
-        (track) =>
-          track.language === language && (kind === '' || track.kind === kind)
-      );
+    ? []
+    : tracks
+        .filter(
+          (track) =>
+            track.language === language && (kind === '' || track.kind === kind)
+        )
+        .map((track) => ({
+          id: vimeoTextTrackId(track, tracks.indexOf(track), tracks),
+          mode: track.mode
+        }));
 
+// `texttrackchange` carries language and kind, never an id or an index, so two
+// tracks sharing both (a plain and a forced-narrative English subtitle track,
+// say) are indistinguishable from the payload alone (#57). Two things break
+// the tie, in order of authority:
+//   1. the SDK's own `mode`, which marks the track actually showing. It is the
+//      only signal that reflects a change made inside Vimeo's CC menu, so it
+//      outranks anything we remember — an earlier draft checked our own id
+//      first and, because that id is sticky, never consulted mode again once
+//      Reely had selected either sibling;
+//   2. the id we last enabled ourselves, when it is one of the candidates —
+//      the fallback for an SDK build that does not mark the pair distinctly.
+// If neither applies the first candidate wins, as before.
 const resolveActiveVimeoTextTrackId = (
   language: string,
   kind: string,
-  tracks: ReadonlyArray<VimeoSdkTextTrack>
+  tracks: ReadonlyArray<VimeoSdkTextTrack>,
+  preferredId: string | null
 ): string | null => {
-  const index = findVimeoTextTrackIndex(language, kind, tracks);
-  return index === -1 ? null : vimeoTextTrackId(tracks[index]!, index, tracks);
+  const candidates = vimeoTextTrackCandidates(language, kind, tracks);
+  if (candidates.length === 0) return null;
+  const showing = candidates.find((candidate) => candidate.mode === 'showing');
+  if (showing) return showing.id;
+  if (
+    preferredId !== null &&
+    candidates.some((candidate) => candidate.id === preferredId)
+  ) {
+    return preferredId;
+  }
+  return candidates[0]!.id;
 };
 
 // Vimeo can either draw the cues itself or hand them over as `cuechange`
@@ -631,14 +658,21 @@ export const createVimeoProvider = (
       const language =
         typeof record.language === 'string' ? record.language : '';
       const kind = typeof record.kind === 'string' ? record.kind : '';
-      if (
-        findVimeoTextTrackIndex(language, kind, textTracks) !== -1 ||
-        language === ''
-      ) {
+      // ANY ambiguity has to go the slow way. The modes we hold are stale by
+      // definition once the change came from Vimeo's own UI, and mode is the
+      // only signal that can break the tie then. Skipping the refresh when our
+      // own last-enabled id happens to be among the candidates looks like a
+      // cheap win and is not: that id is sticky, so it would suppress the
+      // refresh forever after the first selection — measured, that resolves
+      // the wrong sibling AND skips the ownership reconcile, leaving Vimeo and
+      // the overlay both drawing (#57).
+      const candidates = vimeoTextTrackCandidates(language, kind, textTracks);
+      if (candidates.length === 1 || language === '') {
         selectedTextTrackId = resolveActiveVimeoTextTrackId(
           language,
           kind,
-          textTracks
+          textTracks,
+          lastEnabledTrackId
         );
         reconcileActiveTrack(player, textTracks);
         emit({ selectedTextTrackId });
@@ -657,7 +691,8 @@ export const createVimeoProvider = (
           selectedTextTrackId = resolveActiveVimeoTextTrackId(
             language,
             kind,
-            freshTracks
+            freshTracks,
+            lastEnabledTrackId
           );
           reconcileActiveTrack(player, freshTracks);
           emit({

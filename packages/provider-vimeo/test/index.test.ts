@@ -1433,3 +1433,122 @@ test('a destroy that interrupts loading leaves no embed behind', async () => {
     expect.objectContaining({ lifecycle: 'ready' })
   );
 });
+
+// #57: two tracks can share BOTH language and kind (a plain transcript and a
+// forced-narrative one, say). The ids disambiguate by index, but Vimeo's
+// `texttrackchange` payload carries only language and kind, so the reverse
+// mapping cannot tell the pair apart from the event alone.
+const duplicateEnglish = [
+  {
+    language: 'en',
+    kind: 'subtitles',
+    label: 'English',
+    mode: 'disabled' as const
+  },
+  {
+    language: 'en',
+    kind: 'subtitles',
+    label: 'English (forced)',
+    mode: 'disabled' as const
+  },
+  {
+    language: 'fr',
+    kind: 'captions',
+    label: 'Français',
+    mode: 'disabled' as const
+  }
+];
+
+test('disambiguates ids when two tracks share a language, and resolves them back', async () => {
+  const { patches, sdk, provider } = await setup({
+    fake: { textTracks: duplicateEnglish }
+  });
+  expect(readyPatch(patches).textTracks).toMatchObject([
+    { id: 'vimeo:en:0', label: 'English' },
+    { id: 'vimeo:en:1', label: 'English (forced)' },
+    { id: 'vimeo:fr', label: 'Français' }
+  ]);
+
+  await expect(provider.selectTextTrack('vimeo:en:1')).resolves.toEqual({
+    ok: true
+  });
+  expect(sdk.instances[0]!.enableTextTrack).toHaveBeenCalledWith(
+    'en',
+    'subtitles',
+    false
+  );
+  expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: 'vimeo:en:1' });
+});
+
+test('keeps our own selection when the echo cannot distinguish the duplicate', async () => {
+  const { patches, sdk, provider } = await setup({
+    fake: { textTracks: duplicateEnglish }
+  });
+  await provider.selectTextTrack('vimeo:en:1');
+
+  // Vimeo echoes our own enable back. language+kind alone match the FIRST
+  // English track, so resolving from the payload would silently rewrite the
+  // selection to the track the viewer did not pick.
+  sdk.instances[0]!.emit('texttrackchange', {
+    kind: 'subtitles',
+    label: 'English (forced)',
+    language: 'en'
+  });
+  expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: 'vimeo:en:1' });
+});
+
+test('uses the showing mode to disambiguate a change made in Vimeo UI', async () => {
+  const { patches, sdk } = await setup({
+    fake: { textTracks: duplicateEnglish }
+  });
+  const player = sdk.instances[0]!;
+  // The viewer picked the second English track inside Vimeo's own CC menu, so
+  // there is no selection of ours to prefer — but the SDK marks which one is
+  // actually showing.
+  player.setTextTracks([
+    duplicateEnglish[0]!,
+    { ...duplicateEnglish[1]!, mode: 'showing' as const },
+    duplicateEnglish[2]!
+  ]);
+  player.emit('texttrackchange', {
+    kind: 'subtitles',
+    label: 'English (forced)',
+    language: 'en'
+  });
+  await flushMicrotasks();
+  expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: 'vimeo:en:1' });
+  // Pins the refresh itself, not just the outcome: a cached mode is stale by
+  // definition here, so resolving without re-reading would be luck.
+  expect(player.getTextTracks).toHaveBeenCalledTimes(2);
+  expect(patches.at(-1)).toMatchObject({
+    textTracks: [{ id: 'vimeo:en:0' }, { id: 'vimeo:en:1' }, { id: 'vimeo:fr' }]
+  });
+});
+
+test('follows a Vimeo-UI switch to the other duplicate, after we selected one', async () => {
+  const { patches, sdk, provider } = await setup({
+    fake: { textTracks: duplicateEnglish }
+  });
+  const player = sdk.instances[0]!;
+  await provider.selectTextTrack('vimeo:en:1');
+  player.enableTextTrack.mockClear();
+
+  // The viewer now picks the OTHER English track in Vimeo's own CC menu. Our
+  // last-enabled id still names a candidate, so preferring it — or letting it
+  // suppress the refresh — reports the track the viewer just left, and skips
+  // the re-enable that puts drawing ownership back where the renderer says.
+  player.setTextTracks([
+    { ...duplicateEnglish[0]!, mode: 'showing' as const },
+    duplicateEnglish[1]!,
+    duplicateEnglish[2]!
+  ]);
+  player.emit('texttrackchange', {
+    kind: 'subtitles',
+    label: 'English',
+    language: 'en'
+  });
+  await flushMicrotasks();
+
+  expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: 'vimeo:en:0' });
+  expect(player.enableTextTrack).toHaveBeenCalledWith('en', 'subtitles', false);
+});
