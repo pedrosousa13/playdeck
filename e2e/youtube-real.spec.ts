@@ -26,7 +26,7 @@ test(
     // Queued playback is best-effort under real autoplay policy: require the
     // provider to become ready, and accept a confirmed playing state when the
     // browser allows it.
-    const playButton = page.getByRole('button', { name: /Play|Pause/ });
+    const playButton = page.locator('[data-reely-part="play-button"]');
     await expect(playButton).toHaveAttribute('data-state', /playing|paused/, {
       timeout: 30_000
     });

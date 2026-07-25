@@ -51,9 +51,9 @@ test(
       'src',
       /^https:\/\/player\.vimeo\.com\/video\/76979871\?/
     );
-    await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible({
-      timeout: 60_000
-    });
+    await expect(
+      page.locator('[data-reely-part="play-button"]')
+    ).toHaveAttribute('data-state', 'playing', { timeout: 60_000 });
 
     // 76979871 carries de/es/en/fr subtitles; discovery must surface them.
     await expect

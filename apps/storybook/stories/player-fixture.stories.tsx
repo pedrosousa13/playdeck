@@ -235,8 +235,9 @@ const PlayerFixture = ({
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
   const preload: Player.PlayerPreload = preloadInput ?? 'metadata';
   const defaultMuted = defaultMutedInput ?? false;
-  // AirPlay demo control is gated so the default fixture keeps a single
-  // page-global "Play" button.
+  // The demo control drives `showAirPlayPicker()` directly; the shipped
+  // `AirPlayButton` primitive is always mounted, so `platform.spec` needs a
+  // story where only the demo control's capability gating is under test.
   const airplayDemo = airplay === 'demo';
   const sourceChange = sourceChangeInput === 'external';
   const hlsEngine: 'auto' | 'native' | 'hls.js' = engine ?? 'auto';
@@ -318,6 +319,7 @@ const PlayerFixture = ({
         </Player.Viewport>
         <Player.PlayButton />
         <Player.CaptionsButton />
+        <Player.AirPlayButton />
         <PresentationControls airplayDemo={airplayDemo} />
         <LiveControls />
         <StateProbes />

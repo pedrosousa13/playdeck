@@ -13,17 +13,14 @@ const recordRequests = (page: Page): string[] => {
   return requests;
 };
 
-const playToCompletion = async (page: Page): Promise<void> => {
-  await page.getByRole('button', { name: 'Play' }).click();
-  await expect(page.getByRole('button', { name: 'Pause' })).toHaveAttribute(
-    'data-state',
-    'playing'
-  );
+const playButton = (page: Page) =>
+  page.locator('[data-reely-part="play-button"]');
 
-  await expect(page.getByRole('button', { name: 'Play' })).toHaveAttribute(
-    'data-state',
-    'ended'
-  );
+const playToCompletion = async (page: Page): Promise<void> => {
+  await playButton(page).click();
+  await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
+
+  await expect(playButton(page)).toHaveAttribute('data-state', 'ended');
 };
 
 test('plays the local hls fixture to completion with the hls.js engine', async ({

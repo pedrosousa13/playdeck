@@ -33,16 +33,13 @@ test('blocked audible autoplay waits for a user retry without muting', async ({
     '/iframe.html?id=fixtures-playerfixture--autoplay-audible&viewMode=story'
   );
 
-  const playButton = page.getByRole('button', { name: 'Play' });
+  const playButton = page.locator('[data-reely-part="play-button"]');
   await expect(playButton).toHaveAttribute('data-autoplay-state', 'blocked');
   await expect(playButton).toHaveJSProperty('tabIndex', 0);
   await expect(page.getByLabel('Reely media')).toHaveJSProperty('muted', false);
 
   await playButton.click();
 
-  await expect(page.getByRole('button', { name: 'Pause' })).toHaveAttribute(
-    'data-state',
-    'playing'
-  );
+  await expect(playButton).toHaveAttribute('data-state', 'playing');
   await expect(page.getByLabel('Reely media')).toHaveJSProperty('muted', false);
 });

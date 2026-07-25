@@ -30,9 +30,12 @@ const STORY =
 // So the fix is to click once the player will accept the command. The refusal
 // window itself is real product behaviour, covered by the second test below and
 // tracked in #69.
+const playButton = (page: Page) =>
+  page.locator('[data-reely-part="play-button"]');
+
 const startPlayback = async (page: Page) => {
   await page.goto(STORY);
-  const play = page.getByRole('button', { name: 'Play', exact: true });
+  const play = playButton(page);
   await expect(play).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => window.reelyHandle?.getState().activation))
@@ -45,18 +48,13 @@ test('plays, pauses, and ends an MP4 with confirmed native states', async ({
 }) => {
   await startPlayback(page);
 
-  const pauseButton = page.getByRole('button', { name: 'Pause', exact: true });
-  await expect(pauseButton).toHaveAttribute('data-state', 'playing');
+  await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
 
-  await pauseButton.click();
-  await expect(
-    page.getByRole('button', { name: 'Play', exact: true })
-  ).toHaveAttribute('data-state', 'paused');
+  await playButton(page).click();
+  await expect(playButton(page)).toHaveAttribute('data-state', 'paused');
 
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: 'Play', exact: true })
-  ).toHaveAttribute('data-state', 'ended');
+  await playButton(page).click();
+  await expect(playButton(page)).toHaveAttribute('data-state', 'ended');
 });
 
 // The behaviour that caused #64, pinned deliberately instead of being waited
@@ -93,7 +91,5 @@ test('a play issued before the player is ready is dropped (#69)', async ({
   expect(outcome.activation).not.toBe('ready');
   expect(outcome.result).toEqual({ ok: false, reason: 'not-ready' });
 
-  await expect(
-    page.getByRole('button', { name: 'Play', exact: true })
-  ).toHaveAttribute('data-state', 'paused');
+  await expect(playButton(page)).toHaveAttribute('data-state', 'paused');
 });

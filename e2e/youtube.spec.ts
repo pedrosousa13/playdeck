@@ -128,7 +128,7 @@ test('youtube one interaction click loads the provider and queues playback', asy
 
   await activationButton.click();
 
-  const playButton = page.getByRole('button', { name: 'Pause' });
+  const playButton = page.locator('[data-reely-part="play-button"]');
   await expect(playButton).toBeVisible();
   await expect(playButton).toHaveAttribute('data-state', 'playing');
   await expect(activationButton).toBeHidden();
