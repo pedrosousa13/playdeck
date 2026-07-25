@@ -34,6 +34,13 @@ describe('textTrackLabel', () => {
     expect(textTrackLabel('', 'not a tag!')).toBe('not a tag!');
   });
 
+  // Without `fallback: 'none'` Intl invents a name in the runtime's own
+  // locale for codes with no display data of their own — 'und' becomes
+  // 'root', which is worse than showing the code.
+  test('shows the raw code for a language with no display name of its own', () => {
+    expect(textTrackLabel('', 'und')).toBe('und');
+  });
+
   test('falls back to Unknown with neither a label nor a language', () => {
     expect(textTrackLabel('', null)).toBe('Unknown');
     expect(textTrackLabel(undefined, undefined)).toBe('Unknown');

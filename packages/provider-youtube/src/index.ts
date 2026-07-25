@@ -103,7 +103,9 @@ const preReadyCapabilities = (): PlayerCapabilities => ({
   setVolume: notReady,
   setPlaybackRate: notReady,
   fullscreen: notReady,
-  selectTextTrack: providerUnavailable,
+  // Nothing is known about caption tracks until the captions module reports
+  // in, so this is 'not-ready' like its siblings — not a permanent verdict.
+  selectTextTrack: notReady,
   ...fixedCapabilities
 });
 
