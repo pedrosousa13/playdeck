@@ -731,3 +731,25 @@ test('reports unsupported fullscreen and picture-in-picture browser APIs consist
     reason: 'unsupported'
   });
 });
+
+// #74: both readyState comparisons in emitMediaState read
+// `HTMLMediaElement.HAVE_METADATA`, which happy-dom does not define. Since
+// `1 >= undefined` is false, the provider could never leave 'loading-provider'
+// in the unit environment — silently, with no error, so the missing coverage
+// looked like a gap rather than a bug.
+test('reaches ready once the media element reports metadata', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'readyState', { configurable: true, value: 1 });
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  await provider.load();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(patches.at(-1)).toMatchObject({
+    activation: 'ready',
+    lifecycle: 'ready'
+  });
+});
