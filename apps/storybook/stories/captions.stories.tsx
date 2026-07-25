@@ -122,9 +122,18 @@ export const LongText: Story = {
       '[data-reely-part="caption-cue"]'
     );
     await expect(cueBox).not.toBeNull();
-    // A single line of this text box is roughly 20-25px tall; wrapping to
-    // several rows pushes it well past that.
-    expect(cueBox!.getBoundingClientRect().height).toBeGreaterThan(40);
+    // Count the rows the text actually occupies rather than comparing the cue
+    // box to a pixel threshold: a threshold tracks the font size and viewport
+    // width, and stays green for any tall box however the wrapping broke. A
+    // Range over the TEXT NODE reports one rect per visual row — measured, 3
+    // here and 1 with `white-space: nowrap` forced onto the cue box. Ranging
+    // over the cue box element instead does not discriminate: that reports
+    // fragment rects, 4 wrapped against 2 unwrapped.
+    const text = cueBox!.querySelector('[data-reely-part="caption-line"]')
+      ?.firstChild as Text;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    expect(range.getClientRects().length).toBeGreaterThan(1);
   }
 };
 
@@ -163,9 +172,10 @@ export const SafeArea: Story = {
       <Player.Viewport style={viewportStyle}>
         <Player.Captions />
       </Player.Viewport>
-      {/* Stands in for a device's bottom safe-area chrome (home indicator),
-          rendered below the video surface so the cue box, which is anchored
-          inside the viewport, is guaranteed to sit above it. */}
+      {/* Illustrates the device chrome the inset stands for. It cannot stand
+          in for the inset itself: env() resolves to its fallback everywhere
+          except real hardware, so nothing rendered here changes what the
+          component computes. */}
       <div
         data-testid="safe-area-inset"
         style={{
@@ -181,10 +191,18 @@ export const SafeArea: Story = {
     const captions = line.closest(
       '[data-reely-part="captions"]'
     ) as HTMLElement;
-    const inset = canvas.getByTestId('safe-area-inset');
-    expect(captions.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      inset.getBoundingClientRect().top
+    // The previous assertion compared the cue box against the stand-in strip
+    // below the viewport, which the layout guarantees regardless of any
+    // padding — it would have passed with the safe-area handling deleted.
+    // What is verifiable off-device is that the padding is expressed in terms
+    // of the inset with a floor to fall back to; that a real inset moves the
+    // cue box needs hardware, and belongs to the #17 device matrix.
+    expect(captions.style.paddingBottom).toContain(
+      'env(safe-area-inset-bottom'
     );
+    expect(
+      parseFloat(getComputedStyle(captions).paddingBottom)
+    ).toBeGreaterThan(0);
   }
 };
 

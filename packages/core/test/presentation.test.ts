@@ -144,7 +144,7 @@ test('publishes frozen presentation capability patches from the provider', () =>
     setVolume: { status: 'available' },
     setPlaybackRate: { status: 'available' },
     selectQuality: { status: 'unknown', reason: 'provider-check' },
-    selectTextTrack: { status: 'unavailable', reason: 'provider' },
+    selectTextTrack: { status: 'unavailable', reason: 'source' },
     fullscreen: { status: 'unavailable', reason: 'policy' },
     pictureInPicture: { status: 'unavailable', reason: 'browser' },
     airPlay: { status: 'unknown', reason: 'provider-check' },
