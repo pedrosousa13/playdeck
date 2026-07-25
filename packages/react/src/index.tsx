@@ -53,6 +53,11 @@ const HAVE_CURRENT_DATA: HTMLMediaElement['HAVE_CURRENT_DATA'] = 2;
 type PlayerContextValue = ActivationBindings & {
   controller: PlayerController;
   source: ReturnType<typeof detectSource>;
+  // The last non-null caption selection, remembered so toggling captions back
+  // on restores it. Player-scoped rather than per-control: CaptionsButton and
+  // the Controls `C` shortcut each used to keep their own ref, so the two
+  // disagreed whenever one mounted after a selection the other had seen (#58).
+  lastSelectedTextTrackId: RefObject<string | null>;
 };
 
 type SourceTransition = {
@@ -802,11 +807,26 @@ export const Root = ({
     mediaSessionBinding.current?.setMetadata(mediaMetadata ?? null);
   }, [mediaMetadata]);
 
+  // Fed by a subscription rather than by a control's render, so it also
+  // records selections made by a custom control calling selectTextTrack
+  // directly, and stays correct while no captions control is mounted at all.
+  const lastSelectedTextTrackId = useRef<string | null>(null);
+  useEffect(
+    () =>
+      controller.subscribe((state) => {
+        if (state.selectedTextTrackId !== null) {
+          lastSelectedTextTrackId.current = state.selectedTextTrackId;
+        }
+      }),
+    [controller]
+  );
+
   const value = useMemo(
     () => ({
       controller,
       source: detectedSource,
       ...activation,
+      lastSelectedTextTrackId,
       registerMedia
     }),
     [activation, controller, detectedSource, registerMedia]
@@ -1811,17 +1831,13 @@ export const CaptionsButton = ({
       textTracks: state.textTracks
     })
   );
-  const { controller } = usePlayer();
-  const lastSelectedId = useRef<string | null>(null);
-  /* eslint-disable react-hooks/refs -- remember the last non-null selection synchronously so toggling captions back on restores it. */
-  if (selectedId !== null) lastSelectedId.current = selectedId;
-  /* eslint-enable react-hooks/refs */
+  const { controller, lastSelectedTextTrackId } = usePlayer();
   // One-time announcement: track the previously seen selection so the live
   // region text only changes (and is only announced) on an actual
   // transition, not on every unrelated re-render.
   const previousSelectedId = useRef<string | null>(selectedId);
   const announcement = useRef<string>('');
-  /* eslint-disable react-hooks/refs -- computed synchronously per render, mirroring lastSelectedId above, so the announcement updates on the same render as the transition. */
+  /* eslint-disable react-hooks/refs -- computed synchronously per render so the announcement updates on the same render as the transition. */
   if (previousSelectedId.current !== selectedId) {
     const label = textTracks.find((t) => t.id === selectedId)?.label;
     announcement.current =
@@ -1848,7 +1864,7 @@ export const CaptionsButton = ({
           const next = resolveCaptionToggle(
             textTracks,
             selectedId,
-            lastSelectedId.current
+            lastSelectedTextTrackId.current
           );
           if (next !== undefined) void controller.selectTextTrack(next);
         }}
@@ -1947,17 +1963,9 @@ export const Controls = ({
     volume: state.volume,
     volumeStatus: state.capabilities.setVolume.status
   }));
-  const { controller } = usePlayer();
+  const { controller, lastSelectedTextTrackId } = usePlayer();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hadFocusWithin = useRef(false);
-  // Remember the last non-null caption selection, same as CaptionsButton, so
-  // the `C` shortcut restores the same track the button would when toggling
-  // captions back on — sharing resolveCaptionToggle keeps the two in sync.
-  const lastSelectedTextTrackId = useRef<string | null>(null);
-  /* eslint-disable react-hooks/refs -- mirrors CaptionsButton's lastSelectedId ref. */
-  if (selectedTextTrackId !== null)
-    lastSelectedTextTrackId.current = selectedTextTrackId;
-  /* eslint-enable react-hooks/refs */
   // Signature of the capabilities that gate whether a child control is
   // rendered. Focus restoration keys off changes here so it fires only on a
   // capability transition (a gated control appearing or disappearing) and
@@ -2049,6 +2057,7 @@ export const Controls = ({
       controller,
       fullscreen,
       fullscreenStatus,
+      lastSelectedTextTrackId,
       muted,
       seekStatus,
       selectedTextTrackId,
