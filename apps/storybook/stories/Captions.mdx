@@ -51,6 +51,17 @@ still say `custom`. If you know your embed hits that path, pass
 including the chromeless embed Reely builds by default — `showing: false` is
 confirmed against the real embed to suppress Vimeo's renderer.
 
+**Vimeo caveat — tracks that share a language _and_ a kind.** Vimeo's
+`texttrackchange` event reports a language and a kind, never an id or an index,
+so two tracks matching on both (a plain and a forced-narrative English subtitle
+track, say) cannot be told apart from the event alone. Whenever the pair is ambiguous Reely re-reads the
+track list and takes the one the SDK marks as showing, since that is the only
+signal that reflects a change made in Vimeo's own CC menu. Only if no sibling
+is marked does it fall back to the track it last enabled itself, and then to
+the first match. So what remains unresolvable is narrow: an SDK build that
+marks neither sibling as showing, where a change made in Vimeo's UI between
+two such tracks can leave `selectedTextTrackId` naming the wrong one.
+
 Vimeo's cue payload also carries no cue timings. A Vimeo `TextCue` reports the
 playback position at which the cue was observed for both `startTime` and
 `endTime`, rather than inventing a window; treat it as an arrival timestamp,
