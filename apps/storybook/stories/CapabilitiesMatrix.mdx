@@ -17,9 +17,19 @@ renders nothing.
 | `Player.SeekSlider`       | `seek`                                                | `seek` is `available`                 |
 | `Player.FullscreenButton` | `fullscreen`                                          | `fullscreen` is `available`           |
 | `Player.PipButton`        | `pictureInPicture`                                    | `pictureInPicture` is `available`     |
+| `Player.AirPlayButton`    | `airPlay`                                             | `airPlay` is `available`              |
 | `Player.Time`             | — (display)                                           | always                                |
 | `Player.Controls`         | `seek`, `setVolume`, `fullscreen`, `pictureInPicture` | container; children gate individually |
 
+`airPlay` reports whether the engine exposes a route picker, not whether there
+is anything to cast to: it resolves `available` when WebKit's
+`webkitShowPlaybackTargetPicker` exists and the media does not opt out via
+`x-webkit-airplay="deny"` or `disableRemotePlayback`. So `Player.AirPlayButton`
+renders nothing outside Safari and iOS, but inside them it renders even when no
+receiver is on the network, and opens an empty picker.
+
+`selectTextTrack` gates `Player.CaptionsButton` — see the Captions docs.
+
 The remaining `PlayerCapabilities` keys — `setPlaybackRate`, `selectQuality`,
-`selectTextTrack`, `airPlay`, `customControls` — have no dedicated primitive
-yet; they are staged in stories but gate no shipped control.
+`customControls` — have no dedicated primitive yet; they are staged in stories
+but gate no shipped control.

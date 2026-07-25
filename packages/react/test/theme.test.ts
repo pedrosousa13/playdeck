@@ -72,6 +72,37 @@ describe('theme contract', () => {
     expect(offenders).toEqual([]);
   });
 
+  test('every button-shaped part is carried by every button rule', () => {
+    // The button rules are hand-listed selector groups, so a new control
+    // primitive is styled only if someone remembers to add it to all of them --
+    // and a control that misses one silently loses its box, its hover tint or
+    // its forced-colors border while looking fine everywhere else.
+    const buttonParts = [
+      'play-button',
+      'mute-button',
+      'captions-button',
+      'fullscreen-button',
+      'pip-button',
+      'airplay-button',
+      'settings-menu-trigger'
+    ];
+    // Anchored on "mentions any button part" rather than on one named part.
+    // Anchoring on `play-button` missed a rule listing only, say, mute-button
+    // and pip-button; anchoring on "two or more" then missed a rule that names
+    // exactly one -- which is the shape that silently drops a single control's
+    // hover tint, the very failure this test exists to catch.
+    const buttonRules = selectorLists.filter((selector) =>
+      buttonParts.some((part) => selector.includes(`data-reely-part='${part}'`))
+    );
+    expect(buttonRules.length).toBeGreaterThan(0);
+    const missing = buttonRules.flatMap((rule) =>
+      buttonParts
+        .filter((part) => !rule.includes(`data-reely-part='${part}'`))
+        .map((part) => `${part} missing from: ${rule.replace(/\s+/g, ' ')}`)
+    );
+    expect(missing).toEqual([]);
+  });
+
   test('declares no !important', () => {
     // A theme that needs !important has already lost the override argument.
     expect(withoutComments).not.toMatch(/!\s*important/i);

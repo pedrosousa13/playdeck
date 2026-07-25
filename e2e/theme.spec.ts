@@ -59,7 +59,7 @@ test('control states stay distinguishable in forced-colors mode', async ({
   await page.emulateMedia({ forcedColors: 'active' });
   await page.goto(themeStory);
 
-  const play = page.getByRole('button', { name: 'Play' });
+  const play = page.getByRole('button', { name: 'Play', exact: true });
   await expect(play).toBeVisible();
 
   const idle = await play.evaluate((element) => {
@@ -90,7 +90,7 @@ test('the themed player has a focus indicator that survives forced colors', asyn
   await page.emulateMedia({ forcedColors: 'active' });
   await page.goto(themeStory);
 
-  const play = page.getByRole('button', { name: 'Play' });
+  const play = page.getByRole('button', { name: 'Play', exact: true });
   await play.focus();
   const outline = await play.evaluate((element) => {
     const styles = globalThis.getComputedStyle(element);

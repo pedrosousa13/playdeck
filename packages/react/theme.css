@@ -160,6 +160,7 @@
     [data-reely-part='captions-button'],
     [data-reely-part='fullscreen-button'],
     [data-reely-part='pip-button'],
+    [data-reely-part='airplay-button'],
     [data-reely-part='settings-menu-trigger']
   ) {
     display: inline-grid;
@@ -184,6 +185,7 @@
     [data-reely-part='captions-button'],
     [data-reely-part='fullscreen-button'],
     [data-reely-part='pip-button'],
+    [data-reely-part='airplay-button'],
     [data-reely-part='settings-menu-trigger']
   ):where(:hover) {
     background-color: var(--reely-control-hover, rgb(255 255 255 / 0.12));
@@ -314,6 +316,7 @@
       [data-reely-part='captions-button'],
       [data-reely-part='fullscreen-button'],
       [data-reely-part='pip-button'],
+      [data-reely-part='airplay-button'],
       [data-reely-part='settings-menu-trigger']
     ) {
       transition-duration: 0.01ms;
@@ -337,6 +340,7 @@
       [data-reely-part='captions-button'],
       [data-reely-part='fullscreen-button'],
       [data-reely-part='pip-button'],
+      [data-reely-part='airplay-button'],
       [data-reely-part='settings-menu-trigger'],
       [data-reely-part='menu-item'],
       [data-reely-part='menu-radio-item']
@@ -353,6 +357,7 @@
       [data-reely-part='captions-button'],
       [data-reely-part='fullscreen-button'],
       [data-reely-part='pip-button'],
+      [data-reely-part='airplay-button'],
       [data-reely-part='settings-menu-trigger'],
       [data-reely-part='menu-item'],
       [data-reely-part='menu-radio-item']

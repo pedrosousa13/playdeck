@@ -2,7 +2,7 @@
 
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, test } from 'vitest';
-import { PlayIcon, CheckIcon, SettingsIcon } from '../src/icons';
+import { AirPlayIcon, PlayIcon, CheckIcon, SettingsIcon } from '../src/icons';
 import * as Player from '../src/index';
 
 afterEach(cleanup);
@@ -29,5 +29,32 @@ describe('icons', () => {
   test('are re-exported from the package entry', () => {
     expect(Player.SettingsIcon).toBe(SettingsIcon);
     expect(Player.PlayIcon).toBe(PlayIcon);
+    expect(Player.AirPlayIcon).toBe(AirPlayIcon);
+  });
+
+  test('AirPlayIcon draws a glyph', () => {
+    // Asserting fill/aria-hidden/viewBox here would only re-test the shared
+    // `Icon` wrapper: any component that renders `<Icon>` passes that whether
+    // or not it draws anything. Nothing else in the repo renders this icon --
+    // AirPlayButton falls back to a text label -- so this is the only thing
+    // standing between a blank glyph and a release.
+    const { container } = render(<AirPlayIcon />);
+    const paths = [...container.querySelectorAll('svg > path')];
+    // Both halves of the glyph: the screen outline and the triangle. Pinning
+    // the count catches one being deleted.
+    expect(paths.length).toBe(2);
+    for (const path of paths) {
+      const d = path.getAttribute('d') ?? '';
+      // Counting drawing segments rather than string length or coordinate
+      // extent, both of which a shape with no area satisfies: `M0 0z` is short
+      // but `M0 0zM0 0z` is not, and `M0 0L24 0z` spans 24 units while being
+      // collinear and rendering nothing. A closed shape needs at least three.
+      const segments = d.replace(/[MmZz]/g, '').match(/[A-Za-z]/g) ?? [];
+      expect(segments.length).toBeGreaterThanOrEqual(3);
+      // And it has to cover ground on both axes, so a run of segments along a
+      // single line still fails.
+      const numbers = (d.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+      expect(Math.max(...numbers) - Math.min(...numbers)).toBeGreaterThan(5);
+    }
   });
 });

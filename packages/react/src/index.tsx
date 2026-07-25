@@ -1711,6 +1711,54 @@ export const PipButton = ({
   );
 };
 
+export type AirPlayButtonProps = ComponentPropsWithRef<'button'>;
+
+/**
+ * Opens the platform AirPlay route picker. Gated on the `airPlay` capability,
+ * so it renders nothing outside Safari/iOS where AirPlay does not exist.
+ *
+ * Unlike `FullscreenButton` and `PipButton` this is **not** a toggle. Which
+ * device the user picked is never exposed, and Reely does not currently
+ * surface an active-route flag either: WebKit's
+ * `webkitCurrentPlaybackTargetIsWireless` is deliberately unplumbed (see
+ * `provider-native`). So there is no state to render today — no `aria-pressed`,
+ * one static label, no `data-state`.
+ *
+ * That last part is current behaviour, not a permanent guarantee: if the
+ * wireless-route flag is ever surfaced, this control gains a state.
+ */
+export const AirPlayButton = ({
+  children,
+  onClick,
+  style,
+  ...props
+}: AirPlayButtonProps) => {
+  const { provider, status } = usePlayerState((state) => ({
+    provider: state.provider,
+    status: state.capabilities.airPlay.status
+  }));
+  const { controller } = usePlayer();
+  if (status !== 'available') return null;
+
+  return (
+    <button
+      {...props}
+      aria-label="AirPlay"
+      data-provider={provider ?? undefined}
+      data-reely-part="airplay-button"
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented) return;
+        void controller.showAirPlayPicker();
+      }}
+      style={{ ...controlTargetStyle, ...style }}
+      type="button"
+    >
+      {children ?? 'AirPlay'}
+    </button>
+  );
+};
+
 /**
  * Resolves what a captions toggle (button click or `C` shortcut) should do
  * next, given the current tracks/selection and the last non-null selection
