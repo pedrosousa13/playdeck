@@ -89,6 +89,7 @@ jobs:
       # and hit that cache instead of rebuilding from scratch.
       - run: pnpm build
       - run: pnpm test:packages
+      - run: pnpm test:budgets
       - run: pnpm test:bundle
       - run: pnpm test:integrations
 
