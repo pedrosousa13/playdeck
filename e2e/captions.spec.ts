@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { playButton } from './locators';
 
 test('custom captions render the discovered track once playing', async ({
   page
@@ -7,7 +8,7 @@ test('custom captions render the discovered track once playing', async ({
     '/iframe.html?id=fixtures-playerfixture--captions-custom&viewMode=story'
   );
 
-  await page.locator('[data-reely-part="play-button"]').click();
+  await playButton(page).click();
 
   const captionsButton = page.locator('[data-reely-part="captions-button"]');
   await expect(captionsButton).toHaveAttribute('data-state', 'on');
@@ -23,7 +24,7 @@ test('the captions button toggles the overlay off and back on', async ({
     '/iframe.html?id=fixtures-playerfixture--captions-custom&viewMode=story'
   );
 
-  await page.locator('[data-reely-part="play-button"]').click();
+  await playButton(page).click();
 
   const captionsButton = page.locator('[data-reely-part="captions-button"]');
   const captions = page.locator('[data-reely-part="captions"]');
@@ -47,7 +48,7 @@ test('native caption rendering leaves the custom overlay empty', async ({
     '/iframe.html?id=fixtures-playerfixture--captions-native&viewMode=story'
   );
 
-  await page.locator('[data-reely-part="play-button"]').click();
+  await playButton(page).click();
 
   const captionsButton = page.locator('[data-reely-part="captions-button"]');
   await expect(captionsButton).toHaveAttribute('data-state', 'on');

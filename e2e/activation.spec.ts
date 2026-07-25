@@ -137,7 +137,10 @@ test('interaction activation makes no provider request before click', async ({
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--interaction-external&viewMode=story'
   );
-  const activationButton = page.getByRole('button', { name: 'Play video' });
+  const activationButton = page.getByRole('button', {
+    name: 'Play video',
+    exact: true
+  });
   await expect(activationButton).toBeVisible();
   await expect(page.getByTestId('viewport')).toBeVisible();
   await armClickTimestamp(activationButton, 'activationClick');
@@ -158,7 +161,10 @@ test('interaction source change stays dormant until a second click', async ({
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--interaction-source-change-muted&viewMode=story'
   );
-  const activationButton = page.getByRole('button', { name: 'Play video' });
+  const activationButton = page.getByRole('button', {
+    name: 'Play video',
+    exact: true
+  });
   await expect(activationButton).toBeVisible();
   await armClickTimestamp(activationButton, 'sourceAClick');
   expect(providerRequests).toEqual([]);
@@ -172,7 +178,9 @@ test('interaction source change stays dormant until a second click', async ({
   await expectRequestsAfter(page, providerRequests, sourceAClick, [sourceAUrl]);
   await expect(activationButton).toBeHidden();
 
-  await page.getByRole('button', { name: 'Switch to source B' }).click();
+  await page
+    .getByRole('button', { name: 'Switch to source B', exact: true })
+    .click();
 
   await expect(activationButton).toBeVisible();
   await expect(activationButton).toHaveAttribute('data-state', 'dormant');
@@ -201,7 +209,10 @@ test('interaction preload=none plays from the activation click', async ({
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--interaction-preload-none-external-muted&viewMode=story'
   );
-  const activationButton = page.getByRole('button', { name: 'Play video' });
+  const activationButton = page.getByRole('button', {
+    name: 'Play video',
+    exact: true
+  });
   const documentElement = page.locator('html');
   await expect(activationButton).toBeVisible();
   await expect(page.getByLabel('Reely media')).toHaveCount(0);

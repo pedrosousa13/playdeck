@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { playButton } from './locators';
 
 // Real-provider smoke test: it talks to youtube.com, so it is nondeterministic
 // by nature and excluded from blocking runs. Opt in with
@@ -12,7 +13,10 @@ test(
     await page.goto(
       '/iframe.html?id=fixtures-playerfixture--interaction-youtube&viewMode=story'
     );
-    const activationButton = page.getByRole('button', { name: 'Play video' });
+    const activationButton = page.getByRole('button', {
+      name: 'Play video',
+      exact: true
+    });
     await expect(activationButton).toBeVisible();
 
     await activationButton.click();
@@ -26,8 +30,8 @@ test(
     // Queued playback is best-effort under real autoplay policy: require the
     // provider to become ready, and accept a confirmed playing state when the
     // browser allows it.
-    const playButton = page.locator('[data-reely-part="play-button"]');
-    await expect(playButton).toHaveAttribute('data-state', /playing|paused/, {
+    const play = playButton(page);
+    await expect(play).toHaveAttribute('data-state', /playing|paused/, {
       timeout: 30_000
     });
     await expect(activationButton).toBeHidden();

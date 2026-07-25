@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { playButton } from './locators';
 
 // The theme's two accessibility modes can only be checked with real media
 // emulation, which the Storybook play tests cannot do — they assert the rest of
@@ -59,7 +60,7 @@ test('control states stay distinguishable in forced-colors mode', async ({
   await page.emulateMedia({ forcedColors: 'active' });
   await page.goto(themeStory);
 
-  const play = page.locator('[data-reely-part="play-button"]');
+  const play = playButton(page);
   await expect(play).toBeVisible();
 
   const idle = await play.evaluate((element) => {
@@ -90,7 +91,7 @@ test('the themed player has a focus indicator that survives forced colors', asyn
   await page.emulateMedia({ forcedColors: 'active' });
   await page.goto(themeStory);
 
-  const play = page.locator('[data-reely-part="play-button"]');
+  const play = playButton(page);
   await play.focus();
   const outline = await play.evaluate((element) => {
     const styles = globalThis.getComputedStyle(element);

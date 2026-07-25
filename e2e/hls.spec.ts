@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { playButton } from './locators';
 
 // Under `storybook dev`, Vite's dependency optimizer serves hls.js from its
 // deps cache (e.g. /node_modules/.cache/storybook/<version>/<hash>/sb-vite/deps/hls__js.js),
@@ -12,9 +13,6 @@ const recordRequests = (page: Page): string[] => {
   });
   return requests;
 };
-
-const playButton = (page: Page) =>
-  page.locator('[data-reely-part="play-button"]');
 
 const playToCompletion = async (page: Page): Promise<void> => {
   await playButton(page).click();

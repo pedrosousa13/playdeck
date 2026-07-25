@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { playButton } from './locators';
 
 declare global {
   interface Window {
@@ -30,9 +31,6 @@ const STORY =
 // So the fix is to click once the player will accept the command. The refusal
 // window itself is real product behaviour, covered by the second test below and
 // tracked in #69.
-const playButton = (page: Page) =>
-  page.locator('[data-reely-part="play-button"]');
-
 const startPlayback = async (page: Page) => {
   await page.goto(STORY);
   const play = playButton(page);

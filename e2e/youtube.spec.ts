@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { playButton } from './locators';
 
 const youtubeDomains = [
   'youtube.com',
@@ -97,7 +98,10 @@ test('youtube interaction activation rejects every YouTube request before the cl
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--interaction-youtube&viewMode=story'
   );
-  const activationButton = page.getByRole('button', { name: 'Play video' });
+  const activationButton = page.getByRole('button', {
+    name: 'Play video',
+    exact: true
+  });
   await expect(activationButton).toBeVisible();
   await expect(page.getByTestId('viewport')).toBeVisible();
   expect(youtubeRequests).toEqual([]);
@@ -122,15 +126,18 @@ test('youtube one interaction click loads the provider and queues playback', asy
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--interaction-youtube&viewMode=story'
   );
-  const activationButton = page.getByRole('button', { name: 'Play video' });
+  const activationButton = page.getByRole('button', {
+    name: 'Play video',
+    exact: true
+  });
   await expect(activationButton).toBeVisible();
   expect(youtubeRequests).toEqual([]);
 
   await activationButton.click();
 
-  const playButton = page.locator('[data-reely-part="play-button"]');
-  await expect(playButton).toBeVisible();
-  await expect(playButton).toHaveAttribute('data-state', 'playing');
+  const play = playButton(page);
+  await expect(play).toBeVisible();
+  await expect(play).toHaveAttribute('data-state', 'playing');
   await expect(activationButton).toBeHidden();
   const iframe = page.locator('[data-reely-part="media"] iframe');
   await expect(iframe).toHaveAttribute(
@@ -153,7 +160,8 @@ test('youtube docs example stays dormant while the native fixture is used', asyn
     '/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story'
   );
   const activationButton = page.getByRole('button', {
-    name: 'Watch YouTube example'
+    name: 'Watch YouTube example',
+    exact: true
   });
   await expect(activationButton).toBeVisible();
   await expect(page.getByLabel('Reely media')).toHaveCount(1);
