@@ -24,7 +24,15 @@ export type VimeoSdkPlayer = {
   getPlaybackRate: () => Promise<number>;
   setPlaybackRate: (rate: number) => Promise<unknown>;
   getTextTracks: () => Promise<ReadonlyArray<VimeoSdkTextTrack>>;
-  enableTextTrack: (language: string, kind?: string) => Promise<unknown>;
+  // `showing: false` makes Vimeo fire `cuechange` without drawing the cues
+  // with its own in-iframe renderer, which is what lets Reely own caption
+  // rendering. Verified against the real chromeless embed: with `false` the
+  // paused frame is pixel-identical to having no track enabled.
+  enableTextTrack: (
+    language: string,
+    kind?: string,
+    showing?: boolean
+  ) => Promise<unknown>;
   disableTextTrack: () => Promise<unknown>;
   requestFullscreen: () => Promise<unknown>;
   exitFullscreen: () => Promise<unknown>;

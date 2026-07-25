@@ -1,5 +1,6 @@
 import type {
   Availability,
+  CaptionRendering,
   CommandResult,
   PlayerCapabilities,
   PlayerError,
@@ -9,6 +10,7 @@ import type {
   ProviderEvent,
   ProviderEventFor,
   ProviderStateListener,
+  TextCue,
   TextTrack,
   TextTrackKind,
   VimeoSource
@@ -237,11 +239,9 @@ const numberField = (data: unknown, field: string): number | undefined => {
     : undefined;
 };
 
-// Vimeo renders captions inside its own iframe (captionRendering:
-// 'provider'), so this adapter only normalizes track discovery and
-// selection -- no cue overlay. `language` is Vimeo's stable per-track key,
-// so it doubles as the id; the array index only disambiguates the rare case
-// of two tracks sharing a language.
+// `language` is Vimeo's stable per-track key, so it doubles as the id; the
+// array index only disambiguates the rare case of two tracks sharing a
+// language.
 const vimeoTextTrackKind = (kind: string): TextTrackKind =>
   kind === 'captions' ? 'captions' : 'subtitles';
 
@@ -301,10 +301,49 @@ const resolveActiveVimeoTextTrackId = (
   return index === -1 ? null : vimeoTextTrackId(tracks[index]!, index, tracks);
 };
 
+// Vimeo can either draw the cues itself or hand them over as `cuechange`
+// payloads, so the renderer mode picks the owner: 'custom' means we enabled
+// the track with `showing: false` and draw it in Reely's overlay, 'native'
+// means Vimeo's in-iframe renderer draws it -- which is what 'provider'
+// reports, and the fallback for anything the overlay cannot render.
 const vimeoCaptionRendering = (
-  tracks: ReadonlyArray<VimeoSdkTextTrack>
-): 'provider' | 'unavailable' =>
-  tracks.length > 0 ? 'provider' : 'unavailable';
+  tracks: ReadonlyArray<VimeoSdkTextTrack>,
+  renderer: 'custom' | 'native'
+): CaptionRendering =>
+  tracks.length === 0
+    ? 'unavailable'
+    : renderer === 'custom'
+      ? 'custom'
+      : 'provider';
+
+// Vimeo's cue payload is markup, not plain text: WebVTT tags survive in the
+// `text` property (their own docs' example contains `<i>`), lines are joined
+// with U+21B5 instead of a newline, and WebVTT requires `&`/`<`/`>` in cue
+// text to arrive escaped. `TextCue.text` is plain text with real newlines, so
+// this is a parse rather than a passthrough -- handing `text` straight through
+// would render literal tags in the overlay.
+// Exactly the six escapes the WebVTT cue-text grammar defines, and no more:
+// anything else (`&quot;`, numeric references) is not required to be escaped in
+// cue text, so passing it through matches what the other providers do with the
+// same file rather than inventing a Vimeo-only decode.
+const decodeCueEntities = (text: string): string =>
+  text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    // A no-break space, not a plain one: captions use `&nbsp;` precisely to
+    // stop the overlay breaking a line there.
+    .replace(/&nbsp;/g, '\u00a0')
+    // Bidi marks — the whole reason they are escapable is that right-to-left
+    // subtitles need them, so leaving them literal breaks exactly the tracks
+    // that use them.
+    .replace(/&lrm;/g, '\u200e')
+    .replace(/&rlm;/g, '\u200f')
+    // `&amp;` last, so an escaped entity like `&amp;lt;` survives as `&lt;`
+    // instead of being decoded twice into `<`.
+    .replace(/&amp;/g, '&');
+
+const vimeoCueText = (text: string): string =>
+  decodeCueEntities(text.replace(/↵/g, '\n').replace(/<[^>]*>/g, ''));
 
 export const createVimeoProvider = (
   mount: VimeoMountElement,
@@ -312,6 +351,7 @@ export const createVimeoProvider = (
   options: VimeoProviderOptions = {}
 ): VimeoProviderAdapter => {
   const listeners = new Set<ProviderStateListener>();
+  const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
   let attached = false;
   let destroyed = false;
   let started = false;
@@ -327,6 +367,41 @@ export const createVimeoProvider = (
   let pictureInPictureAvailability: Availability = available;
   let textTrackAvailability: Availability = providerCheck;
   let customControlsAvailability: Availability = providerCheck;
+  let captionRenderer: 'custom' | 'native' = 'custom';
+  let activeCues: readonly TextCue[] = [];
+  // The track this adapter last asked Vimeo to enable. Vimeo's own UI can
+  // change the active track too, and only this tells the two apart.
+  let lastEnabledTrackId: string | null = null;
+
+  const emitCues = (cues: readonly TextCue[]): void => {
+    activeCues = cues;
+    cueListeners.forEach((listener) => listener(cues));
+  };
+
+  const clearCues = (): void => {
+    if (activeCues.length === 0) return;
+    emitCues([]);
+  };
+
+  // `showing: false` is what makes Vimeo hand the cues over instead of drawing
+  // them, so every enable has to carry the current renderer mode.
+  //
+  // The id is recorded synchronously, before the SDK call settles, because two
+  // things read it: the `texttrackchange` reconcile (to tell a change Vimeo's
+  // own UI made apart from the echo of our own enable) and `setCaptionRenderer`
+  // (which would otherwise see a selection that has not been written yet).
+  const enableWithRenderer = (
+    player: VimeoSdkPlayer,
+    track: VimeoSdkTextTrack,
+    id: string
+  ): Promise<unknown> => {
+    lastEnabledTrackId = id;
+    return player.enableTextTrack(
+      track.language,
+      track.kind,
+      captionRenderer === 'native'
+    );
+  };
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
@@ -369,6 +444,12 @@ export const createVimeoProvider = (
     const iframe = activeIframe;
     activePlayer = undefined;
     activeIframe = undefined;
+    // Cues belong to the player being discarded; a retry must not inherit them.
+    // Neither must the memory of what was enabled: the fresh player has nothing
+    // enabled, so a stale id would both re-enable a track the state reports as
+    // unselected and swallow a real Vimeo-UI change as our own echo.
+    clearCues();
+    lastEnabledTrackId = null;
     if (player) {
       try {
         void Promise.resolve(player.destroy()).catch(() => undefined);
@@ -493,6 +574,56 @@ export const createVimeoProvider = (
         event('pictureinpicturechange', { pictureInPicture: false }, data)
       )
     );
+    on('cuechange', (data) => {
+      const rawCues = asRecord(data).cues;
+      if (!Array.isArray(rawCues)) return;
+      // Vimeo's payload carries no cue timings at all, so the position the cue
+      // became active at is the only honest thing to report for both bounds.
+      const position = currentTime;
+      emitCues(
+        rawCues.flatMap((raw): TextCue[] => {
+          const text = asRecord(raw).text;
+          if (typeof text !== 'string') return [];
+          const normalized = vimeoCueText(text);
+          if (normalized.trim() === '') return [];
+          return [
+            {
+              id: null,
+              startTime: position,
+              endTime: position,
+              text: normalized
+            }
+          ];
+        })
+      );
+    });
+    // A track change Vimeo made itself (its in-iframe CC menu) arrives enabled
+    // `showing: true`, so Vimeo is drawing it -- while `cuechange` fires
+    // regardless of `showing`, which would leave the overlay drawing it too.
+    // Re-enabling under the current renderer puts ownership back where the
+    // renderer mode says it belongs. Our own enables echo back through here as
+    // well, and `lastEnabledTrackId` is what tells the two apart.
+    const reconcileActiveTrack = (
+      player: VimeoSdkPlayer,
+      tracks: ReadonlyArray<VimeoSdkTextTrack>
+    ): void => {
+      // Cues stop arriving for the track being left, so anything already
+      // emitted would stay painted: the old language's line lingering over the
+      // new one, or over nothing at all once captions are off.
+      if (selectedTextTrackId === null) {
+        clearCues();
+        lastEnabledTrackId = null;
+        return;
+      }
+      if (selectedTextTrackId === lastEnabledTrackId) return;
+      clearCues();
+      const track = resolveVimeoTextTrack(selectedTextTrackId, tracks);
+      if (!track) return;
+      void Promise.resolve(
+        enableWithRenderer(player, track, selectedTextTrackId)
+      ).catch(() => undefined);
+    };
+
     on('texttrackchange', (data) => {
       // Fires whenever the active track changes, including through Vimeo's
       // own in-iframe UI, so this keeps our selection state honest with it.
@@ -509,6 +640,7 @@ export const createVimeoProvider = (
           kind,
           textTracks
         );
+        reconcileActiveTrack(player, textTracks);
         emit({ selectedTextTrackId });
         return;
       }
@@ -527,10 +659,14 @@ export const createVimeoProvider = (
             kind,
             freshTracks
           );
+          reconcileActiveTrack(player, freshTracks);
           emit({
             textTracks: toCoreTextTracks(freshTracks),
             selectedTextTrackId,
-            captionRendering: vimeoCaptionRendering(freshTracks),
+            captionRendering: vimeoCaptionRendering(
+              freshTracks,
+              captionRenderer
+            ),
             capabilities: capabilities()
           });
         },
@@ -619,6 +755,21 @@ export const createVimeoProvider = (
       duration = initialDuration;
       textTracks = initialTracks;
       selectedTextTrackId = showingVimeoTextTrackId(initialTracks);
+      // Vimeo can arrive with a track already showing -- a viewer's stored
+      // preference, or `texttrack=` on the embed URL. Discovery only reads it,
+      // so re-enable it under the current renderer: otherwise Vimeo keeps
+      // drawing a track the overlay is also about to draw.
+      if (selectedTextTrackId !== null) {
+        const showing = resolveVimeoTextTrack(
+          selectedTextTrackId,
+          initialTracks
+        );
+        if (showing) {
+          void Promise.resolve(
+            enableWithRenderer(player, showing, selectedTextTrackId)
+          ).catch(() => undefined);
+        }
+      }
       textTrackAvailability =
         initialTracks.length > 0
           ? available
@@ -658,7 +809,7 @@ export const createVimeoProvider = (
             : { seekable: [{ start: 0, end: duration }] }),
           textTracks: toCoreTextTracks(textTracks),
           selectedTextTrackId,
-          captionRendering: vimeoCaptionRendering(textTracks),
+          captionRendering: vimeoCaptionRendering(textTracks, captionRenderer),
           capabilities: capabilities()
         },
         event('ready', undefined)
@@ -706,6 +857,7 @@ export const createVimeoProvider = (
       ++generation;
       teardown();
       listeners.clear();
+      cueListeners.clear();
     },
     subscribe: (listener) => {
       listeners.add(listener);
@@ -766,6 +918,8 @@ export const createVimeoProvider = (
           (result) => {
             if (result.ok) {
               selectedTextTrackId = null;
+              lastEnabledTrackId = null;
+              clearCues();
               emit({ selectedTextTrackId: null });
             }
             return result;
@@ -774,14 +928,51 @@ export const createVimeoProvider = (
       }
       const match = resolveVimeoTextTrack(id, textTracks);
       if (!match) return Promise.resolve({ ok: false, reason: 'unsupported' });
-      return runCommand((player) =>
-        player.enableTextTrack(match.language, match.kind)
-      ).then((result) => {
-        if (result.ok) {
-          selectedTextTrackId = id;
-          emit({ selectedTextTrackId: id });
+      return runCommand((player) => enableWithRenderer(player, match, id)).then(
+        (result) => {
+          if (result.ok) {
+            selectedTextTrackId = id;
+            // Cues stop arriving for the track being left, so the previous
+            // language's line would stay painted until the new one delivers.
+            // Same reason the Vimeo-UI path clears; the menu is the path most
+            // viewers actually take.
+            clearCues();
+            emit({ selectedTextTrackId: id });
+            return result;
+          }
+          // The enable never took effect, so the optimistic id has to roll back
+          // -- otherwise a renderer flip hands Vimeo the track that failed.
+          lastEnabledTrackId = selectedTextTrackId;
+          return result;
         }
-        return result;
+      );
+    },
+    subscribeCues: (listener) => {
+      cueListeners.add(listener);
+      return () => cueListeners.delete(listener);
+    },
+    setCaptionRenderer: (mode) => {
+      if (mode === captionRenderer) return;
+      captionRenderer = mode;
+      // Vimeo decides whether to draw the cues at enable time, so the active
+      // track has to be re-enabled for a mode flip to take effect. Prefer the
+      // id we last asked Vimeo to enable over `selectedTextTrackId`: a flip in
+      // the same tick as a `selectTextTrack` would otherwise read a selection
+      // that has not been written back yet, and re-enable the wrong track (or
+      // none, leaving neither Vimeo nor the overlay drawing).
+      const player = activePlayer;
+      const activeId = lastEnabledTrackId ?? selectedTextTrackId;
+      if (player && activeId !== null) {
+        const active = resolveVimeoTextTrack(activeId, textTracks);
+        if (active) {
+          void Promise.resolve(
+            enableWithRenderer(player, active, activeId)
+          ).catch(() => undefined);
+        }
+      }
+      if (captionRenderer === 'native') clearCues();
+      emit({
+        captionRendering: vimeoCaptionRendering(textTracks, captionRenderer)
       });
     },
     requestFullscreen: () => runCommand((player) => player.requestFullscreen()),
