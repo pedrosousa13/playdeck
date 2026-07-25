@@ -27,9 +27,10 @@ attached provider is capable of — never merely what was asked for.
   nothing for the browser to draw, so the effective mode falls back to
   `custom` (harmless, since there are also no cues to draw there either).
 - **`provider`** — an embedding provider draws the captions inside its own
-  iframe. Reely reports the effective mode honestly: it still exposes the
-  track list and language selection, but renders no overlay and emits no cues,
-  because the embed is the one drawing.
+  iframe. Reely reports the effective mode honestly: it exposes the track list
+  and language selection but renders no overlay, because the embed is the one
+  drawing. (Cues may still reach `useActiveCues` in this mode where the
+  provider supplies them — useful for a transcript — but nothing draws them.)
 - **`unavailable`** — there are no selectable text tracks.
 
 **YouTube and Vimeo differ, because their APIs do.** YouTube's iframe API
@@ -37,17 +38,23 @@ exposes no cue text at all, so YouTube is always `provider`. Vimeo's SDK will
 hand its cues over — `enableTextTrack(language, kind, /* showing */ false)`
 fires `cuechange` without Vimeo's own renderer drawing — so Vimeo runs as
 `custom` by default and its cues flow through `Player.Captions` like any other
-source. Setting `captionRenderer="native"` on a Vimeo source gives drawing
-back to Vimeo, and the effective mode becomes `provider`; that is the fallback
-for anything the overlay cannot render.
+source. Setting `captionRenderer="native"` on a Vimeo source gives drawing back
+to Vimeo, and the effective mode becomes `provider`.
 
-One Vimeo caveat worth knowing: if the embed falls back to **native playback**
-(no Vimeo player UI at all), Vimeo's docs note that captions are drawn by the
-platform's native renderer regardless of the `showing` flag. Reely's overlay
-would then be a second set of captions, so prefer `captionRenderer="native"`
-where you know that applies. Vimeo's cue payload also carries no cue timings,
-so a Vimeo `TextCue` reports the playback position the cue became active at
-for both `startTime` and `endTime` rather than inventing a window.
+**Vimeo caveat — the one case Reely cannot detect.** If a Vimeo embed falls
+back to **native playback** (no Vimeo player UI at all), Vimeo's docs say the
+platform's native renderer draws captions regardless of the `showing` flag. The
+overlay would then be a second set of captions. The SDK exposes no way to ask
+whether that is happening, and Reely does not guess: `captionRendering` will
+still say `custom`. If you know your embed hits that path, pass
+`captionRenderer="native"` and let Vimeo own the drawing. Everywhere else —
+including the chromeless embed Reely builds by default — `showing: false` is
+verified to suppress Vimeo's renderer.
+
+Vimeo's cue payload also carries no cue timings. A Vimeo `TextCue` reports the
+playback position at which the cue was observed for both `startTime` and
+`endTime`, rather than inventing a window; treat it as an arrival timestamp,
+not a stable property of the cue.
 
 **Engine caveat:** requesting `captionRenderer="native"` while the HLS
 provider is running its hls.js engine is honored without pretending it did

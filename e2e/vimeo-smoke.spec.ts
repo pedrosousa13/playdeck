@@ -79,12 +79,20 @@ test(
       .toBe('custom');
     await page.evaluate(() => window.reelyHandle?.seekTo(10));
 
-    const cue = page.locator('[data-reely-part="caption-cue"]').first();
-    await expect(cue).toHaveText(/\S/, { timeout: 30_000 });
-    // Normalization ran: no WebVTT tag or Vimeo's U+21B5 line separator
-    // survives into what the viewer reads.
-    const text = (await cue.textContent()) ?? '';
-    expect(text).not.toMatch(/[<>↵]/);
+    const cues = page.locator('[data-reely-part="caption-cue"]');
+    await expect(cues.first()).toHaveText(/\S/, { timeout: 30_000 });
+    // Normalization ran: neither a WebVTT tag nor Vimeo's U+21B5 line
+    // separator survives into what the viewer reads. Only `<` is checked, not
+    // `>`: a correctly escaped `&gt;` decodes to a literal `>` that belongs in
+    // the text, whereas a surviving tag always brings a `<` with it.
+    const text = (await cues.first().textContent()) ?? '';
+    expect(text).not.toMatch(/[<↵]/);
+
+    // Cue exit, not just entry. The payload carries no timings, so a cue can
+    // only be retired by Vimeo signalling an empty cue list — if it ever
+    // stopped doing that, every cue would stay on screen through the silence
+    // after it, and nothing else here would notice.
+    await expect(cues).toHaveCount(0, { timeout: 60_000 });
   }
 );
 
