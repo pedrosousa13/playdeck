@@ -67,24 +67,38 @@ test('a device safe-area inset lifts the cue box clear of the chrome', async ({
 }) => {
   test.skip(
     browserName !== 'chromium',
-    'Emulation.setSafeAreaInsetsOverride is a Chromium CDP command.'
+    'Safe-area inset overrides are a Chromium CDP command; WebKit and iOS, where these insets are actually non-zero in production, run in the manual device matrix.'
   );
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--captions-custom&viewMode=story'
   );
   await playButton(page).click();
+  const captions = page.locator('[data-reely-part="captions"]');
   const cue = page.locator('[data-reely-part="caption-cue"]').first();
   await expect(cue).toHaveText(/Reely caption one/);
   const before = (await cue.boundingBox())!;
 
   const session = await page.context().newCDPSession(page);
   await session.send('Emulation.setSafeAreaInsetsOverride', {
-    insets: { bottom: 34 }
+    insets: { bottom: 34, left: 21 }
   });
 
   await expect
     .poll(async () => Math.round((await cue.boundingBox())!.y))
     .toBe(Math.round(before.y) - 34);
+
+  // The left inset is asserted on the padding rather than on the cue's x: the
+  // cue box is centred, so a 21px left inset moves it by half that, which
+  // would be asserting the centring rather than the inset. Measured: x goes
+  // 333 -> 343.
+  await expect
+    .poll(() =>
+      captions.evaluate((element) => {
+        const style = globalThis.getComputedStyle(element);
+        return { left: style.paddingLeft, right: style.paddingRight };
+      })
+    )
+    .toEqual({ left: '21px', right: '0px' });
 
   // Page-scoped: leaving it set would leak into anything else on this page.
   await session.send('Emulation.setSafeAreaInsetsOverride', { insets: {} });

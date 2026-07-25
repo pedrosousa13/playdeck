@@ -137,7 +137,12 @@ export const LongText: Story = {
     // The other way wrapping breaks: overflowing the viewport instead of
     // wrapping inside it, which a row count alone cannot tell from a narrow
     // viewport.
-    expect(cueBox!.getBoundingClientRect().width).toBeLessThanOrEqual(480);
+    const viewportWidth = cueBox!
+      .closest('[data-reely-part="viewport"]')!
+      .getBoundingClientRect().width;
+    expect(cueBox!.getBoundingClientRect().width).toBeLessThanOrEqual(
+      viewportWidth
+    );
   }
 };
 
