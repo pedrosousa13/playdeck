@@ -72,6 +72,32 @@ describe('theme contract', () => {
     expect(offenders).toEqual([]);
   });
 
+  test('every button-shaped part is carried by every button rule', () => {
+    // The button rules are hand-listed selector groups, so a new control
+    // primitive is styled only if someone remembers to add it to all of them --
+    // and a control that misses one silently loses its box, its hover tint or
+    // its forced-colors border while looking fine everywhere else.
+    const buttonParts = [
+      'play-button',
+      'mute-button',
+      'captions-button',
+      'fullscreen-button',
+      'pip-button',
+      'airplay-button',
+      'settings-menu-trigger'
+    ];
+    const buttonRules = selectorLists.filter((selector) =>
+      selector.includes("data-reely-part='play-button'")
+    );
+    expect(buttonRules.length).toBeGreaterThan(0);
+    const missing = buttonRules.flatMap((rule) =>
+      buttonParts
+        .filter((part) => !rule.includes(`data-reely-part='${part}'`))
+        .map((part) => `${part} missing from: ${rule.replace(/\s+/g, ' ')}`)
+    );
+    expect(missing).toEqual([]);
+  });
+
   test('declares no !important', () => {
     // A theme that needs !important has already lost the override argument.
     expect(withoutComments).not.toMatch(/!\s*important/i);

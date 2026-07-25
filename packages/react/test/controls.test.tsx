@@ -40,7 +40,8 @@ const createMockAdapter = () => {
     requestFullscreen: vi.fn(ok),
     exitFullscreen: vi.fn(ok),
     requestPictureInPicture: vi.fn(ok),
-    exitPictureInPicture: vi.fn(ok)
+    exitPictureInPicture: vi.fn(ok),
+    showAirPlayPicker: vi.fn(ok)
   };
   const adapter: ProviderAdapter = {
     provider: 'native',
@@ -474,6 +475,67 @@ describe('PipButton', () => {
       screen.getByRole('button', { name: 'Exit picture-in-picture' })
     );
     expect(spies.exitPictureInPicture).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AirPlayButton', () => {
+  test('stays absent until the capability resolves', () => {
+    const { emit } = renderWithPlayer(
+      <Player.AirPlayButton />,
+      capabilities({ airPlay: notReady })
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+    emit(capabilities({ airPlay: available }));
+    expect(screen.getByRole('button', { name: 'AirPlay' })).toBeDefined();
+  });
+
+  test('renders nothing when AirPlay is unavailable', () => {
+    renderWithPlayer(
+      <Player.AirPlayButton />,
+      capabilities({ airPlay: unavailable })
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  test('opens the picker and carries the part/provider contract', () => {
+    const { spies } = renderWithPlayer(
+      <Player.AirPlayButton />,
+      capabilities({ airPlay: available })
+    );
+    const button = screen.getByRole('button', { name: 'AirPlay' });
+    expect(attr(button, 'data-reely-part')).toBe('airplay-button');
+    expect(attr(button, 'data-provider')).toBe('native');
+    fireEvent.click(button);
+    expect(spies.showAirPlayPicker).toHaveBeenCalledTimes(1);
+  });
+
+  // The page is never told which route the user picked, so the control has no
+  // on/off state to expose — unlike PipButton, which is a real toggle.
+  test('is not a toggle: no aria-pressed, one static label', () => {
+    const { emit } = renderWithPlayer(
+      <Player.AirPlayButton />,
+      capabilities({ airPlay: available })
+    );
+    const button = screen.getByRole('button', { name: 'AirPlay' });
+    expect(attr(button, 'aria-pressed')).toBeNull();
+    fireEvent.click(button);
+    emit({ playback: 'playing' });
+    expect(
+      screen.getByRole('button', { name: 'AirPlay' }).getAttribute('aria-label')
+    ).toBe('AirPlay');
+  });
+
+  test('a consumer onClick that prevents default suppresses the picker', () => {
+    const { spies } = renderWithPlayer(
+      <Player.AirPlayButton
+        onClick={(event) => {
+          event.preventDefault();
+        }}
+      />,
+      capabilities({ airPlay: available })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'AirPlay' }));
+    expect(spies.showAirPlayPicker).not.toHaveBeenCalled();
   });
 });
 

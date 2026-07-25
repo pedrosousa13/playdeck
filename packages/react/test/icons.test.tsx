@@ -2,7 +2,7 @@
 
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, test } from 'vitest';
-import { PlayIcon, CheckIcon, SettingsIcon } from '../src/icons';
+import { AirPlayIcon, PlayIcon, CheckIcon, SettingsIcon } from '../src/icons';
 import * as Player from '../src/index';
 
 afterEach(cleanup);
@@ -29,5 +29,16 @@ describe('icons', () => {
   test('are re-exported from the package entry', () => {
     expect(Player.SettingsIcon).toBe(SettingsIcon);
     expect(Player.PlayIcon).toBe(PlayIcon);
+    expect(Player.AirPlayIcon).toBeDefined();
+    expect(Player.AirPlayIcon).toBe(AirPlayIcon);
+  });
+
+  test('AirPlayIcon follows the shared icon shape', () => {
+    const { container } = render(<AirPlayIcon />);
+    const svg = container.querySelector('svg');
+    expect(svg).not.toBeNull();
+    expect(svg?.getAttribute('fill')).toBe('currentColor');
+    expect(svg?.getAttribute('aria-hidden')).toBe('true');
+    expect(svg?.getAttribute('viewBox')).toBe('0 0 24 24');
   });
 });

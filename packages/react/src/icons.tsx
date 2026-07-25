@@ -79,6 +79,13 @@ export const PipExitIcon = (props: IconProps): ReactElement => (
   </Icon>
 );
 
+export const AirPlayIcon = (props: IconProps): ReactElement => (
+  <Icon {...props}>
+    <path d="M3 5h18v11h-4v-2h2V7H5v7h2v2H3V5z" />
+    <path d="M12 13l5 6H7l5-6z" />
+  </Icon>
+);
+
 export const SettingsIcon = (props: IconProps): ReactElement => (
   <Icon {...props}>
     <path d="M12 8a4 4 0 100 8 4 4 0 000-8zm0 2a2 2 0 110 4 2 2 0 010-4z" />

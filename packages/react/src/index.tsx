@@ -1711,6 +1711,49 @@ export const PipButton = ({
   );
 };
 
+export type AirPlayButtonProps = ComponentPropsWithRef<'button'>;
+
+/**
+ * Opens the platform AirPlay route picker. Gated on the `airPlay` capability,
+ * so it renders nothing outside Safari/iOS where AirPlay does not exist.
+ *
+ * Unlike `FullscreenButton` and `PipButton` this is **not** a toggle: the page
+ * is never told which route the user picked, so there is no on/off state to
+ * expose. Hence no `aria-pressed`, one static label, and no `data-state` —
+ * an invented state value would be a styling hook that never changes.
+ */
+export const AirPlayButton = ({
+  children,
+  onClick,
+  style,
+  ...props
+}: AirPlayButtonProps) => {
+  const { provider, status } = usePlayerState((state) => ({
+    provider: state.provider,
+    status: state.capabilities.airPlay.status
+  }));
+  const { controller } = usePlayer();
+  if (status !== 'available') return null;
+
+  return (
+    <button
+      {...props}
+      aria-label="AirPlay"
+      data-provider={provider ?? undefined}
+      data-reely-part="airplay-button"
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented) return;
+        void controller.showAirPlayPicker();
+      }}
+      style={{ ...controlTargetStyle, ...style }}
+      type="button"
+    >
+      {children ?? 'AirPlay'}
+    </button>
+  );
+};
+
 /**
  * Resolves what a captions toggle (button click or `C` shortcut) should do
  * next, given the current tracks/selection and the last non-null selection
