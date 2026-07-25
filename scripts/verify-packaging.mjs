@@ -94,6 +94,22 @@ async function main() {
       }
 
       console.log(`\n--- attw --pack: ${pkg.name} ---`);
+      // attw treats every `exports` subpath as a code entry point and expects
+      // type declarations behind it, so an asset export (a stylesheet) always
+      // reports "resolution failed". Excluding them is correct rather than a
+      // workaround: there is nothing for TypeScript to resolve, and publint
+      // still checks that the subpath exists in the tarball.
+      //
+      // Derived from the package's own exports so a future asset export is
+      // covered without editing this script.
+      const assetEntrypoints = Object.keys(
+        JSON.parse(readFileSync(join(pkg.path, 'package.json'), 'utf8'))
+          .exports ?? {}
+        // attw names entrypoints without the leading `./`.
+      )
+        .filter((subpath) => /\.(?:css|svg|png|woff2?)$/.test(subpath))
+        .map((subpath) => subpath.replace(/^\.\//, ''));
+
       // All workspace packages currently ship ESM only (`"type": "module"`,
       // a single `import` export condition, no `require` entry point). The
       // esm-only profile stops attw from flagging the legacy CJS/node10
@@ -105,7 +121,12 @@ async function main() {
           '--pack',
           '--profile',
           'esm-only',
-          tarball
+          // The tarball goes before the flag: --exclude-entrypoints is
+          // variadic and would otherwise swallow it as another entrypoint.
+          tarball,
+          ...(assetEntrypoints.length > 0
+            ? ['--exclude-entrypoints', ...assetEntrypoints]
+            : [])
         ])
       ) {
         failures.push(`attw failed for ${pkg.name}`);

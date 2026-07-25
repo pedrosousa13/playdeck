@@ -1,0 +1,388 @@
+/*
+ * @reely/react/theme.css — the optional theme.
+ *
+ * Import it or don't: the primitives ship no CSS of their own, so nothing here
+ * is required for a working player. Three rules make it safe to adopt without
+ * ever forking or fighting it:
+ *
+ *   1. Everything is inside `@layer reely`. Unlayered consumer CSS beats a
+ *      cascade layer whatever its specificity, so your own rules win by
+ *      default — no `!important`, no ordering games.
+ *   2. Every selector is wrapped in `:where()`, which contributes zero
+ *      specificity. A single class of your own outranks any rule below.
+ *   3. Every token is read as `var(--name, default)` and is never declared by
+ *      this file. That matters: a declaration block here (even on the player)
+ *      would beat a value you set on an ancestor, because a declaration always
+ *      wins over inheritance. Reading with a fallback instead means you can set
+ *      tokens anywhere above the player — or on the player itself — and they
+ *      take effect, while nothing leaks into the surrounding document.
+ *
+ * Tokens, with their defaults:
+ *
+ *   Color        --reely-color-surface       rgb(0 0 0 / 0.72)
+ *                --reely-color-on-surface    #fff
+ *                --reely-color-accent        #3ea6ff
+ *                --reely-color-track         rgb(255 255 255 / 0.3)
+ *                --reely-color-buffered      rgb(255 255 255 / 0.5)
+ *                --reely-color-focus         #fff
+ *                --reely-color-backdrop      #000
+ *   Typography   --reely-font-family         system-ui stack
+ *                --reely-font-size           0.875rem
+ *                --reely-font-size-small     0.8125rem
+ *                --reely-line-height         1.4
+ *   Spacing      --reely-space-1             0.25rem
+ *                --reely-space-2             0.5rem
+ *                --reely-space-3             0.75rem
+ *   Shape        --reely-radius              0.375rem
+ *                --reely-radius-large        0.5rem
+ *   Controls     --reely-control-size        2.75rem  (44px, the locked target)
+ *                --reely-control-icon-size   1.25rem
+ *                --reely-control-hover       rgb(255 255 255 / 0.12)
+ *                --reely-slider-thickness    0.25rem
+ *   Overlays     --reely-overlay-opacity     1
+ *                --reely-overlay-scrim       bottom-up black gradient
+ *   Motion       --reely-transition-duration 150ms
+ *                --reely-transition-easing   ease
+ *   Safe area    --reely-safe-bottom/-left/-right   env(safe-area-inset-*)
+ *   Poster       --reely-poster-fit          cover      (read by PosterImage)
+ *                --reely-poster-position     center     (read by PosterImage)
+ *
+ * Layer geometry is deliberately NOT here. `Player.Poster` and
+ * `Player.PosterImage` apply position, inset, sizing and object-fit inline, so
+ * the stable-geometry guarantee holds for consumers who ship no stylesheet at
+ * all. Inline styles beat any stylesheet, so restating those rules here would
+ * be dead CSS. The last two tokens above are the ones those components read.
+ */
+
+@layer reely {
+  :where([data-reely-part='viewport']) {
+    font-family: var(
+      --reely-font-family,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      roboto,
+      helvetica,
+      arial,
+      sans-serif
+    );
+    color: var(--reely-color-on-surface, #fff);
+    background-color: var(--reely-color-backdrop, #000);
+  }
+
+  /* ---- media --------------------------------------------------------------
+   * Appearance only; layer geometry belongs to the components (see above).
+   */
+  :where([data-reely-part='media']) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background-color: var(--reely-color-backdrop, #000);
+  }
+
+  /* ---- activation and status --------------------------------------------- */
+  :where([data-reely-part='activation']) {
+    display: grid;
+    place-items: center;
+    inline-size: 4rem;
+    block-size: 4rem;
+    border: 0;
+    border-radius: 50%;
+    color: var(--reely-color-on-surface, #fff);
+    background-color: var(--reely-color-surface, rgb(0 0 0 / 0.72));
+    cursor: pointer;
+    transition: opacity var(--reely-transition-duration, 150ms)
+      var(--reely-transition-easing, ease);
+  }
+
+  :where([data-reely-part='loading-indicator']) {
+    color: var(--reely-color-on-surface, #fff);
+  }
+
+  :where([data-reely-part='error']) {
+    display: grid;
+    gap: var(--reely-space-2, 0.5rem);
+    place-items: center;
+    padding: var(--reely-space-3, 0.75rem);
+    border-radius: var(--reely-radius-large, 0.5rem);
+    color: var(--reely-color-on-surface, #fff);
+    background-color: var(--reely-color-surface, rgb(0 0 0 / 0.72));
+  }
+
+  :where([data-reely-part='error-message']) {
+    margin: 0;
+    font-size: var(--reely-font-size, 0.875rem);
+    line-height: var(--reely-line-height, 1.4);
+  }
+
+  :where([data-reely-part='error-retry']) {
+    padding: var(--reely-space-1, 0.25rem) var(--reely-space-3, 0.75rem);
+    border: 1px solid var(--reely-color-on-surface, #fff);
+    border-radius: var(--reely-radius, 0.375rem);
+    color: var(--reely-color-on-surface, #fff);
+    font: inherit;
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  /* ---- control surface --------------------------------------------------- */
+  :where([data-reely-part='controls']) {
+    display: flex;
+    gap: var(--reely-space-1, 0.25rem);
+    align-items: center;
+    padding: var(--reely-space-2, 0.5rem);
+    padding-bottom: calc(
+      var(--reely-space-2, 0.5rem) +
+        var(--reely-safe-bottom, env(safe-area-inset-bottom, 0px))
+    );
+    padding-left: calc(
+      var(--reely-space-2, 0.5rem) +
+        var(--reely-safe-left, env(safe-area-inset-left, 0px))
+    );
+    padding-right: calc(
+      var(--reely-space-2, 0.5rem) +
+        var(--reely-safe-right, env(safe-area-inset-right, 0px))
+    );
+    color: var(--reely-color-on-surface, #fff);
+    background: var(
+      --reely-overlay-scrim,
+      linear-gradient(to top, rgb(0 0 0 / 0.72), rgb(0 0 0 / 0))
+    );
+    opacity: var(--reely-overlay-opacity, 1);
+    transition: opacity var(--reely-transition-duration, 150ms)
+      var(--reely-transition-easing, ease);
+  }
+
+  /* Every button-shaped control shares one box. */
+  :where(
+    [data-reely-part='play-button'],
+    [data-reely-part='mute-button'],
+    [data-reely-part='captions-button'],
+    [data-reely-part='fullscreen-button'],
+    [data-reely-part='pip-button'],
+    [data-reely-part='settings-menu-trigger']
+  ) {
+    display: inline-grid;
+    place-items: center;
+    /* The seek slider is the flexible element in the bar; buttons must not be
+     * squeezed below their target size when the bar runs out of room, or the
+     * locked 44px minimum quietly stops holding on narrow players. */
+    flex: 0 0 auto;
+    inline-size: var(--reely-control-size, 2.75rem);
+    block-size: var(--reely-control-size, 2.75rem);
+    padding: 0;
+    border: 0;
+    border-radius: var(--reely-radius, 0.375rem);
+    color: var(--reely-color-on-surface, #fff);
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  :where(
+    [data-reely-part='play-button'],
+    [data-reely-part='mute-button'],
+    [data-reely-part='captions-button'],
+    [data-reely-part='fullscreen-button'],
+    [data-reely-part='pip-button'],
+    [data-reely-part='settings-menu-trigger']
+  ):where(:hover) {
+    background-color: var(--reely-control-hover, rgb(255 255 255 / 0.12));
+  }
+
+  :where([data-reely-part]):where(:focus-visible) {
+    outline: 2px solid var(--reely-color-focus, #fff);
+    outline-offset: 2px;
+  }
+
+  :where([data-reely-part] svg) {
+    inline-size: var(--reely-control-icon-size, 1.25rem);
+    block-size: var(--reely-control-icon-size, 1.25rem);
+  }
+
+  :where([data-reely-part='time']) {
+    padding-inline: var(--reely-space-2, 0.5rem);
+    font-size: var(--reely-font-size-small, 0.8125rem);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* ---- sliders ----------------------------------------------------------- */
+  :where([data-reely-part='seek-slider']) {
+    position: relative;
+    flex: 1 1 auto;
+    min-inline-size: 4rem;
+  }
+
+  :where([data-reely-part='seek-buffered']) {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 50%;
+    block-size: var(--reely-slider-thickness, 0.25rem);
+    translate: 0 -50%;
+    border-radius: calc(var(--reely-slider-thickness, 0.25rem) / 2);
+    background-color: var(--reely-color-track, rgb(255 255 255 / 0.3));
+    pointer-events: none;
+  }
+
+  :where([data-reely-part='seek-buffered-range']) {
+    position: absolute;
+    inset-block: 0;
+    border-radius: inherit;
+    background-color: var(--reely-color-buffered, rgb(255 255 255 / 0.5));
+  }
+
+  :where(
+    [data-reely-part='seek-slider-input'],
+    [data-reely-part='volume-slider']
+  ) {
+    inline-size: 100%;
+    margin: 0;
+    accent-color: var(--reely-color-accent, #3ea6ff);
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  :where([data-reely-part='volume-slider']) {
+    inline-size: 5rem;
+  }
+
+  /* ---- menus ------------------------------------------------------------- */
+  :where([data-reely-part='settings-menu-root']) {
+    position: relative;
+  }
+
+  :where([data-reely-part='settings-menu'], [data-reely-part='captions-menu']) {
+    position: absolute;
+    inset-block-end: calc(100% + var(--reely-space-1, 0.25rem));
+    inset-inline-end: 0;
+    min-inline-size: 10rem;
+    padding: var(--reely-space-1, 0.25rem);
+    border-radius: var(--reely-radius-large, 0.5rem);
+    color: var(--reely-color-on-surface, #fff);
+    background-color: var(--reely-color-surface, rgb(0 0 0 / 0.72));
+    box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.4);
+  }
+
+  :where([data-reely-part='menu-item'], [data-reely-part='menu-radio-item']) {
+    display: flex;
+    gap: var(--reely-space-2, 0.5rem);
+    align-items: center;
+    inline-size: 100%;
+    min-block-size: var(--reely-control-size, 2.75rem);
+    padding-inline: var(--reely-space-2, 0.5rem);
+    border: 0;
+    border-radius: var(--reely-radius, 0.375rem);
+    color: inherit;
+    font: inherit;
+    font-size: var(--reely-font-size, 0.875rem);
+    text-align: start;
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  :where(
+    [data-reely-part='menu-item'],
+    [data-reely-part='menu-radio-item']
+  ):where(:hover) {
+    background-color: var(--reely-control-hover, rgb(255 255 255 / 0.12));
+  }
+
+  :where([data-reely-part='menu-radio-indicator']) {
+    display: inline-grid;
+    place-items: center;
+    inline-size: var(--reely-control-icon-size, 1.25rem);
+  }
+
+  /* ---- captions ---------------------------------------------------------- */
+  /* Cue styling variables belong to the captions work, not the theme; this
+   * only makes the default overlay match the themed player's typography. */
+  :where([data-reely-part='caption-cue']) {
+    font-family: inherit;
+    line-height: var(--reely-line-height, 1.4);
+  }
+
+  /* ---- reduced motion ---------------------------------------------------- */
+  @media (prefers-reduced-motion: reduce) {
+    /* Nonessential movement only: opacity transitions on the control surface
+     * and the activation affordance. No state change is conveyed by motion, so
+     * nothing is hidden by removing it. */
+    :where(
+      [data-reely-part='controls'],
+      [data-reely-part='activation'],
+      [data-reely-part='play-button'],
+      [data-reely-part='mute-button'],
+      [data-reely-part='captions-button'],
+      [data-reely-part='fullscreen-button'],
+      [data-reely-part='pip-button'],
+      [data-reely-part='settings-menu-trigger']
+    ) {
+      transition-duration: 0.01ms;
+    }
+  }
+
+  /* ---- forced colors ----------------------------------------------------- */
+  @media (forced-colors: active) {
+    /* The user's palette replaces ours. Translucent scrims and hover tints are
+     * dropped entirely in this mode, so state has to come from borders and
+     * system colors instead — otherwise a hovered or focused control becomes
+     * indistinguishable from an idle one.
+     */
+    :where([data-reely-part='controls']) {
+      background: canvas;
+    }
+
+    :where(
+      [data-reely-part='play-button'],
+      [data-reely-part='mute-button'],
+      [data-reely-part='captions-button'],
+      [data-reely-part='fullscreen-button'],
+      [data-reely-part='pip-button'],
+      [data-reely-part='settings-menu-trigger'],
+      [data-reely-part='menu-item'],
+      [data-reely-part='menu-radio-item']
+    ) {
+      border: 1px solid buttonborder;
+      color: buttontext;
+      background-color: buttonface;
+      forced-color-adjust: none;
+    }
+
+    :where(
+      [data-reely-part='play-button'],
+      [data-reely-part='mute-button'],
+      [data-reely-part='captions-button'],
+      [data-reely-part='fullscreen-button'],
+      [data-reely-part='pip-button'],
+      [data-reely-part='settings-menu-trigger'],
+      [data-reely-part='menu-item'],
+      [data-reely-part='menu-radio-item']
+    ):where(:hover) {
+      /* `Highlight`/`HighlightText` rather than the newer
+       * `selecteditem`/`selecteditemtext`: WebKit drops the latter as invalid,
+       * which silently left hover indistinguishable from idle there. */
+      color: highlighttext;
+      background-color: highlight;
+    }
+
+    :where([data-reely-part]):where(:focus-visible) {
+      outline: 2px solid highlight;
+    }
+
+    :where(
+      [data-reely-part='settings-menu'],
+      [data-reely-part='captions-menu']
+    ) {
+      border: 1px solid canvastext;
+      background-color: canvas;
+    }
+
+    :where([data-reely-part='seek-buffered']) {
+      border: 1px solid canvastext;
+      background-color: canvas;
+    }
+
+    :where([data-reely-part='seek-buffered-range']) {
+      background-color: canvastext;
+    }
+  }
+}

@@ -7,10 +7,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./theme.css": "./theme.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "theme.css"
   ],
   "dependencies": {
     "@reely/core": "workspace:*",
