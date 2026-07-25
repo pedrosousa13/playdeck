@@ -215,7 +215,7 @@ test('interaction preload=none plays from the activation click', async ({
   });
   const documentElement = page.locator('html');
   await expect(activationButton).toBeVisible();
-  await expect(page.getByLabel('Reely media')).toHaveCount(0);
+  await expect(page.getByLabel('Reely media', { exact: true })).toHaveCount(0);
   await documentElement.evaluate((element) => {
     element.dataset.mediaPlayCount = '0';
     element.dataset.mediaPlayTime = '';
@@ -239,7 +239,7 @@ test('interaction preload=none plays from the activation click', async ({
   await activationButton.click();
 
   await expect.poll(() => providerRequests.length).toBeGreaterThan(0);
-  const media = page.getByLabel('Reely media');
+  const media = page.getByLabel('Reely media', { exact: true });
   await expect(media).toHaveAttribute('preload', 'none');
   await expect(media).toHaveJSProperty('muted', true);
   try {

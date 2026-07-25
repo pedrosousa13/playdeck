@@ -30,20 +30,27 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules
   },
   {
-    // Playwright matches accessible names as SUBSTRINGS (testing-library
-    // matches exactly), so `{ name: 'Play' }` also resolves "AirPlay" and
-    // "Play video". The resulting strict-mode violation only appears once a
-    // second control renders — often on one engine only, which is the most
-    // expensive shape of CI failure. See #73.
+    // Playwright matches accessible names and text as SUBSTRINGS
+    // (testing-library matches exactly), so `{ name: 'Play' }` also resolves
+    // "AirPlay" and "Play video". The resulting strict-mode violation only
+    // appears once a second element renders — often on one engine only, which
+    // is the most expensive shape of CI failure. See #73. `exact: false` is a
+    // substring match too, so only `exact: true` satisfies these rules.
     files: ['e2e/**/*.ts'],
     rules: {
       'no-restricted-syntax': [
         'error',
         {
           selector:
-            "CallExpression[callee.property.name='getByRole'] > ObjectExpression:has(Property[key.name='name']):not(:has(Property[key.name='exact']))",
+            "CallExpression[callee.property.name='getByRole'] > ObjectExpression:has(Property[key.name='name']):not(:has(Property[key.name='exact'][value.value=true]))",
           message:
             'Playwright name matching is a substring match. Locate reely controls by [data-reely-part=...], or pass exact: true.'
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^getBy(Label|Text|Placeholder|Title|AltText)$/]:not(:has(ObjectExpression > Property[key.name='exact'][value.value=true]))",
+          message:
+            'Playwright text matching is a substring match. Locate by [data-reely-part=...], or pass exact: true.'
         }
       ]
     }

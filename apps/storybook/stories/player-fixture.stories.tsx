@@ -324,9 +324,9 @@ const PlayerFixture = ({
           Mounted everywhere on purpose: "AirPlay" contains "Play", so a
           name-based Playwright lookup collides here (#73). It is a partial
           guard — the primitive only renders where the airPlay capability
-          exists (WebKit, and not for iframe providers). The interaction
-          stories are covered cross-browser instead, by ActivationButton's
-          "Play video".
+          exists (WebKit, and not for iframe providers), and ActivationButton's
+          "Play video" only collides on every engine until it is activated
+          away. The eslint rule over e2e/ is what actually enforces this.
         */}
         <Player.AirPlayButton />
         <PresentationControls airplayDemo={airplayDemo} />

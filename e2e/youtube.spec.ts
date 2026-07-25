@@ -164,7 +164,7 @@ test('youtube docs example stays dormant while the native fixture is used', asyn
     exact: true
   });
   await expect(activationButton).toBeVisible();
-  await expect(page.getByLabel('Reely media')).toHaveCount(1);
+  await expect(page.getByLabel('Reely media', { exact: true })).toHaveCount(1);
   expect(youtubeRequests).toEqual([]);
 
   await activationButton.click();
