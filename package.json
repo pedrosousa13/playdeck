@@ -16,6 +16,7 @@
     "test:storybook": "pnpm --filter @reely/storybook test",
     "test:integrations": "turbo run build --filter=@reely/integration-next-image && pnpm --filter @reely/integration-next-image test:integration",
     "test:packages": "node scripts/verify-packaging.mjs",
+    "test:budgets": "node scripts/check-bundle-budgets.mjs",
     "test:bundle": "turbo run build --filter=@reely/bundle-native-only && pnpm --filter @reely/bundle-native-only test",
     "build": "turbo run build"
   },
