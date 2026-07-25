@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { playButton } from './locators';
 import { readFile } from 'node:fs/promises';
 
 type CapabilityValue = {
@@ -80,7 +81,10 @@ test('interaction loading contacts no Vimeo domain before one click plays', asyn
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--vimeo-interaction&viewMode=story'
   );
-  const activation = page.getByRole('button', { name: 'Play video' });
+  const activation = page.getByRole('button', {
+    name: 'Play video',
+    exact: true
+  });
   await activation.waitFor();
   expect(requests, 'no Vimeo request may start before activation').toEqual([]);
 
@@ -94,7 +98,7 @@ test('interaction loading contacts no Vimeo domain before one click plays', asyn
   expect(src).toContain('controls=0');
   expect(src).toContain('dnt=1');
 
-  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+  await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
   expect(requests.length).toBeGreaterThan(0);
   await expect
     .poll(() => customControls(page))
@@ -125,11 +129,11 @@ test('unlisted embeds carry the privacy hash end to end', async ({ page }) => {
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--vimeo-unlisted-interaction&viewMode=story'
   );
-  await page.getByRole('button', { name: 'Play video' }).click();
+  await page.getByRole('button', { name: 'Play video', exact: true }).click();
 
   const iframe = page.locator('[data-reely-part="media"] iframe');
   await expect(iframe).toHaveAttribute('src', /h=abc123hash/);
-  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+  await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
   const oembedRequest = requests.find((url) =>
     url.startsWith('https://vimeo.com/api/oembed.json')
   );
@@ -145,8 +149,8 @@ test('plan-gated chromeless controls report provider-plan', async ({
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--vimeo-interaction&viewMode=story'
   );
-  await page.getByRole('button', { name: 'Play video' }).click();
-  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+  await page.getByRole('button', { name: 'Play video', exact: true }).click();
+  await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
   await expect
     .poll(() => customControls(page))
     .toEqual({
@@ -162,8 +166,8 @@ test('caption tracks discovered from the embed are selectable', async ({
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--vimeo-interaction&viewMode=story'
   );
-  await page.getByRole('button', { name: 'Play video' }).click();
-  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+  await page.getByRole('button', { name: 'Play video', exact: true }).click();
+  await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
   await expect
     .poll(() =>
       page.evaluate(

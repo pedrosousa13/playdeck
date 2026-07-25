@@ -90,8 +90,8 @@ test('platform AirPlay capability is WebKit-only and gates the picker control', 
   browserName,
   page
 }) => {
-  // The AirPlay demo control is gated behind ?airplay=demo so it never adds a
-  // second page-global "Play"-named button to the default fixture.
+  // The demo control is gated behind the `airplay` story arg, so this story is
+  // the one place its capability gating is observable.
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--airplay-demo&viewMode=story',
     { waitUntil: 'domcontentloaded' }

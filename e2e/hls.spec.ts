@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { playButton } from './locators';
 
 // Under `storybook dev`, Vite's dependency optimizer serves hls.js from its
 // deps cache (e.g. /node_modules/.cache/storybook/<version>/<hash>/sb-vite/deps/hls__js.js),
@@ -14,16 +15,10 @@ const recordRequests = (page: Page): string[] => {
 };
 
 const playToCompletion = async (page: Page): Promise<void> => {
-  await page.getByRole('button', { name: 'Play' }).click();
-  await expect(page.getByRole('button', { name: 'Pause' })).toHaveAttribute(
-    'data-state',
-    'playing'
-  );
+  await playButton(page).click();
+  await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
 
-  await expect(page.getByRole('button', { name: 'Play' })).toHaveAttribute(
-    'data-state',
-    'ended'
-  );
+  await expect(playButton(page)).toHaveAttribute('data-state', 'ended');
 };
 
 test('plays the local hls fixture to completion with the hls.js engine', async ({

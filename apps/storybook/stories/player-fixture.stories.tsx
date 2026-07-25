@@ -235,8 +235,10 @@ const PlayerFixture = ({
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
   const preload: Player.PlayerPreload = preloadInput ?? 'metadata';
   const defaultMuted = defaultMutedInput ?? false;
-  // AirPlay demo control is gated so the default fixture keeps a single
-  // page-global "Play" button.
+  // The demo control drives `showAirPlayPicker()` directly, which the shipped
+  // `AirPlayButton` primitive below also does. It stays behind the arg so it
+  // does not shadow the primitive in every story; `platform.spec` reaches it by
+  // testid, so the gating is a tidiness choice, not a constraint on locators.
   const airplayDemo = airplay === 'demo';
   const sourceChange = sourceChangeInput === 'external';
   const hlsEngine: 'auto' | 'native' | 'hls.js' = engine ?? 'auto';
@@ -318,6 +320,15 @@ const PlayerFixture = ({
         </Player.Viewport>
         <Player.PlayButton />
         <Player.CaptionsButton />
+        {/*
+          Mounted everywhere on purpose: "AirPlay" contains "Play", so a
+          name-based Playwright lookup collides here (#73). It is a partial
+          guard — the primitive only renders where the airPlay capability
+          exists (WebKit, and not for iframe providers), and ActivationButton's
+          "Play video" only collides on every engine until it is activated
+          away. The eslint rule over e2e/ is what actually enforces this.
+        */}
+        <Player.AirPlayButton />
         <PresentationControls airplayDemo={airplayDemo} />
         <LiveControls />
         <StateProbes />

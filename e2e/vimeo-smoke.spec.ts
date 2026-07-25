@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { playButton } from './locators';
 
 // Real-provider smoke tests: tagged @real so they never block CI (see
 // grepInvert in playwright.config.ts). Run with:
@@ -42,7 +43,10 @@ test(
     await page.goto(
       '/iframe.html?id=fixtures-playerfixture--vimeo-interaction-muted&viewMode=story'
     );
-    const activation = page.getByRole('button', { name: 'Play video' });
+    const activation = page.getByRole('button', {
+      name: 'Play video',
+      exact: true
+    });
     await activation.waitFor();
     await activation.click();
 
@@ -51,7 +55,7 @@ test(
       'src',
       /^https:\/\/player\.vimeo\.com\/video\/76979871\?/
     );
-    await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible({
+    await expect(playButton(page)).toHaveAttribute('data-state', 'playing', {
       timeout: 60_000
     });
 
@@ -108,7 +112,7 @@ test(
     await page.goto(
       '/iframe.html?id=fixtures-playerfixture--vimeo-free-plan&viewMode=story'
     );
-    await page.getByRole('button', { name: 'Play video' }).click();
+    await page.getByRole('button', { name: 'Play video', exact: true }).click();
     await expect
       .poll(() => capability(page, 'customControls'), { timeout: 60_000 })
       .toEqual({ status: 'unavailable', reason: 'provider-plan' });
@@ -123,7 +127,7 @@ test(
     await page.goto(
       '/iframe.html?id=fixtures-playerfixture--vimeo-paid-plan&viewMode=story'
     );
-    await page.getByRole('button', { name: 'Play video' }).click();
+    await page.getByRole('button', { name: 'Play video', exact: true }).click();
     await expect
       .poll(() => capability(page, 'customControls'), { timeout: 60_000 })
       .toEqual({ status: 'available' });

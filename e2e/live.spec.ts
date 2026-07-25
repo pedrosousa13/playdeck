@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { playButton } from './locators';
 
 // Under `storybook dev`, Vite's dependency optimizer serves hls.js from its
 // deps cache (e.g. /node_modules/.cache/storybook/<version>/<hash>/sb-vite/deps/hls__js.js),
@@ -96,7 +97,7 @@ test('detects a live stream and never shows a fixed duration on native HLS', asy
   );
 
   await expect(page.getByTestId('hls-engine')).toHaveText('native');
-  await page.getByRole('button', { name: 'Play' }).click();
+  await playButton(page).click();
 
   const panel = page.getByTestId('live-panel');
   await expect(panel).toHaveAttribute('data-live-status', 'live');

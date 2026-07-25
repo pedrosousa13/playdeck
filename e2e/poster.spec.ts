@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { playButton } from './locators';
 import { readdirSync, readFileSync, type Dirent } from 'node:fs';
 import { extname, join } from 'node:path';
 
@@ -145,7 +146,7 @@ test('hides the poster after the first frame without changing its geometry', asy
   );
   const visibleGeometry = await rect(poster(page));
 
-  await page.getByRole('button', { name: 'Play' }).click();
+  await playButton(page).click();
 
   await expect(poster(page)).toHaveAttribute('data-state', 'hidden');
   await expect(poster(page)).toHaveCSS('visibility', 'hidden');

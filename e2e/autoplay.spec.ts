@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { playButton } from './locators';
 
 test('muted autoplay reaches a confirmed started state', async ({ page }) => {
   await page.goto(
@@ -7,7 +8,9 @@ test('muted autoplay reaches a confirmed started state', async ({ page }) => {
 
   const button = page.locator('[data-autoplay-state]');
   await expect(button).toHaveAttribute('data-autoplay-state', 'started');
-  await expect(page.getByLabel('Reely media')).toHaveJSProperty('muted', true);
+  await expect(
+    page.getByLabel('Reely media', { exact: true })
+  ).toHaveJSProperty('muted', true);
 });
 
 test('blocked audible autoplay waits for a user retry without muting', async ({
@@ -33,16 +36,17 @@ test('blocked audible autoplay waits for a user retry without muting', async ({
     '/iframe.html?id=fixtures-playerfixture--autoplay-audible&viewMode=story'
   );
 
-  const playButton = page.getByRole('button', { name: 'Play' });
-  await expect(playButton).toHaveAttribute('data-autoplay-state', 'blocked');
-  await expect(playButton).toHaveJSProperty('tabIndex', 0);
-  await expect(page.getByLabel('Reely media')).toHaveJSProperty('muted', false);
+  const play = playButton(page);
+  await expect(play).toHaveAttribute('data-autoplay-state', 'blocked');
+  await expect(play).toHaveJSProperty('tabIndex', 0);
+  await expect(
+    page.getByLabel('Reely media', { exact: true })
+  ).toHaveJSProperty('muted', false);
 
-  await playButton.click();
+  await play.click();
 
-  await expect(page.getByRole('button', { name: 'Pause' })).toHaveAttribute(
-    'data-state',
-    'playing'
-  );
-  await expect(page.getByLabel('Reely media')).toHaveJSProperty('muted', false);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await expect(
+    page.getByLabel('Reely media', { exact: true })
+  ).toHaveJSProperty('muted', false);
 });
