@@ -3,113 +3,209 @@ import {
   PlayerController,
   type CommandResult,
   type PlayerError,
-  type ProviderAdapter
+  type ProviderAdapter,
+  type ProviderStateListener
 } from '../src/index';
 
 const ok = async (): Promise<CommandResult> => ({ ok: true });
 
-const createAdapter = (): ProviderAdapter => ({
-  provider: 'native',
-  attach: () => {},
-  load: () => {},
-  destroy: () => {},
-  subscribe: () => () => {},
-  play: ok,
-  pause: ok,
-  setPlaybackRate: vi.fn(ok)
-});
+/**
+ * An adapter shaped like the SDK-backed providers rather than like the native
+ * one: its command guards stay shut until `load()` has run, because that is
+ * where YouTube and Vimeo create the underlying player. Attaching the adapter
+ * is not the moment commands start working, and a signal that settles on
+ * assignment is wrong for three of the four shipped providers.
+ */
+const createSdkAdapter = () => {
+  const listeners = new Set<ProviderStateListener>();
+  let loaded = false;
+  const guarded = vi.fn(async (): Promise<CommandResult> =>
+    loaded ? { ok: true } : { ok: false, reason: 'not-ready' }
+  );
+  const adapter: ProviderAdapter = {
+    provider: 'youtube',
+    attach: () => {},
+    load: () => {
+      loaded = true;
+    },
+    destroy: () => {},
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    play: ok,
+    pause: ok,
+    setPlaybackRate: guarded
+  };
+  const emitReady = () =>
+    listeners.forEach((listener) =>
+      listener({ lifecycle: 'ready', activation: 'ready' })
+    );
+  return { adapter, guarded, emitReady };
+};
 
-const failure: PlayerError = {
+const recoverable: PlayerError = {
+  category: 'unsupported',
+  fatal: false,
+  recoverable: true,
+  message: 'No source yet.'
+};
+
+const terminal: PlayerError = {
   category: 'source',
   fatal: true,
   recoverable: false,
   message: 'No provider could play this source.'
 };
 
-// Commands issued before a provider attaches are refused with `not-ready`, and
+// Commands issued before the player is ready are refused with `not-ready`, and
 // nothing queues them. `whenReady` is the signal that makes that refusal
 // something a consumer can program against rather than discover.
 
-test('resolves once a provider is attached', async () => {
+test('a command issued the moment it resolves is actually accepted', async () => {
   const controller = new PlayerController();
-  let settled: CommandResult | undefined;
-  const ready = controller.whenReady().then((result) => (settled = result));
+  const { adapter, guarded, emitReady } = createSdkAdapter();
 
-  controller.setActivation({ activation: 'loading-provider' });
-  await Promise.resolve();
-  expect(settled).toBeUndefined();
+  const applied = controller
+    .whenReady()
+    .then(() => controller.setPlaybackRate(0.25));
 
-  controller.setProvider(createAdapter());
+  controller.setProvider(adapter);
+  emitReady();
 
-  await expect(ready).resolves.toEqual({ ok: true });
+  // The whole contract in one assertion: no `not-ready` on the other side.
+  await expect(applied).resolves.toEqual({ ok: true });
+  expect(guarded).toHaveBeenCalledTimes(1);
 });
 
-test('resolves immediately when a provider is already attached', async () => {
+test('does not resolve merely because an adapter was assigned', async () => {
   const controller = new PlayerController();
-  controller.setProvider(createAdapter());
+  const { adapter } = createSdkAdapter();
+  let settled = false;
+  void controller.whenReady().then(() => (settled = true));
+
+  controller.setProvider(adapter);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  // Assignment is not readiness: the SDK players are built in `load()`.
+  expect(settled).toBe(false);
+});
+
+test('resolves immediately when the player is already ready', async () => {
+  const controller = new PlayerController();
+  const { adapter, emitReady } = createSdkAdapter();
+  controller.setProvider(adapter);
+  emitReady();
 
   await expect(controller.whenReady()).resolves.toEqual({ ok: true });
 });
 
-test('a command issued after it resolves is accepted', async () => {
-  const controller = new PlayerController();
-  const adapter = createAdapter();
-  const ready = controller.whenReady();
-  controller.setProvider(adapter);
-
-  await ready;
-
-  // The whole point of the signal: this is the first moment the caller can
-  // issue a command without being told `not-ready`.
-  await expect(controller.setPlaybackRate(0.25)).resolves.toEqual({ ok: true });
-  expect(adapter.setPlaybackRate).toHaveBeenCalledWith(0.25);
-});
-
-test('resolves with the failure when the player errors before attaching', async () => {
+test('resolves with the failure when the player fails terminally', async () => {
   const controller = new PlayerController();
   const ready = controller.whenReady();
 
-  controller.setActivation({ activation: 'error', error: failure });
+  controller.setActivation({ activation: 'error', error: terminal });
 
-  // Never left pending on a player that will never become ready — a promise
-  // that hangs forever is worse than one that reports the failure.
+  // Never left pending on a player that will never become ready.
   await expect(ready).resolves.toEqual({
     ok: false,
     reason: 'provider-error',
-    error: failure
+    error: terminal
   });
 });
 
-test('resolves immediately when the player has already errored', async () => {
+test('ignores a recoverable error and resolves when the player recovers', async () => {
   const controller = new PlayerController();
-  controller.setActivation({ activation: 'error', error: failure });
+  const { adapter, emitReady } = createSdkAdapter();
+  let settled: CommandResult | undefined;
+  const ready = controller.whenReady().then((r) => (settled = r));
 
-  await expect(controller.whenReady()).resolves.toMatchObject({ ok: false });
-});
+  // The ordinary `source={data?.url ?? ''}` shape: the React layer reports an
+  // error activation for a source that has not arrived yet, and it heals on
+  // the next render. Reporting that as a permanent failure would make the
+  // documented `if (ready.ok)` pattern silently skip the preference.
+  controller.setActivation({ activation: 'error', error: recoverable });
+  await Promise.resolve();
+  expect(settled).toBeUndefined();
 
-test('a later attach still resolves waiters created after an error', async () => {
-  const controller = new PlayerController();
-  controller.setActivation({ activation: 'error', error: failure });
-  await controller.whenReady();
-
-  // Retry path: the player recovers, and a fresh waiter tracks the new attempt
-  // rather than replaying the stale failure.
-  controller.setActivation({ activation: 'eligible' });
-  const ready = controller.whenReady();
-  controller.setProvider(createAdapter());
+  controller.setProvider(adapter);
+  emitReady();
 
   await expect(ready).resolves.toEqual({ ok: true });
 });
 
+test('resolves immediately when the player has already failed terminally', async () => {
+  const controller = new PlayerController();
+  controller.setActivation({ activation: 'error', error: terminal });
+
+  await expect(controller.whenReady()).resolves.toMatchObject({ ok: false });
+});
+
+test('a later attempt still resolves waiters created after a failure', async () => {
+  const controller = new PlayerController();
+  controller.setActivation({ activation: 'error', error: terminal });
+  await controller.whenReady();
+
+  controller.setActivation({ activation: 'eligible' });
+  const { adapter, emitReady } = createSdkAdapter();
+  const ready = controller.whenReady();
+  controller.setProvider(adapter);
+  emitReady();
+
+  await expect(ready).resolves.toEqual({ ok: true });
+});
+
+test('settles pending waiters when the provider is detached', async () => {
+  const controller = new PlayerController();
+  const { adapter } = createSdkAdapter();
+  controller.setProvider(adapter);
+  const ready = controller.whenReady();
+
+  // React unmount detaches the provider. A waiter left pending here holds its
+  // closure and never runs, which is what the docs promise never happens.
+  controller.setProvider(undefined);
+
+  await expect(ready).resolves.toEqual({ ok: false, reason: 'not-ready' });
+});
+
 test('every pending waiter resolves, not just the first', async () => {
   const controller = new PlayerController();
+  const { adapter, emitReady } = createSdkAdapter();
   const first = controller.whenReady();
   const second = controller.whenReady();
 
-  controller.setProvider(createAdapter());
+  controller.setProvider(adapter);
+  emitReady();
 
   await expect(Promise.all([first, second])).resolves.toEqual([
     { ok: true },
     { ok: true }
   ]);
+});
+
+test('keeps its answer once given, across later transitions', async () => {
+  const controller = new PlayerController();
+  const { adapter, emitReady } = createSdkAdapter();
+  const seen: CommandResult[] = [];
+  const ready = controller.whenReady().then((r) => {
+    seen.push(r);
+    return r;
+  });
+
+  controller.setProvider(adapter);
+  emitReady();
+  await ready;
+
+  // Detach and come back. A waiter is answered once; the churn afterwards must
+  // not reach it again, and a caller asking now sees the current state rather
+  // than the old answer.
+  controller.setProvider(undefined);
+  const afterDetach = controller.whenReady();
+  const second = createSdkAdapter();
+  controller.setProvider(second.adapter);
+  second.emitReady();
+
+  expect(seen).toEqual([{ ok: true }]);
+  await expect(afterDetach).resolves.toEqual({ ok: true });
 });

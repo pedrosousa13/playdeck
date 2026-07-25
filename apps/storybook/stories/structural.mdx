@@ -16,18 +16,20 @@ story rather than shown in isolation.
   The mock-backed stories issue no media; it renders for real in the
   `Real playback/Providers` and `Fixtures/PlayerFixture` stories.
 
-## Commands before the provider attaches
+## Commands before the player is ready
 
-A command issued before a provider is attached is **refused, not queued**. It
+A command issued before the player is ready is **refused, not queued**. It
 resolves `{ ok: false, reason: 'not-ready' }`, and nothing replays it later.
 
-That window is reachable in ordinary code: controls render and are clickable
-while the provider is still loading, so "apply my preferred rate as soon as the
-player mounts" runs squarely inside it. `Player.PlayButton` is the exception
-that hides this — activation has its own path, so clicking play during loading
-does work.
+That window is reachable in ordinary code. `Player.Controls` and its buttons
+render unconditionally, so they are on screen and clickable while the provider
+is still loading — `Player.PlayButton` included, and it is refused like
+everything else in that window. The one control that behaves differently is
+`Player.ActivationButton`, which owns the activation path and queues the play
+it triggers; it is `aria-disabled` while the provider loads.
 
-Await `whenReady()` before applying startup preferences:
+So "apply my preferred rate as soon as the player mounts" runs squarely inside
+the refusal window. Await `whenReady()` first:
 
 ```tsx
 const player = useRef<Player.PlayerHandle>(null);
@@ -39,8 +41,30 @@ useEffect(() => {
 }, []);
 ```
 
-It resolves `{ ok: true }` at the first moment a command will be accepted — when
-the provider attaches, which is earlier than the `ready` activation, since that
-also waits on media metadata. If the player fails before attaching, it resolves
-`{ ok: false, reason: 'provider-error' }` carrying the error rather than hanging
-forever. Available on the ref handle and on `usePlayerActions()`.
+It resolves `{ ok: true }` once the player reaches its `ready` activation, which
+is the point where a command is actually accepted. Not on provider attach:
+YouTube and Vimeo build their underlying player inside `load()`, so an attached
+adapter still answers `not-ready` — resolving there would be true for the native
+provider alone.
+
+It resolves `{ ok: false }` rather than hanging when readiness becomes
+impossible — `provider-error` for a terminal failure, `not-ready` if the player
+is torn down while you wait. A _recoverable_ error does not settle it, because
+the React layer reports one for a source that has not arrived yet
+(`source={data?.url ?? ''}`), and that heals on the next render.
+
+Available on the ref handle and on `usePlayerActions()`. Inside a component you
+can equally watch the state, which needs no new API:
+
+```tsx
+const activation = usePlayerState((state) => state.activation);
+useEffect(() => {
+  if (activation === 'ready') void actions.setPlaybackRate(0.75);
+}, [activation, actions]);
+```
+
+`whenReady()` earns its place on the imperative handle, where there is no
+render loop to hang that effect on — `on('ready', …)` is edge-triggered and
+misses a listener attached after the fact, and `subscribe()` fires
+synchronously during subscription, which makes unsubscribing from the first
+call awkward.

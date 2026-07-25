@@ -51,11 +51,15 @@ describe('whenReady on the player handle', () => {
     const controller = handle.current as unknown as PlayerController;
     const mock = createAdapter();
 
-    // Typed access, not a cast: this is the point of the change.
+    // The handle is the controller at runtime, so this call would work even if
+    // `whenReady` were missing from the `PlayerHandle` type. What pins the
+    // public type is that this line stops compiling without it, which
+    // `pnpm typecheck` enforces as a CI gate.
     const ready = handle.current?.whenReady();
 
     act(() => {
       controller.setProvider(mock.adapter);
+      mock.emit({ lifecycle: 'ready', activation: 'ready' });
     });
 
     await expect(ready).resolves.toEqual({ ok: true });
@@ -84,6 +88,7 @@ describe('whenReady on the player handle', () => {
 
     act(() => {
       controller.setProvider(mock.adapter);
+      mock.emit({ lifecycle: 'ready', activation: 'ready' });
     });
 
     await expect(applied).resolves.toEqual({ ok: true });
@@ -119,6 +124,7 @@ describe('whenReady on the player handle', () => {
 
     await act(async () => {
       controller.setProvider(mock.adapter);
+      mock.emit({ lifecycle: 'ready', activation: 'ready' });
     });
 
     expect(screen.getByTestId('status').textContent).toBe('ready');

@@ -606,6 +606,31 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
   return failure(input, 'invalid-source');
 };
 
+/**
+ * What a `whenReady()` waiter should be told about this state, or `undefined`
+ * while the answer is still unknown.
+ *
+ * Readiness is the `ready` activation rather than provider attach: for the
+ * SDK-backed providers the command guards only open once `load()` has built
+ * the underlying player, so an adapter being assigned says nothing about
+ * whether a command will be accepted.
+ *
+ * A recoverable error is not an answer either. The React layer reports an
+ * error activation for a source that has not arrived yet
+ * (`source={data?.url ?? ''}`), and that heals on the next render — settling
+ * there would hand a permanent failure to a player heading for ready.
+ */
+const readySettlement = (state: PlayerState): CommandResult | undefined => {
+  if (state.activation === 'ready') return { ok: true };
+  if (state.activation !== 'error') return undefined;
+  if (state.error?.recoverable) return undefined;
+  return {
+    ok: false,
+    reason: 'provider-error',
+    ...(state.error ? { error: state.error } : {})
+  };
+};
+
 export class PlayerController {
   #provider: ProviderAdapter | undefined;
   #unsubscribe: (() => void) | undefined;
@@ -710,6 +735,9 @@ export class PlayerController {
     if (generation !== this.#generation) return;
     this.#provider = provider;
     if (!provider) {
+      // Detach — React unmount takes this path. Anything still awaiting
+      // readiness will never get it, so settle rather than strand the closure.
+      this.#settleReadyWaiters({ ok: false, reason: 'not-ready' });
       this.#setState(
         this.#withAutoplayConfiguration(createInitialPlayerState())
       );
@@ -724,10 +752,6 @@ export class PlayerController {
         provider: provider.provider
       })
     );
-    // Commands reach the adapter from here on, which is what `whenReady`
-    // promises — not the later `ready` activation, which also waits on media
-    // metadata.
-    this.#settleReadyWaiters({ ok: true });
     if (generation !== this.#generation || provider !== this.#provider) return;
     let nextUnsubscribe: (() => void) | undefined;
     try {
@@ -996,13 +1020,8 @@ export class PlayerController {
   #setState = (state: PlayerState): void => {
     const snapshot = Object.freeze(state);
     this.#state = snapshot;
-    if (snapshot.activation === 'error') {
-      this.#settleReadyWaiters({
-        ok: false,
-        reason: 'provider-error',
-        ...(snapshot.error ? { error: snapshot.error } : {})
-      });
-    }
+    const settlement = readySettlement(snapshot);
+    if (settlement) this.#settleReadyWaiters(settlement);
     this.#listeners.forEach((listener) => listener(snapshot));
   };
 
@@ -1014,25 +1033,27 @@ export class PlayerController {
   };
 
   /**
-   * Resolves at the first moment a command will be accepted — that is, once a
-   * provider is attached. Commands issued before then are refused with
+   * Resolves `{ok: true}` once the player is ready, meaning a command issued
+   * at that moment is accepted. Commands issued before then are refused with
    * `not-ready` and nothing queues them, so this is the signal to await before
    * applying startup preferences (a playback rate, a volume, a text track).
    *
-   * Resolves `{ok: false, reason: 'provider-error'}` if the player reaches its
-   * error activation first, so an awaiting caller is never left hanging on a
-   * player that will never become ready. A waiter created after an error
-   * tracks the next attempt rather than replaying the old failure.
+   * Readiness is deliberately the `ready` activation and not provider attach.
+   * For the SDK-backed providers the command guards only open once `load()`
+   * has built the underlying player, so resolving on attach would report
+   * ready while `setPlaybackRate` still answers `not-ready` — true for the
+   * native provider only, which is the trap this signal exists to remove.
+   *
+   * Resolves `{ok: false}` instead of hanging when readiness becomes
+   * impossible: `provider-error` for a terminal failure, `not-ready` if the
+   * provider is detached (React unmount) while a caller is still waiting.
+   * A *recoverable* error is not terminal and is ignored, because the React
+   * layer reports one for a source that has simply not arrived yet. A waiter
+   * created after a failure tracks the next attempt rather than replaying it.
    */
   whenReady = (): Promise<CommandResult> => {
-    if (this.#provider) return Promise.resolve({ ok: true });
-    if (this.#state.activation === 'error') {
-      return Promise.resolve({
-        ok: false,
-        reason: 'provider-error',
-        ...(this.#state.error ? { error: this.#state.error } : {})
-      });
-    }
+    const settled = readySettlement(this.#state);
+    if (settled) return Promise.resolve(settled);
     return new Promise<CommandResult>((resolve) => {
       this.#readyWaiters.add(resolve);
     });
