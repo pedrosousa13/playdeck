@@ -164,21 +164,11 @@ test(
 
     const frame = page.locator('[data-reely-part="media"] iframe');
     const cues = page.locator('[data-reely-part="caption-cue"]');
-    // Only the custom renderer puts cues in Reely's overlay; under 'native'
-    // the overlay is empty by design, which is the whole point of the
-    // comparison, so the wait for it is conditional.
-    const settleOnCue = async (overlayDrawsCues: boolean) => {
-      await page.evaluate(() => window.reelyHandle?.seekTo(10));
-      if (overlayDrawsCues) {
-        await expect(cues.first()).toHaveText(/\S/, { timeout: 30_000 });
-      }
-      await page.evaluate(() => window.reelyHandle?.pause());
-      // A paused frame takes a beat to be the frame on screen, and Vimeo's own
-      // renderer takes another to paint over it.
-      await page.waitForTimeout(2_000);
-    };
-
-    await settleOnCue(true);
+    await page.evaluate(() => window.reelyHandle?.seekTo(10));
+    await expect(cues.first()).toHaveText(/\S/, { timeout: 30_000 });
+    await page.evaluate(() => window.reelyHandle?.pause());
+    // A paused frame takes a beat to be the frame on screen.
+    await page.waitForTimeout(2_000);
 
     // Reely's own overlay sits ON TOP of the iframe, so an element screenshot
     // captures it too — and then the two frames differ because of OUR cues, not
@@ -202,15 +192,20 @@ test(
     // vacuous — measured, the frames differed on jitter alone and the test
     // passed even with custom mode forced to showing: true.
     await page.evaluate(() => window.reelyHandle?.setCaptionRenderer('native'));
+
+    // Poll the pixels, not the state: setCaptionRenderer emits
+    // `captionRendering` synchronously, so polling that would satisfy on the
+    // first tick — long before Vimeo's SDK round-trip and repaint. Only a
+    // fixed sleep was actually gating this, which fails red on a slow network
+    // rather than green, but reads as a barrier it never was.
     await expect
       .poll(
-        () =>
-          page.evaluate(() => window.reelyHandle?.getState().captionRendering),
+        async () => Buffer.compare(await frame.screenshot(), custom) !== 0,
         { timeout: 30_000 }
       )
-      .toBe('provider');
-    await page.waitForTimeout(2_000);
-
-    expect(await frame.screenshot()).not.toEqual(custom);
+      .toBe(true);
+    expect(
+      await page.evaluate(() => window.reelyHandle?.getState().captionRendering)
+    ).toBe('provider');
   }
 );
