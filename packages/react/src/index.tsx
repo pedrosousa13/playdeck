@@ -113,6 +113,7 @@ export const normalizePoster = (input: PosterInput): NormalizedPoster => {
 export type PlayerHandle = Pick<
   PlayerController,
   | 'getState'
+  | 'whenReady'
   | 'subscribe'
   | 'on'
   | 'play'
@@ -291,6 +292,7 @@ export const usePlayerActions = (): PlayerActions => {
   const { controller } = usePlayer();
   return useMemo(
     () => ({
+      whenReady: controller.whenReady,
       play: controller.play,
       pause: controller.pause,
       togglePlayback: controller.togglePlayback,

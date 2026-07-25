@@ -632,6 +632,7 @@ export class PlayerController {
         readonly playback: PlaybackState;
       }
     | undefined;
+  #readyWaiters = new Set<(result: CommandResult) => void>();
 
   configureAutoplay = (
     mode: AutoplayMode,
@@ -723,6 +724,10 @@ export class PlayerController {
         provider: provider.provider
       })
     );
+    // Commands reach the adapter from here on, which is what `whenReady`
+    // promises — not the later `ready` activation, which also waits on media
+    // metadata.
+    this.#settleReadyWaiters({ ok: true });
     if (generation !== this.#generation || provider !== this.#provider) return;
     let nextUnsubscribe: (() => void) | undefined;
     try {
@@ -991,7 +996,46 @@ export class PlayerController {
   #setState = (state: PlayerState): void => {
     const snapshot = Object.freeze(state);
     this.#state = snapshot;
+    if (snapshot.activation === 'error') {
+      this.#settleReadyWaiters({
+        ok: false,
+        reason: 'provider-error',
+        ...(snapshot.error ? { error: snapshot.error } : {})
+      });
+    }
     this.#listeners.forEach((listener) => listener(snapshot));
+  };
+
+  #settleReadyWaiters = (result: CommandResult): void => {
+    if (this.#readyWaiters.size === 0) return;
+    const waiters = [...this.#readyWaiters];
+    this.#readyWaiters.clear();
+    waiters.forEach((resolve) => resolve(result));
+  };
+
+  /**
+   * Resolves at the first moment a command will be accepted — that is, once a
+   * provider is attached. Commands issued before then are refused with
+   * `not-ready` and nothing queues them, so this is the signal to await before
+   * applying startup preferences (a playback rate, a volume, a text track).
+   *
+   * Resolves `{ok: false, reason: 'provider-error'}` if the player reaches its
+   * error activation first, so an awaiting caller is never left hanging on a
+   * player that will never become ready. A waiter created after an error
+   * tracks the next attempt rather than replaying the old failure.
+   */
+  whenReady = (): Promise<CommandResult> => {
+    if (this.#provider) return Promise.resolve({ ok: true });
+    if (this.#state.activation === 'error') {
+      return Promise.resolve({
+        ok: false,
+        reason: 'provider-error',
+        ...(this.#state.error ? { error: this.#state.error } : {})
+      });
+    }
+    return new Promise<CommandResult>((resolve) => {
+      this.#readyWaiters.add(resolve);
+    });
   };
 
   #setActiveCues = (cues: readonly TextCue[]): void => {

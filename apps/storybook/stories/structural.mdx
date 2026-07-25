@@ -15,3 +15,32 @@ story rather than shown in isolation.
 - **`Player.Media`** — mounts the actual media element once a provider attaches.
   The mock-backed stories issue no media; it renders for real in the
   `Real playback/Providers` and `Fixtures/PlayerFixture` stories.
+
+## Commands before the provider attaches
+
+A command issued before a provider is attached is **refused, not queued**. It
+resolves `{ ok: false, reason: 'not-ready' }`, and nothing replays it later.
+
+That window is reachable in ordinary code: controls render and are clickable
+while the provider is still loading, so "apply my preferred rate as soon as the
+player mounts" runs squarely inside it. `Player.PlayButton` is the exception
+that hides this — activation has its own path, so clicking play during loading
+does work.
+
+Await `whenReady()` before applying startup preferences:
+
+```tsx
+const player = useRef<Player.PlayerHandle>(null);
+
+useEffect(() => {
+  void player.current?.whenReady().then((ready) => {
+    if (ready.ok) void player.current?.setPlaybackRate(0.75);
+  });
+}, []);
+```
+
+It resolves `{ ok: true }` at the first moment a command will be accepted — when
+the provider attaches, which is earlier than the `ready` activation, since that
+also waits on media metadata. If the player fails before attaching, it resolves
+`{ ok: false, reason: 'provider-error' }` carrying the error rather than hanging
+forever. Available on the ref handle and on `usePlayerActions()`.
