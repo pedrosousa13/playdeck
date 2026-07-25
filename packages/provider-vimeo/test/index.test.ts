@@ -795,6 +795,49 @@ test('hands caption rendering back to Vimeo in native renderer mode', async () =
   expect(player.enableTextTrack).toHaveBeenCalledWith('en', 'subtitles', true);
 });
 
+test('takes over a track the embed already had showing', async () => {
+  // Vimeo can arrive with a track already showing (a viewer's stored
+  // preference, or `texttrack=` on the embed). Discovery alone leaves Vimeo
+  // drawing it, so with the overlay owning rendering both would draw.
+  const { sdk } = await setup({
+    fake: { textTracks: [{ ...enTrack, mode: 'showing' as const }] }
+  });
+
+  expect(sdk.instances[0]!.enableTextTrack).toHaveBeenCalledWith(
+    'en',
+    'subtitles',
+    false
+  );
+});
+
+test('leaves an already-showing track to Vimeo in native renderer mode', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk({
+    textTracks: [{ ...enTrack, mode: 'showing' as const }]
+  });
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource);
+  provider.subscribe(() => undefined);
+  // Mirrors core re-applying a stored renderer intent before the provider has
+  // attached, the way PlayerController.setProvider does.
+  provider.setCaptionRenderer!('native');
+  await provider.attach();
+  await provider.load();
+
+  expect(sdk.instances[0]!.enableTextTrack).toHaveBeenCalledWith(
+    'en',
+    'subtitles',
+    true
+  );
+});
+
+test('does not enable anything when discovery finds no selection', async () => {
+  const { sdk } = await setup({ fake: { textTracks: [enTrack] } });
+
+  expect(sdk.instances[0]!.enableTextTrack).not.toHaveBeenCalled();
+});
+
 test('re-enables the active track when the renderer mode flips', async () => {
   const { provider, sdk } = await setup({
     fake: {

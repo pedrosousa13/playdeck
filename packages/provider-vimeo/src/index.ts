@@ -702,6 +702,21 @@ export const createVimeoProvider = (
       duration = initialDuration;
       textTracks = initialTracks;
       selectedTextTrackId = showingVimeoTextTrackId(initialTracks);
+      // Vimeo can arrive with a track already showing -- a viewer's stored
+      // preference, or `texttrack=` on the embed URL. Discovery only reads it,
+      // so re-enable it under the current renderer: otherwise Vimeo keeps
+      // drawing a track the overlay is also about to draw.
+      if (selectedTextTrackId !== null) {
+        const showing = resolveVimeoTextTrack(
+          selectedTextTrackId,
+          initialTracks
+        );
+        if (showing) {
+          void Promise.resolve(enableWithRenderer(player, showing)).catch(
+            () => undefined
+          );
+        }
+      }
       textTrackAvailability =
         initialTracks.length > 0
           ? available
