@@ -134,6 +134,10 @@ export const LongText: Story = {
     const range = document.createRange();
     range.selectNodeContents(text);
     expect(range.getClientRects().length).toBeGreaterThan(1);
+    // The other way wrapping breaks: overflowing the viewport instead of
+    // wrapping inside it, which a row count alone cannot tell from a narrow
+    // viewport.
+    expect(cueBox!.getBoundingClientRect().width).toBeLessThanOrEqual(480);
   }
 };
 
@@ -173,11 +177,10 @@ export const SafeArea: Story = {
         <Player.Captions />
       </Player.Viewport>
       {/* Illustrates the device chrome the inset stands for. It cannot stand
-          in for the inset itself: env() resolves to its fallback everywhere
-          except real hardware, so nothing rendered here changes what the
-          component computes. */}
+          in for the inset itself: env() resolves to its fallback unless the
+          engine reports a real inset, so nothing rendered here changes what
+          the component computes. */}
       <div
-        data-testid="safe-area-inset"
         style={{
           height: 34,
           background:
@@ -194,12 +197,15 @@ export const SafeArea: Story = {
     // The previous assertion compared the cue box against the stand-in strip
     // below the viewport, which the layout guarantees regardless of any
     // padding — it would have passed with the safe-area handling deleted.
-    // What is verifiable off-device is that the padding is expressed in terms
-    // of the inset with a floor to fall back to; that a real inset moves the
-    // cue box needs hardware, and belongs to the #17 device matrix.
+    // Here the check is structural: all three insets are reserved, with a
+    // floor under the bottom one. That a real inset MOVES the cue box is
+    // asserted behaviourally in e2e/captions.spec.ts, which sets one through
+    // Chromium's CDP — it does not need hardware.
     expect(captions.style.paddingBottom).toContain(
       'env(safe-area-inset-bottom'
     );
+    expect(captions.style.paddingLeft).toContain('env(safe-area-inset-left');
+    expect(captions.style.paddingRight).toContain('env(safe-area-inset-right');
     expect(
       parseFloat(getComputedStyle(captions).paddingBottom)
     ).toBeGreaterThan(0);
