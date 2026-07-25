@@ -1,0 +1,165 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Overview/Theme" />
+
+# Theme
+
+Reely ships two independent things: headless primitives that import no CSS at
+all, and one optional stylesheet. Nothing in the primitives depends on the
+stylesheet, and importing the stylesheet changes no behaviour — only appearance.
+
+## Headless usage
+
+The default. You get structure, state, capability gating and accessibility
+semantics, and you write every visual rule yourself. No stylesheet is loaded,
+and the parts carry stable `data-reely-part` and `data-state` attributes to hook
+onto.
+
+```tsx
+import * as Player from '@reely/react';
+
+<Player.Root source="/video.mp4">
+  <Player.Viewport className="my-viewport">
+    <Player.Media />
+    <Player.Controls className="my-controls">
+      <Player.PlayButton className="my-button" />
+      <Player.SeekSlider className="my-slider" />
+      <Player.MuteButton className="my-button" />
+      <Player.FullscreenButton className="my-button" />
+    </Player.Controls>
+  </Player.Viewport>
+</Player.Root>;
+```
+
+## Themed usage
+
+Add one import. That is the whole difference.
+
+```tsx
+import * as Player from '@reely/react';
+import '@reely/react/theme.css';
+```
+
+The stylesheet styles the parts you render. It adds no elements, changes no
+markup, and gates nothing — a control that was absent because its capability is
+`unavailable` stays absent.
+
+## Overriding it
+
+Two CSS features do the work, and you don't have to think about either:
+
+**Everything is inside `@layer reely`.** Unlayered CSS beats a cascade layer
+whatever its specificity, so your own rules win by default — no `!important`, no
+ordering games, no `:not()` tricks.
+
+**Every selector is wrapped in `:where()`,** which contributes zero specificity.
+A single class of your own outranks any rule in the file.
+
+```css
+/* Wins over the theme. That's all it takes. */
+.my-controls {
+  background: white;
+}
+```
+
+## Tokens
+
+Everything worth changing is a custom property, read as `var(--name, default)`.
+The file declares none of them, which is deliberate: a declaration — even on the
+player element — would beat a value you set on an ancestor, because a
+declaration always wins over inheritance. Reading with fallbacks means you can
+set tokens **anywhere above the player**, or on the player itself, and they take
+effect. It also means nothing leaks into the surrounding document.
+
+```css
+/* Anywhere above the player. */
+.brand {
+  --reely-color-accent: oklch(0.7 0.2 320);
+  --reely-control-size: 3rem;
+  --reely-radius: 0;
+}
+```
+
+| Group     | Tokens                                                                                                                                                                        |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Color     | `--reely-color-surface`, `--reely-color-on-surface`, `--reely-color-accent`, `--reely-color-track`, `--reely-color-buffered`, `--reely-color-focus`, `--reely-color-backdrop` |
+| Type      | `--reely-font-family`, `--reely-font-size`, `--reely-font-size-small`, `--reely-line-height`                                                                                  |
+| Spacing   | `--reely-space-1`, `--reely-space-2`, `--reely-space-3`                                                                                                                       |
+| Shape     | `--reely-radius`, `--reely-radius-large`                                                                                                                                      |
+| Controls  | `--reely-control-size`, `--reely-control-icon-size`, `--reely-control-hover`, `--reely-slider-thickness`                                                                      |
+| Overlays  | `--reely-overlay-opacity`, `--reely-overlay-scrim`                                                                                                                            |
+| Motion    | `--reely-transition-duration`, `--reely-transition-easing`                                                                                                                    |
+| Safe area | `--reely-safe-bottom`, `--reely-safe-left`, `--reely-safe-right`                                                                                                              |
+| Poster    | `--reely-poster-fit`, `--reely-poster-position`                                                                                                                               |
+
+**`--reely-control-size` has a floor.** The 44×44 px minimum touch target is
+enforced by the primitives with an inline `min-width`/`min-height`, so a smaller
+value is clamped up rather than obeyed. That is intentional: an accessibility
+minimum is not a style choice. Larger values work normally.
+
+The two poster tokens are read by `Player.PosterImage` itself rather than by the
+stylesheet, so they apply with or without the theme.
+
+## Custom icons
+
+Every control renders a default icon and accepts children instead. This works
+with or without the theme, and the theme sizes whatever `svg` it finds via
+`--reely-control-icon-size`.
+
+```tsx
+<Player.PlayButton>
+  <MyPlayIcon />
+</Player.PlayButton>
+```
+
+Icons are also importable individually and tree-shake if unused:
+
+```tsx
+import { PlayIcon, CaptionsIcon } from '@reely/react';
+```
+
+## Custom controls
+
+The theme targets parts, not components, so a control you build yourself is
+themed by carrying the part attribute — and skips the theme entirely if it
+doesn't.
+
+```tsx
+const { togglePlayback } = Player.usePlayerActions();
+const playback = Player.usePlayerState((state) => state.playback);
+
+<button data-reely-part="play-button" onClick={togglePlayback}>
+  {playback === 'playing' ? 'Pause' : 'Play'}
+</button>;
+```
+
+## With Tailwind
+
+Utility classes are unlayered, so they beat the theme with no configuration.
+You can mix the two freely: keep the theme for the fiddly parts (slider track,
+menus, focus rings) and reach for utilities where you want something different.
+
+```tsx
+import '@reely/react/theme.css';
+
+<Player.Controls className="gap-3 bg-gradient-to-t from-black/80 px-4">
+  <Player.PlayButton className="rounded-full hover:bg-white/20" />
+  <Player.SeekSlider className="flex-1" />
+</Player.Controls>;
+```
+
+If you'd rather Tailwind own everything, skip the stylesheet — the headless path
+above is the supported default, not a fallback.
+
+## Reduced motion and forced colors
+
+Both are handled, and both are covered by tests that emulate the real media
+conditions rather than asserting the CSS text:
+
+- **`prefers-reduced-motion: reduce`** collapses the nonessential opacity
+  transitions on the control surface and the activation affordance. No state is
+  conveyed by motion, so nothing is lost.
+- **Forced-colors mode** replaces the palette with the user's own. Translucent
+  scrims and hover tints are dropped by the browser in this mode, so the theme
+  switches controls to real borders and system colors — otherwise a hovered or
+  focused control would be indistinguishable from an idle one.
