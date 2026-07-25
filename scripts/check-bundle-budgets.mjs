@@ -43,6 +43,13 @@ const targets = [
     budget: 18
   },
   {
+    // Shipped as-is rather than built: it is plain CSS, and the primitives
+    // never import it, which is what keeps the headless chain CSS-free.
+    name: '@reely/react/theme.css',
+    path: '../packages/react/theme.css',
+    budget: 6
+  },
+  {
     name: '@reely/provider-native',
     path: '../packages/provider-native/dist/index.js',
     budget: null
