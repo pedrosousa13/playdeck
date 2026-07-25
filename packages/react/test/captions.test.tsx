@@ -514,6 +514,106 @@ describe('Player.CaptionsButton announcer', () => {
   });
 });
 
+describe('captions toggle memory is player-scoped', () => {
+  // #58: CaptionsButton and the Controls "C" shortcut each kept their own ref
+  // for the last non-null selection, so the two only agreed while both were
+  // mounted and watching the same selections. Mount one after the other has
+  // already recorded a selection and they disagree.
+  test('the shortcut restores a track selected through the button before it mounted', () => {
+    const { container, emitState, rerender, selectTextTrack } =
+      renderWithPlayer(<Player.CaptionsButton />);
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English'), track('fr', 'French')],
+      selectedTextTrackId: 'fr'
+    });
+    const button = container.querySelector(
+      '[data-reely-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+    emitState({ selectedTextTrackId: null });
+
+    // Controls mounts only now, with captions already off — it never observed
+    // the French selection.
+    rerender(
+      <Player.Root loading="interaction" source="/tracer.mp4">
+        <Player.CaptionsButton />
+        <Player.Controls>
+          <Player.Time />
+        </Player.Controls>
+      </Player.Root>
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'c' });
+    expect(selectTextTrack).toHaveBeenLastCalledWith('fr');
+  });
+
+  test('the button restores a track the shortcut turned off before it mounted', () => {
+    const { container, emitState, rerender, selectTextTrack } =
+      renderWithPlayer(
+        <Player.Controls>
+          <Player.Time />
+        </Player.Controls>
+      );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English'), track('fr', 'French')],
+      selectedTextTrackId: 'fr'
+    });
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'c' });
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+    emitState({ selectedTextTrackId: null });
+
+    rerender(
+      <Player.Root loading="interaction" source="/tracer.mp4">
+        <Player.Controls>
+          <Player.Time />
+        </Player.Controls>
+        <Player.CaptionsButton />
+      </Player.Root>
+    );
+    fireEvent.click(
+      container.querySelector(
+        '[data-reely-part="captions-button"]'
+      ) as HTMLButtonElement
+    );
+    expect(selectTextTrack).toHaveBeenLastCalledWith('fr');
+  });
+
+  test('remembers a selection made while no captions control was mounted', () => {
+    const { container, emitState, rerender, selectTextTrack } =
+      renderWithPlayer(<Player.Time />);
+    // A custom control calling selectTextTrack directly contributed to neither
+    // component's memory before, because neither was rendering.
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English'), track('fr', 'French')],
+      selectedTextTrackId: 'fr'
+    });
+    emitState({ selectedTextTrackId: null });
+
+    rerender(
+      <Player.Root loading="interaction" source="/tracer.mp4">
+        <Player.CaptionsButton />
+      </Player.Root>
+    );
+    fireEvent.click(
+      container.querySelector(
+        '[data-reely-part="captions-button"]'
+      ) as HTMLButtonElement
+    );
+    expect(selectTextTrack).toHaveBeenLastCalledWith('fr');
+  });
+});
+
 describe('Player.Controls captions shortcut', () => {
   test('pressing "c" turns captions off when a track is selected', () => {
     const { container, emitState, selectTextTrack } = renderWithPlayer(
