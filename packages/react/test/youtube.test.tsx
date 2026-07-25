@@ -201,7 +201,7 @@ test('renders no Reely control layer over a ready YouTube embed', async () => {
         setVolume: { status: 'available' },
         setPlaybackRate: { status: 'available' },
         selectQuality: { status: 'unavailable', reason: 'provider' },
-        selectTextTrack: { status: 'unavailable', reason: 'provider' },
+        selectTextTrack: { status: 'unavailable', reason: 'source' },
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
