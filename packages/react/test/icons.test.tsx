@@ -40,10 +40,19 @@ describe('icons', () => {
     // standing between a blank glyph and a release.
     const { container } = render(<AirPlayIcon />);
     const paths = [...container.querySelectorAll('svg > path')];
-    expect(paths.length).toBeGreaterThan(0);
+    // Both halves of the glyph: the screen outline and the triangle. Pinning
+    // the count catches one being deleted.
+    expect(paths.length).toBe(2);
     for (const path of paths) {
-      const d = path.getAttribute('d') ?? '';
-      expect(d.length).toBeGreaterThan(10);
+      // Measuring the extent the path covers, not its string length: a long
+      // `d` of repeated `M0 0z` is 15 characters and draws nothing at all.
+      const numbers = (path.getAttribute('d') ?? '')
+        .match(/-?\d+(\.\d+)?/g)
+        ?.map(Number);
+      expect(numbers?.length).toBeGreaterThan(3);
+      const spread =
+        Math.max(...(numbers ?? [0])) - Math.min(...(numbers ?? [0]));
+      expect(spread).toBeGreaterThan(5);
     }
   });
 });

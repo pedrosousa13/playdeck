@@ -24,7 +24,12 @@ const withTheme = (Story: () => ReactElement) => (
 const viewportStyle = {
   position: 'relative' as const,
   aspectRatio: '16 / 9',
-  width: 480
+  // Wide enough for the full control row at the largest size these stories
+  // demonstrate (`--reely-control-size: 3.5rem` in AccentAndSizeTokens). The
+  // buttons are `flex: 0 0 auto` so they push out of the box rather than
+  // shrink, and at 480 the row already overflowed once AirPlayButton made it
+  // seven buttons.
+  width: 640
 };
 
 const ThemedPlayer = () => (

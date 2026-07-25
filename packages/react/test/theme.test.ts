@@ -86,14 +86,13 @@ describe('theme contract', () => {
       'airplay-button',
       'settings-menu-trigger'
     ];
-    // Anchored on "mentions two or more button parts" rather than on one named
-    // part: anchoring on `play-button` made a new rule listing only, say,
-    // mute-button and pip-button invisible to this check.
-    const buttonRules = selectorLists.filter(
-      (selector) =>
-        buttonParts.filter((part) =>
-          selector.includes(`data-reely-part='${part}'`)
-        ).length >= 2
+    // Anchored on "mentions any button part" rather than on one named part.
+    // Anchoring on `play-button` missed a rule listing only, say, mute-button
+    // and pip-button; anchoring on "two or more" then missed a rule that names
+    // exactly one -- which is the shape that silently drops a single control's
+    // hover tint, the very failure this test exists to catch.
+    const buttonRules = selectorLists.filter((selector) =>
+      buttonParts.some((part) => selector.includes(`data-reely-part='${part}'`))
     );
     expect(buttonRules.length).toBeGreaterThan(0);
     const missing = buttonRules.flatMap((rule) =>

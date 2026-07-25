@@ -509,8 +509,10 @@ describe('AirPlayButton', () => {
     expect(spies.showAirPlayPicker).toHaveBeenCalledTimes(1);
   });
 
-  // The page is never told which route the user picked, so the control has no
-  // on/off state to expose — unlike PipButton, which is a real toggle.
+  // Reely does not currently surface an active-route flag (WebKit's
+  // `webkitCurrentPlaybackTargetIsWireless` is deliberately unplumbed in
+  // provider-native), so there is no state to expose — unlike PipButton,
+  // which is a real toggle.
   test('is not a toggle: no aria-pressed, one static label', () => {
     const { emit } = renderWithPlayer(
       <Player.AirPlayButton />,
