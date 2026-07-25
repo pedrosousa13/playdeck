@@ -973,7 +973,123 @@ test('flips the renderer for a selection that has not settled yet', async () => 
   );
 });
 
-test('drops cue subscribers on destroy', async () => {
+test('forgets what it enabled when the player is torn down', async () => {
+  // The id outlives the player it referred to otherwise, and the fresh player
+  // has nothing enabled -- so a renderer flip would switch captions on for a
+  // track the reported state says is not selected, and a genuine Vimeo-UI
+  // enable of that same track would be swallowed as our own echo.
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  await provider.selectTextTrack!('vimeo:en');
+  await provider.retry!();
+  const retried = sdk.instances.at(-1)!;
+  retried.enableTextTrack.mockClear();
+
+  provider.setCaptionRenderer!('native');
+
+  expect(retried.enableTextTrack).not.toHaveBeenCalled();
+});
+
+test('forgets a track whose enable failed', async () => {
+  const frTrack = {
+    language: 'fr',
+    kind: 'subtitles',
+    label: 'Français',
+    mode: 'disabled' as const
+  };
+  const { provider, sdk } = await setup({
+    fake: { textTracks: [enTrack, frTrack] }
+  });
+  const player = sdk.instances[0]!;
+  await provider.selectTextTrack!('vimeo:en');
+  player.enableTextTrack.mockRejectedValueOnce(new Error('nope'));
+  await provider.selectTextTrack!('vimeo:fr');
+  player.enableTextTrack.mockClear();
+
+  // Without a rollback the failed target is still the remembered id, so the
+  // flip hands Vimeo the wrong track while state still reports English.
+  provider.setCaptionRenderer!('native');
+
+  expect(player.enableTextTrack).toHaveBeenCalledWith('en', 'subtitles', true);
+});
+
+test('clears the previous cue when Reely switches language', async () => {
+  const frTrack = {
+    language: 'fr',
+    kind: 'subtitles',
+    label: 'Français',
+    mode: 'disabled' as const
+  };
+  const { provider, sdk } = await setup({
+    fake: { textTracks: [enTrack, frTrack] }
+  });
+  const player = sdk.instances[0]!;
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+  await provider.selectTextTrack!('vimeo:en');
+  player.emit('cuechange', cueChangePayload([{ text: 'English cue' }]));
+
+  // The captions menu is the primary path; it must not behave differently from
+  // a switch made in Vimeo's own UI.
+  await provider.selectTextTrack!('vimeo:fr');
+
+  expect(seen.at(-1)).toEqual([]);
+});
+
+test('reconciles a track that was not in the last known set', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const player = sdk.instances[0]!;
+  player.setTextTracks([
+    enTrack,
+    {
+      language: 'es',
+      kind: 'captions',
+      label: 'Español',
+      mode: 'showing' as const
+    }
+  ]);
+  const seen: (readonly TextCue[])[] = [];
+  provider.subscribeCues!((cues) => seen.push(cues));
+  player.emit('cuechange', cueChangePayload([{ text: 'stale' }]));
+
+  player.emit('texttrackchange', {
+    language: 'es',
+    kind: 'captions',
+    label: 'Español'
+  });
+  await flushMicrotasks();
+
+  expect(player.enableTextTrack).toHaveBeenCalledWith('es', 'captions', false);
+  expect(seen.at(-1)).toEqual([]);
+});
+
+test('does not re-enable anything after captions are turned off', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const player = sdk.instances[0]!;
+  await provider.selectTextTrack!('vimeo:en');
+  await provider.selectTextTrack!(null);
+  player.enableTextTrack.mockClear();
+
+  provider.setCaptionRenderer!('native');
+
+  expect(player.enableTextTrack).not.toHaveBeenCalled();
+});
+
+test('does not re-enable anything after Vimeo UI turns captions off', async () => {
+  const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
+  const player = sdk.instances[0]!;
+  await provider.selectTextTrack!('vimeo:en');
+  player.emit('texttrackchange', { language: '', kind: '', label: '' });
+  player.enableTextTrack.mockClear();
+
+  provider.setCaptionRenderer!('native');
+
+  expect(player.enableTextTrack).not.toHaveBeenCalled();
+});
+
+// Documents the staleness guard rather than `cueListeners.clear()`: a destroyed
+// player short-circuits every event before it can reach a cue subscriber, so
+// clearing the set is a leak fix with no observable behaviour of its own.
+test('emits no cues once the provider is destroyed', async () => {
   const { provider, sdk } = await setup({ fake: { textTracks: [enTrack] } });
   const seen: (readonly TextCue[])[] = [];
   provider.subscribeCues!((cues) => seen.push(cues));

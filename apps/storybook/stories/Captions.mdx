@@ -49,7 +49,7 @@ whether that is happening, and Reely does not guess: `captionRendering` will
 still say `custom`. If you know your embed hits that path, pass
 `captionRenderer="native"` and let Vimeo own the drawing. Everywhere else —
 including the chromeless embed Reely builds by default — `showing: false` is
-verified to suppress Vimeo's renderer.
+confirmed against the real embed to suppress Vimeo's renderer.
 
 Vimeo's cue payload also carries no cue timings. A Vimeo `TextCue` reports the
 playback position at which the cue was observed for both `startTime` and

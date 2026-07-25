@@ -445,7 +445,11 @@ export const createVimeoProvider = (
     activePlayer = undefined;
     activeIframe = undefined;
     // Cues belong to the player being discarded; a retry must not inherit them.
+    // Neither must the memory of what was enabled: the fresh player has nothing
+    // enabled, so a stale id would both re-enable a track the state reports as
+    // unselected and swallow a real Vimeo-UI change as our own echo.
     clearCues();
+    lastEnabledTrackId = null;
     if (player) {
       try {
         void Promise.resolve(player.destroy()).catch(() => undefined);
@@ -928,8 +932,17 @@ export const createVimeoProvider = (
         (result) => {
           if (result.ok) {
             selectedTextTrackId = id;
+            // Cues stop arriving for the track being left, so the previous
+            // language's line would stay painted until the new one delivers.
+            // Same reason the Vimeo-UI path clears; the menu is the path most
+            // viewers actually take.
+            clearCues();
             emit({ selectedTextTrackId: id });
+            return result;
           }
+          // The enable never took effect, so the optimistic id has to roll back
+          // -- otherwise a renderer flip hands Vimeo the track that failed.
+          lastEnabledTrackId = selectedTextTrackId;
           return result;
         }
       );
@@ -949,14 +962,13 @@ export const createVimeoProvider = (
       // none, leaving neither Vimeo nor the overlay drawing).
       const player = activePlayer;
       const activeId = lastEnabledTrackId ?? selectedTextTrackId;
-      const active =
-        activeId === null
-          ? undefined
-          : resolveVimeoTextTrack(activeId, textTracks);
-      if (player && active && activeId !== null) {
-        void Promise.resolve(
-          enableWithRenderer(player, active, activeId)
-        ).catch(() => undefined);
+      if (player && activeId !== null) {
+        const active = resolveVimeoTextTrack(activeId, textTracks);
+        if (active) {
+          void Promise.resolve(
+            enableWithRenderer(player, active, activeId)
+          ).catch(() => undefined);
+        }
       }
       if (captionRenderer === 'native') clearCues();
       emit({

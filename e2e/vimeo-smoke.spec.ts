@@ -93,6 +93,10 @@ test(
     // stopped doing that, every cue would stay on screen through the silence
     // after it, and nothing else here would notice.
     await expect(cues).toHaveCount(0, { timeout: 60_000 });
+    // ...and the pipeline survived the exit. Clearing on its own would also
+    // happen if the provider errored or the player were torn down, which is not
+    // what this is meant to prove.
+    await expect(cues.first()).toHaveText(/\S/, { timeout: 60_000 });
   }
 );
 
