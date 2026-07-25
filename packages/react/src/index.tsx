@@ -42,6 +42,11 @@ import {
   type RefObject
 } from 'react';
 
+// HTMLMediaElement.HAVE_CURRENT_DATA, inlined for the same reason
+// provider-native inlines HAVE_METADATA: some DOM test environments omit the
+// static readyState constants, and `x >= undefined` is silently always false.
+const HAVE_CURRENT_DATA = 2;
+
 type PlayerContextValue = ActivationBindings & {
   controller: PlayerController;
   source: ReturnType<typeof detectSource>;
@@ -644,7 +649,7 @@ export const Root = ({
       };
       media.addEventListener('loadeddata', onLoadedData);
       loadedDataListener.current = { media, listener: onLoadedData };
-      if (media.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      if (media.readyState >= HAVE_CURRENT_DATA) {
         onLoadedData();
       }
     },
