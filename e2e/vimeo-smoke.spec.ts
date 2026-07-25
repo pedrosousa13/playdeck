@@ -21,6 +21,8 @@ declare global {
       };
       selectTextTrack: (track: string | null) => Promise<{ ok: boolean }>;
       seekTo: (seconds: number) => Promise<{ ok: boolean }>;
+      pause: () => Promise<{ ok: boolean }>;
+      setCaptionRenderer: (mode: 'custom' | 'native') => void;
     };
   }
 }
@@ -131,5 +133,79 @@ test(
     await expect
       .poll(() => capability(page, 'customControls'), { timeout: 60_000 })
       .toEqual({ status: 'available' });
+  }
+);
+
+// #62: Reely's Vimeo captions rest entirely on one empirical guarantee —
+// `enableTextTrack(language, kind, false)` makes Vimeo fire `cuechange` WITHOUT
+// drawing the cues itself. If that ever changed, every Vimeo consumer would see
+// two sets of captions and nothing in the suite would notice: the cue text
+// still arrives, the state still says 'custom', and only the pixels differ.
+// So the assertion has to be on pixels. The renderer is flipped in-page rather
+// than by reloading, so both frames come from the same decode of the same
+// paused position.
+test(
+  'showing:false keeps Vimeo from drawing the cues it hands over',
+  { tag: '@real' },
+  async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.goto(
+      '/iframe.html?id=fixtures-playerfixture--vimeo-interaction-muted&viewMode=story'
+    );
+    await page.getByRole('button', { name: 'Play video', exact: true }).click();
+    await expect(playButton(page)).toHaveAttribute('data-state', 'playing', {
+      timeout: 60_000
+    });
+
+    await expect
+      .poll(() => capability(page, 'selectTextTrack'), { timeout: 30_000 })
+      .toEqual({ status: 'available' });
+    await page.evaluate(() => window.reelyHandle?.selectTextTrack('vimeo:en'));
+
+    const frame = page.locator('[data-reely-part="media"] iframe');
+    const cues = page.locator('[data-reely-part="caption-cue"]');
+    await page.evaluate(() => window.reelyHandle?.seekTo(10));
+    await expect(cues.first()).toHaveText(/\S/, { timeout: 30_000 });
+    await page.evaluate(() => window.reelyHandle?.pause());
+    // A paused frame takes a beat to be the frame on screen.
+    await page.waitForTimeout(2_000);
+
+    // Reely's own overlay sits ON TOP of the iframe, so an element screenshot
+    // captures it too — and then the two frames differ because of OUR cues, not
+    // Vimeo's. Measured: without this, the comparison passes even when custom
+    // mode is forced to enable with showing: true, which is precisely the
+    // regression the test exists to catch. Hidden via a stylesheet rather than
+    // an inline style, which React would overwrite on the next cue render.
+    await page.addStyleTag({
+      content: '[data-reely-part="captions"] { display: none !important; }'
+    });
+    await page.waitForTimeout(500);
+    const custom = await frame.screenshot();
+    // Control pair: prove the paused frame is stable, otherwise a decode
+    // difference downstream would read as a caption difference.
+    await page.waitForTimeout(1_000);
+    expect(await frame.screenshot()).toEqual(custom);
+
+    // Flip the renderer WITHOUT seeking or resuming: the video stays paused on
+    // the very same frame, so the only thing that can change in the iframe is
+    // whether Vimeo draws the cue. Re-seeking instead made the comparison
+    // vacuous — measured, the frames differed on jitter alone and the test
+    // passed even with custom mode forced to showing: true.
+    await page.evaluate(() => window.reelyHandle?.setCaptionRenderer('native'));
+
+    // Poll the pixels, not the state: setCaptionRenderer emits
+    // `captionRendering` synchronously, so polling that would satisfy on the
+    // first tick — long before Vimeo's SDK round-trip and repaint. Only a
+    // fixed sleep was actually gating this, which fails red on a slow network
+    // rather than green, but reads as a barrier it never was.
+    await expect
+      .poll(
+        async () => Buffer.compare(await frame.screenshot(), custom) !== 0,
+        { timeout: 30_000 }
+      )
+      .toBe(true);
+    expect(
+      await page.evaluate(() => window.reelyHandle?.getState().captionRendering)
+    ).toBe('provider');
   }
 );
