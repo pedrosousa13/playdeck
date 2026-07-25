@@ -110,10 +110,6 @@ const verifyMediaPropsExclusions = (): Player.MediaProps[] => [
 ];
 
 const confirmMetadataReady = (media: HTMLVideoElement): void => {
-  Object.defineProperty(HTMLMediaElement, 'HAVE_METADATA', {
-    configurable: true,
-    value: 1
-  });
   Object.defineProperty(media, 'readyState', {
     configurable: true,
     value: 1
@@ -1576,10 +1572,6 @@ test('keeps the committed poster lifecycle through an abandoned source render', 
 });
 
 test('hides the poster when attached media already has current data', () => {
-  Object.defineProperty(HTMLMediaElement, 'HAVE_CURRENT_DATA', {
-    configurable: true,
-    value: 2
-  });
   vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(2);
   const { Poster } = posterPrimitives;
 

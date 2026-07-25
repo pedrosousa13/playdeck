@@ -303,14 +303,9 @@ export const createNativeProvider = (
   const emitMediaState = (originalEvent?: Event): void =>
     emit(
       {
-        lifecycle:
-          media.readyState >= HTMLMediaElement.HAVE_METADATA
-            ? 'ready'
-            : 'loading',
+        lifecycle: media.readyState >= HAVE_METADATA ? 'ready' : 'loading',
         activation:
-          media.readyState >= HTMLMediaElement.HAVE_METADATA
-            ? 'ready'
-            : 'loading-provider',
+          media.readyState >= HAVE_METADATA ? 'ready' : 'loading-provider',
         currentTime: media.currentTime,
         duration: Number.isFinite(media.duration) ? media.duration : null,
         buffered: toRanges(media.buffered),
