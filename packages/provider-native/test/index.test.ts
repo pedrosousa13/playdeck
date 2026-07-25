@@ -450,10 +450,13 @@ test('reports native text tracks as unavailable when the command is unsupported'
 
   expect(patches.at(-1)).toMatchObject({
     capabilities: {
-      selectTextTrack: { status: 'unavailable', reason: 'provider' }
+      selectTextTrack: { status: 'unavailable', reason: 'source' }
     }
   });
-  expect(provider.selectTextTrack).toBeUndefined();
+  await expect(provider.selectTextTrack?.('missing')).resolves.toEqual({
+    ok: false,
+    reason: 'unsupported'
+  });
 });
 
 const createTimeRanges = (

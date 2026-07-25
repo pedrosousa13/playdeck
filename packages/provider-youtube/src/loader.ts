@@ -6,6 +6,9 @@ export type YouTubePlayerEventHandlers = {
     data: number;
     target: YouTubePlayer;
   }) => void;
+  // Fires when a player module -- including the unofficial "captions"
+  // module -- becomes available or changes availability.
+  onApiChange?: (event: { target: YouTubePlayer }) => void;
 };
 
 export type YouTubePlayerOptions = {
@@ -33,6 +36,14 @@ export type YouTubePlayer = {
   getPlayerState: () => number;
   getIframe: () => HTMLIFrameElement;
   destroy: () => void;
+  // Unofficial "module" API used by the captions/cc module. Undocumented by
+  // Google; behavior below follows community-observed conventions and is
+  // unverified against a real player (see issue #11).
+  loadModule: (module: string) => void;
+  unloadModule?: (module: string) => void;
+  getOptions?: (module: string) => string[];
+  getOption: (module: string, option: string) => unknown;
+  setOption: (module: string, option: string, value: unknown) => void;
 };
 
 export type YouTubePlayerConstructor = new (

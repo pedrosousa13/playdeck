@@ -69,7 +69,7 @@ test(
       .poll(() => capability(page, 'selectTextTrack'), { timeout: 30_000 })
       .toEqual({ status: 'available' });
     const selection = await page.evaluate(() =>
-      window.reelyHandle?.selectTextTrack('en')
+      window.reelyHandle?.selectTextTrack('vimeo:en')
     );
     expect(selection).toMatchObject({ ok: true });
 

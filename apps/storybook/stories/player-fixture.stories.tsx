@@ -21,6 +21,7 @@ type PlayerFixtureProps = {
   readonly defaultMuted?: boolean;
   readonly airplay?: 'demo';
   readonly sourceChange?: 'external';
+  readonly captionRenderer?: Player.RootProps['captionRenderer'];
 };
 
 const PresentationControls = ({
@@ -208,6 +209,16 @@ const LiveControls = () => {
   );
 };
 
+const captionTextTracks: Player.MediaProps['textTracks'] = [
+  {
+    src: '/captions-en.vtt',
+    srcLang: 'en',
+    label: 'English',
+    kind: 'captions',
+    default: true
+  }
+];
+
 const PlayerFixture = ({
   source: sourceKey,
   engine,
@@ -217,7 +228,8 @@ const PlayerFixture = ({
   preload: preloadInput,
   defaultMuted: defaultMutedInput,
   airplay,
-  sourceChange: sourceChangeInput
+  sourceChange: sourceChangeInput,
+  captionRenderer
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -257,11 +269,15 @@ const PlayerFixture = ({
     : null;
 
   const [source, setSource] = useState(initialSource);
+  // Only the captions fixture (a story arg sets `captionRenderer`) attaches a
+  // real <track>; every other story keeps the plain <video> it had before.
+  const textTracks = captionRenderer ? captionTextTracks : undefined;
 
   return (
     <>
       <Player.Root
         autoplay={autoplay}
+        captionRenderer={captionRenderer}
         defaultMuted={defaultMuted}
         loading={loading}
         mediaMetadata={{
@@ -297,9 +313,11 @@ const PlayerFixture = ({
           </Player.Poster>
           <Player.ActivationButton />
           <Player.LoadingIndicator />
-          <Player.Media />
+          <Player.Media textTracks={textTracks} />
+          <Player.Captions />
         </Player.Viewport>
         <Player.PlayButton />
+        <Player.CaptionsButton />
         <PresentationControls airplayDemo={airplayDemo} />
         <LiveControls />
         <StateProbes />
@@ -363,6 +381,10 @@ const meta: Meta<PlayerFixtureProps> = {
     sourceChange: {
       control: 'radio',
       options: ['external']
+    },
+    captionRenderer: {
+      control: 'radio',
+      options: ['custom', 'native']
     }
   },
   parameters: {
@@ -394,6 +416,14 @@ export const NativeMp4: Story = {
       <YouTubeExample />
     </>
   )
+};
+
+export const CaptionsCustom: Story = {
+  args: { captionRenderer: 'custom' }
+};
+
+export const CaptionsNative: Story = {
+  args: { captionRenderer: 'native' }
 };
 
 export const HlsHlsJs: Story = {

@@ -8,8 +8,10 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderEventFor,
-  ProviderStateListener
+  ProviderStateListener,
+  TextTrack
 } from '@reely/core';
+import { textTrackLabel } from '@reely/core';
 import {
   loadYouTubeIframeApi,
   type YouTubeIframeApi,
@@ -60,7 +62,8 @@ type YouTubeCommand =
   | 'setPlaybackRate'
   | 'requestFullscreen'
   | 'exitFullscreen'
-  | 'retry';
+  | 'retry'
+  | 'selectTextTrack';
 
 export type YouTubeProviderAdapter = ProviderAdapter &
   Required<Pick<ProviderAdapter, YouTubeCommand>> & {
@@ -73,6 +76,12 @@ const providerUnavailable: Availability = {
   status: 'unavailable',
   reason: 'provider'
 };
+// A video without caption tracks is a property of the source, not of the
+// provider — every provider reports the empty-track case the same way.
+const sourceUnavailable: Availability = {
+  status: 'unavailable',
+  reason: 'source'
+};
 const policyUnavailable: Availability = {
   status: 'unavailable',
   reason: 'policy'
@@ -84,7 +93,6 @@ const browserUnavailable: Availability = {
 
 const fixedCapabilities = {
   selectQuality: providerUnavailable,
-  selectTextTrack: providerUnavailable,
   pictureInPicture: providerUnavailable,
   airPlay: providerUnavailable,
   customControls: policyUnavailable
@@ -95,14 +103,21 @@ const preReadyCapabilities = (): PlayerCapabilities => ({
   setVolume: notReady,
   setPlaybackRate: notReady,
   fullscreen: notReady,
+  // Nothing is known about caption tracks until the captions module reports
+  // in, so this is 'not-ready' like its siblings — not a permanent verdict.
+  selectTextTrack: notReady,
   ...fixedCapabilities
 });
 
-const readyCapabilities = (fullscreen: Availability): PlayerCapabilities => ({
+const readyCapabilities = (
+  fullscreen: Availability,
+  selectTextTrack: Availability
+): PlayerCapabilities => ({
   seek: available,
   setVolume: available,
   setPlaybackRate: available,
   fullscreen,
+  selectTextTrack,
   ...fixedCapabilities
 });
 
@@ -179,6 +194,68 @@ const loadFailure = (cause: unknown): Exclude<CommandResult, { ok: true }> => ({
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
+// YouTube renders captions inside its own iframe (captionRendering:
+// 'provider'), so this adapter only normalizes track discovery and
+// selection -- no cue overlay. Shape and field names follow the
+// community-documented (unofficial) "captions" module; unverified against a
+// real player (see issue #11).
+type YouTubeCaptionTrack = {
+  readonly languageCode: string;
+  readonly displayName?: string;
+  readonly languageName?: string;
+  readonly vssId?: string;
+  readonly kind?: string;
+};
+
+const youtubeTextTrackId = (
+  track: YouTubeCaptionTrack,
+  index: number,
+  tracks: readonly YouTubeCaptionTrack[]
+): string =>
+  tracks.filter((candidate) => candidate.languageCode === track.languageCode)
+    .length > 1
+    ? `youtube:${track.languageCode}:${index}`
+    : `youtube:${track.languageCode}`;
+
+const resolveYouTubeTextTrack = (
+  id: string,
+  tracks: readonly YouTubeCaptionTrack[]
+): YouTubeCaptionTrack | undefined =>
+  tracks.find(
+    (candidate, index) => youtubeTextTrackId(candidate, index, tracks) === id
+  );
+
+const findYouTubeTextTrackId = (
+  languageCode: string,
+  tracks: readonly YouTubeCaptionTrack[]
+): string | null => {
+  const index = tracks.findIndex(
+    (track) => track.languageCode === languageCode
+  );
+  return index === -1
+    ? null
+    : youtubeTextTrackId(tracks[index]!, index, tracks);
+};
+
+const toCoreTextTracks = (
+  tracks: readonly YouTubeCaptionTrack[]
+): TextTrack[] =>
+  tracks.map((track, index) => ({
+    id: youtubeTextTrackId(track, index, tracks),
+    label: textTrackLabel(
+      track.displayName || track.languageName,
+      track.languageCode
+    ),
+    language: track.languageCode,
+    kind: 'captions',
+    readiness: 'loaded'
+  }));
+
+const youtubeCaptionRendering = (
+  tracks: readonly YouTubeCaptionTrack[]
+): 'provider' | 'unavailable' =>
+  tracks.length > 0 ? 'provider' : 'unavailable';
+
 type PendingPlay = {
   readonly resolve: (result: CommandResult) => void;
   readonly timer: ReturnType<typeof setTimeout>;
@@ -208,6 +285,8 @@ export const createYouTubeProvider = (
   let knownMuted = false;
   let knownVolume = 1;
   let knownCurrentTime = 0;
+  let textTracks: readonly YouTubeCaptionTrack[] = [];
+  let selectedTextTrackId: string | null = null;
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
@@ -282,11 +361,20 @@ export const createYouTubeProvider = (
     );
   };
 
+  const fullscreenAvailability = (): Availability => {
+    const iframe = safeIframe();
+    return typeof iframe?.requestFullscreen === 'function'
+      ? available
+      : browserUnavailable;
+  };
+
+  const textTrackAvailability = (): Availability =>
+    textTracks.length > 0 ? available : sourceUnavailable;
+
   const emitReadyState = (): void => {
     const current = player;
     if (!current) return;
     const duration = current.getDuration();
-    const iframe = safeIframe();
     // No command has run yet, so these reads are the player's own state.
     knownMuted = current.isMuted();
     knownVolume = clamp01(current.getVolume() / 100);
@@ -301,13 +389,54 @@ export const createYouTubeProvider = (
         volume: knownVolume,
         playbackRate: current.getPlaybackRate(),
         capabilities: readyCapabilities(
-          typeof iframe?.requestFullscreen === 'function'
-            ? available
-            : browserUnavailable
+          fullscreenAvailability(),
+          textTrackAvailability()
         )
       },
       event('ready', undefined)
     );
+  };
+
+  // The captions module is undocumented: onApiChange is the community-known
+  // signal that it (and its tracklist) has become available. Unverified
+  // against a real player (see issue #11).
+  const discoverCaptionTracks = (): void => {
+    const current = guardReady();
+    if (!current) return;
+    let rawTracklist: unknown;
+    try {
+      rawTracklist = current.getOption('captions', 'tracklist');
+    } catch {
+      rawTracklist = undefined;
+    }
+    textTracks = Array.isArray(rawTracklist)
+      ? (rawTracklist as YouTubeCaptionTrack[])
+      : [];
+    let rawTrack: unknown;
+    try {
+      rawTrack = current.getOption('captions', 'track');
+    } catch {
+      rawTrack = undefined;
+    }
+    const languageCode =
+      rawTrack !== null &&
+      typeof rawTrack === 'object' &&
+      'languageCode' in rawTrack
+        ? (rawTrack as { languageCode?: unknown }).languageCode
+        : undefined;
+    selectedTextTrackId =
+      typeof languageCode === 'string' && languageCode
+        ? findYouTubeTextTrackId(languageCode, textTracks)
+        : null;
+    emit({
+      textTracks: toCoreTextTracks(textTracks),
+      selectedTextTrackId,
+      captionRendering: youtubeCaptionRendering(textTracks),
+      capabilities: readyCapabilities(
+        fullscreenAvailability(),
+        textTrackAvailability()
+      )
+    });
   };
 
   const emitVolumeIntent = (): void => {
@@ -390,6 +519,10 @@ export const createYouTubeProvider = (
     settlePendingPlays({ ok: false, reason: 'not-ready' });
     stopTimePolling();
     ready = false;
+    // A retry recreates the player, so cached caption state must not leak
+    // into the new session's capabilities before its own onApiChange fires.
+    textTracks = [];
+    selectedTextTrackId = null;
     const current = player;
     player = undefined;
     if (current) {
@@ -427,6 +560,17 @@ export const createYouTubeProvider = (
         onReady: () => {
           if (destroyed || forGeneration !== generation) return;
           ready = true;
+          // The captions module's own discovery signal (onApiChange) is
+          // undocumented and not guaranteed to fire on its own, so proactively
+          // load it as a safety net; unverified against a real player (see
+          // issue #11).
+          if (typeof player?.loadModule === 'function') {
+            try {
+              player.loadModule('captions');
+            } catch {
+              // Best-effort; must not block emitting ready state.
+            }
+          }
           emitReadyState();
         },
         onStateChange: ({ data }) => {
@@ -443,6 +587,10 @@ export const createYouTubeProvider = (
             { playbackRate: data },
             event('ratechange', { playbackRate: data })
           );
+        },
+        onApiChange: () => {
+          if (destroyed || forGeneration !== generation) return;
+          discoverCaptionTracks();
         }
       }
     });
@@ -595,6 +743,29 @@ export const createYouTubeProvider = (
         return Promise.resolve({ ok: false, reason: 'provider-error' });
       }
       return runCommand((current) => current.setPlaybackRate(rate));
+    },
+    selectTextTrack: (id) => {
+      if (id === null) {
+        return runCommand((current) => {
+          // Community convention for turning captions off; unverified
+          // against a real player (see issue #11).
+          current.setOption('captions', 'track', {});
+          selectedTextTrackId = null;
+          emit({ selectedTextTrackId: null });
+        });
+      }
+      const match = resolveYouTubeTextTrack(id, textTracks);
+      if (!match) return Promise.resolve({ ok: false, reason: 'unsupported' });
+      return runCommand((current) => {
+        current.setOption('captions', 'track', {
+          languageCode: match.languageCode
+        });
+        // Intent model, consistent with the rest of this provider: emit the
+        // requested track immediately rather than waiting on a confirming
+        // event the unofficial API does not reliably provide.
+        selectedTextTrackId = id;
+        emit({ selectedTextTrackId: id });
+      });
     },
     requestFullscreen: async () => {
       if (destroyed || !player) return { ok: false, reason: 'not-ready' };

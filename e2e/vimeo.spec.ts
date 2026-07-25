@@ -12,6 +12,14 @@ declare global {
       getState: () => {
         activation: string;
         capabilities: Record<string, CapabilityValue>;
+        captionRendering: string;
+        textTracks: ReadonlyArray<{
+          id: string;
+          label: string;
+          language: string | null;
+          kind: string;
+          readiness: string;
+        }>;
       };
       selectTextTrack: (track: string | null) => Promise<{ ok: boolean }>;
     };
@@ -163,8 +171,21 @@ test('caption tracks discovered from the embed are selectable', async ({
       )
     )
     .toEqual({ status: 'available' });
+  // Vimeo draws captions inside its own iframe, so the effective rendering
+  // mode is `provider` and tracks are addressed by their normalized id.
+  const state = await page.evaluate(() => window.reelyHandle?.getState());
+  expect(state?.captionRendering).toBe('provider');
+  expect(state?.textTracks).toEqual([
+    {
+      id: 'vimeo:en',
+      label: 'English',
+      language: 'en',
+      kind: 'subtitles',
+      readiness: 'loaded'
+    }
+  ]);
   const result = await page.evaluate(() =>
-    window.reelyHandle?.selectTextTrack('en')
+    window.reelyHandle?.selectTextTrack('vimeo:en')
   );
   expect(result).toEqual({ ok: true });
 });

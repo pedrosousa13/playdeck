@@ -20,6 +20,57 @@ export type PlayerError = {
   readonly cause?: unknown;
 };
 
+export type TextTrackKind = 'subtitles' | 'captions';
+export type TextTrackReadiness = 'idle' | 'loading' | 'loaded' | 'error';
+export type CaptionRendering = 'custom' | 'native' | 'provider' | 'unavailable';
+
+export type TextTrack = {
+  readonly id: string;
+  readonly label: string;
+  readonly language: string | null;
+  readonly kind: TextTrackKind;
+  readonly readiness: TextTrackReadiness;
+};
+
+// `TextTrack.label` is a human label, so it must never be empty: providers
+// hand their raw label through here and get a language-derived one back when
+// there is nothing usable. A `<track srclang="en">` with no `label` would
+// otherwise render a menu item with an empty accessible name.
+//
+// The language is rendered in itself ("français", not "French") wherever it
+// has its own display data, which matches how caption menus name languages
+// elsewhere. `fallback: 'none'` is what keeps that honest: without it, a code
+// with no display name of its own gets one invented in the runtime's locale
+// ("und" becomes "root", "mul" becomes "Multiple languages" or
+// "multilingue"), so we take the raw code instead.
+export const textTrackLabel = (
+  label: string | null | undefined,
+  language: string | null | undefined
+): string => {
+  const trimmedLabel = label?.trim();
+  if (trimmedLabel) return trimmedLabel;
+  const code = language?.trim();
+  if (!code) return 'Unknown';
+  try {
+    return (
+      new Intl.DisplayNames([code], {
+        type: 'language',
+        fallback: 'none'
+      }).of(code) ?? code
+    );
+  } catch {
+    // A malformed language tag throws; the raw code still beats an empty name.
+    return code;
+  }
+};
+
+export type TextCue = {
+  readonly id: string | null;
+  readonly startTime: number;
+  readonly endTime: number;
+  readonly text: string;
+};
+
 export type CommandResult =
   | { ok: true }
   | { ok: false; reason: CommandFailureReason; error?: PlayerError };
@@ -98,6 +149,9 @@ export type PlayerState = {
   readonly quality: PlayerQuality | null;
   readonly capabilities: PlayerCapabilities;
   readonly error: PlayerError | null;
+  readonly textTracks: readonly TextTrack[];
+  readonly selectedTextTrackId: string | null;
+  readonly captionRendering: CaptionRendering;
 };
 
 export type PreProviderActivation =
@@ -222,6 +276,8 @@ export type ProviderAdapter = {
   exitPictureInPicture?: () => Promise<CommandResult>;
   showAirPlayPicker?: () => Promise<CommandResult>;
   retry?: () => Promise<CommandResult>;
+  subscribeCues?: (listener: (cues: readonly TextCue[]) => void) => () => void;
+  setCaptionRenderer?: (mode: 'custom' | 'native') => void;
 };
 
 const freezeAvailability = (availability: Availability): Availability =>
@@ -285,7 +341,10 @@ export const createInitialPlayerState = (): PlayerState =>
     hlsEngine: null,
     quality: null,
     capabilities: initialCapabilities(),
-    error: null
+    error: null,
+    textTracks: Object.freeze([]),
+    selectedTextTrackId: null,
+    captionRendering: 'unavailable'
   });
 
 const orderedRanges = (
@@ -550,6 +609,9 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
 export class PlayerController {
   #provider: ProviderAdapter | undefined;
   #unsubscribe: (() => void) | undefined;
+  #cueUnsubscribe: (() => void) | undefined;
+  #activeCues: readonly TextCue[] = Object.freeze([]);
+  #cueListeners = new Set<(cues: readonly TextCue[]) => void>();
   #listeners = new Set<(state: PlayerState) => void>();
   #eventListeners = new Map<
     PlayerEventType,
@@ -559,6 +621,7 @@ export class PlayerController {
   #generation = 0;
   #autoplayMode: AutoplayMode = false;
   #autoplayControlledMuted: boolean | undefined;
+  #captionRenderer: 'custom' | 'native' = 'custom';
   #hasAutoplayConfigurationError = false;
   #autoplayConfigurationRevision = 0;
   #autoplayAttemptGeneration: number | undefined;
@@ -632,10 +695,14 @@ export class PlayerController {
     this.#pendingPlaybackOrigin = undefined;
     const generation = ++this.#generation;
     const unsubscribe = this.#unsubscribe;
+    const cueUnsubscribe = this.#cueUnsubscribe;
     const previousProvider = this.#provider;
     this.#unsubscribe = undefined;
+    this.#cueUnsubscribe = undefined;
     this.#provider = undefined;
     unsubscribeSafely(unsubscribe);
+    unsubscribeSafely(cueUnsubscribe);
+    this.#setActiveCues([]);
     if (previousProvider) {
       destroyProviderSafely(previousProvider);
     }
@@ -697,6 +764,18 @@ export class PlayerController {
       return;
     }
     this.#unsubscribe = nextUnsubscribe;
+    if (provider.subscribeCues) {
+      this.#cueUnsubscribe = provider.subscribeCues((cues) => {
+        if (generation !== this.#generation || provider !== this.#provider)
+          return;
+        this.#setActiveCues(cues);
+      });
+    }
+    try {
+      provider.setCaptionRenderer?.(this.#captionRenderer);
+    } catch {
+      // Re-applying the remembered mode must not crash provider wiring.
+    }
     let attachResult: void | Promise<void>;
     try {
       attachResult = provider.attach();
@@ -720,6 +799,21 @@ export class PlayerController {
     this.#listeners.add(listener);
     listener(this.#state);
     return () => this.#listeners.delete(listener);
+  };
+
+  subscribeCues = (
+    listener: (cues: readonly TextCue[]) => void
+  ): (() => void) => {
+    this.#cueListeners.add(listener);
+    listener(this.#activeCues);
+    return () => this.#cueListeners.delete(listener);
+  };
+
+  getActiveCues = (): readonly TextCue[] => this.#activeCues;
+
+  setCaptionRenderer = (mode: 'custom' | 'native'): void => {
+    this.#captionRenderer = mode;
+    this.#provider?.setCaptionRenderer?.(mode);
   };
 
   on = <Type extends PlayerEventType>(
@@ -900,6 +994,11 @@ export class PlayerController {
     this.#listeners.forEach((listener) => listener(snapshot));
   };
 
+  #setActiveCues = (cues: readonly TextCue[]): void => {
+    this.#activeCues = Object.freeze(cues.map((c) => Object.freeze({ ...c })));
+    this.#cueListeners.forEach((l) => l(this.#activeCues));
+  };
+
   #applyPatch = (patch: ProviderStatePatch, acceptAutoplay = true): void => {
     const explicitProviderError =
       patch.error !== undefined &&
@@ -921,6 +1020,12 @@ export class PlayerController {
         patch.capabilities === undefined
           ? this.#state.capabilities
           : freezeCapabilities(patch.capabilities),
+      textTracks:
+        patch.textTracks === undefined
+          ? this.#state.textTracks
+          : Object.freeze(
+              patch.textTracks.map((track) => Object.freeze({ ...track }))
+            ),
       quality:
         patch.quality === undefined
           ? this.#state.quality

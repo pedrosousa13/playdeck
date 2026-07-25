@@ -10,7 +10,8 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   `mute-button`, `volume-slider`, `seek-slider` / `seek-buffered`,
   `fullscreen-button`, `pip-button`, `time`, `controls`, `poster`,
   `poster-image`, `loading-indicator`, `activation`, `viewport`, `media`,
-  `error` / `error-message` / `error-retry`).
+  `error` / `error-message` / `error-retry`, `captions` / `captions-button` /
+  `captions-announcer`).
 - **`data-state`** — the component's derived state (e.g. `paused`/`playing`,
   `muted`/`unmuted`, `idle`/`ready`, `loading`/`loaded`/`error`,
   `global`/`scoped`, the error category on `error`, or the activation state).
@@ -18,7 +19,7 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   no provider is attached. By design it appears only on the provider-bound
   control primitives (`play-button`, `mute-button`, `volume-slider`,
   `seek-slider`, `time`, `fullscreen-button`, `pip-button`, `controls`,
-  `error`), not
+  `error`, `captions-button`), not
   on the structural/activation parts (`viewport`, `poster`, `poster-image`,
   `media`, `activation`, `loading-indicator`), which don't read provider
   state and so avoid re-rendering when it changes.

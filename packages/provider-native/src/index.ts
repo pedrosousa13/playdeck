@@ -1,6 +1,7 @@
 import type {
   Availability,
   CommandResult,
+  PlayerCapabilities,
   PlayerError,
   PlayerEventDetailMap,
   PlayerEventType,
@@ -10,6 +11,7 @@ import type {
   ProviderStateListener,
   TimeRange
 } from '@reely/core';
+import { createNativeTextTracks, type NativeTextTracks } from './text-tracks';
 
 const available: Availability = { status: 'available' };
 const unsupported: Availability = {
@@ -276,6 +278,28 @@ export const createNativeProvider = (
     return airPlayDisallowed() ? policyDisallowed : available;
   };
 
+  const textTracks: NativeTextTracks = createNativeTextTracks(
+    media,
+    (patch) => emit(patch),
+    () => mediaCapabilities()
+  );
+
+  function mediaCapabilities(): PlayerCapabilities {
+    return {
+      seek: available,
+      setVolume: available,
+      setPlaybackRate: available,
+      selectQuality: { status: 'unknown', reason: 'provider-check' },
+      selectTextTrack: textTracks.hasSelectableTextTracks()
+        ? available
+        : { status: 'unavailable', reason: 'source' },
+      fullscreen: fullscreenAvailability(),
+      pictureInPicture: pictureInPictureAvailability(),
+      airPlay: airPlayAvailability(),
+      customControls: available
+    };
+  }
+
   const emitMediaState = (originalEvent?: Event): void =>
     emit(
       {
@@ -294,17 +318,7 @@ export const createNativeProvider = (
         muted: media.muted,
         volume: media.volume,
         playbackRate: media.playbackRate,
-        capabilities: {
-          seek: available,
-          setVolume: available,
-          setPlaybackRate: available,
-          selectQuality: { status: 'unknown', reason: 'provider-check' },
-          selectTextTrack: { status: 'unavailable', reason: 'provider' },
-          fullscreen: fullscreenAvailability(),
-          pictureInPicture: pictureInPictureAvailability(),
-          airPlay: airPlayAvailability(),
-          customControls: available
-        }
+        capabilities: mediaCapabilities()
       },
       originalEvent ? event('ready', originalEvent, undefined) : undefined
     );
@@ -570,11 +584,17 @@ export const createNativeProvider = (
       if (attached || destroyed) return;
       attached = true;
       addListeners();
+      textTracks.attachListeners();
+      textTracks.discover();
       emitMediaState();
     },
     load: () => {
       if (destroyed || loaded) return;
       loaded = true;
+      // Caption state is deliberately left alone: `load()` runs once, right
+      // after `attach()` discovered this source's tracks. A source switch
+      // creates a new provider, and the controller clears caption state on
+      // the swap.
       media.load();
     },
     destroy: () => {
@@ -582,6 +602,7 @@ export const createNativeProvider = (
       destroyed = true;
       ++replayGeneration;
       if (attached) removeListeners();
+      textTracks.destroy();
       if (!media.paused) {
         try {
           media.pause();
@@ -595,6 +616,7 @@ export const createNativeProvider = (
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    subscribeCues: textTracks.subscribeCues,
     play: () =>
       runCommand(() => {
         if (
@@ -756,6 +778,8 @@ export const createNativeProvider = (
         boundaryEnded = false;
         media.load();
       });
-    }
+    },
+    selectTextTrack: textTracks.selectTextTrack,
+    setCaptionRenderer: textTracks.setCaptionRenderer
   };
 };

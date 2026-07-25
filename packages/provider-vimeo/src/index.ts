@@ -9,8 +9,11 @@ import type {
   ProviderEvent,
   ProviderEventFor,
   ProviderStateListener,
+  TextTrack,
+  TextTrackKind,
   VimeoSource
 } from '@reely/core';
+import { textTrackLabel } from '@reely/core';
 import {
   loadVimeoSdk,
   type VimeoSdkPlayer,
@@ -234,6 +237,75 @@ const numberField = (data: unknown, field: string): number | undefined => {
     : undefined;
 };
 
+// Vimeo renders captions inside its own iframe (captionRendering:
+// 'provider'), so this adapter only normalizes track discovery and
+// selection -- no cue overlay. `language` is Vimeo's stable per-track key,
+// so it doubles as the id; the array index only disambiguates the rare case
+// of two tracks sharing a language.
+const vimeoTextTrackKind = (kind: string): TextTrackKind =>
+  kind === 'captions' ? 'captions' : 'subtitles';
+
+const vimeoTextTrackId = (
+  track: VimeoSdkTextTrack,
+  index: number,
+  tracks: ReadonlyArray<VimeoSdkTextTrack>
+): string =>
+  tracks.filter((candidate) => candidate.language === track.language).length > 1
+    ? `vimeo:${track.language}:${index}`
+    : `vimeo:${track.language}`;
+
+const resolveVimeoTextTrack = (
+  id: string,
+  tracks: ReadonlyArray<VimeoSdkTextTrack>
+): VimeoSdkTextTrack | undefined =>
+  tracks.find(
+    (candidate, index) => vimeoTextTrackId(candidate, index, tracks) === id
+  );
+
+const toCoreTextTracks = (
+  tracks: ReadonlyArray<VimeoSdkTextTrack>
+): TextTrack[] =>
+  tracks.map((track, index) => ({
+    id: vimeoTextTrackId(track, index, tracks),
+    label: textTrackLabel(track.label, track.language),
+    language: track.language || null,
+    kind: vimeoTextTrackKind(track.kind),
+    readiness: 'loaded'
+  }));
+
+const showingVimeoTextTrackId = (
+  tracks: ReadonlyArray<VimeoSdkTextTrack>
+): string | null => {
+  const index = tracks.findIndex((track) => track.mode === 'showing');
+  return index === -1 ? null : vimeoTextTrackId(tracks[index]!, index, tracks);
+};
+
+const findVimeoTextTrackIndex = (
+  language: string,
+  kind: string,
+  tracks: ReadonlyArray<VimeoSdkTextTrack>
+): number =>
+  language === ''
+    ? -1
+    : tracks.findIndex(
+        (track) =>
+          track.language === language && (kind === '' || track.kind === kind)
+      );
+
+const resolveActiveVimeoTextTrackId = (
+  language: string,
+  kind: string,
+  tracks: ReadonlyArray<VimeoSdkTextTrack>
+): string | null => {
+  const index = findVimeoTextTrackIndex(language, kind, tracks);
+  return index === -1 ? null : vimeoTextTrackId(tracks[index]!, index, tracks);
+};
+
+const vimeoCaptionRendering = (
+  tracks: ReadonlyArray<VimeoSdkTextTrack>
+): 'provider' | 'unavailable' =>
+  tracks.length > 0 ? 'provider' : 'unavailable';
+
 export const createVimeoProvider = (
   mount: VimeoMountElement,
   source: VimeoSource,
@@ -249,6 +321,7 @@ export const createVimeoProvider = (
   let currentTime = 0;
   let duration: number | null = null;
   let textTracks: ReadonlyArray<VimeoSdkTextTrack> = [];
+  let selectedTextTrackId: string | null = null;
   let volumeAvailability: Availability = available;
   let playbackRateAvailability: Availability = available;
   let pictureInPictureAvailability: Availability = available;
@@ -420,6 +493,50 @@ export const createVimeoProvider = (
         event('pictureinpicturechange', { pictureInPicture: false }, data)
       )
     );
+    on('texttrackchange', (data) => {
+      // Fires whenever the active track changes, including through Vimeo's
+      // own in-iframe UI, so this keeps our selection state honest with it.
+      const record = asRecord(data);
+      const language =
+        typeof record.language === 'string' ? record.language : '';
+      const kind = typeof record.kind === 'string' ? record.kind : '';
+      if (
+        findVimeoTextTrackIndex(language, kind, textTracks) !== -1 ||
+        language === ''
+      ) {
+        selectedTextTrackId = resolveActiveVimeoTextTrackId(
+          language,
+          kind,
+          textTracks
+        );
+        emit({ selectedTextTrackId });
+        return;
+      }
+      // The reported track isn't part of the last known set -- refresh it
+      // from the SDK before resolving the selection.
+      void player.getTextTracks().then(
+        (freshTracks) => {
+          if (isStale(thisGeneration, player)) return;
+          textTracks = freshTracks;
+          textTrackAvailability =
+            freshTracks.length > 0
+              ? available
+              : { status: 'unavailable', reason: 'source' };
+          selectedTextTrackId = resolveActiveVimeoTextTrackId(
+            language,
+            kind,
+            freshTracks
+          );
+          emit({
+            textTracks: toCoreTextTracks(freshTracks),
+            selectedTextTrackId,
+            captionRendering: vimeoCaptionRendering(freshTracks),
+            capabilities: capabilities()
+          });
+        },
+        () => undefined
+      );
+    });
     on('error', (data) => {
       const record = asRecord(data);
       if (typeof record.method === 'string') return;
@@ -501,6 +618,7 @@ export const createVimeoProvider = (
       if (isStale(thisGeneration, player)) return { ok: true };
       duration = initialDuration;
       textTracks = initialTracks;
+      selectedTextTrackId = showingVimeoTextTrackId(initialTracks);
       textTrackAvailability =
         initialTracks.length > 0
           ? available
@@ -538,6 +656,9 @@ export const createVimeoProvider = (
           ...(duration === null
             ? {}
             : { seekable: [{ start: 0, end: duration }] }),
+          textTracks: toCoreTextTracks(textTracks),
+          selectedTextTrackId,
+          captionRendering: vimeoCaptionRendering(textTracks),
           capabilities: capabilities()
         },
         event('ready', undefined)
@@ -639,17 +760,29 @@ export const createVimeoProvider = (
       }
       return result;
     },
-    selectTextTrack: (track) => {
-      if (track === null) {
-        return runCommand((player) => player.disableTextTrack());
+    selectTextTrack: (id) => {
+      if (id === null) {
+        return runCommand((player) => player.disableTextTrack()).then(
+          (result) => {
+            if (result.ok) {
+              selectedTextTrackId = null;
+              emit({ selectedTextTrackId: null });
+            }
+            return result;
+          }
+        );
       }
-      const match = textTracks.find(
-        (candidate) => candidate.language === track
-      );
+      const match = resolveVimeoTextTrack(id, textTracks);
       if (!match) return Promise.resolve({ ok: false, reason: 'unsupported' });
       return runCommand((player) =>
         player.enableTextTrack(match.language, match.kind)
-      );
+      ).then((result) => {
+        if (result.ok) {
+          selectedTextTrackId = id;
+          emit({ selectedTextTrackId: id });
+        }
+        return result;
+      });
     },
     requestFullscreen: () => runCommand((player) => player.requestFullscreen()),
     exitFullscreen: () => runCommand((player) => player.exitFullscreen()),
