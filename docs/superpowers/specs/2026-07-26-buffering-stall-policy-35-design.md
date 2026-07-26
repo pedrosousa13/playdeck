@@ -226,3 +226,17 @@ git diff --name-only main...HEAD | xargs npx prettier --check --ignore-unknown
 ```
 
 Format check caveats, measured in prior sessions: it is a commit-range diff so it cannot see uncommitted edits — commit first, then check. `--ignore-unknown` is required because a `.vtt` fixture is in the tree. Do not run repo-wide `pnpm format:check` locally; it warns on gitignored `.planning/**`. Run every gate unpiped and read the exit code — a pipe has produced a false green here.
+
+## What changed during implementation
+
+Four things the design did not anticipate. All are recorded here rather than only in commit messages, because each is a decision a reviewer should be able to disagree with.
+
+**1. The state machine moved out of the effect.** The design's machine called `setShown` synchronously inside an effect body. `react-hooks/set-state-in-effect` rejects that shape, and correctly: every branch is a conclusion that follows directly from the state just read, so an effect only adds a wasted commit. The adjustment now happens **during render**, with each branch guarded so it is a no-op once applied and converges in one extra pass before paint. Effects schedule the two timers and do nothing else. Behaviour is identical — the same tests pass, and each still fails when its mechanism is removed.
+
+**2. Ruling 3 has a wider blast radius than the design's table showed.** Holding `loading-provider` for 500 ms means _any_ test that clicks activation and then asserts `idle` now has to wait. The design's "Existing tests this change breaks" table listed three; the real count was six, plus every new test's own setup, which has to drain the provider-load floor before it can exercise a stall from a hidden indicator. This is the cost of ruling 3 landing where the design said it would, not a surprise in kind — but the design understated it.
+
+**3. `a11y-media.spec.ts` needed a narrow exclusion, not a moved window.** That test observes every live region during playback and asserts silence. Its window starts after `played()`, deliberately excluding `LoadingIndicator`'s `'loading-provider'` → idle transition, which its own comment already classifies as a legitimate announcement. The floor moves that transition later, into the window.
+
+The window is **not** moved to dodge it: its start point is load-bearing, because the `installedAt < cueBoundary` guard proves the 0.4 s cue transition is still ahead of the observer, and waiting out the floor first would advance `currentTime` past that boundary and silently drop the cue coverage the test exists to hold. Instead the exact string `'loading-indicator: '` is excluded and bounded to one occurrence. A spurious `loading-indicator: Buffering`, an indicator announcing idle twice, and every time-update or cue leak all still fail. The test's second phase clears the announcement buffer before the captions click, so its "exactly one announcement" assertion is measured over that click alone.
+
+**4. One planned test was written toothless and had to be rewritten.** "Ignores a rebuffer shorter than the show delay" originally asserted only the state _after_ the rebuffer cleared — which is `idle` with or without a debounce, so it passed against the very bug it named. Caught at its red step, where it failed to fail. It now asserts _inside_ the 300 ms window. Every timing behaviour here was subsequently falsified by breaking its mechanism and watching the specific test fail: show-delay → 0, floor → 0, and the terminal-error override deleted.

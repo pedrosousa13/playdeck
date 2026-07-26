@@ -210,11 +210,42 @@ test('live regions announce state transitions only, never time updates or cues',
     .toBe(true);
 
   const duringPlayback = await page.evaluate(() => window.__reelyAnnouncements);
-  expect(duringPlayback).toEqual([]);
+
+  // `LoadingIndicator`'s `'loading-provider'` → idle transition is the one
+  // legitimate announcement that can land in this window. It used to complete
+  // before `played()` returned; since #35 gave the indicator a 500ms
+  // minimum-visible floor, it can complete just after, inside the window.
+  //
+  // It is excluded by EXACT value rather than by part name, and bounded to one
+  // occurrence, so the exclusion stays as narrow as the thing it excuses: the
+  // empty string is the region emptying as it goes idle. A spurious
+  // `loading-indicator: Buffering`, a flapping indicator announcing idle twice,
+  // and every time-update or cue leak all still fail here.
+  //
+  // The window is NOT moved later to dodge this. Its start point is
+  // load-bearing: the `installedAt < cueBoundary` guard above proves the 0.4s
+  // cue transition is still ahead of the observer, and waiting out the floor
+  // first would advance `currentTime` past that boundary and silently drop the
+  // cue coverage this test exists to hold.
+  const idleTransition = 'loading-indicator: ';
+  expect(duringPlayback.filter((entry) => entry !== idleTransition)).toEqual(
+    []
+  );
+  expect(
+    duringPlayback.filter((entry) => entry === idleTransition).length
+  ).toBeLessThanOrEqual(1);
 
   // A real state transition, on the other hand, announces exactly once. The
   // example's declared `<track default>` selects English on load, so the
   // first click turns captions OFF, not on.
+  //
+  // The buffer is cleared first — the observer stays installed, so the
+  // assertion below is still "exactly one announcement, and it is this one",
+  // but measured over the captions click alone rather than over the whole test.
+  // Without this it would also have to carry the idle transition excused above.
+  await page.evaluate(() => {
+    window.__reelyAnnouncements = [];
+  });
   await captionsButton(page).click();
   await expect(captionsButton(page)).toHaveAttribute('data-state', 'off');
 
