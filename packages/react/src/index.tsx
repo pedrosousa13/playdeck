@@ -1180,6 +1180,20 @@ const useLoadingPresentation = (): LoadingPresentation => {
   return shown;
 };
 
+/**
+ * Surfaces provider loading and mid-playback stalls as a polite live region.
+ *
+ * `data-state` is `loading-provider`, `buffering` or `idle`; both active states
+ * share one full-bleed box, so styling the two differently is a CSS decision,
+ * not a prop.
+ *
+ * Debounced (#35): a stall must persist 500ms before it is admitted, and once
+ * admitted it is held 500ms, so a short rebuffer never strobes the indicator.
+ * A provider load shows immediately — there is nothing on screen to flicker
+ * against — but is held by the same 500ms floor. A terminal activation error
+ * clears the indicator at once, overriding both timers. `state.buffering`
+ * remains the raw, undebounced provider signal for consumers who want it.
+ */
 export type LoadingIndicatorProps = ComponentPropsWithRef<'div'>;
 
 export const LoadingIndicator = ({
@@ -1616,6 +1630,12 @@ export const VolumeSlider = ({
   );
 };
 
+/**
+ * `data-buffering` is `"true"` while a stall is admitted, on the same 500ms
+ * schedule as `LoadingIndicator` (#35). It is a separate attribute from
+ * `data-state`, which means "is there a seek window" and does not move during a
+ * stall. The slider stays interactive: seeking away is how a user escapes one.
+ */
 export type SeekSliderProps = ComponentPropsWithRef<'div'> & {
   // Escape hatch onto the inner range control (aria-label, step, disabled,
   // id/name, data-*, onChange, style). The library keeps ownership of the
