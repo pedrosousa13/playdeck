@@ -113,8 +113,20 @@ const layoutCss = `
 }
 /* Below this width the button row alone needs the space. Dropping the volume
    slider (rather than letting it squeeze) is what keeps the composition usable
-   at 320px, so #32's 1.4.10 reflow check passes by construction. */
+   at 320px, so #32's 1.4.10 reflow check passes by construction.
+
+   The control row also stops being an overlay here. At 320px with text
+   resized to 200% (#32's 1.4.4 check) the row is taller than a 16:9 box is,
+   so an absolutely-positioned row inside an overflow: hidden box is clipped —
+   measured at 35px of lost controls. In flow, under a viewport that is free
+   to size itself, nothing is lost. */
 @media (max-width: 420px) {
+  .reely-example {
+    aspect-ratio: auto;
+  }
+  .reely-example-controls {
+    position: static;
+  }
   .reely-example-volume {
     display: none;
   }

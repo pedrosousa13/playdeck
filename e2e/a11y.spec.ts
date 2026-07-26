@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { settingsMenu, settingsTrigger } from './locators';
+import { controls, settingsMenu, settingsTrigger } from './locators';
 
 // #32's verification target. Every state below is a MOCK story: no media, no
 // network, and identical on every engine, which is what makes a fixed
@@ -123,5 +123,64 @@ for (const state of states) {
     expect(results.incomplete.map((incomplete) => incomplete.id)).toEqual(
       state.knownIncomplete ?? []
     );
+  });
+}
+
+// WCAG 1.4.4 (resize text to 200%) and 1.4.10 (reflow at 320 CSS px) are two
+// different criteria and passing one does not imply the other, so both are
+// asserted — plus the combination. No single WCAG criterion demands 320px AND
+// 200% together, but a mobile user at 320px with 200% text is a real user, and
+// that combination is where this composition actually broke: measured on main,
+// the 179px control row was clipped 35px by a 144px `aspect-ratio: 16/9`,
+// `overflow: hidden` box.
+const reflowCases = [
+  { name: '200% text at 1280px (WCAG 1.4.4)', width: 1280, fontSize: '32px' },
+  {
+    name: '320px-equivalent width (WCAG 1.4.10)',
+    width: 320,
+    fontSize: '16px'
+  },
+  { name: '320px at 200% text', width: 320, fontSize: '32px' }
+] as const;
+
+for (const reflow of reflowCases) {
+  test(`the composition reflows without loss of content: ${reflow.name}`, async ({
+    page
+  }) => {
+    await page.setViewportSize({ width: reflow.width, height: 720 });
+    await page.goto(composition);
+    await expect(controls(page)).toBeVisible();
+
+    // 200% text as a UA text-only zoom applies it: scale the root font size
+    // against the measured 16px baseline. The example's layout is rem-based
+    // (`max-width: 48rem`, buttons at `1.125rem`), so it scales with this.
+    await page.evaluate((fontSize) => {
+      document.documentElement.style.fontSize = fontSize;
+    }, reflow.fontSize);
+
+    // No two-dimensional scrolling.
+    const doc = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth
+    }));
+    expect(doc.scrollWidth).toBeLessThanOrEqual(doc.clientWidth);
+
+    // No clipping. This is the assertion the existing 320px test in
+    // reference.spec.ts lacks: it measures horizontal overflow only, which is
+    // why a 35px vertical clip survived it.
+    const clip = await page.evaluate(() => {
+      const viewport = document.querySelector('[data-reely-part="viewport"]')!;
+      const row = document.querySelector('[data-reely-part="controls"]')!;
+      const v = viewport.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      return {
+        clippedTopBy: Math.round(v.top - r.top),
+        clippedBottomBy: Math.round(r.bottom - v.bottom),
+        rowHeight: Math.round(r.height),
+        viewportHeight: Math.round(v.height)
+      };
+    });
+    expect(clip.clippedTopBy).toBeLessThanOrEqual(0);
+    expect(clip.clippedBottomBy).toBeLessThanOrEqual(0);
   });
 }
