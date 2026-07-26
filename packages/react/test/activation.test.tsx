@@ -1400,7 +1400,7 @@ test('LoadingIndicator does not occupy the viewport while idle, but does while l
   expect(idleRegion.style.overflow).toBe('hidden');
   expect(idleRegion.style.clip).toBe('rect(0, 0, 0, 0)');
   expect(idleRegion.style.zIndex).toBe('');
-  expect(idleRegion.style.pointerEvents).toBe('');
+  expect(idleRegion.style.pointerEvents).toBe('none');
 
   fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
 

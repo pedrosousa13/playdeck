@@ -1138,7 +1138,7 @@ export const LoadingIndicator = ({
               zIndex: 30,
               pointerEvents: 'none'
             }
-          : { ...style, ...visuallyHiddenStyle }
+          : { ...style, ...visuallyHiddenStyle, pointerEvents: 'none' }
       }
     >
       {active
