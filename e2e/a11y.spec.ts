@@ -1,7 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import {
+  activationButton,
+  captionsButton,
   controls,
+  media,
+  muteButton,
+  pipButton,
   playButton,
   settingsMenu,
   settingsTrigger
@@ -287,5 +292,80 @@ test('the settings menu takes focus on open and gives it back on Escape', async 
   // Focus went back to the trigger, not to <body>, so the Tab walk resumes
   // from where it left off rather than restarting.
   await page.keyboard.press('Tab');
-  await expect(page.locator('[data-reely-part="pip-button"]')).toBeFocused();
+  await expect(pipButton(page)).toBeFocused();
+});
+
+// The `RealSources` story: real providers, real media. Driven on the local MP4
+// leg only — the YouTube and Vimeo legs are @real and grep-inverted out of CI.
+const realSources = story('real-sources');
+
+// Both local fixtures are ~1 second long, so `data-state="playing"` is a state
+// the clip leaves on its own and asserting it is a race. `currentTime > 0` is
+// race-free: it stays true once ended.
+const played = (page: Page) =>
+  expect
+    .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
+    .toBeGreaterThan(0);
+
+test('keyboard shortcuts reach the media element, not just the DOM', async ({
+  page
+}) => {
+  await page.goto(realSources);
+  await activationButton(page).click();
+  await played(page);
+
+  // Shortcuts are scoped to the controls region, so focus must be inside it.
+  await controls(page).focus();
+
+  await page.keyboard.press('m');
+  await expect(muteButton(page)).toHaveAttribute('data-state', 'muted');
+  await expect(
+    media(page).evaluate((el: HTMLVideoElement) => el.muted)
+  ).resolves.toBe(true);
+
+  await page.keyboard.press('m');
+  await expect(muteButton(page)).toHaveAttribute('data-state', 'unmuted');
+
+  // The <track> the example declares through Media's children; its `default`
+  // flag selects it on load, so the first press turns captions off. The
+  // custom caption renderer keeps a selected track's native mode `hidden`
+  // (the overlay draws it, not the browser) and an unselected one `disabled`
+  // — read here off the real `TextTrack`, not just the button's own label.
+  const trackMode = () =>
+    media(page).evaluate(
+      (el: HTMLVideoElement) => el.textTracks[0]?.mode ?? null
+    );
+  await expect(captionsButton(page)).toHaveAttribute('data-state', 'on');
+  await expect.poll(trackMode).toBe('hidden');
+  await page.keyboard.press('c');
+  await expect(captionsButton(page)).toHaveAttribute('data-state', 'off');
+  await expect.poll(trackMode).toBe('disabled');
+  await page.keyboard.press('c');
+  await expect(captionsButton(page)).toHaveAttribute('data-state', 'on');
+  await expect.poll(trackMode).toBe('hidden');
+});
+
+test('arrow-key seeking moves the media element', async ({ page }) => {
+  await page.goto(realSources);
+  await activationButton(page).click();
+  await played(page);
+  await controls(page).focus();
+
+  // Pause first. While the clip is still playing, seeking to 0 does not
+  // settle there — playback resumes forward from 0 in real time, and on a
+  // poll long enough it re-reaches the natural end (observed: currentTime
+  // lands back at 1, not 0). `k` pauses through the same shortcut handler
+  // this test exercises, giving seekBy(-5)'s clamp-at-0 a floor that holds.
+  await page.keyboard.press('k');
+  await expect
+    .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(true);
+
+  // The fixture is ~1s and `seekBy(-5)` clamps at 0, so seeking BACKWARD to a
+  // known floor is the deterministic direction on a clip this short —
+  // seeking forward races the clip ending on its own.
+  await page.keyboard.press('ArrowLeft');
+  await expect
+    .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
+    .toBe(0);
 });
