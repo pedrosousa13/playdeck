@@ -30,11 +30,6 @@ export const settingsTrigger = (page: Page) =>
     '[data-reely-part="settings-menu-trigger"][aria-label="Settings"]'
   );
 
-export const captionsMenuTrigger = (page: Page) =>
-  page.locator(
-    '[data-reely-part="settings-menu-trigger"][aria-label="Captions"]'
-  );
-
 export const settingsMenu = (page: Page) =>
   page.locator('[data-reely-part="settings-menu"]');
 

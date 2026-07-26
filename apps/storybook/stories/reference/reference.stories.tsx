@@ -121,8 +121,20 @@ export const Composition: Story = {
       ).toBeInTheDocument();
     }
 
-    // Icons, not text fallbacks: every button's only child is an <svg>.
-    for (const name of ['Play', 'Mute', 'Enter fullscreen', 'AirPlay']) {
+    // Icons, not text fallbacks: every button whose primitive defaults to a
+    // string child (`PlayButton`, `MuteButton`, `PipButton`, `AirPlayButton`,
+    // `FullscreenButton`) renders an <svg> instead, with no text content.
+    // `CaptionsButton` and the `CaptionsMenu`/`Settings` triggers default to
+    // an icon themselves, so supplying one there proves nothing about
+    // consumer override and is excluded here. Presence of each control under
+    // the staged state was already asserted above.
+    for (const name of [
+      'Play',
+      'Mute',
+      'Enter picture-in-picture',
+      'AirPlay',
+      'Enter fullscreen'
+    ]) {
       const button = canvas.getByRole('button', { name });
       await expect(button.querySelector('svg')).not.toBeNull();
       await expect(button.textContent).toBe('');

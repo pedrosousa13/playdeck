@@ -68,7 +68,7 @@ export default tseslint.config(
     //
     // A denylist, not an allowlist: ESLint's group negation never un-matches a
     // specifier containing `/`, so `['**', '!@reely/react', ...]` rejects
-    // `@reely/react` itself. Verified over 14 cases by
+    // `@reely/react` itself. Verified over 13 cases by
     // stories/reference/import-rule.contract.test.ts, which is also what keeps
     // this rule red-then-green rather than merely present.
     //

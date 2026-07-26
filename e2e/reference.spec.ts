@@ -124,11 +124,20 @@ test('swapping MP4 to HLS keeps the controls live and populates the quality ladd
   ).toHaveAttribute('aria-checked', 'true');
 });
 
-test('the control row does not overflow at 320px', async ({ page }) => {
+test('the control row does not overflow at 320px, and hides the volume slider below the 420px breakpoint', async ({
+  page
+}) => {
   // #32's 1.4.10 reflow check has to pass by construction on the very artifact
   // it is pointed at, not be discovered later. This is also the defect
   // Theme/Theme still admits: at 480 its row overflowed by 49px once
   // AirPlayButton made it six buttons.
+  //
+  // The overflow assertions below hold at 320px regardless of the
+  // `@media (max-width: 420px)` volume-slider rule, because
+  // `.reely-example-row-buttons` sets `flex-wrap: wrap` — the row cannot
+  // overflow horizontally either way. What actually exercises that
+  // breakpoint is the volume-slider visibility check that follows: hidden at
+  // 320px, visible again at 480px (comfortably above the breakpoint).
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto(story);
   await activationButton(page).click();
@@ -144,6 +153,12 @@ test('the control row does not overflow at 320px', async ({ page }) => {
     clientWidth: document.documentElement.clientWidth
   }));
   expect(page320.scrollWidth).toBeLessThanOrEqual(page320.clientWidth);
+
+  const volumeSlider = page.locator('[data-reely-part="volume-slider"]');
+  await expect(volumeSlider).toBeHidden();
+
+  await page.setViewportSize({ width: 480, height: 640 });
+  await expect(volumeSlider).toBeVisible();
 });
 
 // AirPlay is hardcoded unavailable on both iframe providers — a static

@@ -332,8 +332,11 @@ const mp4TextTracks: Player.MediaProps['textTracks'] = [
  * #15-class bugs live, so the reference example walks it.
  *
  * Capability gating becomes visible here rather than hidden: `AirPlayButton`
- * and `PipButton` genuinely disappear on YouTube and Vimeo, which hard-code
- * `airPlay` unavailable. That is the primitives' central promise on display.
+ * genuinely disappears on both YouTube and Vimeo, which hard-code `airPlay`
+ * unavailable. `PipButton` disappears on YouTube only — Vimeo initialises
+ * `pictureInPicture` available and downgrades it only if a request fails, so
+ * the button renders there. That is the primitives' central promise on
+ * display.
  */
 export const ReferencePlayerWithSources = (): ReactElement => {
   const [active, setActive] = useState<(typeof sources)[number]['id']>('mp4');
