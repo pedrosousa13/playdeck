@@ -91,12 +91,47 @@ hls:<height>x<width>@<bitrate>
 ```
 
 with a `:<idx>` suffix appended only for entries whose base id collides inside
-the list — the same tiebreak `hls:<lang>[:idx]` already uses for captions.
+the list.
+
+`HlsLevelLike`'s three fields are all optional (`:34-38`) — audio-only
+renditions carry no dimensions — so a missing field renders as the literal
+token `-`: `hls:-x-@128000`. A level is never omitted from the list for lacking
+dimensions. Filtering would leave a rung that `levels` holds and no id can
+name, and silent filtering is the kind of thing that returns as a bug report.
+Labelling a dimensionless rung is the consumer's problem, from `bitrate`.
 
 `selectQuality(id)` resolves by recomputing ids over the live `levels` array and
 matching. A rung that has been pruned yields
 `{ ok: false, reason: 'unsupported' }`, which is the truthful answer rather than
 a silent switch to a neighbour.
+
+### Correction: the caption tiebreak this cites does not exist
+
+An earlier draft of this section claimed the `:<idx>` suffix mirrors a
+`hls:<lang>[:idx]` tiebreak already used for captions. **It does not.**
+`hlsSubtitleTrackId` (`provider-hls:503-509`) is `hls:<track.id>` with a
+fallback to `hls:<index>` — an id-or-index fallback, not a collision tiebreak,
+and no language appears in it. The `:<idx>` shape here is new. It is still the
+right shape, but it is being introduced, not followed, and nothing about it may
+lean on a caption precedent for authority.
+
+Noted and deliberately out of scope: that caption fallback branch is itself
+index-derived, so it carries this same latent class. It is far lower risk —
+hls.js does not prune `subtitleTracks` the way it prunes `levels` — and folding
+it in would widen a spec that already touches three packages. If it deserves a
+fix it deserves its own issue.
+
+### The one place ids legitimately move
+
+Two rungs identical in height, width **and** bitrate are distinguished only by
+`:<idx>`. Pruning one changes the collision set, so the survivor's suffix can
+shift. That is not the #57 class: rungs identical on every field this contract
+exposes are mutually interchangeable, so repointing between them is not
+observably wrong.
+
+The stability test must therefore assert stability for **distinct** rungs and
+must not accidentally build its fixture out of identical ones, or it will fail
+for the wrong reason and get "fixed" by weakening the assertion.
 
 ## Per-provider behaviour
 
@@ -109,6 +144,21 @@ a silent switch to a neighbour.
 | provider-vimeo         | Unchanged — `unavailable/provider` (`:456`). No list. Follow-up filed. |
 
 `selectQuality(null)` keeps setting `currentLevel = -1`.
+
+### `LEVELS_UPDATED` is not the listener already there
+
+`provider-hls:660` listens to **`LEVEL_UPDATED`** — singular, hls.js's
+per-level-details event, which this adapter uses for the live hint. The refresh
+this spec needs is **`LEVELS_UPDATED`** — plural, fired when the level _array_
+changes, which is what pruning does. One letter apart, adjacent in the file,
+and reusing the wrong one would silently disable the pruning refresh while
+every other test still passed.
+
+`LEVELS_UPDATED` is absent from the `HlsConstructorLike.Events` shim
+(`:87-95`), so it must be added there and to every test fake. That shim is an
+exported public type whose `Events` members are required, so this is a
+technically breaking addition for anyone supplying a custom `HlsModuleLoader` —
+free now, on the same unreleased-packages argument as the signature change.
 
 ### provider-native's permanent unknown
 
@@ -126,13 +176,51 @@ has no ladder to choose from, and `source` is the vocabulary already used for
 
 `selectQuality` is `available` only when the list is non-empty. This is the
 precedent from the hls.js caption work, where the capability was gated on track
-count rather than on the engine being present.
+count rather than on the engine being present — `resolveHlsCaptionRendering`
+(`provider-hls:536-537`) gates on `hlsTextTracks.length === 0`. That citation
+holds; the one in §"Id stability" did not.
+
+**What it is when the list is empty.** Today `selectQualityAvailability` starts
+`unknown/provider-check` (`:285-288`) and `MANIFEST_PARSED` flips it
+unconditionally to `available` (`:653-655`). Gating on the list creates a state
+the current code has no answer for: manifest parsed, list empty.
+
+It resolves to `unavailable/source` — the same verdict, for the same reason, as
+the `provider-native` fix below. Leaving it `unknown/provider-check` would
+reintroduce the never-resolving verdict this spec exists partly to delete, one
+provider over. `unknown/provider-check` remains correct **only** before the
+manifest is parsed, where the check genuinely has not happened yet.
+
+**A single-rung ladder reports `available`.** The list has one member, so the
+capability is honest: that rung is selectable. Whether a one-item menu is worth
+rendering is a consumer judgment, and `qualities.length > 1` is the consumer's
+test to make. Gating the capability on `> 1` would bury a UX decision in a
+provider.
 
 ## Lifecycle
 
 `load()` and `retry()` both clear the list and reset the selection to auto.
 `retry()` already resets `selectQualityAvailability` in exactly that place
 (`provider-hls:809-812`).
+
+### When the held selection is pruned out from under us
+
+`selectQuality(prunedId)` returning `unsupported` covers the call. It does not
+cover the selection already held when hls.js prunes that rung mid-playback —
+`selectedQualityId` would keep naming a rung absent from `qualities`, and a menu
+would render a checked radio item for a row it is no longer drawing.
+
+The rule: on every list refresh, a held `selectedQualityId` that no longer names
+a member resets to `null`. This is `resolveHlsTextTrackSelection`
+(`provider-hls:519-530`) minus its default-track branch — "a held selection
+persists as long as it still names an existing track, otherwise none" is
+already this repo's rule, and quality has no `default` rung to fall back to.
+
+**`currentLevel` is not written during that reset.** hls.js prunes levels as
+part of its own error recovery and moves `currentLevel` itself; writing `-1`
+into the middle of that is fighting the engine over state it is mid-way through
+fixing. Reporting `null` is truthful about the selection this adapter is still
+holding, which is none.
 
 No `hasExplicitSelection` machinery. Captions needed it because a source swap
 had to re-honour a new `default` track and not clobber a user's held choice.
@@ -168,9 +256,20 @@ Red first, per the repo's practice.
   refreshed on `LEVELS_UPDATED`.
 - **Ids survive a level being pruned.** Remove a level from the fake's array,
   refresh, and assert the surviving rungs keep the ids they had — this is the
-  §"Id stability" trap, asserted directly rather than trusted.
+  §"Id stability" trap, asserted directly rather than trusted. The fixture's
+  rungs must be **distinct**; see §"The one place ids legitimately move".
 - Two rungs sharing height, width and bitrate get distinct ids via the `:idx`
   tiebreak.
+- A level with no `height`/`width` gets the `-` token rather than `undefined` in
+  its id, and is present in the list rather than filtered out.
+- **The refresh is wired to `LEVELS_UPDATED`, not `LEVEL_UPDATED`.** Firing
+  `LEVEL_UPDATED` alone must not refresh the list — without this assertion the
+  two events are interchangeable in the fake and the pruning test passes on the
+  wrong listener.
+- **A held selection whose rung is pruned resets to `null`**, and the test
+  asserts `currentLevel` was _not_ written during that reset.
+- The capability is `unavailable/source` — not `unknown` — when the manifest
+  parses with an empty list, and `available` for a single-rung list.
 - `selectQuality(id)` switches to the right level; `selectQuality(null)` sets
   `currentLevel = -1`; an id not in the list returns `unsupported`; an id for a
   pruned rung returns `unsupported`.
@@ -194,8 +293,10 @@ point of #67.
 - [ ] The selection is readable separately from the active level.
 - [ ] Ids are stable across level pruning, proven by a test that fails if they
       are index-derived.
-- [ ] `provider-native` no longer reports a capability verdict that never
-      resolves.
+- [ ] No capability verdict anywhere in this contract can fail to resolve —
+      `provider-native`'s permanent `unknown` is gone, and gating `provider-hls`
+      on list length does not introduce a new one.
+- [ ] A selection cannot outlive the rung it names.
 - [ ] A quality menu can be built from public exports alone — demonstrated by
       #67.
 
