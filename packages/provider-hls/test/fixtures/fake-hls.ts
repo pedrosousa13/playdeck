@@ -15,6 +15,7 @@ export class FakeHls implements HlsInstanceLike {
     ERROR: 'hlsError',
     LEVEL_SWITCHED: 'hlsLevelSwitched',
     LEVEL_UPDATED: 'hlsLevelUpdated',
+    LEVELS_UPDATED: 'hlsLevelsUpdated',
     MANIFEST_PARSED: 'hlsManifestParsed',
     SUBTITLE_TRACKS_UPDATED: 'hlsSubtitleTracksUpdated',
     SUBTITLE_TRACK_SWITCH: 'hlsSubtitleTrackSwitch',
@@ -96,6 +97,13 @@ export class FakeHls implements HlsInstanceLike {
     if (liveSyncPosition !== undefined)
       this.liveSyncPosition = liveSyncPosition;
     this.emit(FakeHls.Events.LEVEL_UPDATED, { details: { live } });
+  };
+
+  // Fired by real hls.js when the level *array* changes — notably when
+  // `removeLevel` prunes a rung after repeated errors. Distinct from
+  // `emitLevelUpdated` above, whose event carries one level's details.
+  emitLevelsUpdated = (): void => {
+    this.emit(FakeHls.Events.LEVELS_UPDATED, { levels: this.levels });
   };
 
   startLoad = (): void => {
