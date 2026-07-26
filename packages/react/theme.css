@@ -233,6 +233,16 @@
     background-color: var(--reely-color-buffered, rgb(255 255 255 / 0.5));
   }
 
+  /* A stall the 500ms debounce has admitted (#35). Motion-free on purpose: a
+     pulse would carry the same information but needs a prefers-reduced-motion
+     carve-out to do it, and a static opacity change does not. */
+  :where(
+    [data-reely-part='seek-slider'][data-buffering='true']
+      [data-reely-part='seek-buffered-range']
+  ) {
+    opacity: 0.5;
+  }
+
   :where(
     [data-reely-part='seek-slider-input'],
     [data-reely-part='volume-slider']
