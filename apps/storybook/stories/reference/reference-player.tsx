@@ -1,6 +1,6 @@
 import type { PlayerQuality } from '@reely/core';
 import * as Player from '@reely/react';
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 
 /**
  * The reference composition: one player assembled only from public
@@ -290,6 +290,79 @@ export const ReferencePlayer = ({
           </div>
         </Player.Controls>
       </Player.Viewport>
+    </>
+  );
+};
+
+const sources = [
+  { id: 'mp4', label: 'MP4', source: '/tracer.mp4' },
+  {
+    id: 'hls',
+    label: 'HLS',
+    source: { type: 'hls', src: '/hls/master.m3u8', engine: 'hls.js' }
+  },
+  {
+    id: 'youtube',
+    label: 'YouTube',
+    source: 'https://www.youtube.com/watch?v=M7lc1UVf-VE'
+  },
+  { id: 'vimeo', label: 'Vimeo', source: 'https://vimeo.com/76979871' }
+] as const satisfies ReadonlyArray<{
+  readonly id: string;
+  readonly label: string;
+  readonly source: Player.RootProps['source'];
+}>;
+
+// Only the local MP4 needs a declared <track>; HLS carries its subtitles in the
+// manifest and the iframe providers expose their own. Declaring children on
+// Media at all is the API #15 shipped without.
+const mp4TextTracks: Player.MediaProps['textTracks'] = [
+  {
+    src: '/captions-en.vtt',
+    srcLang: 'en',
+    label: 'English',
+    kind: 'captions',
+    default: true
+  }
+];
+
+/**
+ * The same composition against four real providers, switched by swapping the
+ * `source` prop rather than remounting `Player.Root` — the swap path is where
+ * #15-class bugs live, so the reference example walks it.
+ *
+ * Capability gating becomes visible here rather than hidden: `AirPlayButton`
+ * and `PipButton` genuinely disappear on YouTube and Vimeo, which hard-code
+ * `airPlay` unavailable. That is the primitives' central promise on display.
+ */
+export const ReferencePlayerWithSources = (): ReactElement => {
+  const [active, setActive] = useState<(typeof sources)[number]['id']>('mp4');
+  const current = sources.find((entry) => entry.id === active) ?? sources[0];
+
+  return (
+    <>
+      <div
+        aria-label="Source"
+        role="group"
+        style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}
+      >
+        {sources.map((entry) => (
+          <button
+            aria-pressed={entry.id === active}
+            data-testid={`reference-source-${entry.id}`}
+            key={entry.id}
+            onClick={() => setActive(entry.id)}
+            type="button"
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+      <Player.Root loading="interaction" source={current.source}>
+        <ReferencePlayer
+          textTracks={current.id === 'mp4' ? mp4TextTracks : undefined}
+        />
+      </Player.Root>
     </>
   );
 };

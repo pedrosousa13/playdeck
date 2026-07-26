@@ -6,7 +6,10 @@ import {
 } from '@reely/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
-import { ReferencePlayer } from './reference-player';
+import {
+  ReferencePlayer,
+  ReferencePlayerWithSources
+} from './reference-player';
 
 const available: Availability = { status: 'available' };
 
@@ -274,4 +277,14 @@ export const KeyboardFlow: Story = {
       canvas.getByRole('button', { name: 'Enter fullscreen' })
     ).toHaveFocus();
   }
+};
+
+/**
+ * Real providers, real media, real network — excluded from the deterministic
+ * story test suite (tagged `!test`), which is also what makes the mock
+ * decorator step aside. `e2e/reference.spec.ts` drives this one.
+ */
+export const RealSources: StoryObj = {
+  tags: ['real-playback', '!test'],
+  render: () => <ReferencePlayerWithSources />
 };
