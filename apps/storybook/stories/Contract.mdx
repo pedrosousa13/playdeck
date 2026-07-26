@@ -28,6 +28,13 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   on the structural/activation parts (`viewport`, `poster`, `poster-image`,
   `media`, `activation`, `loading-indicator`), which don't read provider
   state and so avoid re-rendering when it changes.
+- **`data-buffering`** — `"true"` while a stall has been admitted, `"false"`
+  otherwise. Only on `seek-slider`. Debounced: a stall must persist 500ms
+  before it is admitted, and once admitted it is held 500ms, so a short
+  rebuffer never twitches the slider. `data-state` on the same element is a
+  separate axis (`ready`/`idle` means "is there a seek window") and does not
+  move during a stall. The undebounced signal stays available to consumers as
+  `state.buffering`.
 
 Style and query against these attributes rather than internal class names.
 

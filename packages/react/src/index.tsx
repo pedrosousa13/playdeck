@@ -1655,6 +1655,7 @@ export const SeekSlider = ({
       status: state.capabilities.seek.status
     }));
   const { controller } = usePlayer();
+  const stalled = useLoadingPresentation() === 'buffering';
   if (status !== 'available') return null;
   const hasDuration = typeof duration === 'number' && duration > 0;
   const window = seekWindow(duration, seekable);
@@ -1666,6 +1667,7 @@ export const SeekSlider = ({
   return (
     <div
       {...props}
+      data-buffering={stalled ? 'true' : 'false'}
       data-provider={provider ?? undefined}
       data-reely-part="seek-slider"
       data-state={window ? 'ready' : 'idle'}
