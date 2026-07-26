@@ -137,11 +137,14 @@ test('live regions announce state transitions only, never time updates or cues',
     }
   });
 
-  // Play through the whole ~1s clip. `captions-en.vtt`'s first cue spans
-  // 0-5s, so it is active and rendering for the entire clip — measured: the
-  // fixture (`apps/storybook/public/tracer.mp4`) is exactly 1.0s. Time
-  // updates fire repeatedly over this window too; neither the ongoing cue
-  // nor a time tick may reach a live region.
+  // Play through the whole ~1s clip. `captions-reference.vtt` (this example's
+  // own fixture, distinct from `captions-en.vtt`) carries two cues with a
+  // boundary at 0.4s, so a real cue TRANSITION happens inside this window, not
+  // just one steady cue sitting there unchanged — the fixture the composed
+  // example used to declare span a single 0-5s cue, which a ~1s clip never
+  // gets to see change at all. Time updates fire repeatedly over the same
+  // window. Neither the cue transition nor a time tick may reach a live
+  // region.
   await expect
     .poll(
       () =>

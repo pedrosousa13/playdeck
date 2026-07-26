@@ -351,9 +351,17 @@ const sources = [
 // Only the local MP4 needs a declared <track>; HLS carries its subtitles in the
 // manifest and the iframe providers expose their own. Declaring children on
 // Media at all is the API #15 shipped without.
+//
+// `captions-reference.vtt`, not `captions-en.vtt`: this example's own fixture
+// carries two cues with a boundary at 0.4s, inside the ~1s clip, so a cue
+// transition actually happens during real playback here (#32's e2e
+// announcement-policy test needs one to fall inside its observation window).
+// `captions-en.vtt` stays a single 0-5s cue for the other stories/specs that
+// use it (`fixtures-playerfixture--captions-*`, driven by
+// `e2e/captions.spec.ts`) — this file is scoped to the reference example only.
 const mp4TextTracks: Player.MediaProps['textTracks'] = [
   {
-    src: '/captions-en.vtt',
+    src: '/captions-reference.vtt',
     srcLang: 'en',
     label: 'English',
     kind: 'captions',
