@@ -1129,6 +1129,41 @@ const useLoadingPresentation = (): LoadingPresentation => {
   const [floorExpired, setFloorExpired] = useState(true);
   const visible = shown !== null;
 
+  // Adjusted during render rather than from an effect. Every branch below is a
+  // conclusion that follows directly from the state just read, so an effect
+  // would only add a wasted commit — and `react-hooks/set-state-in-effect`
+  // rightly rejects that shape. Each branch is guarded so it is a no-op once
+  // applied, so this converges in one extra render pass, before paint.
+  if (desired === null) {
+    // A terminal error overrides the floor with no wait: it must not hold
+    // "Buffering" on top of ErrorDisplay.
+    if (visible && (floorExpired || activation === 'error')) {
+      setShown(null);
+      setFloorExpired(true);
+    }
+  } else if (visible && shown !== desired) {
+    // Already on screen: swap the label with no delay. Hiding for 500ms across
+    // `loading-provider` -> `buffering` would manufacture the very flicker the
+    // delay exists to remove.
+    setShown(desired);
+  } else if (!visible && desired === 'loading-provider') {
+    // Nothing is on screen yet, so there is nothing to flicker against.
+    setShown('loading-provider');
+    setFloorExpired(false);
+  }
+
+  // A stall is admitted only after it has run uninterrupted for the delay.
+  // Cleanup runs before the next effect pass and on unmount, so a stall that
+  // clears inside the window cancels rather than fires late.
+  useEffect(() => {
+    if (desired !== 'buffering' || visible) return;
+    const timer = setTimeout(() => {
+      setShown('buffering');
+      setFloorExpired(false);
+    }, BUFFERING_SHOW_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [desired, visible]);
+
   // Keyed on `visible`, not on `shown`, so a `loading-provider` -> `buffering`
   // label swap does not restart the floor: it bounds the visible period, not
   // the label.
@@ -1140,42 +1175,6 @@ const useLoadingPresentation = (): LoadingPresentation => {
     );
     return () => clearTimeout(timer);
   }, [visible, floorExpired]);
-
-  useEffect(() => {
-    // A terminal error overrides both timers with no wait: the floor must not
-    // hold "Buffering" on top of ErrorDisplay.
-    if (activation === 'error') {
-      setShown(null);
-      setFloorExpired(true);
-      return;
-    }
-    if (desired !== null) {
-      // Already on screen: swap the label with no delay. Hiding for 500ms
-      // across `loading-provider` -> `buffering` would manufacture the very
-      // flicker the delay exists to remove.
-      if (shown !== null) {
-        setShown(desired);
-        return;
-      }
-      // Nothing is on screen yet, so there is nothing to flicker against.
-      if (desired === 'loading-provider') {
-        setShown('loading-provider');
-        setFloorExpired(false);
-        return;
-      }
-      const timer = setTimeout(() => {
-        setShown('buffering');
-        setFloorExpired(false);
-      }, BUFFERING_SHOW_DELAY_MS);
-      // Runs before the next effect pass and on unmount, so a stall that clears
-      // inside the delay window cancels rather than fires late.
-      return () => clearTimeout(timer);
-    }
-    if (shown === null) return;
-    // Not yet: the floor effect above flips `floorExpired`, which re-runs this
-    // effect, which then takes the branch below.
-    if (floorExpired) setShown(null);
-  }, [activation, desired, shown, floorExpired]);
 
   return shown;
 };
