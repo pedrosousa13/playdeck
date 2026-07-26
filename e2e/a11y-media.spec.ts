@@ -110,12 +110,14 @@ test('live regions announce state transitions only, never time updates or cues',
   await page.goto(realSources);
   await activationButton(page).click();
   await played(page);
-  // Starting the window here (after `played()`, i.e. after `currentTime > 0`)
-  // deliberately leaves `LoadingIndicator`'s `'loading-provider'` → idle
-  // transition unobserved. That is a real, legitimate announcement (a
-  // meaningful state change, not a time or cue violation) — asserting it here
-  // would race real activation/decode latency instead of the policy this test
-  // exists to check.
+  // The window starts here (after `played()`, i.e. after `currentTime > 0`)
+  // rather than before the click, because asserting on `LoadingIndicator`'s
+  // `'loading-provider'` → idle transition would race real activation/decode
+  // latency instead of the policy this test exists to check. That transition is
+  // a real, legitimate announcement (a meaningful state change, not a time or
+  // cue violation). Since #35 gave the indicator a 500ms minimum-visible floor
+  // it can land just inside this window rather than before it, so it is
+  // excluded by exact value at the assertion below rather than by position.
 
   // Observe every live region in the tree, not a named one: a regression that
   // adds aria-live to the time display or the caption cue container has to be
