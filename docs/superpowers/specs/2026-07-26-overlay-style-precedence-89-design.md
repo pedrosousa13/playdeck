@@ -139,7 +139,7 @@ AFTER-CAPTIONS-CLICK
 
 Every other control (mute, play) updated on the same emits. Clicking anything else afterwards made the captions button catch up immediately, so the subscription was alive — **a single notification was dropped.** A control that subscribes to player state _after_ that state has already advanced can miss its next notification and render stale.
 
-That is a `usePlayerState` bug, not an example bug, and conditionally rendering controls is an ordinary consumer pattern. Filed separately rather than worked around silently.
+That is a `usePlayerState` bug, not an example bug, and conditionally rendering controls is an ordinary consumer pattern. Filed as [#95](https://github.com/pedrosousa13/reely/issues/95) rather than worked around silently.
 
 Switching to `hidden` sidesteps it and is better on its own merits: the subtree never unmounts, so there is no remount churn and no subscription to re-establish, and `hidden` still removes the row from layout, from the accessibility tree and from the tab order — everything SC 2.4.11 asks for.
 

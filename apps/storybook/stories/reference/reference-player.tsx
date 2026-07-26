@@ -279,7 +279,7 @@ export const ReferencePlayer = ({
   // miss the next notification and render stale — measured on WebKit as a
   // captions button stuck reading `on` after its own click had already set
   // `selectedTextTrackId` to null, 6 runs out of 6. That is a library bug
-  // (filed separately), not something this example should have to work
+  // (#95), not something this example should have to work
   // around; keeping the subtree mounted sidesteps it and is cheaper anyway.
   // `hidden` still removes the row from layout, from the a11y tree and from
   // the tab order, which is all SC 2.4.11 asks for.

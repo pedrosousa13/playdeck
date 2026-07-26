@@ -38,6 +38,9 @@ library stays unopinionated about layout; this example documents one way to lay
 a control row out — two rows, a wrapping button row, and the volume slider
 dropped below a 420px breakpoint so the composition stays usable at 320px.
 
+Where a primitive sets geometry on itself, your `style` prop overrides it —
+see the `style` section of `Overview/Contract` for the one carve-out.
+
 This example does **not** mount `@reely/react/theme.css`. The only per-story way
 to mount it in this repo reads it by path out of `packages/`, which the import
 rule below forbids, and a plain side-effect import would leak the theme into
