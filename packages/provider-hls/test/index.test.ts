@@ -1206,3 +1206,45 @@ test('derives an id for a level carrying no dimensions or bitrate at all', async
     qualities: [{ id: 'hls:-x-@-', height: null, width: null, bitrate: null }]
   });
 });
+
+test('destroys the previous hls.js instance when load runs twice', async () => {
+  // #85. `retry()` tears down before restarting, but `load()` went straight to
+  // `startHlsJs()`, so a second `load()` left the first instance attached to
+  // the media element with its listeners live — still loading fragments and
+  // holding memory until the page went away.
+  //
+  // Reachable for a consumer holding an adapter from `createHlsProvider`
+  // directly, which is a public export. `PlayerController` itself calls
+  // `load()` once per provider, and a source swap builds a new adapter.
+  const { provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+  expect(first.destroyed).toBe(false);
+
+  await provider.load();
+  const second = currentFakeHls();
+
+  expect(second).not.toBe(first);
+  expect(first.destroyed).toBe(true);
+  expect(second.destroyed).toBe(false);
+  expect(FakeHls.instances).toHaveLength(2);
+});
+
+test('destroys the previous hls.js instance on retry', async () => {
+  // `retry()` used to call `teardownHls()` itself; #85 moved that into
+  // `startHlsJs()` so starting owns it. This pins the behaviour retry lost the
+  // explicit call for — without it, the move would be a silent regression here
+  // rather than a refactor.
+  const { provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+
+  await expect(provider.retry?.()).resolves.toEqual({ ok: true });
+  const second = currentFakeHls();
+
+  expect(second).not.toBe(first);
+  expect(first.destroyed).toBe(true);
+  expect(second.destroyed).toBe(false);
+});
