@@ -273,16 +273,16 @@ export const ReferencePlayer = ({
   // on purpose: it sets `pointer-events: none`, so controls beneath it stay
   // operable.
   //
-  // `hidden`, not a conditional render, and the difference is load-bearing.
-  // Unmounting the row means it remounts on activation, and a control that
-  // subscribes to player state *after* that state has already advanced can
-  // miss the next notification and render stale — measured on WebKit as a
-  // captions button stuck reading `on` after its own click had already set
-  // `selectedTextTrackId` to null, 6 runs out of 6. That is a library bug
-  // (#95), not something this example should have to work
-  // around; keeping the subtree mounted sidesteps it and is cheaper anyway.
-  // `hidden` still removes the row from layout, from the a11y tree and from
-  // the tab order, which is all SC 2.4.11 asks for.
+  // `hidden`, not a conditional render, on its own merits: it removes the row
+  // from layout, from the a11y tree and from the tab order — all SC 2.4.11
+  // asks for — without paying to unmount and remount the whole subtree.
+  //
+  // It used to be load-bearing for a second reason. A control mounted after
+  // the state it selects had already advanced could miss one notification and
+  // render stale (measured on WebKit as a captions button stuck reading `on`,
+  // 6 runs of 6), so a conditional render here tripped it. That was #95 — one
+  // throwing subscriber abandoning the controller's emit loop — and it is
+  // fixed in core, so either shape is correct now.
   const overlayOwnsViewport = state.activation !== 'ready' || state.errored;
 
   return (

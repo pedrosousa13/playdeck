@@ -255,6 +255,47 @@ test('position state is reported for the owning root when supported', () => {
   expect(positionStates.at(-1)).toMatchObject({ duration: 120, position: 5 });
 });
 
+// #95. WebKit settles `currentTime` a fraction PAST `duration` once a clip
+// ends (measured 1.000131 against a duration of 1 on the 1s reference
+// fixture), and the Media Session spec makes `position > duration` a
+// TypeError. Reporting the raw pair therefore throws inside a controller
+// subscriber during ordinary end-of-playback.
+test('clamps a position that overshoots duration rather than throwing', () => {
+  const { session, positionStates } = createSession();
+  // A spec-faithful stand-in: the real navigator.mediaSession throws here.
+  session.setPositionState = (state) => {
+    if (
+      state &&
+      state.position !== undefined &&
+      state.duration !== undefined &&
+      state.position > state.duration
+    ) {
+      throw new TypeError('Type error');
+    }
+    positionStates.push(state);
+  };
+  const coordinator = createMediaSessionCoordinator(session);
+  const controller = new PlayerController();
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+  bindMediaSession(controller, coordinator, { metadata: { title: 'One' } });
+
+  // The root only reports position while it owns the session, which it claims
+  // by playing — so the clip has to run before it can overshoot its own end.
+  emit({ playback: 'playing', duration: 1, currentTime: 0.5, playbackRate: 1 });
+  expect(positionStates.at(-1)).toMatchObject({ position: 0.5 });
+
+  expect(() =>
+    emit({
+      playback: 'ended',
+      duration: 1,
+      currentTime: 1.000131,
+      playbackRate: 1
+    })
+  ).not.toThrow();
+  expect(positionStates.at(-1)).toMatchObject({ duration: 1, position: 1 });
+});
+
 test('clears position state when the stream goes live (duration null)', () => {
   const { session, positionStates } = createSession();
   const coordinator = createMediaSessionCoordinator(session);
