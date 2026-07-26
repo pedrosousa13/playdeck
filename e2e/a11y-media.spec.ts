@@ -7,6 +7,12 @@ import {
   muteButton
 } from './locators';
 
+declare global {
+  interface Window {
+    __reelyAnnouncements: string[];
+  }
+}
+
 // Real-media #32 checks only: real providers, real network, real decode
 // timing. Split out of `e2e/a11y.spec.ts` (which stays mock-only) because the
 // two families have different failure profiles — the mock tests are
@@ -92,4 +98,70 @@ test('arrow-key seeking moves the media element', async ({ page }) => {
   await expect
     .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
     .toBe(0);
+});
+
+test('live regions announce state transitions only, never time updates or cues', async ({
+  page
+}) => {
+  await page.goto(realSources);
+  await activationButton(page).click();
+  await played(page);
+
+  // Observe every live region in the tree, not a named one: a regression that
+  // adds aria-live to the time display or the caption cue container has to be
+  // caught here as well as structurally (the story-level inventory check only
+  // proves shape, not that a live region stays silent during playback).
+  await page.evaluate(() => {
+    window.__reelyAnnouncements = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        const node = (
+          record.target.nodeType === Node.TEXT_NODE
+            ? record.target.parentElement
+            : (record.target as Element)
+        )?.closest('[aria-live], [role="status"], [role="alert"]');
+        if (!node) continue;
+        window.__reelyAnnouncements.push(
+          `${node.getAttribute('data-reely-part')}: ${node.textContent ?? ''}`
+        );
+      }
+    });
+    for (const region of document.querySelectorAll(
+      '[aria-live], [role="status"], [role="alert"]'
+    )) {
+      observer.observe(region, {
+        characterData: true,
+        childList: true,
+        subtree: true
+      });
+    }
+  });
+
+  // Play through the whole ~1s clip. `captions-en.vtt`'s first cue spans
+  // 0-5s, so it is active and rendering for the entire clip — measured: the
+  // fixture (`apps/storybook/public/tracer.mp4`) is exactly 1.0s. Time
+  // updates fire repeatedly over this window too; neither the ongoing cue
+  // nor a time tick may reach a live region.
+  await expect
+    .poll(
+      () =>
+        media(page).evaluate(
+          (el: HTMLVideoElement) => el.ended || el.currentTime > 0.9
+        ),
+      { timeout: 15_000 }
+    )
+    .toBe(true);
+
+  const duringPlayback = await page.evaluate(() => window.__reelyAnnouncements);
+  expect(duringPlayback).toEqual([]);
+
+  // A real state transition, on the other hand, announces exactly once. The
+  // example's declared `<track default>` selects English on load, so the
+  // first click turns captions OFF, not on.
+  await captionsButton(page).click();
+  await expect(captionsButton(page)).toHaveAttribute('data-state', 'off');
+
+  await expect
+    .poll(() => page.evaluate(() => window.__reelyAnnouncements))
+    .toEqual(['captions-announcer: Captions off']);
 });
