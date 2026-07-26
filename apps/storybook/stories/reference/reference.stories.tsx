@@ -434,3 +434,44 @@ export const RealSources: StoryObj = {
   tags: ['real-playback', '!test'],
   render: () => <ReferencePlayerWithSources />
 };
+
+/**
+ * #32's announcement policy, structurally: the composed example puts exactly
+ * two live regions in the tree, and neither the time display nor the caption
+ * cue container is one. Time updates tick many times a second and cue text
+ * changes per cue — either in a live region would make a screen reader
+ * unusable during playback.
+ *
+ * `ErrorDisplay` adds a third (`role="alert"`), but only when
+ * `state.error !== null`, so it is absent here by construction and covered by
+ * the `ErrorState` story instead.
+ */
+export const LiveRegionInventory: Story = {
+  // `canvasElement`, not `canvas`: this walks the DOM directly, and scoping to
+  // the story's own root keeps Storybook's iframe chrome out of the inventory.
+  play: async ({ canvasElement }) => {
+    const regions = [
+      ...canvasElement.querySelectorAll(
+        '[aria-live], [role="status"], [role="alert"]'
+      )
+    ].map((node) => node.getAttribute('data-reely-part'));
+
+    await expect(regions).toEqual(['loading-indicator', 'captions-announcer']);
+
+    // The two elements whose content changes continuously during playback.
+    for (const part of ['time', 'captions']) {
+      const nodes = canvasElement.querySelectorAll(
+        `[data-reely-part="${part}"]`
+      );
+      // The composition renders two `time` elements (current and duration) and
+      // one `captions` container; an empty NodeList would make this loop a
+      // no-op, so assert it is not.
+      await expect(nodes.length).toBeGreaterThan(0);
+      for (const node of nodes) {
+        await expect(node.getAttribute('aria-live')).toBeNull();
+        await expect(node.getAttribute('role')).not.toBe('status');
+        await expect(node.getAttribute('role')).not.toBe('alert');
+      }
+    }
+  }
+};
