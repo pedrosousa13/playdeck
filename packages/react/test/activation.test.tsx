@@ -1382,6 +1382,59 @@ test('LoadingIndicator suppresses buffering after a terminal activation error', 
   ).toBeDefined();
 });
 
+test('LoadingIndicator does not occupy the viewport while idle, but does while loading or buffering', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  render(interactionFixture());
+
+  // Idle, before activation even starts: the live region is mounted (per the
+  // announcement-policy test above) but must not claim any of the viewport —
+  // a full-bleed, high-z-index idle box makes automated color-contrast checks
+  // unable to resolve a background for any text in the player (#32), even
+  // though nothing is visibly rendered.
+  const idleRegion = screen.getByRole('status');
+  expect(idleRegion.dataset.state).toBe('idle');
+  expect(idleRegion.style.position).toBe('absolute');
+  expect(idleRegion.style.width).toBe('1px');
+  expect(idleRegion.style.height).toBe('1px');
+  expect(idleRegion.style.overflow).toBe('hidden');
+  expect(idleRegion.style.clip).toBe('rect(0, 0, 0, 0)');
+  expect(idleRegion.style.zIndex).toBe('');
+  expect(idleRegion.style.pointerEvents).toBe('');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+
+  // Loading: the same node, now full-bleed and on top, so a real loading
+  // indicator a consumer renders as `children` is actually visible.
+  const loadingRegion = screen.getByRole('status');
+  expect(loadingRegion).toBe(idleRegion);
+  expect(loadingRegion.dataset.state).toBe('loading-provider');
+  expect(loadingRegion.style.position).toBe('absolute');
+  expect(loadingRegion.style.zIndex).toBe('30');
+  expect(loadingRegion.style.pointerEvents).toBe('none');
+  expect(loadingRegion.style.width).toBe('');
+  expect(loadingRegion.style.clip).toBe('');
+
+  await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
+  act(() =>
+    fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: true })
+  );
+
+  // Buffering: full-bleed again, for the same reason.
+  const bufferingRegion = screen.getByRole('status');
+  expect(bufferingRegion.dataset.state).toBe('buffering');
+  expect(bufferingRegion.style.zIndex).toBe('30');
+  expect(bufferingRegion.style.pointerEvents).toBe('none');
+
+  act(() => fake.emit({ buffering: false }));
+
+  // Back to idle once buffering clears: hidden again, not full-bleed.
+  const backToIdle = screen.getByRole('status');
+  expect(backToIdle.dataset.state).toBe('idle');
+  expect(backToIdle.style.zIndex).toBe('');
+  expect(backToIdle.style.width).toBe('1px');
+});
+
 test('keeps focus and retries after loader failure', async () => {
   const current = createFakeProvider();
   mockedLoadProvider
