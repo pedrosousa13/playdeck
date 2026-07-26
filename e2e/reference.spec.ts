@@ -1,10 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   activationButton,
+  airPlayButton,
   captionsButton,
   controls,
   media,
   muteButton,
+  pipButton,
   playButton,
   seekSliderInput,
   settingsMenu,
@@ -142,4 +144,55 @@ test('the control row does not overflow at 320px', async ({ page }) => {
     clientWidth: document.documentElement.clientWidth
   }));
   expect(page320.scrollWidth).toBeLessThanOrEqual(page320.clientWidth);
+});
+
+// AirPlay is hardcoded unavailable on both iframe providers — a static
+// `{ status: 'unavailable', reason: 'provider' }` (Vimeo) / `providerUnavailable`
+// constant (YouTube) that is never reassigned in either adapter — so asserting
+// it hidden immediately after activation is safe on both, no settle time needed.
+for (const provider of ['youtube', 'vimeo'] as const) {
+  test(`@real capability gating hides AirPlay on ${provider}`, async ({
+    page
+  }) => {
+    await page.goto(story);
+    await page.getByTestId(`reference-source-${provider}`).click();
+    await activationButton(page).click();
+
+    await expect(playButton(page)).toHaveAttribute('data-provider', provider);
+    await expect(airPlayButton(page)).toHaveCount(0);
+  });
+}
+
+// PiP is NOT symmetric the way AirPlay is. YouTube hardcodes it unavailable
+// (`pictureInPicture: providerUnavailable` in provider-youtube/src/index.ts,
+// never reassigned), so — like AirPlay above — it is safe to assert hidden
+// immediately.
+test('@real capability gating hides PiP on youtube', async ({ page }) => {
+  await page.goto(story);
+  await page.getByTestId('reference-source-youtube').click();
+  await activationButton(page).click();
+
+  await expect(playButton(page)).toHaveAttribute('data-provider', 'youtube');
+  await expect(pipButton(page)).toHaveCount(0);
+});
+
+// Vimeo's adapter defaults `pictureInPicture` to `available` and only
+// downgrades it after a *failed* `requestPictureInPicture` call
+// (provider-vimeo/src/index.ts) — Vimeo's SDK genuinely exposes native PiP, so
+// the button renders rather than disappearing. Measured across repeated runs:
+// it appears ~300-900ms after the `data-provider` match, once the SDK attaches,
+// and stays. Asserting it hidden (as AirPlay is) would only pass by the race of
+// the assertion running before that attach completes — confirmed flaky by
+// sampling the DOM on a tight poll, so this asserts the settled, correct state
+// instead, with the same generous timeout the other @real specs use for
+// provider round-trips.
+test('@real capability gating leaves PiP available on vimeo', async ({
+  page
+}) => {
+  await page.goto(story);
+  await page.getByTestId('reference-source-vimeo').click();
+  await activationButton(page).click();
+
+  await expect(playButton(page)).toHaveAttribute('data-provider', 'vimeo');
+  await expect(pipButton(page)).toBeVisible({ timeout: 30_000 });
 });
