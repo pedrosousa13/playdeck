@@ -866,6 +866,20 @@ test('exposes the AirPlay picker through the wrapper on the native engine', asyn
   await provider.attach();
   await provider.load();
 
+  // `createNativeProvider` is delegated to, so HLS inherits #71's route
+  // gating: the picker API existing is no longer enough, and the capability
+  // stays unavailable until WebKit announces a playback target.
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { airPlay: { status: 'unavailable', reason: 'provider' } }
+  });
+
+  const availability = new Event('webkitplaybacktargetavailabilitychanged');
+  Object.defineProperty(availability, 'availability', {
+    configurable: true,
+    value: 'available'
+  });
+  media.dispatchEvent(availability);
+
   expect(patches.at(-1)).toMatchObject({
     capabilities: { airPlay: { status: 'available' } }
   });

@@ -28,7 +28,13 @@ Vimeo.
   native/HLS and Vimeo, the browser draws them on request, and YouTube's embed
   draws its own. The effective mode is always inspectable.
 - **Presentation** — fullscreen, Picture-in-Picture, AirPlay where available,
-  and Media Session integration with ownership arbitration.
+  and Media Session integration with ownership arbitration. `airPlay` means
+  "there is somewhere to cast to", not "this engine has the picker API": it
+  follows WebKit's `webkitplaybacktargetavailabilitychanged` and stays
+  `unavailable` / `provider` until a route is announced, so
+  `Player.AirPlayButton` no longer renders in Safari with no receiver on the
+  network and no longer opens an empty picker (#71). The transition is live in
+  both directions, and `@reely/provider-hls` inherits it.
 - **Activation** — a queued user play is now always issued after the
   provider's `load()` has run (fixes #86); no API change.
 - **Layout escape hatch** — geometry a primitive sets on itself is a default
