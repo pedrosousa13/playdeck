@@ -1104,6 +1104,11 @@ const visuallyHiddenStyle: CSSProperties = {
 // timer lifecycle enters the core state machine. Full rationale:
 // docs/superpowers/specs/2026-07-26-buffering-stall-policy-35-design.md
 const BUFFERING_SHOW_DELAY_MS = 500;
+// Once anything is shown it stays shown this long. A show delay alone does not
+// stop flicker: a stall lasting 550ms would paint for 50ms, and that is the
+// flicker. Applies to `loading-provider` too — a fast provider load strobes the
+// indicator the same way a short rebuffer does.
+const LOADING_MIN_VISIBLE_MS = 500;
 
 type LoadingPresentation = 'loading-provider' | 'buffering' | null;
 
@@ -1121,32 +1126,56 @@ const useLoadingPresentation = (): LoadingPresentation => {
           ? 'buffering'
           : null;
   const [shown, setShown] = useState<LoadingPresentation>(null);
+  const [floorExpired, setFloorExpired] = useState(true);
+  const visible = shown !== null;
+
+  // Keyed on `visible`, not on `shown`, so a `loading-provider` -> `buffering`
+  // label swap does not restart the floor: it bounds the visible period, not
+  // the label.
+  useEffect(() => {
+    if (!visible || floorExpired) return;
+    const timer = setTimeout(
+      () => setFloorExpired(true),
+      LOADING_MIN_VISIBLE_MS
+    );
+    return () => clearTimeout(timer);
+  }, [visible, floorExpired]);
 
   useEffect(() => {
-    if (desired === null) {
+    // A terminal error overrides both timers with no wait: the floor must not
+    // hold "Buffering" on top of ErrorDisplay.
+    if (activation === 'error') {
       setShown(null);
+      setFloorExpired(true);
       return;
     }
-    // Already on screen: swap the label with no delay. Hiding for 500ms across
-    // `loading-provider` -> `buffering` would manufacture the very flicker the
-    // delay exists to remove.
-    if (shown !== null) {
-      setShown(desired);
-      return;
+    if (desired !== null) {
+      // Already on screen: swap the label with no delay. Hiding for 500ms
+      // across `loading-provider` -> `buffering` would manufacture the very
+      // flicker the delay exists to remove.
+      if (shown !== null) {
+        setShown(desired);
+        return;
+      }
+      // Nothing is on screen yet, so there is nothing to flicker against.
+      if (desired === 'loading-provider') {
+        setShown('loading-provider');
+        setFloorExpired(false);
+        return;
+      }
+      const timer = setTimeout(() => {
+        setShown('buffering');
+        setFloorExpired(false);
+      }, BUFFERING_SHOW_DELAY_MS);
+      // Runs before the next effect pass and on unmount, so a stall that clears
+      // inside the delay window cancels rather than fires late.
+      return () => clearTimeout(timer);
     }
-    // Nothing is on screen yet, so there is nothing to flicker against.
-    if (desired === 'loading-provider') {
-      setShown('loading-provider');
-      return;
-    }
-    const timer = setTimeout(
-      () => setShown('buffering'),
-      BUFFERING_SHOW_DELAY_MS
-    );
-    // Runs before the next effect pass and on unmount, so a stall that clears
-    // inside the delay window cancels rather than fires late.
-    return () => clearTimeout(timer);
-  }, [desired, shown]);
+    if (shown === null) return;
+    // Not yet: the floor effect above flips `floorExpired`, which re-runs this
+    // effect, which then takes the branch below.
+    if (floorExpired) setShown(null);
+  }, [activation, desired, shown, floorExpired]);
 
   return shown;
 };

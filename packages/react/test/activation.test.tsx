@@ -1337,12 +1337,16 @@ test('configuration-error activation becomes actionable after configuration is v
 test('LoadingIndicator keeps a persistent live region so buffering is announced', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
+  vi.useFakeTimers();
   render(interactionFixture());
   fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
   await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
   act(() =>
     fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: false })
   );
+  // The provider-load indicator is held by the minimum-visible floor. Drain it
+  // so this starts from a hidden region rather than a held one.
+  act(() => void vi.advanceTimersByTime(500));
 
   // The live region exists and is empty before buffering starts, so the later
   // content change is announced instead of mounting already-populated.
@@ -1350,7 +1354,6 @@ test('LoadingIndicator keeps a persistent live region so buffering is announced'
   expect(region.dataset.state).toBe('idle');
   expect(region.textContent).toBe('');
 
-  vi.useFakeTimers();
   act(() => fake.emit({ buffering: true }));
   act(() => void vi.advanceTimersByTime(500));
 
@@ -1363,13 +1366,16 @@ test('LoadingIndicator keeps a persistent live region so buffering is announced'
 test('LoadingIndicator ignores a rebuffer shorter than the 500ms show delay', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
+  vi.useFakeTimers();
   render(interactionFixture());
   fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
   await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
   act(() =>
     fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: false })
   );
-  vi.useFakeTimers();
+  // Drain the provider-load floor so this starts from a hidden indicator.
+  act(() => void vi.advanceTimersByTime(500));
+  expect(screen.getByRole('status').dataset.state).toBe('idle');
 
   // A 300ms rebuffer is the common case under healthy adaptive bitrate. It must
   // never reach the DOM: painting it is the flicker this policy exists to stop.
@@ -1391,13 +1397,16 @@ test('LoadingIndicator ignores a rebuffer shorter than the 500ms show delay', as
 test('LoadingIndicator admits a sustained stall at 500ms and not before', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
+  vi.useFakeTimers();
   render(interactionFixture());
   fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
   await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
   act(() =>
     fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: false })
   );
-  vi.useFakeTimers();
+  // Drain the provider-load floor so this starts from a hidden indicator.
+  act(() => void vi.advanceTimersByTime(500));
+  expect(screen.getByRole('status').dataset.state).toBe('idle');
 
   act(() => fake.emit({ buffering: true }));
 
@@ -1413,13 +1422,13 @@ test('LoadingIndicator admits a sustained stall at 500ms and not before', async 
 test('LoadingIndicator swaps loading-provider to buffering without going idle', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
+  vi.useFakeTimers();
   render(interactionFixture());
   fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
   const region = screen.getByRole('status');
   expect(region.dataset.state).toBe('loading-provider');
 
   await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
-  vi.useFakeTimers();
 
   // The provider becomes ready and immediately buffers its first segment. The
   // indicator is already on screen, so re-running the show delay here would
@@ -1430,6 +1439,108 @@ test('LoadingIndicator swaps loading-provider to buffering without going idle', 
   );
   expect(region.dataset.state).toBe('buffering');
   expect(region.textContent).toBe('Buffering');
+});
+
+test('LoadingIndicator holds an admitted stall for 500ms after it clears', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  vi.useFakeTimers();
+  render(interactionFixture());
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+  await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
+  act(() =>
+    fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: false })
+  );
+  // Drain the provider-load floor so this starts from a hidden indicator.
+  act(() => void vi.advanceTimersByTime(500));
+  expect(screen.getByRole('status').dataset.state).toBe('idle');
+
+  // A 700ms stall clears 200ms after being admitted. Hiding on that edge would
+  // paint the indicator for 200ms — legible to a machine, a blink to a person.
+  act(() => fake.emit({ buffering: true }));
+  act(() => void vi.advanceTimersByTime(500));
+  expect(screen.getByRole('status').dataset.state).toBe('buffering');
+
+  act(() => void vi.advanceTimersByTime(200));
+  act(() => fake.emit({ buffering: false }));
+  expect(screen.getByRole('status').dataset.state).toBe('buffering');
+
+  // 500ms after it became visible, not 500ms after it cleared.
+  act(() => void vi.advanceTimersByTime(300));
+  expect(screen.getByRole('status').dataset.state).toBe('idle');
+});
+
+test('LoadingIndicator holds a fast provider load for 500ms', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  vi.useFakeTimers();
+  render(interactionFixture());
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+  const region = screen.getByRole('status');
+  expect(region.dataset.state).toBe('loading-provider');
+
+  await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
+
+  // A warm cache resolves the provider in ~50ms. Without the floor the
+  // indicator strobes — the same defect as a short rebuffer, under a different
+  // state name, so it gets the same floor rather than a carve-out.
+  act(() => void vi.advanceTimersByTime(50));
+  act(() =>
+    fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: false })
+  );
+  expect(region.dataset.state).toBe('loading-provider');
+
+  act(() => void vi.advanceTimersByTime(450));
+  expect(region.dataset.state).toBe('idle');
+});
+
+test('LoadingIndicator drops an admitted stall immediately on a terminal error', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  vi.useFakeTimers();
+  render(interactionFixture());
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+  await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
+  act(() =>
+    fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: false })
+  );
+  // Drain the provider-load floor so this starts from a hidden indicator.
+  act(() => void vi.advanceTimersByTime(500));
+
+  act(() => fake.emit({ buffering: true }));
+  act(() => void vi.advanceTimersByTime(500));
+  expect(screen.getByRole('status').dataset.state).toBe('buffering');
+
+  // The floor must not hold "Buffering" on top of ErrorDisplay. An error
+  // overrides both timers with no wait.
+  act(() =>
+    fake.emit({ activation: 'error', lifecycle: 'error', buffering: true })
+  );
+  expect(screen.getByRole('status').dataset.state).toBe('idle');
+  expect(screen.getByRole('status').textContent).toBe('');
+});
+
+test('LoadingIndicator clears its pending timer on unmount', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  vi.useFakeTimers();
+  const { unmount } = render(interactionFixture());
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+  await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
+  act(() =>
+    fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: false })
+  );
+  // Drain the provider-load floor so this starts from a hidden indicator.
+  act(() => void vi.advanceTimersByTime(500));
+
+  // Counted as a delta rather than an absolute, so unrelated timers scheduled
+  // by the fixture cannot make this pass or fail by accident.
+  const before = vi.getTimerCount();
+  act(() => fake.emit({ buffering: true }));
+  expect(vi.getTimerCount()).toBe(before + 1);
+
+  unmount();
+  expect(vi.getTimerCount()).toBe(before);
 });
 
 test('LoadingIndicator suppresses buffering after a terminal activation error', async () => {
@@ -1460,6 +1571,7 @@ test('LoadingIndicator suppresses buffering after a terminal activation error', 
 test('LoadingIndicator does not occupy the viewport while idle, but does while loading or buffering', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
+  vi.useFakeTimers();
   render(interactionFixture());
 
   // Idle, before activation even starts: the live region is mounted (per the
@@ -1495,15 +1607,19 @@ test('LoadingIndicator does not occupy the viewport while idle, but does while l
     fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: true })
   );
 
-  // Buffering: full-bleed again, for the same reason.
+  // Buffering: full-bleed again, for the same reason. The indicator is already
+  // visible as `loading-provider`, so this is a label swap, not a fresh show —
+  // no delay to advance past.
   const bufferingRegion = screen.getByRole('status');
   expect(bufferingRegion.dataset.state).toBe('buffering');
   expect(bufferingRegion.style.zIndex).toBe('30');
   expect(bufferingRegion.style.pointerEvents).toBe('none');
 
   act(() => fake.emit({ buffering: false }));
+  act(() => void vi.advanceTimersByTime(500));
 
-  // Back to idle once buffering clears: hidden again, not full-bleed.
+  // Back to idle once buffering clears and the minimum-visible floor expires:
+  // hidden again, not full-bleed.
   const backToIdle = screen.getByRole('status');
   expect(backToIdle.dataset.state).toBe('idle');
   expect(backToIdle.style.zIndex).toBe('');
