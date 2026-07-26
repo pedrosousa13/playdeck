@@ -199,9 +199,20 @@ provider.
 
 ## Lifecycle
 
-`load()` and `retry()` both clear the list and reset the selection to auto.
-`retry()` already resets `selectQualityAvailability` in exactly that place
-(`provider-hls:809-812`).
+The general rule: **the list and the selection clear wherever `quality: null` is
+already emitted.** There are three such places, not the two an earlier draft
+of this section named.
+
+`load()` and `retry()` both route through `startHlsJs`, which is where a new
+engine instance is born and therefore the single site that covers both. Neither
+needs its own clear — `retry()`'s existing reset of `selectQualityAvailability`
+(`provider-hls:809-812`) stays as it is, because `unknown/provider-check` is the
+honest verdict again until the new manifest parses.
+
+The third is `surfaceFatal` (`:427-445`), which already emits `quality: null`
+and downgrades the capability to `unavailable/provider`. Without clearing the
+list there, exhausted error recovery would leave state advertising the rungs of
+a torn-down instance behind an unavailable capability.
 
 ### When the held selection is pruned out from under us
 
