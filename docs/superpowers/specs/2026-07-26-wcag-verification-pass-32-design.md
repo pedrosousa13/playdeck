@@ -55,7 +55,7 @@ open/close_, which is a different path.
    combination on its own. It is fixed and tested anyway: a mobile user at 320px
    with 200% text is a real user.
 
-## 1. State inventory — seven states, six stories
+## 1. State inventory — seven states, five stories
 
 The seven states #32 lists do not map one-to-one onto stories: `Composition` is
 genuinely both _paused_ and _captions-on_. New stories are added to
@@ -97,7 +97,8 @@ and the coverage claim for the primitive stories. Chromium only, by
 
 **`@axe-core/playwright`** — new root devDependency, new `e2e/a11y.spec.ts`,
 seven states × chromium / firefox / webkit. Scoped with
-`.include('.reely-example')` so Storybook's own DOM can never enter the result.
+`.include('[data-reely-part="viewport"]')` so Storybook's own DOM can never
+enter the result.
 
 The cost is two places to update when a state changes; that is accepted. The
 value is that axe evaluates computed style, and UA defaults for focus rings and
@@ -119,8 +120,7 @@ breakpoint so the control row leaves the fixed-ratio clipping box:
     aspect-ratio: auto;
   }
   .reely-example-controls {
-    position: static;
-    background: #0b0e13;
+    position: relative;
   }
   .reely-example-volume {
     display: none;
@@ -161,7 +161,7 @@ composed example is exactly `['loading-indicator', 'captions-announcer']`
 behavioural path never exercises. Blind to behaviour: an announcer firing on
 every `timeupdate` has an identical inventory.
 
-**Behavioural**, in `e2e/a11y.spec.ts` against `RealSources` on the local MP4
+**Behavioural**, in `e2e/a11y-media.spec.ts` against `RealSources` on the local MP4
 with its VTT track. A `MutationObserver` over every
 `[aria-live], [role="status"], [role="alert"]` node:
 
@@ -267,3 +267,35 @@ and specs ship nothing.
 
 Repo-wide `pnpm format:check` fails locally on gitignored `.planning/**`; check
 changed files only.
+
+## What changed during implementation
+
+Substantive deltas between this design and what shipped:
+
+- **420px breakpoint: `relative`, not `static`.** `static` drops the control
+  row out of the positioned stacking context its `z-index: 20` depends on, so
+  it painted below Gestures/Poster/Media — invisible and unclickable —
+  confirmed by `elementFromPoint` at the row's own center resolving to the
+  gestures element instead. `relative` keeps the same in-flow position while
+  keeping `z-index` effective. The `background` re-declaration in this doc's
+  original snippet was also dropped: the base `.reely-example-controls` rule
+  is already opaque (`rgb(4, 6, 10)`) for axe color-contrast, so a second,
+  different opaque color inside the media query would be redundant and
+  inconsistent.
+- **`Player.LoadingIndicator` primitive fix.** Its idle style was missing
+  `pointerEvents: 'none'` on one branch, dropping an invariant that was
+  previously unconditional on this shipped primitive. Fixed as part of this
+  verification pass; see `packages/react/src/index.tsx`.
+- **`results.incomplete` is asserted via a per-state allowlist**, not treated
+  as always-empty. Two states carry a diagnosed, written-down axe
+  `needs-review` finding (`idle`'s color-contrast bgOverlap from the
+  full-viewport `ActivationButton`; `menu-open`'s `aria-valid-attr-value`
+  false positive on `aria-haspopup` + `aria-controls`) — see
+  `e2e/a11y.spec.ts`'s `knownIncomplete` field.
+- **The e2e suite split.** `e2e/a11y.spec.ts` ended up mock-only (axe sweep,
+  reflow/hit-test, tab-order/menu-focus); real-media checks (shortcut effects
+  against an actual `<video>`, the behavioural announcement test) shipped in
+  a separate `e2e/a11y-media.spec.ts`, kept apart because that suite depends
+  on video decode timing and is more flake-prone.
+- **A dense `captions-reference.vtt` fixture** (`apps/storybook/public/`)
+  backs the behavioural announcement test's cue-transition coverage.

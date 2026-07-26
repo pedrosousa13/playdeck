@@ -130,8 +130,9 @@ const layoutCss = `
    stacking context its z-index: 20 relies on, so it silently painted BELOW
    Gestures/Poster/Media instead of above them — invisible and unclickable,
    confirmed by elementFromPoint at the row's own center resolving to the
-   gestures element instead. relative keeps the same in-flow position (no
-   offsets are set) while keeping z-index effective. */
+   gestures element instead. relative keeps the same in-flow position — the
+   inherited inset: auto 0 0 0 nets to zero displacement on a
+   relatively-positioned box — while keeping z-index effective. */
 @media (max-width: 420px) {
   .reely-example {
     aspect-ratio: auto;

@@ -22,7 +22,7 @@ const story = (id: string) =>
 
 const composition = story('composition');
 
-// The seven states #32 lists. They are seven states over six stories:
+// The seven states #32 lists. They are seven states over five stories:
 // `composition` is genuinely both paused and captions-on, and menu-open is
 // that same story with the settings menu opened by this spec rather than by a
 // story play function — whether Storybook runs play functions on a plain
@@ -194,16 +194,23 @@ for (const reflow of reflowCases) {
     expect(clip.clippedTopBy).toBeLessThanOrEqual(0);
     expect(clip.clippedBottomBy).toBeLessThanOrEqual(0);
 
-    // No occlusion. Correct geometry is not enough: a control row can have a
-    // perfectly unclipped bounding box and still be painted underneath
-    // Gestures/Poster/Media, invisible and unclickable, if it is not a
-    // *positioned* element (CSS 2.1 always paints in-flow, non-positioned
-    // content before positioned content, regardless of z-index or DOM order).
-    // That exact regression shipped past every assertion above it in this
-    // file, past `toBeVisible()` (attached, non-zero size, not display:none —
-    // it does not check what else is painted on top), and past the 320px
-    // reflow fix's own author, so it is hit-tested here explicitly rather
-    // than trusted to geometry.
+    // Hit-testable at its own center. Correct geometry is not enough: a
+    // control row can have a perfectly unclipped bounding box and still be
+    // painted underneath Gestures/Poster/Media, invisible and unclickable, if
+    // it is not a *positioned* element (CSS 2.1 always paints in-flow,
+    // non-positioned content before positioned content, regardless of
+    // z-index or DOM order). That exact regression shipped past every
+    // assertion above it in this file, past `toBeVisible()` (attached,
+    // non-zero size, not display:none — it does not check what else is
+    // painted on top), and past the 320px reflow fix's own author, so it is
+    // hit-tested here explicitly rather than trusted to geometry.
+    //
+    // Note this proves hit-testability, not visual non-occlusion:
+    // `elementFromPoint` is blind to `pointer-events: none`, and reely's own
+    // overlays (`Player.Poster`, `Player.Captions`, the active
+    // `LoadingIndicator`) all set it. A green result here does not mean
+    // nothing is painted over the controls — only that the control itself
+    // resolves at its own center.
     const playHandle = await playButton(page).elementHandle();
     if (playHandle === null) throw new Error('play button not found');
     const hit = await page.evaluate((play: Element) => {
