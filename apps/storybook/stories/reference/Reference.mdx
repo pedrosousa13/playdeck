@@ -1,0 +1,118 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Overview/Reference example" />
+
+# Reference example
+
+One composed player, in `stories/reference/`, assembled **only** from public
+`@reely/react` and `@reely/core` exports. It is the runnable proof behind
+criterion 8 of #1, and it is the artifact #32 points axe and its keyboard flows
+at.
+
+Two mountings of one component, so there is a single composition rather than
+two that drift:
+
+- **`Reference/Player → Composition`** — under the mock decorator, every
+  capability dialed available, no media and no network. It runs in
+  `pnpm --filter @reely/storybook test` with axe at `test: 'error'`.
+- **`Reference/Player → RealSources`** — tagged `real-playback` and `!test`, so
+  the decorator steps aside and the story owns its own `Player.Root`. This is
+  what `e2e/reference.spec.ts` drives.
+
+## Icons are your job, not the library's
+
+Every button here receives an icon child from `@reely/react`'s icon exports.
+The primitives keep their text fallbacks (`children ?? (isPlaying ? 'Pause' :
+'Play')`) and are unchanged by this example. Defaulting to icons would make
+every icon a static dependency of every button and undo the opt-in
+tree-shakeability the icon exports exist for.
+
+Accessible names are unaffected either way: they come from each primitive's own
+`aria-label`, never from the child. Supplying icon children _is_ composition
+from public parts, which is the thing being proved.
+
+## Layout is your job too
+
+The layout CSS lives in this example, not in `@reely/react/theme.css`. The
+library stays unopinionated about layout; this example documents one way to lay
+a control row out — two rows, a wrapping button row, and the volume slider
+dropped below a 420px breakpoint so the composition stays usable at 320px.
+
+This example does **not** mount `@reely/react/theme.css`. The only per-story way
+to mount it in this repo reads it by path out of `packages/`, which the import
+rule below forbids, and a plain side-effect import would leak the theme into
+every other story's document.
+
+## What the story mounting does not prove
+
+`Player.Media` renders nothing in the `Composition` story, on purpose.
+`Media` is gated on activation, and every route to activation loads a real
+provider that replaces the mock adapter — so a mock-owned story and a mounted
+media element are mutually exclusive. The media layer, the `<track>` declared
+through `Media`'s `textTracks`, the provider swap and the quality ladder are all
+proved by `RealSources` and `e2e/reference.spec.ts` instead.
+
+## "Public exports only" is a lint rule
+
+`eslint.config.js` scopes a `no-restricted-imports` block to
+`stories/reference/**`. Rejected: any `../` escape, anything under
+`packages/`, any `@reely/*/src/*` subpath, the provider packages, and
+`hls.js`. It runs in the existing `static` gate, so a violation fails at
+authoring time. Convention has already failed twice (#15, #73).
+
+`stories/reference/import-rule.contract.test.ts` runs ESLint over both halves of
+the rule — the specifiers it must reject and the ones it must accept. A lint
+rule that has never been seen to fail is worth nothing.
+
+Two stated limitations:
+
+- **Specifier hygiene, not packed-entry coverage.** Storybook aliases
+  `@reely/react` to `packages/react/src/index.tsx`, so this rule cannot prove
+  the _published_ entry exports what the example touches. That side is covered
+  where it belongs: `attw` and `publint` in `test:packages`, plus
+  `packages/react/test/theme.test.ts` asserting the exports map.
+- **Not a dependency allowlist.** ESLint's group negation never un-matches a
+  specifier containing a slash, so the allowlist form of this rule rejects
+  `@reely/react` itself. The denylist that works stops reaching into internals;
+  it will not stop a brand-new third-party dependency being added.
+
+## Capability gating, on display
+
+Switching sources makes gating visible rather than hidden, which is the
+primitives' central promise:
+
+- **`AirPlayButton` disappears on YouTube and Vimeo.** Both hard-code the
+  `airPlay` capability unavailable, so the control renders nothing.
+- **`PipButton` disappears on YouTube, but not on Vimeo.** YouTube hard-codes
+  `pictureInPicture` unavailable; Vimeo reports it available up front and
+  downgrades only if a request actually fails. So the same composition shows a
+  PiP button on one iframe provider and not the other, without the example
+  branching on provider anywhere.
+- **The quality group appears only under HLS, on browsers that resolve to
+  hls.js.** Only the hls.js engine populates `PlayerState.qualities`. The
+  example no longer forces an engine, so each browser resolves HLS via its own
+  `canPlayType`: MP4 never has a quality ladder regardless, and neither does
+  HLS on a browser that reports native HLS support — which, measured
+  directly, is Chromium and WebKit both, leaving Firefox as the one where the
+  menu section actually appears.
+
+The lesson for anyone testing against these: a capability assertion needs an
+explicit settle condition only when the capability's _initial_ value differs
+from its settled value. Statically-unavailable capabilities are safe to assert
+immediately; a defaulted-available one like Vimeo's `pictureInPicture` is not.
+
+## The gap this example found before a line of code
+
+Composing the settings menu revealed that nothing in public state enumerated the
+selectable quality ladder — `PlayerState.quality` was the level playing now, and
+`selectQuality` took a height nobody could discover. That was filed as #81 and
+landed on its own terms before this example.
+
+Driving the example against a **local** fixture then surfaced a second one, #86:
+a queued user play could be dropped. Every existing end-to-end test routed its
+media through a mocked response, which added just enough latency to hide an
+ordering bug; a real local file did not. It is fixed. A third, #87, is the same
+defect for audible autoplay one layer down, and is filed but not fixed here.
+
+Two gaps in one example is the argument for having it. Neither was reachable
+from unit tests that mock the thing being tested.

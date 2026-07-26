@@ -500,44 +500,70 @@ export const useActivation = (
         }
         const queuePlay = session.current.queuedPlay;
         session.current.queuedPlay = false;
-        controller.setProvider(adapter);
-        if (queuePlay) {
-          if (
-            adapter.provider === 'native' &&
-            optionsRef.current.preload === 'none'
-          ) {
-            void Promise.resolve().then(() => {
-              if (
-                isCurrentLoad() &&
-                controller.getState().activation !== 'error'
-              ) {
-                void controller.playWithOrigin('user');
-              }
-            });
+        if (!queuePlay) {
+          controller.setProvider(adapter);
+          return;
+        }
+        // A queued user play has to be issued after this provider has loaded.
+        // `setProvider` calls `attach()` synchronously and only queues
+        // `load()` behind it, and a provider that attaches to media which
+        // already has metadata reports readiness during that `attach()` — so
+        // playing on the first replayed state lands before `load()`, which
+        // then aborts it. Gating on the provider's own `load()` orders
+        // correctly whether `attach()` is synchronous or returns a promise.
+        // Readiness is still required, because an iframe provider rejects a
+        // play issued before its embed is ready. Native media asked to
+        // preload nothing is the exception: it reports readiness only once
+        // something has played it, so it plays as soon as `load()` has run.
+        const awaitReadiness = !(
+          adapter.provider === 'native' && optionsRef.current.preload === 'none'
+        );
+        let loaded = false;
+        let ready = false;
+        let played = false;
+        const subscription: { unsubscribe?: () => void } = {};
+        let armed = false;
+        let disposed = false;
+        const dispose = (): void => {
+          if (disposed) return;
+          disposed = true;
+          if (armed) subscription.unsubscribe?.();
+        };
+        const playWhenLoaded = (): void => {
+          if (played || !loaded || (awaitReadiness && !ready)) return;
+          played = true;
+          dispose();
+          void controller.playWithOrigin('user');
+        };
+        controller.setProvider({
+          ...adapter,
+          load: () => {
+            const result = adapter.load();
+            if (
+              !isCurrentLoad() ||
+              controller.getState().activation === 'error'
+            ) {
+              dispose();
+              return result;
+            }
+            loaded = true;
+            playWhenLoaded();
+            return result;
+          }
+        });
+        subscription.unsubscribe = controller.subscribe((state) => {
+          if (disposed) return;
+          if (!isCurrentLoad() || state.activation === 'error') {
+            dispose();
             return;
           }
-          const subscription: { unsubscribe?: () => void } = {};
-          let armed = false;
-          let disposed = false;
-          const dispose = (): void => {
-            if (disposed) return;
-            disposed = true;
-            if (armed) subscription.unsubscribe?.();
-          };
-          subscription.unsubscribe = controller.subscribe((state) => {
-            if (disposed) return;
-            if (!isCurrentLoad() || state.activation === 'error') {
-              dispose();
-              return;
-            }
-            if (state.activation !== 'ready') return;
-            dispose();
-            void controller.playWithOrigin('user');
-          });
-          armed = true;
-          if (disposed) {
-            subscription.unsubscribe();
-          }
+          if (state.activation !== 'ready') return;
+          ready = true;
+          playWhenLoaded();
+        });
+        armed = true;
+        if (disposed) {
+          subscription.unsubscribe();
         }
       })
       .catch((cause: unknown) => {

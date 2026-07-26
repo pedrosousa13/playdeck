@@ -503,6 +503,97 @@ test('interaction plays once when installation synchronously becomes ready', asy
   );
 });
 
+test('interaction queues its play behind load when attach reports readiness', async () => {
+  const installationOrder: string[] = [];
+  const controller = new PlayerController();
+  const listeners = new Set<ProviderStateListener>();
+  const adapter: ProviderAdapter = {
+    provider: 'native',
+    attach: () => {
+      listeners.forEach((listener) =>
+        listener({ activation: 'ready', lifecycle: 'ready' })
+      );
+    },
+    destroy: () => undefined,
+    load: () => {
+      installationOrder.push('load');
+    },
+    play: async () => {
+      installationOrder.push('play');
+      return { ok: true };
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+  };
+  mockedLoadProvider.mockResolvedValue(adapter);
+  const playWithOrigin = vi.spyOn(controller, 'playWithOrigin');
+  let activateFromInteraction!: () => void;
+
+  render(
+    <ActivationProbe
+      controller={controller}
+      loading="interaction"
+      onActivate={(activate) => {
+        activateFromInteraction = activate;
+      }}
+    />
+  );
+  act(() => activateFromInteraction());
+
+  await vi.waitFor(() =>
+    expect(playWithOrigin).toHaveBeenCalledExactlyOnceWith('user')
+  );
+  expect(installationOrder).toEqual(['load', 'play']);
+});
+
+test('interaction queues its play behind load when attach yields before reporting readiness', async () => {
+  const installationOrder: string[] = [];
+  const controller = new PlayerController();
+  const listeners = new Set<ProviderStateListener>();
+  const adapter: ProviderAdapter = {
+    provider: 'native',
+    attach: async () => {
+      await Promise.resolve();
+      listeners.forEach((listener) =>
+        listener({ activation: 'ready', lifecycle: 'ready' })
+      );
+    },
+    destroy: () => undefined,
+    load: () => {
+      installationOrder.push('load');
+    },
+    play: async () => {
+      installationOrder.push('play');
+      return { ok: true };
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+  };
+  mockedLoadProvider.mockResolvedValue(adapter);
+  const playWithOrigin = vi.spyOn(controller, 'playWithOrigin');
+  let activateFromInteraction!: () => void;
+
+  render(
+    <ActivationProbe
+      controller={controller}
+      loading="interaction"
+      onActivate={(activate) => {
+        activateFromInteraction = activate;
+      }}
+    />
+  );
+  act(() => activateFromInteraction());
+
+  await vi.waitFor(() =>
+    expect(playWithOrigin).toHaveBeenCalledExactlyOnceWith('user')
+  );
+  expect(installationOrder).toEqual(['load', 'play']);
+});
+
 test('interaction discards a loader resolved against an immediate error snapshot', async () => {
   const pending = deferred<ProviderAdapter>();
   const fake = createFakeProvider();

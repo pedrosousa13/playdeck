@@ -29,6 +29,8 @@ Vimeo.
   draws its own. The effective mode is always inspectable.
 - **Presentation** — fullscreen, Picture-in-Picture, AirPlay where available,
   and Media Session integration with ownership arbitration.
+- **Activation** — a queued user play is now always issued after the
+  provider's `load()` has run (fixes #86); no API change.
 
 The `DefaultPlayer` preset is not in this release; it is deferred (see issue
 \#1). This prerelease ships the headless primitives only.

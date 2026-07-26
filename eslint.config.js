@@ -60,5 +60,44 @@ export default tseslint.config(
         }
       ]
     }
+  },
+  {
+    // #67's reference example is the proof that the primitives are sufficient,
+    // which only holds if it composes from public exports. Convention has
+    // failed twice (#15, #73), so this is a gate rather than a comment.
+    //
+    // A denylist, not an allowlist: ESLint's group negation never un-matches a
+    // specifier containing `/`, so `['**', '!@reely/react', ...]` rejects
+    // `@reely/react` itself. Verified over 13 cases by
+    // stories/reference/import-rule.contract.test.ts, which is also what keeps
+    // this rule red-then-green rather than merely present.
+    //
+    // Known limit, stated in Reference.mdx: this proves specifier hygiene, not
+    // that a brand-new third-party dependency was not added.
+    files: ['apps/storybook/stories/reference/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../*', '../**'],
+              message:
+                'The reference example must not reach outside its own directory: it exists to prove the primitives are sufficient from public exports alone. Rebuild what you need from @reely/react / @reely/core.'
+            },
+            {
+              group: ['**/packages/**', '@reely/*/src/**'],
+              message:
+                'Import the package entry (@reely/react, @reely/core), never a path into its source.'
+            },
+            {
+              group: ['@reely/provider-*', 'hls.js'],
+              message:
+                'The example composes against the public React surface only; providers are wired by Player.Root.'
+            }
+          ]
+        }
+      ]
+    }
   }
 );

@@ -30,6 +30,9 @@ receiver is on the network, and opens an empty picker.
 
 `selectTextTrack` gates `Player.CaptionsButton` — see the Captions docs.
 
-The remaining `PlayerCapabilities` keys — `setPlaybackRate`, `selectQuality`,
-`customControls` — have no dedicated primitive yet; they are staged in stories
-but gate no shipped control.
+`setPlaybackRate` and `selectQuality` have no dedicated primitive, and are
+composed by the consumer instead — see the **Reference example**, whose settings
+menu builds a playback-rate group and a quality group over
+`Player.SettingsMenu`/`Player.MenuRadioGroup`, each gated on its own capability.
+`selectQuality`'s ladder comes from `PlayerState.qualities`; only the hls.js
+engine populates it. `customControls` gates no shipped control.
