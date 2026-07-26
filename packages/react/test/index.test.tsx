@@ -1249,7 +1249,7 @@ const posterPrimitives = Player as typeof Player & {
   normalizePoster: (input: unknown) => unknown;
 };
 
-test('renders opaque custom and native picture posters in the fixed decorative layer', () => {
+test('renders opaque custom and native picture posters in the decorative layer', () => {
   const renderSpy = vi.fn();
   const marker = {};
   const CustomPoster = ({ marker: receivedMarker }: { marker: object }) => {
@@ -1297,15 +1297,20 @@ test('renders opaque custom and native picture posters in the fixed decorative l
   expect(media.style.zIndex).toBe('0');
   expect(poster?.getAttribute('aria-hidden')).toBe('true');
   expect(poster?.getAttribute('data-state')).toBe('visible');
+  // #89: the layer's geometry is a *default*, not an invariant — every static
+  // property below is the consumer's value, not the primitive's. `visibility`
+  // is the exception and is the point of the exception: it is derived from
+  // `posterState`, so overriding it would not be overriding layout, it would
+  // be pinning a state machine's output and permanently defeating the hide.
   expect((poster as HTMLElement).style).toMatchObject({
-    position: 'absolute',
-    inset: '0',
-    width: '100%',
-    height: '100%',
-    zIndex: '10',
-    pointerEvents: 'none',
+    position: 'fixed',
+    inset: '12px',
+    width: '320px',
+    height: '180px',
+    zIndex: '999',
+    pointerEvents: 'auto',
     visibility: 'visible',
-    transform: 'none'
+    transform: 'translateX(100px)'
   });
   expect(poster?.getAttribute('style')).not.toContain('background-image');
   expect(picture?.outerHTML).toBe(

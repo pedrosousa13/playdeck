@@ -31,6 +31,13 @@ Vimeo.
   and Media Session integration with ownership arbitration.
 - **Activation** — a queued user play is now always issued after the
   provider's `load()` has run (fixes #86); no API change.
+- **Layout escape hatch** — geometry a primitive sets on itself is a default
+  your `style` prop overrides, on `Viewport`, `Poster`, `ActivationButton`,
+  `LoadingIndicator`, `ErrorDisplay` and `PosterImage` (#89). These six
+  previously discarded a colliding `style` property, so a value you passed and
+  saw ignored now takes effect. Properties derived from player state
+  (`Poster`'s `visibility`) stay the primitive's own, and `PosterImage`'s
+  explicit `objectFit` / `objectPosition` props still beat `style`.
 
 The `DefaultPlayer` preset is not in this release; it is deferred (see issue
 \#1). This prerelease ships the headless primitives only.

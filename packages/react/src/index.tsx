@@ -843,6 +843,15 @@ export const Root = ({
   );
 };
 
+// #89: geometry a primitive sets for itself is a default the consumer's
+// `style` prop overrides, so it is spread *before* `...style` everywhere. The
+// only exception is a property derived from player state — that is the
+// primitive's output, not layout, and stays after `...style`.
+const viewportStyle: CSSProperties = {
+  position: 'relative',
+  overflow: 'hidden'
+};
+
 const assignRef = <Value,>(
   ref: Ref<Value> | undefined,
   value: Value | null
@@ -887,7 +896,7 @@ export const Viewport = ({ children, ref, style, ...rest }: ViewportProps) => {
       {...rest}
       data-reely-part="viewport"
       ref={mergedRef}
-      style={{ ...style, position: 'relative', overflow: 'hidden' }}
+      style={{ ...viewportStyle, ...style }}
     >
       {children}
     </div>
@@ -1012,6 +1021,16 @@ export const Media = ({
   );
 };
 
+const posterOverlayStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  zIndex: 10,
+  pointerEvents: 'none',
+  transform: 'none'
+};
+
 export const Poster = ({ children, style, ...safeRest }: PosterProps) => {
   const posterState = usePosterState();
 
@@ -1022,14 +1041,11 @@ export const Poster = ({ children, style, ...safeRest }: PosterProps) => {
       data-reely-part="poster"
       data-state={posterState}
       style={{
+        ...posterOverlayStyle,
         ...style,
-        position: 'absolute',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        zIndex: 10,
-        pointerEvents: 'none',
-        transform: 'none',
+        // After `...style`, alone: derived from `posterState`, so a static
+        // consumer value would pin the poster open for every source rather
+        // than override a layout choice.
         visibility: posterState === 'hidden' ? 'hidden' : 'visible'
       }}
     >
@@ -1039,6 +1055,12 @@ export const Poster = ({ children, style, ...safeRest }: PosterProps) => {
 };
 
 export type ActivationButtonProps = ComponentPropsWithRef<'button'>;
+
+const activationOverlayStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  zIndex: 30
+};
 
 export const ActivationButton = ({
   'aria-label': ariaLabel,
@@ -1071,12 +1093,7 @@ export const ActivationButton = ({
           activateFromInteraction();
         }
       }}
-      style={{
-        ...style,
-        position: 'absolute',
-        inset: 0,
-        zIndex: 30
-      }}
+      style={{ ...activationOverlayStyle, ...style }}
       type="button"
     >
       {children ?? (isError ? 'Retry' : 'Play')}
@@ -1195,6 +1212,18 @@ const useLoadingPresentation = (): LoadingPresentation => {
  */
 export type LoadingIndicatorProps = ComponentPropsWithRef<'div'>;
 
+const loadingOverlayStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  zIndex: 30,
+  pointerEvents: 'none'
+};
+
+const loadingHiddenStyle: CSSProperties = {
+  ...visuallyHiddenStyle,
+  pointerEvents: 'none'
+};
+
 export const LoadingIndicator = ({
   children,
   style,
@@ -1217,16 +1246,12 @@ export const LoadingIndicator = ({
       data-reely-part="loading-indicator"
       data-state={active ?? 'idle'}
       role="status"
+      // The *branch* is state-derived and stays the primitive's; the contents
+      // of each branch are static geometry, so `...style` wins inside both.
       style={
         active
-          ? {
-              ...style,
-              position: 'absolute',
-              inset: 0,
-              zIndex: 30,
-              pointerEvents: 'none'
-            }
-          : { ...style, ...visuallyHiddenStyle, pointerEvents: 'none' }
+          ? { ...loadingOverlayStyle, ...style }
+          : { ...loadingHiddenStyle, ...style }
       }
     >
       {active
@@ -1255,6 +1280,12 @@ export type ErrorDisplayProps = Omit<
   readonly children?: (context: ErrorDisplayRenderProps) => ReactNode;
 };
 
+const errorOverlayStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  zIndex: 40
+};
+
 export const ErrorDisplay = ({
   children,
   style,
@@ -1281,12 +1312,7 @@ export const ErrorDisplay = ({
       data-reely-part="error"
       data-state={error.category}
       role="alert"
-      style={{
-        ...style,
-        position: 'absolute',
-        inset: 0,
-        zIndex: 40
-      }}
+      style={{ ...errorOverlayStyle, ...style }}
     >
       {children ? (
         children({ error, retry })
@@ -1402,6 +1428,12 @@ const initialPosterImageState = (
   srcSet?: string
 ): PosterImageState => (src || srcSet ? 'loading' : 'idle');
 
+const posterImageStyle: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  height: '100%'
+};
+
 export const PosterImage = ({
   src,
   srcSet,
@@ -1481,13 +1513,18 @@ export const PosterImage = ({
       src={src}
       srcSet={srcSet}
       style={{
+        ...posterImageStyle,
         ...style,
-        display: 'block',
-        width: '100%',
-        height: '100%',
+        // Three rungs, stated rather than implied by spread order: the
+        // explicit prop is more specific than the generic `style` bag and
+        // wins it, and `style` in turn beats the theming-variable default.
         objectFit: (objectFit ??
+          style?.objectFit ??
           'var(--reely-poster-fit, cover)') as CSSProperties['objectFit'],
-        objectPosition: objectPosition ?? 'var(--reely-poster-position, center)'
+        objectPosition:
+          objectPosition ??
+          style?.objectPosition ??
+          'var(--reely-poster-position, center)'
       }}
       width={width}
     />
