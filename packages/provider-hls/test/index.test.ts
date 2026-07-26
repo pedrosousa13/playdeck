@@ -365,11 +365,15 @@ test('refreshes the ladder on LEVELS_UPDATED and not on LEVEL_UPDATED', async ()
     { height: 720, width: 1280, bitrate: 2_000_000 },
     { height: 360, width: 640, bitrate: 800_000 }
   ];
+  const before = patches.length;
+
   hls.emitLevelUpdated(false);
 
-  expect(patches.at(-1)).not.toMatchObject({
-    qualities: [{ id: 'hls:720x1280@2000000' }, { id: 'hls:360x640@800000' }]
-  });
+  // Order-independent: asserting on `patches.at(-1)` alone would pass if the
+  // singular handler refreshed the ladder and then emitted anything else.
+  expect(patches.slice(before)).not.toContainEqual(
+    expect.objectContaining({ qualities: expect.anything() })
+  );
 
   hls.emitLevelsUpdated();
 
@@ -923,4 +927,282 @@ test('fails hls.js startup when the loaded module rejects the environment', asyn
     error: { category: 'unsupported', fatal: true }
   });
   expect(FakeHls.instances).toHaveLength(0);
+});
+
+// Pruning INSIDE a collision set, which the earlier stability test cannot
+// reach because its fixture is deliberately made of distinct rungs. When a
+// pair collapses to one, the survivor's `:<idx>` suffix disappears entirely —
+// an id-only membership test drops a selection whose rung is still present
+// while the engine stays pinned to it, so state reports auto while playback
+// is locked to one level with no way back.
+test('keeps a selection whose twin was pruned, under the survivor id', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 1080, width: 1920, bitrate: 5_000_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+  await provider.selectQuality?.('hls:1080x1920@5000000:0');
+  expect(hls.currentLevel).toBe(0);
+
+  hls.levels = [hls.levels[0]!];
+  hls.emitLevelsUpdated();
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [{ id: 'hls:1080x1920@5000000' }],
+    selectedQualityId: 'hls:1080x1920@5000000'
+  });
+  expect(hls.currentLevel).toBe(0);
+});
+
+// The ordinal shifting down is the other half: an unconditional `:<idx>`
+// suffix would not help here, because the survivor is renumbered rather than
+// unsuffixed. Only matching on the collision-free base id covers both.
+test('keeps a selection whose ordinal shifted when a lower twin was pruned', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 1080, width: 1920, bitrate: 5_000_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+  await provider.selectQuality?.('hls:1080x1920@5000000:2');
+
+  hls.levels = [hls.levels[1]!, hls.levels[2]!];
+  hls.emitLevelsUpdated();
+
+  // Which surviving twin is adopted is not asserted, and must not be: rungs
+  // sharing a base id are identical on every field this contract exposes, so
+  // the choice is unobservable. What must hold is that the selection is still
+  // a member of the published list.
+  const patch = patches.at(-1) as {
+    qualities: ReadonlyArray<{ id: string }>;
+    selectedQualityId: string | null;
+  };
+  expect(patch.qualities).toHaveLength(2);
+  expect(patch.selectedQualityId).not.toBeNull();
+  expect(patch.qualities.map((quality) => quality.id)).toContain(
+    patch.selectedQualityId
+  );
+});
+
+// A rung that genuinely leaves must still drop the selection — otherwise the
+// two tests above could be satisfied by never resetting at all.
+test('drops a selection when no rung of its kind survives', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 360, width: 640, bitrate: 800_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+  await provider.selectQuality?.('hls:1080x1920@5000000:0');
+
+  hls.levels = [hls.levels[2]!];
+  hls.emitLevelsUpdated();
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [{ id: 'hls:360x640@800000' }],
+    selectedQualityId: null
+  });
+});
+
+test('withdraws a stale unavailable verdict when an empty ladder restarts', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+  first.levels = [];
+  first.emit(FakeHls.Events.MANIFEST_PARSED, { levels: first.levels });
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: {
+      selectQuality: { status: 'unavailable', reason: 'source' }
+    }
+  });
+
+  await provider.load();
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: {
+      selectQuality: { status: 'unknown', reason: 'provider-check' }
+    }
+  });
+});
+
+// The store half of the read/write pair. Every other assertion about
+// `selectedQualityId` after a refresh expects `null`, which is equally
+// satisfied by never recording the selection and by resetting it
+// unconditionally — so without this, `hlsSelectedQualityId = id` is unbound.
+test('keeps a held selection across a refresh that leaves its rung in place', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 360, width: 640, bitrate: 800_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+  await provider.selectQuality?.('hls:1080x1920@5000000');
+
+  hls.levels = [hls.levels[0]!];
+  hls.emitLevelsUpdated();
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [{ id: 'hls:1080x1920@5000000' }],
+    selectedQualityId: 'hls:1080x1920@5000000'
+  });
+});
+
+// The race the fresh-derivation comment exists for: hls.js splices `levels`
+// and the consumer clicks before LEVELS_UPDATED lands. Resolving against the
+// cached list instead would switch to the wrong rung and report ok.
+test('resolves selectQuality against the live levels array, not the last enumerated one', async () => {
+  const { provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 360, width: 640, bitrate: 800_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  hls.levels = [hls.levels[1]!];
+
+  await expect(
+    provider.selectQuality?.('hls:1080x1920@5000000')
+  ).resolves.toEqual({ ok: false, reason: 'unsupported' });
+  expect(hls.currentLevel).toBe(-1);
+  await expect(provider.selectQuality?.('hls:360x640@800000')).resolves.toEqual(
+    { ok: true }
+  );
+  expect(hls.currentLevel).toBe(0);
+});
+
+// The `:idx` tiebreak is otherwise bound only in the emitted list. A lookup
+// matching on base id alone would leave every colliding rung unselectable
+// while the suite stayed green.
+test('selects a colliding rung by its disambiguated id', async () => {
+  const { provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 1080, width: 1920, bitrate: 5_000_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  await expect(
+    provider.selectQuality?.('hls:1080x1920@5000000:1')
+  ).resolves.toEqual({ ok: true });
+  expect(hls.currentLevel).toBe(1);
+});
+
+// A second load() does not tear the first instance down, so its listeners stay
+// live while `hls` points at the second. Without the generation guard a dead
+// instance overwrites the live ladder.
+test('ignores a stale hls.js instance refreshing the ladder after a second load', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+  first.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  first.emit(FakeHls.Events.MANIFEST_PARSED, { levels: first.levels });
+
+  await provider.load();
+  const second = currentFakeHls();
+  second.levels = [{ height: 360, width: 640, bitrate: 800_000 }];
+  second.emit(FakeHls.Events.MANIFEST_PARSED, { levels: second.levels });
+
+  first.levels = [{ height: 144, width: 256, bitrate: 100_000 }];
+  first.emitLevelsUpdated();
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [{ id: 'hls:360x640@800000' }]
+  });
+});
+
+// Without the `?? null`, an out-of-range index emits `quality: undefined`,
+// which core reads as "no change" — so the previous rung would show as active
+// forever.
+test('reports no rendition when hls.js switches to an index outside the ladder', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  hls.emit(FakeHls.Events.LEVEL_SWITCHED, { level: 3 });
+
+  expect(patches.at(-1)).toEqual({ quality: null });
+});
+
+// The restart clear is otherwise asserted only through its emitted patch, so
+// the two internal assignments could be deleted. Then a restarted ladder that
+// happens to repeat the rung would re-publish a selection nobody made.
+test('does not resurrect a held selection when the restarted ladder repeats the rung', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+  first.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  first.emit(FakeHls.Events.MANIFEST_PARSED, { levels: first.levels });
+  await provider.selectQuality?.('hls:720x1280@2000000');
+
+  await expect(provider.retry?.()).resolves.toEqual({ ok: true });
+  const second = currentFakeHls();
+  second.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  second.emit(FakeHls.Events.MANIFEST_PARSED, { levels: second.levels });
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [{ id: 'hls:720x1280@2000000' }],
+    selectedQualityId: null
+  });
+});
+
+// The restart guard's selection half: a rung selected against a levels array
+// that was never enumerated leaves the list empty and the selection set.
+test('clears a held selection on restart even when the ladder was never enumerated', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  await provider.selectQuality?.('hls:720x1280@2000000');
+
+  await provider.load();
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [],
+    selectedQualityId: null,
+    capabilities: {
+      selectQuality: { status: 'unknown', reason: 'provider-check' }
+    }
+  });
+});
+
+test('derives an id for a level carrying no dimensions or bitrate at all', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [{}];
+
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [{ id: 'hls:-x-@-', height: null, width: null, bitrate: null }]
+  });
 });
