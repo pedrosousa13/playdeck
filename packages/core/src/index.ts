@@ -634,6 +634,12 @@ export class PlayerController {
   #hasAutoplayConfigurationError = false;
   #autoplayConfigurationRevision = 0;
   #autoplayAttemptGeneration: number | undefined;
+  // The generation whose `load()` has run. No play command may be issued before
+  // it: `load()` aborts a play already in flight, per the HTML media spec. This
+  // is reachable because a provider may report ready from inside `attach()` —
+  // `provider-native` does exactly that when the media already has metadata —
+  // while `load()` is only queued once `attach()` returns (#87).
+  #loadedGeneration: number | undefined;
   #pendingPlaybackOrigin:
     | {
         readonly generation: number;
@@ -796,6 +802,13 @@ export class PlayerController {
       .then(() => {
         if (generation !== this.#generation) return;
         return provider.load();
+      })
+      .then(() => {
+        if (generation !== this.#generation) return;
+        this.#loadedGeneration = generation;
+        // A provider that reported ready during `attach()` had its autoplay
+        // attempt declined for being pre-load; this is that attempt's turn.
+        this.#synchronizeAutoplay();
       })
       .catch((cause: unknown) =>
         this.#handleLifecycleFailure(cause, generation)
@@ -1090,7 +1103,10 @@ export class PlayerController {
       this.#hasAutoplayConfigurationError ||
       this.#state.lifecycle !== 'ready' ||
       this.#state.activation !== 'ready' ||
-      this.#autoplayAttemptGeneration === generation
+      this.#autoplayAttemptGeneration === generation ||
+      // Declined rather than dropped: the load chain re-runs this once `load()`
+      // has resolved for this generation (#87).
+      this.#loadedGeneration !== generation
     ) {
       return;
     }
