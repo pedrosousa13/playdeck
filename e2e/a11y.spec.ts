@@ -220,3 +220,72 @@ for (const reflow of reflowCases) {
     ).toBe(true);
   });
 }
+
+// Measured identical on Chromium, Firefox and WebKit. `Player.Controls`
+// defaults to `tabIndex={0}`, which is why the region itself is the first
+// stop. Both the CaptionsMenu and the SettingsMenu trigger carry
+// `data-reely-part="settings-menu-trigger"` — CaptionsMenu is a preset over
+// SettingsMenu — so the two consecutive entries are not a duplicate.
+const tabOrder = [
+  'controls',
+  'seek-slider-input',
+  'play-button',
+  'mute-button',
+  'volume-slider',
+  'captions-button',
+  'settings-menu-trigger',
+  'settings-menu-trigger',
+  'pip-button',
+  'airplay-button',
+  'fullscreen-button'
+] as const;
+
+const focusedPart = (page: Page) =>
+  page.evaluate(
+    () => document.activeElement?.getAttribute('data-reely-part') ?? null
+  );
+
+test('every control in the composition is reachable by Tab, in composed order', async ({
+  page
+}) => {
+  await page.goto(composition);
+  await expect(controls(page)).toBeVisible();
+  await page.evaluate(() => (document.body as HTMLElement).focus());
+
+  const observed: Array<string | null> = [];
+  for (let i = 0; i < tabOrder.length; i += 1) {
+    await page.keyboard.press('Tab');
+    observed.push(await focusedPart(page));
+  }
+
+  // Stops at `fullscreen-button` deliberately. Past the last control the
+  // engines diverge — Chromium and WebKit move focus out of the page to the
+  // browser chrome, Firefox under Playwright stays put — which is harness
+  // behaviour, not a focus trap in the composition.
+  expect(observed).toEqual([...tabOrder]);
+});
+
+test('the settings menu takes focus on open and gives it back on Escape', async ({
+  page
+}) => {
+  await page.goto(composition);
+  await expect(controls(page)).toBeVisible();
+
+  await settingsTrigger(page).focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(settingsMenu(page)).toHaveAttribute('data-reely-menu', 'open');
+  // The menu autofocuses its first item, so the scrollable container's own
+  // tabIndex={0} is never the landing spot.
+  await expect(
+    page.getByRole('menuitemradio', { name: '0.5×', exact: true })
+  ).toBeFocused();
+
+  await page.keyboard.press('Escape');
+  await expect(settingsMenu(page)).toHaveCount(0);
+  await expect(settingsTrigger(page)).toBeFocused();
+
+  // Focus went back to the trigger, not to <body>, so the Tab walk resumes
+  // from where it left off rather than restarting.
+  await page.keyboard.press('Tab');
+  await expect(page.locator('[data-reely-part="pip-button"]')).toBeFocused();
+});
