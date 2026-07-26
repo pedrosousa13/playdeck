@@ -121,4 +121,34 @@ Test 4's direct assertion matters: the axe equality alone would pass again if so
 
 ## What changed during implementation
 
-_(Filled in as deviations are found, per the convention in the #35 and #32 specs.)_
+Two deviations, both found by measurement rather than review.
+
+### 1. The control row is hidden, not unmounted — because unmounting it hit a library bug
+
+The Q2 ruling above proposes `{activation === 'ready' && error === null ? <Player.Controls …> : null}`. That is what was built first, and it broke `e2e/reference.spec.ts`'s captions test on WebKit — **6 runs out of 6, and 6/6 green with the gate disabled**, so not a flake.
+
+Instrumenting the example to expose the player snapshot showed the divergence exactly:
+
+```
+AFTER-CAPTIONS-CLICK
+  state.selectedTextTrackId  null          <- correct
+  button data-state          "on"          <- stale
+  native track mode          "disabled"    <- the command reached the media
+  captions-announcer text    ""            <- the component never saw a transition
+```
+
+Every other control (mute, play) updated on the same emits. Clicking anything else afterwards made the captions button catch up immediately, so the subscription was alive — **a single notification was dropped.** A control that subscribes to player state _after_ that state has already advanced can miss its next notification and render stale.
+
+That is a `usePlayerState` bug, not an example bug, and conditionally rendering controls is an ordinary consumer pattern. Filed separately rather than worked around silently.
+
+Switching to `hidden` sidesteps it and is better on its own merits: the subtree never unmounts, so there is no remount churn and no subscription to re-establish, and `hidden` still removes the row from layout, from the accessibility tree and from the tab order — everything SC 2.4.11 asks for.
+
+`hidden` needs `.reely-example [hidden] { display: none !important }` to work here. reely's overlay primitives carry inline `display` (`Captions` is `display: flex` from `captionsOverlayStyle`), and a non-important stylesheet rule cannot beat an inline one. This is one of the few honest uses of `!important`.
+
+### 2. Hiding the row collapsed the viewport below 420px
+
+`@media (max-width: 420px)` drops `aspect-ratio` so the in-flow control row is not clipped (#32's 1.4.10 fix). With the row hidden, the box has no in-flow content left and collapses to zero height — measured as the viewport resolving to `hidden` at 320px, so `ActivationButton` could not be clicked at all. `aspect-ratio: 16 / 9` is restored via `:has(.reely-example-controls[hidden])`: the reason for dropping it only exists while there is a visible row to clip.
+
+### 3. Blast radius was smaller than expected on the library side, larger on the example side
+
+The Q1 flip broke exactly one existing test — `index.test.tsx`'s poster-layer test, which pinned the old contract deliberately and was updated to the new one. No other library test moved. The example, by contrast, needed two unrelated fixes above.

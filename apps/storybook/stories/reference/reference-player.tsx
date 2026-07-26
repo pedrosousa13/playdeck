@@ -32,6 +32,14 @@ const layoutCss = `
   color: #e8edf4;
   font-family: system-ui, sans-serif;
 }
+/* The standard [hidden] reset, and it needs !important here rather than by
+   habit: reely's overlay primitives carry their own inline display (Captions
+   is display: flex from captionsOverlayStyle), and a non-important stylesheet
+   rule cannot beat an inline one. Without this, hidden is inert on exactly
+   the parts #89 needs it on. */
+.reely-example [hidden] {
+  display: none !important;
+}
 .reely-example-controls {
   position: absolute;
   inset: auto 0 0 0;
@@ -137,6 +145,16 @@ const layoutCss = `
   .reely-example {
     aspect-ratio: auto;
   }
+  /* ...unless there is no visible control row to clip. Dropping aspect-ratio
+     only makes sense while the in-flow row is what gives the box its height;
+     in the states where #89 hides that row (pre-activation, and while an
+     error surface owns the viewport) the box has no in-flow content at all
+     and collapses to zero height, taking the full-bleed overlay down with
+     it. Measured: the viewport resolved to hidden at 320px, so the
+     activation button could not be clicked. */
+  .reely-example:has(.reely-example-controls[hidden]) {
+    aspect-ratio: 16 / 9;
+  }
   .reely-example-controls {
     position: relative;
   }
@@ -239,8 +257,33 @@ export const ReferencePlayer = ({
     playing: snapshot.playback === 'playing',
     muted: snapshot.muted,
     fullscreen: snapshot.fullscreen,
-    pictureInPicture: snapshot.pictureInPicture
+    pictureInPicture: snapshot.pictureInPicture,
+    activation: snapshot.activation,
+    errored: snapshot.error !== null
   }));
+  // #89. A full-bleed, pointer-capturing overlay owns the viewport in exactly
+  // two situations: `ActivationButton` before activation (a real button at
+  // `inset: 0; z-index: 30`) and `ErrorDisplay` while an error exists (an
+  // opaque surface at 40). Content underneath one of them is invisible and
+  // unclickable but still tabbable and still announced, which is WCAG 2.2
+  // SC 2.4.11 — so the layer below is taken out of the page entirely.
+  //
+  // Both conditions are the negations of the overlays' own render gates, so
+  // this cannot drift out of sync with them. `LoadingIndicator` is excluded
+  // on purpose: it sets `pointer-events: none`, so controls beneath it stay
+  // operable.
+  //
+  // `hidden`, not a conditional render, and the difference is load-bearing.
+  // Unmounting the row means it remounts on activation, and a control that
+  // subscribes to player state *after* that state has already advanced can
+  // miss the next notification and render stale — measured on WebKit as a
+  // captions button stuck reading `on` after its own click had already set
+  // `selectedTextTrackId` to null, 6 runs out of 6. That is a library bug
+  // (filed separately), not something this example should have to work
+  // around; keeping the subtree mounted sidesteps it and is cheaper anyway.
+  // `hidden` still removes the row from layout, from the a11y tree and from
+  // the tab order, which is all SC 2.4.11 asks for.
+  const overlayOwnsViewport = state.activation !== 'ready' || state.errored;
 
   return (
     <>
@@ -278,6 +321,7 @@ export const ReferencePlayer = ({
         <Player.Controls
           aria-label="Video player controls"
           className="reely-example-controls"
+          hidden={overlayOwnsViewport}
         >
           <div className="reely-example-row">
             <Player.Time type="current" />
@@ -323,8 +367,11 @@ export const ReferencePlayer = ({
         </Player.Controls>
         {/* After Controls, not before: Captions and Controls share z-index 20
             (#32), so the later sibling wins the tie. Captions used to lose it
-            here, rendering caption text underneath the control bar. */}
-        <Player.Captions />
+            here, rendering caption text underneath the control bar. Hidden
+            under the same condition as Controls: cue text below an opaque
+            error surface is unreadable, and leaves the same
+            unresolvable-background residue the control row did. */}
+        <Player.Captions hidden={overlayOwnsViewport} />
       </Player.Viewport>
     </>
   );

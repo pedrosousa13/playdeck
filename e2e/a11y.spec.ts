@@ -40,14 +40,16 @@ const states: ReadonlyArray<{
   readonly knownIncomplete?: readonly string[];
 }> = [
   // idle: Player.ActivationButton is a real, full-viewport "tap anywhere to
-  // play" surface while idle (position: absolute; inset: 0; z-index: 30, not
-  // overridable via its style prop) — genuinely rendered and meaningful,
-  // unlike LoadingIndicator's empty idle case, so it cannot be visually
-  // hidden the same way. It geometrically outranks the time row underneath
-  // it; axe reports this as color-contrast/bgOverlap, a stacking-order
-  // determination independent of either element's background color. Not
-  // this example's to fix.
-  { name: 'idle', url: story('idle'), knownIncomplete: ['color-contrast'] },
+  // play" surface while idle (position: absolute; inset: 0; z-index: 30) —
+  // genuinely rendered and meaningful, unlike LoadingIndicator's empty idle
+  // case, so it cannot be visually hidden the same way. It used to carry a
+  // color-contrast/bgOverlap entry because the example rendered the control
+  // row underneath it; #89 ruled that a composition defect rather than a
+  // primitive one — content under a pointer-capturing overlay is unreachable
+  // but still tabbable — so the row is no longer rendered there and the
+  // state is clean. The focus-reachability test below is what actually pins
+  // that; this entry going away is the consequence.
+  { name: 'idle', url: story('idle') },
   { name: 'playing', url: story('playing') },
   { name: 'paused', url: composition },
   { name: 'captions-on', url: composition },
@@ -66,17 +68,11 @@ const states: ReadonlyArray<{
   },
   { name: 'blocked-autoplay', url: story('blocked-autoplay') },
   // error: Player.ErrorDisplay is a real, full-viewport error surface while
-  // an error exists (position: absolute; inset: 0; z-index: 40, not
-  // overridable via its style prop) — by design, above everything else,
-  // including the time row underneath it. That is color-contrast/bgOverlap,
-  // a stacking-order determination independent of either element's
-  // background color, so no CSS change here resolves it. Not this example's
-  // to fix.
-  {
-    name: 'error',
-    url: story('error-state'),
-    knownIncomplete: ['color-contrast']
-  }
+  // an error exists (position: absolute; inset: 0; z-index: 40) — by design,
+  // above everything else. Same #89 ruling as idle: the control row and the
+  // caption layer are no longer rendered beneath it, so nothing is left for
+  // axe to fail to resolve a background for.
+  { name: 'error', url: story('error-state') }
 ];
 
 // Scoped to the player. Storybook injects a hidden argstable
@@ -134,6 +130,80 @@ for (const state of states) {
     expect(results.incomplete.map((incomplete) => incomplete.id)).toEqual(
       state.knownIncomplete ?? []
     );
+  });
+}
+
+// WCAG 2.2 SC 2.4.11 Focus Not Obscured, asserted directly rather than
+// inferred (#89).
+//
+// `idle` and `error` are the two states where a full-bleed, *pointer-
+// capturing* overlay owns the viewport: `ActivationButton` is a real
+// `<button>` at `inset: 0; z-index: 30`, and `ErrorDisplay` is an opaque
+// surface at 40. Anything the example renders beneath one of them is
+// invisible and unclickable while still being tabbable and still being
+// announced — a keyboard user tabs into a play button that a click cannot
+// reach.
+//
+// Axe only ever saw the shadow of this: it reported `color-contrast`
+// (`bgOverlap`) on the time row, in `incomplete`, and said nothing about
+// focus at all. Both of those entries are gone from `knownIncomplete` above
+// now that the composition no longer renders the row underneath — but the
+// axe equality alone would go green again if someone re-rendered the row and
+// the overlay merely stopped being opaque. So the property is stated here as
+// what it actually is: reachability.
+//
+// `LoadingIndicator` is deliberately not in this set. It sets
+// `pointer-events: none`, so controls beneath it stay operable, and
+// `elementFromPoint` is blind to it anyway.
+for (const state of states.filter(
+  (candidate) => candidate.name === 'idle' || candidate.name === 'error'
+)) {
+  test(`no focusable control is obscured in the ${state.name} state`, async ({
+    page
+  }) => {
+    await page.goto(state.url);
+    await expect(page.locator('[data-reely-part="viewport"]')).toBeVisible();
+
+    const obscured = await page.evaluate(() => {
+      const viewport = document.querySelector('[data-reely-part="viewport"]')!;
+      const focusable = [
+        ...viewport.querySelectorAll<HTMLElement>(
+          'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ]
+        .filter((node) => !node.hasAttribute('disabled'))
+        // Not rendered at all (`display: none`, which is how the example
+        // takes the control row out of the page here) means not focusable
+        // and nothing to obscure. A zero-size box would also make the
+        // hit-test below meaningless rather than informative.
+        .filter((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+
+      return focusable
+        .map((node) => {
+          const rect = node.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            rect.left + rect.width / 2,
+            rect.top + rect.height / 2
+          );
+          return {
+            part: node.getAttribute('data-reely-part') ?? node.tagName,
+            label: node.getAttribute('aria-label'),
+            reached: hit !== null && (hit === node || node.contains(hit)),
+            resolvedTo:
+              hit?.getAttribute('data-reely-part') ?? hit?.tagName ?? null
+          };
+        })
+        .filter((result) => !result.reached);
+    });
+
+    expect(
+      obscured,
+      `every focusable element in the ${state.name} state must hit-test to ` +
+        `itself; these did not`
+    ).toEqual([]);
   });
 }
 
