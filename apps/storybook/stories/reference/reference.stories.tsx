@@ -381,9 +381,17 @@ export const BlockedAutoplay: Story = {
     }
   },
   play: async ({ canvas }) => {
-    await expect(
-      canvas.getByRole('button', { name: 'Play' })
-    ).toHaveAttribute('data-state', 'paused');
+    const playButton = canvas.getByRole('button', { name: 'Play' });
+    await expect(playButton).toHaveAttribute('data-state', 'paused');
+    // `data-state` mirrors `playback` alone, and 'paused' is also
+    // `createInitialPlayerState()`'s own default — true regardless of
+    // whether any of this story's overrides took effect. The load-bearing
+    // check is `data-autoplay-state`, which mirrors `state.autoplay`: it only
+    // reads 'blocked' because `autoplay: 'audible'` made the controller
+    // actually attempt to play, and the mock's rejecting `playResult` is what
+    // that attempt turns into 'blocked' (verified by editing each knob and
+    // re-running — see the task report).
+    await expect(playButton).toHaveAttribute('data-autoplay-state', 'blocked');
   }
 };
 
