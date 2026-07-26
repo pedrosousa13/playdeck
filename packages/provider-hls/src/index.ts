@@ -433,6 +433,8 @@ export const createHlsProvider = (
   const surfaceFatal = (error: PlayerError): void => {
     teardownHls();
     selectQualityAvailability = { status: 'unavailable', reason: 'provider' };
+    hlsQualityList = [];
+    hlsSelectedQualityId = null;
     emit(
       {
         lifecycle: 'error',
@@ -441,6 +443,8 @@ export const createHlsProvider = (
         buffering: false,
         seeking: false,
         quality: null,
+        qualities: [],
+        selectedQualityId: null,
         ...(lastCapabilities
           ? { capabilities: decorateCapabilities(lastCapabilities) }
           : {}),
@@ -664,6 +668,16 @@ export const createHlsProvider = (
 
   const startHlsJs = async (): Promise<CommandResult> => {
     const startGeneration = ++generation;
+    // Both `load()` and `retry()` route through here, so this is the one place
+    // a new engine instance's empty ladder has to be published: without it,
+    // state would keep advertising a dead instance's rungs until the new
+    // manifest parsed. Guarded because on a first load there is nothing to
+    // clear, and an unconditional patch would publish a no-op change.
+    if (hlsQualityList.length > 0 || hlsSelectedQualityId !== null) {
+      hlsQualityList = [];
+      hlsSelectedQualityId = null;
+      emit({ qualities: [], selectedQualityId: null });
+    }
     let Hls = hlsConstructor;
     if (!Hls) {
       try {
@@ -898,22 +912,27 @@ export const createHlsProvider = (
     },
     ...(engine === 'hls.js'
       ? {
-          selectQuality: async (
-            height: number | null
-          ): Promise<CommandResult> => {
+          selectQuality: async (id: string | null): Promise<CommandResult> => {
             const instance = hls;
             if (destroyed || !instance) {
               return { ok: false, reason: 'not-ready' };
             }
-            if (height === null) {
+            if (id === null) {
               instance.currentLevel = -1;
+              hlsSelectedQualityId = null;
+              emit({ selectedQualityId: null });
               return { ok: true };
             }
-            const index = instance.levels.findIndex(
-              (level) => level.height === height
+            // Resolved against a fresh derivation over the live `levels`
+            // array, so a rung hls.js has pruned is `unsupported` rather than
+            // a silent switch to whatever now occupies that index.
+            const index = hlsQualities(instance.levels).findIndex(
+              (quality) => quality.id === id
             );
             if (index === -1) return { ok: false, reason: 'unsupported' };
             instance.currentLevel = index;
+            hlsSelectedQualityId = id;
+            emit({ selectedQualityId: id });
             return { ok: true };
           },
           selectTextTrack: async (
