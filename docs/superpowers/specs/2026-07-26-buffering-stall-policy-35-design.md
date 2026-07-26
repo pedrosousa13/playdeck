@@ -28,7 +28,7 @@ Measured on `main` @ `d317df7`, not assumed:
 
 On YouTube the user gets a stopped playhead with no explanation; on Vimeo the ranges are a progress bar wearing a buffer's clothes. So the slider needs an explicit stall signal, not an inferred one.
 
-Fixing the two adapters is the strictly better UX and is **deliberately not done here** — #35 lists "provider-specific buffering quirks" as out of scope, and it would widen the branch into three more packages. Filed as a follow-up instead (see [Out of scope](#out-of-scope)).
+Fixing the two adapters is the strictly better UX and is **deliberately not done here** — #35 lists "provider-specific buffering quirks" as out of scope, and it would widen the branch into three more packages. Filed as [#91](https://github.com/pedrosousa13/reely/issues/91) instead.
 
 ## The policy
 
@@ -82,7 +82,9 @@ Consequences, stated as a table because these are the cases the tests assert:
 <div data-reely-part="seek-slider" data-state="ready" data-buffering="true">
 ```
 
-Driven by the **same debounced hook** as `LoadingIndicator`, so the two can never disagree or flicker independently of each other.
+Driven by the **same debounced hook** as `LoadingIndicator` — same signal, same thresholds, same transitions, so the two move together.
+
+Each component holds its own hook instance rather than sharing one value through context. Both derive from identical state in the same React commit and schedule identical timers, so they agree in every case that occurs in practice. The honest exception: `SeekSlider` renders `null` until the seek capability is available, so a slider that mounts *mid-stall* starts its own delay from its mount rather than from the stall's start, and can lag the indicator by up to 500 ms once. Sharing through context would close that gap at the cost of new context plumbing in `Root` for a case with no user-visible consequence — not worth it.
 
 A separate attribute, not a third `data-state` value: `data-state` on this part means "is there a seek window", and conflating two orthogonal axes into one attribute makes `[data-state="ready"]` stop matching during a stall, silently breaking every existing consumer rule. Always present with a value (`"true"` | `"false"`), matching the repo's existing convention of `data-state={muted ? 'muted' : 'unmuted'}` over conditionally-omitted attributes.
 
@@ -188,10 +190,9 @@ Three assertions currently depend on the undebounced behaviour. Each is updated,
 
 ## Theme
 
-Two rules in `packages/react/theme.css`, inside `@layer reely` and `:where()`-wrapped for specificity zero, as `packages/react/test/theme.test.ts` enforces:
+**One** rule in `packages/react/theme.css`, inside `@layer reely` and `:where()`-wrapped for specificity zero, as `packages/react/test/theme.test.ts` enforces: `[data-buffering='true']` on `seek-slider` dims the buffered ranges, so a stall reads on the slider in the shipped theme.
 
-- `[data-state='buffering']` on `loading-indicator` — no new geometry, per policy 1.
-- `[data-buffering='true']` on `seek-slider` — dims the buffered ranges so a stall reads on the slider in the shipped theme.
+No companion rule for `loading-indicator[data-state='buffering']`. The theme sets only `color` on that part (`theme.css:98`) and policy 1 forbids new geometry, so a second rule would have nothing meaningful to declare — an empty rule is noise, not a contract.
 
 **Motion-free.** A pulse would be the obvious choice and is deliberately avoided: it would need a `prefers-reduced-motion` carve-out, and #32's WCAG work has just landed. A static opacity change carries the same information with no reduced-motion surface.
 
@@ -203,7 +204,7 @@ Two rules in `packages/react/theme.css`, inside `@layer reely` and `:where()`-wr
 
 ## Out of scope
 
-- **Provider `buffered` gaps** — YouTube emits none, Vimeo fabricates. Real UX debt, explicitly out of scope per #35 ("provider-specific buffering quirks"). To be filed as a follow-up issue.
+- **Provider `buffered` gaps** — YouTube emits none, Vimeo fabricates. Real UX debt, explicitly out of scope per #35 ("provider-specific buffering quirks"). Filed as [#91](https://github.com/pedrosousa13/reely/issues/91).
 - **Live-edge stall behaviour** — #14.
 - **Auto-hide** — was preset-scoped, dropped with #9's deferral. No primitive implements it (`grep autoHide packages/react/src` is empty).
 - **Configurable thresholds as props** — see policy 2.
