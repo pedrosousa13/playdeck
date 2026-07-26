@@ -271,11 +271,40 @@ export const createNativeProvider = (
     media.getAttribute('x-webkit-airplay') === 'deny' ||
     webkitMedia.disableRemotePlayback === true;
 
+  // Whether WebKit has told us a playback target exists. Starts false: Apple's
+  // guidance is to show an AirPlay control only once the availability event
+  // reports a route, and every native Apple player behaves that way, so an
+  // always-present button reads as broken rather than as a feature (#71).
+  //
+  // `unavailable`, not `unknown`, for the pre-event window. `unknown` promises
+  // a verdict is coming, and on a machine that never sees a receiver the event
+  // never fires — which is exactly the trap `selectQuality` used to be in
+  // (see its comment below): a consumer gating UI on it waits forever. This
+  // says what is true right now and flips the moment that stops being true.
+  let airPlayRouteAvailable = false;
+  const airPlayNoRoute: Availability = {
+    status: 'unavailable',
+    reason: 'provider'
+  };
+
   const airPlayAvailability = (): Availability => {
     if (typeof webkitMedia.webkitShowPlaybackTargetPicker !== 'function') {
       return unsupported;
     }
-    return airPlayDisallowed() ? policyDisallowed : available;
+    if (airPlayDisallowed()) return policyDisallowed;
+    return airPlayRouteAvailable ? available : airPlayNoRoute;
+  };
+
+  const onAirPlayTargetAvailabilityChange = (event: Event): void => {
+    const next =
+      (event as { readonly availability?: string }).availability ===
+      'available';
+    // WebKit re-announces on route changes that leave availability unchanged;
+    // recomputing capabilities on each would push an identical patch to every
+    // subscriber and wake every capability-gated control for nothing.
+    if (next === airPlayRouteAvailable) return;
+    airPlayRouteAvailable = next;
+    emit({ capabilities: mediaCapabilities() });
   };
 
   const textTracks: NativeTextTracks = createNativeTextTracks(
@@ -541,6 +570,10 @@ export const createNativeProvider = (
       'webkitpresentationmodechanged',
       onWebKitPresentationModeChange
     );
+    media.addEventListener(
+      'webkitplaybacktargetavailabilitychanged',
+      onAirPlayTargetAvailabilityChange
+    );
   };
 
   const removeListeners = (): void => {
@@ -575,6 +608,10 @@ export const createNativeProvider = (
     media.removeEventListener(
       'webkitpresentationmodechanged',
       onWebKitPresentationModeChange
+    );
+    media.removeEventListener(
+      'webkitplaybacktargetavailabilitychanged',
+      onAirPlayTargetAvailabilityChange
     );
   };
 

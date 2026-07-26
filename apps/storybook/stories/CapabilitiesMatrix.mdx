@@ -21,12 +21,35 @@ renders nothing.
 | `Player.Time`             | — (display)                                           | always                                |
 | `Player.Controls`         | `seek`, `setVolume`, `fullscreen`, `pictureInPicture` | container; children gate individually |
 
-`airPlay` reports whether the engine exposes a route picker, not whether there
-is anything to cast to: it resolves `available` when WebKit's
-`webkitShowPlaybackTargetPicker` exists and the media does not opt out via
-`x-webkit-airplay="deny"` or `disableRemotePlayback`. So `Player.AirPlayButton`
-renders nothing outside Safari and iOS, but inside them it renders even when no
-receiver is on the network, and opens an empty picker.
+`airPlay` reports whether there is somewhere to cast to, resolved in this
+order (#71):
+
+| Condition                                                         | `airPlay`                  |
+| ----------------------------------------------------------------- | -------------------------- |
+| No `webkitShowPlaybackTargetPicker` — anything but Safari and iOS | `unavailable` / `browser`  |
+| `x-webkit-airplay="deny"` or `disableRemotePlayback`              | `unavailable` / `policy`   |
+| No playback target announced yet, or the last one went away       | `unavailable` / `provider` |
+| WebKit announced an available playback target                     | `available`                |
+
+The third row is the new one: `airPlay` used to resolve `available` on the
+picker API merely existing, so `Player.AirPlayButton` rendered inside Safari
+even with no receiver on the network and opened an empty picker. It now
+follows `webkitplaybacktargetavailabilitychanged`, which is Apple's own
+guidance and what every native Apple player does.
+
+Two consequences worth knowing:
+
+- **It is live.** Plugging a receiver into the network makes the button appear
+  without a reload, and unplugging it takes the button away again.
+- **`unavailable`, not `unknown`, before the first announcement.** `unknown`
+  promises a verdict is coming; on a machine that never sees a receiver the
+  event never fires, and a consumer gating UI on it would wait forever.
+
+`@reely/provider-hls` delegates to the native provider, so HLS inherits all of
+this. The command itself is unchanged: `showAirPlayPicker()` still forwards to
+WebKit whenever the API exists and policy permits, so a consumer driving it
+directly is not blocked by the capability — the capability governs what
+renders, not what is callable.
 
 `selectTextTrack` gates `Player.CaptionsButton` — see the Captions docs.
 
