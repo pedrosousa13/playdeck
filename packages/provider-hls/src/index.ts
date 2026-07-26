@@ -702,6 +702,13 @@ export const createHlsProvider = (
 
   const startHlsJs = async (): Promise<CommandResult> => {
     const startGeneration = ++generation;
+    // Starting owns teardown, rather than each caller remembering it. `retry()`
+    // used to do this itself and `load()` did not, so a second `load()` left
+    // the previous instance attached with its listeners live, still loading
+    // fragments (#85). Every handler is generation- and identity-guarded, so
+    // nothing was corrupted — it was a resource leak, not a state bug. A no-op
+    // on a first load, where there is nothing to tear down.
+    teardownHls();
     // Both `load()` and `retry()` route through here, so this is the one place
     // a new engine instance's empty ladder has to be published: without it,
     // state would keep advertising a dead instance's rungs until the new
@@ -963,7 +970,7 @@ export const createHlsProvider = (
       hlsHasExplicitTextTrackSelection = false;
       hlsParsedCues = [];
       emitHlsCues([]);
-      teardownHls();
+      // No `teardownHls()` here: `startHlsJs()` owns it now (#85).
       return startHlsJs();
     },
     ...(engine === 'hls.js'
