@@ -504,6 +504,27 @@ test('withdraws the quality capability while the restarted ladder is empty', asy
   });
 });
 
+// retry() sets this verdict itself before restarting, so it cannot prove the
+// restart path owns it. A second load() — reachable for a consumer holding an
+// adapter from createHlsProvider directly — is the case that can.
+test('withdraws the quality capability when a second load empties the ladder', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+  first.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  first.emit(FakeHls.Events.MANIFEST_PARSED, { levels: first.levels });
+
+  await provider.load();
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [],
+    capabilities: {
+      selectQuality: { status: 'unknown', reason: 'provider-check' }
+    }
+  });
+});
+
 test('clears the ladder when quality selection is downgraded by a fatal error', async () => {
   const { patches, provider } = createHarness(stubMseOnlySupport);
   await provider.attach();
