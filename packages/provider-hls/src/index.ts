@@ -298,13 +298,16 @@ export const createHlsProvider = (
   let hlsLiveHint: boolean | undefined;
   let liveState: PlayerLiveState = null;
   let liveSeekMeaningful = true;
+  // hls.js quality state: the derived ladder and the held selection (`null` is
+  // auto). Unlike captions there is no "explicitly chosen" flag — see
+  // `refreshHlsQualities` for why quality needs no default-track rule.
+  let hlsQualityList: PlayerQuality[] = [];
+  let hlsSelectedQualityId: string | null = null;
   // hls.js text-track state — mirrors packages/provider-native/src/text-tracks.ts's
   // shape (held selection + "has the user explicitly chosen" flag so a later
   // SUBTITLE_TRACKS_UPDATED can tell "keep the held id" apart from "apply the
   // default-track rule"), but keyed to hls.js's own subtitleTracks/subtitleTrack
   // surface instead of `<track>` elements.
-  let hlsQualityList: PlayerQuality[] = [];
-  let hlsSelectedQualityId: string | null = null;
   let hlsTextTracks: TextTrack[] = [];
   let hlsSelectedTextTrackId: string | null = null;
   let hlsHasExplicitTextTrackSelection = false;
@@ -678,7 +681,21 @@ export const createHlsProvider = (
     if (hlsQualityList.length > 0 || hlsSelectedQualityId !== null) {
       hlsQualityList = [];
       hlsSelectedQualityId = null;
-      emit({ qualities: [], selectedQualityId: null });
+      // The capability and the list are one claim and may not disagree, even
+      // for the window before the new manifest parses. `retry()` already sets
+      // this same verdict; a plain second `load()` does not, so it is set here
+      // rather than left to the caller.
+      selectQualityAvailability = {
+        status: 'unknown',
+        reason: 'provider-check'
+      };
+      emit({
+        qualities: [],
+        selectedQualityId: null,
+        ...(lastCapabilities
+          ? { capabilities: decorateCapabilities(lastCapabilities) }
+          : {})
+      });
     }
     let Hls = hlsConstructor;
     if (!Hls) {

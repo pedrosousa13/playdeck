@@ -480,6 +480,30 @@ test('clears the ladder and the selection when the engine restarts', async () =>
   );
 });
 
+// The capability and the list are one claim, so they may not disagree even
+// briefly. Restarting empties the ladder, and until the new manifest parses
+// the check genuinely has not happened again.
+test('withdraws the quality capability while the restarted ladder is empty', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+  first.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  first.emit(FakeHls.Events.MANIFEST_PARSED, { levels: first.levels });
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { selectQuality: { status: 'available' } }
+  });
+
+  await expect(provider.retry?.()).resolves.toEqual({ ok: true });
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [],
+    capabilities: {
+      selectQuality: { status: 'unknown', reason: 'provider-check' }
+    }
+  });
+});
+
 test('clears the ladder when quality selection is downgraded by a fatal error', async () => {
   const { patches, provider } = createHarness(stubMseOnlySupport);
   await provider.attach();
