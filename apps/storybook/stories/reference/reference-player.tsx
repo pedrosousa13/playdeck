@@ -299,7 +299,7 @@ const sources = [
   {
     id: 'hls',
     label: 'HLS',
-    source: { type: 'hls', src: '/hls/master.m3u8', engine: 'hls.js' }
+    source: { type: 'hls', src: '/hls/master.m3u8' }
   },
   {
     id: 'youtube',

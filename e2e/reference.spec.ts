@@ -83,9 +83,14 @@ test('the settings menu changes the playback rate on the media element', async (
     .toBe(1.5);
 });
 
-test('swapping MP4 to HLS keeps the controls live and populates the quality ladder', async ({
-  page
-}) => {
+// Shared by both HLS-swap tests below. The example no longer forces an
+// engine (`source: { type: 'hls', src: '/hls/master.m3u8' }`), so this swap
+// lets each browser resolve HLS the way a consumer's would, via
+// `HTMLVideoElement.canPlayType`. Measured directly (see the quality-ladder
+// test below): both Chromium and WebKit report non-empty support for the HLS
+// MIME type and resolve to the native engine; only Firefox reports none and
+// resolves to hls.js.
+const swapToHls = async (page: Page): Promise<void> => {
   await page.goto(story);
   await activationButton(page).click();
   await played(page);
@@ -97,10 +102,37 @@ test('swapping MP4 to HLS keeps the controls live and populates the quality ladd
   await expect(activationButton(page)).toBeVisible();
   await activationButton(page).click();
   await played(page);
+};
+
+test('swapping MP4 to HLS keeps the controls live', async ({ page }) => {
+  await swapToHls(page);
 
   // The controls survived the swap on the same Root.
   await muteButton(page).click();
   await expect(muteButton(page)).toHaveAttribute('data-state', 'muted');
+});
+
+test('swapping MP4 to HLS populates the quality ladder', async ({
+  browserName,
+  page
+}) => {
+  // Only the hls.js engine populates `PlayerState.qualities` (see
+  // provider-hls); native HLS leaves it empty by design, so the menu section
+  // is legitimately absent there. The example no longer forces `engine:
+  // 'hls.js'` (that put an hls.js flow on WebKit, see e2e/hls.spec.ts:28,46-49
+  // for why this repo doesn't rely on that combination) — auto-detection asks
+  // each browser's own `HTMLVideoElement.canPlayType`, and measured directly:
+  // Chromium and WebKit both report non-empty support for the HLS MIME type,
+  // so `selectHlsEngine` resolves them to 'native' the same as forced native
+  // would; only Firefox reports no native support and resolves to hls.js.
+  // Scoped to the one browser where that's actually true, rather than
+  // Chromium as `hls.spec.ts:28`'s *forced*-engine comment might suggest.
+  test.skip(
+    browserName !== 'firefox',
+    "Only the hls.js engine enumerates PlayerState.qualities; under auto-detection, Firefox is the only project whose canPlayType reports no native HLS support, so it's the only one that resolves to hls.js here."
+  );
+
+  await swapToHls(page);
 
   // #81's ladder, from the fixture manifest's two variants (320x180, 160x90).
   // Observed labels under HLS in Task 4: 'Auto (180p)', '90p', '180p'. Assert

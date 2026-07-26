@@ -88,9 +88,13 @@ primitives' central promise:
   downgrades only if a request actually fails. So the same composition shows a
   PiP button on one iframe provider and not the other, without the example
   branching on provider anywhere.
-- **The quality group appears only under HLS.** Only the hls.js engine
-  populates `PlayerState.qualities`; native MP4 reports the `selectQuality`
-  capability unavailable, so that whole menu section is absent.
+- **The quality group appears only under HLS, on browsers that resolve to
+  hls.js.** Only the hls.js engine populates `PlayerState.qualities`. The
+  example no longer forces an engine, so each browser resolves HLS via its own
+  `canPlayType`: MP4 never has a quality ladder regardless, and neither does
+  HLS on a browser that reports native HLS support — which, measured
+  directly, is Chromium and WebKit both, leaving Firefox as the one where the
+  menu section actually appears.
 
 The lesson for anyone testing against these: a capability assertion needs an
 explicit settle condition only when the capability's _initial_ value differs
