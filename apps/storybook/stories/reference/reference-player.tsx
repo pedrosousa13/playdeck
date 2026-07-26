@@ -18,6 +18,10 @@ import { useState, type ReactElement } from 'react';
 // not do, and a plain side-effect import would leak the theme into every other
 // story's document.
 const layoutCss = `
+/* This whole block is one JS template literal (it is delimited by the
+   backtick right above). Do not put a backtick anywhere in here, including
+   markdown-style code-quoting in a comment - it silently closes the string
+   early and breaks the build with no warning at this line. */
 .reely-example {
   position: relative;
   width: 100%;
