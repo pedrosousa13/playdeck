@@ -17,14 +17,14 @@ Measured on `main` @ `d317df7`, not assumed:
 
 ## One measured fact that shapes the design
 
-**Buffered ranges are not a universal fallback.** The tempting cheap answer to "what does the seek slider show during a stall" is *nothing — the playhead freezes at the edge of a buffered range and that tells the story*. It does not, on half the providers:
+**Buffered ranges are not a universal fallback.** The tempting cheap answer to "what does the seek slider show during a stall" is _nothing — the playhead freezes at the edge of a buffered range and that tells the story_. It does not, on half the providers:
 
-| Provider | `buffered` |
-| --- | --- |
-| native | Real `TimeRanges` (`provider-native/src/index.ts:316,452`) |
-| hls | Real — `createNativeProvider` is delegated to (`provider-hls/src/index.ts:280`), so HLS inherits the `<video>` ranges |
-| youtube | **None emitted at all** |
-| vimeo | **Fabricated** single `[{start: 0, end: seconds}]` span from a progress event (`provider-vimeo/src/index.ts:544`) |
+| Provider | `buffered`                                                                                                            |
+| -------- | --------------------------------------------------------------------------------------------------------------------- |
+| native   | Real `TimeRanges` (`provider-native/src/index.ts:316,452`)                                                            |
+| hls      | Real — `createNativeProvider` is delegated to (`provider-hls/src/index.ts:280`), so HLS inherits the `<video>` ranges |
+| youtube  | **None emitted at all**                                                                                               |
+| vimeo    | **Fabricated** single `[{start: 0, end: seconds}]` span from a progress event (`provider-vimeo/src/index.ts:544`)     |
 
 On YouTube the user gets a stopped playhead with no explanation; on Vimeo the ranges are a progress bar wearing a buffer's clothes. So the slider needs an explicit stall signal, not an inferred one.
 
@@ -36,10 +36,12 @@ This section is what gets mirrored onto the issue to satisfy acceptance criterio
 
 ### 1. Initial load and mid-playback stall are distinct states with identical geometry
 
-Two `data-state` values, two default labels, one box. The primitive exposes the distinction; CSS decides whether the two *look* different:
+Two `data-state` values, two default labels, one box. The primitive exposes the distinction; CSS decides whether the two _look_ different:
 
 ```html
-<div data-reely-part="loading-indicator" data-state="loading-provider">Loading video</div>
+<div data-reely-part="loading-indicator" data-state="loading-provider">
+  Loading video
+</div>
 <div data-reely-part="loading-indicator" data-state="buffering">Buffering</div>
 ```
 
@@ -49,20 +51,20 @@ Two `data-state` values, two default labels, one box. The primitive exposes the 
 
 ### 2. Debounce: 500 ms show-delay, 500 ms minimum-visible, React-side
 
-**Two timers, not one.** A show-delay alone does not stop flicker — a stall lasting `delay + 50 ms` paints the indicator for 50 ms, and that *is* the flicker. The floor is what makes any painted indicator legible.
+**Two timers, not one.** A show-delay alone does not stop flicker — a stall lasting `delay + 50 ms` paints the indicator for 50 ms, and that _is_ the flicker. The floor is what makes any painted indicator legible.
 
-| Timer | Value | Meaning |
-| --- | --- | --- |
-| show-delay | 500 ms | `buffering` must be continuously true this long before anything is shown |
-| minimum-visible | 500 ms | once shown, the indicator stays shown at least this long |
+| Timer           | Value  | Meaning                                                                  |
+| --------------- | ------ | ------------------------------------------------------------------------ |
+| show-delay      | 500 ms | `buffering` must be continuously true this long before anything is shown |
+| minimum-visible | 500 ms | once shown, the indicator stays shown at least this long                 |
 
 Consequences, stated as a table because these are the cases the tests assert:
 
 | Stall duration | Painted for |
-| --- | --- |
-| 300 ms | nothing |
-| 700 ms | 500 ms |
-| 5 s | 5 s |
+| -------------- | ----------- |
+| 300 ms         | nothing     |
+| 700 ms         | 500 ms      |
+| 5 s            | 5 s         |
 
 **Why 500/500**: a healthy ABR rebuffer is typically sub-500 ms, so the common case paints nothing at all, while 500 ms stays well under the ~1 s mark where a user loses flow — a genuine stall is still acknowledged promptly. Worst-case latency before a real stall is admitted is 500 ms.
 
@@ -79,12 +81,16 @@ Consequences, stated as a table because these are the cases the tests assert:
 ### 3. Seek slider during a stall: `data-buffering`, from the same signal
 
 ```html
-<div data-reely-part="seek-slider" data-state="ready" data-buffering="true">
+<div
+  data-reely-part="seek-slider"
+  data-state="ready"
+  data-buffering="true"
+></div>
 ```
 
 Driven by the **same debounced hook** as `LoadingIndicator` — same signal, same thresholds, same transitions, so the two move together.
 
-Each component holds its own hook instance rather than sharing one value through context. Both derive from identical state in the same React commit and schedule identical timers, so they agree in every case that occurs in practice. The honest exception: `SeekSlider` renders `null` until the seek capability is available, so a slider that mounts *mid-stall* starts its own delay from its mount rather than from the stall's start, and can lag the indicator by up to 500 ms once. Sharing through context would close that gap at the cost of new context plumbing in `Root` for a case with no user-visible consequence — not worth it.
+Each component holds its own hook instance rather than sharing one value through context. Both derive from identical state in the same React commit and schedule identical timers, so they agree in every case that occurs in practice. The honest exception: `SeekSlider` renders `null` until the seek capability is available, so a slider that mounts _mid-stall_ starts its own delay from its mount rather than from the stall's start, and can lag the indicator by up to 500 ms once. Sharing through context would close that gap at the cost of new context plumbing in `Root` for a case with no user-visible consequence — not worth it.
 
 A separate attribute, not a third `data-state` value: `data-state` on this part means "is there a seek window", and conflating two orthogonal axes into one attribute makes `[data-state="ready"]` stop matching during a stall, silently breaking every existing consumer rule. Always present with a value (`"true"` | `"false"`), matching the repo's existing convention of `data-state={muted ? 'muted' : 'unmuted'}` over conditionally-omitted attributes.
 
@@ -98,7 +104,7 @@ These are not in #35's question list, but the state machine cannot be written wi
 
 2. **An already-visible indicator swaps its label with no delay.** `loading-provider → buffering` is a common transition (the provider becomes ready and immediately buffers its first segment). Re-running the show-delay across it would hide the indicator for 500 ms and bring it back — manufacturing the exact flicker this policy exists to remove.
 
-3. **The minimum-visible floor applies to any visible period, including `loading-provider`.** A fast provider load (warm cache, native provider) otherwise strobes the indicator for ~50 ms, which is the same defect wearing a different state name. A policy that says "no flicker" but exempts one of its two states is incoherent, and the carve-out costs *more* code than uniformity — two paths instead of one.
+3. **The minimum-visible floor applies to any visible period, including `loading-provider`.** A fast provider load (warm cache, native provider) otherwise strobes the indicator for ~50 ms, which is the same defect wearing a different state name. A policy that says "no flicker" but exempts one of its two states is incoherent, and the carve-out costs _more_ code than uniformity — two paths instead of one.
 
    **Cost, stated plainly**: on a fast load the indicator holds ~450 ms longer than the provider needs, over media that is already playing underneath. This is muted in practice because the primitive paints no background of its own — `theme.css` sets only `color` on this part (`packages/react/theme.css:98`) — so what holds is the consumer's spinner, not a scrim. A consumer who wants the loading state gone the instant the provider is ready can read `activation` directly via `usePlayerState`.
 
@@ -153,13 +159,13 @@ show(next):
   shown = next; floorExpired = false; floor timer -> floorExpired = true after 500 ms
 ```
 
-The floor timer is **not** restarted by a label swap (ruling 2) — it bounds the visible *period*, not the label. Both timers are cleared on unmount.
+The floor timer is **not** restarted by a label swap (ruling 2) — it bounds the visible _period_, not the label. Both timers are cleared on unmount.
 
 `buffering` while `activation` is `dormant`/`eligible` keeps today's behaviour (it shows), because today's condition is `activation !== 'error' && buffering`. Not changed, not tested beyond what already exists.
 
 ## Red first
 
-Every test below is watched fail before the implementation exists, and the *reason* it fails is checked — a test that passes its own red step for the wrong reason is a fake-green, and this repo has shipped two of them (`.superpowers/sdd/progress.md`, session 2026-07-26).
+Every test below is watched fail before the implementation exists, and the _reason_ it fails is checked — a test that passes its own red step for the wrong reason is a fake-green, and this repo has shipped two of them (`.superpowers/sdd/progress.md`, session 2026-07-26).
 
 Unit tests, `packages/react/test/activation.test.tsx`, with `vi.useFakeTimers()`:
 
@@ -180,11 +186,11 @@ Storybook stories cover the rendered states, not the timing (timing is not driva
 
 Three assertions currently depend on the undebounced behaviour. Each is updated, none is deleted — the subject of the assertion changed, so the assertion moves with it.
 
-| Location | What breaks | Fix |
-| --- | --- | --- |
-| `packages/react/test/activation.test.tsx:1352-1357` | emits `buffering: true`, then synchronously expects `data-state="buffering"` | advance 500 ms before asserting |
-| `packages/react/test/activation.test.tsx:1419-1435` | same, plus `emit({buffering:false})` then synchronously expects `idle` | advance past both the delay and the floor |
-| `apps/storybook/stories/loading-indicator.stories.tsx:55-72` | mounts with `buffering: true`; `waitFor` still resolves at ~500 ms inside its 1000 ms default, so it passes on luck | give `waitFor` an explicit timeout |
+| Location                                                     | What breaks                                                                                                         | Fix                                       |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `packages/react/test/activation.test.tsx:1352-1357`          | emits `buffering: true`, then synchronously expects `data-state="buffering"`                                        | advance 500 ms before asserting           |
+| `packages/react/test/activation.test.tsx:1419-1435`          | same, plus `emit({buffering:false})` then synchronously expects `idle`                                              | advance past both the delay and the floor |
+| `apps/storybook/stories/loading-indicator.stories.tsx:55-72` | mounts with `buffering: true`; `waitFor` still resolves at ~500 ms inside its 1000 ms default, so it passes on luck | give `waitFor` an explicit timeout        |
 
 `activation.test.tsx:1360` (terminal error) keeps passing unchanged, which is the ruling-4 check.
 

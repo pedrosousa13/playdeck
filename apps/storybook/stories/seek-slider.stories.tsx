@@ -92,9 +92,12 @@ export const Stalled: Story = {
     // A stall must persist 500ms before it is admitted (#35). The timeout is
     // explicit so this does not silently depend on waitFor's default being
     // larger than the delay.
-    await waitFor(() => expect(root).toHaveAttribute('data-buffering', 'true'), {
-      timeout: 2_000
-    });
+    await waitFor(
+      () => expect(root).toHaveAttribute('data-buffering', 'true'),
+      {
+        timeout: 2_000
+      }
+    );
     // The seek window is a separate axis and must not move during a stall.
     await expect(root).toHaveAttribute('data-state', 'ready');
   }
