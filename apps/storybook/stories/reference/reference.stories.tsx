@@ -355,9 +355,10 @@ export const Playing: Story = {
     // `PlayButton`'s accessible name flips to "Pause" once `playback` is
     // 'playing' (`aria-label={isPlaying ? 'Pause' : 'Play'}`), so the playing
     // button is found by that name, not by "Play".
-    await expect(
-      canvas.getByRole('button', { name: 'Pause' })
-    ).toHaveAttribute('data-state', 'playing');
+    await expect(canvas.getByRole('button', { name: 'Pause' })).toHaveAttribute(
+      'data-state',
+      'playing'
+    );
   }
 };
 
