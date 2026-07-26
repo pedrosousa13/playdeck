@@ -38,10 +38,17 @@ const states: ReadonlyArray<{
 // suppression by another name. If a best-practice rule fires on something
 // structurally unfixable in a page fragment, escalate it rather than
 // narrowing the tags.
+//
+// The scoping itself has a cost, and it's worth naming: `.include(...)` sets
+// axe's context to this subtree, so page-level rules (`bypass`) never run,
+// and `region`/`landmark-one-main`/`page-has-heading-one` downgrade to
+// inapplicable instead of running and passing. Those three are properties of
+// Storybook's bare iframe document (no `<main>`, no `<h1>`, no landmarks) —
+// not of reely — and a consumer's real page owns them, not a story fragment.
+// "Zero violations" below is therefore a claim about this subtree, not about
+// the host page.
 const scan = (page: Page) =>
-  new AxeBuilder({ page })
-    .include('[data-reely-part="viewport"]')
-    .analyze();
+  new AxeBuilder({ page }).include('[data-reely-part="viewport"]').analyze();
 
 for (const state of states) {
   test(`no accessibility violations in the ${state.name} state`, async ({
@@ -63,5 +70,18 @@ for (const state of states) {
     // The full violation objects, not just a count — a bare length assertion
     // tells whoever reads the CI log nothing about what broke.
     expect(results.violations).toEqual([]);
+
+    // `results.incomplete` (axe's needs-review bucket) is deliberately NOT
+    // asserted empty here. On the `composition`-backed states it always
+    // carries a `color-contrast` entry for the caption line and both time
+    // elements, with reason `bgOverlap`: `Player.LoadingIndicator` mounts an
+    // always-present, full-viewport `position: absolute; inset: 0` div at
+    // `z-index: 30` even while idle (by design, so a screen reader still gets
+    // the aria-live region when it later populates) — higher than every other
+    // layer in the composition, and not overridable via its `style` prop. Any
+    // text anywhere in this viewport therefore reads as "overlapped by
+    // another element" to axe, regardless of the example's own CSS. That is a
+    // primitive-level constraint, not something this story's layout controls,
+    // so it is reported (issue #32) rather than forced green here.
   });
 }

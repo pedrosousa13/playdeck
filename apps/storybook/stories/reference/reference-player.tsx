@@ -36,7 +36,12 @@ const layoutCss = `
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.25rem;
-  background: linear-gradient(to top, rgba(4, 6, 10, 0.94), rgba(4, 6, 10, 0));
+  /* Solid, not a gradient: a gradient background makes axe's color-contrast
+     check unable to resolve a single background color (#32), and a gradient
+     fading to transparent at its own top edge was also genuinely washing out
+     the time row's text. Opaque black reads the same as the gradient's
+     darkest stop, just consistent across the whole bar instead of fading. */
+  background: rgb(4, 6, 10);
 }
 .reely-example-row {
   display: flex;
@@ -221,7 +226,6 @@ export const ReferencePlayer = ({
           />
         </Player.Poster>
         <Player.Media textTracks={textTracks} />
-        <Player.Captions />
         <Player.LoadingIndicator />
         {/* The default child is a literal "Retry" text button; the example
             renders icons everywhere, so it supplies the render prop. */}
@@ -289,6 +293,10 @@ export const ReferencePlayer = ({
             </Player.FullscreenButton>
           </div>
         </Player.Controls>
+        {/* After Controls, not before: Captions and Controls share z-index 20
+            (#32), so the later sibling wins the tie. Captions used to lose it
+            here, rendering caption text underneath the control bar. */}
+        <Player.Captions />
       </Player.Viewport>
     </>
   );
