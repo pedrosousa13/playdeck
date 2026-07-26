@@ -156,7 +156,7 @@ const ExampleSettingsMenu = (): ReactElement | null => {
       <Player.SettingsMenuTrigger>
         <Player.SettingsIcon />
       </Player.SettingsMenuTrigger>
-      <Player.SettingsMenuContent className="reely-example-menu">
+      <Player.SettingsMenuContent className="reely-example-menu" tabIndex={0}>
         {showRates ? (
           <Player.MenuRadioGroup
             aria-label="Playback speed"

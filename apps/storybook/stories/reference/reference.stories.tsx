@@ -177,6 +177,13 @@ export const SettingsMenuSelection: Story = {
  * that rejected the command cannot show a selection that never took effect.
  * The mock adapter's setPlaybackRate resolves ok but emits nothing, so 1x stays
  * checked — asserted deliberately, so nobody "fixes" this into local state.
+ *
+ * Deliberately left open when the play function ends: it's the only story
+ * that leaves axe (`test: 'error'`) a settings menu to scan in its normal
+ * open state, which is the state #32 needs covered. Reachable by keyboard —
+ * `SettingsMenuContent`'s content root carries `tabIndex={0}` (in
+ * `reference-player.tsx`) precisely so the scrollable, arrow-key-only menu
+ * item list is Tab-reachable, not just mouse/arrow-reachable.
  */
 export const SettingsMenuFollowsState: Story = {
   play: async ({ canvas, userEvent }) => {
@@ -187,23 +194,29 @@ export const SettingsMenuFollowsState: Story = {
     await expect(
       canvas.getByRole('menuitemradio', { name: '1×' })
     ).toHaveAttribute('aria-checked', 'true');
-    // Close before the story ends: `.reely-example-menu` is a scrollable,
-    // arrow-key-only region (every item is `tabIndex={-1}`), so an open menu
-    // trips axe's scrollable-region-focusable rule. Left open only by this
-    // reopen-to-inspect step, not by anything a real user flow leaves behind.
-    await userEvent.keyboard('{Escape}');
-    await expect(canvas.queryByRole('menu')).toBeNull();
   }
 };
 
 /**
- * The captions toggle follows player state, not a local click flag: the mock
- * adapter has no `selectTextTrack`, so `controller.selectTextTrack` resolves
- * `{ ok: false, reason: 'unsupported' }`, nothing is emitted, and the button
- * stays reflecting `selectedTextTrackId` — observed by running this story,
- * not assumed.
+ * `CaptionsButton`'s label is derived purely from `selectedTextTrackId`
+ * (`index.tsx:1830`) — there is no local-state path to check it against, so
+ * this cannot be a "follows state, not local state" test the way
+ * `SettingsMenuFollowsState` is for playback rate.
+ *
+ * What this does prove: the mock adapter implements no `selectTextTrack`, so
+ * `controller.selectTextTrack` resolves `{ ok: false, reason: 'unsupported' }`
+ * and no state patch is emitted. Clicking therefore leaves the button
+ * unchanged — verified here, not assumed. That is enough to catch a real
+ * regression class (e.g. someone adding a local optimistic toggle so the
+ * label flips even when the command is rejected), which is why the assertion
+ * is kept.
+ *
+ * What this does NOT prove: that the click handler is wired at all — an
+ * accidentally-deleted `onClick` would produce an identical, unchanged DOM.
+ * The real toggle (selecting a track, seeing the label flip) is covered
+ * against live media by Playwright e2e in a later task, not here.
  */
-export const CaptionsToggle: Story = {
+export const CaptionsToggleUnderUnsupportedCommand: Story = {
   play: async ({ canvas, userEvent }) => {
     const button = canvas.getByRole('button', { name: 'Disable captions' });
     await expect(button).toHaveAttribute('data-state', 'on');
@@ -215,8 +228,9 @@ export const CaptionsToggle: Story = {
 };
 
 /**
- * Keyboard flow #32 will extend: every control in the row is reachable by Tab
- * in visual order, and the menu takes focus on open and gives it back.
+ * Keyboard flow #32 will extend: every control in the button row is reachable
+ * by Tab in composed order, and the settings menu takes focus on open and
+ * gives it back.
  */
 export const KeyboardFlow: Story = {
   play: async ({ canvas, userEvent }) => {
@@ -231,16 +245,33 @@ export const KeyboardFlow: Story = {
     await expect(
       canvas.getByRole('button', { name: 'Disable captions' })
     ).toHaveFocus();
+    await userEvent.tab();
+    await expect(
+      canvas.getByRole('button', { name: 'Captions' })
+    ).toHaveFocus();
+
+    const settingsTrigger = canvas.getByRole('button', { name: 'Settings' });
+    await userEvent.tab();
+    await expect(settingsTrigger).toHaveFocus();
 
     // Arrow-opening the settings menu lands on its first item, and Escape
-    // returns focus to the trigger.
-    const trigger = canvas.getByRole('button', { name: 'Settings' });
-    trigger.focus();
+    // returns focus to the trigger without disturbing the rest of the row.
     await userEvent.keyboard('{ArrowDown}');
     await expect(
       canvas.getByRole('menuitemradio', { name: '0.5×' })
     ).toHaveFocus();
     await userEvent.keyboard('{Escape}');
-    await expect(trigger).toHaveFocus();
+    await expect(settingsTrigger).toHaveFocus();
+
+    await userEvent.tab();
+    await expect(
+      canvas.getByRole('button', { name: 'Enter picture-in-picture' })
+    ).toHaveFocus();
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'AirPlay' })).toHaveFocus();
+    await userEvent.tab();
+    await expect(
+      canvas.getByRole('button', { name: 'Enter fullscreen' })
+    ).toHaveFocus();
   }
 };
