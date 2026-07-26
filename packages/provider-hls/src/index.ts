@@ -529,14 +529,16 @@ export const createHlsProvider = (
   const hlsQualities = (
     levels: ReadonlyArray<HlsLevelLike>
   ): PlayerQuality[] => {
-    const baseIds = levels.map(hlsQualityBaseId);
+    const rungs = levels.map((level) => ({
+      level,
+      baseId: hlsQualityBaseId(level)
+    }));
     const collisions = new Map<string, number>();
-    baseIds.forEach((baseId) =>
+    rungs.forEach(({ baseId }) =>
       collisions.set(baseId, (collisions.get(baseId) ?? 0) + 1)
     );
     const assigned = new Map<string, number>();
-    return levels.map((level, index) => {
-      const baseId = baseIds[index] as string;
+    return rungs.map(({ baseId, level }) => {
       let id = baseId;
       if ((collisions.get(baseId) ?? 0) > 1) {
         const ordinal = assigned.get(baseId) ?? 0;
