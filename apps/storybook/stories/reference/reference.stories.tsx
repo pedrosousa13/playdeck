@@ -292,6 +292,141 @@ export const KeyboardFlow: Story = {
 };
 
 /**
+ * Nothing has activated yet: no capability is available, so every
+ * capability-gated control (captions among them) is absent and the
+ * composition is the poster plus the activation overlay. `Player.PlayButton`
+ * is not capability-gated — it must stay actionable so a click can recover a
+ * stalled player — so it renders regardless; the activation overlay
+ * (`Player.ActivationButton`) is the idle-specific control asserted below.
+ * One of #32's seven axe states.
+ */
+export const Idle: Story = {
+  parameters: {
+    player: {
+      state: {
+        lifecycle: 'idle',
+        activation: 'dormant',
+        playback: 'paused',
+        provider: null,
+        duration: null,
+        currentTime: 0,
+        capabilities: createInitialPlayerState().capabilities,
+        captionRendering: 'unavailable',
+        textTracks: [],
+        selectedTextTrackId: null,
+        qualities: [],
+        selectedQualityId: null,
+        quality: null
+      } satisfies ProviderStatePatch,
+      cues: []
+    }
+  },
+  play: async ({ canvas }) => {
+    // The activation overlay only renders pre-activation (`ActivationButton`
+    // returns null once `activation === 'ready'`), so its presence proves the
+    // overrides above actually replaced `meta`'s staged (already-activated)
+    // state rather than merging into it.
+    await expect(
+      canvas.getByRole('button', { name: 'Play video' })
+    ).toBeInTheDocument();
+    // Captions are gated on the `selectTextTrack` capability, which the
+    // override above resets to unavailable — both toggle labels are absent.
+    await expect(
+      canvas.queryByRole('button', { name: 'Disable captions' })
+    ).toBeNull();
+    await expect(
+      canvas.queryByRole('button', { name: 'Enable captions' })
+    ).toBeNull();
+  }
+};
+
+/** Mid-playback. One of #32's seven axe states. */
+export const Playing: Story = {
+  parameters: {
+    player: {
+      state: {
+        ...stagedState,
+        playback: 'playing',
+        currentTime: 42
+      } satisfies ProviderStatePatch
+    }
+  },
+  play: async ({ canvas }) => {
+    // `PlayButton`'s accessible name flips to "Pause" once `playback` is
+    // 'playing' (`aria-label={isPlaying ? 'Pause' : 'Play'}`), so the playing
+    // button is found by that name, not by "Play".
+    await expect(canvas.getByRole('button', { name: 'Pause' })).toHaveAttribute(
+      'data-state',
+      'playing'
+    );
+  }
+};
+
+/**
+ * Autoplay was attempted and the browser refused it. The controls stay live —
+ * a blocked autoplay is a recoverable state a user clicks out of, not an
+ * error. One of #32's seven axe states.
+ */
+export const BlockedAutoplay: Story = {
+  parameters: {
+    player: {
+      // `rootProps.autoplay` collides with the decorator (Root re-applies its
+      // own `configureAutoplay`); the top-level knob is the supported route.
+      autoplay: 'audible',
+      playResult: { ok: false, reason: 'blocked' },
+      state: {
+        ...stagedState,
+        playback: 'paused',
+        autoplay: 'blocked'
+      } satisfies ProviderStatePatch
+    }
+  },
+  play: async ({ canvas }) => {
+    const playButton = canvas.getByRole('button', { name: 'Play' });
+    await expect(playButton).toHaveAttribute('data-state', 'paused');
+    // `data-state` mirrors `playback` alone, and 'paused' is also
+    // `createInitialPlayerState()`'s own default — true regardless of
+    // whether any of this story's overrides took effect. The load-bearing
+    // check is `data-autoplay-state`, which mirrors `state.autoplay`: it only
+    // reads 'blocked' because `autoplay: 'audible'` made the controller
+    // actually attempt to play, and the mock's rejecting `playResult` is what
+    // that attempt turns into 'blocked' (verified by editing each knob and
+    // re-running — see the task report).
+    await expect(playButton).toHaveAttribute('data-autoplay-state', 'blocked');
+  }
+};
+
+/**
+ * A fatal, recoverable source error. `ErrorDisplay` gates on
+ * `state.error !== null` (not on `lifecycle`), and `recoverable: true` is what
+ * makes the example's icon-only Retry button render. One of #32's seven axe
+ * states, and the only one that puts a `role="alert"` in the tree.
+ */
+export const ErrorState: Story = {
+  parameters: {
+    player: {
+      state: {
+        ...stagedState,
+        lifecycle: 'error',
+        playback: 'paused',
+        error: {
+          category: 'source',
+          fatal: true,
+          recoverable: true,
+          message: 'The video could not be loaded.'
+        }
+      } satisfies ProviderStatePatch
+    }
+  },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole('alert')).toBeInTheDocument();
+    await expect(
+      canvas.getByRole('button', { name: 'Retry' })
+    ).toBeInTheDocument();
+  }
+};
+
+/**
  * Real providers, real media, real network — excluded from the deterministic
  * story test suite (tagged `!test`), which is also what makes the mock
  * decorator step aside. `e2e/reference.spec.ts` drives this one.
@@ -299,4 +434,45 @@ export const KeyboardFlow: Story = {
 export const RealSources: StoryObj = {
   tags: ['real-playback', '!test'],
   render: () => <ReferencePlayerWithSources />
+};
+
+/**
+ * #32's announcement policy, structurally: the composed example puts exactly
+ * two live regions in the tree, and neither the time display nor the caption
+ * cue container is one. Time updates tick many times a second and cue text
+ * changes per cue — either in a live region would make a screen reader
+ * unusable during playback.
+ *
+ * `ErrorDisplay` adds a third (`role="alert"`), but only when
+ * `state.error !== null`, so it is absent here by construction and covered by
+ * the `ErrorState` story instead.
+ */
+export const LiveRegionInventory: Story = {
+  // `canvasElement`, not `canvas`: this walks the DOM directly, and scoping to
+  // the story's own root keeps Storybook's iframe chrome out of the inventory.
+  play: async ({ canvasElement }) => {
+    const regions = [
+      ...canvasElement.querySelectorAll(
+        '[aria-live], [role="status"], [role="alert"]'
+      )
+    ].map((node) => node.getAttribute('data-reely-part'));
+
+    await expect(regions).toEqual(['loading-indicator', 'captions-announcer']);
+
+    // The two elements whose content changes continuously during playback.
+    for (const part of ['time', 'captions']) {
+      const nodes = canvasElement.querySelectorAll(
+        `[data-reely-part="${part}"]`
+      );
+      // The composition renders two `time` elements (current and duration) and
+      // one `captions` container; an empty NodeList would make this loop a
+      // no-op, so assert it is not.
+      await expect(nodes.length).toBeGreaterThan(0);
+      for (const node of nodes) {
+        await expect(node.getAttribute('aria-live')).toBeNull();
+        await expect(node.getAttribute('role')).not.toBe('status');
+        await expect(node.getAttribute('role')).not.toBe('alert');
+      }
+    }
+  }
 };

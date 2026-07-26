@@ -1084,6 +1084,18 @@ export const ActivationButton = ({
   );
 };
 
+const visuallyHiddenStyle: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: 'hidden',
+  clip: 'rect(0, 0, 0, 0)',
+  whiteSpace: 'nowrap',
+  border: 0
+};
+
 export type LoadingIndicatorProps = ComponentPropsWithRef<'div'>;
 
 export const LoadingIndicator = ({
@@ -1103,7 +1115,13 @@ export const LoadingIndicator = ({
         : null;
   // The live region stays mounted (empty when idle) so a screen reader
   // announces the buffering/loading transition. A region that mounts already
-  // populated is typically not announced.
+  // populated is typically not announced. It must not, however, occupy the
+  // viewport while idle: a full-bleed `position: absolute; inset: 0` box outranks
+  // any consumer content beneath z-index 30, and even empty and
+  // `pointer-events: none`, that geometry alone makes automated color-contrast
+  // checks unable to resolve a background for any text in the player (#32).
+  // Visually hide it instead while idle, and only switch to the full-bleed
+  // overlay once there is something to actually show above the composition.
   return (
     <div
       {...props}
@@ -1111,13 +1129,17 @@ export const LoadingIndicator = ({
       data-reely-part="loading-indicator"
       data-state={active ?? 'idle'}
       role="status"
-      style={{
-        ...style,
-        position: 'absolute',
-        inset: 0,
-        zIndex: 30,
-        pointerEvents: 'none'
-      }}
+      style={
+        active
+          ? {
+              ...style,
+              position: 'absolute',
+              inset: 0,
+              zIndex: 30,
+              pointerEvents: 'none'
+            }
+          : { ...style, ...visuallyHiddenStyle, pointerEvents: 'none' }
+      }
     >
       {active
         ? (children ??
@@ -1801,18 +1823,6 @@ const resolveCaptionToggle = (
 ): string | null | undefined => {
   if (selectedId !== null) return null;
   return textTracks.find((t) => t.id === rememberedId)?.id ?? textTracks[0]?.id;
-};
-
-const visuallyHiddenStyle: CSSProperties = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  padding: 0,
-  margin: -1,
-  overflow: 'hidden',
-  clip: 'rect(0, 0, 0, 0)',
-  whiteSpace: 'nowrap',
-  border: 0
 };
 
 export type CaptionsButtonProps = ComponentPropsWithRef<'button'>;

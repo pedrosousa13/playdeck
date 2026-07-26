@@ -116,3 +116,138 @@ defect for audible autoplay one layer down, and is filed but not fixed here.
 
 Two gaps in one example is the argument for having it. Neither was reachable
 from unit tests that mock the thing being tested.
+
+## What #32 verifies here, and where
+
+Two axe runners, deliberately. `.storybook/preview.tsx` sets
+`a11y: { test: 'error' }`, so axe fails the Vitest story run on any violation
+for **every** story, primitive and composed — that is the authoring-time gate,
+and it is Chromium-only because `apps/storybook/vitest.config.ts` pins one
+browser instance. `e2e/a11y.spec.ts` adds `@axe-core/playwright` over the
+composed example's seven states in Chromium, Firefox and WebKit, scoped to
+`[data-reely-part="viewport"]` so Storybook's own iframe chrome can never enter
+a result.
+
+The seven states are five stories: `Composition` is genuinely both _paused_ and
+_captions-on_, and _menu-open_ is that same story with the menu opened by the
+spec. `Idle`, `Playing`, `BlockedAutoplay` and `ErrorState` stage the rest
+through the mock decorator.
+
+**No axe rule is suppressed anywhere.** One finding was a real primitive bug,
+fixed rather than worked around: `Player.LoadingIndicator` kept its live region
+mounted while idle — deliberately, so a screen reader announces the
+loading/buffering transition — but did so as a full-bleed
+`position: absolute; inset: 0; z-index: 30` box. Even empty and
+`pointer-events: none`, that geometry alone made axe unable to resolve a
+background colour for **any** text in **any** reely viewport, for every
+consumer. It now renders visually-hidden while idle and takes the full-bleed
+overlay only once there is something to show; its own tests live in
+`packages/react/test/activation.test.tsx`. `SettingsMenuContent`'s
+`tabIndex={0}` is the other precedent: a real `scrollable-region-focusable`
+violation, remediated rather than silenced.
+
+Axe runs its **default rule set**, not a narrower WCAG-tag subset — scoping
+with `withTags` would silently drop the best-practice rules, which is a
+suppression by another name. That choice has a cost worth stating plainly:
+`.include('[data-reely-part="viewport"]')` sets axe's context to the player
+subtree, so page-level rules (`bypass`, `region`, `landmark-one-main`,
+`page-has-heading-one`) never run against it — those are properties of
+Storybook's bare iframe document (no `<main>`, no `<h1>`, no landmarks), not of
+reely, and a consumer's real page owns them. A clean run here is a claim about
+this subtree, not about a host page.
+
+Every state also asserts `results.incomplete` — axe's needs-review bucket —
+against a per-state allowlist of rule ids, compared by equality, so an
+undiagnosed new finding fails the same as a violation would. Three states
+carry a diagnosed entry, not an ignored one:
+
+- **`idle` and `error` — `color-contrast`.** `ActivationButton` and
+  `ErrorDisplay` are both real, full-viewport surfaces while shown
+  (`position: absolute; inset: 0`, not overridable through their `style` prop
+  — filed as #89), and each outranks the time row underneath it. Axe reports
+  the resulting stacking-order overlap as an unresolvable color-contrast case;
+  no CSS change in this example fixes it.
+- **`menu-open` — `aria-valid-attr-value`.** axe-core flags any
+  `aria-controls` paired with a non-false `aria-haspopup` as needs-review the
+  instant the attribute is present, without resolving the id first. Every
+  correctly-built `aria-haspopup` + `aria-controls` menu trips this — a
+  permanent axe-core limitation for the pattern, not something fixable here.
+
+The other four states assert both buckets empty.
+
+### Reflow
+
+Three tests, because WCAG 1.4.4 (200% text) and 1.4.10 (320 CSS px) are
+separate criteria and neither implies the other: 200% at 1280px, 320px at
+normal text, and — beyond what either criterion demands — 320px at 200%. That
+last one is where this composition actually broke: the control row grew to
+179px inside a 144px `aspect-ratio: 16/9`, `overflow: hidden` box and lost 35px
+off the top.
+
+Below 420px the control row now takes `position: relative` rather than
+staying an absolutely-positioned overlay, so it occupies real space and the
+viewport is free to size around it — not `position: static`, which is what
+this fix first shipped as and was a real bug: `static` also drops an element
+out of the positioned stacking context its own `z-index: 20` depends on, so
+the row silently painted **below** Gestures/Poster/Media instead of above
+them — invisible and unclickable at ≤420px, with every existing assertion,
+including a plain `toBeVisible()`, still green. Each reflow case now
+hit-tests the play button's own center with `elementFromPoint` and asserts it
+resolves to the button itself, not to whatever got painted on top of it —
+correct geometry alone already shipped this regression once, so it is no
+longer trusted alone.
+
+### Announcements
+
+The policy is _state transitions only_ — never time updates, never per-cue.
+Asserted twice, because either alone is weak. Structurally, in the
+`LiveRegionInventory` story: the composed example puts exactly
+`loading-indicator` and `captions-announcer` in the tree, and neither `Time`
+nor `Captions` carries live semantics. Behaviourally, in
+`e2e/a11y-media.spec.ts`: a `MutationObserver` over every live region records
+nothing across a full clip with its cue window, then exactly one entry when
+captions are toggled.
+
+That behavioural check needed its own fixture, `captions-reference.vtt`, with
+a cue boundary at 0.4s inside the reference example's ~1s clip. The
+composition's existing `captions-en.vtt` is a single 0–5s cue, so on a clip
+this short no cue transition would ever occur inside the observation window,
+and the "never per-cue" half of this criterion would go unexercised without
+ever failing.
+
+### Keyboard
+
+The suite is split both by what each mounting can prove and by media
+dependency. `e2e/a11y.spec.ts` holds the mock-based checks (the axe sweep,
+reflow and hit-test, tab order, menu focus); `e2e/a11y-media.spec.ts` holds
+the real-media checks (shortcut effects, the announcement behavioural test) —
+kept apart because a real-media timing flake must never read as a regression
+in the deterministic mock suite, or vice versa. Both filenames contain "a11y",
+so `pnpm test:e2e --grep a11y` still catches both.
+
+Tab order and menu focus return run against the mock `Composition`, the only
+mounting where a fixed expected order is honest — every capability is dialed
+available, so all nine controls render on every engine, whereas on real MP4
+`AirPlayButton` appears on WebKit alone. Shortcut _effects_ run against
+`RealSources` and are read off the media element: the mock adapter implements
+no `seek` and echoes no state, so a shortcut assertion there could not tell a
+wired handler from a deleted one.
+
+The tab walk stops at `fullscreen-button`. Past the last control the engines
+diverge — Chromium and WebKit move focus to the browser chrome, Firefox under
+Playwright stays put — which is harness behaviour, not a focus trap.
+
+### Not covered here
+
+`pnpm test:e2e --grep a11y` green does **not** close #32. The owner's visual
+review of the composed example plus the primitive stories across
+wide/narrow/touch layouts is a human gate, scheduled after #17's real-device
+matrix — the automated pass above is necessary, not sufficient, and should
+never be read as the whole criterion. Capability-transition focus restoration
+is unit-tested in `packages/react/test/controls.test.tsx` rather than here,
+because #32 asks for focus retention through menu open/close specifically.
+
+The two `color-contrast` diagnoses above have a shared root cause that is
+filed, not fixed, here: `ActivationButton` and `ErrorDisplay` both apply their
+full-bleed geometry after spreading the consumer's own `style` prop, so
+neither can be repositioned by a consumer either — tracked as #89.

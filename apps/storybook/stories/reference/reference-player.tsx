@@ -18,6 +18,10 @@ import { useState, type ReactElement } from 'react';
 // not do, and a plain side-effect import would leak the theme into every other
 // story's document.
 const layoutCss = `
+/* This whole block is one JS template literal (it is delimited by the
+   backtick right above). Do not put a backtick anywhere in here, including
+   markdown-style code-quoting in a comment - it silently closes the string
+   early and breaks the build with no warning at this line. */
 .reely-example {
   position: relative;
   width: 100%;
@@ -36,7 +40,12 @@ const layoutCss = `
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.25rem;
-  background: linear-gradient(to top, rgba(4, 6, 10, 0.94), rgba(4, 6, 10, 0));
+  /* Solid, not a gradient: a gradient background makes axe's color-contrast
+     check unable to resolve a single background color (#32), and a gradient
+     fading to transparent at its own top edge was also genuinely washing out
+     the time row's text. Opaque black reads the same as the gradient's
+     darkest stop, just consistent across the whole bar instead of fading. */
+  background: rgb(4, 6, 10);
 }
 .reely-example-row {
   display: flex;
@@ -99,14 +108,38 @@ const layoutCss = `
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: rgba(4, 6, 10, 0.86);
+  /* Opaque, not 0.86 alpha: the same axe color-contrast issue as the control
+     bar (#32) — a background that isn't fully opaque over the poster image
+     leaves a single background color unresolvable (messageKey: imgNode). */
+  background: rgb(4, 6, 10);
   text-align: center;
   padding: 1rem;
 }
 /* Below this width the button row alone needs the space. Dropping the volume
    slider (rather than letting it squeeze) is what keeps the composition usable
-   at 320px, so #32's 1.4.10 reflow check passes by construction. */
+   at 320px, so #32's 1.4.10 reflow check passes by construction.
+
+   The control row also stops being an overlay here. At 320px with text
+   resized to 200% (#32's 1.4.4 check) the row is taller than a 16:9 box is,
+   so an absolutely-positioned row inside an overflow: hidden box is clipped —
+   measured at 35px of lost controls. In flow, under a viewport that is free
+   to size itself, nothing is lost.
+
+   relative, not static: the row still needs to take up space in normal
+   flow (that's the fix), but static also drops it out of the positioned
+   stacking context its z-index: 20 relies on, so it silently painted BELOW
+   Gestures/Poster/Media instead of above them — invisible and unclickable,
+   confirmed by elementFromPoint at the row's own center resolving to the
+   gestures element instead. relative keeps the same in-flow position — the
+   inherited inset: auto 0 0 0 nets to zero displacement on a
+   relatively-positioned box — while keeping z-index effective. */
 @media (max-width: 420px) {
+  .reely-example {
+    aspect-ratio: auto;
+  }
+  .reely-example-controls {
+    position: relative;
+  }
   .reely-example-volume {
     display: none;
   }
@@ -221,7 +254,6 @@ export const ReferencePlayer = ({
           />
         </Player.Poster>
         <Player.Media textTracks={textTracks} />
-        <Player.Captions />
         <Player.LoadingIndicator />
         {/* The default child is a literal "Retry" text button; the example
             renders icons everywhere, so it supplies the render prop. */}
@@ -289,6 +321,10 @@ export const ReferencePlayer = ({
             </Player.FullscreenButton>
           </div>
         </Player.Controls>
+        {/* After Controls, not before: Captions and Controls share z-index 20
+            (#32), so the later sibling wins the tie. Captions used to lose it
+            here, rendering caption text underneath the control bar. */}
+        <Player.Captions />
       </Player.Viewport>
     </>
   );
@@ -316,9 +352,17 @@ const sources = [
 // Only the local MP4 needs a declared <track>; HLS carries its subtitles in the
 // manifest and the iframe providers expose their own. Declaring children on
 // Media at all is the API #15 shipped without.
+//
+// `captions-reference.vtt`, not `captions-en.vtt`: this example's own fixture
+// carries two cues with a boundary at 0.4s, inside the ~1s clip, so a cue
+// transition actually happens during real playback here (#32's e2e
+// announcement-policy test needs one to fall inside its observation window).
+// `captions-en.vtt` stays a single 0-5s cue for the other stories/specs that
+// use it (`fixtures-playerfixture--captions-*`, driven by
+// `e2e/captions.spec.ts`) — this file is scoped to the reference example only.
 const mp4TextTracks: Player.MediaProps['textTracks'] = [
   {
-    src: '/captions-en.vtt',
+    src: '/captions-reference.vtt',
     srcLang: 'en',
     label: 'English',
     kind: 'captions',

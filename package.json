@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
+    "@axe-core/playwright": "4.12.1",
     "@changesets/cli": "2.31.1",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.61.1",
