@@ -103,39 +103,93 @@ test('arrow-key seeking moves the media element', async ({ page }) => {
 test('live regions announce state transitions only, never time updates or cues', async ({
   page
 }) => {
+  // `captions-reference.vtt`'s cue boundary — see the fixture and the guard
+  // assertion below, both of which depend on this exact value.
+  const cueBoundary = 0.4;
+
   await page.goto(realSources);
   await activationButton(page).click();
   await played(page);
+  // Starting the window here (after `played()`, i.e. after `currentTime > 0`)
+  // deliberately leaves `LoadingIndicator`'s `'loading-provider'` → idle
+  // transition unobserved. That is a real, legitimate announcement (a
+  // meaningful state change, not a time or cue violation) — asserting it here
+  // would race real activation/decode latency instead of the policy this test
+  // exists to check.
 
   // Observe every live region in the tree, not a named one: a regression that
   // adds aria-live to the time display or the caption cue container has to be
   // caught here as well as structurally (the story-level inventory check only
   // proves shape, not that a live region stays silent during playback).
+  //
+  // One observer on `document.body`'s subtree, not one per already-known
+  // region: a per-region `observe()` list built at setup time can only ever
+  // watch regions that exist at that moment. `ErrorDisplay` renders `null`
+  // until `state.error !== null` and then mounts a fresh `role="alert"` div as
+  // a SIBLING of the regions watched here, not nested inside any of them — a
+  // per-region list would never see it, even though a decode failure mid-
+  // window is a real possibility on a real `<video>`, not a hypothetical.
+  //
+  // The callback below has two branches that stay disjoint (no double-
+  // counting): `ancestor` fires for mutations INSIDE a region already present
+  // in the tree (a text node's data changing, or a region's own children
+  // being swapped, e.g. `LoadingIndicator` toggling between text and `null`);
+  // `addedNodes` fires for a region — or one nested inside an added subtree —
+  // arriving for the first time. A mutation can only ever be shaped one way
+  // or the other, never both.
   await page.evaluate(() => {
     window.__reelyAnnouncements = [];
+    const selector = '[aria-live], [role="status"], [role="alert"]';
+    const regionsWithin = (node: Node): Element[] => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return [];
+      const el = node as Element;
+      return el.matches(selector) ? [el] : [...el.querySelectorAll(selector)];
+    };
     const observer = new MutationObserver((records) => {
       for (const record of records) {
-        const node = (
+        const ancestor = (
           record.target.nodeType === Node.TEXT_NODE
             ? record.target.parentElement
             : (record.target as Element)
-        )?.closest('[aria-live], [role="status"], [role="alert"]');
-        if (!node) continue;
-        window.__reelyAnnouncements.push(
-          `${node.getAttribute('data-reely-part')}: ${node.textContent ?? ''}`
-        );
+        )?.closest(selector);
+        if (ancestor) {
+          window.__reelyAnnouncements.push(
+            `${ancestor.getAttribute('data-reely-part')}: ${ancestor.textContent ?? ''}`
+          );
+        }
+        for (const added of record.addedNodes) {
+          for (const region of regionsWithin(added)) {
+            window.__reelyAnnouncements.push(
+              `${region.getAttribute('data-reely-part')}: ${region.textContent ?? ''}`
+            );
+          }
+        }
       }
     });
-    for (const region of document.querySelectorAll(
-      '[aria-live], [role="status"], [role="alert"]'
-    )) {
-      observer.observe(region, {
-        characterData: true,
-        childList: true,
-        subtree: true
-      });
-    }
+    observer.observe(document.body, {
+      characterData: true,
+      childList: true,
+      subtree: true
+    });
   });
+
+  // Guard against a real race: the cue boundary above falls at 0.4s, and
+  // nothing forces the observer to be live before then. Real
+  // activation-to-first-frame latency (no mock: real decode) can push
+  // installation past 0.4s on a slow engine — this plan's own constraints
+  // flag WebKit as the historically slow one here — and if it does, the cue
+  // transition already happened unobserved, "no announcements" would pass for
+  // having nothing left to see rather than the policy holding, and this test
+  // would silently degrade back into exactly the structurally-unobservable
+  // gap the dense fixture was added to close. Reading `currentTime`
+  // immediately after installing (rather than, say, seeking back to 0 first)
+  // avoids introducing a real seek's own async settling time and its
+  // knock-on `TextTrack`/`LoadingIndicator` side effects into the very window
+  // being measured; asserting on it fails loudly instead of degrading.
+  const installedAt = await media(page).evaluate(
+    (el: HTMLVideoElement) => el.currentTime
+  );
+  expect(installedAt).toBeLessThan(cueBoundary);
 
   // Play through the whole ~1s clip. `captions-reference.vtt` (this example's
   // own fixture, distinct from `captions-en.vtt`) carries two cues with a
