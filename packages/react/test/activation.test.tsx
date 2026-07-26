@@ -191,6 +191,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -1349,10 +1350,84 @@ test('LoadingIndicator keeps a persistent live region so buffering is announced'
   expect(region.dataset.state).toBe('idle');
   expect(region.textContent).toBe('');
 
+  vi.useFakeTimers();
   act(() => fake.emit({ buffering: true }));
+  act(() => void vi.advanceTimersByTime(500));
 
   // Same node, now populated — an announced change, not a fresh mount.
   expect(screen.getByRole('status')).toBe(region);
+  expect(region.dataset.state).toBe('buffering');
+  expect(region.textContent).toBe('Buffering');
+});
+
+test('LoadingIndicator ignores a rebuffer shorter than the 500ms show delay', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  render(interactionFixture());
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+  await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
+  act(() =>
+    fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: false })
+  );
+  vi.useFakeTimers();
+
+  // A 300ms rebuffer is the common case under healthy adaptive bitrate. It must
+  // never reach the DOM: painting it is the flicker this policy exists to stop.
+  act(() => fake.emit({ buffering: true }));
+  act(() => void vi.advanceTimersByTime(300));
+
+  // Asserted here, inside the rebuffer, rather than only after it clears.
+  // Checking the end state alone proves nothing — it is `idle` with or without
+  // a debounce, so the test would pass against the very bug it names.
+  expect(screen.getByRole('status').dataset.state).toBe('idle');
+
+  act(() => fake.emit({ buffering: false }));
+  act(() => void vi.advanceTimersByTime(5_000));
+
+  // And the cancelled timer never fires late.
+  expect(screen.getByRole('status').dataset.state).toBe('idle');
+});
+
+test('LoadingIndicator admits a sustained stall at 500ms and not before', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  render(interactionFixture());
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+  await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
+  act(() =>
+    fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: false })
+  );
+  vi.useFakeTimers();
+
+  act(() => fake.emit({ buffering: true }));
+
+  // The asymmetry is the assertion. Checking only the 500ms side would pass
+  // just as happily against no delay at all — a test that cannot fail.
+  act(() => void vi.advanceTimersByTime(499));
+  expect(screen.getByRole('status').dataset.state).toBe('idle');
+
+  act(() => void vi.advanceTimersByTime(1));
+  expect(screen.getByRole('status').dataset.state).toBe('buffering');
+});
+
+test('LoadingIndicator swaps loading-provider to buffering without going idle', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  render(interactionFixture());
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+  const region = screen.getByRole('status');
+  expect(region.dataset.state).toBe('loading-provider');
+
+  await vi.waitFor(() => expect(fake.counts().attachCount).toBe(1));
+  vi.useFakeTimers();
+
+  // The provider becomes ready and immediately buffers its first segment. The
+  // indicator is already on screen, so re-running the show delay here would
+  // blank it for 500ms and bring it back — manufacturing the exact flicker the
+  // delay exists to remove. It must swap the label instead.
+  act(() =>
+    fake.emit({ activation: 'ready', lifecycle: 'ready', buffering: true })
+  );
   expect(region.dataset.state).toBe('buffering');
   expect(region.textContent).toBe('Buffering');
 });

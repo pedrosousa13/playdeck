@@ -1096,6 +1096,61 @@ const visuallyHiddenStyle: CSSProperties = {
   border: 0
 };
 
+// --- buffering/stall presentation (#35) -------------------------------------
+// `state.buffering` is the raw provider signal (`waiting`, `bufferstart`,
+// YouTube state 3), so it flaps: a short rebuffer under healthy adaptive
+// bitrate would strobe the indicator. The policy debounces here rather than in
+// core, so `state.buffering` stays truthful for analytics consumers and no
+// timer lifecycle enters the core state machine. Full rationale:
+// docs/superpowers/specs/2026-07-26-buffering-stall-policy-35-design.md
+const BUFFERING_SHOW_DELAY_MS = 500;
+
+type LoadingPresentation = 'loading-provider' | 'buffering' | null;
+
+const useLoadingPresentation = (): LoadingPresentation => {
+  const { activation, buffering } = usePlayerState((state) => ({
+    activation: state.activation,
+    buffering: state.buffering
+  }));
+  const desired: LoadingPresentation =
+    activation === 'error'
+      ? null
+      : activation === 'loading-provider'
+        ? 'loading-provider'
+        : buffering
+          ? 'buffering'
+          : null;
+  const [shown, setShown] = useState<LoadingPresentation>(null);
+
+  useEffect(() => {
+    if (desired === null) {
+      setShown(null);
+      return;
+    }
+    // Already on screen: swap the label with no delay. Hiding for 500ms across
+    // `loading-provider` -> `buffering` would manufacture the very flicker the
+    // delay exists to remove.
+    if (shown !== null) {
+      setShown(desired);
+      return;
+    }
+    // Nothing is on screen yet, so there is nothing to flicker against.
+    if (desired === 'loading-provider') {
+      setShown('loading-provider');
+      return;
+    }
+    const timer = setTimeout(
+      () => setShown('buffering'),
+      BUFFERING_SHOW_DELAY_MS
+    );
+    // Runs before the next effect pass and on unmount, so a stall that clears
+    // inside the delay window cancels rather than fires late.
+    return () => clearTimeout(timer);
+  }, [desired, shown]);
+
+  return shown;
+};
+
 export type LoadingIndicatorProps = ComponentPropsWithRef<'div'>;
 
 export const LoadingIndicator = ({
@@ -1103,16 +1158,7 @@ export const LoadingIndicator = ({
   style,
   ...props
 }: LoadingIndicatorProps) => {
-  const { activation, buffering } = usePlayerState((state) => ({
-    activation: state.activation,
-    buffering: state.buffering
-  }));
-  const active =
-    activation === 'loading-provider'
-      ? 'loading-provider'
-      : activation !== 'error' && buffering
-        ? 'buffering'
-        : null;
+  const active = useLoadingPresentation();
   // The live region stays mounted (empty when idle) so a screen reader
   // announces the buffering/loading transition. A region that mounts already
   // populated is typically not announced. It must not, however, occupy the
