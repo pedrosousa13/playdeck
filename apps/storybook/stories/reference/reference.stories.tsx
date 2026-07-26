@@ -134,3 +134,113 @@ export const Composition: Story = {
     );
   }
 };
+
+/** The settings menu is two radio groups, each gated on its own capability. */
+export const SettingsMenuSelection: Story = {
+  play: async ({ canvas, userEvent }) => {
+    const trigger = canvas.getByRole('button', { name: 'Settings' });
+    await userEvent.click(trigger);
+
+    const menu = await canvas.findByRole('menu');
+    await expect(menu).toHaveAttribute('data-reely-menu', 'open');
+    // Named groups rather than text headings: role="menu" only admits
+    // menuitem/menuitemradio/group children.
+    await expect(
+      canvas.getByRole('group', { name: 'Playback speed' })
+    ).toBeInTheDocument();
+    await expect(
+      canvas.getByRole('group', { name: 'Quality' })
+    ).toBeInTheDocument();
+
+    // Auto plus the three staged rungs, labelled by height.
+    await expect(
+      canvas.getByRole('menuitemradio', { name: '1080p' })
+    ).toBeInTheDocument();
+    await expect(
+      canvas.getByRole('menuitemradio', { name: 'Auto (720p)' })
+    ).toBeInTheDocument();
+
+    // 1x is checked because the group reads state.playbackRate, not local state.
+    await expect(
+      canvas.getByRole('menuitemradio', { name: '1×' })
+    ).toHaveAttribute('aria-checked', 'true');
+
+    await userEvent.click(canvas.getByRole('menuitemradio', { name: '1.5×' }));
+    // Selecting closes and returns focus to the trigger (never <body>).
+    await expect(canvas.queryByRole('menu')).toBeNull();
+    await expect(trigger).toHaveFocus();
+  }
+};
+
+/**
+ * The rate the menu shows follows player state, so a menu driven by a provider
+ * that rejected the command cannot show a selection that never took effect.
+ * The mock adapter's setPlaybackRate resolves ok but emits nothing, so 1x stays
+ * checked — asserted deliberately, so nobody "fixes" this into local state.
+ */
+export const SettingsMenuFollowsState: Story = {
+  play: async ({ canvas, userEvent }) => {
+    const trigger = canvas.getByRole('button', { name: 'Settings' });
+    await userEvent.click(trigger);
+    await userEvent.click(canvas.getByRole('menuitemradio', { name: '2×' }));
+    await userEvent.click(trigger);
+    await expect(
+      canvas.getByRole('menuitemradio', { name: '1×' })
+    ).toHaveAttribute('aria-checked', 'true');
+    // Close before the story ends: `.reely-example-menu` is a scrollable,
+    // arrow-key-only region (every item is `tabIndex={-1}`), so an open menu
+    // trips axe's scrollable-region-focusable rule. Left open only by this
+    // reopen-to-inspect step, not by anything a real user flow leaves behind.
+    await userEvent.keyboard('{Escape}');
+    await expect(canvas.queryByRole('menu')).toBeNull();
+  }
+};
+
+/**
+ * The captions toggle follows player state, not a local click flag: the mock
+ * adapter has no `selectTextTrack`, so `controller.selectTextTrack` resolves
+ * `{ ok: false, reason: 'unsupported' }`, nothing is emitted, and the button
+ * stays reflecting `selectedTextTrackId` — observed by running this story,
+ * not assumed.
+ */
+export const CaptionsToggle: Story = {
+  play: async ({ canvas, userEvent }) => {
+    const button = canvas.getByRole('button', { name: 'Disable captions' });
+    await expect(button).toHaveAttribute('data-state', 'on');
+    await userEvent.click(button);
+    await expect(
+      canvas.getByRole('button', { name: 'Disable captions' })
+    ).toHaveAttribute('data-state', 'on');
+  }
+};
+
+/**
+ * Keyboard flow #32 will extend: every control in the row is reachable by Tab
+ * in visual order, and the menu takes focus on open and gives it back.
+ */
+export const KeyboardFlow: Story = {
+  play: async ({ canvas, userEvent }) => {
+    canvas.getByRole('button', { name: 'Play' }).focus();
+    await expect(canvas.getByRole('button', { name: 'Play' })).toHaveFocus();
+
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'Mute' })).toHaveFocus();
+    await userEvent.tab();
+    await expect(canvas.getByRole('slider', { name: 'Volume' })).toHaveFocus();
+    await userEvent.tab();
+    await expect(
+      canvas.getByRole('button', { name: 'Disable captions' })
+    ).toHaveFocus();
+
+    // Arrow-opening the settings menu lands on its first item, and Escape
+    // returns focus to the trigger.
+    const trigger = canvas.getByRole('button', { name: 'Settings' });
+    trigger.focus();
+    await userEvent.keyboard('{ArrowDown}');
+    await expect(
+      canvas.getByRole('menuitemradio', { name: '0.5×' })
+    ).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    await expect(trigger).toHaveFocus();
+  }
+};
