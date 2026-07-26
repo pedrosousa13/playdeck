@@ -227,6 +227,19 @@ test('reports quality selection honestly per engine', async () => {
   expect(mseHarness.patches.at(-1)).toMatchObject({
     capabilities: { selectQuality: { status: 'available' } }
   });
+
+  const emptyHarness = createHarness(stubMseOnlySupport);
+  await emptyHarness.provider.attach();
+  await emptyHarness.provider.load();
+  const emptyHls = currentFakeHls();
+  emptyHls.levels = [];
+  emptyHls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: emptyHls.levels });
+  expect(emptyHarness.patches.at(-1)).toMatchObject({
+    qualities: [],
+    capabilities: {
+      selectQuality: { status: 'unavailable', reason: 'source' }
+    }
+  });
 });
 
 test('reports the current rendition after hls.js level switches', async () => {
@@ -242,30 +255,297 @@ test('reports the current rendition after hls.js level switches', async () => {
   hls.emit(FakeHls.Events.LEVEL_SWITCHED, { level: 1 });
 
   expect(patches.at(-1)).toEqual({
-    quality: { height: 90, width: 160, bitrate: 150_000 }
+    quality: {
+      id: 'hls:90x160@150000',
+      height: 90,
+      width: 160,
+      bitrate: 150_000
+    }
   });
 });
 
-test('selects renditions by height and returns to automatic adaptation', async () => {
+test('enumerates the hls.js ladder with content-derived ids', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 180, width: 320, bitrate: 400_000 },
+    { height: 90, width: 160, bitrate: 150_000 },
+    { bitrate: 128_000 }
+  ];
+
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [
+      { id: 'hls:180x320@400000', height: 180, width: 320, bitrate: 400_000 },
+      { id: 'hls:90x160@150000', height: 90, width: 160, bitrate: 150_000 },
+      { id: 'hls:-x-@128000', height: null, width: null, bitrate: 128_000 }
+    ],
+    selectedQualityId: null,
+    capabilities: { selectQuality: { status: 'available' } }
+  });
+});
+
+test('keeps a single-rung ladder selectable', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [{ id: 'hls:720x1280@2000000' }],
+    capabilities: { selectQuality: { status: 'available' } }
+  });
+});
+
+test('gives rungs identical on every exposed field distinct ids', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 1080, width: 1920, bitrate: 5_000_000 }
+  ];
+
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  const patch = patches.at(-1) as { qualities: ReadonlyArray<{ id: string }> };
+  expect(patch.qualities.map((quality) => quality.id)).toEqual([
+    'hls:1080x1920@5000000:0',
+    'hls:1080x1920@5000000:1'
+  ]);
+});
+
+// The trap this whole issue exists to avoid: hls.js prunes levels out of its
+// own array after repeated errors, so an index-derived id would silently
+// repoint a held selection at a different rung. The rungs here are
+// deliberately DISTINCT — a fixture of identical rungs would make this fail
+// for the unrelated `:idx` reason the design document calls out.
+test('keeps quality ids stable when hls.js prunes a level', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 720, width: 1280, bitrate: 2_000_000 },
+    { height: 360, width: 640, bitrate: 800_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  hls.levels = [hls.levels[0]!, hls.levels[2]!];
+  hls.emitLevelsUpdated();
+
+  const patch = patches.at(-1) as { qualities: ReadonlyArray<{ id: string }> };
+  expect(patch.qualities.map((quality) => quality.id)).toEqual([
+    'hls:1080x1920@5000000',
+    'hls:360x640@800000'
+  ]);
+});
+
+// LEVELS_UPDATED (plural, the level array changed) is one letter from
+// LEVEL_UPDATED (singular, one level's details), which this adapter already
+// listens to for the live hint. Wiring the refresh to the wrong one would
+// leave every other test in this file passing.
+test('refreshes the ladder on LEVELS_UPDATED and not on LEVEL_UPDATED', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  hls.levels = [
+    { height: 720, width: 1280, bitrate: 2_000_000 },
+    { height: 360, width: 640, bitrate: 800_000 }
+  ];
+  hls.emitLevelUpdated(false);
+
+  expect(patches.at(-1)).not.toMatchObject({
+    qualities: [{ id: 'hls:720x1280@2000000' }, { id: 'hls:360x640@800000' }]
+  });
+
+  hls.emitLevelsUpdated();
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [{ id: 'hls:720x1280@2000000' }, { id: 'hls:360x640@800000' }]
+  });
+});
+
+test('selects renditions by id and returns to automatic adaptation', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 180, width: 320, bitrate: 400_000 },
+    { height: 90, width: 160, bitrate: 150_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+
+  await expect(provider.selectQuality?.('hls:90x160@150000')).resolves.toEqual({
+    ok: true
+  });
+  expect(hls.currentLevel).toBe(1);
+  expect(patches.at(-1)).toMatchObject({
+    selectedQualityId: 'hls:90x160@150000'
+  });
+
+  await expect(provider.selectQuality?.(null)).resolves.toEqual({ ok: true });
+  expect(hls.currentLevel).toBe(-1);
+  expect(patches.at(-1)).toMatchObject({ selectedQualityId: null });
+
+  await expect(
+    provider.selectQuality?.('hls:720x1280@2000000')
+  ).resolves.toEqual({ ok: false, reason: 'unsupported' });
+  await expect(provider.selectQuality?.('')).resolves.toEqual({
+    ok: false,
+    reason: 'unsupported'
+  });
+});
+
+test('reports a pruned rung as unsupported rather than switching to a neighbour', async () => {
   const { provider } = createHarness(stubMseOnlySupport);
   await provider.attach();
   await provider.load();
   const hls = currentFakeHls();
-  hls.levels = [{ height: 180 }, { height: 90 }];
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 360, width: 640, bitrate: 800_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
 
-  await expect(provider.selectQuality?.(90)).resolves.toEqual({ ok: true });
-  expect(hls.currentLevel).toBe(1);
+  hls.levels = [hls.levels[1]!];
+  hls.emitLevelsUpdated();
+  hls.currentLevel = 0;
 
-  await expect(provider.selectQuality?.(null)).resolves.toEqual({ ok: true });
-  expect(hls.currentLevel).toBe(-1);
+  await expect(
+    provider.selectQuality?.('hls:1080x1920@5000000')
+  ).resolves.toEqual({ ok: false, reason: 'unsupported' });
+  expect(hls.currentLevel).toBe(0);
 
-  await expect(provider.selectQuality?.(720)).resolves.toEqual({
-    ok: false,
-    reason: 'unsupported'
+  // Paired with the rejection above so this test cannot pass by rejecting
+  // every id: the rung that survived the prune is still selectable.
+  await expect(provider.selectQuality?.('hls:360x640@800000')).resolves.toEqual(
+    { ok: true }
+  );
+  expect(hls.currentLevel).toBe(0);
+});
+
+test('drops a held selection whose rung hls.js pruned, without fighting it for currentLevel', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [
+    { height: 1080, width: 1920, bitrate: 5_000_000 },
+    { height: 360, width: 640, bitrate: 800_000 }
+  ];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+  await provider.selectQuality?.('hls:1080x1920@5000000');
+  expect(hls.currentLevel).toBe(0);
+
+  hls.levels = [hls.levels[1]!];
+  hls.emitLevelsUpdated();
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [{ id: 'hls:360x640@800000' }],
+    selectedQualityId: null
   });
-  await expect(provider.selectQuality?.(Number.NaN)).resolves.toEqual({
-    ok: false,
-    reason: 'unsupported'
+  // hls.js owns recovery from its own pruning; the adapter must not have
+  // written currentLevel while it was mid-way through that.
+  expect(hls.currentLevel).toBe(0);
+});
+
+test('clears the ladder and the selection when the engine restarts', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+  first.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  first.emit(FakeHls.Events.MANIFEST_PARSED, { levels: first.levels });
+  await provider.selectQuality?.('hls:720x1280@2000000');
+  const beforeRetry = patches.length;
+
+  await expect(provider.retry?.()).resolves.toEqual({ ok: true });
+
+  expect(patches.slice(beforeRetry)).toContainEqual(
+    expect.objectContaining({ qualities: [], selectedQualityId: null })
+  );
+});
+
+// The capability and the list are one claim, so they may not disagree even
+// briefly. Restarting empties the ladder, and until the new manifest parses
+// the check genuinely has not happened again.
+test('withdraws the quality capability while the restarted ladder is empty', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+  first.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  first.emit(FakeHls.Events.MANIFEST_PARSED, { levels: first.levels });
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { selectQuality: { status: 'available' } }
+  });
+
+  await expect(provider.retry?.()).resolves.toEqual({ ok: true });
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [],
+    capabilities: {
+      selectQuality: { status: 'unknown', reason: 'provider-check' }
+    }
+  });
+});
+
+// retry() sets this verdict itself before restarting, so it cannot prove the
+// restart path owns it. A second load() — reachable for a consumer holding an
+// adapter from createHlsProvider directly — is the case that can.
+test('withdraws the quality capability when a second load empties the ladder', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const first = currentFakeHls();
+  first.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  first.emit(FakeHls.Events.MANIFEST_PARSED, { levels: first.levels });
+
+  await provider.load();
+
+  expect(patches.at(-1)).toMatchObject({
+    qualities: [],
+    capabilities: {
+      selectQuality: { status: 'unknown', reason: 'provider-check' }
+    }
+  });
+});
+
+test('clears the ladder when quality selection is downgraded by a fatal error', async () => {
+  const { patches, provider } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [{ height: 720, width: 1280, bitrate: 2_000_000 }];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+  await provider.selectQuality?.('hls:720x1280@2000000');
+
+  hls.emitFatalError(FakeHls.ErrorTypes.NETWORK_ERROR);
+  hls.emitFatalError(FakeHls.ErrorTypes.NETWORK_ERROR);
+  hls.emitFatalError(FakeHls.ErrorTypes.NETWORK_ERROR);
+
+  expect(patches.at(-1)).toMatchObject({
+    lifecycle: 'error',
+    quality: null,
+    qualities: [],
+    selectedQualityId: null,
+    capabilities: {
+      selectQuality: { status: 'unavailable', reason: 'provider' }
+    }
   });
 });
 
@@ -290,7 +570,7 @@ test('downgrades quality selection on recovery exhaustion and restores it after 
       selectQuality: { status: 'unavailable', reason: 'provider' }
     }
   });
-  await expect(provider.selectQuality?.(90)).resolves.toEqual({
+  await expect(provider.selectQuality?.('hls:90x-@-')).resolves.toEqual({
     ok: false,
     reason: 'not-ready'
   });
@@ -303,7 +583,9 @@ test('downgrades quality selection on recovery exhaustion and restores it after 
   expect(patches.at(-1)).toMatchObject({
     capabilities: { selectQuality: { status: 'available' } }
   });
-  await expect(provider.selectQuality?.(90)).resolves.toEqual({ ok: true });
+  await expect(provider.selectQuality?.('hls:90x-@-')).resolves.toEqual({
+    ok: true
+  });
   expect(second.currentLevel).toBe(1);
 });
 

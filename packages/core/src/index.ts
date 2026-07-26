@@ -109,6 +109,7 @@ export type PlayerProvider = 'native' | 'hls' | 'youtube' | 'vimeo';
 export type HlsEngine = 'native' | 'hls.js';
 
 export type PlayerQuality = {
+  readonly id: string;
   readonly height: number | null;
   readonly width: number | null;
   readonly bitrate: number | null;
@@ -147,6 +148,12 @@ export type PlayerState = {
   readonly provider: PlayerProvider | null;
   readonly hlsEngine: HlsEngine | null;
   readonly quality: PlayerQuality | null;
+  // `quality` above is the level playing right now, and moves on its own under
+  // adaptive selection; `selectedQualityId` is what the consumer chose, `null`
+  // meaning auto. A menu needs both: the selection checks a radio item, the
+  // active level labels the auto row ("Auto (1080p)").
+  readonly qualities: readonly PlayerQuality[];
+  readonly selectedQualityId: string | null;
   readonly capabilities: PlayerCapabilities;
   readonly error: PlayerError | null;
   readonly textTracks: readonly TextTrack[];
@@ -264,7 +271,7 @@ export type ProviderAdapter = {
   pause?: () => Promise<CommandResult>;
   seekTo?: (time: number) => Promise<CommandResult>;
   seekBy?: (offset: number) => Promise<CommandResult>;
-  selectQuality?: (height: number | null) => Promise<CommandResult>;
+  selectQuality?: (id: string | null) => Promise<CommandResult>;
   mute?: () => Promise<CommandResult>;
   unmute?: () => Promise<CommandResult>;
   setVolume?: (volume: number) => Promise<CommandResult>;
@@ -340,6 +347,8 @@ export const createInitialPlayerState = (): PlayerState =>
     provider: null,
     hlsEngine: null,
     quality: null,
+    qualities: Object.freeze([]),
+    selectedQualityId: null,
     capabilities: initialCapabilities(),
     error: null,
     textTracks: Object.freeze([]),
@@ -864,8 +873,8 @@ export class PlayerController {
     this.#command('seekTo', time);
   seekBy = (offset: number): Promise<CommandResult> =>
     this.#command('seekBy', offset);
-  selectQuality = (height: number | null): Promise<CommandResult> =>
-    this.#command('selectQuality', height);
+  selectQuality = (id: string | null): Promise<CommandResult> =>
+    this.#command('selectQuality', id);
   mute = (): Promise<CommandResult> => this.#command('mute');
   unmute = (): Promise<CommandResult> => this.#command('unmute');
   toggleMuted = (): Promise<CommandResult> =>
@@ -1032,6 +1041,12 @@ export class PlayerController {
           : patch.quality === null
             ? null
             : Object.freeze({ ...patch.quality }),
+      qualities:
+        patch.qualities === undefined
+          ? this.#state.qualities
+          : Object.freeze(
+              patch.qualities.map((quality) => Object.freeze({ ...quality }))
+            ),
       autoplay: this.#hasAutoplayConfigurationError
         ? 'failed'
         : patch.playback === 'playing' && this.#state.autoplay === 'attempting'

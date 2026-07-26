@@ -289,7 +289,12 @@ export const createNativeProvider = (
       seek: available,
       setVolume: available,
       setPlaybackRate: available,
-      selectQuality: { status: 'unknown', reason: 'provider-check' },
+      // A plain media element exposes no rendition ladder. This used to be
+      // `unknown`/`provider-check`, but nothing ever resolved it — this
+      // function returns the same literal on every recomputation — so a
+      // consumer gating a quality menu on it waited on a verdict that never
+      // arrived.
+      selectQuality: { status: 'unavailable', reason: 'source' },
       selectTextTrack: textTracks.hasSelectableTextTracks()
         ? available
         : { status: 'unavailable', reason: 'source' },

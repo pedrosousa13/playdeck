@@ -459,6 +459,26 @@ test('reports native text tracks as unavailable when the command is unsupported'
   });
 });
 
+test('reports quality selection as unavailable rather than pending forever', async () => {
+  const media = document.createElement('video');
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  // `mediaCapabilities()` returns the same literal on every recomputation, so
+  // an `unknown` verdict here would never resolve and a consumer gating a
+  // quality menu on it would wait forever. A plain media element has no
+  // ladder at all, which is `unavailable/source`.
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: {
+      selectQuality: { status: 'unavailable', reason: 'source' }
+    }
+  });
+  expect(provider.selectQuality).toBeUndefined();
+});
+
 const createTimeRanges = (
   ranges: ReadonlyArray<readonly [number, number]>
 ): TimeRanges => ({

@@ -7,6 +7,7 @@ import type {
   PlayerCapabilities,
   PlayerError,
   PlayerLiveState,
+  PlayerQuality,
   ProviderAdapter,
   ProviderEvent,
   ProviderStateListener,
@@ -88,6 +89,9 @@ export type HlsConstructorLike = {
     readonly ERROR: string;
     readonly LEVEL_SWITCHED: string;
     readonly LEVEL_UPDATED: string;
+    // Plural: the level *array* changed, which is what `removeLevel` does when
+    // hls.js prunes a rung. Not to be confused with the singular event above.
+    readonly LEVELS_UPDATED: string;
     readonly MANIFEST_PARSED: string;
     readonly SUBTITLE_TRACKS_UPDATED: string;
     readonly SUBTITLE_TRACK_SWITCH: string;
@@ -294,6 +298,11 @@ export const createHlsProvider = (
   let hlsLiveHint: boolean | undefined;
   let liveState: PlayerLiveState = null;
   let liveSeekMeaningful = true;
+  // hls.js quality state: the derived ladder and the held selection (`null` is
+  // auto). Unlike captions there is no "explicitly chosen" flag — see
+  // `refreshHlsQualities` for why quality needs no default-track rule.
+  let hlsQualityList: PlayerQuality[] = [];
+  let hlsSelectedQualityId: string | null = null;
   // hls.js text-track state — mirrors packages/provider-native/src/text-tracks.ts's
   // shape (held selection + "has the user explicitly chosen" flag so a later
   // SUBTITLE_TRACKS_UPDATED can tell "keep the held id" apart from "apply the
@@ -427,6 +436,8 @@ export const createHlsProvider = (
   const surfaceFatal = (error: PlayerError): void => {
     teardownHls();
     selectQualityAvailability = { status: 'unavailable', reason: 'provider' };
+    hlsQualityList = [];
+    hlsSelectedQualityId = null;
     emit(
       {
         lifecycle: 'error',
@@ -435,6 +446,8 @@ export const createHlsProvider = (
         buffering: false,
         seeking: false,
         quality: null,
+        qualities: [],
+        selectedQualityId: null,
         ...(lastCapabilities
           ? { capabilities: decorateCapabilities(lastCapabilities) }
           : {}),
@@ -497,6 +510,80 @@ export const createHlsProvider = (
         ? `hls.js reported an unrecoverable fatal error: ${errorData.details}`
         : 'hls.js reported an unrecoverable fatal error.',
       cause: data
+    });
+  };
+
+  // Content-derived, never index-derived: hls.js removes levels from `levels`
+  // after repeated errors, so an index-keyed id would silently repoint a held
+  // selection at a different rung. `HlsLevelLike`'s fields are all optional
+  // (audio-only renditions carry no dimensions), so a missing one renders as
+  // `-` rather than the string "undefined".
+  const hlsLevelToken = (value: number | undefined): string =>
+    value === undefined ? '-' : String(value);
+
+  const hlsQualityBaseId = (level: HlsLevelLike): string =>
+    `hls:${hlsLevelToken(level.height)}x${hlsLevelToken(level.width)}` +
+    `@${hlsLevelToken(level.bitrate)}`;
+
+  // Rungs identical on every field this contract exposes are separated by a
+  // `:<idx>` suffix. That suffix — and only that suffix — can move when the
+  // collision set changes, which is harmless precisely because such rungs are
+  // indistinguishable to a consumer.
+  const hlsQualities = (
+    levels: ReadonlyArray<HlsLevelLike>
+  ): PlayerQuality[] => {
+    const rungs = levels.map((level) => ({
+      level,
+      baseId: hlsQualityBaseId(level)
+    }));
+    const collisions = new Map<string, number>();
+    rungs.forEach(({ baseId }) =>
+      collisions.set(baseId, (collisions.get(baseId) ?? 0) + 1)
+    );
+    const assigned = new Map<string, number>();
+    return rungs.map(({ baseId, level }) => {
+      let id = baseId;
+      if ((collisions.get(baseId) ?? 0) > 1) {
+        const ordinal = assigned.get(baseId) ?? 0;
+        assigned.set(baseId, ordinal + 1);
+        id = `${baseId}:${ordinal}`;
+      }
+      return {
+        id,
+        height: level.height ?? null,
+        width: level.width ?? null,
+        bitrate: level.bitrate ?? null
+      };
+    });
+  };
+
+  // Gated on list length, the way `resolveHlsCaptionRendering` gates on track
+  // count. An empty list once the manifest has parsed is `unavailable/source`,
+  // never `unknown` — a verdict that cannot resolve is the same defect this
+  // change fixes in provider-native.
+  const refreshHlsQualities = (instance: HlsInstanceLike): void => {
+    if (destroyed || hls !== instance) return;
+    hlsQualityList = hlsQualities(instance.levels);
+    selectQualityAvailability =
+      hlsQualityList.length === 0
+        ? { status: 'unavailable', reason: 'source' }
+        : { status: 'available' };
+    // A held selection may not outlive the rung it names. `currentLevel` is
+    // deliberately not written here: hls.js prunes levels as part of its own
+    // error recovery and moves `currentLevel` itself, so writing -1 into the
+    // middle of that fights the engine over state it is still repairing.
+    if (
+      hlsSelectedQualityId !== null &&
+      !hlsQualityList.some((quality) => quality.id === hlsSelectedQualityId)
+    ) {
+      hlsSelectedQualityId = null;
+    }
+    emit({
+      qualities: hlsQualityList,
+      selectedQualityId: hlsSelectedQualityId,
+      ...(lastCapabilities
+        ? { capabilities: decorateCapabilities(lastCapabilities) }
+        : {})
     });
   };
 
@@ -586,6 +673,30 @@ export const createHlsProvider = (
 
   const startHlsJs = async (): Promise<CommandResult> => {
     const startGeneration = ++generation;
+    // Both `load()` and `retry()` route through here, so this is the one place
+    // a new engine instance's empty ladder has to be published: without it,
+    // state would keep advertising a dead instance's rungs until the new
+    // manifest parsed. Guarded because on a first load there is nothing to
+    // clear, and an unconditional patch would publish a no-op change.
+    if (hlsQualityList.length > 0 || hlsSelectedQualityId !== null) {
+      hlsQualityList = [];
+      hlsSelectedQualityId = null;
+      // The capability and the list are one claim and may not disagree, even
+      // for the window before the new manifest parses. `retry()` already sets
+      // this same verdict; a plain second `load()` does not, so it is set here
+      // rather than left to the caller.
+      selectQualityAvailability = {
+        status: 'unknown',
+        reason: 'provider-check'
+      };
+      emit({
+        qualities: [],
+        selectedQualityId: null,
+        ...(lastCapabilities
+          ? { capabilities: decorateCapabilities(lastCapabilities) }
+          : {})
+      });
+    }
     let Hls = hlsConstructor;
     if (!Hls) {
       try {
@@ -639,23 +750,16 @@ export const createHlsProvider = (
     );
     instance.on(HlsRuntime.Events.LEVEL_SWITCHED, (_event, data) => {
       if (destroyed || hls !== instance) return;
-      const level = instance.levels[(data as { level: number }).level];
-      emit({
-        quality: level
-          ? {
-              height: level.height ?? null,
-              width: level.width ?? null,
-              bitrate: level.bitrate ?? null
-            }
-          : null
-      });
+      const index = (data as { level: number }).level;
+      // Resolved through the same derivation as the list, so the active
+      // level's id and its list entry's id cannot drift apart.
+      emit({ quality: hlsQualities(instance.levels)[index] ?? null });
     });
     instance.on(HlsRuntime.Events.MANIFEST_PARSED, () => {
-      if (destroyed || hls !== instance) return;
-      selectQualityAvailability = { status: 'available' };
-      if (lastCapabilities) {
-        emit({ capabilities: decorateCapabilities(lastCapabilities) });
-      }
+      refreshHlsQualities(instance);
+    });
+    instance.on(HlsRuntime.Events.LEVELS_UPDATED, () => {
+      refreshHlsQualities(instance);
     });
     instance.on(HlsRuntime.Events.LEVEL_UPDATED, (_event, data) => {
       if (destroyed || hls !== instance) return;
@@ -827,22 +931,27 @@ export const createHlsProvider = (
     },
     ...(engine === 'hls.js'
       ? {
-          selectQuality: async (
-            height: number | null
-          ): Promise<CommandResult> => {
+          selectQuality: async (id: string | null): Promise<CommandResult> => {
             const instance = hls;
             if (destroyed || !instance) {
               return { ok: false, reason: 'not-ready' };
             }
-            if (height === null) {
+            if (id === null) {
               instance.currentLevel = -1;
+              hlsSelectedQualityId = null;
+              emit({ selectedQualityId: null });
               return { ok: true };
             }
-            const index = instance.levels.findIndex(
-              (level) => level.height === height
+            // Resolved against a fresh derivation over the live `levels`
+            // array, so a rung hls.js has pruned is `unsupported` rather than
+            // a silent switch to whatever now occupies that index.
+            const index = hlsQualities(instance.levels).findIndex(
+              (quality) => quality.id === id
             );
             if (index === -1) return { ok: false, reason: 'unsupported' };
             instance.currentLevel = index;
+            hlsSelectedQualityId = id;
+            emit({ selectedQualityId: id });
             return { ok: true };
           },
           selectTextTrack: async (
