@@ -119,13 +119,21 @@ const layoutCss = `
    resized to 200% (#32's 1.4.4 check) the row is taller than a 16:9 box is,
    so an absolutely-positioned row inside an overflow: hidden box is clipped —
    measured at 35px of lost controls. In flow, under a viewport that is free
-   to size itself, nothing is lost. */
+   to size itself, nothing is lost.
+
+   relative, not static: the row still needs to take up space in normal
+   flow (that's the fix), but static also drops it out of the positioned
+   stacking context its z-index: 20 relies on, so it silently painted BELOW
+   Gestures/Poster/Media instead of above them — invisible and unclickable,
+   confirmed by elementFromPoint at the row's own center resolving to the
+   gestures element instead. relative keeps the same in-flow position (no
+   offsets are set) while keeping z-index effective. */
 @media (max-width: 420px) {
   .reely-example {
     aspect-ratio: auto;
   }
   .reely-example-controls {
-    position: static;
+    position: relative;
   }
   .reely-example-volume {
     display: none;
