@@ -104,7 +104,10 @@ const layoutCss = `
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: rgba(4, 6, 10, 0.86);
+  /* Opaque, not 0.86 alpha: the same axe color-contrast issue as the control
+     bar (#32) — a background that isn't fully opaque over the poster image
+     leaves a single background color unresolvable (messageKey: imgNode). */
+  background: rgb(4, 6, 10);
   text-align: center;
   padding: 1rem;
 }

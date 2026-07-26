@@ -20,14 +20,34 @@ const states: ReadonlyArray<{
   readonly name: string;
   readonly url: string;
   readonly open?: boolean;
+  // Set only for a state with a diagnosed, structural `incomplete` finding
+  // that is NOT this example's to fix (see the reason given at each use, and
+  // the fix report for #32). Never used to park something merely unexamined.
+  readonly knownIncomplete?: string;
 }> = [
-  { name: 'idle', url: story('idle') },
+  {
+    name: 'idle',
+    url: story('idle'),
+    knownIncomplete:
+      'Player.ActivationButton is a real, full-viewport "tap anywhere to play" surface while idle (position: absolute; inset: 0; z-index: 30, not overridable via its style prop) — genuinely rendered and meaningful, unlike LoadingIndicator\'s empty idle case, so it cannot be visually hidden the same way. It geometrically outranks the time row underneath it, which axe reports as color-contrast/bgOverlap regardless of either element\'s background color.'
+  },
   { name: 'playing', url: story('playing') },
   { name: 'paused', url: composition },
   { name: 'captions-on', url: composition },
-  { name: 'menu-open', url: composition, open: true },
+  {
+    name: 'menu-open',
+    url: composition,
+    open: true,
+    knownIncomplete:
+      'axe-core\'s aria-valid-attr-value check unconditionally flags any aria-controls paired with a non-false aria-haspopup as "needs review" (messageKey: controlsWithinPopup) the instant the attribute is present — it does not attempt to resolve the id first. Every correctly-built aria-haspopup+aria-controls menu trips this; it is not specific to reely.'
+  },
   { name: 'blocked-autoplay', url: story('blocked-autoplay') },
-  { name: 'error', url: story('error-state') }
+  {
+    name: 'error',
+    url: story('error-state'),
+    knownIncomplete:
+      'Player.ErrorDisplay is a real, full-viewport error surface while an error exists (position: absolute; inset: 0; z-index: 40, not overridable via its style prop) — by design, above everything else, including the time row underneath it. Making its own background fully opaque (this task) resolved the separate color-contrast/imgNode finding on its own text, but bgOverlap on the time row is a pure stacking-order determination in axe (independent of any color), so it persists regardless.'
+  }
 ];
 
 // Scoped to the player. Storybook injects a hidden argstable
@@ -53,7 +73,7 @@ const scan = (page: Page) =>
 for (const state of states) {
   test(`no accessibility violations in the ${state.name} state`, async ({
     page
-  }) => {
+  }, testInfo) => {
     await page.goto(state.url);
     // The idle state renders no controls at all, so wait on the viewport.
     await expect(page.locator('[data-reely-part="viewport"]')).toBeVisible();
@@ -71,17 +91,24 @@ for (const state of states) {
     // tells whoever reads the CI log nothing about what broke.
     expect(results.violations).toEqual([]);
 
-    // `results.incomplete` (axe's needs-review bucket) is deliberately NOT
-    // asserted empty here. On the `composition`-backed states it always
-    // carries a `color-contrast` entry for the caption line and both time
-    // elements, with reason `bgOverlap`: `Player.LoadingIndicator` mounts an
-    // always-present, full-viewport `position: absolute; inset: 0` div at
-    // `z-index: 30` even while idle (by design, so a screen reader still gets
-    // the aria-live region when it later populates) — higher than every other
-    // layer in the composition, and not overridable via its `style` prop. Any
-    // text anywhere in this viewport therefore reads as "overlapped by
-    // another element" to axe, regardless of the example's own CSS. That is a
-    // primitive-level constraint, not something this story's layout controls,
-    // so it is reported (issue #32) rather than forced green here.
+    // `results.incomplete` is axe's needs-review bucket: rules it could not
+    // conclusively pass or fail. An empty one is what makes the WCAG 1.4.3
+    // (color-contrast) claim over this state's text real, rather than
+    // parked. `Player.LoadingIndicator` used to force this on every
+    // composition-backed state by occupying the full viewport even while
+    // idle; that is fixed (#32, `packages/react/src/index.tsx`). A few
+    // states still carry a distinct, diagnosed `incomplete` entry that is
+    // not this example's or this task's to fix — see `knownIncomplete`
+    // above. Those are surfaced as a visible, non-failing annotation
+    // instead of silently dropped, so CI stays honest without staying red
+    // on findings outside this task's scope.
+    if (state.knownIncomplete) {
+      testInfo.annotations.push({
+        type: 'known-incomplete (#32)',
+        description: `${state.knownIncomplete} Actual: ${JSON.stringify(results.incomplete)}`
+      });
+    } else {
+      expect(results.incomplete).toEqual([]);
+    }
   });
 }
