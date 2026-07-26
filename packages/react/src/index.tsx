@@ -1096,6 +1096,103 @@ const visuallyHiddenStyle: CSSProperties = {
   border: 0
 };
 
+// --- buffering/stall presentation (#35) -------------------------------------
+// `state.buffering` is the raw provider signal (`waiting`, `bufferstart`,
+// YouTube state 3), so it flaps: a short rebuffer under healthy adaptive
+// bitrate would strobe the indicator. The policy debounces here rather than in
+// core, so `state.buffering` stays truthful for analytics consumers and no
+// timer lifecycle enters the core state machine. Full rationale:
+// docs/superpowers/specs/2026-07-26-buffering-stall-policy-35-design.md
+const BUFFERING_SHOW_DELAY_MS = 500;
+// Once anything is shown it stays shown this long. A show delay alone does not
+// stop flicker: a stall lasting 550ms would paint for 50ms, and that is the
+// flicker. Applies to `loading-provider` too — a fast provider load strobes the
+// indicator the same way a short rebuffer does.
+const LOADING_MIN_VISIBLE_MS = 500;
+
+type LoadingPresentation = 'loading-provider' | 'buffering' | null;
+
+const useLoadingPresentation = (): LoadingPresentation => {
+  const { activation, buffering } = usePlayerState((state) => ({
+    activation: state.activation,
+    buffering: state.buffering
+  }));
+  const desired: LoadingPresentation =
+    activation === 'error'
+      ? null
+      : activation === 'loading-provider'
+        ? 'loading-provider'
+        : buffering
+          ? 'buffering'
+          : null;
+  const [shown, setShown] = useState<LoadingPresentation>(null);
+  const [floorExpired, setFloorExpired] = useState(true);
+  const visible = shown !== null;
+
+  // Adjusted during render rather than from an effect. Every branch below is a
+  // conclusion that follows directly from the state just read, so an effect
+  // would only add a wasted commit — and `react-hooks/set-state-in-effect`
+  // rightly rejects that shape. Each branch is guarded so it is a no-op once
+  // applied, so this converges in one extra render pass, before paint.
+  if (desired === null) {
+    // A terminal error overrides the floor with no wait: it must not hold
+    // "Buffering" on top of ErrorDisplay.
+    if (visible && (floorExpired || activation === 'error')) {
+      setShown(null);
+      setFloorExpired(true);
+    }
+  } else if (visible && shown !== desired) {
+    // Already on screen: swap the label with no delay. Hiding for 500ms across
+    // `loading-provider` -> `buffering` would manufacture the very flicker the
+    // delay exists to remove.
+    setShown(desired);
+  } else if (!visible && desired === 'loading-provider') {
+    // Nothing is on screen yet, so there is nothing to flicker against.
+    setShown('loading-provider');
+    setFloorExpired(false);
+  }
+
+  // A stall is admitted only after it has run uninterrupted for the delay.
+  // Cleanup runs before the next effect pass and on unmount, so a stall that
+  // clears inside the window cancels rather than fires late.
+  useEffect(() => {
+    if (desired !== 'buffering' || visible) return;
+    const timer = setTimeout(() => {
+      setShown('buffering');
+      setFloorExpired(false);
+    }, BUFFERING_SHOW_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [desired, visible]);
+
+  // Keyed on `visible`, not on `shown`, so a `loading-provider` -> `buffering`
+  // label swap does not restart the floor: it bounds the visible period, not
+  // the label.
+  useEffect(() => {
+    if (!visible || floorExpired) return;
+    const timer = setTimeout(
+      () => setFloorExpired(true),
+      LOADING_MIN_VISIBLE_MS
+    );
+    return () => clearTimeout(timer);
+  }, [visible, floorExpired]);
+
+  return shown;
+};
+
+/**
+ * Surfaces provider loading and mid-playback stalls as a polite live region.
+ *
+ * `data-state` is `loading-provider`, `buffering` or `idle`; both active states
+ * share one full-bleed box, so styling the two differently is a CSS decision,
+ * not a prop.
+ *
+ * Debounced (#35): a stall must persist 500ms before it is admitted, and once
+ * admitted it is held 500ms, so a short rebuffer never strobes the indicator.
+ * A provider load shows immediately — there is nothing on screen to flicker
+ * against — but is held by the same 500ms floor. A terminal activation error
+ * clears the indicator at once, overriding both timers. `state.buffering`
+ * remains the raw, undebounced provider signal for consumers who want it.
+ */
 export type LoadingIndicatorProps = ComponentPropsWithRef<'div'>;
 
 export const LoadingIndicator = ({
@@ -1103,16 +1200,7 @@ export const LoadingIndicator = ({
   style,
   ...props
 }: LoadingIndicatorProps) => {
-  const { activation, buffering } = usePlayerState((state) => ({
-    activation: state.activation,
-    buffering: state.buffering
-  }));
-  const active =
-    activation === 'loading-provider'
-      ? 'loading-provider'
-      : activation !== 'error' && buffering
-        ? 'buffering'
-        : null;
+  const active = useLoadingPresentation();
   // The live region stays mounted (empty when idle) so a screen reader
   // announces the buffering/loading transition. A region that mounts already
   // populated is typically not announced. It must not, however, occupy the
@@ -1541,6 +1629,12 @@ export const VolumeSlider = ({
   );
 };
 
+/**
+ * `data-buffering` is `"true"` while a stall is admitted, on the same 500ms
+ * schedule as `LoadingIndicator` (#35). It is a separate attribute from
+ * `data-state`, which means "is there a seek window" and does not move during a
+ * stall. The slider stays interactive: seeking away is how a user escapes one.
+ */
 export type SeekSliderProps = ComponentPropsWithRef<'div'> & {
   // Escape hatch onto the inner range control (aria-label, step, disabled,
   // id/name, data-*, onChange, style). The library keeps ownership of the
@@ -1580,6 +1674,7 @@ export const SeekSlider = ({
       status: state.capabilities.seek.status
     }));
   const { controller } = usePlayer();
+  const stalled = useLoadingPresentation() === 'buffering';
   if (status !== 'available') return null;
   const hasDuration = typeof duration === 'number' && duration > 0;
   const window = seekWindow(duration, seekable);
@@ -1591,6 +1686,7 @@ export const SeekSlider = ({
   return (
     <div
       {...props}
+      data-buffering={stalled ? 'true' : 'false'}
       data-provider={provider ?? undefined}
       data-reely-part="seek-slider"
       data-state={window ? 'ready' : 'idle'}

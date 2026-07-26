@@ -11,7 +11,9 @@ const meta = {
         component: [
           '`Player.LoadingIndicator` surfaces buffering/loading.',
           '',
-          '**Contract** — `data-reely-part="loading-indicator"`, `data-state`.',
+          '**Contract** — `data-reely-part="loading-indicator"`, `data-state="loading-provider" | "buffering" | "idle"`. Both active states share one full-bleed box, so styling them differently is a CSS decision, not a prop.',
+          '',
+          '**Debounce (#35)** — a stall must persist 500ms before it is admitted, and once admitted it is held 500ms, so a short rebuffer never strobes the indicator. A provider load shows immediately (nothing is on screen to flicker against) but is held by the same 500ms floor. A terminal activation error clears it at once. `state.buffering` remains the raw, undebounced signal.',
           '',
           '**Accessibility** — decorative/status.',
           '',
@@ -65,8 +67,12 @@ export const Buffering: Story = {
   },
   play: async ({ canvas }) => {
     const indicator = await canvas.findByRole('status');
-    await waitFor(() =>
-      expect(indicator).toHaveAttribute('data-state', 'buffering')
+    // The indicator debounces: a stall must persist 500ms before it is
+    // admitted (#35). The timeout is explicit so this does not silently depend
+    // on waitFor's default being larger than the delay.
+    await waitFor(
+      () => expect(indicator).toHaveAttribute('data-state', 'buffering'),
+      { timeout: 2_000 }
     );
   }
 };

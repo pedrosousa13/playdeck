@@ -214,11 +214,16 @@ test('renders no Reely control layer over a ready YouTube embed', async () => {
     expect(document.querySelector('[data-reely-part="activation"]')).toBeNull();
   });
   // The live region persists (for announcements) but is idle and empty over a
-  // ready embed — no active loading layer.
+  // ready embed — no active loading layer. Awaited rather than asserted
+  // synchronously: the indicator holds a provider load for a 500ms minimum so
+  // a fast load does not strobe it (#35), and this embed loads instantly.
   const loadingIndicator = document.querySelector(
     '[data-reely-part="loading-indicator"]'
   );
-  expect(loadingIndicator?.getAttribute('data-state')).toBe('idle');
+  await waitFor(
+    () => expect(loadingIndicator?.getAttribute('data-state')).toBe('idle'),
+    { timeout: 2_000 }
+  );
   expect(loadingIndicator?.textContent).toBe('');
   expect(document.querySelector('[data-reely-part="media"]')).not.toBeNull();
 });

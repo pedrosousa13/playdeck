@@ -251,6 +251,33 @@ describe('SeekSlider', () => {
     ...patch
   });
 
+  test('carries an admitted stall on the same 500ms schedule as the indicator', () => {
+    const { container, emit } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady()
+    );
+    const slider = container.querySelector('[data-reely-part="seek-slider"]');
+    expect(attr(slider, 'data-buffering')).toBe('false');
+
+    vi.useFakeTimers();
+    emit({ buffering: true });
+
+    // Same debounce as LoadingIndicator, from the same hook: a short rebuffer
+    // must not twitch the slider either.
+    act(() => void vi.advanceTimersByTime(499));
+    expect(attr(slider, 'data-buffering')).toBe('false');
+
+    act(() => void vi.advanceTimersByTime(1));
+    expect(attr(slider, 'data-buffering')).toBe('true');
+
+    // `data-state` means "is there a seek window" and must be untouched by the
+    // stall — conflating the two axes would break every consumer rule that
+    // selects on [data-state="ready"].
+    expect(attr(slider, 'data-state')).toBe('ready');
+
+    vi.useRealTimers();
+  });
+
   test('renders nothing while the seek capability is unknown', () => {
     renderWithPlayer(<Player.SeekSlider />, capabilities({ seek: notReady }));
     expect(screen.queryByRole('slider')).toBeNull();
