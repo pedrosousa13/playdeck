@@ -493,3 +493,67 @@ test('labels confirmed pause actions with their requested origin', async () => {
 
   expect(origins).toEqual(['user']);
 });
+
+// Reproduces #87. The provider reports ready from inside `attach()` — which is
+// what `provider-native` does whenever the media already has metadata
+// (`readyState >= HAVE_METADATA`), i.e. for a local fixture served directly
+// rather than through a throttled/mocked response. `load()` is only queued
+// after `attach()` returns, so a play issued during the attach tick lands
+// first and `load()` then aborts it, per the HTML media spec.
+const createEagerReadyProvider = () => {
+  const calls: string[] = [];
+  let emit: ProviderStateListener | undefined;
+  const provider: ProviderAdapter = {
+    provider: 'native',
+    attach: () => {
+      calls.push('attach');
+      emit?.({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+    },
+    load: () => {
+      calls.push('load');
+    },
+    destroy: () => undefined,
+    subscribe: (listener) => {
+      emit = listener;
+      return () => undefined;
+    },
+    play: async () => {
+      calls.push('play');
+      return { ok: true };
+    },
+    mute: async () => {
+      calls.push('mute');
+      return { ok: true };
+    }
+  };
+  return { calls, provider };
+};
+
+test('issues no autoplay play before load when metadata is already available', async () => {
+  const eager = createEagerReadyProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(eager.provider);
+  await flushCommands();
+
+  expect(eager.calls).toContain('play');
+  expect(eager.calls.indexOf('play')).toBeGreaterThan(
+    eager.calls.indexOf('load')
+  );
+});
+
+test('issues no muted-autoplay play before load either', async () => {
+  // `muted` is only accidentally safe today: the `mute` await costs it enough
+  // microtask hops to land after `load()`. Nothing in the code expresses that,
+  // so it is one refactor away from breaking the same way `audible` does.
+  const eager = createEagerReadyProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('muted');
+  controller.setProvider(eager.provider);
+  await flushCommands();
+
+  expect(eager.calls).toContain('play');
+  expect(eager.calls.indexOf('play')).toBeGreaterThan(
+    eager.calls.indexOf('load')
+  );
+});

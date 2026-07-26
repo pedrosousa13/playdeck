@@ -662,7 +662,13 @@ test('mutes before autoplay and reports attempting then confirmed started', asyn
   const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
 
   confirmMetadataReady(media);
-  expect(screen.getByRole('button').dataset.autoplayState).toBe('attempting');
+  // Awaited rather than asserted synchronously: autoplay is deferred until the
+  // provider's own `load()` has run (#87), because `load()` aborts a play
+  // already in flight. The `attempting` state is stable until the
+  // `volumechange` below confirms the mute, so this cannot race past it.
+  await waitFor(() =>
+    expect(screen.getByRole('button').dataset.autoplayState).toBe('attempting')
+  );
   fireEvent.volumeChange(media);
 
   await waitFor(() =>
@@ -1760,4 +1766,41 @@ test('tolerates an inline callback ref through unrelated parent re-renders', () 
     fireEvent.click(getByText('tick'));
   }).not.toThrow();
   expect(observerInstances).toHaveLength(1);
+});
+
+test('issues no autoplay play before the provider load when metadata is already present', async () => {
+  // The end-to-end shape of #87, driven through the real native provider
+  // rather than a fake: `provider-native.attach()` calls `emitMediaState()`
+  // synchronously, which reports `ready` off `readyState >= HAVE_METADATA`.
+  // The controller only queues `load()` after `attach()` returns, so an
+  // autoplay play issued during the attach tick lands first and `load()` then
+  // aborts it, per the HTML media spec.
+  //
+  // Reproducing needs metadata present BEFORE the provider attaches — a local
+  // fixture served directly rather than a throttled or mocked response. That
+  // latency difference is why the sibling defect (#86) survived so long.
+  const calls: string[] = [];
+  vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(1);
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {
+    calls.push('load');
+  });
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+    this: HTMLMediaElement
+  ) {
+    calls.push('play');
+    this.dispatchEvent(new Event('play'));
+    return Promise.resolve();
+  });
+
+  render(
+    <LegacyRoot autoplay="audible" source="/tracer.mp4">
+      <Player.Media />
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+
+  await waitFor(() =>
+    expect(screen.getByRole('button').dataset.autoplayState).toBe('started')
+  );
+  expect(calls).toEqual(['load', 'play']);
 });
