@@ -1,6 +1,11 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { controls, settingsMenu, settingsTrigger } from './locators';
+import {
+  controls,
+  playButton,
+  settingsMenu,
+  settingsTrigger
+} from './locators';
 
 // #32's verification target. Every state below is a MOCK story: no media, no
 // network, and identical on every engine, which is what makes a fixed
@@ -182,5 +187,36 @@ for (const reflow of reflowCases) {
     });
     expect(clip.clippedTopBy).toBeLessThanOrEqual(0);
     expect(clip.clippedBottomBy).toBeLessThanOrEqual(0);
+
+    // No occlusion. Correct geometry is not enough: a control row can have a
+    // perfectly unclipped bounding box and still be painted underneath
+    // Gestures/Poster/Media, invisible and unclickable, if it is not a
+    // *positioned* element (CSS 2.1 always paints in-flow, non-positioned
+    // content before positioned content, regardless of z-index or DOM order).
+    // That exact regression shipped past every assertion above it in this
+    // file, past `toBeVisible()` (attached, non-zero size, not display:none —
+    // it does not check what else is painted on top), and past the 320px
+    // reflow fix's own author, so it is hit-tested here explicitly rather
+    // than trusted to geometry.
+    const playHandle = await playButton(page).elementHandle();
+    if (playHandle === null) throw new Error('play button not found');
+    const hit = await page.evaluate((play: Element) => {
+      const r = play.getBoundingClientRect();
+      const el = document.elementFromPoint(
+        r.left + r.width / 2,
+        r.top + r.height / 2
+      );
+      return {
+        isPlayButtonOrDescendant:
+          el !== null && (el === play || play.contains(el)),
+        resolvedTag: el?.tagName ?? null,
+        resolvedPart: el?.getAttribute('data-reely-part') ?? null
+      };
+    }, playHandle);
+    expect(
+      hit.isPlayButtonOrDescendant,
+      `expected the play button's own center to hit-test to itself, but ` +
+        `resolved to <${hit.resolvedTag}> data-reely-part="${hit.resolvedPart}" instead`
+    ).toBe(true);
   });
 }
