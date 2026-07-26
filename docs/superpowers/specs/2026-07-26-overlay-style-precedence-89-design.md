@@ -10,10 +10,10 @@ The issue frames Q1 as a choice between two defensible readings — geometry-bef
 
 It is incidental. Counted across every `...style` spread site in `packages/react/src/index.tsx` on `main` @ `714abdc`:
 
-| Order | Sites | Components |
-| --- | --- | --- |
-| `...style` **last** (geometry is an overridable default) | 15 | `Media`, `Captions`, `SeekSlider`, `SettingsMenuRoot`, `Gestures`, and every `controlTargetStyle` control |
-| `...style` **first** (geometry is an invariant) | 7 | `Viewport`, `Poster`, `ActivationButton`, `LoadingIndicator` (both branches), `ErrorDisplay`, `PosterImage` |
+| Order                                                    | Sites | Components                                                                                                  |
+| -------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------- |
+| `...style` **last** (geometry is an overridable default) | 15    | `Media`, `Captions`, `SeekSlider`, `SettingsMenuRoot`, `Gestures`, and every `controlTargetStyle` control   |
+| `...style` **first** (geometry is an invariant)          | 7     | `Viewport`, `Poster`, `ActivationButton`, `LoadingIndicator` (both branches), `ErrorDisplay`, `PosterImage` |
 
 The majority is already "overridable default". More decisive than the count: **the two groups are not separable by any principle the code states.**
 
@@ -25,7 +25,7 @@ Full-bleed overlay with a stacking context, on both sides of the line. Whatever 
 
 Two further facts push the same way:
 
-- **Inline styles beat stylesheet rules.** For the 7 invariant sites, the *only* override path available to a consumer today is `!important`. `Reference.mdx:34` ("Layout is your job too") advertises layout as consumer-owned; a documented escape hatch that requires `!important` to work is not an escape hatch.
+- **Inline styles beat stylesheet rules.** For the 7 invariant sites, the _only_ override path available to a consumer today is `!important`. `Reference.mdx:34` ("Layout is your job too") advertises layout as consumer-owned; a documented escape hatch that requires `!important` to work is not an escape hatch.
 - **Ecosystem convention.** Headless React libraries in this space (Radix, Base UI) treat a forwarded `style` prop as last-wins. A consumer's first guess will be wrong 7 times out of 22 in reely today, with no signal telling them which.
 
 ### Ruling for Q1
@@ -39,7 +39,7 @@ With one carve-out, because "`style` always wins" is too blunt to be correct:
 Two components have such properties, and both would be broken by the unqualified rule:
 
 - `Poster` (`index.tsx:1025`) sets `visibility` from `posterState`. A consumer's static `style={{ visibility: 'visible' }}` would not be overriding layout — it would be pinning a state machine's output, permanently defeating the poster's own hide.
-- `LoadingIndicator` (`index.tsx:1223-1229`) selects its whole branch from `active`. The *choice* of branch is state-derived and stays the primitive's; the *contents* of each branch are static geometry and become overridable.
+- `LoadingIndicator` (`index.tsx:1223-1229`) selects its whole branch from `active`. The _choice_ of branch is state-derived and stays the primitive's; the _contents_ of each branch are static geometry and become overridable.
 
 The carve-out is narrow and mechanical: if the value is computed from `usePlayerState`, it is invariant; otherwise it is a default. That is a rule a consumer can hold in their head and a reviewer can apply without judgement.
 
@@ -50,7 +50,7 @@ The carve-out is narrow and mechanical: if the value is computed from `usePlayer
 An explicit prop is more specific than a generic `style` bag, so it wins; `style` in turn beats the CSS-variable default, because a consumer who writes `style={{ objectFit: 'contain' }}` has asked for exactly that. Precedence is stated in one expression rather than by spread ordering:
 
 ```ts
-objectFit: objectFit ?? style?.objectFit ?? 'var(--reely-poster-fit, cover)'
+objectFit: objectFit ?? style?.objectFit ?? 'var(--reely-poster-fit, cover)';
 ```
 
 The rest of `PosterImage`'s geometry (`display`, `width`, `height`) moves before `...style` with everything else.
@@ -59,7 +59,7 @@ The rest of `PosterImage`'s geometry (`display`, `width`, `height`) moves before
 
 Each of the 7 sites builds its geometry as an object literal inside the render body, so a fresh object is allocated on every render of every overlay — including `Poster` and `LoadingIndicator`, which re-render on state ticks. `controlTargetStyle` (`index.tsx:1498`) and `captionsOverlayStyle` (`index.tsx:1323`) already establish the module-level-constant idiom for exactly this.
 
-Hoisting is not cosmetic here: it is what makes the ordering rule *checkable*. With the geometry in named module constants, `{ ...activationOverlayStyle, ...style }` is uniform and greppable, and a future site that gets the order wrong stands out. The per-render allocation going away is a real, if small, second benefit.
+Hoisting is not cosmetic here: it is what makes the ordering rule _checkable_. With the geometry in named module constants, `{ ...activationOverlayStyle, ...style }` is uniform and greppable, and a future site that gets the order wrong stands out. The per-render allocation going away is a real, if small, second benefit.
 
 ## Q2: the axe residue is the shadow, not the thing
 
@@ -78,7 +78,7 @@ Making the primitive dodge the tool would fix the measurement and leave the defe
 
 ### Ruling for Q2
 
-**Composition, not primitive.** The primitives are behaving correctly: a fatal error surface *should* cover the player at `z-index: 40`, and a tap-anywhere-to-play surface *should* cover it at 30. Neither should be weakened.
+**Composition, not primitive.** The primitives are behaving correctly: a fatal error surface _should_ cover the player at `z-index: 40`, and a tap-anywhere-to-play surface _should_ cover it at 30. Neither should be weakened.
 
 The reference example stops rendering the interactive control row while a full-bleed, pointer-capturing overlay owns the viewport:
 
@@ -117,7 +117,7 @@ Per component, in `packages/react/test/`:
 3. **`PosterImage` precedence is three-way.** Prop beats `style` beats the CSS-variable default: three assertions, one per rung.
 4. **The composition does not bury controls.** Extend `e2e/a11y.spec.ts`'s existing per-state assertions: with both `knownIncomplete` entries removed, the equality assertion carries this. Add a direct assertion that no control is focusable in the `error` and `idle` states, so the guarantee is stated as focus reachability rather than inferred from an axe contrast bucket.
 
-Test 4's direct assertion matters: the axe equality alone would pass again if someone re-rendered the controls *and* the overlay stopped being opaque. The thing being protected is focus reachability, so that is what gets asserted.
+Test 4's direct assertion matters: the axe equality alone would pass again if someone re-rendered the controls _and_ the overlay stopped being opaque. The thing being protected is focus reachability, so that is what gets asserted.
 
 ## What changed during implementation
 
