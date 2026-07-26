@@ -292,6 +292,132 @@ export const KeyboardFlow: Story = {
 };
 
 /**
+ * Nothing has activated yet: no capability is available, so every
+ * capability-gated control (captions among them) is absent and the
+ * composition is the poster plus the activation overlay. `Player.PlayButton`
+ * is not capability-gated — it must stay actionable so a click can recover a
+ * stalled player — so it renders regardless; the activation overlay
+ * (`Player.ActivationButton`) is the idle-specific control asserted below.
+ * One of #32's seven axe states.
+ */
+export const Idle: Story = {
+  parameters: {
+    player: {
+      state: {
+        lifecycle: 'idle',
+        activation: 'dormant',
+        playback: 'paused',
+        provider: null,
+        duration: null,
+        currentTime: 0,
+        capabilities: createInitialPlayerState().capabilities,
+        captionRendering: 'unavailable',
+        textTracks: [],
+        selectedTextTrackId: null,
+        qualities: [],
+        selectedQualityId: null,
+        quality: null
+      } satisfies ProviderStatePatch,
+      cues: []
+    }
+  },
+  play: async ({ canvas }) => {
+    // The activation overlay only renders pre-activation (`ActivationButton`
+    // returns null once `activation === 'ready'`), so its presence proves the
+    // overrides above actually replaced `meta`'s staged (already-activated)
+    // state rather than merging into it.
+    await expect(
+      canvas.getByRole('button', { name: 'Play video' })
+    ).toBeInTheDocument();
+    // Captions are gated on the `selectTextTrack` capability, which the
+    // override above resets to unavailable — both toggle labels are absent.
+    await expect(
+      canvas.queryByRole('button', { name: 'Disable captions' })
+    ).toBeNull();
+    await expect(
+      canvas.queryByRole('button', { name: 'Enable captions' })
+    ).toBeNull();
+  }
+};
+
+/** Mid-playback. One of #32's seven axe states. */
+export const Playing: Story = {
+  parameters: {
+    player: {
+      state: {
+        ...stagedState,
+        playback: 'playing',
+        currentTime: 42
+      } satisfies ProviderStatePatch
+    }
+  },
+  play: async ({ canvas }) => {
+    // `PlayButton`'s accessible name flips to "Pause" once `playback` is
+    // 'playing' (`aria-label={isPlaying ? 'Pause' : 'Play'}`), so the playing
+    // button is found by that name, not by "Play".
+    await expect(
+      canvas.getByRole('button', { name: 'Pause' })
+    ).toHaveAttribute('data-state', 'playing');
+  }
+};
+
+/**
+ * Autoplay was attempted and the browser refused it. The controls stay live —
+ * a blocked autoplay is a recoverable state a user clicks out of, not an
+ * error. One of #32's seven axe states.
+ */
+export const BlockedAutoplay: Story = {
+  parameters: {
+    player: {
+      // `rootProps.autoplay` collides with the decorator (Root re-applies its
+      // own `configureAutoplay`); the top-level knob is the supported route.
+      autoplay: 'audible',
+      playResult: { ok: false, reason: 'blocked' },
+      state: {
+        ...stagedState,
+        playback: 'paused',
+        autoplay: 'blocked'
+      } satisfies ProviderStatePatch
+    }
+  },
+  play: async ({ canvas }) => {
+    await expect(
+      canvas.getByRole('button', { name: 'Play' })
+    ).toHaveAttribute('data-state', 'paused');
+  }
+};
+
+/**
+ * A fatal, recoverable source error. `ErrorDisplay` gates on
+ * `state.error !== null` (not on `lifecycle`), and `recoverable: true` is what
+ * makes the example's icon-only Retry button render. One of #32's seven axe
+ * states, and the only one that puts a `role="alert"` in the tree.
+ */
+export const ErrorState: Story = {
+  parameters: {
+    player: {
+      state: {
+        ...stagedState,
+        lifecycle: 'error',
+        playback: 'paused',
+        error: {
+          category: 'source',
+          fatal: true,
+          recoverable: true,
+          message: 'The video could not be loaded.'
+        }
+      } satisfies ProviderStatePatch
+    }
+  },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole('alert')).toBeInTheDocument();
+    await expect(
+      canvas.getByRole('button', { name: 'Retry' })
+    ).toBeInTheDocument();
+  }
+};
+
+/**
  * Real providers, real media, real network — excluded from the deterministic
  * story test suite (tagged `!test`), which is also what makes the mock
  * decorator step aside. `e2e/reference.spec.ts` drives this one.
