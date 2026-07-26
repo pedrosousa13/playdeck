@@ -358,7 +358,17 @@ export const ReferencePlayerWithSources = (): ReactElement => {
           </button>
         ))}
       </div>
-      <Player.Root loading="interaction" source={current.source}>
+      {/* `preload="none"` is deliberate, not a default: with the default
+          `"metadata"`, the local MP4 fixture is small enough that the
+          native provider can reach `readyState >= HAVE_METADATA` inside the
+          same synchronous tick as `Root.setProvider`, before its `load()`
+          call resets the element and races the queued play from the
+          activation click. `"none"` defers loading past that reset, which
+          also matches an interaction-gated player only fetching the media
+          the user asked for. Measured driving this story headlessly: e2e
+          reference.spec.ts's MP4 play assertion failed on ~50-80% of runs
+          without this. */}
+      <Player.Root loading="interaction" preload="none" source={current.source}>
         <ReferencePlayer
           textTracks={current.id === 'mp4' ? mp4TextTracks : undefined}
         />
