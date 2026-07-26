@@ -45,5 +45,17 @@ Vimeo.
   (`Poster`'s `visibility`) stay the primitive's own, and `PosterImage`'s
   explicit `objectFit` / `objectPosition` props still beat `style`.
 
+- **Subscriber isolation** — one listener throwing no longer abandons the
+  notification it was part of. `subscribe`, `subscribeCues` and `on` each
+  iterated their listeners with a bare loop, so a throwing listener starved
+  every listener registered after it for that emit; a control that subscribed
+  late then rendered exactly one transition stale until the next unrelated
+  emit (#95). Listener errors are now isolated and rethrown on a fresh task, so
+  they still reach uncaught-error handling instead of being swallowed. The
+  throw that surfaced this was Reely's own: Media Session position reporting
+  passed `currentTime` straight through, and WebKit settles it a fraction past
+  `duration` at the end of a clip, which the Media Session spec makes a
+  `TypeError`. Position is now clamped to the media's own bounds.
+
 The `DefaultPlayer` preset is not in this release; it is deferred (see issue
 \#1). This prerelease ships the headless primitives only.

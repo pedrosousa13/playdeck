@@ -399,6 +399,28 @@ const unsubscribeSafely = (unsubscribe: (() => void) | undefined): void => {
   }
 };
 
+// One subscriber must not be able to abandon an emit. `Set.forEach` stops at
+// the first throw, so every listener registered AFTER the thrower silently
+// missed that notification and resynced only on the next unrelated one — a
+// control that subscribed late rendered exactly one transition stale (#95).
+//
+// Isolated but not silenced: the error is rethrown on a fresh task, so it
+// still reaches the page's uncaught-error handling the way a listener throwing
+// at top level would. Swallowing it outright is what would have hidden the
+// media-session defect that found this bug in the first place.
+const notifySafely = <Value>(
+  listener: (value: Value) => void,
+  value: Value
+): void => {
+  try {
+    listener(value);
+  } catch (cause) {
+    queueMicrotask(() => {
+      throw cause;
+    });
+  }
+};
+
 const explicitObjectGuidance =
   'Pass an explicit source object with a supported type and the required fields.';
 
@@ -1013,12 +1035,12 @@ export class PlayerController {
   #setState = (state: PlayerState): void => {
     const snapshot = Object.freeze(state);
     this.#state = snapshot;
-    this.#listeners.forEach((listener) => listener(snapshot));
+    this.#listeners.forEach((listener) => notifySafely(listener, snapshot));
   };
 
   #setActiveCues = (cues: readonly TextCue[]): void => {
     this.#activeCues = Object.freeze(cues.map((c) => Object.freeze({ ...c })));
-    this.#cueListeners.forEach((l) => l(this.#activeCues));
+    this.#cueListeners.forEach((l) => notifySafely(l, this.#activeCues));
   };
 
   #applyPatch = (patch: ProviderStatePatch, acceptAutoplay = true): void => {
@@ -1251,7 +1273,7 @@ export class PlayerController {
     } as PlayerEvent;
     this.#eventListeners
       .get(completeEvent.type)
-      ?.forEach((listener) => listener(completeEvent));
+      ?.forEach((listener) => notifySafely(listener, completeEvent));
   };
 
   #handleLifecycleFailure = (cause: unknown, generation: number): void => {
@@ -1520,9 +1542,14 @@ export const bindMediaSession = (
       else root.notifyPaused();
     }
     if (state.duration !== null && Number.isFinite(state.duration)) {
+      // Clamped, not passed through: the Media Session spec makes a position
+      // outside [0, duration] a TypeError, and WebKit settles `currentTime` a
+      // fraction PAST `duration` once a clip ends (measured 1.000131 against a
+      // duration of 1). Reporting the raw pair threw on ordinary end of
+      // playback (#95).
       root.setPositionState({
         duration: state.duration,
-        position: state.currentTime,
+        position: Math.min(Math.max(state.currentTime, 0), state.duration),
         playbackRate: state.playbackRate
       });
       positionCleared = false;
