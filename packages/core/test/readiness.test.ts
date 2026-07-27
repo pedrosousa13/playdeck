@@ -92,3 +92,110 @@ test('a retry refused without an error restores the declaration', async () => {
   expect(seen).toContain(false);
   expect(controller.getState().commandsReady).toBe(true);
 });
+
+test('whenReady resolves true when the adapter declares readiness', async () => {
+  const controller = new PlayerController();
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+
+  const pending = controller.whenReady();
+  emit({ commandsReady: true });
+
+  await expect(pending).resolves.toBe(true);
+});
+
+test('whenReady resolves true immediately when already ready', async () => {
+  const controller = new PlayerController();
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+  emit({ commandsReady: true });
+
+  await expect(controller.whenReady()).resolves.toBe(true);
+});
+
+test('whenReady resolves false when the provider detaches', async () => {
+  const controller = new PlayerController();
+  controller.setProvider(createProvider().provider);
+
+  const pending = controller.whenReady();
+  controller.setProvider(undefined);
+
+  await expect(pending).resolves.toBe(false);
+});
+
+test('whenReady resolves false when the provider is swapped', async () => {
+  const controller = new PlayerController();
+  controller.setProvider(createProvider().provider);
+
+  const pending = controller.whenReady();
+  controller.setProvider(createProvider().provider);
+
+  await expect(pending).resolves.toBe(false);
+});
+
+test('whenReady resolves false on a fatal error', async () => {
+  const controller = new PlayerController();
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+
+  const pending = controller.whenReady();
+  emit({
+    lifecycle: 'error',
+    activation: 'error',
+    error: {
+      category: 'provider',
+      fatal: true,
+      recoverable: false,
+      message: 'The stream is gone.'
+    }
+  });
+
+  await expect(pending).resolves.toBe(false);
+});
+
+// The React layer attaches its provider in an effect, so a consumer call that
+// lands before it must not be answered `false`.
+test('whenReady waits when no provider is attached yet', async () => {
+  const controller = new PlayerController();
+
+  let settled: boolean | 'pending' = 'pending';
+  void controller.whenReady().then((value) => (settled = value));
+  await Promise.resolve();
+  expect(settled).toBe('pending');
+
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+  emit({ commandsReady: true });
+  await Promise.resolve();
+
+  expect(settled).toBe(true);
+});
+
+// `toProviderError` stamps `recoverable: true` on every lifecycle exception,
+// so treating recoverable as terminal would settle on almost everything — the
+// misreading that hung PR #72.
+test('whenReady stays pending on a recoverable error', async () => {
+  const controller = new PlayerController();
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+
+  let settled: boolean | 'pending' = 'pending';
+  void controller.whenReady().then((value) => (settled = value));
+  emit({
+    lifecycle: 'error',
+    activation: 'error',
+    error: {
+      category: 'provider',
+      fatal: false,
+      recoverable: true,
+      message: 'The manifest request failed.'
+    }
+  });
+  await Promise.resolve();
+
+  expect(settled).toBe('pending');
+
+  emit({ commandsReady: true });
+  await Promise.resolve();
+  expect(settled).toBe(true);
+});
