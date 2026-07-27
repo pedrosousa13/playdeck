@@ -26,7 +26,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check && pnpm lint && pnpm typecheck
+      # typecheck first: it is `tsc -b`, which emits the package declarations
+      # the examples project resolves through its `paths`. test:docs proves the
+      # checker itself works before docs:check trusts it.
+      - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:docs && pnpm docs:check
 
   unit:
     runs-on: ubuntu-latest
