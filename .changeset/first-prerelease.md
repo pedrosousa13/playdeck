@@ -80,6 +80,17 @@ Vimeo.
   for any text in the player. It becomes the top-most overlay only once there
   is a loading or buffering state to show.
 
+- **Caption renderer, imperatively** — `setCaptionRenderer('custom' | 'native')`
+  is on `usePlayerActions()` and on the `Player.Root` ref handle, next to the
+  `captionRenderer` prop. It was reachable but undeclared: the ref hands back
+  the controller, so the method was there whether or not the type admitted it.
+  Flipping the renderer without re-rendering `Root` is what it is for.
+
+- **Media Session** — `getMediaSessionCoordinator(session)` is the way to get a
+  coordinator. `createMediaSessionCoordinator` is no longer exported: a second
+  coordinator over the same `MediaSession` hands out roots that cannot see each
+  other's ownership, which is what the one-per-document rule exists to prevent.
+
 - **Subscriber isolation** — one listener throwing no longer abandons the
   notification it was part of. `subscribe`, `subscribeCues` and `on` each
   iterated their listeners with a bare loop, so a throwing listener starved

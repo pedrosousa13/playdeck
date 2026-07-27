@@ -1,6 +1,23 @@
 {
   "name": "@reely/provider-youtube",
   "version": "0.0.0",
+  "description": "YouTube IFrame Player API provider for Reely.",
+  "keywords": [
+    "media",
+    "player",
+    "video",
+    "youtube"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/provider-youtube#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "directory": "packages/provider-youtube"
+  },
+  "bugs": {
+    "url": "https://github.com/pedrosousa13/reely/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
