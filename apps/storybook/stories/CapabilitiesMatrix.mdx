@@ -81,10 +81,15 @@ useEffect(() => {
 }, [commandsReady, actions]);
 ```
 
-Outside React, `controller.whenReady()` resolves `true` at the same moment, and
+For imperative code, `whenReady()` resolves `true` at the same moment, and
 `false` if the player detaches, is swapped, or fails fatally — it never rejects
-and never hangs:
+and never hangs. It sits on the player actions and on the `Player.Root` ref
+handle, as well as on a bare `PlayerController`:
 
 ```ts
-if (await controller.whenReady()) void controller.setPlaybackRate(0.75);
+const actions = Player.usePlayerActions();
+if (await actions.whenReady()) void actions.setPlaybackRate(0.75);
 ```
+
+A call made before a provider is attached waits rather than answering `false`,
+so it is safe to await from an effect that runs before mount finishes.
