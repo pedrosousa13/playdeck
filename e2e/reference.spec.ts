@@ -165,7 +165,7 @@ test('the control row does not overflow at 320px, and hides the volume slider be
   // AirPlayButton made it six buttons.
   //
   // The overflow assertions below hold at 320px regardless of the
-  // `@media (max-width: 420px)` volume-slider rule, because
+  // `@container (max-width: 420px)` volume-slider rule, because
   // `.reely-example-row-buttons` sets `flex-wrap: wrap` — the row cannot
   // overflow horizontally either way. What actually exercises that
   // breakpoint is the volume-slider visibility check that follows: hidden at
@@ -226,6 +226,140 @@ test('the volume slider hides on the player width, not the viewport width', asyn
   // same assertion as the test above, passing for the wrong reason.
   const width = await page.evaluate(() => document.documentElement.clientWidth);
   expect(width).toBeGreaterThan(420);
+});
+
+test('a narrow container keeps the 16:9 floor and puts the row in flow', async ({
+  page
+}) => {
+  // #114. The container query used to fire alone here: the volume slider hid,
+  // but the box stayed locked to `aspect-ratio: 16 / 9` and the row stayed an
+  // absolutely-positioned overlay covering 153px of those 180 — measured, with
+  // the media element itself only 150px tall underneath it. The 320px viewport
+  // path has always stacked instead (measured 336 = 180 media + 153 row),
+  // because `Player.Media` is in flow; this is that outcome, on the axis that
+  // an embed in a narrow column actually varies.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(story);
+  await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
+
+  const player = page.locator('.reely-example');
+  await expect
+    .poll(() => player.evaluate((el) => el.getBoundingClientRect().width))
+    .toBeLessThanOrEqual(320);
+
+  await activationButton(page).click();
+  await played(page);
+
+  // The media and the row both take part in flow, so the box is the sum of
+  // them rather than a 16:9 lid clamped over both: 320 x 9 / 16 = 180 was the
+  // old ceiling and the row alone is 153 of it. Measured at 303 after the fix;
+  // asserted as a relation, because the media element's own height depends on
+  // the fixture's intrinsic ratio.
+  const height = await player.evaluate((el) =>
+    Math.round(el.getBoundingClientRect().height)
+  );
+  expect(height).toBeGreaterThan(180);
+
+  const mediaHeight = await media(page).evaluate((el) =>
+    Math.round(el.getBoundingClientRect().height)
+  );
+  const rowHeight = await controls(page).evaluate((el) =>
+    Math.round(el.getBoundingClientRect().height)
+  );
+  // Stacked, not overlaid: neither one is hidden behind the other.
+  expect(height).toBeGreaterThanOrEqual(mediaHeight + rowHeight);
+
+  expect(
+    await controls(page).evaluate((el) => getComputedStyle(el).position)
+  ).toBe('relative');
+
+  // And the viewport really was wide throughout, or this is the 320px viewport
+  // test again, passing for the wrong reason.
+  expect(
+    await page.evaluate(() => document.documentElement.clientWidth)
+  ).toBeGreaterThan(420);
+});
+
+// PiP is capability-gated, and the capability is a property of the engine
+// BUILD rather than of the browser name: Firefox has no programmatic PiP at
+// all, and Playwright's Linux WebKit reports none either while macOS WebKit
+// does — measured, as two tests that passed locally on webkit and failed on
+// the same project in CI. So ask the media element, the way
+// `e2e/platform.spec.ts:23-51` derives its own expectation, instead of
+// encoding a browser list that is wrong on one platform.
+//
+// Call it after activation: there is no <video> in the document before that.
+const pipIsAvailable = (page: Page): Promise<boolean> =>
+  page.evaluate(() => {
+    const media = document.querySelector('video') as
+      (HTMLVideoElement & Record<string, unknown>) | null;
+    if (media === null || media.disablePictureInPicture === true) return false;
+    if (typeof media.requestPictureInPicture === 'function')
+      return document.pictureInPictureEnabled !== false;
+    return (
+      typeof media.webkitSupportsPresentationMode === 'function' &&
+      (media.webkitSupportsPresentationMode as (mode: string) => boolean)(
+        'picture-in-picture'
+      ) === true
+    );
+  });
+
+const skipWithoutPip =
+  'This engine build exposes no Picture-in-Picture, so neither the button nor the folded menu entry renders at any width.';
+
+test('a narrow container folds PiP into the settings menu', async ({
+  page
+}) => {
+  // The row holds 6 targets at 320px (312px of content, 44px targets, 4px
+  // gaps) and wants 8, so two wrap and the button row doubles to 92px. The
+  // volume slider is redundant with the mute button and is simply hidden; PiP
+  // and AirPlay are unique functionality, so they move rather than vanish.
+  //
+  // AirPlay is asserted only as absent from the row: it is capability-gated on
+  // a WebKit-only API, so on chromium its button and its menu entry are both
+  // legitimately missing and there is nothing to prove about the fold.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(story);
+  await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
+  await activationButton(page).click();
+  await played(page);
+  test.skip(!(await pipIsAvailable(page)), skipWithoutPip);
+
+  await expect(pipButton(page)).toBeHidden();
+  await expect(airPlayButton(page)).toBeHidden();
+
+  // One line: the button row is exactly one 44px target tall.
+  const buttonRow = page.locator('.reely-example-row-buttons');
+  expect(
+    await buttonRow.evaluate((el) =>
+      Math.round(el.getBoundingClientRect().height)
+    )
+  ).toBe(44);
+
+  // The function did not disappear with the button.
+  await settingsTrigger(page).click();
+  await expect(
+    page.getByRole('menuitem', { exact: true, name: 'Picture in picture' })
+  ).toBeVisible();
+});
+
+test('a wide player keeps PiP as a button, not a menu item', async ({
+  page
+}) => {
+  // The other half of the fold: both forms are rendered and the container
+  // query hides whichever does not apply, so the same action offered twice at
+  // one width is the failure mode this catches.
+  await page.goto(story);
+  await activationButton(page).click();
+  await played(page);
+  test.skip(!(await pipIsAvailable(page)), skipWithoutPip);
+
+  await expect(pipButton(page)).toBeVisible();
+
+  await settingsTrigger(page).click();
+  await expect(
+    page.getByRole('menuitem', { exact: true, name: 'Picture in picture' })
+  ).toBeHidden();
 });
 
 // AirPlay is hardcoded unavailable on both iframe providers — a static

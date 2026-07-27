@@ -207,6 +207,17 @@ test('a 320px container keeps every layer inside the player', async ({
       `${name} escapes the player`
     ).toBe(true);
   }
+
+  // #114: in flow, over a box that keeps its 16:9 floor. `absolute` here means
+  // the box is still ratio-locked and the row is eating the poster.
+  expect(
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-reely-part="controls"]');
+      if (el === null) throw new Error('no control row');
+      return getComputedStyle(el).position;
+    })
+  ).toBe('relative');
+  expect(Math.round(player.height)).toBe(180);
 });
 
 test('the idle and error states hand the whole player to their overlay', async ({

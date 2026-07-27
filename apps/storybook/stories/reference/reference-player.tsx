@@ -22,19 +22,31 @@ const layoutCss = `
    backtick right above). Do not put a backtick anywhere in here, including
    markdown-style code-quoting in a comment - it silently closes the string
    early and breaks the build with no warning at this line. */
+/* Controls that depend on how much room the PLAYER has query this, not the
+   viewport: an embedded player in a narrow column then gets the same
+   treatment as a narrow phone, which a viewport media query cannot express.
+
+   The container is this wrapper, not the player. An element is never matched
+   by its own container query, so with container-type on .reely-example the box
+   could not restyle itself — which is how aspect-ratio ended up stranded on a
+   viewport media query while the rules it is paired with fired on the
+   container (#114). The cqw unit below needs an ancestor container for the
+   same reason. max-width lives here so container width and player width are
+   the same number at every viewport; on the player it would leave the
+   container measuring the full page above 768px. */
+.reely-example-frame {
+  width: 100%;
+  max-width: 48rem;
+  container-type: inline-size;
+}
 .reely-example {
   position: relative;
   width: 100%;
-  max-width: 48rem;
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: #0b0e13;
   color: #e8edf4;
   font-family: system-ui, sans-serif;
-  /* Controls that depend on how much room the PLAYER has query this, not the
-     viewport: an embedded player in a narrow column then gets the same
-     treatment as a narrow phone, which a viewport media query cannot express. */
-  container-type: inline-size;
 }
 /* The standard [hidden] reset, and it needs !important here rather than by
    habit: reely's overlay primitives carry their own inline display (Captions
@@ -106,7 +118,8 @@ const layoutCss = `
   display: flex;
   flex-direction: column;
 }
-.reely-example-menu [data-reely-part='menu-radio-item'] {
+.reely-example-menu [data-reely-part='menu-radio-item'],
+.reely-example-menu [data-reely-part='menu-item'] {
   justify-content: flex-start;
   display: flex;
   align-items: center;
@@ -129,13 +142,23 @@ const layoutCss = `
 }
 /* Below this width the button row alone needs the space. Dropping the volume
    slider (rather than letting it squeeze) is what keeps the composition usable
-   at 320px, so #32's 1.4.10 reflow check passes by construction.
+   at 320px, so #32's 1.4.10 reflow check passes by construction. The mute
+   button survives it, so no function is lost — which is why PiP and AirPlay
+   move into the settings menu instead of being hidden like this.
 
-   The control row also stops being an overlay here. At 320px with text
-   resized to 200% (#32's 1.4.4 check) the row is taller than a 16:9 box is,
-   so an absolutely-positioned row inside an overflow: hidden box is clipped —
-   measured at 35px of lost controls. In flow, under a viewport that is free
-   to size itself, nothing is lost.
+   min-height, not aspect-ratio. The row stops being an overlay here: at 320px
+   with text resized to 200% (#32's 1.4.4 check) it is taller than a 16:9 box,
+   and an absolutely-positioned row inside an overflow: hidden box is clipped —
+   measured at 35px of lost controls. But aspect-ratio: auto is the wrong
+   release valve: Poster and Media are absolutely positioned and contribute no
+   in-flow height, so with the row in flow as the only in-flow child the box
+   collapses onto the row itself — measured 288x153 at a 320px viewport, a
+   player with no video area at all. A 9/16 floor in container units keeps the
+   box 16:9 until the row genuinely needs more, and lets it grow when it does.
+
+   justify-content: flex-end pins the row to the bottom. Without it the row
+   sits at the TOP of a min-height-inflated box, because it is the only in-flow
+   child and the extra height is trailing free space.
 
    relative, not static: the row still needs to take up space in normal
    flow (that's the fix), but static also drops it out of the positioned
@@ -144,34 +167,43 @@ const layoutCss = `
    confirmed by elementFromPoint at the row's own center resolving to the
    gestures element instead. relative keeps the same in-flow position — the
    inherited inset: auto 0 0 0 nets to zero displacement on a
-   relatively-positioned box — while keeping z-index effective. */
-@media (max-width: 420px) {
+   relatively-positioned box — while keeping z-index effective.
+
+   No :has(.reely-example-controls[hidden]) guard any more. It existed because
+   aspect-ratio: auto collapsed the box to zero height in the states where #89
+   hides the row (pre-activation, and while an error surface owns the
+   viewport), taking the full-bleed overlay down with it — measured as an
+   activation button that could not be clicked. min-height holds the box open
+   in exactly those states, so there is nothing left to guard. */
+@container (max-width: 420px) {
   .reely-example {
     aspect-ratio: auto;
-  }
-  /* ...unless there is no visible control row to clip. Dropping aspect-ratio
-     only makes sense while the in-flow row is what gives the box its height;
-     in the states where #89 hides that row (pre-activation, and while an
-     error surface owns the viewport) the box has no in-flow content at all
-     and collapses to zero height, taking the full-bleed overlay down with
-     it. Measured: the viewport resolved to hidden at 320px, so the
-     activation button could not be clicked. */
-  .reely-example:has(.reely-example-controls[hidden]) {
-    aspect-ratio: 16 / 9;
+    min-height: 56.25cqw;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
   }
   .reely-example-controls {
     position: relative;
   }
-}
-/* The player's own width, not the page's. Kept separate from the media query
-   above on purpose: aspect-ratio and the in-flow control row are a pair — the
-   row only leaves the overlay because the box gave up its fixed ratio — and
-   driving those two from different queries lets them disagree, which is the
-   35px of clipped controls #32 measured. Which controls FIT is a question
-   about the player; how the box lays out in the page is a question about the
-   page. */
-@container (max-width: 420px) {
   .reely-example-volume {
+    display: none;
+  }
+  .reely-example-fold {
+    display: none;
+  }
+}
+/* The other half of the fold. Both forms are always rendered and the container
+   query hides whichever does not apply — display: none takes the inactive one
+   out of the accessibility tree too, so neither width offers the same action
+   twice. 421px, not 420px: the breakpoint above is inclusive.
+
+   Written as a descendant selector to match the specificity of the menu item
+   styling above, which sets display: flex at (0,2,0). A bare
+   .reely-example-menu-fold is (0,1,0) and silently loses to it — measured, as
+   a PiP entry that stayed visible next to the PiP button at 768px. */
+@container (min-width: 421px) {
+  .reely-example-menu .reely-example-menu-fold {
     display: none;
   }
 }
@@ -207,13 +239,22 @@ const ExampleSettingsMenu = (): ReactElement | null => {
     qualityStatus: snapshot.capabilities.selectQuality.status,
     qualities: snapshot.qualities,
     selectedQualityId: snapshot.selectedQualityId,
-    playing: snapshot.quality
+    playing: snapshot.quality,
+    pictureInPicture: snapshot.pictureInPicture,
+    pipStatus: snapshot.capabilities.pictureInPicture.status,
+    airPlayStatus: snapshot.capabilities.airPlay.status
   }));
   const actions = Player.usePlayerActions();
   const showRates = state.rateStatus === 'available';
   const showQualities =
     state.qualityStatus === 'available' && state.qualities.length > 0;
-  if (!showRates && !showQualities) return null;
+  // The folded entries (#114). MenuItem does not gate itself the way PipButton
+  // and AirPlayButton do, so these read the same capabilities the buttons read.
+  // The menu must also open when the folded entries are the ONLY thing in it,
+  // or the functionality it absorbed disappears exactly where it is needed.
+  const showPip = state.pipStatus === 'available';
+  const showAirPlay = state.airPlayStatus === 'available';
+  if (!showRates && !showQualities && !showPip && !showAirPlay) return null;
 
   return (
     <Player.SettingsMenu>
@@ -253,6 +294,39 @@ const ExampleSettingsMenu = (): ReactElement | null => {
               </Player.MenuRadioItem>
             ))}
           </Player.MenuRadioGroup>
+        ) : null}
+        {/* Folded out of the button row below 420px (#114). These two carry
+            visible text rather than an icon alone: they are menu entries, and
+            the accessible name of a menuitem comes from its content — there is
+            no primitive supplying an aria-label here the way there is for the
+            buttons. */}
+        {showPip ? (
+          <Player.MenuItem
+            className="reely-example-menu-fold"
+            onSelect={() => {
+              void (state.pictureInPicture
+                ? actions.exitPictureInPicture()
+                : actions.requestPictureInPicture());
+            }}
+          >
+            {state.pictureInPicture ? (
+              <Player.PipExitIcon />
+            ) : (
+              <Player.PipEnterIcon />
+            )}
+            Picture in picture
+          </Player.MenuItem>
+        ) : null}
+        {showAirPlay ? (
+          <Player.MenuItem
+            className="reely-example-menu-fold"
+            onSelect={() => {
+              void actions.showAirPlayPicker();
+            }}
+          >
+            <Player.AirPlayIcon />
+            AirPlay
+          </Player.MenuItem>
         ) : null}
       </Player.SettingsMenuContent>
     </Player.SettingsMenu>
@@ -301,91 +375,93 @@ export const ReferencePlayer = ({
   return (
     <>
       <style>{layoutCss}</style>
-      <Player.Viewport className="reely-example">
-        <Player.Poster>
-          <Player.PosterImage
-            alt=""
-            src="/poster.svg"
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        </Player.Poster>
-        <Player.Media textTracks={textTracks} />
-        <Player.LoadingIndicator />
-        {/* The default child is a literal "Retry" text button; the example
-            renders icons everywhere, so it supplies the render prop. */}
-        <Player.ErrorDisplay className="reely-example-error">
-          {({ error, retry }) => (
-            <>
-              <p>{error.message}</p>
-              {retry ? (
-                <button aria-label="Retry" onClick={retry} type="button">
-                  <Player.ReplayIcon />
-                </button>
-              ) : null}
-            </>
-          )}
-        </Player.ErrorDisplay>
-        {/* Before Controls: Gestures is full-bleed with no z-index, so a later
-            sibling without one would be covered by it. */}
-        <Player.Gestures />
-        <Player.ActivationButton>
-          <Player.PlayIcon style={{ fontSize: '3rem' }} />
-        </Player.ActivationButton>
-        <Player.Controls
-          aria-label="Video player controls"
-          className="reely-example-controls"
-          hidden={overlayOwnsViewport}
-        >
-          <div className="reely-example-row">
-            <Player.Time type="current" />
-            <div className="reely-example-scrubber">
-              <Player.SeekSlider />
+      <div className="reely-example-frame">
+        <Player.Viewport className="reely-example">
+          <Player.Poster>
+            <Player.PosterImage
+              alt=""
+              src="/poster.svg"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          </Player.Poster>
+          <Player.Media textTracks={textTracks} />
+          <Player.LoadingIndicator />
+          {/* The default child is a literal "Retry" text button; the example
+              renders icons everywhere, so it supplies the render prop. */}
+          <Player.ErrorDisplay className="reely-example-error">
+            {({ error, retry }) => (
+              <>
+                <p>{error.message}</p>
+                {retry ? (
+                  <button aria-label="Retry" onClick={retry} type="button">
+                    <Player.ReplayIcon />
+                  </button>
+                ) : null}
+              </>
+            )}
+          </Player.ErrorDisplay>
+          {/* Before Controls: Gestures is full-bleed with no z-index, so a later
+              sibling without one would be covered by it. */}
+          <Player.Gestures />
+          <Player.ActivationButton>
+            <Player.PlayIcon style={{ fontSize: '3rem' }} />
+          </Player.ActivationButton>
+          <Player.Controls
+            aria-label="Video player controls"
+            className="reely-example-controls"
+            hidden={overlayOwnsViewport}
+          >
+            <div className="reely-example-row">
+              <Player.Time type="current" />
+              <div className="reely-example-scrubber">
+                <Player.SeekSlider />
+              </div>
+              <Player.Time type="duration" />
             </div>
-            <Player.Time type="duration" />
-          </div>
-          <div className="reely-example-row reely-example-row-buttons">
-            <Player.PlayButton>
-              {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
-            </Player.PlayButton>
-            <Player.MuteButton>
-              {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
-            </Player.MuteButton>
-            <Player.VolumeSlider className="reely-example-volume" />
-            <span className="reely-example-spacer" />
-            <Player.CaptionsButton>
-              <Player.CaptionsIcon />
-            </Player.CaptionsButton>
-            {/* Default children: CaptionsMenu's own trigger already renders
-                CaptionsIcon, not a text label. */}
-            <Player.CaptionsMenu />
-            <ExampleSettingsMenu />
-            <Player.PipButton>
-              {state.pictureInPicture ? (
-                <Player.PipExitIcon />
-              ) : (
-                <Player.PipEnterIcon />
-              )}
-            </Player.PipButton>
-            <Player.AirPlayButton>
-              <Player.AirPlayIcon />
-            </Player.AirPlayButton>
-            <Player.FullscreenButton>
-              {state.fullscreen ? (
-                <Player.FullscreenExitIcon />
-              ) : (
-                <Player.FullscreenEnterIcon />
-              )}
-            </Player.FullscreenButton>
-          </div>
-        </Player.Controls>
-        {/* After Controls, not before: Captions and Controls share z-index 20
-            (#32), so the later sibling wins the tie. Captions used to lose it
-            here, rendering caption text underneath the control bar. Hidden
-            under the same condition as Controls: cue text below an opaque
-            error surface is unreadable, and leaves the same
-            unresolvable-background residue the control row did. */}
-        <Player.Captions hidden={overlayOwnsViewport} />
-      </Player.Viewport>
+            <div className="reely-example-row reely-example-row-buttons">
+              <Player.PlayButton>
+                {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
+              </Player.PlayButton>
+              <Player.MuteButton>
+                {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
+              </Player.MuteButton>
+              <Player.VolumeSlider className="reely-example-volume" />
+              <span className="reely-example-spacer" />
+              <Player.CaptionsButton>
+                <Player.CaptionsIcon />
+              </Player.CaptionsButton>
+              {/* Default children: CaptionsMenu's own trigger already renders
+                  CaptionsIcon, not a text label. */}
+              <Player.CaptionsMenu />
+              <ExampleSettingsMenu />
+              <Player.PipButton className="reely-example-fold">
+                {state.pictureInPicture ? (
+                  <Player.PipExitIcon />
+                ) : (
+                  <Player.PipEnterIcon />
+                )}
+              </Player.PipButton>
+              <Player.AirPlayButton className="reely-example-fold">
+                <Player.AirPlayIcon />
+              </Player.AirPlayButton>
+              <Player.FullscreenButton>
+                {state.fullscreen ? (
+                  <Player.FullscreenExitIcon />
+                ) : (
+                  <Player.FullscreenEnterIcon />
+                )}
+              </Player.FullscreenButton>
+            </div>
+          </Player.Controls>
+          {/* After Controls, not before: Captions and Controls share z-index 20
+              (#32), so the later sibling wins the tie. Captions used to lose it
+              here, rendering caption text underneath the control bar. Hidden
+              under the same condition as Controls: cue text below an opaque
+              error surface is unreadable, and leaves the same
+              unresolvable-background residue the control row did. */}
+          <Player.Captions hidden={overlayOwnsViewport} />
+        </Player.Viewport>
+      </div>
     </>
   );
 };
