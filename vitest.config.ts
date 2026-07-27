@@ -30,6 +30,14 @@ export default defineConfig({
     include: [
       'packages/**/*.test.{ts,tsx}',
       'apps/storybook/stories/**/*.contract.test.ts'
-    ]
+    ],
+    // Measured with `pnpm test --coverage`, not gated on. A threshold here
+    // would say a number is the goal; the goal is that every load-bearing
+    // branch has a test that dies without it, which a percentage cannot tell
+    // you (#101 found six branches at 95% line coverage).
+    coverage: {
+      provider: 'v8',
+      include: ['packages/*/src/**']
+    }
   }
 });

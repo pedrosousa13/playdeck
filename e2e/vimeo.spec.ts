@@ -7,26 +7,6 @@ type CapabilityValue = {
   readonly reason?: string;
 };
 
-declare global {
-  interface Window {
-    reelyHandle?: {
-      getState: () => {
-        activation: string;
-        capabilities: Record<string, CapabilityValue>;
-        captionRendering: string;
-        textTracks: ReadonlyArray<{
-          id: string;
-          label: string;
-          language: string | null;
-          kind: string;
-          readiness: string;
-        }>;
-      };
-      selectTextTrack: (track: string | null) => Promise<{ ok: boolean }>;
-    };
-  }
-}
-
 const embedHtml = readFile(
   new URL('./fixtures/vimeo-embed.html', import.meta.url),
   'utf8'

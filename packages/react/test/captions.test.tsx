@@ -197,7 +197,22 @@ describe('Player.Captions', () => {
       />
     );
     emitState({ captionRendering: 'custom' });
-    emitCues([{ id: 'c1', startTime: 0, endTime: 1, text: 'hello' }]);
+    // Carries engine-only fields, the way a real provider's cue object does
+    // (hls.js hands over its own parsed cue, the native engine a VTTCue). The
+    // assertion below only means anything against a cue that has something to
+    // strip: with a fixture holding exactly the four public fields it passed
+    // whether `normalizeCue` copied or returned the cue untouched (#101).
+    emitCues([
+      {
+        id: 'c1',
+        startTime: 0,
+        endTime: 1,
+        text: 'hello',
+        line: 'auto',
+        align: 'center',
+        getCueAsHTML: () => undefined
+      } as unknown as TextCue
+    ]);
     expect(
       container.querySelector('[data-testid="custom-cue"]')?.textContent
     ).toBe('HELLO');

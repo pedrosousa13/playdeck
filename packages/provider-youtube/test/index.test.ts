@@ -717,6 +717,39 @@ test('reports no buffered range when the edge sits behind the playhead', async (
   expect(bufferedIn(patches).at(-1)).toEqual([]);
 });
 
+// The edge landing exactly on the playhead is a zero-length range, which is
+// not a range: a consumer drawing it gets a sliver of "buffered" covering
+// nothing. `end <= currentTime`, not `<` -- and nothing asserted the
+// difference until this test (#101).
+test('reports no buffered range when the edge sits exactly on the playhead', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter();
+
+  harness.duration = 120;
+  harness.currentTime = 60;
+  harness.loadedFraction = 0.5;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(bufferedIn(patches).at(-1)).toEqual([]);
+});
+
+// `getVideoLoadedFraction` is documented as a fraction, but this adapter has
+// no way to hold the SDK to that, and an unclamped value scales straight into
+// a range end past the end of the video.
+test('never reports a buffer end past the duration, whatever fraction arrives', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter();
+
+  harness.duration = 120;
+  harness.currentTime = 10;
+  harness.loadedFraction = 1.5;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(bufferedIn(patches).at(-1)).toEqual([{ start: 10, end: 120 }]);
+});
+
 test('reports no buffered range without a usable duration', async () => {
   vi.useFakeTimers();
   const { harness, patches } = await readyAdapter();

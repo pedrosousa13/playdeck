@@ -425,6 +425,28 @@ test('clamps seeking to seekable ranges intersected with configured boundaries',
   expect(media.currentTime).toBe(7);
 });
 
+// Configured boundaries that fall in a gap between seekable ranges leave
+// nowhere legal to land, so the command is refused rather than silently
+// snapped to the nearest edge outside the caller's own bounds. Nothing
+// asserted the empty-intersection branch before (#101).
+test('refuses a seek when no seekable range intersects the configured boundaries', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([
+      [0, 3],
+      [7, 10]
+    ])
+  });
+  const provider = createNativeProvider(media, { startTime: 4, endTime: 6 });
+
+  await expect(provider.seekTo?.(5)).resolves.toEqual({
+    ok: false,
+    reason: 'provider-error'
+  });
+  expect(media.currentTime).toBe(0);
+});
+
 test('emits one public play event for the native play and playing pair', async () => {
   const media = document.createElement('video');
   const eventTypes: string[] = [];

@@ -523,7 +523,9 @@ const sourceFromVimeoUrl = (url: URL): VimeoSource | undefined => {
   ) {
     return undefined;
   }
-  if (pathHash !== undefined && !isVimeoHash(pathHash)) return undefined;
+  // No check on `pathHash`: the path pattern above already captures it as
+  // `[A-Za-z0-9]+`, so validating it again is a branch nothing can reach --
+  // confirmed by removing it and watching no test die (#101).
 
   const hash = queryHash ?? pathHash;
   return { type: 'vimeo', videoId, ...(hash ? { hash } : {}) };

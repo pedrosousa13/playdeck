@@ -140,6 +140,10 @@ export type PlayerHandle = Pick<
   | 'setVolume'
   | 'setPlaybackRate'
   | 'selectTextTrack'
+  // The imperative twin of the `captionRenderer` prop: flipping the renderer
+  // without re-rendering `Root` is the only way to change it mid-playback,
+  // which is what the Vimeo caption e2e does.
+  | 'setCaptionRenderer'
   | 'requestFullscreen'
   | 'exitFullscreen'
   | 'requestPictureInPicture'
@@ -317,6 +321,7 @@ export const usePlayerActions = (): PlayerActions => {
       setVolume: controller.setVolume,
       setPlaybackRate: controller.setPlaybackRate,
       selectTextTrack: controller.selectTextTrack,
+      setCaptionRenderer: controller.setCaptionRenderer,
       requestFullscreen: controller.requestFullscreen,
       exitFullscreen: controller.exitFullscreen,
       requestPictureInPicture: controller.requestPictureInPicture,
