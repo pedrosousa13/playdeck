@@ -232,13 +232,12 @@ test('a narrow container keeps the 16:9 floor and puts the row in flow', async (
   page
 }) => {
   // #114. The container query used to fire alone here: the volume slider hid,
-  // but the box kept `aspect-ratio: 16 / 9` and the row stayed an
-  // absolutely-positioned overlay eating 153px of 180. The viewport path was
-  // no better — `aspect-ratio: auto` collapsed the box onto the row itself
-  // (measured 288x153, no video area at all), because Poster and Media are
-  // absolutely positioned and contribute no in-flow height. `min-height`
-  // replaces the ratio: a 16:9 floor the row cannot shrink, and headroom the
-  // row can grow into.
+  // but the box stayed locked to `aspect-ratio: 16 / 9` and the row stayed an
+  // absolutely-positioned overlay covering 153px of those 180 — measured, with
+  // the media element itself only 150px tall underneath it. The 320px viewport
+  // path has always stacked instead (measured 336 = 180 media + 153 row),
+  // because `Player.Media` is in flow; this is that outcome, on the axis that
+  // an embed in a narrow column actually varies.
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(story);
   await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
@@ -251,12 +250,24 @@ test('a narrow container keeps the 16:9 floor and puts the row in flow', async (
   await activationButton(page).click();
   await played(page);
 
-  const box = await player.evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    return { width: Math.round(r.width), height: Math.round(r.height) };
-  });
-  // 320 x 9 / 16 = 180: the floor holds, and nothing has pushed past it yet.
-  expect(box).toEqual({ width: 320, height: 180 });
+  // The media and the row both take part in flow, so the box is the sum of
+  // them rather than a 16:9 lid clamped over both: 320 x 9 / 16 = 180 was the
+  // old ceiling and the row alone is 153 of it. Measured at 303 after the fix;
+  // asserted as a relation, because the media element's own height depends on
+  // the fixture's intrinsic ratio.
+  const height = await player.evaluate((el) =>
+    Math.round(el.getBoundingClientRect().height)
+  );
+  expect(height).toBeGreaterThan(180);
+
+  const mediaHeight = await media(page).evaluate((el) =>
+    Math.round(el.getBoundingClientRect().height)
+  );
+  const rowHeight = await controls(page).evaluate((el) =>
+    Math.round(el.getBoundingClientRect().height)
+  );
+  // Stacked, not overlaid: neither one is hidden behind the other.
+  expect(height).toBeGreaterThanOrEqual(mediaHeight + rowHeight);
 
   expect(
     await controls(page).evaluate((el) => getComputedStyle(el).position)
