@@ -193,6 +193,41 @@ test('the control row does not overflow at 320px, and hides the volume slider be
   await expect(volumeSlider).toBeVisible();
 });
 
+test('the volume slider hides on the player width, not the viewport width', async ({
+  page
+}) => {
+  // The breakpoint test above resizes the viewport, which narrows the player
+  // too, so it cannot tell a viewport query from a container query. This can:
+  // the viewport stays wide and only the player is narrow, which is what an
+  // embedded player in a sidebar actually looks like. Against a
+  // `@media (max-width: 420px)` rule the slider stays visible and this fails.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(story);
+  // Constrain the CONTAINING element, not the player: that is what an embed in
+  // a narrow column does, and the player's own `width: 100%` then resolves to
+  // 320px. Styling `.reely-example` directly does not work anyway — the story
+  // injects its stylesheet from the body, so a rule added here loses on
+  // document order at equal specificity (measured: the player stayed 768px).
+  await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
+  await expect
+    .poll(() =>
+      page
+        .locator('.reely-example')
+        .evaluate((el) => el.getBoundingClientRect().width)
+    )
+    .toBeLessThanOrEqual(320);
+
+  await activationButton(page).click();
+  await played(page);
+
+  await expect(page.locator('[data-reely-part="volume-slider"]')).toBeHidden();
+
+  // And the viewport really was wide throughout — otherwise this would be the
+  // same assertion as the test above, passing for the wrong reason.
+  const width = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(width).toBeGreaterThan(420);
+});
+
 // AirPlay is hardcoded unavailable on both iframe providers — a static
 // `{ status: 'unavailable', reason: 'provider' }` (Vimeo) / `providerUnavailable`
 // constant (YouTube) that is never reassigned in either adapter — so asserting
