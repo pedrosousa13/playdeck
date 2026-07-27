@@ -16,6 +16,7 @@ import {
   type VimeoMountElement,
   type VimeoProviderOptions
 } from '../src/index';
+import type { VimeoSdkQuality } from '../src/loader';
 import {
   createFakeSdk,
   namedError,
@@ -269,7 +270,7 @@ test('emits confirmed ready state from the embedded player', async () => {
     selectTextTrack: { status: 'available' },
     fullscreen: { status: 'available' },
     customControls: { status: 'available' },
-    selectQuality: { status: 'unavailable', reason: 'provider' },
+    selectQuality: { status: 'available' },
     airPlay: { status: 'unavailable', reason: 'provider' }
   });
 });
@@ -1669,4 +1670,205 @@ test('vimeo declares command readiness before player.ready() resolves', async ()
   );
 
   releaseReady();
+});
+
+// --- quality (#82) ---
+
+test('reports the Vimeo ladder as selectable rungs, auto excluded', async () => {
+  const { patches } = await setup();
+  const ready = readyPatch(patches);
+
+  expect(ready.qualities).toEqual([
+    { id: 'vimeo:720p', height: 720, width: null, bitrate: null },
+    { id: 'vimeo:540p', height: 540, width: null, bitrate: null },
+    { id: 'vimeo:360p', height: 360, width: null, bitrate: null },
+    { id: 'vimeo:240p', height: 240, width: null, bitrate: null }
+  ]);
+  expect(ready.selectedQualityId).toBeNull();
+  expect(ready.capabilities).toMatchObject({
+    selectQuality: { status: 'available' }
+  });
+});
+
+test('adopts a rung the player is already pinned to at ready', async () => {
+  const { patches } = await setup({
+    fake: {
+      qualities: [
+        { id: 'auto', label: 'Auto', active: false },
+        { id: '540p', label: '540p', active: true }
+      ]
+    }
+  });
+
+  expect(readyPatch(patches).selectedQualityId).toBe('vimeo:540p');
+});
+
+test('reports quality selection unavailable when the ladder holds only auto', async () => {
+  const { patches } = await setup({
+    fake: { qualities: [{ id: 'auto', label: 'Auto', active: true }] }
+  });
+  const ready = readyPatch(patches);
+
+  expect(ready.qualities).toEqual([]);
+  expect(ready.capabilities).toMatchObject({
+    selectQuality: { status: 'unavailable', reason: 'source' }
+  });
+});
+
+test('reports quality selection unavailable when the SDK cannot enumerate', async () => {
+  const { patches } = await setup({
+    fake: { getQualities: () => Promise.reject(new Error('nope')) }
+  });
+  const ready = readyPatch(patches);
+
+  expect(ready.qualities).toEqual([]);
+  expect(ready.capabilities).toMatchObject({
+    selectQuality: { status: 'unavailable', reason: 'source' }
+  });
+});
+
+// An embed that does not implement the method still answers it — the SDK
+// resolves with whatever came back, `null` included. Trusting that shape took
+// the whole load down with a TypeError.
+test('stays ready when the embed answers getQualities with a non-list', async () => {
+  const { patches } = await setup({
+    fake: {
+      getQualities: () =>
+        Promise.resolve(null as unknown as ReadonlyArray<VimeoSdkQuality>)
+    }
+  });
+  const ready = readyPatch(patches);
+
+  expect(ready.qualities).toEqual([]);
+  expect(ready.capabilities).toMatchObject({
+    selectQuality: { status: 'unavailable', reason: 'source' }
+  });
+});
+
+test('drops ladder entries the SDK does not identify', async () => {
+  const { patches } = await setup({
+    fake: {
+      qualities: [
+        { id: 'auto', label: 'Auto', active: true },
+        { label: '720p', active: false } as unknown as VimeoSdkQuality,
+        { id: '540p', label: '540p', active: false }
+      ]
+    }
+  });
+
+  expect(readyPatch(patches).qualities).toEqual([
+    { id: 'vimeo:540p', height: 540, width: null, bitrate: null }
+  ]);
+});
+
+test('pins a rung through the SDK and confirms the selection', async () => {
+  const { provider, sdk, patches } = await setup();
+  const player = sdk.instances[0]!;
+
+  await expect(provider.selectQuality?.('vimeo:540p')).resolves.toEqual({
+    ok: true
+  });
+
+  expect(player.setQuality).toHaveBeenCalledWith('540p');
+  expect(patches).toContainEqual({ selectedQualityId: 'vimeo:540p' });
+});
+
+test('returns to auto by selecting the SDK auto rung', async () => {
+  const { provider, sdk, patches } = await setup();
+  const player = sdk.instances[0]!;
+  await provider.selectQuality?.('vimeo:360p');
+
+  await expect(provider.selectQuality?.(null)).resolves.toEqual({ ok: true });
+
+  expect(player.setQuality).toHaveBeenLastCalledWith('auto');
+  expect(patches).toContainEqual({ selectedQualityId: null });
+});
+
+// An id the player never offered never settles at all — the command would hang
+// forever rather than fail (#82).
+test('refuses an id the player never offered without calling the SDK', async () => {
+  const { provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+
+  await expect(provider.selectQuality?.('vimeo:4320p')).resolves.toEqual({
+    ok: false,
+    reason: 'unsupported'
+  });
+
+  expect(player.setQuality).not.toHaveBeenCalled();
+});
+
+test('leaves the selection alone when the SDK rejects the switch', async () => {
+  const { provider, sdk, patches } = await setup({
+    fake: { setQuality: () => Promise.reject(namedError('Error', 'nope')) }
+  });
+  const player = sdk.instances[0]!;
+
+  const result = await provider.selectQuality?.('vimeo:540p');
+
+  expect(result?.ok).toBe(false);
+  expect(player.setQuality).toHaveBeenCalledWith('540p');
+  expect(patches).not.toContainEqual({ selectedQualityId: 'vimeo:540p' });
+});
+
+// Vimeo's own settings menu changes quality too, on an embed that shows it.
+// `qualitychange` reports the *selection*, not the rung adaptive playback
+// happens to be on: under auto the rendition moved 720 -> 540 with no event
+// fired (#82).
+test('follows a quality change made in Vimeo UI', async () => {
+  const { sdk, patches } = await setup();
+  const player = sdk.instances[0]!;
+
+  player.emit('qualitychange', { quality: '360p' });
+  expect(patches).toContainEqual({ selectedQualityId: 'vimeo:360p' });
+
+  player.emit('qualitychange', { quality: 'auto' });
+  expect(patches).toContainEqual({ selectedQualityId: null });
+});
+
+// The live SDK fires `qualitychange` for our own `setQuality` too, so the echo
+// arrives after the command has already announced the selection.
+test('does not re-announce the selection when the SDK echoes our own switch', async () => {
+  const { provider, sdk, patches } = await setup();
+  await provider.selectQuality?.('vimeo:540p');
+
+  sdk.instances[0]!.emit('qualitychange', { quality: '540p' });
+
+  expect(
+    patches.filter((patch) => patch.selectedQualityId === 'vimeo:540p')
+  ).toHaveLength(1);
+});
+
+test('refuses to return to auto when the player offers no auto rung', async () => {
+  const { provider, sdk } = await setup({
+    fake: { qualities: [{ id: '720p', label: '720p', active: true }] }
+  });
+
+  await expect(provider.selectQuality?.(null)).resolves.toEqual({
+    ok: false,
+    reason: 'unsupported'
+  });
+
+  expect(sdk.instances[0]!.setQuality).not.toHaveBeenCalled();
+});
+
+test('ignores a quality change naming a rung the player never offered', async () => {
+  const { sdk, patches } = await setup();
+  const before = patches.length;
+
+  sdk.instances[0]!.emit('qualitychange', { quality: '4320p' });
+
+  expect(patches).toHaveLength(before);
+});
+
+// The fresh player has nothing pinned, so a selection carried over from the
+// discarded one would report a rung the embed is not honouring.
+test('re-derives the selection from the player a retry builds', async () => {
+  const { provider, patches } = await setup();
+  await provider.selectQuality?.('vimeo:540p');
+
+  await provider.retry();
+
+  const ready = patches.filter((patch) => patch.lifecycle === 'ready');
+  expect(ready.at(-1)?.selectedQualityId).toBeNull();
 });

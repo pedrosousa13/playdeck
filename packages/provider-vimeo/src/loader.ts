@@ -5,6 +5,15 @@ export type VimeoSdkTextTrack = {
   readonly mode: 'showing' | 'hidden' | 'disabled';
 };
 
+// `auto` arrives as a member of this list, with `active` marking the entry the
+// player is honouring — so under auto the specific rungs are all `false` and
+// the one actually rendering is not identified. Measured on the live SDK (#82).
+export type VimeoSdkQuality = {
+  readonly id: string;
+  readonly label: string;
+  readonly active: boolean;
+};
+
 export type VimeoSdkEventListener = (data?: unknown) => void;
 
 export type VimeoSdkPlayer = {
@@ -26,6 +35,11 @@ export type VimeoSdkPlayer = {
   setVolume: (volume: number) => Promise<unknown>;
   getPlaybackRate: () => Promise<number>;
   setPlaybackRate: (rate: number) => Promise<unknown>;
+  getQualities: () => Promise<ReadonlyArray<VimeoSdkQuality>>;
+  // An id the player never offered never settles at all — the SDK neither
+  // resolves nor rejects it (#82), so every call has to be resolved against the
+  // published list first.
+  setQuality: (id: string) => Promise<unknown>;
   getTextTracks: () => Promise<ReadonlyArray<VimeoSdkTextTrack>>;
   // `showing: false` makes Vimeo fire `cuechange` without drawing the cues
   // with its own in-iframe renderer, which is what lets Reely own caption
