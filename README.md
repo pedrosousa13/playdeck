@@ -113,7 +113,10 @@ gh run download <run-id> --name visual-baselines --dir e2e/__screenshots__
 ```
 
 Then commit the PNGs. A red `visual` CI job uploads the `-actual` and `-diff`
-images as a `visual-diff` artifact.
+images as a `visual-diff` artifact, which is also where the images come from
+when the refresh workflow is not dispatchable — GitHub only offers
+`workflow_dispatch` for workflows already on the default branch, so a workflow
+file added on a branch cannot be run until it has merged once.
 
 ## Browser support
 

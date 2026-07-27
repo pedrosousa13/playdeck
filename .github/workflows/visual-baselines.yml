@@ -11,6 +11,13 @@ name: Visual baselines
 #   gh workflow run visual-baselines.yml --ref "$(git branch --show-current)"
 #   gh run download <run-id> --name visual-baselines --dir e2e/__screenshots__
 #   git add e2e/__screenshots__ && git commit
+#
+# `--ref <branch>` runs the branch's copy of this file, but GitHub only offers
+# `workflow_dispatch` for workflows that exist on the DEFAULT branch — so this
+# is undispatchable until it has merged once (HTTP 404: "workflow
+# visual-baselines.yml not found on the default branch"). Before then, take the
+# images from the `visual-diff` artifact of a failing `visual` CI job: Playwright
+# writes each missing baseline as `<name>-actual.png` next to the failure.
 on:
   workflow_dispatch:
 
