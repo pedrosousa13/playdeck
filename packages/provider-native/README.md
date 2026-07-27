@@ -10,21 +10,39 @@ pnpm add @reely/provider-native
 `@reely/react` loads this for you when the source resolves to `video`. Install
 it directly only if you are driving a `PlayerController` yourself.
 
+<!-- example:provider-native -->
+
 ```ts
+import { PlayerController } from '@reely/core';
 import { createNativeProvider } from '@reely/provider-native';
 
+declare const videoElement: HTMLVideoElement;
+
+const controller = new PlayerController();
+
+// Plays anything the element itself can play — MP4, WebM, and HLS on Safari,
+// where the browser has its own HLS support.
 controller.setProvider(
-  createNativeProvider(videoElement, { startTime: 30, endTime: 90 })
+  createNativeProvider(videoElement, {
+    loop: true,
+    // A clip out of a longer file: playback is clamped to this window.
+    startTime: 30,
+    endTime: 45
+  })
 );
+
+export const play = (): Promise<unknown> => controller.play();
 ```
+
+<!-- /example -->
 
 ## Exports
 
-| Export                  | What it is                                              |
-| ----------------------- | ------------------------------------------------------- |
-| `createNativeProvider`  | Builds the adapter over a `<video>` element.            |
-| `NativePlaybackOptions` | `startTime`, `endTime`, `crossOrigin`, `playsInline`, … |
-| `NativeProviderAdapter` | The adapter's own type, if you need to name it.         |
+| Export                  | What it is                                      |
+| ----------------------- | ----------------------------------------------- |
+| `createNativeProvider`  | Builds the adapter over a `<video>` element.    |
+| `NativePlaybackOptions` | `loop`, `startTime`, `endTime`.                 |
+| `NativeProviderAdapter` | The adapter's own type, if you need to name it. |
 
 ## What it reports honestly
 

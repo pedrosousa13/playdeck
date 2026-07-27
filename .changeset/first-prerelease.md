@@ -55,6 +55,10 @@ Vimeo.
   `Hls.Events.LEVELS_UPDATED` —
   `HlsConstructorLike` now requires it — because hls.js prunes levels during
   its own error recovery and the published ladder has to follow.
+  `HlsInstanceLike.on` is declared as a method rather than a property-typed
+  function, so a real hls.js module satisfies `HlsModuleLoader`: the documented
+  `loadHls: () => import('hls.js')` previously needed `as unknown as` to
+  compile, including inside this package.
 - **Presentation** — fullscreen, Picture-in-Picture, AirPlay where available,
   and Media Session integration with ownership arbitration. `airPlay` means
   "there is somewhere to cast to", not "this engine has the picker API": it

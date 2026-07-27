@@ -13,13 +13,26 @@ pnpm add @reely/provider-hls
 dependency but is imported dynamically, so it only reaches the network when the
 hls.js engine is actually selected.
 
+<!-- example:provider-hls -->
+
 ```ts
+import { PlayerController } from '@reely/core';
 import { createHlsProvider } from '@reely/provider-hls';
 
+declare const videoElement: HTMLVideoElement;
+
+const controller = new PlayerController();
+
+// hls.js is a dependency but is imported dynamically, so it only reaches the
+// network when the hls.js engine is actually the one selected.
 controller.setProvider(
   createHlsProvider(videoElement, { type: 'hls', src: '/master.m3u8' })
 );
+
+export const play = (): Promise<unknown> => controller.play();
 ```
+
+<!-- /example -->
 
 ## Engine selection
 
@@ -28,9 +41,35 @@ to hls.js where Media Source Extensions exist. `native` and `hls.js` force one;
 forcing an engine the browser cannot provide fails with an explained error
 rather than silently falling back.
 
+<!-- example:provider-hls-engine -->
+
 ```ts
-createHlsProvider(video, { type: 'hls', src, engine: 'hls.js' });
+import {
+  createHlsProvider,
+  detectHlsEnvironment,
+  selectHlsEngine
+} from '@reely/provider-hls';
+
+declare const videoElement: HTMLVideoElement;
+
+// What this browser offers, asked before anything is loaded.
+const environment = detectHlsEnvironment(videoElement); // { nativeHls, mse }
+
+// Forcing an engine the browser cannot provide fails with an explained error
+// rather than silently falling back to the other one.
+const selection = selectHlsEngine('hls.js', environment);
+if (selection.engine === null) throw new Error(selection.error.message);
+
+export const engine = selection.engine; // 'native' | 'hls.js'
+
+export const provider = createHlsProvider(videoElement, {
+  type: 'hls',
+  src: '/master.m3u8',
+  engine: 'hls.js'
+});
 ```
+
+<!-- /example -->
 
 ## Exports
 
@@ -51,9 +90,21 @@ consumes from hls.js — `HlsConstructorLike`, `HlsInstanceLike`, `HlsConfigLike
 `loadHls` replaces the dynamic import — for pinning a version, or serving it
 from somewhere else:
 
+<!-- example:provider-hls-loader -->
+
 ```ts
-createHlsProvider(video, source, { loadHls: () => import('hls.js') });
+import { createHlsProvider } from '@reely/provider-hls';
+
+declare const videoElement: HTMLVideoElement;
+
+export const provider = createHlsProvider(
+  videoElement,
+  { type: 'hls', src: '/master.m3u8' },
+  { loadHls: () => import('hls.js') }
+);
 ```
+
+<!-- /example -->
 
 The module you return has to expose `Hls.Events.LEVELS_UPDATED`. hls.js prunes
 levels during its own error recovery, and the published quality ladder has to

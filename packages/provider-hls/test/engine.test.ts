@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 
 import { afterEach, expect, test, vi } from 'vitest';
-import { detectHlsEnvironment, selectHlsEngine } from '../src/index';
+import {
+  detectHlsEnvironment,
+  selectHlsEngine,
+  type HlsModuleLoader
+} from '../src/index';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -109,3 +113,15 @@ test('detects MSE through ManagedMediaSource where only it exists', () => {
 
   expect(detectHlsEnvironment(media)).toEqual({ nativeHls: false, mse: true });
 });
+
+// Type-level, not runtime: `loadHls: () => import('hls.js')` is the form this
+// package's README documents, so a real hls.js module must satisfy
+// `HlsModuleLoader` without a cast. It did not — `HlsInstanceLike.on` was a
+// property-typed function, checked contravariantly, and hls.js's `on` only
+// accepts its own event names. This assertion fails `pnpm typecheck` if that
+// regresses.
+type AssertAssignable<Target, Source extends Target> = Source;
+export type RealHlsSatisfiesTheLoader = AssertAssignable<
+  HlsModuleLoader,
+  () => Promise<typeof import('hls.js')>
+>;

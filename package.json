@@ -43,6 +43,7 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.4.0",
     "happy-dom": "20.8.9",
+    "hls.js": "1.6.16",
     "prettier": "3.9.6",
     "publint": "0.3.22",
     "turbo": "2.10.6",
