@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "types": ["node"],
+    // These run under plain `node`, not a bundler, so they are resolved the way
+    // node resolves them rather than the way the packages are built.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    // The gate scripts stay as .mjs — checking them is verification only, and
+    // must not change how `pnpm test:packages` and `pnpm test:budgets` run.
+    "allowJs": true,
+    "checkJs": true,
+    "tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo/scripts.tsbuildinfo"
+  },
+  "include": ["*.mjs"]
+}

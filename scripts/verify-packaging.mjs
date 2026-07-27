@@ -29,6 +29,16 @@ const process = globalThis.process;
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const fixtureTemplate = join(repoRoot, 'tests/packaging/fixture');
 
+/**
+ * A project entry from `pnpm list -r --depth -1 --json`.
+ * @typedef {{ name: string; version: string; path: string; private: boolean }} WorkspaceProject
+ */
+
+/**
+ * @param {string} command
+ * @param {readonly string[]} args
+ * @param {import('node:child_process').ExecFileSyncOptions} [options]
+ */
 const run = (command, args, options = {}) =>
   execFileSync(command, args, {
     cwd: repoRoot,
@@ -36,6 +46,11 @@ const run = (command, args, options = {}) =>
     ...options
   });
 
+/**
+ * @param {string} command
+ * @param {readonly string[]} args
+ * @param {import('node:child_process').ExecFileSyncOptions} [options]
+ */
 const tryRun = (command, args, options = {}) => {
   try {
     run(command, args, options);
@@ -45,9 +60,14 @@ const tryRun = (command, args, options = {}) => {
   }
 };
 
+/**
+ * @param {string} name
+ * @param {string} version
+ */
 const tarballFileName = (name, version) =>
   `${name.replace(/^@/, '').replace('/', '-')}-${version}.tgz`;
 
+/** @param {string} tarball */
 const tarballEntries = (tarball) =>
   execFileSync('tar', ['-tzf', tarball], { encoding: 'utf8' })
     .split('\n')
@@ -55,6 +75,10 @@ const tarballEntries = (tarball) =>
     // Every entry in an npm tarball is under `package/`.
     .map((entry) => entry.replace(/^package\//, ''));
 
+/**
+ * @param {string} tarball
+ * @param {string} entry
+ */
 const readTarballFile = (tarball, entry) =>
   execFileSync('tar', ['-xzOf', tarball, `package/${entry}`], {
     encoding: 'utf8'
@@ -63,8 +87,10 @@ const readTarballFile = (tarball, entry) =>
 // What ships is what the `files` field lets through, and that is a coarser
 // filter than it looks: `dist` sweeps up whatever else the build left in the
 // directory. These are the two things a consumer should never receive.
+/** @param {string} tarball */
 const tarballProblems = (tarball) => {
   const entries = tarballEntries(tarball);
+  /** @type {string[]} */
   const problems = [];
 
   // Incremental-build caches: TypeScript writes `.tsbuildinfo` beside the
@@ -82,12 +108,17 @@ const tarballProblems = (tarball) => {
   // a map that resolves to neither is a dangling pointer at the publisher's
   // working copy.
   for (const entry of entries.filter((name) => name.endsWith('.map'))) {
-    const map = JSON.parse(readTarballFile(tarball, entry));
+    const map =
+      /** @type {{ sources?: string[]; sourcesContent?: unknown }} */ (
+        JSON.parse(readTarballFile(tarball, entry))
+      );
     const sources = map.sources ?? [];
     const inlined =
       Array.isArray(map.sourcesContent) &&
       map.sourcesContent.length === sources.length &&
-      map.sourcesContent.every((content) => typeof content === 'string');
+      map.sourcesContent.every(
+        (/** @type {unknown} */ content) => typeof content === 'string'
+      );
     if (inlined) continue;
     const dir = entry.includes('/') ? entry.replace(/\/[^/]*$/, '') : '';
     const missing = sources.filter(
@@ -105,11 +136,13 @@ const tarballProblems = (tarball) => {
 
 async function main() {
   // 1. Discover every publishable (non-private) workspace package.
-  const listing = JSON.parse(
-    execFileSync('pnpm', ['list', '-r', '--depth', '-1', '--json'], {
-      cwd: repoRoot,
-      encoding: 'utf8'
-    })
+  const listing = /** @type {WorkspaceProject[]} */ (
+    JSON.parse(
+      execFileSync('pnpm', ['list', '-r', '--depth', '-1', '--json'], {
+        cwd: repoRoot,
+        encoding: 'utf8'
+      })
+    )
   );
   const packages = listing.filter((entry) => entry.private === false);
   if (packages.length === 0) {
@@ -122,6 +155,7 @@ async function main() {
   );
 
   const tarballDir = mkdtempSync(join(tmpdir(), 'reely-packaging-tarballs-'));
+  /** @type {string[]} */
   const failures = [];
 
   try {
@@ -209,6 +243,10 @@ async function main() {
   }
 }
 
+/**
+ * @param {readonly WorkspaceProject[]} packages
+ * @param {string} tarballDir
+ */
 async function runFixture(packages, tarballDir) {
   const fixtureDir = mkdtempSync(join(tmpdir(), 'reely-packaging-fixture-'));
   try {
@@ -217,6 +255,7 @@ async function runFixture(packages, tarballDir) {
     const manifestPath = join(fixtureDir, 'package.json');
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     manifest.dependencies ??= {};
+    /** @type {Record<string, string>} */
     const tarballSpecs = {};
     for (const pkg of packages) {
       tarballSpecs[pkg.name] = `file:${join(
@@ -253,7 +292,9 @@ async function runFixture(packages, tarballDir) {
   }
 }
 
+/** @param {string} distDir */
 async function smokeTest(distDir) {
+  /** @type {Record<string, string>} */
   const mime = {
     '.css': 'text/css',
     '.html': 'text/html',
@@ -275,8 +316,14 @@ async function smokeTest(distDir) {
       response.end();
     }
   });
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  // `resolve` takes an argument, so passing it straight to `listen` matched the
+  // (port, backlog, listener) overload rather than the (port, host, listener)
+  // one -- which typechecked '127.0.0.1' as a backlog size.
+  await new Promise((resolve) =>
+    server.listen(0, '127.0.0.1', () => resolve(undefined))
+  );
 
+  /** @type {import('@playwright/test').Browser | undefined} */
   let browser;
   try {
     const address = server.address();
@@ -285,6 +332,7 @@ async function smokeTest(distDir) {
     }
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
+    /** @type {Error[]} */
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error));
 
@@ -309,7 +357,7 @@ async function smokeTest(distDir) {
       await browser?.close();
     } finally {
       await new Promise((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve()))
+        server.close((error) => (error ? reject(error) : resolve(undefined)))
       );
     }
   }
@@ -318,6 +366,8 @@ async function smokeTest(distDir) {
 try {
   await main();
 } catch (error) {
-  console.error(`\n${error.message}`);
+  // Not every throw is an Error -- a spawned tool that rejects with a string
+  // used to print an empty line and exit 1 with no reason given.
+  console.error(`\n${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 }
