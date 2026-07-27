@@ -59,3 +59,32 @@ menu builds a playback-rate group and a quality group over
 `Player.SettingsMenu`/`Player.MenuRadioGroup`, each gated on its own capability.
 `selectQuality`'s ladder comes from `PlayerState.qualities`; only the hls.js
 engine populates it. `customControls` gates no shipped control.
+
+## `commandsReady`: when a command will actually land
+
+A capability says whether a command is _supported_. `PlayerState.commandsReady`
+says whether it is _accepted yet_. Commands issued before it are refused with
+`{ ok: false, reason: 'not-ready' }` — they are **not** queued, and nothing is
+replayed once the provider comes up.
+
+Each provider declares readiness for itself, because the moment differs and
+core cannot derive it: native declares after `media.load()` (which resets
+`playbackRate`, so anything applied earlier is undone), hls.js at
+`MEDIA_ATTACHED`, YouTube at `onReady`, and Vimeo when its player is
+constructed. `activation` is not a substitute — native with `preload="none"`
+accepts commands while `activation` is still `loading-provider`.
+
+```tsx
+const commandsReady = Player.usePlayerState((state) => state.commandsReady);
+useEffect(() => {
+  if (commandsReady) void actions.setPlaybackRate(0.75);
+}, [commandsReady, actions]);
+```
+
+Outside React, `controller.whenReady()` resolves `true` at the same moment, and
+`false` if the player detaches, is swapped, or fails fatally — it never rejects
+and never hangs:
+
+```ts
+if (await controller.whenReady()) void controller.setPlaybackRate(0.75);
+```
