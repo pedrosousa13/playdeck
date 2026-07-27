@@ -72,6 +72,45 @@ jobs:
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=${{ matrix.browser }}
 
+  # Chromium only, and its own job rather than a leg of the `e2e` matrix: the
+  # PNG baselines in `e2e/__screenshots__` are generated on this runner image
+  # and compared on it, so a red run here means either a real visual change or
+  # a runner-image change, and neither should be buried in a three-engine
+  # matrix. On macOS those five tests skip; the layering assertions in the same
+  # spec run everywhere.
+  visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: corepack enable
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: playwright-version
+        run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ steps.playwright-version.outputs.version }}
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      # pnpm appends extra CLI args to the end of a compound script rather than
+      # inserting a `--` separator, so this lands on the `playwright test` half.
+      - run: pnpm test:e2e --project=visual
+      # The -actual and -diff PNGs. Without these a red run says "images
+      # differ" and gives nobody a way to see how.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-diff
+          path: test-results/
+          retention-days: 14
+
   package:
     runs-on: ubuntu-latest
     steps:

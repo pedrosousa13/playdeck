@@ -13,6 +13,21 @@ export default defineConfig({
   // Tests tagged @real hit third-party networks and are nondeterministic, so
   // they never block; opt in with REELY_REAL_PROVIDERS=1.
   grepInvert: process.env.REELY_REAL_PROVIDERS ? undefined : /@real/,
+  // One baseline set, not one per platform. The default template appends
+  // `-{projectName}-{platform}`, which here would mean a darwin set nobody can
+  // regenerate on linux and a linux set nobody can regenerate on darwin. There
+  // is no docker on the maintainer's machine, so the images are produced where
+  // CI runs and compared where CI runs; see
+  // `.github/workflows/visual-baselines.yml`.
+  snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}',
+  // Playwright's default screenshot threshold is 0.2, and pixelmatch turns that
+  // into `maxDelta = 35215 * threshold ** 2` = 1408.6 in YIQ space
+  // (`playwright-core/lib/coreBundle.js:6792`). Measured: repainting the whole
+  // reference control bar from rgb(4, 6, 10) to rgb(90, 6, 10) is a delta of
+  // 1184.1 — under the default it passed, and a falsification run went green
+  // against a visibly red bar. At 0.1 the same change fails with room to spare,
+  // while pixelmatch's own antialiasing detection still absorbs edge noise.
+  expect: { toHaveScreenshot: { threshold: 0.1 } },
   use: { baseURL: 'http://127.0.0.1:4173' },
   webServer: {
     command:
@@ -23,8 +38,28 @@ export default defineConfig({
     timeout: 120_000
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } }
+    // `visual` runs chromium only, so a visual test is +1 to the suite, not
+    // +3. The three engine projects ignore it explicitly rather than relying
+    // on a grep, so `pnpm test:e2e --project=chromium` keeps its exact count.
+    {
+      name: 'chromium',
+      testIgnore: /visual\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] }
+    },
+    {
+      name: 'firefox',
+      testIgnore: /visual\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'] }
+    },
+    {
+      name: 'webkit',
+      testIgnore: /visual\.spec\.ts/,
+      use: { ...devices['Desktop Safari'] }
+    },
+    {
+      name: 'visual',
+      testMatch: /visual\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] }
+    }
   ]
 });

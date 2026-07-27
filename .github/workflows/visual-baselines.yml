@@ -1,0 +1,48 @@
+name: Visual baselines
+
+# The five PNG baselines in `e2e/__screenshots__` are compared on
+# `ubuntu-latest` and can only be generated there: macOS and Linux render text
+# differently, and there is no docker on the maintainer's machine to bridge the
+# gap. So regenerating them is a workflow, not a local command — an
+# un-refreshable baseline is the check somebody deletes at the first font bump.
+#
+# Run it, download the artifact, commit the PNGs:
+#
+#   gh workflow run visual-baselines.yml --ref "$(git branch --show-current)"
+#   gh run download <run-id> --name visual-baselines --dir e2e/__screenshots__
+#   git add e2e/__screenshots__ && git commit
+#
+# `--ref <branch>` runs the branch's copy of this file, but GitHub only offers
+# `workflow_dispatch` for workflows that exist on the DEFAULT branch — so this
+# is undispatchable until it has merged once (HTTP 404: "workflow
+# visual-baselines.yml not found on the default branch"). Before then, take the
+# images from the `visual-diff` artifact of a failing `visual` CI job: Playwright
+# writes each missing baseline as `<name>-actual.png` next to the failure.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: corepack enable
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # `--update-snapshots` writes missing and changed baselines and reports
+      # the run as failed when it changed anything, which is correct but not
+      # useful here: the artifact is the deliverable either way.
+      - run: pnpm test:e2e --project=visual --update-snapshots
+        continue-on-error: true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: visual-baselines
+          path: e2e/__screenshots__/
+          retention-days: 14

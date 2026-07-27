@@ -97,6 +97,27 @@ turns an unrelated PR red:
 REELY_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
 ```
 
+`e2e/visual.spec.ts` runs in its own `visual` Playwright project (chromium
+only) and is the one suite that checks how the player _looks_: overlay
+layering, containment and overflow, plus five PNG baselines of the reference
+example in `e2e/__screenshots__`.
+
+The baselines are generated on `ubuntu-latest` and compared there, because
+macOS and Linux render text differently — on macOS those five tests skip and
+the layering assertions still run. To refresh them after an intentional visual
+change:
+
+```sh
+gh workflow run visual-baselines.yml --ref "$(git branch --show-current)"
+gh run download <run-id> --name visual-baselines --dir e2e/__screenshots__
+```
+
+Then commit the PNGs. A red `visual` CI job uploads the `-actual` and `-diff`
+images as a `visual-diff` artifact, which is also where the images come from
+when the refresh workflow is not dispatchable — GitHub only offers
+`workflow_dispatch` for workflows already on the default branch, so a workflow
+file added on a branch cannot be run until it has merged once.
+
 ## Browser support
 
 | Browser     | Minimum |

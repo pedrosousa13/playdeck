@@ -3,10 +3,17 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { available, ready } from './support';
 
+// `bottom: calc(100% + 0.25rem)`, not a fixed offset from the viewport's
+// bottom edge: `SettingsMenu`'s root is the nearest positioned ancestor, so an
+// offset written as if it were relative to `Player.Viewport` resolves against
+// the trigger's own box instead. It used to read `bottom: 3rem`, which put the
+// open menu 42px ABOVE the top of the page — measured, and invisible to every
+// check in the repo until `e2e/visual.spec.ts` looked (#112). This anchors the
+// menu to the trigger, the same way the reference example does.
 const menuStyle = {
   position: 'absolute' as const,
-  bottom: '3rem',
-  right: '0.5rem',
+  bottom: 'calc(100% + 0.25rem)',
+  right: 0,
   minWidth: 180,
   padding: '0.25rem',
   background: '#11151c',
@@ -58,7 +65,12 @@ const meta = {
         position: 'relative'
       }}
     >
-      <SpeedMenu />
+      {/* Bottom-right, where a real control row puts it: a menu that opens
+          upward needs room above the trigger, and a trigger sitting at the top
+          of the viewport has none. */}
+      <div style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>
+        <SpeedMenu />
+      </div>
     </Player.Viewport>
   )
 } satisfies Meta<typeof Player.SettingsMenu>;
