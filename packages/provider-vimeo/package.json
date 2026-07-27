@@ -13,7 +13,7 @@
     "dist"
   ],
   "dependencies": {
-    "@reely/core": "workspace:*",
+    "@reely/core": "workspace:^",
     "@vimeo/player": "2.30.4"
   },
   "scripts": {

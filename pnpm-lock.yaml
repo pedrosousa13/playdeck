@@ -126,10 +126,10 @@ importers:
   packages/provider-hls:
     dependencies:
       '@reely/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@reely/provider-native':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../provider-native
       hls.js:
         specifier: 1.6.16
@@ -138,13 +138,13 @@ importers:
   packages/provider-native:
     dependencies:
       '@reely/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
 
   packages/provider-vimeo:
     dependencies:
       '@reely/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@vimeo/player':
         specifier: 2.30.4
@@ -153,25 +153,25 @@ importers:
   packages/provider-youtube:
     dependencies:
       '@reely/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
 
   packages/react:
     dependencies:
       '@reely/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@reely/provider-hls':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../provider-hls
       '@reely/provider-native':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../provider-native
       '@reely/provider-vimeo':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../provider-vimeo
       '@reely/provider-youtube':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../provider-youtube
     devDependencies:
       react:

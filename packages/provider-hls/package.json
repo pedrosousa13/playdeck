@@ -13,8 +13,8 @@
     "dist"
   ],
   "dependencies": {
-    "@reely/core": "workspace:*",
-    "@reely/provider-native": "workspace:*",
+    "@reely/core": "workspace:^",
+    "@reely/provider-native": "workspace:^",
     "hls.js": "1.6.16"
   },
   "scripts": {
