@@ -281,6 +281,7 @@ test('a narrow container keeps the 16:9 floor and puts the row in flow', async (
 });
 
 test('a narrow container folds PiP into the settings menu', async ({
+  browserName,
   page
 }) => {
   // The row holds 6 targets at 320px (312px of content, 44px targets, 4px
@@ -291,6 +292,15 @@ test('a narrow container folds PiP into the settings menu', async ({
   // AirPlay is asserted only as absent from the row: it is capability-gated on
   // a WebKit-only API, so on chromium its button and its menu entry are both
   // legitimately missing and there is nothing to prove about the fold.
+  //
+  // Firefox reports `pictureInPicture: unavailable` with reason `browser` — no
+  // programmatic PiP request, asserted directly in e2e/platform.spec.ts:189.
+  // Both the button and the folded entry gate on that one capability, so there
+  // is nothing to fold there either.
+  test.skip(
+    browserName === 'firefox',
+    'Firefox exposes no programmatic PiP, so neither the button nor the folded menu entry renders.'
+  );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(story);
   await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
@@ -316,11 +326,18 @@ test('a narrow container folds PiP into the settings menu', async ({
 });
 
 test('a wide player keeps PiP as a button, not a menu item', async ({
+  browserName,
   page
 }) => {
   // The other half of the fold: both forms are rendered and the container
   // query hides whichever does not apply, so the same action offered twice at
-  // one width is the failure mode this catches.
+  // one width is the failure mode this catches. Skipped on Firefox for the
+  // same reason as the test above — no programmatic PiP, so neither form
+  // renders at any width.
+  test.skip(
+    browserName === 'firefox',
+    'Firefox exposes no programmatic PiP, so neither the button nor the folded menu entry renders.'
+  );
   await page.goto(story);
   await activationButton(page).click();
   await played(page);
