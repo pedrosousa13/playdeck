@@ -13,6 +13,13 @@ export default defineConfig({
   // Tests tagged @real hit third-party networks and are nondeterministic, so
   // they never block; opt in with REELY_REAL_PROVIDERS=1.
   grepInvert: process.env.REELY_REAL_PROVIDERS ? undefined : /@real/,
+  // One baseline set, not one per platform. The default template appends
+  // `-{projectName}-{platform}`, which here would mean a darwin set nobody can
+  // regenerate on linux and a linux set nobody can regenerate on darwin. There
+  // is no docker on the maintainer's machine, so the images are produced where
+  // CI runs and compared where CI runs; see
+  // `.github/workflows/visual-baselines.yml`.
+  snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}',
   use: { baseURL: 'http://127.0.0.1:4173' },
   webServer: {
     command:
@@ -23,8 +30,28 @@ export default defineConfig({
     timeout: 120_000
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } }
+    // `visual` runs chromium only, so a visual test is +1 to the suite, not
+    // +3. The three engine projects ignore it explicitly rather than relying
+    // on a grep, so `pnpm test:e2e --project=chromium` keeps its exact count.
+    {
+      name: 'chromium',
+      testIgnore: /visual\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] }
+    },
+    {
+      name: 'firefox',
+      testIgnore: /visual\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'] }
+    },
+    {
+      name: 'webkit',
+      testIgnore: /visual\.spec\.ts/,
+      use: { ...devices['Desktop Safari'] }
+    },
+    {
+      name: 'visual',
+      testMatch: /visual\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] }
+    }
   ]
 });
