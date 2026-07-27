@@ -370,3 +370,81 @@ test('the themed control row lays out with theme.css mounted', async ({
     ).toBe(true);
   }
 });
+
+/**
+ * The reviewer's-eye half. These five images are the only place anything in
+ * this repo compares rendered output to a reference.
+ *
+ * Linux only, and that is not a preference: there is no docker on the
+ * maintainer's machine, CI runs on `ubuntu-latest`, and macOS renders text
+ * differently. The baselines are produced where they are compared. On macOS
+ * these skip and the invariant layer above — which is what catches the bugs
+ * this repo has actually had — still runs. Refresh procedure:
+ * `.github/workflows/visual-baselines.yml`, documented in the root README.
+ *
+ * The stories are mock-decorated: no media element, no network, and a staged
+ * `currentTime: 12` / `duration: 120`, so the pixels are deterministic by
+ * construction. No masking and no seeking is needed.
+ */
+test.describe('reference example baselines', () => {
+  test.skip(
+    process.platform !== 'linux',
+    'Baselines are generated on ubuntu-latest; macOS renders text differently. Run the visual-baselines workflow to refresh them.'
+  );
+
+  const shot = { animations: 'disabled' } as const;
+
+  test('idle', async ({ page }) => {
+    await page.goto(story('reference-player--idle'));
+    await expect(page.locator(part('activation'))).toBeVisible();
+    await expect(page.locator('.reely-example')).toHaveScreenshot(
+      'reference-idle.png',
+      shot
+    );
+  });
+
+  test('composition', async ({ page }) => {
+    await page.goto(story('reference-player--composition'));
+    await expect(page.locator(part('caption-cue'))).toBeVisible();
+    await expect(page.locator('.reely-example')).toHaveScreenshot(
+      'reference-composition.png',
+      shot
+    );
+  });
+
+  test('settings menu open', async ({ page }) => {
+    await page.goto(story('reference-player--composition'));
+    await expect(page.locator(part('controls'))).toBeVisible();
+    await page
+      .locator(`${part('settings-menu-trigger')}[aria-label="Settings"]`)
+      .click();
+    await expect(page.locator(part('settings-menu'))).toHaveAttribute(
+      'data-reely-menu',
+      'open'
+    );
+    await expect(page.locator('.reely-example')).toHaveScreenshot(
+      'reference-menu-open.png',
+      shot
+    );
+  });
+
+  test('narrow container', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(story('reference-player--composition'));
+    await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
+    await expect(page.locator(part('volume-slider'))).toBeHidden();
+    await expect(page.locator('.reely-example')).toHaveScreenshot(
+      'reference-narrow.png',
+      shot
+    );
+  });
+
+  test('error state', async ({ page }) => {
+    await page.goto(story('reference-player--error-state'));
+    await expect(page.locator(part('error'))).toBeVisible();
+    await expect(page.locator('.reely-example')).toHaveScreenshot(
+      'reference-error.png',
+      shot
+    );
+  });
+});
