@@ -118,7 +118,8 @@ const layoutCss = `
   display: flex;
   flex-direction: column;
 }
-.reely-example-menu [data-reely-part='menu-radio-item'] {
+.reely-example-menu [data-reely-part='menu-radio-item'],
+.reely-example-menu [data-reely-part='menu-item'] {
   justify-content: flex-start;
   display: flex;
   align-items: center;
@@ -188,6 +189,23 @@ const layoutCss = `
   .reely-example-volume {
     display: none;
   }
+  .reely-example-fold {
+    display: none;
+  }
+}
+/* The other half of the fold. Both forms are always rendered and the container
+   query hides whichever does not apply — display: none takes the inactive one
+   out of the accessibility tree too, so neither width offers the same action
+   twice. 421px, not 420px: the breakpoint above is inclusive.
+
+   Written as a descendant selector to match the specificity of the menu item
+   styling above, which sets display: flex at (0,2,0). A bare
+   .reely-example-menu-fold is (0,1,0) and silently loses to it — measured, as
+   a PiP entry that stayed visible next to the PiP button at 768px. */
+@container (min-width: 421px) {
+  .reely-example-menu .reely-example-menu-fold {
+    display: none;
+  }
 }
 `;
 
@@ -221,13 +239,22 @@ const ExampleSettingsMenu = (): ReactElement | null => {
     qualityStatus: snapshot.capabilities.selectQuality.status,
     qualities: snapshot.qualities,
     selectedQualityId: snapshot.selectedQualityId,
-    playing: snapshot.quality
+    playing: snapshot.quality,
+    pictureInPicture: snapshot.pictureInPicture,
+    pipStatus: snapshot.capabilities.pictureInPicture.status,
+    airPlayStatus: snapshot.capabilities.airPlay.status
   }));
   const actions = Player.usePlayerActions();
   const showRates = state.rateStatus === 'available';
   const showQualities =
     state.qualityStatus === 'available' && state.qualities.length > 0;
-  if (!showRates && !showQualities) return null;
+  // The folded entries (#114). MenuItem does not gate itself the way PipButton
+  // and AirPlayButton do, so these read the same capabilities the buttons read.
+  // The menu must also open when the folded entries are the ONLY thing in it,
+  // or the functionality it absorbed disappears exactly where it is needed.
+  const showPip = state.pipStatus === 'available';
+  const showAirPlay = state.airPlayStatus === 'available';
+  if (!showRates && !showQualities && !showPip && !showAirPlay) return null;
 
   return (
     <Player.SettingsMenu>
@@ -267,6 +294,39 @@ const ExampleSettingsMenu = (): ReactElement | null => {
               </Player.MenuRadioItem>
             ))}
           </Player.MenuRadioGroup>
+        ) : null}
+        {/* Folded out of the button row below 420px (#114). These two carry
+            visible text rather than an icon alone: they are menu entries, and
+            the accessible name of a menuitem comes from its content — there is
+            no primitive supplying an aria-label here the way there is for the
+            buttons. */}
+        {showPip ? (
+          <Player.MenuItem
+            className="reely-example-menu-fold"
+            onSelect={() => {
+              void (state.pictureInPicture
+                ? actions.exitPictureInPicture()
+                : actions.requestPictureInPicture());
+            }}
+          >
+            {state.pictureInPicture ? (
+              <Player.PipExitIcon />
+            ) : (
+              <Player.PipEnterIcon />
+            )}
+            Picture in picture
+          </Player.MenuItem>
+        ) : null}
+        {showAirPlay ? (
+          <Player.MenuItem
+            className="reely-example-menu-fold"
+            onSelect={() => {
+              void actions.showAirPlayPicker();
+            }}
+          >
+            <Player.AirPlayIcon />
+            AirPlay
+          </Player.MenuItem>
         ) : null}
       </Player.SettingsMenuContent>
     </Player.SettingsMenu>
@@ -374,14 +434,14 @@ export const ReferencePlayer = ({
                   CaptionsIcon, not a text label. */}
               <Player.CaptionsMenu />
               <ExampleSettingsMenu />
-              <Player.PipButton>
+              <Player.PipButton className="reely-example-fold">
                 {state.pictureInPicture ? (
                   <Player.PipExitIcon />
                 ) : (
                   <Player.PipEnterIcon />
                 )}
               </Player.PipButton>
-              <Player.AirPlayButton>
+              <Player.AirPlayButton className="reely-example-fold">
                 <Player.AirPlayIcon />
               </Player.AirPlayButton>
               <Player.FullscreenButton>

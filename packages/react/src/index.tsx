@@ -2308,13 +2308,23 @@ const useSettingsMenu = (): SettingsMenuContextValue => {
   return ctx;
 };
 
+// Roving focus walks this list, so it must contain only items a user can
+// actually land on. A consumer hiding an entry with CSS — a container query
+// that folds a control into the menu at one width and back out at another, as
+// the reference example does — leaves the element in the DOM, and `.focus()`
+// on a `display: none` element silently does nothing: the wrap from the first
+// item landed on it and ArrowUp and End became dead keys.
+//
+// The check is on the item itself, not its ancestors. `checkVisibility()`
+// would cover both but is Chrome 105 / Firefox 125 / Safari 17.4, above the
+// support floor these packages declare.
 const menuItems = (root: HTMLElement | null): HTMLElement[] =>
   root
     ? Array.from(
         root.querySelectorAll<HTMLElement>(
           '[role="menuitem"], [role="menuitemradio"]'
         )
-      )
+      ).filter((el) => getComputedStyle(el).display !== 'none')
     : [];
 
 export const SettingsMenu = ({

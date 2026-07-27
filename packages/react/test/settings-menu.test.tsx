@@ -60,6 +60,40 @@ describe('SettingsMenu', () => {
     expect(hasFocus(items[0])).toBe(true);
   });
 
+  test('roving focus skips items hidden with CSS', async () => {
+    // Found building the #114 reference example, which renders PiP and AirPlay
+    // both as buttons and as menu entries and lets a container query hide
+    // whichever does not apply at the current player width. The hidden entry
+    // stayed in `querySelectorAll`, so wrapping from the first item landed on
+    // an unfocusable element and ArrowUp and End became dead keys — measured in
+    // a real browser as focus never leaving the first item.
+    render(
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger />
+        <Player.SettingsMenuContent>
+          <Player.MenuItem>Quality</Player.MenuItem>
+          <Player.MenuItem>Speed</Player.MenuItem>
+          <Player.MenuItem style={{ display: 'none' }}>AirPlay</Player.MenuItem>
+        </Player.SettingsMenuContent>
+      </Player.SettingsMenu>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const items = screen.getAllByRole('menuitem');
+    await waitFor(() => expect(hasFocus(items[0])).toBe(true));
+
+    // Wrap backwards past the hidden last item onto the last visible one.
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowUp' });
+    expect(hasFocus(items[1])).toBe(true);
+
+    // Forwards from there wraps to the first, not onto the hidden item.
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' });
+    expect(hasFocus(items[0])).toBe(true);
+
+    // End means the last item a user can actually reach.
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'End' });
+    expect(hasFocus(items[1])).toBe(true);
+  });
+
   test('Escape closes the menu and returns focus to the trigger', async () => {
     render(<Menu />);
     const trigger = screen.getByRole('button', { name: 'Settings' });
