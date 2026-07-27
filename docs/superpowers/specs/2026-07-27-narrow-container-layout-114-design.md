@@ -1,96 +1,151 @@
-# The container query owns the layout switch (#114)
+# The control row fits the player it is in (#114)
 
 **Issue:** #114 (parent #1). Filed from the baseline `e2e/__screenshots__/reference-narrow.png` that #113 added, which pinned a state nobody had looked at directly.
 
+**Supersedes** the first version of this spec (`512233d`), which proposed moving the layout switch onto the container query and stopped there. That design was falsified by measurement before any of it was implemented; §2 records how, because the failure is more useful than the proposal was.
+
 ## Goal
 
-At a **320 px container inside a wide viewport** — an embed in a narrow column, the case `container-type: inline-size` was added for in #111 — the reference composition is not usable:
+At a **320 px container inside a wide viewport** — an embed in a narrow column, the case `container-type: inline-size` was added for in #111 — the reference composition is not usable. #114 records three symptoms: the control row occupies 153 px of a 320×180 player, the button row wraps to two lines, and the caption cue overlaps the buttons.
 
-- the player box is `320×180`, and the control row occupies **153 px** of it, leaving a sliver of poster
-- the button row wraps to two lines
-- the caption cue **overlaps** the bottom button row
+Make a 320 px embed usable: video area intact, every control reachable, nothing clipped at 200 % text.
 
-Nothing here is a regression. The appearance predates #113; only the pin is new. #114 asks whether the container query should own the layout switch that the viewport media query owns alone today.
+## 1. What the measurement actually found
 
-Answer: **yes, and the media query goes away entirely.**
+Probed against the running Storybook before designing, `reference-player--composition`, Chromium:
 
-## 1. Why the literal ask is not expressible, and what that changes
+| Fact                                      | 320 px **viewport** (today)          | 320 px **container** (today)          |
+| ----------------------------------------- | ------------------------------------ | ------------------------------------- |
+| `.reely-example` box                      | **288 × 153**                        | 320 × 180                             |
+| computed `aspect-ratio`                   | `auto`                               | `16 / 9`                              |
+| `[data-reely-part="controls"]` `position` | `relative`                           | `absolute`                            |
+| control row height                        | 153                                  | 153                                   |
+| button row height                         | 92 — two lines                       | 92 — two lines                        |
+| caption cue vs button row                 | 125–150 inside 73–165 — **overlaps** | 152–177 inside 100–192 — **overlaps** |
 
-#114 proposes moving `aspect-ratio: auto` and `position: relative` from `@media (max-width: 420px)` into `@container (max-width: 420px)`. Probed before designing against it — Chromium, `page.setContent`, three cases at a 320 px page width:
+Three things follow, and all three contradict #114's own root-cause section.
 
-| Case                                          | `aspect-ratio` resolved      | Height |
-| --------------------------------------------- | ---------------------------- | ------ |
-| Container tries to restyle **itself**         | `16 / 9` — rule ignored      | 180    |
-| Wrapper is the container, box is a descendant | `auto` — rule applied        | 18     |
-| Descendant restyled from a self-container     | `position: relative` applied | —      |
+**`Player.Media` and `Player.Poster` are absolutely positioned, so they contribute no in-flow height.** `aspect-ratio: auto` therefore does not let the box grow _around_ the media; it collapses the box onto the control row alone. The 320 px viewport path — which #114 calls "the good outcome" — is 288 × 153 of pure control bar with no video area at all.
 
-**An element is never matched by its own container query.** `.reely-example` _is_ the container, so `aspect-ratio: auto` and its `:has()` variant cannot move as written. `.reely-example-controls { position: relative }` is a descendant and _could_ move alone — and moving it alone is precisely what #111 forbids, because the row would go in flow inside a box still locked to 16 / 9, which is the 35 px of clipped controls #32 measured.
+**Two of #114's three symptoms are not container-path defects.** The button row wraps to two lines on both paths, and the caption cue overlaps the button row on both paths. Only the first symptom is specific to the container path.
 
-So the split is not a preference to revisit; it is enforced by the DOM. Changing it requires a **container element that is not the box being restyled**. That is the whole design.
+**The row is 153 px on both paths.** No choice of query changes that. Both queries are downstream of a control row that does not fit at 320 px.
 
-## 2. The wrapper
+## 2. Why the first design failed, and the constraint that killed it
 
-`Player.Viewport` stays the box. A plain consumer `<div>` wraps it and owns the containment:
+The first design proposed making the container path match the viewport path, on the strength of #114's claim that the viewport path was correct. It would have traded a sliver of poster for none.
+
+Its other finding stands and still shapes this one. Probed separately: **an element is never matched by its own container query.** `.reely-example` carries `container-type`, so `@container` rules cannot restyle it; only descendants. Any design that restyles the box from a container query needs a wrapper element that is the container. That wrapper survives into this design, because `cqw` units resolve against an ancestor container too.
+
+## 3. The row is the constraint, and it is arithmetic
+
+Measured at a 320 px container: row content width 312 px, `gap: 4px`, every control a **44 × 44** target (WCAG 2.2 AA, and not negotiable).
 
 ```
-.reely-example-frame   width: 100%; max-width: 48rem; container-type: inline-size
-  .reely-example       width: 100%; position: relative; aspect-ratio: 16/9; overflow: hidden
+capacity:  n × 44 + (n − 1) × 4 ≤ 312   →   n ≤ 6.58   →   6 per line
+present:   play mute captions cc-menu settings pip | airplay fullscreen  = 8
+           (volume slider already hidden at this width and still 8)
 ```
 
-`.reely-example` gives up `container-type` and `max-width`; it keeps everything else. `[data-reely-part="viewport"]` still resolves to the same element, so no existing locator moves.
+Six fit; two wrap. That is the 92 px button row, and:
 
-`max-width` moves **to the wrapper** rather than staying on the box. If the box kept it, the container would measure the wrapper's full width while the player was capped at 48 rem, and above 768 px the query would be asking about the page again — the exact confusion this change removes. On the wrapper, container width and player width are the same number at every viewport.
+```
+control row = 8 (padding) + 49 (time row) + 4 (gap) + 92 (buttons) = 153
+```
 
-The wrapper is consumer DOM. It does not become a primitive, and nothing in `packages/` changes.
+So the fix is to remove two controls from the row without removing the functionality, and to stop the box from collapsing when the row goes in flow.
 
-## 3. The rules move, and the media query is deleted
+## 4. The design
 
-All three rules move verbatim into the existing `@container (max-width: 420px)` block, joining `.reely-example-volume { display: none }`. `@media (max-width: 420px)` is removed, not kept as a fallback. The container is now the same width as the player, and the player is the thing the breakpoint is about; a viewport query alongside it can only agree with the container query or contradict it, and contradicting it is the bug being fixed.
+### 4.1 Fold two controls into the settings menu
 
-The pair `#111` insisted on stays a pair. It is now driven by **one** query instead of two, which is the opposite of the disagreement that spec warned about.
+`PipButton` and `AirPlayButton` leave the row at a narrow container. They are unique functionality — unlike the volume slider, which is redundant with the mute button and is already dropped here — so they move rather than vanish, as `Player.MenuItem` entries in the existing settings menu.
 
-Complete behavioural delta:
+`MenuItem` is a public export (`packages/react/src/index.tsx:2490`) and closes the menu on select, so this stays composed only from public parts, which is the reference example's entire purpose.
 
-| Case                                  | Today                            | After                                                       |
-| ------------------------------------- | -------------------------------- | ----------------------------------------------------------- |
-| 320 px viewport (player also ~320 px) | media fires, in-flow row         | container fires — **identical**                             |
-| Wide viewport, player at 768 px       | neither fires, overlay row       | **identical**                                               |
-| Wide viewport, 320 px container       | container fires alone → crowding | in-flow row, box taller than 180 px, caption clears the row |
+Both forms render, and the container query hides whichever does not apply:
 
-The new height is **not asserted here as a number** — it depends on whether `Player.Media` and `Player.Poster` contribute in-flow height, which is a property of the primitives rather than of this stylesheet. The plan measures it on the viewport path first (where the same rules already apply today) and carries it as a measured fact; the test asserts the relation, not the constant.
+```css
+@container (max-width: 420px) {
+  .reely-example-fold {
+    display: none;
+  } /* the two buttons */
+}
+@container (min-width: 421px) {
+  .reely-example-menu-fold {
+    display: none;
+  } /* the two menu items */
+}
+```
 
-Only the third row changes. Two of the three cases are already covered by tests that must stay green **unchanged** — that is the regression argument for this change.
+No JS, no `ResizeObserver`, and `display: none` removes the inactive form from the accessibility tree, so neither width exposes a duplicate affordance.
 
-## 4. What was decided against
+Two consequences for `ExampleSettingsMenu`:
 
-**Keep 16 / 9 and shed controls.** The host reserved a 16 / 9 box, so honour it: hide lower-priority controls at a narrow container until the row fits one line inside 180 px. No wrapper, no structural change, and it matches #111's stated split verbatim.
+- It gates itself on capabilities and returns `null` when neither playback rate nor quality is available. It must also render when only the folded items are available, or the folded functionality disappears exactly where it is needed.
+- `PipButton` and `AirPlayButton` self-gate on `capabilities.pictureInPicture.status` and `capabilities.airPlay.status`. `MenuItem` does not gate itself, so the menu entries must read those capabilities explicitly. Actions are `requestPictureInPicture()` / `exitPictureInPicture()` and `showAirPlayPicker()` on `usePlayerActions()`.
 
-Rejected because the volume slider is _redundant_ — the mute button survives it — while PiP and AirPlay are unique functionality. Hiding them is a loss of function, not a reflow. The honest version folds them into the settings menu first, which is a larger change than the wrapper, not a smaller one.
+Result: 6 buttons, one line, control row **105 px** — 58 % of a 180 px box, against 85 % today.
+
+### 4.2 `min-height`, not `aspect-ratio: auto`
+
+This is the part the first design got wrong, and it cannot simply be dropped: at 320 px with 200 % text the row roughly doubles, and an overlay row inside a 180 px `overflow: hidden` box is clipped. That is the 35 px #32 measured, and it is why `aspect-ratio: auto` exists at all. The rule is replaced rather than removed:
+
+```css
+@container (max-width: 420px) {
+  .reely-example {
+    aspect-ratio: auto;
+    min-height: 56.25cqw; /* 9/16 of the container — 180px at 320px */
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .reely-example-controls {
+    position: relative;
+  }
+}
+```
+
+`Poster` and `Media` are absolutely positioned and paint the full box regardless, so the video area stays 320 × 180 while the row sits in flow over its bottom 105 px. When the row genuinely needs more than 180 px — the 200 % text case — the box **grows** instead of clipping. `justify-content: flex-end` keeps the row at the bottom: in flow it is the only in-flow child, and without it the row would sit at the top of a `min-height`-inflated box.
+
+The `:has(.reely-example-controls[hidden])` collapse guard is **deleted**. It existed because `aspect-ratio: auto` collapsed the box to zero height in the states where #89 hides the row, taking the full-bleed overlay with it — measured in #111 as an activation button that could not be clicked. `min-height` holds the box open in exactly those states, so the guard has nothing left to guard.
+
+### 4.3 The media query is deleted
+
+With the box no longer collapsing, both paths want identical treatment, and the container query owns all of it. `@media (max-width: 420px)` goes away entirely. That is #114's literal ask, reached from the other direction.
 
 ## 5. Risks, and what falsifies each
 
-- **The stacking context moves.** `.reely-example` is `position: relative; z-index: auto`, so today it is `container-type`'s containment that makes it a stacking context. On the wrapper, it stops being one. Internal ordering should be unaffected — same relative z-indexes inside the same context — and the containing block for the absolutely-positioned row, poster and gesture layer stays `.reely-example` via `position: relative`. **Check:** `e2e/visual.spec.ts`'s ten layering invariants, unchanged. If any fail, the containment is the suspect; report it rather than working around it.
-- **The `:has()` collapse guard must fire on the container path too.** In the states where #89 hides the control row (pre-activation, and while an error surface owns the viewport) the box has no in-flow content, and without the guard it collapses to zero height and takes the full-bleed overlay with it — measured in #111 as an activation button that could not be clicked. **Check:** the idle and error narrow-container cases.
-- **#32's reflow cases.** 320 px at 200 % text, and 320 px-equivalent width. The replacement query is px-based exactly like the one it replaces, so these should be untouched. **Check:** `e2e/a11y.spec.ts`'s three reflow cases, green and unchanged.
-- **#111's own container-query test** — the volume slider hides on the player's width with the viewport held at 1280 px — must stay green with no edit. It is the test that proves the container mechanism still works after the container moved elements.
+- **The stacking context moves to the wrapper.** `.reely-example` is `position: relative; z-index: auto`, so today it is `container-type`'s containment that makes it a stacking context. Internal ordering should be unaffected and the containing block for the absolutely-positioned overlays stays `.reely-example` via `position: relative`. **Check:** `e2e/visual.spec.ts`'s ten layering invariants, unchanged. If any fail, the containment is the suspect — report it rather than working around it.
+- **`display: flex` on the player is new.** Every overlay in it is absolutely positioned and so is out of flow, but the control row is not, and `Captions` is not. **Check:** the same layering invariants, plus the caption cue's box.
+- **The collapse guard is gone.** If `min-height` does not hold the box open in the idle and error states, the activation button becomes unclickable — the exact #111 failure. **Check:** `the idle and error states hand the whole player to their overlay`, and the activation-overlay test, at a narrow container as well as wide.
+- **#32's reflow cases.** 320 px at 200 % text is the case the `min-height` growth exists for. **Check:** `e2e/a11y.spec.ts`'s three reflow cases, green and unchanged.
+- **The folded menu items are new interactive surface.** **Check:** axe over the primitive stories and the composed example with the menu open, and the keyboard flow that opens the menu and returns focus on Escape.
+- **`cqw` and `@container` are Chrome 105 / Firefox 110 / Safari 16** — above the packages' declared floor (Chrome 99 / Firefox 97 / Safari 15.4). Unchanged from #111: this is a workbench composition, never published, and the primitives ship no CSS. `Reference.mdx` says so and continues to.
 
 ## 6. Tests
 
-- `e2e/reference.spec.ts` — its two responsive tests **stay green and stay distinct**. #114 says explicitly that a fix must not collapse them into the same assertion: one covers the viewport path, one the container path. The container-path test gains the assertion that the row is now in flow — the player is taller than `320 × 9 / 16` at a 320 px container.
-- `e2e/visual.spec.ts` — "a 320px container keeps every layer inside the player" stays green. A new case asserts the caption cue does not overlap the control row at a narrow container: that is the defect #114 names and nothing currently asserts it. It fails against today's CSS.
-- `e2e/__screenshots__/reference-narrow.png` — regenerated with `gh workflow run visual-baselines.yml` and downloaded from the artifact, **never by hand** (root README, Development). The other four baselines must come back byte-identical; if any of them moves, this change reached further than its own case and that is a finding.
+- `e2e/reference.spec.ts` — the two existing responsive tests **stay green and stay distinct**; #114 says a fix must not collapse the viewport path and the container path into one assertion. A new test asserts the container path's single-line row: the button row's height equals one 44 px target, and the player is 320 × 180 with the row in flow.
+- PiP and AirPlay reachability at a narrow container — the point of folding rather than hiding. Asserted through the menu, not through the buttons.
+- `e2e/visual.spec.ts` — the ten layering invariants unchanged; the narrow-container case gains the in-flow assertion.
+- `e2e/__screenshots__/reference-narrow.png` regenerated with `gh workflow run visual-baselines.yml`, **never by hand**. `reference-menu-open.png` will also move, because the menu gains items at wide only if the fold items are visible there — they are not, so it must **not** move. If it does, the `min-width: 421px` rule is wrong.
+- The other four baselines must come back byte-identical. Any other movement means the change reached past its own case.
 
 ## 7. Docs
 
-`Reference.mdx` currently teaches the old split, and gives "an element cannot query its own container" as its reason. The fact is right and the conclusion no longer follows once a wrapper exists — the paragraph is rewritten to describe one container-driven breakpoint. Its floor paragraph stands unchanged: `@container` is still Chrome 105 / Firefox 110 / Safari 16, still above the packages' declared floor, and this is still a workbench composition that ships no CSS.
+`Reference.mdx` currently teaches the old split and cites "an element cannot query its own container" as the reason the box's rules stay on a media query. The fact is right; the conclusion no longer follows once a wrapper exists. Rewritten to describe one container-driven breakpoint, the fold, and the `min-height` mechanism.
 
-The `#111` spec's §3 and its plan's "do not simplify the split" note are historical records of a decision made with correct reasoning and one missing option. They are left untouched; this spec supersedes them, and says so here so a reader who finds them first is not misled.
+The `#111` spec's §3 and its plan's "do not simplify the split" note are historical records of a decision made with correct reasoning and one missing option. They are left untouched; this spec supersedes them and says so here.
+
+**#114 itself needs correcting.** Its root-cause section states that the viewport path is the good outcome. It is not, and the measurement in §1 belongs on the issue so the next reader does not re-derive a wrong premise.
 
 ## Out of scope
 
-- `Theme/Theme`'s pre-existing 5 px control-row overflow at its own width, recorded in a comment in `reference-player.tsx`. Older, cosmetic, and inside the area #32 reviews.
-- Anything in `packages/`. The primitives ship no CSS; the declared browser support floor does not move.
-- Folding PiP and AirPlay into the settings menu at narrow widths. That is preset behaviour (#9), out of the MVP.
+- **Dropping the two `Time` labels at a narrow container.** It is the obvious next lever on the remaining 105 px and it is not measured, so it is not promised. 58 % of the box is better than 85 % and still not good; if the owner wants better, that is the next thing to measure.
+- `Theme/Theme`'s pre-existing 5 px control-row overflow at its own width. Older, cosmetic, inside the area #32 reviews.
+- The caption cue overlapping the button row. It happens on **both** paths, at every width, and `e2e/visual.spec.ts:129-135` records that cue-over-row overlap is deliberate — the cue wins on paint order. #114's third symptom is therefore not fixed here, and the issue gets a comment saying so rather than a silent omission.
+- Anything in `packages/`. The primitives ship no CSS and the declared browser support floor does not move.
+- The `DefaultPlayer` preset's own narrow layout (#9). Out of the MVP.
 
 ## Verification
 
