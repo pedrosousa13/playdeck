@@ -55,6 +55,43 @@ describe('theme contract', () => {
     expect(outsideLayer.trim()).toBe('');
   });
 
+  // The declared browser support floor (Chrome/Edge 99, Firefox 97, Safari and
+  // iOS 15.4) is set by the newest CSS feature in this file, which today is
+  // `@layer`. Nothing recomputes that when a rule is added, so this freezes the
+  // inventory instead: a new at-rule, functional pseudo-class or CSS function
+  // fails here, and moving the floor becomes a deliberate act with a docs
+  // change attached rather than a side effect of a styling tweak.
+  //
+  // This gates the inventory, not a feature-to-version mapping -- no caniuse
+  // dataset to refresh, nothing that rots.
+  test('uses only the CSS features the declared support floor covers', () => {
+    const atRules = new Set(
+      [...withoutComments.matchAll(/@([a-z-]+)/g)].map(([, name]) => name)
+    );
+    const pseudoFunctions = new Set(
+      [...withoutComments.matchAll(/:([a-z-]+)\(/g)].map(([, name]) => name)
+    );
+    const functions = new Set(
+      [...withoutComments.matchAll(/(?<![\w-:])([a-z-]+)\(/g)]
+        .map(([, name]) => name)
+        .filter((name) => !pseudoFunctions.has(name))
+    );
+
+    expect([...atRules].sort()).toEqual(['layer', 'media']);
+    expect([...pseudoFunctions].sort()).toEqual(['where']);
+    // `calc` and `linear-gradient` are far below the floor (IE9 and Safari 6.1
+    // respectively) and do not set it; they are listed because this asserts the
+    // whole inventory, not a subset -- a subset check would let a new feature
+    // through unnoticed, which is the failure mode this exists to prevent.
+    expect([...functions].sort()).toEqual([
+      'calc',
+      'env',
+      'linear-gradient',
+      'rgb',
+      'var'
+    ]);
+  });
+
   test('every selector is specificity-zero via :where()', () => {
     expect(selectorLists.length).toBeGreaterThan(0);
     const offenders = selectorLists.filter((selector) => {

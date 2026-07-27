@@ -38,6 +38,20 @@ library stays unopinionated about layout; this example documents one way to lay
 a control row out — two rows, a wrapping button row, and the volume slider
 dropped below a 420px breakpoint so the composition stays usable at 320px.
 
+That breakpoint is a **container query**, not a media query: it asks how wide
+the _player_ is, so an embed in a narrow column gets the same treatment as a
+narrow phone. Only that rule is container-driven. The box's own `aspect-ratio`
+and the control row's switch from overlay to in-flow stay on a viewport media
+query, because they are a pair — the row can only leave the overlay once the box
+has given up its fixed ratio — and an element cannot query its own container
+anyway. Splitting the pair across two queries lets them disagree, which is the
+35px of clipped controls #32 measured.
+
+`@container` is Chrome 105, Firefox 110 and Safari 16 — newer than the floor the
+packages declare (Chrome 99, Firefox 97, Safari 15.4). That does not move the
+packages' floor: this is a composition in this workbench, never published, and
+the primitives ship no CSS at all.
+
 Where a primitive sets geometry on itself, your `style` prop overrides it —
 see the `style` section of `Overview/Contract` for the one carve-out.
 

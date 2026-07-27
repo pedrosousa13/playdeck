@@ -287,6 +287,17 @@ itself is a default your `style` prop overrides; properties derived from player
 state are the primitive's own. The full contract is in the workbench docs under
 **Overview/Contract**.
 
+## Browser support
+
+Chrome and Edge 99, Firefox 97, Safari and iOS Safari 15.4.
+
+The floor comes from `theme.css`, which uses `@layer`; the built JavaScript needs
+nothing above Safari 14.1. Importing the stylesheet is what raises the
+requirement, so a headless consumer is bound only by the JavaScript floor.
+
+`test/theme.test.ts` freezes the stylesheet's CSS feature inventory, so a newer
+feature fails the build rather than silently moving this number.
+
 ## License
 
 [MIT](LICENSE).

@@ -31,6 +31,10 @@ const layoutCss = `
   background: #0b0e13;
   color: #e8edf4;
   font-family: system-ui, sans-serif;
+  /* Controls that depend on how much room the PLAYER has query this, not the
+     viewport: an embedded player in a narrow column then gets the same
+     treatment as a narrow phone, which a viewport media query cannot express. */
+  container-type: inline-size;
 }
 /* The standard [hidden] reset, and it needs !important here rather than by
    habit: reely's overlay primitives carry their own inline display (Captions
@@ -158,6 +162,15 @@ const layoutCss = `
   .reely-example-controls {
     position: relative;
   }
+}
+/* The player's own width, not the page's. Kept separate from the media query
+   above on purpose: aspect-ratio and the in-flow control row are a pair — the
+   row only leaves the overlay because the box gave up its fixed ratio — and
+   driving those two from different queries lets them disagree, which is the
+   35px of clipped controls #32 measured. Which controls FIT is a question
+   about the player; how the box lays out in the page is a question about the
+   page. */
+@container (max-width: 420px) {
   .reely-example-volume {
     display: none;
   }

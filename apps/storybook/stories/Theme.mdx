@@ -84,11 +84,17 @@ effect. It also means nothing leaks into the surrounding document.
 ```css
 /* Anywhere above the player. */
 .brand {
-  --reely-color-accent: oklch(0.7 0.2 320);
+  --reely-color-accent: #7c3aed;
   --reely-control-size: 3rem;
   --reely-radius: 0;
 }
 ```
+
+Tokens take any colour syntax your own support target allows. The value above is
+a hex for the same reason the stylesheet's own defaults are: `oklch()` reached
+Baseline in May 2023, later than the floor Reely declares (Chrome 99, Firefox 97,
+Safari 15.4). Use it if your target is newer — nothing in the theme requires or
+prevents either.
 
 | Group     | Tokens                                                                                                                                                                        |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
