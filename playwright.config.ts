@@ -20,6 +20,14 @@ export default defineConfig({
   // CI runs and compared where CI runs; see
   // `.github/workflows/visual-baselines.yml`.
   snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}',
+  // Playwright's default screenshot threshold is 0.2, and pixelmatch turns that
+  // into `maxDelta = 35215 * threshold ** 2` = 1408.6 in YIQ space
+  // (`playwright-core/lib/coreBundle.js:6792`). Measured: repainting the whole
+  // reference control bar from rgb(4, 6, 10) to rgb(90, 6, 10) is a delta of
+  // 1184.1 — under the default it passed, and a falsification run went green
+  // against a visibly red bar. At 0.1 the same change fails with room to spare,
+  // while pixelmatch's own antialiasing detection still absorbs edge noise.
+  expect: { toHaveScreenshot: { threshold: 0.1 } },
   use: { baseURL: 'http://127.0.0.1:4173' },
   webServer: {
     command:
