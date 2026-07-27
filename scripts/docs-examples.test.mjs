@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { markerNames, renderDoc, uncoveredExports } from './docs-examples.mjs';
+import {
+  markerNames,
+  renderDoc,
+  uncoveredExports,
+  ungatedFences
+} from './docs-examples.mjs';
 
 /** @type {Map<string, { source: string; language: 'ts' | 'tsx' }>} */
 const fixtures = new Map([
@@ -144,4 +149,67 @@ test('reports mdx markers too, and nothing for a plain doc', () => {
     'ui'
   ]);
   assert.deepEqual(markerNames('# Just prose\n', 'md'), []);
+});
+
+test('a ts fence inside a marked region is gated', () => {
+  const input = [
+    '<!-- example:demo -->',
+    '',
+    '```ts',
+    'export const a = 1;',
+    '```',
+    '',
+    '<!-- /example -->'
+  ].join('\n');
+
+  assert.deepEqual(ungatedFences(input, 'md'), []);
+});
+
+test('a ts fence outside every region is reported with its line', () => {
+  const input = ['# Title', '', '```ts', 'stale();', '```'].join('\n');
+
+  assert.deepEqual(ungatedFences(input, 'md'), [3]);
+});
+
+test('an explicitly ignored fence is allowed', () => {
+  const input = [
+    '<!-- example:ignore two import lines, nothing to compile -->',
+    '',
+    '```ts',
+    "import '@reely/react/theme.css';",
+    '```'
+  ].join('\n');
+
+  assert.deepEqual(ungatedFences(input, 'md'), []);
+});
+
+test('non-ts fences are never reported', () => {
+  const input = [
+    '```sh',
+    'pnpm add @reely/core',
+    '```',
+    '```css',
+    'a{}',
+    '```'
+  ].join('\n');
+
+  assert.deepEqual(ungatedFences(input, 'md'), []);
+});
+
+test('the mdx ignore syntax is its own', () => {
+  const ignored = [
+    '{/* example:ignore illustrative fragment */}',
+    '',
+    '```tsx',
+    '<Thing />',
+    '```'
+  ].join('\n');
+
+  assert.deepEqual(ungatedFences(ignored, 'mdx'), []);
+  // The markdown syntax must NOT satisfy an mdx doc: an HTML comment there is
+  // a build error, so accepting it would wave through a file that cannot ship.
+  assert.deepEqual(
+    ungatedFences('<!-- example:ignore -->\n\n```tsx\n```', 'mdx'),
+    [3]
+  );
 });

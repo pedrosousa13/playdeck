@@ -22,12 +22,47 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 export const MARKERS = {
   md: {
     open: /^<!-- example:([a-z0-9-]+) -->$/,
-    close: /^<!-- \/example -->$/
+    close: /^<!-- \/example -->$/,
+    ignore: /^<!-- example:ignore\b.*-->$/
   },
   mdx: {
     open: /^\{\/\* example:([a-z0-9-]+) \*\/\}$/,
-    close: /^\{\/\* \/example \*\/\}$/
+    close: /^\{\/\* \/example \*\/\}$/,
+    ignore: /^\{\/\* example:ignore\b.*\*\/\}$/
   }
+};
+
+/**
+ * The 1-based line numbers of `ts`/`tsx` fences that no `example:` region
+ * generates and no `example:ignore` comment excuses.
+ *
+ * Without this, the gate only checks what is already inside a marker: a new
+ * hand-written example added next to a generated one compiles nowhere and
+ * nothing complains. That is the exact hole this whole mechanism exists to
+ * close, so an unmarked fence is a failure and an exception has to say why.
+ * @param {string} text
+ * @param {'md' | 'mdx'} syntax
+ * @returns {number[]}
+ */
+export const ungatedFences = (text, syntax) => {
+  const marker = MARKERS[syntax];
+  const lines = text.split('\n');
+  /** @type {number[]} */
+  const ungated = [];
+  let inRegion = false;
+  let excused = false;
+
+  for (const [index, line] of lines.entries()) {
+    if (marker.open.test(line)) inRegion = true;
+    else if (marker.close.test(line)) inRegion = false;
+    else if (marker.ignore.test(line)) excused = true;
+    else if (/^```tsx?$/.test(line)) {
+      if (!inRegion && !excused) ungated.push(index + 1);
+      excused = false;
+    }
+  }
+
+  return ungated;
 };
 
 /**
@@ -228,6 +263,8 @@ const main = async () => {
 
   /** @type {string[]} */
   const drifted = [];
+  /** @type {string[]} */
+  const ungated = [];
   /** @type {Set<string>} */
   const referenced = new Set();
   for (const doc of docs) {
@@ -235,6 +272,9 @@ const main = async () => {
     const syntax = doc.endsWith('.mdx') ? 'mdx' : 'md';
     const before = await readFile(path, 'utf8');
     for (const name of markerNames(before, syntax)) referenced.add(name);
+    for (const line of ungatedFences(before, syntax)) {
+      ungated.push(`${doc}:${line}`);
+    }
     const after = renderDoc(before, syntax, fixtures);
     if (before === after) continue;
     if (check) drifted.push(doc);
@@ -253,10 +293,19 @@ const main = async () => {
   if (!check) {
     console.log(`Rewrote ${docs.length} docs from ${fixtures.size} fixtures.`);
   }
-  if (drifted.length > 0 || orphans.length > 0 || uncovered.length > 0) {
+  if (
+    drifted.length > 0 ||
+    ungated.length > 0 ||
+    orphans.length > 0 ||
+    uncovered.length > 0
+  ) {
     const reasons = [
       ...drifted.map(
         (doc) => `  ${doc} is out of date — run \`pnpm docs:examples\`.`
+      ),
+      ...ungated.map(
+        (where) =>
+          `  ${where} is a ts/tsx block nothing compiles — wrap it in an example: marker, or precede it with an example:ignore comment saying why not.`
       ),
       ...orphans.map(
         (name) =>

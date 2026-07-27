@@ -53,6 +53,8 @@ export const Clip = () => (
 
 Optional stylesheet with the default look:
 
+<!-- example:ignore one import line; the theme.css subpath export and its presence in the tarball are gated by test/theme.test.ts -->
+
 ```ts
 import '@reely/react/theme.css';
 ```
