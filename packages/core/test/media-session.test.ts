@@ -2,7 +2,6 @@ import { expect, test, vi } from 'vitest';
 import {
   PlayerController,
   bindMediaSession,
-  createMediaSessionCoordinator,
   getMediaSessionCoordinator,
   type MediaSessionLike,
   type ProviderAdapter,
@@ -74,7 +73,7 @@ test('getMediaSessionCoordinator returns one coordinator per session (per docume
 
 test('a playing root registers metadata and action handlers', () => {
   const { session, handlers } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -93,7 +92,7 @@ test('a playing root registers metadata and action handlers', () => {
 
 test('media session action handlers route to controller commands', () => {
   const { session, handlers } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { commands, emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -112,7 +111,7 @@ test('media session action handlers route to controller commands', () => {
 
 test('releasing the owning root clears its metadata and handlers', () => {
   const { session, handlers } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -133,7 +132,7 @@ test('releasing the owning root clears its metadata and handlers', () => {
 
 test('multi-root: ownership follows the most-recently-playing root', () => {
   const { session } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const first = new PlayerController();
   const second = new PlayerController();
   const firstProvider = createProvider();
@@ -152,7 +151,7 @@ test('multi-root: ownership follows the most-recently-playing root', () => {
 
 test('multi-root: releasing a non-owner never clears the owner handlers', () => {
   const { session, handlers } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const first = new PlayerController();
   const second = new PlayerController();
   const firstProvider = createProvider();
@@ -180,7 +179,7 @@ test('multi-root: releasing a non-owner never clears the owner handlers', () => 
 
 test('a paused owner keeps ownership but reports the paused state', () => {
   const { session, handlers } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -196,7 +195,7 @@ test('a paused owner keeps ownership but reports the paused state', () => {
 
 test('source change releases handlers for the owning root', () => {
   const { session, handlers } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -221,7 +220,7 @@ test('source change releases handlers for the owning root', () => {
 
 test('setMetadata updates the live session only while owning', () => {
   const { session } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -243,7 +242,7 @@ test('position state is reported for the owning root when supported', () => {
   const { session, positionStates } = createSession();
   const setPositionState = vi.fn((state) => positionStates.push(state));
   session.setPositionState = setPositionState;
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -274,7 +273,7 @@ test('clamps a position that overshoots duration rather than throwing', () => {
     }
     positionStates.push(state);
   };
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -298,7 +297,7 @@ test('clamps a position that overshoots duration rather than throwing', () => {
 
 test('clears position state when the stream goes live (duration null)', () => {
   const { session, positionStates } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -319,7 +318,7 @@ test('clears position state when the stream goes live (duration null)', () => {
 
 test('clears position state when the owning root is released', () => {
   const { session, positionStates } = createSession();
-  const coordinator = createMediaSessionCoordinator(session);
+  const coordinator = getMediaSessionCoordinator(session);
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);

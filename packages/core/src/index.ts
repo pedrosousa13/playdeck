@@ -1431,8 +1431,6 @@ const MEDIA_SESSION_ACTIONS = [
   'seekbackward'
 ] as const;
 
-type MetadataFactory = (metadata: MediaMetadataInput) => unknown;
-
 const globalMediaMetadata = ():
   (new (init: MediaMetadataInput) => unknown) | undefined => {
   const scope = globalThis as {
@@ -1443,7 +1441,7 @@ const globalMediaMetadata = ():
     : undefined;
 };
 
-const defaultMetadataFactory: MetadataFactory = (metadata) => {
+const toMediaMetadata = (metadata: MediaMetadataInput): unknown => {
   const Ctor = globalMediaMetadata();
   const init = {
     ...metadata,
@@ -1457,15 +1455,17 @@ const defaultMetadataFactory: MetadataFactory = (metadata) => {
   }
 };
 
-export const createMediaSessionCoordinator = (
-  session: MediaSessionLike,
-  options: { readonly metadataFactory?: MetadataFactory } = {}
+// Internal on purpose: a second coordinator over the same MediaSession would
+// hand out roots that do not know about each other's ownership, which is the
+// exact thing the one-per-document rule exists to prevent.
+// `getMediaSessionCoordinator` is how a caller gets one.
+const createMediaSessionCoordinator = (
+  session: MediaSessionLike
 ): MediaSessionCoordinator => {
-  const metadataFactory = options.metadataFactory ?? defaultMetadataFactory;
   let owner: MediaSessionRoot | null = null;
 
   const applyMetadata = (metadata: MediaMetadataInput | null): void => {
-    session.metadata = metadata ? metadataFactory(metadata) : null;
+    session.metadata = metadata ? toMediaMetadata(metadata) : null;
   };
 
   const clearSurface = (): void => {
