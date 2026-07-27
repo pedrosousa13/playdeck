@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "types": ["node"],
+    // The harnesses run under plain `node`, not a bundler.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    // The harnesses stay as .mjs — checking them is verification only, and must
+    // not change how `pnpm test:bundle` and `pnpm test:integrations` run.
+    "allowJs": true,
+    "checkJs": true,
+    "tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo/tests.tsbuildinfo"
+  },
+  // Only the harnesses. The fixture apps under these directories are typechecked
+  // by their own builds: next-image by `next build`, and the .tsx entries by the
+  // package builds they import from.
+  "include": ["bundle/native-only/*.mjs", "integrations/next-image/*.mjs"]
+}

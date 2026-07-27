@@ -29,12 +29,14 @@ const console = globalThis.console;
 
 const KB = 1024;
 
+/** @param {string} path */
 const gzipKilobytes = async (path) => {
   const source = await readFile(new URL(path, import.meta.url));
   return gzipSync(source).length / KB;
 };
 
 // `budget: null` means report-only.
+/** @type {readonly { name: string; path: string; budget: number | null }[]} */
 const targets = [
   { name: '@reely/core', path: '../packages/core/dist/index.js', budget: 10 },
   {
@@ -102,8 +104,10 @@ for (const { name, size, budget } of measured) {
   );
 }
 
-const over = measured.filter(
-  ({ budget, size }) => budget !== null && size > budget
+// flatMap rather than filter+map: the filter already guarantees a budget, but
+// only a narrowing form proves it to the reader and the typechecker alike.
+const over = measured.flatMap(({ name, size, budget }) =>
+  budget !== null && size > budget ? [{ name, size, budget }] : []
 );
 if (over.length > 0) {
   const detail = over

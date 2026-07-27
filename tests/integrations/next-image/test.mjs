@@ -7,8 +7,16 @@ import { runWithCleanup, startNext, terminate } from './harness.mjs';
 
 const fixtureDirectory = fileURLToPath(new URL('.', import.meta.url));
 
+/**
+ * @typedef {{ x: number; y: number; width: number; height: number }} Rectangle
+ */
+
+/**
+ * @param {Rectangle} actual
+ * @param {Rectangle} expected
+ */
 const equalRectangles = (actual, expected) => {
-  for (const key of ['x', 'y', 'width', 'height']) {
+  for (const key of /** @type {const} */ (['x', 'y', 'width', 'height'])) {
     assert.ok(
       Math.abs(actual[key] - expected[key]) < 0.01,
       `${key} differs: ${actual[key]} !== ${expected[key]}`
@@ -16,22 +24,26 @@ const equalRectangles = (actual, expected) => {
   }
 };
 
+/** @param {import('@playwright/test').Page} page */
 const readPosterMarkup = (page) =>
-  page.locator('[data-reely-part="poster"]').evaluate((poster) => {
-    const image = poster.querySelector('img[alt=""]');
-    if (!image) throw new Error('Expected a poster image in the live DOM.');
-    return {
-      hydrated: document.documentElement.dataset.hydrated === 'true',
-      imageConnected: image.isConnected,
-      posterConnected: poster.isConnected,
-      position: getComputedStyle(image).position,
-      srcset: image.getAttribute('srcset'),
-      sizes: image.getAttribute('sizes'),
-      image: image.getBoundingClientRect().toJSON(),
-      poster: poster.getBoundingClientRect().toJSON()
-    };
-  });
+  page
+    .locator('[data-reely-part="poster"]')
+    .evaluate((/** @type {HTMLElement} */ poster) => {
+      const image = poster.querySelector('img[alt=""]');
+      if (!image) throw new Error('Expected a poster image in the live DOM.');
+      return {
+        hydrated: document.documentElement.dataset.hydrated === 'true',
+        imageConnected: image.isConnected,
+        posterConnected: poster.isConnected,
+        position: getComputedStyle(image).position,
+        srcset: image.getAttribute('srcset'),
+        sizes: image.getAttribute('sizes'),
+        image: image.getBoundingClientRect().toJSON(),
+        poster: poster.getBoundingClientRect().toJSON()
+      };
+    });
 
+/** @type {import('@playwright/test').Browser | undefined} */
 let browser;
 const { origin, server } = await startNext(fixtureDirectory);
 
@@ -39,11 +51,13 @@ await runWithCleanup({
   run: async () => {
     browser = await chromium.launch();
     const page = await browser.newPage();
+    /** @type {string[]} */
     const failures = [];
     let scriptsReleased = false;
+    /** @type {() => void} */
     let resolveHeldScripts = () => {};
     const heldScriptsReleased = new Promise((resolve) => {
-      resolveHeldScripts = resolve;
+      resolveHeldScripts = () => resolve(undefined);
     });
     const releaseHeldScripts = () => {
       if (scriptsReleased) return;
@@ -131,6 +145,6 @@ await runWithCleanup({
       releaseHeldScripts();
     }
   },
-  closeBrowser: () => browser?.close(),
+  closeBrowser: async () => browser?.close(),
   terminateServer: () => terminate(server)
 });

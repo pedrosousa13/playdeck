@@ -6,9 +6,12 @@ import { runWithCleanup, startNext } from './harness.mjs';
 class FakeServer extends EventEmitter {
   stdout = new EventEmitter();
   stderr = new EventEmitter();
+  /** @type {number | null} */
   exitCode = null;
+  /** @type {(string | undefined)[]} */
   signals = [];
 
+  /** @param {string} [signal] */
   kill(signal) {
     this.signals.push(signal);
     this.exitCode = 0;
@@ -52,6 +55,7 @@ test('rejects the original spawn error after lifecycle cleanup', async () => {
 
 test('terminates Next after browser cleanup fails', async () => {
   const browserFailure = new Error('browser close failed');
+  /** @type {string[]} */
   const calls = [];
 
   await assert.rejects(
@@ -71,6 +75,7 @@ test('terminates Next after browser cleanup fails', async () => {
 
 test('preserves the production failure after both cleanup attempts', async () => {
   const productionFailure = new Error('production assertion failed');
+  /** @type {string[]} */
   const calls = [];
 
   await assert.rejects(

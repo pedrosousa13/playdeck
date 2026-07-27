@@ -13,14 +13,21 @@ import { fileURLToPath, URL } from 'node:url';
 
 const root = new URL('./dist/', import.meta.url);
 const rootPath = fileURLToPath(root);
+/**
+ * A Vite manifest, keyed by source path.
+ * @type {Record<string, { file: string; name?: string; isEntry?: boolean; imports?: string[] }>}
+ */
 const manifest = JSON.parse(
   await readFile(new URL('.vite/manifest.json', root), 'utf8')
 );
 const entryKey = Object.keys(manifest).find((key) => manifest[key].isEntry);
 if (!entryKey) throw new Error('The Vite manifest has no entry.');
 
+/** @param {string} rootKey */
 const staticClosure = (rootKey) => {
+  /** @type {Set<string>} */
   const closure = new Set();
+  /** @param {string} key */
   const visit = (key) => {
     if (closure.has(key)) return;
     closure.add(key);
@@ -31,6 +38,7 @@ const staticClosure = (rootKey) => {
 };
 const staticKeys = staticClosure(entryKey);
 
+/** @param {string} key */
 const isProviderEntry = (key) => {
   const name = manifest[key]?.name ?? '';
   return (
@@ -98,6 +106,7 @@ if (closureSources.includes('M12 5V2L7 6')) {
   );
 }
 
+/** @type {Record<string, string>} */
 const mime = {
   '.css': 'text/css',
   '.html': 'text/html',
@@ -135,7 +144,12 @@ const server = createServer(async (request, response) => {
     response.end();
   }
 });
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+// `resolve` takes an argument, so passing it straight to `listen` matched the
+// (port, backlog, listener) overload rather than the (port, host, listener)
+// one -- which typechecked '127.0.0.1' as a backlog size.
+await new Promise((resolve) =>
+  server.listen(0, '127.0.0.1', () => resolve(undefined))
+);
 
 const nativeFile = `/${manifest[nativeProviderKey].file}`;
 const foreignProviderFiles = providerKeys
@@ -148,17 +162,22 @@ const youtubeDomains = [
   'ytimg.com',
   'googlevideo.com'
 ];
+/** @param {string} hostname */
 const isYouTubeHost = (hostname) =>
   youtubeDomains.some(
     (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
   );
 const vimeoDomains = ['vimeo.com', 'vimeocdn.com'];
+/** @param {string} hostname */
 const isVimeoHost = (hostname) =>
   vimeoDomains.some(
     (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
   );
+/** @type {string[]} */
 const requestedScripts = [];
+/** @type {URL[]} */
 const requestedUrls = [];
+/** @type {import('@playwright/test').Browser | undefined} */
 let browser;
 try {
   const address = server.address();
@@ -247,7 +266,7 @@ try {
     await browser?.close();
   } finally {
     await new Promise((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve()))
+      server.close((error) => (error ? reject(error) : resolve(undefined)))
     );
   }
 }
