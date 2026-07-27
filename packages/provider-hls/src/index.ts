@@ -73,7 +73,14 @@ export type HlsInstanceLike = {
   readonly liveSyncPosition?: number | null;
   readonly subtitleTracks: ReadonlyArray<HlsSubtitleTrackLike>;
   subtitleTrack: number;
-  on: (event: string, listener: (event: string, data: unknown) => void) => void;
+  // Method shorthand, not a property-typed function, and deliberately so:
+  // method parameters are checked bivariantly, so a real hls.js `Hls`, whose
+  // `on` only accepts its own `keyof HlsListeners`, satisfies this. Written as
+  // `on: (event: string, ...) => void` it did not, and every consumer passing
+  // `loadHls: () => import('hls.js')` — the form this package's README
+  // documents — needed `as unknown as`. This adapter only ever calls `on` with
+  // names taken from the constructor's own `Events`.
+  on(event: string, listener: (event: string, data: unknown) => void): void;
   startLoad: () => void;
   recoverMediaError: () => void;
   swapAudioCodec: () => void;
@@ -247,10 +254,7 @@ export const selectHlsEngine = (
 // hls.js publishes stricter generic event signatures than the minimal
 // structural surface this adapter consumes, so the dynamic module boundary
 // narrows through a cast instead of importing hls.js types eagerly.
-const defaultLoadHls: HlsModuleLoader = () =>
-  import('hls.js') as unknown as Promise<{
-    readonly default: HlsConstructorLike;
-  }>;
+const defaultLoadHls: HlsModuleLoader = () => import('hls.js');
 
 // On the hls.js engine the native adapter stays attached for media-element
 // state, but hls.js is the sole caption owner: `Player.Media` cannot know the

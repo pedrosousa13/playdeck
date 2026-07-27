@@ -357,3 +357,16 @@ test('on() keeps a re-registered listener after a duplicated unsubscribe', () =>
   expect(first).toEqual([]);
   expect(second).toEqual(['second']);
 });
+
+// Type-level, not runtime: `MediaSessionLike` exists to model
+// `navigator.mediaSession`, so the real DOM object must satisfy it without a
+// cast. It did not — `setActionHandler(action: string, ...)` cannot be
+// satisfied by the DOM's narrower `MediaSessionAction` parameter, so every
+// caller needed `as unknown as MediaSessionLike`. This assertion fails
+// `pnpm typecheck` if that regresses.
+// Type-only so it emits nothing: `Source extends Target` is the assertion.
+type AssertAssignable<Target, Source extends Target> = Source;
+export type DomSessionIsMediaSessionLike = AssertAssignable<
+  MediaSessionLike,
+  MediaSession
+>;

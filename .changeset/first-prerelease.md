@@ -55,6 +55,10 @@ Vimeo.
   `Hls.Events.LEVELS_UPDATED` —
   `HlsConstructorLike` now requires it — because hls.js prunes levels during
   its own error recovery and the published ladder has to follow.
+  `HlsInstanceLike.on` is declared as a method rather than a property-typed
+  function, so a real hls.js module satisfies `HlsModuleLoader`: the documented
+  `loadHls: () => import('hls.js')` previously needed `as unknown as` to
+  compile, including inside this package.
 - **Presentation** — fullscreen, Picture-in-Picture, AirPlay where available,
   and Media Session integration with ownership arbitration. `airPlay` means
   "there is somewhere to cast to", not "this engine has the picker API": it
@@ -90,6 +94,10 @@ Vimeo.
   coordinator. `createMediaSessionCoordinator` is no longer exported: a second
   coordinator over the same `MediaSession` hands out roots that cannot see each
   other's ownership, which is what the one-per-document rule exists to prevent.
+  `MediaSessionLike` names the five actions the coordinator registers rather
+  than taking `action: string`, so a real `navigator.mediaSession` satisfies it
+  and `getMediaSessionCoordinator(navigator.mediaSession)` typechecks without a
+  cast. A fake still only has to implement those five.
 
 - **Subscriber isolation** — one listener throwing no longer abandons the
   notification it was part of. `subscribe`, `subscribeCues` and `on` each

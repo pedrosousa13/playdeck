@@ -9,21 +9,29 @@ compose — and every control is gated on what the active provider can actually
 do, so a control whose command cannot be honoured is absent rather than present
 and disabled.
 
+<!-- example:quickstart -->
+
 ```tsx
 import * as Player from '@reely/react';
 
-<Player.Root source="https://example.com/clip.mp4">
-  <Player.Viewport>
-    <Player.Media />
-    <Player.Controls>
-      <Player.PlayButton />
-      <Player.SeekSlider />
-      <Player.Time />
-      <Player.FullscreenButton />
-    </Player.Controls>
-  </Player.Viewport>
-</Player.Root>;
+// One API across MP4/WebM, HLS, YouTube and Vimeo: the source decides which
+// provider loads, and nothing else changes.
+export const Clip = () => (
+  <Player.Root source="https://example.com/clip.mp4">
+    <Player.Viewport>
+      <Player.Media />
+      <Player.Controls>
+        <Player.PlayButton />
+        <Player.SeekSlider />
+        <Player.Time type="current" />
+        <Player.FullscreenButton />
+      </Player.Controls>
+    </Player.Viewport>
+  </Player.Root>
+);
 ```
+
+<!-- /example -->
 
 ## Packages
 

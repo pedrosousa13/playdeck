@@ -791,12 +791,8 @@ export const Root = ({
   // previous binding (and clears the shared surface only if this root still
   // owns it). Ownership follows the most-recently-playing root across roots.
   useEffect(() => {
-    const mediaSession =
-      typeof navigator !== 'undefined'
-        ? // navigator.mediaSession is a DOM type; the coordinator is
-          // DOM-agnostic and keys on this object's identity.
-          (navigator.mediaSession as unknown as MediaSessionLike | undefined)
-        : undefined;
+    const mediaSession: MediaSessionLike | undefined =
+      typeof navigator !== 'undefined' ? navigator.mediaSession : undefined;
     if (!mediaSession) return;
     const binding = bindMediaSession(
       controller,

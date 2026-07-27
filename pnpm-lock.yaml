@@ -58,6 +58,9 @@ importers:
       happy-dom:
         specifier: 20.8.9
         version: 20.8.9
+      hls.js:
+        specifier: 1.6.16
+        version: 1.6.16
       prettier:
         specifier: 3.9.6
         version: 3.9.6

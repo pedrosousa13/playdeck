@@ -15,25 +15,35 @@ semantics, and you write every visual rule yourself. No stylesheet is loaded,
 and the parts carry stable `data-reely-part` and `data-state` attributes to hook
 onto.
 
+{/* example:theme-headless */}
+
 ```tsx
 import * as Player from '@reely/react';
 
-<Player.Root source="/video.mp4">
-  <Player.Viewport className="my-viewport">
-    <Player.Media />
-    <Player.Controls className="my-controls">
-      <Player.PlayButton className="my-button" />
-      <Player.SeekSlider className="my-slider" />
-      <Player.MuteButton className="my-button" />
-      <Player.FullscreenButton className="my-button" />
-    </Player.Controls>
-  </Player.Viewport>
-</Player.Root>;
+// No stylesheet imported: the primitives ship structure, behaviour and
+// accessibility semantics, and every visual rule is yours.
+export const HeadlessPlayer = () => (
+  <Player.Root source="/video.mp4">
+    <Player.Viewport className="my-viewport">
+      <Player.Media />
+      <Player.Controls className="my-controls">
+        <Player.PlayButton className="my-button" />
+        <Player.SeekSlider className="my-slider" />
+        <Player.MuteButton className="my-button" />
+        <Player.FullscreenButton className="my-button" />
+      </Player.Controls>
+    </Player.Viewport>
+  </Player.Root>
+);
 ```
+
+{/* /example */}
 
 ## Themed usage
 
 Add one import. That is the whole difference.
+
+{/* example:ignore two import lines; the theme.css subpath export and its presence in the tarball are gated by packages/react/test/theme.test.ts */}
 
 ```tsx
 import * as Player from '@reely/react';
@@ -106,13 +116,31 @@ Every control renders a default icon and accepts children instead. This works
 with or without the theme, and the theme sizes whatever `svg` it finds via
 `--reely-control-icon-size`.
 
+{/* example:theme-custom-icon */}
+
 ```tsx
-<Player.PlayButton>
-  <MyPlayIcon />
-</Player.PlayButton>
+import * as Player from '@reely/react';
+import type { ReactElement } from 'react';
+
+declare const MyPlayIcon: () => ReactElement;
+
+// Every control renders a default icon and accepts children instead. The theme
+// sizes whatever `svg` it finds via `--reely-control-icon-size`, so this works
+// with or without the stylesheet — and the control keeps its own accessible
+// name either way.
+export const CustomIconButton = () => (
+  <Player.PlayButton>
+    <MyPlayIcon />
+  </Player.PlayButton>
+);
 ```
 
-Icons are also importable individually and tree-shake if unused:
+{/* /example */}
+
+Icons are also importable individually and tree-shake if unused — the full set
+is listed in the [`@reely/react` README](https://github.com/pedrosousa13/reely/tree/main/packages/react#icons):
+
+{/* example:ignore one import line; the icon set is compiled by examples/react-icons.tsx */}
 
 ```tsx
 import { PlayIcon, CaptionsIcon } from '@reely/react';
@@ -124,20 +152,35 @@ The theme targets parts, not components, so a control you build yourself is
 themed by carrying the part attribute — and skips the theme entirely if it
 doesn't.
 
-```tsx
-const { togglePlayback } = Player.usePlayerActions();
-const playback = Player.usePlayerState((state) => state.playback);
+{/* example:theme-custom-control */}
 
-<button data-reely-part="play-button" onClick={togglePlayback}>
-  {playback === 'playing' ? 'Pause' : 'Play'}
-</button>;
+```tsx
+import * as Player from '@reely/react';
+
+// The theme targets parts, not components: a control you build yourself is
+// themed by carrying the part attribute, and skips the theme entirely if it
+// does not.
+export const MyPlayButton = () => {
+  const { togglePlayback } = Player.usePlayerActions();
+  const playback = Player.usePlayerState((state) => state.playback);
+
+  return (
+    <button data-reely-part="play-button" onClick={togglePlayback}>
+      {playback === 'playing' ? 'Pause' : 'Play'}
+    </button>
+  );
+};
 ```
+
+{/* /example */}
 
 ## With Tailwind
 
 Utility classes are unlayered, so they beat the theme with no configuration.
 You can mix the two freely: keep the theme for the fiddly parts (slider track,
 menus, focus rings) and reach for utilities where you want something different.
+
+{/* example:ignore the stylesheet import is what this block is about, and examples/ cannot resolve a css subpath without faking it — see packages/react/test/theme.test.ts */}
 
 ```tsx
 import '@reely/react/theme.css';

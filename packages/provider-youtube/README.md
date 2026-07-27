@@ -9,11 +9,33 @@ pnpm add @reely/provider-youtube
 
 `@reely/react` loads this for you when the source resolves to `youtube`.
 
-```ts
-import { createYouTubeProvider } from '@reely/provider-youtube';
+<!-- example:provider-youtube -->
 
-controller.setProvider(createYouTubeProvider(mountElement, 'dQw4w9WgXcQ'));
+```ts
+import { PlayerController } from '@reely/core';
+import {
+  PLAYBACK_CONFIRMATION_TIMEOUT_MS,
+  createYouTubeProvider,
+  loadYouTubeIframeApi
+} from '@reely/provider-youtube';
+
+declare const mount: HTMLElement;
+
+const controller = new PlayerController();
+
+// The embed defaults to youtube-nocookie.com; `host` opts back out of it.
+controller.setProvider(createYouTubeProvider(mount, 'dQw4w9WgXcQ'));
+
+// The iframe API is loaded for you. Call this directly only to warm it before
+// a player mounts.
+export const warm = (): Promise<unknown> => loadYouTubeIframeApi();
+
+// How long a play command waits for YouTube to confirm playback started before
+// it is reported as blocked, rather than resolving a promise that never lands.
+export const confirmationTimeout = PLAYBACK_CONFIRMATION_TIMEOUT_MS; // 3000
 ```
+
+<!-- /example -->
 
 The embed host defaults to `https://www.youtube-nocookie.com`, and the API
 script is loaded from `https://www.youtube.com/iframe_api` once per document.

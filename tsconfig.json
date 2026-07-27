@@ -17,6 +17,7 @@
     { "path": "./apps/storybook" },
     { "path": "./e2e" },
     { "path": "./scripts" },
-    { "path": "./tests" }
+    { "path": "./tests" },
+    { "path": "./examples" }
   ]
 }
