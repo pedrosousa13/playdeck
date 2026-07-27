@@ -62,6 +62,23 @@ const paintsAtItsCentre = (page: Page, selector: string): Promise<boolean> =>
     return hit !== null && el.contains(hit);
   }, selector);
 
+/**
+ * The complement of `paintsAtItsCentre`, without the lift: does a click at the
+ * element's own centre land on something *else*? True for a decorative layer
+ * that must not capture pointer input.
+ */
+const hitsThrough = (page: Page, selector: string): Promise<boolean> =>
+  page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (el === null) throw new Error(`no element matched ${sel}`);
+    const rect = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      rect.x + rect.width / 2,
+      rect.y + rect.height / 2
+    );
+    return hit !== null && !el.contains(hit);
+  }, selector);
+
 const overflowOf = (page: Page, selector: string): Promise<number> =>
   page.evaluate((sel) => {
     const el = document.querySelector(sel);
@@ -214,4 +231,142 @@ test('the idle and error states hand the whole player to their overlay', async (
   expect(await paintsAtItsCentre(page, part('error'))).toBe(true);
   await expect(page.locator(part('controls'))).toBeHidden();
   await expect(page.locator(part('captions'))).toBeHidden();
+});
+
+test('the loading indicator is a full-bleed overlay while buffering and nothing while idle', async ({
+  page
+}) => {
+  await page.goto(story('player-loadingindicator--buffering'));
+  const indicator = page.locator(part('loading-indicator'));
+  // #35's debounce: the state is only admitted after 500ms. Wait on the
+  // attribute, never on a timeout — measured while planning, a bare `goto`
+  // reads the 1x1 idle box and the test would assert the wrong thing.
+  await expect(indicator).toHaveAttribute('data-state', 'buffering');
+
+  const viewport = await boxOf(page, part('viewport'));
+  expect(covers(await boxOf(page, part('loading-indicator')), viewport)).toBe(
+    true
+  );
+  // Two halves, and they must disagree — that is the whole point of the
+  // overlay. WITH the pointer-events lift it paints at its own centre, so it
+  // really is the top layer. WITHOUT the lift the hit-test resolves straight
+  // through it, so controls beneath a buffering overlay stay operable (#89
+  // excluded `LoadingIndicator` from the layer it takes out of the page for
+  // exactly this reason). Asserting only the first half proved nothing here:
+  // measured by falsification, this story composes nothing under the overlay,
+  // so `zIndex: 0` on `loadingOverlayStyle` still passed it.
+  expect(await paintsAtItsCentre(page, part('loading-indicator'))).toBe(true);
+  expect(await hitsThrough(page, part('loading-indicator'))).toBe(true);
+
+  await page.goto(story('player-loadingindicator--loading-provider'));
+  await expect(indicator).toHaveAttribute('data-state', 'loading-provider');
+
+  // And the idle indicator must not own the viewport: it stays mounted so a
+  // screen reader announces the transition, but as the 1x1 clipped box
+  // `visuallyHiddenStyle` produces, not as a full-bleed layer.
+  await page.goto(story('reference-player--composition'));
+  await expect(page.locator(part('controls'))).toBeVisible();
+  const idle = await boxOf(page, part('loading-indicator'));
+  expect(idle.width * idle.height).toBeLessThanOrEqual(1);
+});
+
+test('the activation overlay owns the viewport before and after its click', async ({
+  page
+}) => {
+  await page.goto(story('player-activationbutton--dormant'));
+  await expect(page.locator(part('activation'))).toBeVisible();
+
+  const viewport = await boxOf(page, part('viewport'));
+  expect(covers(await boxOf(page, part('activation')), viewport)).toBe(true);
+  expect(await paintsAtItsCentre(page, part('activation'))).toBe(true);
+
+  // The story's own play function clicks it. No `Player.Media` is composed
+  // there, so activation stops at `eligible` rather than reaching `ready` and
+  // the overlay stays mounted — that is the story's documented point. The
+  // post-interaction invariant is therefore that the overlay still owns the
+  // viewport, not that it disappeared.
+  await page.goto(story('player-activationbutton--activates-on-click'));
+  await expect(page.locator(part('activation'))).toHaveAttribute(
+    'data-state',
+    'eligible'
+  );
+  const clicked = await boxOf(page, part('viewport'));
+  expect(covers(await boxOf(page, part('activation')), clicked)).toBe(true);
+  expect(await paintsAtItsCentre(page, part('activation'))).toBe(true);
+});
+
+test('the settings menu and the caption cue render as visible boxes', async ({
+  page
+}) => {
+  await page.goto(story('player-settingsmenu--open'));
+  await expect(page.locator(part('settings-menu'))).toBeVisible();
+  expect(await paintsAtItsCentre(page, part('settings-menu'))).toBe(true);
+  const menu = await boxOf(page, part('settings-menu'));
+  expect(menu.width).toBeGreaterThan(0);
+  expect(menu.height).toBeGreaterThan(0);
+  // Three staged radio items, each with a box of its own — a menu that
+  // collapsed to zero height would still satisfy the assertions above.
+  const items = page.locator(part('menu-radio-item'));
+  await expect(items).toHaveCount(3);
+  for (let index = 0; index < 3; index += 1) {
+    const box = await items.nth(index).boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThan(0);
+  }
+
+  await page.goto(story('player-captions--one-line'));
+  await expect(page.locator(part('caption-cue'))).toBeVisible();
+  const cue = await boxOf(page, part('caption-cue'));
+  expect(cue.width).toBeGreaterThan(0);
+  expect(cue.height).toBeGreaterThan(0);
+  expect(covers(await boxOf(page, part('viewport')), cue)).toBe(true);
+});
+
+test('a non-recoverable error surface covers the viewport without a retry affordance', async ({
+  page
+}) => {
+  await page.goto(story('player-errordisplay--not-recoverable'));
+  await expect(page.locator(part('error'))).toBeVisible();
+
+  expect(
+    covers(
+      await boxOf(page, part('error')),
+      await boxOf(page, part('viewport'))
+    )
+  ).toBe(true);
+  expect(await paintsAtItsCentre(page, part('error'))).toBe(true);
+  // `recoverable: false`, so `ErrorDisplay` renders no retry button. Scoped to
+  // the story root: Storybook's own chrome puts buttons in the document.
+  await expect(page.locator(`${part('viewport')} button`)).toHaveCount(0);
+});
+
+test('the themed control row lays out with theme.css mounted', async ({
+  page
+}) => {
+  // The only story that mounts `@reely/react/theme.css`. Deliberately not
+  // asserting a background colour: measured, the themed row resolves
+  // `rgba(0, 0, 0, 0)` — the theme styles the controls, not the bar.
+  await page.goto(story('theme-theme--default'));
+  await expect(page.locator(part('controls'))).toBeVisible();
+
+  expect(await paintsAtItsCentre(page, part('controls'))).toBe(true);
+  // No overflow assertion here. Measured: this row overflows by 5px at the
+  // story's own width — a pre-existing, already-documented defect (see
+  // `reference-player.tsx`'s note that "Theme/Theme still admits" a row that
+  // overflowed by 49px once AirPlayButton made it six buttons). Asserting it
+  // clean would fail on landing; asserting the 5px would freeze a defect as
+  // the contract. The reference example, which is the artifact #32 reviews,
+  // does carry the overflow assertion — at 320px, in the test above.
+  for (const name of [
+    'play-button',
+    'mute-button',
+    'captions-button',
+    'pip-button',
+    'airplay-button',
+    'fullscreen-button'
+  ]) {
+    expect(
+      await paintsAtItsCentre(page, `${part('controls')} ${part(name)}`),
+      `${name} is covered by something`
+    ).toBe(true);
+  }
 });
