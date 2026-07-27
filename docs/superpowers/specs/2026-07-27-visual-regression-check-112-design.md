@@ -49,6 +49,8 @@ There is no docker on the maintainer's machine (`docker info` fails), CI is `ubu
 snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}'
 ```
 
+The comparison threshold is pinned too, and not by preference. Playwright's default is `0.2`, which pixelmatch turns into `maxDelta = 35215 * threshold ** 2` = 1408.6 in YIQ space (`playwright-core/lib/coreBundle.js:6792`). Repainting the whole reference control bar from `rgb(4, 6, 10)` to `rgb(90, 6, 10)` is a delta of **1184.1** — under the default that is a pass, and the first falsification run went green against a visibly red bar. `expect.toHaveScreenshot.threshold` is therefore `0.1` (maxDelta 352.2), which fails that change with room to spare while pixelmatch's own antialiasing detection still absorbs edge noise. A font-rendering change on the runner image produces deltas far above either number, so this does not trade flakiness for sensitivity.
+
 One baseline set, generated on linux, compared on linux. On macOS the five tests skip with the reason printed, and the invariant layer — which is the part that catches the bugs this repo has actually had — still runs.
 
 ### Refresh procedure
