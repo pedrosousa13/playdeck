@@ -1,6 +1,28 @@
 {
   "name": "@reely/react",
   "version": "0.0.0",
+  "description": "Headless, composable React 19 media player primitives with capability-aware providers.",
+  "keywords": [
+    "media",
+    "player",
+    "video",
+    "react",
+    "headless",
+    "hls",
+    "youtube",
+    "vimeo",
+    "accessibility"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/react#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/pedrosousa13/reely/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -12,8 +34,14 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.d.ts.map",
+    "!dist/.tsbuildinfo*",
     "theme.css"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "dependencies": {
     "@reely/core": "workspace:^",
     "@reely/provider-hls": "workspace:^",

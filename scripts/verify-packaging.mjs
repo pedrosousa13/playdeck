@@ -48,6 +48,61 @@ const tryRun = (command, args, options = {}) => {
 const tarballFileName = (name, version) =>
   `${name.replace(/^@/, '').replace('/', '-')}-${version}.tgz`;
 
+const tarballEntries = (tarball) =>
+  execFileSync('tar', ['-tzf', tarball], { encoding: 'utf8' })
+    .split('\n')
+    .filter((entry) => entry !== '' && !entry.endsWith('/'))
+    // Every entry in an npm tarball is under `package/`.
+    .map((entry) => entry.replace(/^package\//, ''));
+
+const readTarballFile = (tarball, entry) =>
+  execFileSync('tar', ['-xzOf', tarball, `package/${entry}`], {
+    encoding: 'utf8'
+  });
+
+// What ships is what the `files` field lets through, and that is a coarser
+// filter than it looks: `dist` sweeps up whatever else the build left in the
+// directory. These are the two things a consumer should never receive.
+const tarballProblems = (tarball) => {
+  const entries = tarballEntries(tarball);
+  const problems = [];
+
+  // Incremental-build caches: TypeScript writes `.tsbuildinfo` beside the
+  // declarations it emits, so `files: ["dist"]` publishes the build cache --
+  // including the one belonging to the *test* program, which lists paths that
+  // are not in the package at all.
+  for (const entry of entries.filter((name) =>
+    /(^|\/)\.tsbuildinfo/.test(name)
+  )) {
+    problems.push(`ships a build cache: ${entry}`);
+  }
+
+  // A source map has to be usable by whoever receives it. That means either it
+  // carries its sources inline, or the files it points at are in the tarball --
+  // a map that resolves to neither is a dangling pointer at the publisher's
+  // working copy.
+  for (const entry of entries.filter((name) => name.endsWith('.map'))) {
+    const map = JSON.parse(readTarballFile(tarball, entry));
+    const sources = map.sources ?? [];
+    const inlined =
+      Array.isArray(map.sourcesContent) &&
+      map.sourcesContent.length === sources.length &&
+      map.sourcesContent.every((content) => typeof content === 'string');
+    if (inlined) continue;
+    const dir = entry.includes('/') ? entry.replace(/\/[^/]*$/, '') : '';
+    const missing = sources.filter(
+      (source) => !entries.includes(join(dir, source).replaceAll('\\', '/'))
+    );
+    if (missing.length > 0) {
+      problems.push(
+        `${entry} points at sources that are not in the tarball and does not inline them: ${missing.join(', ')}`
+      );
+    }
+  }
+
+  return problems;
+};
+
 async function main() {
   // 1. Discover every publishable (non-private) workspace package.
   const listing = JSON.parse(
@@ -87,6 +142,14 @@ async function main() {
     // 3. Lint every tarball with publint and attw.
     for (const pkg of packages) {
       const tarball = join(tarballDir, tarballFileName(pkg.name, pkg.version));
+
+      console.log(`\n--- tarball contents: ${pkg.name} ---`);
+      const contentProblems = tarballProblems(tarball);
+      for (const problem of contentProblems) {
+        console.error(`${pkg.name} ${problem}`);
+        failures.push(`${pkg.name} ${problem}`);
+      }
+      if (contentProblems.length === 0) console.log('ok');
 
       console.log(`\n--- publint: ${pkg.name} ---`);
       if (!tryRun('pnpm', ['exec', 'publint', 'run', '--strict', tarball])) {

@@ -1,15 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { playButton } from './locators';
 
-declare global {
-  interface Window {
-    reelyHandle?: {
-      getState: () => { activation: string; playbackRate: number };
-      play: () => Promise<{ ok: boolean; reason?: string }>;
-    };
-  }
-}
-
 const STORY =
   '/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story';
 

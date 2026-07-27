@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "types": ["node"],
+    // The specs drive the player through its published handle, so they are
+    // checked against the built declarations rather than a hand-written shape.
+    "paths": { "@reely/react": ["../packages/react/dist/index.d.ts"] },
+    "tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo/e2e.tsbuildinfo"
+  },
+  "references": [{ "path": "../packages/react" }],
+  "include": [".", "../playwright.config.ts"]
+}

@@ -1,0 +1,48 @@
+# @reely/provider-native
+
+The `HTMLMediaElement` provider for [Reely](https://github.com/pedrosousa13/reely):
+progressive MP4/WebM, and HLS in browsers that play it natively (Safari, iOS).
+
+```sh
+pnpm add @reely/provider-native
+```
+
+`@reely/react` loads this for you when the source resolves to `video`. Install
+it directly only if you are driving a `PlayerController` yourself.
+
+```ts
+import { createNativeProvider } from '@reely/provider-native';
+
+controller.setProvider(
+  createNativeProvider(videoElement, { startTime: 30, endTime: 90 })
+);
+```
+
+## Exports
+
+| Export                  | What it is                                              |
+| ----------------------- | ------------------------------------------------------- |
+| `createNativeProvider`  | Builds the adapter over a `<video>` element.            |
+| `NativePlaybackOptions` | `startTime`, `endTime`, `crossOrigin`, `playsInline`, … |
+| `NativeProviderAdapter` | The adapter's own type, if you need to name it.         |
+
+## What it reports honestly
+
+- **Seeking** is clamped to the element's `seekable` ranges intersected with any
+  `startTime`/`endTime` you configured. A seek with nowhere legal to land is
+  refused with `provider-error` rather than snapped somewhere outside your
+  bounds.
+- **`selectQuality`** is `unavailable` with reason `source`: the browser picks
+  its own rendition for native HLS and there is nothing to enumerate. It is not
+  `unknown`, because that would promise an answer that never comes.
+- **`airPlay`** follows WebKit's `webkitplaybacktargetavailabilitychanged`, so
+  it means "there is a receiver to cast to", not "this browser has the picker
+  API". It goes back to `unavailable` when the route disappears.
+- **Captions** are Reely's to draw by default (`captionRendering: 'custom'`);
+  `setCaptionRenderer('native')` hands them back to the browser's own renderer.
+- **`commandsReady`** is declared after `media.load()`, because `load()` resets
+  `playbackRate` and anything applied earlier would be silently undone.
+
+## License
+
+[MIT](LICENSE).

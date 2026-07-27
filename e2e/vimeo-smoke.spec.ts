@@ -5,35 +5,11 @@ import { playButton } from './locators';
 // grepInvert in playwright.config.ts). Run with:
 //   REELY_REAL_PROVIDERS=1 pnpm test:e2e -- --grep @real
 
-type CapabilityValue = {
-  readonly status: string;
-  readonly reason?: string;
-};
+type CapabilityName = keyof ReturnType<
+  NonNullable<Window['reelyHandle']>['getState']
+>['capabilities'];
 
-declare global {
-  interface Window {
-    reelyHandle?: {
-      getState: () => {
-        activation: string;
-        playback: string;
-        captionRendering: string;
-        capabilities: Record<string, CapabilityValue>;
-        qualities: ReadonlyArray<{ id: string; height: number | null }>;
-        selectedQualityId: string | null;
-      };
-      selectQuality: (id: string | null) => Promise<{ ok: boolean }>;
-      selectTextTrack: (track: string | null) => Promise<{ ok: boolean }>;
-      seekTo: (seconds: number) => Promise<{ ok: boolean }>;
-      pause: () => Promise<{ ok: boolean }>;
-      setCaptionRenderer: (mode: 'custom' | 'native') => void;
-    };
-  }
-}
-
-const capability = (
-  page: Page,
-  name: string
-): Promise<CapabilityValue | undefined> =>
+const capability = (page: Page, name: CapabilityName) =>
   page.evaluate(
     (capabilityName) =>
       window.reelyHandle?.getState().capabilities[capabilityName],

@@ -146,7 +146,12 @@ test.each([
   'https://vimeo.com//123456789',
   'https://player.vimeo.com/video/123456789/pathhash/ignored',
   'https://player.vimeo.com//video//123456789//privatehash',
-  'https://player.vimeo.com/video/123456789/%zz'
+  'https://player.vimeo.com/video/123456789/%zz',
+  // The `h` query parameter is the one hash form a caller can put anything
+  // into -- the path form is already constrained by the path pattern itself.
+  'https://vimeo.com/123456789?h=not-a-hash',
+  'https://vimeo.com/123456789?h=',
+  'https://vimeo.com/123456789?h=a1b2c3&h=d4e5f6'
 ])('rejects malformed provider strings: %s', (input) => {
   expect(detectSource(input)).toMatchObject({
     status: 'failure',
@@ -583,6 +588,47 @@ test('preserves range identities when an unrelated provider patch arrives', () =
 
   expect(controller.getState().buffered).toBe(buffered);
   expect(controller.getState().seekable).toBe(seekable);
+});
+
+// A provider is free to hand over its ranges in whatever order its engine
+// reports them (hls.js and the Vimeo SDK both do), and a consumer drawing a
+// buffer bar walks the list in order. Sorting is the contract, not a
+// coincidence of the fixtures used elsewhere in this file (#101).
+test('orders buffered and seekable ranges by start, whatever order they arrive in', () => {
+  let emit: ProviderStateListener | undefined;
+  const controller = new PlayerController();
+  controller.setProvider({
+    provider: 'native',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: (listener) => {
+      emit = listener;
+      return () => undefined;
+    }
+  });
+
+  emit?.({
+    buffered: [
+      { start: 30, end: 40 },
+      { start: 0, end: 10 },
+      { start: 15, end: 20 }
+    ],
+    seekable: [
+      { start: 12, end: 18 },
+      { start: 0, end: 5 }
+    ]
+  });
+
+  expect(controller.getState().buffered).toEqual([
+    { start: 0, end: 10 },
+    { start: 15, end: 20 },
+    { start: 30, end: 40 }
+  ]);
+  expect(controller.getState().seekable).toEqual([
+    { start: 0, end: 5 },
+    { start: 12, end: 18 }
+  ]);
 });
 
 test('protects public state snapshots and their nested values from mutation', () => {

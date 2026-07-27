@@ -14,22 +14,6 @@ import { playButton } from './locators';
 
 type Range = { readonly start: number; readonly end: number };
 
-declare global {
-  interface Window {
-    reelyHandle?: {
-      getState: () => {
-        buffered: readonly Range[];
-        currentTime: number;
-        duration: number | null;
-      };
-      mute: () => Promise<{ ok: boolean }>;
-      play: () => Promise<{ ok: boolean }>;
-      seekTo: (seconds: number) => Promise<{ ok: boolean }>;
-      whenReady: () => Promise<boolean>;
-    };
-  }
-}
-
 const buffered = (page: Page): Promise<readonly Range[]> =>
   page.evaluate(() => window.reelyHandle?.getState().buffered ?? []);
 

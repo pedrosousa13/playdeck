@@ -197,7 +197,22 @@ describe('Player.Captions', () => {
       />
     );
     emitState({ captionRendering: 'custom' });
-    emitCues([{ id: 'c1', startTime: 0, endTime: 1, text: 'hello' }]);
+    // Carries engine-only fields, the way a real provider's cue object does
+    // (hls.js hands over its own parsed cue, the native engine a VTTCue). The
+    // assertion below only means anything against a cue that has something to
+    // strip: with a fixture holding exactly the four public fields it passed
+    // whether `normalizeCue` copied or returned the cue untouched (#101).
+    emitCues([
+      {
+        id: 'c1',
+        startTime: 0,
+        endTime: 1,
+        text: 'hello',
+        line: 'auto',
+        align: 'center',
+        getCueAsHTML: () => undefined
+      } as unknown as TextCue
+    ]);
     expect(
       container.querySelector('[data-testid="custom-cue"]')?.textContent
     ).toBe('HELLO');
@@ -776,6 +791,61 @@ describe('Player.Media textTracks', () => {
       textTracks: [{ src: '/captions/en.vtt', srcLang: 'en', label: 'English' }]
     });
     expect(video.hasAttribute('texttracks')).toBe(false);
+  });
+});
+
+// Cue text and track labels are the two provider-supplied strings this package
+// renders. They come out of a third-party player's payload, so the rule is that
+// they are text and only text -- the markup below has to survive as characters,
+// not become an element (#101).
+describe('provider-supplied strings never render as markup', () => {
+  const injection = '<img src=x onerror="throw new Error()"><b>bold</b>';
+
+  test('cue text renders as text, not markup', () => {
+    const { container, emitState, emitCues } = renderWithPlayer(
+      <Player.Captions />
+    );
+    emitState({ captionRendering: 'custom' });
+    emitCues([{ id: 'c1', startTime: 0, endTime: 1, text: injection }]);
+    const cue = container.querySelector('[data-reely-part="caption-cue"]');
+    expect(cue?.textContent).toBe(injection);
+    expect(cue?.querySelector('img, b')).toBe(null);
+  });
+
+  test('text track labels render as text, not markup', () => {
+    const { container, emitState } = renderWithPlayer(<Player.CaptionsMenu />);
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', injection)],
+      selectedTextTrackId: 'en'
+    });
+    fireEvent.click(
+      container.querySelector(
+        '[data-reely-part="settings-menu-trigger"]'
+      ) as HTMLButtonElement
+    );
+    const item = Array.from(
+      container.querySelectorAll('[role="menuitemradio"]')
+    ).find((candidate) => candidate.textContent === injection);
+    expect(item).toBeDefined();
+    expect(item?.querySelector('img, b')).toBe(null);
+  });
+
+  test('the caption announcer states a label as text, not markup', () => {
+    const { container, emitState } = renderWithPlayer(
+      <Player.CaptionsButton />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', injection)],
+      selectedTextTrackId: null
+    });
+    emitState({ selectedTextTrackId: 'en' });
+    const announcer = container.querySelector(
+      '[data-reely-part="captions-announcer"]'
+    );
+    expect(announcer?.textContent).toBe(`${injection} captions on`);
+    expect(announcer?.querySelector('img, b')).toBe(null);
   });
 });
 

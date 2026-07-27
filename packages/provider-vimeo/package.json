@@ -1,6 +1,23 @@
 {
   "name": "@reely/provider-vimeo",
   "version": "0.0.0",
+  "description": "Vimeo player SDK provider for Reely.",
+  "keywords": [
+    "media",
+    "player",
+    "video",
+    "vimeo"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/provider-vimeo#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "directory": "packages/provider-vimeo"
+  },
+  "bugs": {
+    "url": "https://github.com/pedrosousa13/reely/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -10,8 +27,14 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.ts.map",
+    "!dist/.tsbuildinfo*"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "dependencies": {
     "@reely/core": "workspace:^",
     "@vimeo/player": "2.30.4"

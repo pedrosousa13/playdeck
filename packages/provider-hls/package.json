@@ -1,6 +1,24 @@
 {
   "name": "@reely/provider-hls",
   "version": "0.0.0",
+  "description": "HLS provider for Reely, over hls.js or the browser’s native HLS.",
+  "keywords": [
+    "media",
+    "player",
+    "video",
+    "hls",
+    "hls.js"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/provider-hls#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "directory": "packages/provider-hls"
+  },
+  "bugs": {
+    "url": "https://github.com/pedrosousa13/reely/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -10,8 +28,14 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.ts.map",
+    "!dist/.tsbuildinfo*"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "dependencies": {
     "@reely/core": "workspace:^",
     "@reely/provider-native": "workspace:^",

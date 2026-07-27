@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { fileURLToPath, URL } from 'node:url';
 import { ESLint } from 'eslint';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 // The rule exists because convention has already failed twice (#15, #73), and
 // because #73's own rule shipped accepting `exact: false` on its first attempt:
@@ -9,8 +9,20 @@ import { describe, expect, it } from 'vitest';
 // anything. This asserts both halves of the rule, on every run.
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
+// Resolving the flat config pulls in the whole plugin graph (typescript-eslint
+// and friends), which costs seconds on a cold worker and milliseconds after.
+// Paid once in `beforeAll` on its own timeout: charged to the first `it`
+// instead, it made that one case -- and only that one -- fail on the default
+// 5s budget under a loaded parallel run. That is the shape of the single
+// unreproduced failure recorded on 2026-07-27 (#101).
+let eslint: ESLint;
+
+beforeAll(async () => {
+  eslint = new ESLint({ cwd: repoRoot });
+  await lintSpecifier('@reely/react');
+}, 60_000);
+
 const lintSpecifier = async (specifier: string): Promise<readonly string[]> => {
-  const eslint = new ESLint({ cwd: repoRoot });
   // A side-effect import, not `import x from ...`: no-restricted-imports
   // matches on the specifier string alone, and a bound-but-unused `x` would
   // trip @typescript-eslint/no-unused-vars on every probe, which has nothing

@@ -3,9 +3,17 @@ packages:
   - apps/*
   - tests/bundle/*
   - tests/integrations/*
+# Advisories in transitive development dependencies, none of which reach a
+# published package: `brace-expansion` arrives under eslint's minimatch, and
+# `postcss`/`sharp` under the Next.js build in tests/integrations. They are
+# pinned forward here rather than left for `pnpm audit` to keep reporting --
+# the alternative is re-triaging the same four findings on every run.
+overrides:
+  brace-expansion@<5.0.8: '>=5.0.8'
+  postcss@<8.5.18: '>=8.5.18'
+  sharp@<0.35.0: '>=0.35.0'
 allowBuilds:
   esbuild@0.28.1: true
-  sharp@0.34.5: true
 minimumReleaseAgeExclude:
   - '@vitejs/plugin-react@6.0.4'
   - react-dom@19.2.8
