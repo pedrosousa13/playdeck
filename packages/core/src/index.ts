@@ -1376,11 +1376,18 @@ type MediaSessionActionHandler =
 
 // The subset of `navigator.mediaSession` the coordinator touches. Modeled as a
 // structural type so it can be driven by a real MediaSession or a fake in tests.
+//
+// `action` is the exact set the coordinator registers, not `string`: the DOM's
+// `setActionHandler` only accepts its own `MediaSessionAction` union, so a
+// `string` parameter made this type unsatisfiable by the very object it models
+// — every caller needed `as unknown as MediaSessionLike`. Narrowing it makes a
+// real `navigator.mediaSession` assignable, and a fake still only has to
+// implement these five. Asserted by test/media-session.test.ts.
 export type MediaSessionLike = {
   metadata: unknown;
   playbackState?: string;
   setActionHandler: (
-    action: string,
+    action: 'play' | 'pause' | 'seekto' | 'seekforward' | 'seekbackward',
     handler: MediaSessionActionHandler
   ) => void;
   setPositionState?: (state?: MediaSessionPositionState) => void;

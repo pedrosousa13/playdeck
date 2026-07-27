@@ -90,6 +90,10 @@ Vimeo.
   coordinator. `createMediaSessionCoordinator` is no longer exported: a second
   coordinator over the same `MediaSession` hands out roots that cannot see each
   other's ownership, which is what the one-per-document rule exists to prevent.
+  `MediaSessionLike` names the five actions the coordinator registers rather
+  than taking `action: string`, so a real `navigator.mediaSession` satisfies it
+  and `getMediaSessionCoordinator(navigator.mediaSession)` typechecks without a
+  cast. A fake still only has to implement those five.
 
 - **Subscriber isolation** — one listener throwing no longer abandons the
   notification it was part of. `subscribe`, `subscribeCues` and `on` each
