@@ -44,8 +44,9 @@ So each adapter declares readiness at the point where its own commands both land
 **New method.** `whenReady(): Promise<boolean>` on `PlayerController`.
 
 - Resolves `true` when `commandsReady` becomes true; resolves synchronously-available `true` if it already is.
-- Resolves `false` on detach (`setProvider(undefined)`), destroy, generation swap, or a **fatal** error.
-- **Never rejects and never hangs.** Settling `false` is precisely what neither #72 shape could do.
+- Resolves `false` when an attempt that existed is abandoned: detach (`setProvider(undefined)`, which is also what provider destruction runs through — `PlayerController` has no `destroy` of its own), provider swap, or a **fatal** error.
+- **Waits, rather than answering `false`, when no provider has ever been attached.** The React layer attaches in an effect, so a consumer call that lands first is a race, not an answer, and a spurious `false` is unrecoverable — the consumer has already skipped the command it was waiting to issue. For the same reason a swap only settles waiters that were registered against a provider that actually existed.
+- **Never rejects and never hangs on an outcome.** Settling `false` is precisely what neither #72 shape could do.
 
 Waiters are held in a `Set` and settled from the same place the flag is patched. A non-fatal (`recoverable`) error does **not** settle the promise — recovery is expected and `retry()` may still reach ready. That is the deliberate opposite of #72's reading, which treated `recoverable` as transient and hung on all of them.
 
