@@ -93,6 +93,7 @@ export type HlsConstructorLike = {
     // hls.js prunes a rung. Not to be confused with the singular event above.
     readonly LEVELS_UPDATED: string;
     readonly MANIFEST_PARSED: string;
+    readonly MEDIA_ATTACHED: string;
     readonly SUBTITLE_TRACKS_UPDATED: string;
     readonly SUBTITLE_TRACK_SWITCH: string;
     readonly CUES_PARSED: string;
@@ -858,6 +859,13 @@ export const createHlsProvider = (
         (data as { cues?: ReadonlyArray<HlsParsedCueLike> }).cues ?? [];
       hlsParsedCues = [...hlsParsedCues, ...parsedCues.map(normalizeHlsCue)];
       recomputeActiveHlsCues();
+    });
+    instance.on(HlsRuntime.Events.MEDIA_ATTACHED, () => {
+      if (destroyed || hls !== instance) return;
+      // attachMedia points `media.src` at an MSE blob, which re-runs the load
+      // algorithm and resets `playbackRate`. Commands land and stick from
+      // here, well before the manifest parses (#69).
+      emit({ commandsReady: true });
     });
     instance.attachMedia(media);
     instance.loadSource(source.src);

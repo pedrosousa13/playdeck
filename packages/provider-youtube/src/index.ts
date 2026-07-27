@@ -383,6 +383,9 @@ export const createYouTubeProvider = (
       {
         lifecycle: 'ready',
         activation: 'ready',
+        // The iframe API drops calls made before onReady, so this is the first
+        // moment a command lands (#69).
+        commandsReady: true,
         currentTime: knownCurrentTime,
         duration: Number.isFinite(duration) && duration > 0 ? duration : null,
         muted: knownMuted,

@@ -859,3 +859,21 @@ test('retry clears stale caption state before the new player reports ready', asy
     reason: 'unsupported'
   });
 });
+
+// guardReady() refuses until the player exists, and the iframe API discards
+// calls made before onReady — so attach and load are both too early.
+test('youtube declares command readiness only at onReady', async () => {
+  const adapter = createAdapter();
+
+  await adapter.provider.attach();
+  await adapter.provider.load();
+  expect(adapter.patches).not.toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+
+  adapter.fake.players.at(-1)?.fireReady();
+
+  expect(adapter.patches).toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+});

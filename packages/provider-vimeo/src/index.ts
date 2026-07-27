@@ -756,6 +756,10 @@ export const createVimeoProvider = (
       activePlayer = player;
       activeIframe = iframe;
       wireEvents(player, thisGeneration);
+      // `runCommand` accepts from here, and the SDK queues calls it receives
+      // before its own ready resolves. Declaring at `player.ready()` instead
+      // would never fire behind a blocked iframe (#69).
+      emit({ commandsReady: true });
       const availabilityPromise =
         options.controls === true
           ? Promise.resolve<Availability>({

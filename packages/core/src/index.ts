@@ -159,6 +159,11 @@ export type PlayerState = {
   readonly textTracks: readonly TextTrack[];
   readonly selectedTextTrackId: string | null;
   readonly captionRendering: CaptionRendering;
+  // Declared by the provider adapter, not derived here: it means a command
+  // issued now is accepted *and* will not be undone by a load that has yet to
+  // run. Core cannot compute it — the four adapters open their command guards
+  // at four different moments (#69).
+  readonly commandsReady: boolean;
 };
 
 export type PreProviderActivation =
@@ -353,7 +358,8 @@ export const createInitialPlayerState = (): PlayerState =>
     error: null,
     textTracks: Object.freeze([]),
     selectedTextTrackId: null,
-    captionRendering: 'unavailable'
+    captionRendering: 'unavailable',
+    commandsReady: false
   });
 
 const orderedRanges = (
@@ -644,6 +650,7 @@ export class PlayerController {
   #activeCues: readonly TextCue[] = Object.freeze([]);
   #cueListeners = new Set<(cues: readonly TextCue[]) => void>();
   #listeners = new Set<(state: PlayerState) => void>();
+  #readyWaiters = new Set<(ready: boolean) => void>();
   #eventListeners = new Map<
     PlayerEventType,
     Set<(event: PlayerEvent) => void>
@@ -730,6 +737,10 @@ export class PlayerController {
     )
       return;
     this.#pendingPlaybackOrigin = undefined;
+    // Only an attempt that actually existed can be abandoned. Waiters
+    // registered before the first attach are waiting *for* this provider, not
+    // for the one being replaced, so they must survive it.
+    if (this.#provider) this.#settleReadyWaiters(false);
     const generation = ++this.#generation;
     const unsubscribe = this.#unsubscribe;
     const cueUnsubscribe = this.#cueUnsubscribe;
@@ -839,6 +850,26 @@ export class PlayerController {
 
   getState = (): PlayerState => this.#state;
 
+  // Resolves `true` once the provider declares that a command issued now will
+  // land and stick, and `false` once an attempt that existed is abandoned —
+  // detach, swap, or a fatal error. Never rejects, and never hangs on an
+  // outcome: both shapes tried in PR #72 could hang forever.
+  whenReady = (): Promise<boolean> => {
+    if (this.#state.commandsReady) return Promise.resolve(true);
+    // Deliberately no "no provider yet, so false" shortcut: the React layer
+    // attaches in an effect, so a call that lands first is a race, not an
+    // answer, and a spurious `false` makes the caller skip the very command it
+    // was waiting to issue.
+    return new Promise<boolean>((resolve) => this.#readyWaiters.add(resolve));
+  };
+
+  #settleReadyWaiters = (ready: boolean): void => {
+    if (this.#readyWaiters.size === 0) return;
+    const waiters = this.#readyWaiters;
+    this.#readyWaiters = new Set();
+    waiters.forEach((resolve) => resolve(ready));
+  };
+
   subscribe = (listener: (state: PlayerState) => void): (() => void) => {
     this.#listeners.add(listener);
     listener(this.#state);
@@ -938,6 +969,9 @@ export class PlayerController {
     this.#applyPatch({
       lifecycle: 'loading',
       activation: 'loading-provider',
+      // The provider is rebuilding or reloading its playback target, so its
+      // previous declaration is void until it makes a new one (#69).
+      commandsReady: false,
       error: null
     });
     if (this.#provider !== provider || this.#generation !== generation) {
@@ -961,6 +995,7 @@ export class PlayerController {
         this.#applyPatch({
           lifecycle: previousState.lifecycle,
           activation: previousState.activation,
+          commandsReady: previousState.commandsReady,
           error: previousState.error
         });
       }
@@ -1035,6 +1070,14 @@ export class PlayerController {
   #setState = (state: PlayerState): void => {
     const snapshot = Object.freeze(state);
     this.#state = snapshot;
+    if (snapshot.commandsReady) {
+      this.#settleReadyWaiters(true);
+    } else if (snapshot.error?.fatal === true) {
+      // Only fatal: `toProviderError` stamps `recoverable: true` on every
+      // lifecycle exception, so settling on recoverable would settle on
+      // nearly everything, and `retry()` may still reach ready (#69).
+      this.#settleReadyWaiters(false);
+    }
     this.#listeners.forEach((listener) => notifySafely(listener, snapshot));
   };
 

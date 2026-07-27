@@ -1809,3 +1809,24 @@ test('issues no autoplay play before the provider load when metadata is already 
   );
   expect(calls).toEqual(['load', 'play']);
 });
+
+// #69: the awaitable is only useful if consumers can reach it. `PlayerHandle`
+// is an explicit Pick, so omitting it there would leave `whenReady` reachable
+// only by constructing a PlayerController by hand.
+test('exposes whenReady on the imperative handle and on player actions', () => {
+  const handle = createRef<Player.PlayerHandle>();
+
+  const Probe = (): React.ReactElement => {
+    const actions = Player.usePlayerActions();
+    return <span data-testid="probe">{typeof actions.whenReady}</span>;
+  };
+
+  render(
+    <Player.Root ref={handle} source="/fixtures/clip.mp4">
+      <Probe />
+    </Player.Root>
+  );
+
+  expect(typeof handle.current?.whenReady).toBe('function');
+  expect(screen.getByTestId('probe').textContent).toBe('function');
+});

@@ -146,6 +146,7 @@ export type PlayerHandle = Pick<
   | 'exitPictureInPicture'
   | 'showAirPlayPicker'
   | 'retry'
+  | 'whenReady'
 >;
 
 export type PlayerActions = Omit<PlayerHandle, 'getState' | 'subscribe' | 'on'>;
@@ -321,7 +322,8 @@ export const usePlayerActions = (): PlayerActions => {
       requestPictureInPicture: controller.requestPictureInPicture,
       exitPictureInPicture: controller.exitPictureInPicture,
       showAirPlayPicker: controller.showAirPlayPicker,
-      retry: controller.retry
+      retry: controller.retry,
+      whenReady: controller.whenReady
     }),
     [controller]
   );

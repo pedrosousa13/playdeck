@@ -1552,3 +1552,34 @@ test('follows a Vimeo-UI switch to the other duplicate, after we selected one', 
   expect(patches.at(-1)).toMatchObject({ selectedTextTrackId: 'vimeo:en:0' });
   expect(player.enableTextTrack).toHaveBeenCalledWith('en', 'subtitles', false);
 });
+
+// Declared at player construction, not at `player.ready()`: a blocked iframe
+// keeps `ready()` pending forever while `runCommand` already accepts, and
+// waiting for it is one of the two hangs that closed PR #72. `setup()` is not
+// reusable here because it awaits `load()`, which would never settle.
+test('vimeo declares command readiness before player.ready() resolves', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  let releaseReady: () => void = () => undefined;
+  const sdk = createFakeSdk({
+    ready: () => new Promise<void>((resolve) => (releaseReady = resolve))
+  });
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource);
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  void provider.load();
+
+  await vi.waitFor(() =>
+    expect(patches).toContainEqual(
+      expect.objectContaining({ commandsReady: true })
+    )
+  );
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'ready' })
+  );
+
+  releaseReady();
+});

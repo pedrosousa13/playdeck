@@ -17,6 +17,7 @@ export class FakeHls implements HlsInstanceLike {
     LEVEL_UPDATED: 'hlsLevelUpdated',
     LEVELS_UPDATED: 'hlsLevelsUpdated',
     MANIFEST_PARSED: 'hlsManifestParsed',
+    MEDIA_ATTACHED: 'hlsMediaAttached',
     SUBTITLE_TRACKS_UPDATED: 'hlsSubtitleTracksUpdated',
     SUBTITLE_TRACK_SWITCH: 'hlsSubtitleTrackSwitch',
     CUES_PARSED: 'hlsCuesParsed'
@@ -104,6 +105,13 @@ export class FakeHls implements HlsInstanceLike {
   // `emitLevelUpdated` above, whose event carries one level's details.
   emitLevelsUpdated = (): void => {
     this.emit(FakeHls.Events.LEVELS_UPDATED, { levels: this.levels });
+  };
+
+  // Real hls.js fires this asynchronously, once `attachMedia` has created the
+  // MediaSource and the element has reached sourceopen — so it stays an
+  // explicit call here rather than firing from `attachMedia` itself.
+  emitMediaAttached = (): void => {
+    this.emit(FakeHls.Events.MEDIA_ATTACHED, { media: this.attachedMedia });
   };
 
   startLoad = (): void => {
