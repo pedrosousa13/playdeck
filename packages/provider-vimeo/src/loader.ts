@@ -17,6 +17,9 @@ export type VimeoSdkPlayer = {
   setCurrentTime: (seconds: number) => Promise<unknown>;
   getCurrentTime: () => Promise<number>;
   getDuration: () => Promise<number>;
+  // Real, possibly disjoint ranges as [start, end] pairs. The `progress` event
+  // only reports the edge of the range holding the playhead (#91).
+  getBuffered: () => Promise<ReadonlyArray<readonly number[]>>;
   getMuted: () => Promise<boolean>;
   setMuted: (muted: boolean) => Promise<unknown>;
   getVolume: () => Promise<number>;

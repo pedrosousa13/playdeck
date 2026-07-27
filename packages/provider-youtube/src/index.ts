@@ -9,7 +9,8 @@ import type {
   ProviderEvent,
   ProviderEventFor,
   ProviderStateListener,
-  TextTrack
+  TextTrack,
+  TimeRange
 } from '@reely/core';
 import { textTrackLabel } from '@reely/core';
 import {
@@ -194,6 +195,23 @@ const loadFailure = (cause: unknown): Exclude<CommandResult, { ok: true }> => ({
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
+// The iframe API exposes no ranges, only `getVideoLoadedFraction()`, which
+// measures the end of the range the playhead sits in (#91). The start of that
+// range is not knowable, so the playhead -- the one point known to be inside it
+// -- anchors what we report. This understates the range; it never invents one.
+const bufferedRanges = (
+  player: YouTubePlayer,
+  currentTime: number
+): readonly TimeRange[] => {
+  const duration = player.getDuration();
+  const fraction = player.getVideoLoadedFraction();
+  if (!Number.isFinite(duration) || duration <= 0) return [];
+  if (!Number.isFinite(fraction)) return [];
+  const end = clamp01(fraction) * duration;
+  // A seek can leave the playhead outside the buffer for a poll or two.
+  return end > currentTime ? [{ start: currentTime, end }] : [];
+};
+
 // YouTube renders captions inside its own iframe (captionRendering:
 // 'provider'), so this adapter only normalizes track discovery and
 // selection -- no cue overlay. Shape and field names follow the
@@ -334,7 +352,10 @@ export const createYouTubeProvider = (
       if (destroyed || !current) return;
       try {
         knownCurrentTime = current.getCurrentTime();
-        emit({ currentTime: knownCurrentTime });
+        emit({
+          currentTime: knownCurrentTime,
+          buffered: bufferedRanges(current, knownCurrentTime)
+        });
       } catch {
         // Polling must not escape the provider boundary.
       }

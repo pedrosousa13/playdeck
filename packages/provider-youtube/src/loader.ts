@@ -31,6 +31,9 @@ export type YouTubePlayer = {
   getVolume: () => number;
   getDuration: () => number;
   getCurrentTime: () => number;
+  // Despite the name, this is the end of the buffered range holding the
+  // playhead, over duration — not how much of the video is loaded (#91).
+  getVideoLoadedFraction: () => number;
   getPlaybackRate: () => number;
   setPlaybackRate: (rate: number) => void;
   getPlayerState: () => number;

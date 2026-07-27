@@ -18,6 +18,7 @@ export type FakePlayerOptions = {
   readonly setPlaybackRate?: (rate: number) => Promise<unknown>;
   readonly requestFullscreen?: () => Promise<unknown>;
   readonly requestPictureInPicture?: () => Promise<unknown>;
+  readonly getBuffered?: () => Promise<ReadonlyArray<readonly number[]>>;
 };
 
 export class FakeVimeoPlayer implements VimeoSdkPlayer {
@@ -151,6 +152,14 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
 
   getPictureInPicture: Mock<() => Promise<boolean>> = vi.fn(() =>
     Promise.resolve(false)
+  );
+
+  // The real SDK reports ranges as [start, end] pairs, and they can be
+  // disjoint — verified against live Vimeo (#91).
+  buffered: ReadonlyArray<readonly number[]> = [];
+
+  getBuffered: Mock<() => Promise<ReadonlyArray<readonly number[]>>> = vi.fn(
+    () => this.#options.getBuffered?.() ?? Promise.resolve(this.buffered)
   );
 }
 
