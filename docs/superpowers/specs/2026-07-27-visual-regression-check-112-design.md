@@ -77,22 +77,22 @@ CI gets a `visual` job on `ubuntu-latest`, chromium only, alongside the existing
 
 Driven from Playwright against the real dev server (`playwright.config.ts` already starts `storybook dev` on `127.0.0.1:4173`), not against the built output and not through the test-runner — dev mode and the production build differ, and this repo has seen `test:storybook` green while dev mode was broken.
 
-| Story                                         | Invariant                                                                                                                |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `reference-player--composition`               | control row and every button in it hit-test to themselves, not to `Gestures`                                             |
-| `reference-player--composition`               | poster and caption boxes sit inside the player; the cue is not under the control row                                     |
-| `reference-player--composition`               | settings menu opened from Playwright: menu inside the viewport, hit-tests above the row                                  |
-| `reference-player--composition` @ 320px       | player ≤ 320, no overflow, volume slider hidden, overlays still cover the player — **#111's containing-block invariant** |
-| `reference-player--idle`                      | activation overlay covers the player and hit-tests above poster/gestures; control row absent from layout                 |
-| `reference-player--error-state`               | error surface covers the player, Retry hit-tests to itself, control row absent from layout                               |
-| `player-errordisplay--not-recoverable`        | surface covers, and there is no retry affordance                                                                         |
-| `player-loadingindicator--buffering`          | overlay covers the media box and paints above it (pointer-events variant above) — #89's exact ground                     |
-| `player-loadingindicator--loading-provider`   | the idle indicator occupies no visible box                                                                               |
-| `player-activationbutton--dormant`            | overlay covers the viewport and hit-tests on top                                                                         |
-| `player-activationbutton--activates-on-click` | after the click the overlay is gone and what was beneath it hit-tests to itself                                          |
-| `player-captions--one-line`                   | the cue box is non-zero and inside the player                                                                            |
-| `player-settingsmenu--open`                   | menu inside the viewport, painting above its trigger                                                                     |
-| `theme-theme--default`                        | the themed control row resolves an opaque background, and layering holds with `theme.css` mounted                        |
+| Story                                         | Invariant                                                                                                                                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `reference-player--composition`               | control row and every button in it hit-test to themselves, not to `Gestures`                                                                                                                           |
+| `reference-player--composition`               | poster and caption boxes sit inside the player; the cue is not under the control row                                                                                                                   |
+| `reference-player--composition`               | settings menu opened from Playwright: menu inside the viewport, hit-tests above the row                                                                                                                |
+| `reference-player--composition` @ 320px       | player ≤ 320, no overflow, volume slider hidden, overlays still cover the player — **#111's containing-block invariant**                                                                               |
+| `reference-player--idle`                      | activation overlay covers the player and hit-tests above poster/gestures; control row absent from layout                                                                                               |
+| `reference-player--error-state`               | error surface covers the player, Retry hit-tests to itself, control row absent from layout                                                                                                             |
+| `player-errordisplay--not-recoverable`        | surface covers, and there is no retry affordance                                                                                                                                                       |
+| `player-loadingindicator--buffering`          | overlay covers the **viewport** box and paints above it (pointer-events variant above) — #89's exact ground. There is no `media` part under the mock decorator                                         |
+| `player-loadingindicator--loading-provider`   | the idle indicator occupies no visible box                                                                                                                                                             |
+| `player-activationbutton--dormant`            | overlay covers the viewport and hit-tests on top                                                                                                                                                       |
+| `player-activationbutton--activates-on-click` | after the click the overlay is gone and what was beneath it hit-tests to itself                                                                                                                        |
+| `player-captions--one-line`                   | the cue box is non-zero and inside the player                                                                                                                                                          |
+| `player-settingsmenu--open`                   | menu inside the viewport, painting above its trigger                                                                                                                                                   |
+| `theme-theme--default`                        | layering holds and the row does not overflow with `theme.css` mounted. **Not** an opaque background — measured, the themed row resolves `rgba(0, 0, 0, 0)`; the theme styles the controls, not the bar |
 
 **Stories whose own `play` function mutates state are avoided** where the test drives the interaction itself: `reference-player--settings-menu-selection` and `--settings-menu-follows-state` both click during `play`, which would race a Playwright click. The read-only stories (`Composition`, `Idle`, `Playing`, `ErrorState`) are safe to drive.
 
@@ -109,7 +109,7 @@ The check is worth nothing until it has been watched to fail.
 
 `pnpm test` stays 817. `pnpm test:storybook` stays 80. `pnpm test:e2e --project=<engine>` stays 163 passed / 20 skipped per engine.
 
-The `visual` project adds ~19 tests (14 invariant, 5 pixel), chromium only. The exact totals are whatever the first green run prints and are written into the README and the handoff then, not predicted here — the five pixel tests are skips on macOS and passes on linux, so the local and CI numbers differ by design.
+The `visual` project adds 15 tests (10 invariant, 5 pixel), chromium only. The exact totals are whatever the first green run prints and are written into the README and the handoff then, not predicted here — the five pixel tests are skips on macOS and passes on linux, so the local and CI numbers differ by design.
 
 ## Out of scope
 
