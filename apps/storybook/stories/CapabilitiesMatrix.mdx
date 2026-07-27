@@ -57,8 +57,8 @@ renders, not what is callable.
 composed by the consumer instead — see the **Reference example**, whose settings
 menu builds a playback-rate group and a quality group over
 `Player.SettingsMenu`/`Player.MenuRadioGroup`, each gated on its own capability.
-`selectQuality`'s ladder comes from `PlayerState.qualities`; only the hls.js
-engine populates it. `customControls` gates no shipped control.
+`selectQuality`'s ladder comes from `PlayerState.qualities` — see below for
+which providers populate it. `customControls` gates no shipped control.
 
 ## `commandsReady`: when a command will actually land
 
@@ -122,3 +122,37 @@ holds.
 An empty array therefore means "nothing is buffered ahead of the playhead", on
 every provider. It is not a signal that the provider cannot answer — there is no
 such provider, so there is no capability to check.
+
+## `selectQuality`: two providers can, one is asked and ignored
+
+| Provider | `selectQuality`                  | Where the ladder comes from                           |
+| -------- | -------------------------------- | ----------------------------------------------------- |
+| hls.js   | `available` with a manifest      | The manifest's levels, with height, width and bitrate |
+| vimeo    | `available` with a ladder        | `getQualities()` — one entry per rung, height only    |
+| native   | `unavailable`, reason `source`   | The browser picks; nothing to enumerate               |
+| youtube  | `unavailable`, reason `provider` | Enumerable, but not selectable — see below            |
+
+`auto` is not a rung. Vimeo returns it as a member of `getQualities()` and
+hls.js has an equivalent mode; both are reported as `selectedQualityId: null`
+instead, so a menu has one representation of "let the player choose" whichever
+provider is underneath.
+
+On Vimeo, the rung's `height` is Vimeo's own name for it, not a measurement:
+the rung it labels `240p` renders at 480×270. `width` and `bitrate` are `null`
+because the SDK reports neither. Under `auto` the rung actually rendering is not
+identified at all — the SDK marks `auto` itself as the active entry.
+
+**YouTube can enumerate but cannot select, so it offers neither.**
+`getAvailableQualityLevels()` returns an honest list once playback has started,
+but `setPlaybackQuality()` is accepted and discarded: measured against the live
+IFrame API, asking for each of the six levels the player itself offered left
+`getPlaybackQuality()` on `medium` throughout, with no `onPlaybackQualityChange`
+and no rebuffer. So did setting a level and then seeking, and so did
+`loadVideoById({ suggestedQuality })` — where the player announced its own
+choice as `medium` after being asked for both `tiny` and `hd720`. Asking for
+`tiny` failing in the same way as asking for `hd720` is what rules out a
+bandwidth or viewport ceiling: the argument is discarded, not clamped.
+
+Publishing the list anyway would put rungs in the menu that cannot be chosen, so
+the capability stays `unavailable` and `qualities` stays empty. The full
+measurement is on [#82](https://github.com/pedrosousa13/reely/issues/82).

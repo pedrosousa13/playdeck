@@ -40,11 +40,19 @@ Vimeo.
   quality menu can be built from public exports alone (#81). `quality` still
   means the level playing right now and keeps moving under adaptive selection,
   which is what lets an auto row be labelled honestly. `selectQuality` takes
-  that id — `selectQuality(id: string | null)` — not a height. Only the hls.js
-  engine has a ladder: native playback (including native HLS), YouTube and
-  Vimeo report `selectQuality` as `unavailable`, and `@reely/provider-native`'s
-  verdict is `unavailable` / `source` rather than an `unknown` that could never
-  resolve. A custom `loadHls` module must expose `Hls.Events.LEVELS_UPDATED` —
+  that id — `selectQuality(id: string | null)` — not a height. Two engines have
+  a ladder: hls.js from the manifest, and Vimeo from the SDK's `getQualities()`
+  (#82), whose rungs carry the height Vimeo names them by and nothing it does
+  not report. `auto` is not published as a rung on either — it is
+  `selectedQualityId: null`. Native playback (including native HLS) reports
+  `unavailable` / `source` rather than an `unknown` that could never resolve.
+  YouTube reports `unavailable` / `provider` because it can enumerate levels but
+  cannot honour a choice: measured against the live IFrame API,
+  `setPlaybackQuality` is accepted and discarded for every level the player
+  itself offered, as it is when followed by a seek and when passed as
+  `loadVideoById({ suggestedQuality })`. A menu there would silently do nothing,
+  so none is offered. A custom `loadHls` module must expose
+  `Hls.Events.LEVELS_UPDATED` —
   `HlsConstructorLike` now requires it — because hls.js prunes levels during
   its own error recovery and the published ladder has to follow.
 - **Presentation** — fullscreen, Picture-in-Picture, AirPlay where available,

@@ -18,7 +18,10 @@ declare global {
         playback: string;
         captionRendering: string;
         capabilities: Record<string, CapabilityValue>;
+        qualities: ReadonlyArray<{ id: string; height: number | null }>;
+        selectedQualityId: string | null;
       };
+      selectQuality: (id: string | null) => Promise<{ ok: boolean }>;
       selectTextTrack: (track: string | null) => Promise<{ ok: boolean }>;
       seekTo: (seconds: number) => Promise<{ ok: boolean }>;
       pause: () => Promise<{ ok: boolean }>;
@@ -133,6 +136,67 @@ test(
     await expect
       .poll(() => capability(page, 'customControls'), { timeout: 60_000 })
       .toEqual({ status: 'available' });
+  }
+);
+
+// #82: the ids Reely publishes are Vimeo's own rung keys under a prefix, and
+// the SDK never settles a `setQuality` for an id it did not offer — so an id
+// that drifts out of shape does not fail, it hangs. Every published rung is
+// therefore round-tripped through the live player, not just the first one.
+test(
+  'every quality rung Reely publishes is one the live Vimeo player accepts',
+  { tag: '@real' },
+  async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.goto(
+      '/iframe.html?id=fixtures-playerfixture--vimeo-interaction-muted&viewMode=story'
+    );
+    await page.getByRole('button', { name: 'Play video', exact: true }).click();
+    await expect(playButton(page)).toHaveAttribute('data-state', 'playing', {
+      timeout: 60_000
+    });
+
+    await expect
+      .poll(() => capability(page, 'selectQuality'), { timeout: 30_000 })
+      .toEqual({ status: 'available' });
+
+    const qualities = await page.evaluate(
+      () => window.reelyHandle?.getState().qualities ?? []
+    );
+    // 76979871 carries a real ladder, and `auto` is not part of it: it is a
+    // mode, reported as `selectedQualityId: null`.
+    expect(qualities.length).toBeGreaterThan(1);
+    expect(qualities.map((quality) => quality.id)).not.toContain('vimeo:auto');
+    expect(
+      await page.evaluate(
+        () => window.reelyHandle?.getState().selectedQualityId
+      )
+    ).toBeNull();
+
+    for (const quality of qualities) {
+      expect(
+        await page.evaluate(
+          (id) => window.reelyHandle?.selectQuality(id),
+          quality.id
+        )
+      ).toMatchObject({ ok: true });
+      expect(
+        await page.evaluate(
+          () => window.reelyHandle?.getState().selectedQualityId
+        )
+      ).toBe(quality.id);
+    }
+
+    // And back to adaptive, which is a rung the SDK has to accept under a name
+    // Reely never publishes.
+    expect(
+      await page.evaluate(() => window.reelyHandle?.selectQuality(null))
+    ).toMatchObject({ ok: true });
+    expect(
+      await page.evaluate(
+        () => window.reelyHandle?.getState().selectedQualityId
+      )
+    ).toBeNull();
   }
 );
 

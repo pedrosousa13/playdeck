@@ -3,8 +3,19 @@ import type {
   VimeoSdkConstructor,
   VimeoSdkEventListener,
   VimeoSdkPlayer,
+  VimeoSdkQuality,
   VimeoSdkTextTrack
 } from '../../src/loader';
+
+// The ladder the live SDK reports for the fixture video, auto included and
+// active, exactly as measured (#82).
+const defaultQualities: ReadonlyArray<VimeoSdkQuality> = [
+  { id: 'auto', label: 'Auto', active: true },
+  { id: '720p', label: '720p', active: false },
+  { id: '540p', label: '540p', active: false },
+  { id: '360p', label: '360p', active: false },
+  { id: '240p', label: '240p', active: false }
+];
 
 export type FakePlayerOptions = {
   readonly duration?: number;
@@ -12,6 +23,9 @@ export type FakePlayerOptions = {
   readonly volume?: number;
   readonly playbackRate?: number;
   readonly textTracks?: ReadonlyArray<VimeoSdkTextTrack>;
+  readonly qualities?: ReadonlyArray<VimeoSdkQuality>;
+  readonly getQualities?: () => Promise<ReadonlyArray<VimeoSdkQuality>>;
+  readonly setQuality?: (id: string) => Promise<unknown>;
   readonly ready?: () => Promise<void>;
   readonly play?: () => Promise<unknown>;
   readonly setVolume?: (volume: number) => Promise<unknown>;
@@ -122,6 +136,20 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
 
   getTextTracks: Mock<() => Promise<ReadonlyArray<VimeoSdkTextTrack>>> = vi.fn(
     () => Promise.resolve(this.#textTracks)
+  );
+
+  getQualities: Mock<() => Promise<ReadonlyArray<VimeoSdkQuality>>> = vi.fn(
+    () =>
+      this.#options.getQualities?.() ??
+      Promise.resolve(this.#options.qualities ?? defaultQualities)
+  );
+
+  // The real player moves the `active` flag and fires `qualitychange`; tests
+  // that care about the echo emit it themselves.
+  setQuality: Mock<(id: string) => Promise<unknown>> = vi.fn((id) =>
+    this.#options.setQuality
+      ? this.#options.setQuality(id)
+      : Promise.resolve(id)
   );
 
   enableTextTrack: Mock<

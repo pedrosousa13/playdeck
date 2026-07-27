@@ -93,6 +93,13 @@ const browserUnavailable: Availability = {
 };
 
 const fixedCapabilities = {
+  // Enumerable but not selectable, so nothing is offered. Measured against the
+  // live IFrame API (#82): `getAvailableQualityLevels()` reports a real ladder,
+  // but `setPlaybackQuality()` is accepted and discarded — every level the
+  // player itself offered left `getPlaybackQuality()` unmoved, as did setting a
+  // level then seeking, and as did `loadVideoById({ suggestedQuality })`.
+  // Asking for `tiny` failed exactly like asking for `hd720`, which is what
+  // rules out a bandwidth or viewport ceiling rather than a discarded argument.
   selectQuality: providerUnavailable,
   pictureInPicture: providerUnavailable,
   airPlay: providerUnavailable,
