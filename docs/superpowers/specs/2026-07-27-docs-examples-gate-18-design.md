@@ -27,7 +27,7 @@ Real `.ts`/`.tsx` files at the repo root, one per doc section, named by doc slug
 
 `examples/tsconfig.json` is a new project referenced from the root `tsconfig.json` — the same shape #109 gave `scripts/` and `tests/`, so `pnpm typecheck` picks the fixtures up with no second command to remember and no CI job to add.
 
-`@reely/*` resolves to `packages/*/src/index.ts` through `paths`, following the `e2e/tsconfig.json` precedent. Reason: the static CI job runs before any build, so `dist/index.d.ts` does not exist there. This means the fixtures typecheck against _source_, not against the published declaration files — that surface is `test:packages`' job (`publint`, `attw --pack`, the clean-fixture tarball install), and duplicating it here would only add a build to the fastest CI job.
+`@reely/*` resolves to `packages/*/dist/index.d.ts` through `paths`, with a project `reference` to each package — exactly what `e2e/tsconfig.json` does. `pnpm typecheck` is `tsc -b`, and every package tsconfig is `composite` + `emitDeclarationOnly`, so the build mode emits those declarations before the examples project is checked. No build step to add, and the fixtures are checked against **the type surface a consumer installs**, not against source. That is the whole point for a docs example: an example that only compiles against `src` can still be wrong for the person who ran `pnpm add @reely/core`.
 
 Fixtures are self-contained: every identifier they use is declared in the file. That is the point of the exercise, not an inconvenience of it.
 
@@ -58,14 +58,14 @@ One script, two modes, matching the repo's existing `scripts/*.mjs` convention (
 
 `--check` also runs the **export coverage check**:
 
-- Enumerate each package's public value exports through the TypeScript compiler API — `ts.createProgram` over `packages/*/src/index.ts`, then the entry module's exports filtered to `SymbolFlags.Value`. Not a grep over source files: `packages/react/src/index.tsx:2724` re-exports the icon set with `export *`, while `useActivation` and `loadProvider` are declared `export` in their own modules and are deliberately **not** part of the public entry. A grep gets both of those wrong; `dist/index.d.ts` confirms the real surface.
+- Enumerate each package's public value exports through the TypeScript compiler API — `ts.createProgram` over `packages/*/src/index.ts[x]`, then the entry module's exports filtered to `SymbolFlags.Value`. Source, not `dist`, so the check does not silently pass on stale declarations when run alone; the two agree, and `dist/index.d.ts` was used to confirm it. Not a grep over source files: `packages/react/src/index.tsx:2724` re-exports the icon set with `export *`, while `useActivation` and `loadProvider` are declared `export` in their own modules and are deliberately **not** part of the public entry. A grep gets both of those wrong in opposite directions.
 - Tokenize every fixture into a Set of identifiers (`/[A-Za-z_$][\w$]*/g`) and assert each public value export appears in at least one. Whole-token matching, so `Time` is not satisfied by the word "sometimes".
 - An uncovered export fails with its name and package. That converts #18's acceptance criterion from a thing somebody audited once into a thing that stays true.
 
 ### Wiring
 
-- `"docs:check": "node scripts/docs-examples.mjs --check"` and `"docs:examples": "node scripts/docs-examples.mjs"` in the root `package.json`.
-- Appended to the static CI line, `.github/workflows/ci.yml:29`: `pnpm format:check && pnpm lint && pnpm typecheck && pnpm docs:check`. No new job, no extra runner minutes.
+- `"docs:check"`, `"docs:examples"`, and `"test:docs"` in the root `package.json`. The last runs the script's own `node --test` unit tests, following the `tests/integrations/next-image/harness.test.mjs` precedent for testing a `.mjs` harness.
+- Appended to the static CI line, `.github/workflows/ci.yml:29`: `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:docs && pnpm docs:check`. No new job, no extra runner minutes. `typecheck` runs first because `tsc -b` emits the declarations the examples project resolves through `paths`.
 - `examples/` joins the typecheck projects, so a fixture that stops compiling also fails `pnpm typecheck` on its own.
 
 ## Fixture inventory
