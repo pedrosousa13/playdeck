@@ -165,7 +165,7 @@ test('the control row does not overflow at 320px, and hides the volume slider be
   // AirPlayButton made it six buttons.
   //
   // The overflow assertions below hold at 320px regardless of the
-  // `@media (max-width: 420px)` volume-slider rule, because
+  // `@container (max-width: 420px)` volume-slider rule, because
   // `.reely-example-row-buttons` sets `flex-wrap: wrap` — the row cannot
   // overflow horizontally either way. What actually exercises that
   // breakpoint is the volume-slider visibility check that follows: hidden at
