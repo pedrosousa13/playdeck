@@ -23,13 +23,20 @@ Probed against the running Storybook before designing, `reference-player--compos
 | button row height                         | 92 — two lines                       | 92 — two lines                        |
 | caption cue vs button row                 | 125–150 inside 73–165 — **overlaps** | 152–177 inside 100–192 — **overlaps** |
 
-Three things follow, and all three contradict #114's own root-cause section.
+**That table is measured on `reference-player--composition`, which is mock-decorated and renders no `<video>` element at all.** An earlier draft of this spec read the 288 × 153 box as "the viewport path has no video area" and concluded that #114's root-cause section was wrong. It is not. `Player.Media` is `position: relative` — in flow — and the mock simply has no media element to contribute height. The same four cases on `reference-player--real-sources`, which renders a real `<video>`:
 
-**`Player.Media` and `Player.Poster` are absolutely positioned, so they contribute no in-flow height.** `aspect-ratio: auto` therefore does not let the box grow _around_ the media; it collapses the box onto the control row alone. The 320 px viewport path — which #114 calls "the good outcome" — is 288 × 153 of pure control bar with no video area at all.
+| Case             | Before                                                | After                         |
+| ---------------- | ----------------------------------------------------- | ----------------------------- |
+| 320 px viewport  | 336 = media 180 + row 153, stacked                    | 315 = media 162 + row 153     |
+| 320 px container | **180, with the row absolutely overlaying 153 of it** | **303 = media 150 + row 153** |
 
-**Two of #114's three symptoms are not container-path defects.** The button row wraps to two lines on both paths, and the caption cue overlaps the button row on both paths. Only the first symptom is specific to the container path.
+So the viewport path was already correct, exactly as #114 says, and the container path is the defect: the box stays locked to 16:9 while the row covers 153 of its 180 px and the media element underneath is only 150 px tall.
 
-**The row is 153 px on both paths.** No choice of query changes that. Both queries are downstream of a control row that does not fit at 320 px.
+Two things from the mock table still hold, and both are real:
+
+**Two of #114's three symptoms are not container-path defects.** The button row wraps to two lines on both paths, and the caption cue overlaps the button row on both paths.
+
+**The row is 153 px on both paths.** No choice of query changes that; it is the row's own arithmetic (§3). On the real path the stacked layout absorbs it, which is why the container path is where it hurts.
 
 ## 2. Why the first design failed, and the constraint that killed it
 
@@ -85,11 +92,11 @@ Two consequences for `ExampleSettingsMenu`:
 - It gates itself on capabilities and returns `null` when neither playback rate nor quality is available. It must also render when only the folded items are available, or the folded functionality disappears exactly where it is needed.
 - `PipButton` and `AirPlayButton` self-gate on `capabilities.pictureInPicture.status` and `capabilities.airPlay.status`. `MenuItem` does not gate itself, so the menu entries must read those capabilities explicitly. Actions are `requestPictureInPicture()` / `exitPictureInPicture()` and `showAirPlayPicker()` on `usePlayerActions()`.
 
-Result: 6 buttons, one line, control row **105 px** — 58 % of a 180 px box, against 85 % today.
+Result: 6 buttons, one line, control row **105 px** instead of 153. On the real path that is 48 px off the stacked box (303 → 255) and 48 px more video for the same footprint; on a composition with no media element, where the 180 px floor sets the height, it is the difference between the row covering 85 % of the box and 58 %.
 
 ### 4.2 `min-height`, not `aspect-ratio: auto`
 
-This is the part the first design got wrong, and it cannot simply be dropped: at 320 px with 200 % text the row roughly doubles, and an overlay row inside a 180 px `overflow: hidden` box is clipped. That is the 35 px #32 measured, and it is why `aspect-ratio: auto` exists at all. The rule is replaced rather than removed:
+`aspect-ratio: auto` is what lets the box grow around the in-flow media and row, and it cannot simply be dropped: at 320 px with 200 % text the row roughly doubles, and an overlay row inside a 180 px `overflow: hidden` box is clipped. That is the 35 px #32 measured. But `auto` alone leaves nothing holding the box open in the states where there is no in-flow content — pre-activation and error, where #89 hides the row, and any composition without a media element. The `:has()` guard existed for exactly that. A floor replaces it:
 
 ```css
 @container (max-width: 420px) {
@@ -106,9 +113,13 @@ This is the part the first design got wrong, and it cannot simply be dropped: at
 }
 ```
 
-`Poster` and `Media` are absolutely positioned and paint the full box regardless, so the video area stays 320 × 180 while the row sits in flow over its bottom 105 px. When the row genuinely needs more than 180 px — the 200 % text case — the box **grows** instead of clipping. `justify-content: flex-end` keeps the row at the bottom: in flow it is the only in-flow child, and without it the row would sit at the top of a `min-height`-inflated box.
+`Media` and the control row both take part in flow, so the box becomes the sum of them — measured 303 px at a 320 px container, against a 180 px lid before. `Poster`, `Gestures`, `LoadingIndicator` and `Captions` are absolutely positioned and stretch to whatever the box resolves to.
 
-The `:has(.reely-example-controls[hidden])` collapse guard is **deleted**. It existed because `aspect-ratio: auto` collapsed the box to zero height in the states where #89 hides the row, taking the full-bleed overlay with it — measured in #111 as an activation button that could not be clicked. `min-height` holds the box open in exactly those states, so the guard has nothing left to guard.
+`min-height: 56.25cqw` is the floor for the states with **no** in-flow content: pre-activation and error, where #89 hides the row, and any composition with no media element (the mock-decorated stories are exactly that — measured 180 px there, held open by this rule alone). Without it those states collapse to zero height and take the full-bleed overlay with them, which #111 measured as an activation button that could not be clicked.
+
+`justify-content: flex-end` keeps the row at the bottom when the floor is what sets the height, rather than at the top of the trailing free space.
+
+The `:has(.reely-example-controls[hidden])` collapse guard is therefore **deleted**: `min-height` covers the same states, and covers them without depending on which children happen to be in flow.
 
 ### 4.3 The media query is deleted
 
@@ -141,7 +152,7 @@ The `#111` spec's §3 and its plan's "do not simplify the split" note are histor
 
 ## Out of scope
 
-- **Dropping the two `Time` labels at a narrow container.** It is the obvious next lever on the remaining 105 px and it is not measured, so it is not promised. 58 % of the box is better than 85 % and still not good; if the owner wants better, that is the next thing to measure.
+- **Dropping the two `Time` labels at a narrow container.** It is the obvious next lever on the remaining 105 px — the time row is 49 of it — and it is not measured, so it is not promised.
 - `Theme/Theme`'s pre-existing 5 px control-row overflow at its own width. Older, cosmetic, inside the area #32 reviews.
 - The caption cue overlapping the button row. It happens on **both** paths, at every width, and `e2e/visual.spec.ts:129-135` records that cue-over-row overlap is deliberate — the cue wins on paint order. #114's third symptom is therefore not fixed here, and the issue gets a comment saying so rather than a silent omission.
 - Anything in `packages/`. The primitives ship no CSS and the declared browser support floor does not move.
