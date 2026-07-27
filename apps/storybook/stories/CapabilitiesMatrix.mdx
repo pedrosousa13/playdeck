@@ -93,3 +93,27 @@ if (await actions.whenReady()) void actions.setPlaybackRate(0.75);
 
 A call made before a provider is attached waits rather than answering `false`,
 so it is safe to await from an effect that runs before mount finishes.
+
+## `buffered`: every provider reports, not every provider sees the same thing
+
+`PlayerState.buffered` is what `Player.SeekSlider` paints behind the thumb. Every
+provider populates it and none of them invent a range, but two of them are
+working from a narrower view than the other two:
+
+| Provider    | What the ranges are                                                          |
+| ----------- | ---------------------------------------------------------------------------- |
+| native, hls | The `<video>` element's own `TimeRanges` — every range, exactly as buffered. |
+| vimeo       | The SDK's `getBuffered()` — every range, including gaps left by a seek.      |
+| youtube     | One range, from the playhead to the end of the buffer holding it.            |
+
+YouTube is the odd one out because its iframe API exposes no ranges at all —
+only `getVideoLoadedFraction()`, which despite the name reports the _end_ of the
+range the playhead is in, over duration. The start of that range is not
+recoverable, so the adapter anchors the range at the playhead: everything it
+reports is genuinely buffered, but buffer _behind_ the playhead is invisible, and
+after a backward seek the bar shrinks to what lies ahead even though the earlier
+region is still loaded.
+
+An empty array therefore means "nothing is buffered ahead of the playhead", on
+every provider. It is not a signal that the provider cannot answer — there is no
+such provider, so there is no capability to check.

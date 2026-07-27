@@ -35,6 +35,7 @@ type FakePlayerHarness = {
   state: number;
   currentTime: number;
   duration: number;
+  loadedFraction: number;
   muted: boolean;
   volume: number;
   rate: number;
@@ -66,6 +67,7 @@ const createFakeYouTube = () => {
       state: playerStates.UNSTARTED,
       currentTime: 0,
       duration: 120,
+      loadedFraction: 0,
       muted: false,
       volume: 100,
       rate: 1,
@@ -101,6 +103,7 @@ const createFakeYouTube = () => {
         getVolume: () => harness.volume,
         getDuration: () => harness.duration,
         getCurrentTime: () => harness.currentTime,
+        getVideoLoadedFraction: () => harness.loadedFraction,
         getPlaybackRate: () => harness.rate,
         setPlaybackRate: vi.fn(),
         getPlayerState: () => harness.state,
@@ -581,6 +584,68 @@ test('polls the current time only while confirmed playing', async () => {
   expect(patches).not.toContainEqual(
     expect.objectContaining({ currentTime: 9 })
   );
+});
+
+// --- buffered ranges (#91) ---
+//
+// `getVideoLoadedFraction()` is not the fraction of the video that is loaded:
+// measured against live YouTube it is the END of the buffered range holding the
+// playhead, over duration. It jumps on a forward seek and falls back again on a
+// backward one, so the range's start is not knowable. The playhead is the only
+// point we know to be inside that range, so it anchors what we report.
+
+const bufferedIn = (
+  patches: readonly ProviderStatePatch[]
+): ReadonlyArray<ProviderStatePatch['buffered']> =>
+  patches
+    .filter((patch) => patch.buffered !== undefined)
+    .map((patch) => patch.buffered);
+
+test('reports the buffered edge as a range anchored at the playhead', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter();
+
+  harness.duration = 1344;
+  harness.currentTime = 941;
+  harness.loadedFraction = 0.7162;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(bufferedIn(patches).at(-1)).toEqual([
+    { start: 941, end: 1344 * 0.7162 }
+  ]);
+  // The scaled fraction as a range from zero would have claimed the first 950
+  // seconds were buffered when only ~33 of them were.
+  expect(bufferedIn(patches)).not.toContainEqual([
+    { start: 0, end: 1344 * 0.7162 }
+  ]);
+});
+
+test('reports no buffered range when the edge sits behind the playhead', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter();
+
+  // Mid-seek the playhead can land outside the buffer the fraction describes.
+  harness.duration = 120;
+  harness.currentTime = 70;
+  harness.loadedFraction = 0.25;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(bufferedIn(patches).at(-1)).toEqual([]);
+});
+
+test('reports no buffered range without a usable duration', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter();
+
+  harness.duration = 0;
+  harness.currentTime = 0;
+  harness.loadedFraction = 0.5;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(bufferedIn(patches).at(-1)).toEqual([]);
 });
 
 test('destroy tears the player down and blocks stale async callbacks', async () => {

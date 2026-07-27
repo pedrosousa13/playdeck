@@ -13,6 +13,7 @@ import type {
   TextCue,
   TextTrack,
   TextTrackKind,
+  TimeRange,
   VimeoSource
 } from '@reely/core';
 import { textTrackLabel } from '@reely/core';
@@ -238,6 +239,21 @@ const numberField = (data: unknown, field: string): number | undefined => {
     ? value
     : undefined;
 };
+
+// The SDK hands back `[start, end]` pairs. Anything else is not a range we can
+// vouch for, so it is dropped rather than guessed at.
+const toRanges = (
+  ranges: ReadonlyArray<readonly number[]>
+): readonly TimeRange[] =>
+  ranges.flatMap(([start, end]) =>
+    typeof start === 'number' &&
+    typeof end === 'number' &&
+    Number.isFinite(start) &&
+    Number.isFinite(end) &&
+    end >= start
+      ? [{ start, end }]
+      : []
+  );
 
 // `language` is Vimeo's stable per-track key, so it doubles as the id; the
 // array index only disambiguates the rare case of two tracks sharing a
@@ -538,10 +554,18 @@ export const createVimeoProvider = (
         ...(nextDuration === undefined ? {} : { duration: nextDuration })
       });
     });
-    on('progress', (data) => {
-      const seconds = numberField(data, 'seconds');
-      if (seconds === undefined) return;
-      emit({ buffered: [{ start: 0, end: seconds }] });
+    // `progress.seconds` is the end of the range holding the playhead, not a
+    // range from zero, so it cannot describe the buffer on its own: after a
+    // seek it both hides real ranges and spans the hole in between (#91).
+    // `getBuffered()` reports the ranges themselves.
+    on('progress', () => {
+      void player.getBuffered().then(
+        (ranges) => {
+          if (isStale(thisGeneration, player)) return;
+          emit({ buffered: toRanges(ranges) });
+        },
+        () => undefined
+      );
     });
     on('bufferstart', () => emit({ buffering: true }));
     on('bufferend', () => emit({ buffering: false }));

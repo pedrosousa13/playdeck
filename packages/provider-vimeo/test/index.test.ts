@@ -1247,7 +1247,9 @@ test('maps playback, buffering, and timeline events to confirmed state', async (
   player.emit('timeupdate', { duration: 61.5, percent: 0.2, seconds: 12.3 });
   expect(patches.at(-1)).toMatchObject({ currentTime: 12.3, duration: 61.5 });
 
+  player.buffered = [[0, 30]];
   player.emit('progress', { duration: 60, percent: 0.5, seconds: 30 });
+  await flushMicrotasks();
   expect(patches.at(-1)).toMatchObject({ buffered: [{ start: 0, end: 30 }] });
 
   player.emit('seeking', { duration: 60, percent: 0.8, seconds: 48 });
@@ -1266,6 +1268,91 @@ test('maps playback, buffering, and timeline events to confirmed state', async (
   player.emit('ended', { duration: 60, percent: 1, seconds: 60 });
   expect(patches.at(-1)).toMatchObject({ playback: 'ended', currentTime: 60 });
   expect(events.at(-1)).toMatchObject({ type: 'ended' });
+});
+
+// --- buffered ranges (#91) ---
+
+const bufferedPatches = (
+  patches: readonly ProviderStatePatch[]
+): ReadonlyArray<ProviderStatePatch['buffered']> =>
+  patches
+    .filter((patch) => patch.buffered !== undefined)
+    .map((patch) => patch.buffered);
+
+test('reports the SDK buffered ranges, holes and all', async () => {
+  const { patches, sdk } = await setup();
+  const player = sdk.instances[0]!;
+
+  // Measured against live Vimeo after a forward seek: two disjoint ranges,
+  // while the progress event reported only the edge of the second one.
+  player.buffered = [
+    [0, 30.03],
+    [42.048, 54.054]
+  ];
+  player.emit('progress', {
+    duration: 61.867,
+    percent: 0.777,
+    seconds: 48.043
+  });
+  await flushMicrotasks();
+
+  expect(bufferedPatches(patches).at(-1)).toEqual([
+    { start: 0, end: 30.03 },
+    { start: 42.048, end: 54.054 }
+  ]);
+  // The old fabrication would have painted over the 30.03-42.048 hole.
+  expect(bufferedPatches(patches)).not.toContainEqual([
+    { start: 0, end: 48.043 }
+  ]);
+});
+
+test('reports an empty range list before anything is buffered', async () => {
+  const { patches, sdk } = await setup();
+  const player = sdk.instances[0]!;
+
+  player.buffered = [];
+  player.emit('progress', { duration: 61.867, percent: 0, seconds: 0 });
+  await flushMicrotasks();
+
+  expect(bufferedPatches(patches).at(-1)).toEqual([]);
+});
+
+test('emits no buffered ranges when the SDK cannot report them', async () => {
+  const { patches, sdk } = await setup({
+    fake: { getBuffered: () => Promise.reject(namedError('Error', 'nope')) }
+  });
+
+  sdk.instances[0]!.emit('progress', {
+    duration: 60,
+    percent: 0.5,
+    seconds: 30
+  });
+  await flushMicrotasks();
+
+  expect(bufferedPatches(patches)).toEqual([]);
+});
+
+test('drops buffered ranges that resolve after the player is replaced', async () => {
+  let release: ((ranges: ReadonlyArray<readonly number[]>) => void) | undefined;
+  const { patches, provider, sdk } = await setup({
+    fake: {
+      getBuffered: () =>
+        new Promise<ReadonlyArray<readonly number[]>>((resolve) => {
+          release = resolve;
+        })
+    }
+  });
+
+  sdk.instances[0]!.emit('progress', {
+    duration: 60,
+    percent: 0.5,
+    seconds: 30
+  });
+  provider.destroy();
+  release?.([[0, 30]]);
+  await flushMicrotasks();
+
+  expect(bufferedPatches(patches)).toEqual([]);
 });
 
 test('suppresses the synthetic pause that precedes ended', async () => {
