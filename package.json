@@ -18,6 +18,7 @@
     "test:packages": "node scripts/verify-packaging.mjs",
     "test:budgets": "node scripts/check-bundle-budgets.mjs",
     "test:bundle": "turbo run build --filter=@reely/bundle-native-only && pnpm --filter @reely/bundle-native-only test",
+    "test:docs": "node --test scripts/docs-examples.test.mjs",
     "build": "turbo run build",
     "changeset": "changeset",
     "version:packages": "changeset version",
