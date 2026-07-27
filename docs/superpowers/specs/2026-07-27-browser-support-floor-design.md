@@ -62,11 +62,11 @@ Gating the **inventory** rather than a feature-to-version mapping is what keeps 
 
 ## 3. Container queries in the reference example
 
-`.reely-example` becomes a container (`container-type: inline-size`), and the control-row rules move from `@media (max-width: 420px)` to `@container (max-width: 420px)`.
+`.reely-example` becomes a container (`container-type: inline-size`), and **one** rule moves from `@media (max-width: 420px)` to `@container (max-width: 420px)`: `.reely-example-volume { display: none }`.
 
-The rules that style `.reely-example` **itself** — `aspect-ratio`, and its `:has(.reely-example-controls[hidden])` variant — stay in the viewport media query. An element cannot query its own container, and introducing a wrapper element purely to enable that would add to the composition #67 deliberately kept minimal, in the layout #32 is going to review by eye.
+The other three rules in that block stay on the viewport query, and the reason is a coupling worth stating rather than discovering later. `.reely-example { aspect-ratio: auto }` and its `:has(.reely-example-controls[hidden])` variant style the container **itself**, which cannot query itself. `.reely-example-controls { position: relative }` looks like a child rule, but the comment above it records that it is paired with `aspect-ratio: auto`: below the breakpoint the control row stops being an overlay and takes part in normal flow, which only works because the box has given up its fixed ratio. Driving those two from different queries lets them disagree — a narrow player inside a wide viewport would put the row in flow inside a box still locked to 16:9, which is the clipping #32 already measured at 35 px of lost controls.
 
-So the split is not a compromise, it is the correct decomposition: _what the player looks like inside its box_ is a container question, _how the box behaves in the page_ is a viewport question.
+So the split is narrower than "control-row rules move", and it is the correct decomposition: **which controls fit** is a question about the player's own width; **how the box lays out in the page, and whether its row is an overlay** is a question about the page. Only the first moves.
 
 **Test.** `e2e/reference.spec.ts`'s existing case resizes the viewport and stays valid, because the example is full-width and narrowing the viewport still narrows the container. It cannot distinguish the two mechanisms, so a new case does: at a **fixed 1280 px viewport**, the player is constrained to 320 px with a test-only injected style, and the volume slider must hide anyway. That assertion fails against today's media-query CSS and passes after the change, which is what makes it worth adding.
 
