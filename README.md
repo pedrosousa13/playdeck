@@ -97,6 +97,29 @@ turns an unrelated PR red:
 REELY_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
 ```
 
+## Browser support
+
+| Browser     | Minimum |
+| ----------- | ------- |
+| Chrome/Edge | 99      |
+| Firefox     | 97      |
+| Safari, iOS | 15.4    |
+
+The floor is set by **CSS, not JavaScript**: `theme.css` uses `@layer`, which is
+the newest feature anything in Reely requires. The built JavaScript needs nothing
+above Safari 14.1, so a consumer who never imports the optional stylesheet is
+bound only by that.
+
+`env()`, `forced-colors` and `prefers-reduced-motion` do not raise the floor even
+where support arrived later — a media query that never matches simply does not
+apply, so they are progressive enhancement rather than requirements.
+
+React 19 is a separate peer requirement (`react` and `react-dom` `>=19 <20`).
+
+The reference example in the workbench uses `@container`, which is newer than
+this floor. It is a Storybook composition, not published code — see **Reference
+example** in the workbench docs.
+
 ## License
 
 [MIT](LICENSE).

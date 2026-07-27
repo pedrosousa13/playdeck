@@ -25,6 +25,13 @@
   },
   "type": "module",
   "sideEffects": false,
+  "browserslist": [
+    "chrome >= 99",
+    "edge >= 99",
+    "firefox >= 97",
+    "safari >= 15.4",
+    "ios_saf >= 15.4"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
