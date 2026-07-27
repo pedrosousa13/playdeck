@@ -621,6 +621,88 @@ test('reports the buffered edge as a range anchored at the playhead', async () =
   ]);
 });
 
+test('holds the range start where playback entered the buffer', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter();
+
+  harness.duration = 120;
+  harness.currentTime = 10;
+  harness.loadedFraction = 0.5;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  // Playing on does not narrow the range: 10 was inside the buffer, and the
+  // buffer holding the playhead has not changed, so 10 is still a start we can
+  // prove. Anchoring on the playhead instead would drag the start along.
+  harness.currentTime = 20;
+  harness.loadedFraction = 0.6;
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(bufferedIn(patches).at(-1)).toEqual([{ start: 10, end: 72 }]);
+});
+
+test('widens the range start when the playhead moves back inside the buffer', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter();
+
+  harness.duration = 120;
+  harness.currentTime = 20;
+  harness.loadedFraction = 0.5;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  // Still the same buffer -- the edge did not move -- so the earlier playhead
+  // proves more of it than the anchor did.
+  harness.currentTime = 8;
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(bufferedIn(patches).at(-1)).toEqual([{ start: 8, end: 60 }]);
+});
+
+test('restarts the range when a seek lands past the known buffer edge', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter();
+
+  harness.duration = 1344;
+  harness.currentTime = 9;
+  harness.loadedFraction = 0.02436;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  // The measured YouTube signature for a forward seek into fresh buffer: the
+  // playhead lands beyond the edge we knew, and the fraction jumps with it.
+  // Nothing about the old range applies, so the anchor cannot survive.
+  harness.currentTime = 941;
+  harness.loadedFraction = 0.7162;
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(bufferedIn(patches).at(-1)).toEqual([
+    { start: 941, end: 1344 * 0.7162 }
+  ]);
+});
+
+test('reports only what the playhead proves after a backward seek', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter();
+
+  harness.duration = 1344;
+  harness.currentTime = 941;
+  harness.loadedFraction = 0.7162;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  // Seeking back into an earlier cached region: the fraction drops to that
+  // region's edge, and the range shrinks to what the playhead now stands in.
+  // The 941-974 buffer is still loaded, but nothing here can say so.
+  harness.currentTime = 2.4;
+  harness.loadedFraction = 0.02436;
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(bufferedIn(patches).at(-1)).toEqual([
+    { start: 2.4, end: 1344 * 0.02436 }
+  ]);
+});
+
 test('reports no buffered range when the edge sits behind the playhead', async () => {
   vi.useFakeTimers();
   const { harness, patches } = await readyAdapter();
