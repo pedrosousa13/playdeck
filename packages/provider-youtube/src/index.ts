@@ -196,20 +196,27 @@ const loadFailure = (cause: unknown): Exclude<CommandResult, { ok: true }> => ({
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 // The iframe API exposes no ranges, only `getVideoLoadedFraction()`, which
-// measures the end of the range the playhead sits in (#91). The start of that
-// range is not knowable, so the playhead -- the one point known to be inside it
-// -- anchors what we report. This understates the range; it never invents one.
-const bufferedRanges = (
-  player: YouTubePlayer,
-  currentTime: number
-): readonly TimeRange[] => {
-  const duration = player.getDuration();
-  const fraction = player.getVideoLoadedFraction();
-  if (!Number.isFinite(duration) || duration <= 0) return [];
-  if (!Number.isFinite(fraction)) return [];
-  const end = clamp01(fraction) * duration;
-  // A seek can leave the playhead outside the buffer for a poll or two.
-  return end > currentTime ? [{ start: currentTime, end }] : [];
+// measures the end of the range the playhead sits in, never its start (#91).
+// Every playhead position seen while that same range held it is a start we can
+// prove, so the earliest one anchors the range -- reporting less than is
+// buffered, never more, and without the start sliding along with the thumb.
+type BufferView = { readonly anchor: number; readonly end: number };
+
+const nextBufferView = (
+  previous: BufferView | undefined,
+  currentTime: number,
+  end: number
+): BufferView | undefined => {
+  // A seek can leave the playhead outside the buffer for a poll or two, and
+  // playback can outrun it entirely. Neither leaves a range to report.
+  if (end <= currentTime) return undefined;
+  // A playhead past the edge we knew is in a range we were not tracking, so
+  // nothing we remember about the old one applies to it.
+  const continuous = previous !== undefined && currentTime <= previous.end;
+  return {
+    anchor: continuous ? Math.min(previous.anchor, currentTime) : currentTime,
+    end
+  };
 };
 
 // YouTube renders captions inside its own iframe (captionRendering:
@@ -303,6 +310,7 @@ export const createYouTubeProvider = (
   let knownMuted = false;
   let knownVolume = 1;
   let knownCurrentTime = 0;
+  let bufferView: BufferView | undefined;
   let textTracks: readonly YouTubeCaptionTrack[] = [];
   let selectedTextTrackId: string | null = null;
 
@@ -337,6 +345,21 @@ export const createYouTubeProvider = (
       clearTimeout(timer);
       resolve(result);
     });
+  };
+
+  const bufferedRanges = (
+    current: YouTubePlayer,
+    currentTime: number
+  ): readonly TimeRange[] => {
+    const duration = current.getDuration();
+    const fraction = current.getVideoLoadedFraction();
+    bufferView =
+      Number.isFinite(duration) && duration > 0 && Number.isFinite(fraction)
+        ? nextBufferView(bufferView, currentTime, clamp01(fraction) * duration)
+        : undefined;
+    return bufferView
+      ? [{ start: bufferView.anchor, end: bufferView.end }]
+      : [];
   };
 
   const stopTimePolling = (): void => {
@@ -545,6 +568,8 @@ export const createYouTubeProvider = (
     ready = false;
     // A retry recreates the player, so cached caption state must not leak
     // into the new session's capabilities before its own onApiChange fires.
+    // Neither must a buffer anchor: the new player has loaded nothing.
+    bufferView = undefined;
     textTracks = [];
     selectedTextTrackId = null;
     const current = player;

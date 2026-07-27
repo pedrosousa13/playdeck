@@ -62,7 +62,7 @@ const seekAhead = async (page: Page): Promise<number> =>
   });
 
 test(
-  'youtube reports buffered ranges anchored at the playhead @real',
+  'youtube anchors its buffered range where playback entered the buffer @real',
   { tag: '@real' },
   async ({ page }) => {
     test.setTimeout(120_000);
@@ -85,15 +85,28 @@ test(
       )
       .toBe(true);
 
-    const [range] = await buffered(page);
+    const [entered] = await buffered(page);
+    // The one range is what the API can back: it runs from where playback
+    // entered this buffer to the buffer's edge. A range from zero would be a
+    // claim about 0-to-the-seek-target that nothing has loaded.
+    expect(entered!.start).toBeGreaterThan(target - 5);
+
+    // And it stays put as playback moves on. A range re-anchored on the
+    // playhead every poll would follow the thumb instead.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => window.reelyHandle?.getState().currentTime ?? 0),
+        { timeout: 30_000 }
+      )
+      .toBeGreaterThan(entered!.start + 3);
+
+    const [held] = await buffered(page);
     const currentTime = await page.evaluate(
       () => window.reelyHandle?.getState().currentTime ?? 0
     );
-    // The one range is what the API can back: it starts at the playhead and
-    // runs to the edge of the buffer holding it. A range from zero would be a
-    // claim about 0-to-the-seek-target that nothing has loaded.
-    expect(range!.start).toBeGreaterThan(target - 5);
-    expect(range!.end).toBeGreaterThan(currentTime);
+    expect(held!.start).toBeCloseTo(entered!.start, 1);
+    expect(held!.end).toBeGreaterThan(currentTime);
   }
 );
 
