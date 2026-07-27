@@ -804,7 +804,11 @@ test('exposes picture-in-picture through the wrapper on both engines', async () 
     await provider.attach();
     await provider.load();
 
-    expect(patches.at(-1)).toMatchObject({
+    // The newest capability-bearing patch, not the newest patch: `load()` also
+    // emits the standalone `commandsReady` declaration (#69).
+    expect(
+      patches.filter((patch) => 'capabilities' in patch).at(-1)
+    ).toMatchObject({
       capabilities: { pictureInPicture: { status: 'available' } }
     });
     await expect(provider.requestPictureInPicture?.()).resolves.toEqual({
@@ -869,7 +873,11 @@ test('exposes the AirPlay picker through the wrapper on the native engine', asyn
   // `createNativeProvider` is delegated to, so HLS inherits #71's route
   // gating: the picker API existing is no longer enough, and the capability
   // stays unavailable until WebKit announces a playback target.
-  expect(patches.at(-1)).toMatchObject({
+  // Filtered because `load()` also emits the standalone `commandsReady`
+  // declaration (#69), which would otherwise be the newest patch.
+  expect(
+    patches.filter((patch) => 'capabilities' in patch).at(-1)
+  ).toMatchObject({
     capabilities: { airPlay: { status: 'unavailable', reason: 'provider' } }
   });
 
@@ -1261,4 +1269,39 @@ test('destroys the previous hls.js instance on retry', async () => {
   expect(second).not.toBe(first);
   expect(first.destroyed).toBe(true);
   expect(second.destroyed).toBe(false);
+});
+
+test('the native engine forwards the native adapter declaration', async () => {
+  const harness = createHarness(stubNativeHlsSupport, 'native');
+  vi.spyOn(harness.media, 'load').mockImplementation(() => undefined);
+
+  await harness.provider.attach();
+  expect(harness.patches).not.toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+
+  await harness.provider.load();
+  expect(harness.patches).toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+});
+
+// hls.js points `media.src` at an MSE blob inside attachMedia, which re-runs
+// the load algorithm — declaring before MEDIA_ATTACHED would repeat the native
+// clobber. MANIFEST_PARSED would be later than necessary, and would never
+// arrive for a manifest that fails to parse.
+test('the hls.js engine declares readiness on MEDIA_ATTACHED', async () => {
+  const harness = createHarness(stubMseOnlySupport, 'hls.js');
+
+  await harness.provider.attach();
+  await harness.provider.load();
+  expect(harness.patches).not.toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+
+  currentFakeHls().emitMediaAttached();
+
+  expect(harness.patches).toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
 });
