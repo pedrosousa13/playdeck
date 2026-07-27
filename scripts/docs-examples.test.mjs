@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { renderDoc, uncoveredExports } from './docs-examples.mjs';
+import { markerNames, renderDoc, uncoveredExports } from './docs-examples.mjs';
 
 /** @type {Map<string, { source: string; language: 'ts' | 'tsx' }>} */
 const fixtures = new Map([
@@ -122,4 +122,26 @@ test('reports every uncovered export, not just the first', () => {
       { package: '@reely/core', name: 'b' }
     ]
   );
+});
+
+test('reports the markers a doc references', () => {
+  const input = [
+    '<!-- example:demo -->',
+    '```ts',
+    '```',
+    '<!-- /example -->',
+    '<!-- example:ui -->',
+    '```tsx',
+    '```',
+    '<!-- /example -->'
+  ].join('\n');
+
+  assert.deepEqual(markerNames(input, 'md'), ['demo', 'ui']);
+});
+
+test('reports mdx markers too, and nothing for a plain doc', () => {
+  assert.deepEqual(markerNames('{/* example:ui */}\n{/* /example */}', 'mdx'), [
+    'ui'
+  ]);
+  assert.deepEqual(markerNames('# Just prose\n', 'md'), []);
 });

@@ -81,6 +81,18 @@ export const renderDoc = (text, syntax, fixtures) => {
 };
 
 /**
+ * The fixture names a document references, in order.
+ * @param {string} text
+ * @param {'md' | 'mdx'} syntax
+ * @returns {string[]}
+ */
+export const markerNames = (text, syntax) =>
+  text
+    .split('\n')
+    .map((line) => MARKERS[syntax].open.exec(line)?.[1])
+    .filter((name) => name !== undefined);
+
+/**
  * Whole-identifier matching, never substring: `Time` must not be satisfied by
  * the word "sometimes".
  * @param {Map<string, readonly string[]>} exportsByPackage
@@ -216,18 +228,22 @@ const main = async () => {
 
   /** @type {string[]} */
   const drifted = [];
+  /** @type {Set<string>} */
+  const referenced = new Set();
   for (const doc of docs) {
     const path = join(repoRoot, doc);
+    const syntax = doc.endsWith('.mdx') ? 'mdx' : 'md';
     const before = await readFile(path, 'utf8');
-    const after = renderDoc(
-      before,
-      doc.endsWith('.mdx') ? 'mdx' : 'md',
-      fixtures
-    );
+    for (const name of markerNames(before, syntax)) referenced.add(name);
+    const after = renderDoc(before, syntax, fixtures);
     if (before === after) continue;
     if (check) drifted.push(doc);
     else await writeFile(path, after);
   }
+
+  // A fixture no document references is not documentation: it compiles, it
+  // satisfies the export coverage below, and nobody ever reads it.
+  const orphans = [...fixtures.keys()].filter((name) => !referenced.has(name));
 
   const uncovered = uncoveredExports(
     publicValueExports(),
@@ -237,10 +253,14 @@ const main = async () => {
   if (!check) {
     console.log(`Rewrote ${docs.length} docs from ${fixtures.size} fixtures.`);
   }
-  if (drifted.length > 0 || uncovered.length > 0) {
+  if (drifted.length > 0 || orphans.length > 0 || uncovered.length > 0) {
     const reasons = [
       ...drifted.map(
         (doc) => `  ${doc} is out of date — run \`pnpm docs:examples\`.`
+      ),
+      ...orphans.map(
+        (name) =>
+          `  examples/${name} is referenced by no doc — add an example:${name} marker, or delete it.`
       ),
       ...uncovered.map(
         ({ package: pkg, name }) =>

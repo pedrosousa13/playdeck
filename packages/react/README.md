@@ -15,6 +15,8 @@ hls.js code in its initial graph, and makes no provider network requests.
 
 ## Usage
 
+<!-- example:react-composition -->
+
 ```tsx
 import * as Player from '@reely/react';
 
@@ -22,21 +24,29 @@ export const Clip = () => (
   <Player.Root source="https://example.com/clip.mp4">
     <Player.Viewport>
       <Player.Media />
-      <Player.Poster src="/poster.jpg" />
+      <Player.Poster>
+        <Player.PosterImage alt="" src="/poster.jpg" />
+      </Player.Poster>
       <Player.Captions />
       <Player.Controls>
         <Player.PlayButton />
         <Player.MuteButton />
         <Player.VolumeSlider />
         <Player.SeekSlider />
-        <Player.Time />
-        <Player.CaptionsMenu />
+        <Player.Time type="current" />
+        <Player.Time type="duration" />
+        <Player.CaptionsButton />
+        <Player.PipButton />
+        {/* Renders only where there is somewhere to cast to. */}
+        <Player.AirPlayButton />
         <Player.FullscreenButton />
       </Player.Controls>
     </Player.Viewport>
   </Player.Root>
 );
 ```
+
+<!-- /example -->
 
 `source` takes the same input as `detectSource` — a URL string, or an explicit
 `{ type: 'hls' | 'video' | 'youtube' | 'vimeo', ... }` object.
@@ -49,13 +59,41 @@ import '@reely/react/theme.css';
 
 ## Reading state and issuing commands
 
-```tsx
-const playback = Player.usePlayerState((state) => state.playback);
-const actions = Player.usePlayerActions();
-const cues = Player.useActiveCues();
+<!-- example:react-hooks -->
 
-if (await actions.whenReady()) await actions.setPlaybackRate(0.75);
+```tsx
+import * as Player from '@reely/react';
+
+// `usePlayerState` takes a selector and re-renders only when the selected
+// value changes — not on every time update.
+export const PlaybackLabel = () => {
+  const playback = Player.usePlayerState((state) => state.playback);
+  return <span>{playback}</span>;
+};
+
+// Commands are answered: `whenReady` tells you when one will land, instead of
+// issuing it and hoping.
+export const SlowMotionButton = () => {
+  const actions = Player.usePlayerActions();
+  return (
+    <button
+      onClick={async () => {
+        if (await actions.whenReady()) await actions.setPlaybackRate(0.75);
+      }}
+    >
+      0.75×
+    </button>
+  );
+};
+
+// The cues active right now, for rendering captions yourself.
+export const CueText = () => {
+  const cues = Player.useActiveCues();
+  return <p>{cues.map((cue) => cue.text).join(' ')}</p>;
+};
 ```
+
+<!-- /example -->
 
 `usePlayerState` takes a selector and re-renders only when the selected value
 changes. `Player.Root` also accepts a `ref`, which receives a `PlayerHandle`
@@ -67,6 +105,50 @@ carrying the same commands plus `getState`, `subscribe` and `on`.
 
 `Root`, `Viewport`, `Media`, `Poster`, `PosterImage`, `ActivationButton`,
 `LoadingIndicator`, `ErrorDisplay`, `Captions`, `Gestures`.
+
+Each overlay renders only when its own state calls for it — nothing is drawn
+disabled:
+
+<!-- example:react-overlays -->
+
+```tsx
+import * as Player from '@reely/react';
+
+// The overlay layers, in the order they stack inside a Viewport. Each renders
+// only when its own state says it should: no disabled-looking placeholders.
+export const Overlays = () => (
+  <Player.Viewport>
+    <Player.Poster>
+      <Player.PosterImage alt="" src="/poster.jpg" />
+    </Player.Poster>
+    <Player.Media />
+    {/* Deferred loading: the button activates the player on first interaction. */}
+    <Player.ActivationButton aria-label="Play" />
+    <Player.LoadingIndicator />
+    <Player.Captions />
+    <Player.Gestures
+      seekOffset={10}
+      onSeek={(direction, offset) => console.log(direction, offset)}
+    />
+    {/* `retry` is null when the provider offers no recovery — absent, not
+        disabled. */}
+    <Player.ErrorDisplay>
+      {({ error, retry }) => (
+        <div role="alert">
+          {error.message}
+          {retry ? <button onClick={retry}>Retry</button> : null}
+        </div>
+      )}
+    </Player.ErrorDisplay>
+  </Player.Viewport>
+);
+
+// `Poster` accepts a URL string, an image-props object, or your own element.
+// `normalizePoster` is the same resolution the primitive performs.
+export const poster = Player.normalizePoster('/poster.jpg');
+```
+
+<!-- /example -->
 
 ### Controls
 
@@ -81,6 +163,45 @@ carrying the same commands plus `getState`, `subscribe` and `on`.
 `SettingsMenu` and the menu parts are the building blocks for playback-rate and
 quality menus, which have no dedicated primitive — the reference example
 composes both from these.
+
+<!-- example:react-menus -->
+
+```tsx
+import * as Player from '@reely/react';
+
+// A playback-rate menu built from the menu parts. `SettingsMenu` owns the open
+// state and returns focus to the trigger on every close path.
+export const RateMenu = () => {
+  const actions = Player.usePlayerActions();
+  const rate = Player.usePlayerState((state) => state.playbackRate);
+
+  return (
+    <Player.SettingsMenu>
+      <Player.SettingsMenuTrigger aria-label="Settings" />
+      <Player.SettingsMenuContent>
+        <Player.MenuRadioGroup
+          value={String(rate)}
+          onValueChange={(value) => void actions.setPlaybackRate(Number(value))}
+        >
+          {[0.5, 1, 1.5, 2].map((option) => (
+            <Player.MenuRadioItem key={option} value={String(option)}>
+              {option}×
+            </Player.MenuRadioItem>
+          ))}
+        </Player.MenuRadioGroup>
+        <Player.MenuItem onSelect={() => void actions.seekTo(0)}>
+          Restart
+        </Player.MenuItem>
+      </Player.SettingsMenuContent>
+    </Player.SettingsMenu>
+  );
+};
+
+// The caption track list, already wired to the player's own tracks.
+export const Captions = () => <Player.CaptionsMenu />;
+```
+
+<!-- /example -->
 
 ### Hooks
 
@@ -97,6 +218,63 @@ Every component has a matching props type (`RootProps`, `MediaProps`,
 `SeekSliderProps`, …), plus `PlayerHandle`, `PlayerActions`,
 `PlayerActivationProps`, `PosterInput`, `ResponsivePoster`, `NormalizedPoster`,
 `ErrorDisplayRenderProps`.
+
+### Icons
+
+<!-- example:react-icons -->
+
+```tsx
+import {
+  AirPlayIcon,
+  CaptionsIcon,
+  CheckIcon,
+  FullscreenEnterIcon,
+  FullscreenExitIcon,
+  MutedIcon,
+  PauseIcon,
+  PipEnterIcon,
+  PipExitIcon,
+  PlayButton,
+  PlayIcon,
+  ReplayIcon,
+  SeekBackwardIcon,
+  SeekForwardIcon,
+  SettingsIcon,
+  VolumeHighIcon,
+  VolumeLowIcon
+} from '@reely/react';
+
+// Every icon is an optional named export that tree-shakes out when unused, so
+// importing one costs you only that one.
+export const icons = [
+  PlayIcon,
+  PauseIcon,
+  ReplayIcon,
+  VolumeHighIcon,
+  VolumeLowIcon,
+  MutedIcon,
+  SeekForwardIcon,
+  SeekBackwardIcon,
+  FullscreenEnterIcon,
+  FullscreenExitIcon,
+  PipEnterIcon,
+  PipExitIcon,
+  AirPlayIcon,
+  CaptionsIcon,
+  SettingsIcon,
+  CheckIcon
+];
+
+// Icons are decorative (`aria-hidden`), sized in `em`, and coloured by
+// `currentColor` — a control passing one keeps its own accessible name.
+export const CustomPlayButton = () => (
+  <PlayButton>
+    <PlayIcon />
+  </PlayButton>
+);
+```
+
+<!-- /example -->
 
 ## Styling
 
