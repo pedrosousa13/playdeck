@@ -280,6 +280,59 @@ test('a narrow container keeps the 16:9 floor and puts the row in flow', async (
   ).toBeGreaterThan(420);
 });
 
+test('a narrow container folds PiP into the settings menu', async ({
+  page
+}) => {
+  // The row holds 6 targets at 320px (312px of content, 44px targets, 4px
+  // gaps) and wants 8, so two wrap and the button row doubles to 92px. The
+  // volume slider is redundant with the mute button and is simply hidden; PiP
+  // and AirPlay are unique functionality, so they move rather than vanish.
+  //
+  // AirPlay is asserted only as absent from the row: it is capability-gated on
+  // a WebKit-only API, so on chromium its button and its menu entry are both
+  // legitimately missing and there is nothing to prove about the fold.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(story);
+  await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
+  await activationButton(page).click();
+  await played(page);
+
+  await expect(pipButton(page)).toBeHidden();
+  await expect(airPlayButton(page)).toBeHidden();
+
+  // One line: the button row is exactly one 44px target tall.
+  const buttonRow = page.locator('.reely-example-row-buttons');
+  expect(
+    await buttonRow.evaluate((el) =>
+      Math.round(el.getBoundingClientRect().height)
+    )
+  ).toBe(44);
+
+  // The function did not disappear with the button.
+  await settingsTrigger(page).click();
+  await expect(
+    page.getByRole('menuitem', { exact: true, name: 'Picture in picture' })
+  ).toBeVisible();
+});
+
+test('a wide player keeps PiP as a button, not a menu item', async ({
+  page
+}) => {
+  // The other half of the fold: both forms are rendered and the container
+  // query hides whichever does not apply, so the same action offered twice at
+  // one width is the failure mode this catches.
+  await page.goto(story);
+  await activationButton(page).click();
+  await played(page);
+
+  await expect(pipButton(page)).toBeVisible();
+
+  await settingsTrigger(page).click();
+  await expect(
+    page.getByRole('menuitem', { exact: true, name: 'Picture in picture' })
+  ).toBeHidden();
+});
+
 // AirPlay is hardcoded unavailable on both iframe providers — a static
 // `{ status: 'unavailable', reason: 'provider' }` (Vimeo) / `providerUnavailable`
 // constant (YouTube) that is never reassigned in either adapter — so asserting
