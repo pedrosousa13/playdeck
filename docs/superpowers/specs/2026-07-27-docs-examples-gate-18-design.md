@@ -23,7 +23,7 @@ Three pieces, one new command.
 
 ### 1. `examples/` — the fixtures
 
-Real `.ts`/`.tsx` files at the repo root, one per doc section, named by doc slug: `core-quickstart.ts`, `core-events.ts`, `react-composition.tsx`, `provider-hls-live.ts`, and so on. Roughly twelve.
+Real `.ts`/`.tsx` files at the repo root, one per doc section, named by doc slug: `core-quickstart.ts`, `react-composition.tsx`, `provider-hls-live.ts`, and so on. Thirteen, listed below.
 
 `examples/tsconfig.json` is a new project referenced from the root `tsconfig.json` — the same shape #109 gave `scripts/` and `tests/`, so `pnpm typecheck` picks the fixtures up with no second command to remember and no CI job to add.
 
