@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { renderDoc } from './docs-examples.mjs';
+import { renderDoc, uncoveredExports } from './docs-examples.mjs';
 
 /** @type {Map<string, { source: string; language: 'ts' | 'tsx' }>} */
 const fixtures = new Map([
@@ -91,4 +91,35 @@ test('rejects an unterminated marker', () => {
 test('leaves an unmarked fence alone', () => {
   const input = '```sh\npnpm add @reely/core\n```\n';
   assert.equal(renderDoc(input, 'md', fixtures), input);
+});
+
+test('an export used in a fixture is covered', () => {
+  assert.deepEqual(
+    uncoveredExports(new Map([['@reely/core', ['detectSource']]]), [
+      "import { detectSource } from '@reely/core';\ndetectSource('a.mp4');\n"
+    ]),
+    []
+  );
+});
+
+test('a substring is not coverage', () => {
+  // `Time` must not be satisfied by the word "sometimes" in a comment.
+  assert.deepEqual(
+    uncoveredExports(new Map([['@reely/react', ['Time']]]), [
+      '// sometimes the runtime is slow\n'
+    ]),
+    [{ package: '@reely/react', name: 'Time' }]
+  );
+});
+
+test('reports every uncovered export, not just the first', () => {
+  assert.deepEqual(
+    uncoveredExports(new Map([['@reely/core', ['a', 'b']]]), [
+      'const c = 1;\n'
+    ]),
+    [
+      { package: '@reely/core', name: 'a' },
+      { package: '@reely/core', name: 'b' }
+    ]
+  );
 });
