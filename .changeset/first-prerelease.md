@@ -84,6 +84,14 @@ Vimeo.
   for any text in the player. It becomes the top-most overlay only once there
   is a loading or buffering state to show.
 
+- **Declared browser support** — every package carries a `browserslist` of
+  Chrome/Edge 99, Firefox 97 and Safari/iOS 15.4. That floor is set by
+  `theme.css`'s `@layer`, not by the JavaScript, which needs nothing above
+  Safari 14.1 — so a consumer who never imports the optional stylesheet is bound
+  only by the latter. `@reely/react`'s `test/theme.test.ts` freezes the
+  stylesheet's CSS feature inventory, so a newer feature fails the build instead
+  of silently moving the number.
+
 - **Caption renderer, imperatively** — `setCaptionRenderer('custom' | 'native')`
   is on `usePlayerActions()` and on the `Player.Root` ref handle, next to the
   `captionRenderer` prop. It was reachable but undeclared: the ref hands back
