@@ -10,8 +10,14 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.ts.map",
+    "!dist/.tsbuildinfo*"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "vite build && tsc -b",
     "test": "vitest run --config ../../vitest.config.ts packages/core/test"

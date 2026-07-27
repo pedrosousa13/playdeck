@@ -10,8 +10,14 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.ts.map",
+    "!dist/.tsbuildinfo*"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "dependencies": {
     "@reely/core": "workspace:^"
   },
