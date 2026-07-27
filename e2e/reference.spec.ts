@@ -228,6 +228,47 @@ test('the volume slider hides on the player width, not the viewport width', asyn
   expect(width).toBeGreaterThan(420);
 });
 
+test('a narrow container keeps the 16:9 floor and puts the row in flow', async ({
+  page
+}) => {
+  // #114. The container query used to fire alone here: the volume slider hid,
+  // but the box kept `aspect-ratio: 16 / 9` and the row stayed an
+  // absolutely-positioned overlay eating 153px of 180. The viewport path was
+  // no better — `aspect-ratio: auto` collapsed the box onto the row itself
+  // (measured 288x153, no video area at all), because Poster and Media are
+  // absolutely positioned and contribute no in-flow height. `min-height`
+  // replaces the ratio: a 16:9 floor the row cannot shrink, and headroom the
+  // row can grow into.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(story);
+  await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
+
+  const player = page.locator('.reely-example');
+  await expect
+    .poll(() => player.evaluate((el) => el.getBoundingClientRect().width))
+    .toBeLessThanOrEqual(320);
+
+  await activationButton(page).click();
+  await played(page);
+
+  const box = await player.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { width: Math.round(r.width), height: Math.round(r.height) };
+  });
+  // 320 x 9 / 16 = 180: the floor holds, and nothing has pushed past it yet.
+  expect(box).toEqual({ width: 320, height: 180 });
+
+  expect(
+    await controls(page).evaluate((el) => getComputedStyle(el).position)
+  ).toBe('relative');
+
+  // And the viewport really was wide throughout, or this is the 320px viewport
+  // test again, passing for the wrong reason.
+  expect(
+    await page.evaluate(() => document.documentElement.clientWidth)
+  ).toBeGreaterThan(420);
+});
+
 // AirPlay is hardcoded unavailable on both iframe providers — a static
 // `{ status: 'unavailable', reason: 'provider' }` (Vimeo) / `providerUnavailable`
 // constant (YouTube) that is never reassigned in either adapter — so asserting
