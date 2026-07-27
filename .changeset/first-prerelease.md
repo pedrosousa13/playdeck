@@ -26,7 +26,27 @@ Vimeo.
   imported by the primitives.
 - **Captions** — hybrid rendering: Reely draws WebVTT cues itself for
   native/HLS and Vimeo, the browser draws them on request, and YouTube's embed
-  draws its own. The effective mode is always inspectable.
+  draws its own. The effective mode is always inspectable. Vimeo reports
+  `captionRendering: 'custom'`: the track is enabled with `showing: false` and
+  its `cuechange` payload flows through `Player.Captions` like any other source
+  (#16). `setCaptionRenderer('native')` hands drawing back to Vimeo and reports
+  `provider`, which is also the fallback for anything the overlay cannot
+  render. Vimeo's payload carries no cue timings, so a cue reports the position
+  it became active at for both bounds. YouTube reports `provider`, or
+  `unavailable` when it exposes no tracks.
+- **Quality selection** — `PlayerState` enumerates the selectable rungs in
+  `qualities`, each a `PlayerQuality` carrying a content-derived `id`, next to
+  `selectedQualityId` for what the consumer chose (`null` meaning auto), so a
+  quality menu can be built from public exports alone (#81). `quality` still
+  means the level playing right now and keeps moving under adaptive selection,
+  which is what lets an auto row be labelled honestly. `selectQuality` takes
+  that id — `selectQuality(id: string | null)` — not a height. Only the hls.js
+  engine has a ladder: native playback (including native HLS), YouTube and
+  Vimeo report `selectQuality` as `unavailable`, and `@reely/provider-native`'s
+  verdict is `unavailable` / `source` rather than an `unknown` that could never
+  resolve. A custom `loadHls` module must expose `Hls.Events.LEVELS_UPDATED` —
+  `HlsConstructorLike` now requires it — because hls.js prunes levels during
+  its own error recovery and the published ladder has to follow.
 - **Presentation** — fullscreen, Picture-in-Picture, AirPlay where available,
   and Media Session integration with ownership arbitration. `airPlay` means
   "there is somewhere to cast to", not "this engine has the picker API": it
@@ -44,6 +64,13 @@ Vimeo.
   saw ignored now takes effect. Properties derived from player state
   (`Poster`'s `visibility`) stay the primitive's own, and `PosterImage`'s
   explicit `objectFit` / `objectPosition` props still beat `style`.
+  `LoadingIndicator` keeps its live region mounted while idle so the transition
+  into buffering is announced, but that idle region is now visually hidden
+  instead of a full-bleed `position: absolute; inset: 0` box at z-index 30
+  (#32). The old geometry outranked every layer a consumer composed underneath
+  it and left automated color-contrast checking unable to resolve a background
+  for any text in the player. It becomes the top-most overlay only once there
+  is a loading or buffering state to show.
 
 - **Subscriber isolation** — one listener throwing no longer abandons the
   notification it was part of. `subscribe`, `subscribeCues` and `on` each
