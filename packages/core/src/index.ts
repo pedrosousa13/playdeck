@@ -159,6 +159,11 @@ export type PlayerState = {
   readonly textTracks: readonly TextTrack[];
   readonly selectedTextTrackId: string | null;
   readonly captionRendering: CaptionRendering;
+  // Declared by the provider adapter, not derived here: it means a command
+  // issued now is accepted *and* will not be undone by a load that has yet to
+  // run. Core cannot compute it — the four adapters open their command guards
+  // at four different moments (#69).
+  readonly commandsReady: boolean;
 };
 
 export type PreProviderActivation =
@@ -353,7 +358,8 @@ export const createInitialPlayerState = (): PlayerState =>
     error: null,
     textTracks: Object.freeze([]),
     selectedTextTrackId: null,
-    captionRendering: 'unavailable'
+    captionRendering: 'unavailable',
+    commandsReady: false
   });
 
 const orderedRanges = (
@@ -938,6 +944,9 @@ export class PlayerController {
     this.#applyPatch({
       lifecycle: 'loading',
       activation: 'loading-provider',
+      // The provider is rebuilding or reloading its playback target, so its
+      // previous declaration is void until it makes a new one (#69).
+      commandsReady: false,
       error: null
     });
     if (this.#provider !== provider || this.#generation !== generation) {
@@ -961,6 +970,7 @@ export class PlayerController {
         this.#applyPatch({
           lifecycle: previousState.lifecycle,
           activation: previousState.activation,
+          commandsReady: previousState.commandsReady,
           error: previousState.error
         });
       }
