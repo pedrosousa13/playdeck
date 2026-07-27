@@ -767,10 +767,15 @@ test('reaches ready once the media element reports metadata', async () => {
   const patches: Array<Record<string, unknown>> = [];
   const provider = createNativeProvider(media);
   provider.subscribe((patch) => patches.push(patch));
+  // The activation-bearing patches specifically: `load()` also emits the
+  // standalone `commandsReady` declaration (#69), so the newest patch overall
+  // is not necessarily the newest activation.
+  const lastActivation = (): Record<string, unknown> | undefined =>
+    patches.filter((patch) => 'activation' in patch).at(-1);
 
   await provider.attach();
   await provider.load();
-  expect(patches.at(-1)).toMatchObject({
+  expect(lastActivation()).toMatchObject({
     activation: 'loading-provider',
     lifecycle: 'loading'
   });
@@ -778,8 +783,70 @@ test('reaches ready once the media element reports metadata', async () => {
   readyState = 1;
   media.dispatchEvent(new Event('loadedmetadata'));
 
-  expect(patches.at(-1)).toMatchObject({
+  expect(lastActivation()).toMatchObject({
     activation: 'ready',
     lifecycle: 'ready'
   });
+});
+
+// The media load algorithm resets `playbackRate` to `defaultPlaybackRate`, so
+// a rate applied before `media.load()` is silently reverted — the original #69
+// symptom. Readiness is declared after it, not when the guards open.
+test('native declares command readiness only after media.load()', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'load').mockImplementation(() => undefined);
+  const provider = createNativeProvider(media);
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+
+  await provider.load();
+  expect(patches).toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+});
+
+// The ordering is the whole point: declared before `media.load()`, the
+// declaration would be a lie, because the load undoes what was just applied.
+test('native declares readiness after, not before, media.load() runs', async () => {
+  const media = document.createElement('video');
+  const order: string[] = [];
+  vi.spyOn(media, 'load').mockImplementation(() => {
+    order.push('media.load');
+  });
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => {
+    if (patch.commandsReady === true) order.push('commandsReady');
+  });
+
+  await provider.attach();
+  await provider.load();
+
+  expect(order).toEqual(['media.load', 'commandsReady']);
+});
+
+// `preload="none"` keeps activation at 'loading-provider' until a play
+// triggers metadata load, while commands already land. That asymmetry is
+// exactly what PR #72's `activation === 'ready'` signal got wrong.
+test('native is command-ready while activation is still loading-provider', async () => {
+  const media = document.createElement('video');
+  media.preload = 'none';
+  vi.spyOn(media, 'load').mockImplementation(() => undefined);
+  const provider = createNativeProvider(media);
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  await provider.load();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ activation: 'ready' })
+  );
 });

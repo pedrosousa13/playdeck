@@ -633,6 +633,10 @@ export const createNativeProvider = (
       // creates a new provider, and the controller clears caption state on
       // the swap.
       media.load();
+      // Declared here rather than at attach: the commands operate on the
+      // element from birth, but the load algorithm resets `playbackRate` to
+      // `defaultPlaybackRate`, so anything applied earlier is undone (#69).
+      emit({ commandsReady: true });
     },
     destroy: () => {
       if (destroyed) return;
