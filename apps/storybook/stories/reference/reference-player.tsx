@@ -57,7 +57,7 @@ const layoutCss = `
      fading to transparent at its own top edge was also genuinely washing out
      the time row's text. Opaque black reads the same as the gradient's
      darkest stop, just consistent across the whole bar instead of fading. */
-  background: rgb(90, 6, 10);
+  background: rgb(4, 6, 10);
 }
 .reely-example-row {
   display: flex;
