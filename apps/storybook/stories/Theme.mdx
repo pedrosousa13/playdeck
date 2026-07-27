@@ -15,21 +15,29 @@ semantics, and you write every visual rule yourself. No stylesheet is loaded,
 and the parts carry stable `data-reely-part` and `data-state` attributes to hook
 onto.
 
+{/* example:theme-headless */}
+
 ```tsx
 import * as Player from '@reely/react';
 
-<Player.Root source="/video.mp4">
-  <Player.Viewport className="my-viewport">
-    <Player.Media />
-    <Player.Controls className="my-controls">
-      <Player.PlayButton className="my-button" />
-      <Player.SeekSlider className="my-slider" />
-      <Player.MuteButton className="my-button" />
-      <Player.FullscreenButton className="my-button" />
-    </Player.Controls>
-  </Player.Viewport>
-</Player.Root>;
+// No stylesheet imported: the primitives ship structure, behaviour and
+// accessibility semantics, and every visual rule is yours.
+export const HeadlessPlayer = () => (
+  <Player.Root source="/video.mp4">
+    <Player.Viewport className="my-viewport">
+      <Player.Media />
+      <Player.Controls className="my-controls">
+        <Player.PlayButton className="my-button" />
+        <Player.SeekSlider className="my-slider" />
+        <Player.MuteButton className="my-button" />
+        <Player.FullscreenButton className="my-button" />
+      </Player.Controls>
+    </Player.Viewport>
+  </Player.Root>
+);
 ```
+
+{/* /example */}
 
 ## Themed usage
 
@@ -124,14 +132,27 @@ The theme targets parts, not components, so a control you build yourself is
 themed by carrying the part attribute — and skips the theme entirely if it
 doesn't.
 
-```tsx
-const { togglePlayback } = Player.usePlayerActions();
-const playback = Player.usePlayerState((state) => state.playback);
+{/* example:theme-custom-control */}
 
-<button data-reely-part="play-button" onClick={togglePlayback}>
-  {playback === 'playing' ? 'Pause' : 'Play'}
-</button>;
+```tsx
+import * as Player from '@reely/react';
+
+// The theme targets parts, not components: a control you build yourself is
+// themed by carrying the part attribute, and skips the theme entirely if it
+// does not.
+export const MyPlayButton = () => {
+  const { togglePlayback } = Player.usePlayerActions();
+  const playback = Player.usePlayerState((state) => state.playback);
+
+  return (
+    <button data-reely-part="play-button" onClick={togglePlayback}>
+      {playback === 'playing' ? 'Pause' : 'Play'}
+    </button>
+  );
+};
 ```
+
+{/* /example */}
 
 ## With Tailwind
 
