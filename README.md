@@ -89,9 +89,12 @@ Packaging is verified against real tarballs (`pnpm test:packages`), bundle
 budgets are enforced (`pnpm test:budgets`), and a Next.js integration is built
 and driven in a browser (`pnpm test:integrations`).
 
-The `@real` e2e tests talk to live YouTube and Vimeo. They are excluded from
-every ordinary run and go on a schedule instead, so a third-party outage never
-turns an unrelated PR red:
+The `@real` e2e tests talk to live YouTube and Vimeo. They never run in CI, and
+there is no scheduled run either (#118): YouTube will not serve video to a
+runner's datacenter IP, so the result reported its opinion of that IP rather
+than whether our adapters are correct. Vimeo still plays there, but it runs on
+the same goodwill, so it goes the same way. Run them by hand when you touch a
+provider adapter:
 
 ```sh
 REELY_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real

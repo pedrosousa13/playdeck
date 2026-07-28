@@ -4,6 +4,10 @@ import { playButton } from './locators';
 // Real-provider smoke test: it talks to youtube.com, so it is nondeterministic
 // by nature and excluded from blocking runs. Opt in with
 // REELY_REAL_PROVIDERS=1 pnpm test:e2e -- --grep @real
+//
+// This is the one that cannot pass on a runner at all: YouTube serves no stream
+// to a datacenter IP, so confirmed playback never arrives. That is why the
+// schedule is gone (#118) and why this runs by hand or not at all.
 test(
   'youtube real embed reaches confirmed playback from one click @real',
   { tag: '@real' },
