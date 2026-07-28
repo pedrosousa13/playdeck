@@ -118,9 +118,17 @@ stylesheet, so they apply with or without the theme.
 
 ## Custom icons
 
-Every control renders a default icon and accepts children instead. This works
-with or without the theme, and the theme sizes whatever `svg` it finds via
-`--reely-control-icon-size`.
+Every control accepts children instead of its default. `CaptionsButton` and the
+settings trigger default to an icon; the rest default to a text label — `Play`,
+`Mute`, `AirPlay`, `Enter fullscreen`, `Enter picture-in-picture`.
+
+**The themed control box is sized for an icon.** Every button-shaped control is
+a square `--reely-control-size` that does not shrink, and the theme sizes the
+`svg` it finds inside one via `--reely-control-icon-size`. A default text label
+does not fit that square — it wraps and spills out of the row. So pass icon
+children to those controls, or size them yourself: raise
+`--reely-control-size`, or write your own rule on the part, which outranks the
+theme either way.
 
 {/* example:theme-custom-icon */}
 
@@ -130,8 +138,8 @@ import type { ReactElement } from 'react';
 
 declare const MyPlayIcon: () => ReactElement;
 
-// Every control renders a default icon and accepts children instead. The theme
-// sizes whatever `svg` it finds via `--reely-control-icon-size`, so this works
+// Every control accepts children instead of its default. The theme sizes
+// whatever `svg` it finds via `--reely-control-icon-size`, so this works
 // with or without the stylesheet — and the control keeps its own accessible
 // name either way.
 export const CustomIconButton = () => (

@@ -32,24 +32,59 @@ const viewportStyle = {
   width: 640
 };
 
-const ThemedPlayer = () => (
-  <Player.Viewport style={viewportStyle}>
-    <Player.Controls
-      style={{ position: 'absolute', inset: 'auto 0 0 0' }}
-      aria-label="Video player controls"
-    >
-      <Player.PlayButton />
-      <Player.Time />
-      <Player.SeekSlider />
-      <Player.MuteButton />
-      <Player.VolumeSlider />
-      <Player.CaptionsButton />
-      <Player.PipButton />
-      <Player.AirPlayButton />
-      <Player.FullscreenButton />
-    </Player.Controls>
-  </Player.Viewport>
-);
+// Icon children, supplied here as a consumer supplies them -- the theme sizes
+// every button-shaped control to `--reely-control-size` and its `svg` to
+// `--reely-control-icon-size`, so the default text labels ("Enter
+// fullscreen", "Enter picture-in-picture", ...) wrap and spill out of a 44px
+// box. Which icon shows follows player state, the same swap the reference
+// example makes: every story is already inside the mock `Player.Root`, so the
+// state costs one selector and nothing else.
+const ThemedPlayer = () => {
+  const state = Player.usePlayerState((snapshot) => ({
+    playing: snapshot.playback === 'playing',
+    muted: snapshot.muted,
+    pictureInPicture: snapshot.pictureInPicture,
+    fullscreen: snapshot.fullscreen
+  }));
+
+  return (
+    <Player.Viewport style={viewportStyle}>
+      <Player.Controls
+        style={{ position: 'absolute', inset: 'auto 0 0 0' }}
+        aria-label="Video player controls"
+      >
+        <Player.PlayButton>
+          {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
+        </Player.PlayButton>
+        <Player.Time />
+        <Player.SeekSlider />
+        <Player.MuteButton>
+          {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
+        </Player.MuteButton>
+        <Player.VolumeSlider />
+        {/* No children: CaptionsButton's own default is already an icon. */}
+        <Player.CaptionsButton />
+        <Player.PipButton>
+          {state.pictureInPicture ? (
+            <Player.PipExitIcon />
+          ) : (
+            <Player.PipEnterIcon />
+          )}
+        </Player.PipButton>
+        <Player.AirPlayButton>
+          <Player.AirPlayIcon />
+        </Player.AirPlayButton>
+        <Player.FullscreenButton>
+          {state.fullscreen ? (
+            <Player.FullscreenExitIcon />
+          ) : (
+            <Player.FullscreenEnterIcon />
+          )}
+        </Player.FullscreenButton>
+      </Player.Controls>
+    </Player.Viewport>
+  );
+};
 
 const fullyCapable = ready({
   seek: available,
@@ -93,6 +128,17 @@ export const Default: Story = {
     await expect(styles.width).toBe('44px');
     await expect(styles.height).toBe('44px');
     await expect(styles.cursor).toBe('pointer');
+
+    // The row is a single non-wrapping flex line of `flex: 0 0 auto` boxes, so
+    // a control whose content is wider than its box pushes the row past its
+    // own width. Icon children fit the box; the primitives' default text
+    // labels do not.
+    const controls = await canvas.findByRole('group', {
+      name: 'Video player controls'
+    });
+    await expect(controls.scrollWidth).toBeLessThanOrEqual(
+      controls.clientWidth
+    );
   }
 };
 
@@ -118,7 +164,9 @@ export const ConsumerCssWins: Story = {
         style={{ position: 'absolute', inset: 'auto 0 0 0' }}
         aria-label="Video player controls"
       >
-        <Player.PlayButton />
+        <Player.PlayButton>
+          <Player.PlayIcon />
+        </Player.PlayButton>
       </Player.Controls>
     </Player.Viewport>
   ),
@@ -152,6 +200,14 @@ export const AccentAndSizeTokens: Story = {
     const play = await canvas.findByRole('button', { name: 'Play' });
     // Tokens cascade in from an ancestor, no stylesheet edit required.
     await expect(globalThis.getComputedStyle(play).width).toBe('56px');
+
+    // And the row still fits at the largest size these stories demonstrate.
+    const controls = await canvas.findByRole('group', {
+      name: 'Video player controls'
+    });
+    await expect(controls.scrollWidth).toBeLessThanOrEqual(
+      controls.clientWidth
+    );
   }
 };
 
