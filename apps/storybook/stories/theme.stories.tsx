@@ -234,6 +234,16 @@ export const ControlSizeFloorHolds: Story = {
 // control here is the proof that the toolbar decorator's `<style>` was torn
 // down with each of them rather than left behind in the shared preview
 // document -- which is the reason the theme is mounted per story at all.
+//
+// Its strength is entirely that ordering: run alone (`-t`, or opened directly
+// in the UI), or with these exports reordered, it passes without proving
+// anything. It is the only test that exercises real DOM teardown, so it stays;
+// the unconditional cover for the decorator's two branches is
+// `stories/theme.contract.test.ts`, which asserts them structurally.
+//
+// On the generated autodocs page this story renders themed, because every
+// story in a file co-mounts in one document there and the themed ones bring
+// the stylesheet with them. That is a property of autodocs, not a leak.
 export const TearsDownWithTheStory: Story = {
   globals: { theme: 'headless' },
   play: async ({ canvas }) => {

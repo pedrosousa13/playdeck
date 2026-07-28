@@ -70,10 +70,12 @@ the primitives ship no CSS at all.
 Where a primitive sets geometry on itself, your `style` prop overrides it —
 see the `style` section of `Overview/Contract` for the one carve-out.
 
-This example does **not** mount `@reely/react/theme.css`. The only per-story way
-to mount it in this repo reads it by path out of `packages/`, which the import
-rule below forbids, and a plain side-effect import would leak the theme into
-every other story's document.
+The example itself imports no stylesheet beyond its own layout CSS — never
+`@reely/react/theme.css`, which is the headless point it is making. The
+toolbar's **Theme** toggle still applies to it like every other story: the
+mounting lives in `.storybook/theme.tsx`, outside the import rule below, so
+`Reference/Player` is themable without the example reaching for the theme
+itself.
 
 ## What the story mounting does not prove
 
