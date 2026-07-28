@@ -62,3 +62,15 @@ means no provider load).
 
 The parameter shape is `MockPlayerParameters` in `.storybook/mock-player.tsx`;
 see its doc comments for the full contract.
+
+## Theme toggle
+
+The toolbar's **Theme** control (Headless / Themed) switches every story
+between the raw primitives and the optional `@reely/react/theme.css`. It
+defaults to Headless, because that is what the library ships and what most
+stories assert. The decorator in `.storybook/preview.tsx` is the only place
+the stylesheet is mounted: it renders it as a `<style>` inside the story, so
+it is torn down with the story rather than left in the shared preview
+document. A story that needs the theme regardless of the toolbar pins itself
+with `globals: { theme: 'themed' }` — `stories/theme.stories.tsx` does, on its
+meta.
