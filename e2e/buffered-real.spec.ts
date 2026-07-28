@@ -9,6 +9,14 @@ import { playButton } from './locators';
 // ranges themselves. A unit test can only assert what our fake returns, so the
 // guard against those APIs changing under us lives here.
 //
+// It only guards when someone runs it, though. The 05:17 UTC schedule that used
+// to exercise it without being asked is retired (#118): on a runner, YouTube
+// answers `/youtubei/v1/player` with a 200 and then serves no stream at all --
+// zero `googlevideo.com/videoplayback` requests, against three from the same
+// commit locally -- so playback never starts and the adapter reports a
+// recoverable `blocked`. That measured GitHub's IP reputation, not the
+// adapters. Run this by hand when either adapter changes.
+//
 // Tagged @real: nondeterministic, excluded from blocking runs. Run with
 //   REELY_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
 
