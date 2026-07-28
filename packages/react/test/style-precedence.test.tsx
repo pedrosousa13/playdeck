@@ -162,6 +162,134 @@ test('LoadingIndicator geometry is a default the consumer can override in both b
   expect(loading.style.zIndex).toBe('1');
 });
 
+// #150. `Media` has three return branches — the native <video>, the YouTube
+// mount and the Vimeo mount — and they used to disagree: the two iframe mounts
+// filled their viewport but discarded `style` outright, while the <video> read
+// `style` but set no size at all, so a headless consumer got an
+// intrinsically-sized frame in the corner. All three now state the same
+// geometry as a default.
+test('Media geometry on the native video is a default the consumer can override', () => {
+  // Never resolves: the native provider is not what this test is about, and an
+  // unmocked `loadProvider` would replace the element under us.
+  mockedLoadProvider.mockReturnValue(deferred().promise as never);
+  const { rerender } = render(
+    <Player.Root loading="eager" source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  const media = part('media');
+  expect(media.tagName).toBe('VIDEO');
+  expect(media.style.position).toBe('relative');
+  expect(media.style.zIndex).toBe('0');
+  expect(media.style.width).toBe('100%');
+  expect(media.style.height).toBe('100%');
+  // The frame is content, not decoration, so the default letterboxes.
+  expect(media.style.objectFit).toBe('contain');
+
+  rerender(
+    <Player.Root loading="eager" source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media
+          style={{
+            position: 'static',
+            zIndex: 1,
+            width: '50%',
+            height: '25%',
+            objectFit: 'cover'
+          }}
+        />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  expect(media.style.position).toBe('static');
+  expect(media.style.zIndex).toBe('1');
+  expect(media.style.width).toBe('50%');
+  expect(media.style.height).toBe('25%');
+  expect(media.style.objectFit).toBe('cover');
+});
+
+test('Media geometry on the YouTube mount is a default the consumer can override', () => {
+  mockedLoadProvider.mockReturnValue(deferred().promise as never);
+  const source = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+  const { rerender } = render(
+    <Player.Root loading="eager" source={source}>
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  const mount = part('media');
+  expect(mount.tagName).toBe('DIV');
+  expect(mount.style.position).toBe('relative');
+  expect(mount.style.zIndex).toBe('0');
+  expect(mount.style.width).toBe('100%');
+  expect(mount.style.height).toBe('100%');
+
+  rerender(
+    <Player.Root loading="eager" source={source}>
+      <Player.Viewport>
+        <Player.Media
+          style={{
+            position: 'static',
+            zIndex: 1,
+            width: '50%',
+            height: '25%'
+          }}
+        />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  expect(mount.style.position).toBe('static');
+  expect(mount.style.zIndex).toBe('1');
+  expect(mount.style.width).toBe('50%');
+  expect(mount.style.height).toBe('25%');
+});
+
+test('Media geometry on the Vimeo mount is a default the consumer can override', () => {
+  mockedLoadProvider.mockReturnValue(deferred().promise as never);
+  const source = 'https://vimeo.com/76979871?h=abc123';
+  const { rerender } = render(
+    <Player.Root loading="eager" source={source}>
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  const mount = part('media');
+  expect(mount.tagName).toBe('DIV');
+  expect(mount.style.position).toBe('relative');
+  expect(mount.style.zIndex).toBe('0');
+  expect(mount.style.width).toBe('100%');
+  expect(mount.style.height).toBe('100%');
+
+  rerender(
+    <Player.Root loading="eager" source={source}>
+      <Player.Viewport>
+        <Player.Media
+          style={{
+            position: 'static',
+            zIndex: 1,
+            width: '50%',
+            height: '25%'
+          }}
+        />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  expect(mount.style.position).toBe('static');
+  expect(mount.style.zIndex).toBe('1');
+  expect(mount.style.width).toBe('50%');
+  expect(mount.style.height).toBe('25%');
+});
+
 test('Poster visibility is state-derived and the consumer cannot override it', () => {
   // `eager`, not the default `viewport`: the default needs an
   // IntersectionObserver to make the media eligible, and the observer is not
