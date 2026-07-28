@@ -55,6 +55,35 @@ test('loads the YouTube adapter lazily against an embed mount', async () => {
   expect(document.querySelector('video')).toBeNull();
 });
 
+test('sizes the YouTube embed mount to fill its viewport by default', async () => {
+  // #150: the mount states its geometry inline, so it fills the viewport for a
+  // consumer who ships no stylesheet. `style-precedence.test.tsx` pins that
+  // each of these is overridable.
+  render(
+    <Player.Root
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  // Awaited so the lazy provider load settles inside this test rather than
+  // landing in the next one.
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  const mount = document.querySelector<HTMLElement>(
+    '[data-reely-part="media"]'
+  )!;
+  expect(mount.style.position).toBe('relative');
+  expect(mount.style.zIndex).toBe('0');
+  expect(mount.style.width).toBe('100%');
+  expect(mount.style.height).toBe('100%');
+});
+
 test('the loader rejects a YouTube source without an embed mount', async () => {
   await expect(
     loadProvider({
