@@ -911,6 +911,29 @@ const sourceKey = (source: ReturnType<typeof detectSource>): string =>
     ? JSON.stringify(source.source)
     : 'unsupported-source';
 
+// #150: the native <video> and the two iframe mounts are one layer wearing
+// three shapes, so all three state one geometry — filling the viewport they
+// are laid into.
+const mediaStyle: CSSProperties = {
+  position: 'relative',
+  zIndex: 0,
+  width: '100%',
+  height: '100%'
+};
+
+// The two mounts are <div>s and need nothing more, but the native <video> is
+// inline-level, so without `display: block` it sits on a text baseline and
+// hangs a descender gap below the frame. And the frame is content, so a box
+// that does not match its aspect ratio must letterbox rather than crop away
+// part of the picture or distort it; a consumer who wants cropping passes
+// `objectFit: 'cover'` through `style`. `PosterImage` is decorative and so
+// defaults the other way, to `cover`.
+const nativeMediaStyle: CSSProperties = {
+  ...mediaStyle,
+  display: 'block',
+  objectFit: 'contain'
+};
+
 export const Media = ({
   nativePoster,
   ref,
@@ -954,12 +977,7 @@ export const Media = ({
         data-reely-part="media"
         key={sourceKey(source)}
         ref={registerMedia}
-        style={{
-          position: 'relative',
-          zIndex: 0,
-          width: '100%',
-          height: '100%'
-        }}
+        style={{ ...mediaStyle, ...style }}
       />
     );
   }
@@ -973,12 +991,7 @@ export const Media = ({
         data-reely-part="media"
         key={sourceKey(source)}
         ref={registerMedia}
-        style={{
-          position: 'relative',
-          zIndex: 0,
-          width: '100%',
-          height: '100%'
-        }}
+        style={{ ...mediaStyle, ...style }}
       />
     );
   }
@@ -997,7 +1010,7 @@ export const Media = ({
       poster={nativePoster}
       preload={preload}
       ref={mediaRef}
-      style={{ position: 'relative', zIndex: 0, ...style }}
+      style={{ ...nativeMediaStyle, ...style }}
     >
       {source.source.type === 'video'
         ? source.source.sources.map(({ mimeType, src }, index) => (

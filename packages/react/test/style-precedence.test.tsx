@@ -162,6 +162,97 @@ test('LoadingIndicator geometry is a default the consumer can override in both b
   expect(loading.style.zIndex).toBe('1');
 });
 
+// #150. `Media` has three return branches — the native <video>, the YouTube
+// mount and the Vimeo mount — and they used to disagree: the two iframe mounts
+// filled their viewport but discarded `style` outright, while the <video> read
+// `style` but set no size at all. All three now state their geometry as a
+// default, so all three take a `style` you pass. One test per branch, with the
+// `tagName` pinning which branch actually rendered; `index.test.tsx` and the
+// two provider suites pin what each default is.
+test('Media geometry on the native video is a default the consumer can override', () => {
+  // Never resolves: the native provider is not what this test is about, and an
+  // unmocked `loadProvider` would replace the element under us.
+  mockedLoadProvider.mockReturnValue(deferred().promise as never);
+  render(
+    <Player.Root loading="eager" source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media
+          style={{
+            position: 'static',
+            zIndex: 1,
+            display: 'inline',
+            width: '50%',
+            height: '25%',
+            objectFit: 'cover'
+          }}
+        />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  const media = part('media');
+  expect(media.tagName).toBe('VIDEO');
+  expect(media.style.position).toBe('static');
+  expect(media.style.zIndex).toBe('1');
+  expect(media.style.display).toBe('inline');
+  expect(media.style.width).toBe('50%');
+  expect(media.style.height).toBe('25%');
+  expect(media.style.objectFit).toBe('cover');
+});
+
+test('Media geometry on the YouTube mount is a default the consumer can override', () => {
+  mockedLoadProvider.mockReturnValue(deferred().promise as never);
+  render(
+    <Player.Root
+      loading="eager"
+      source="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    >
+      <Player.Viewport>
+        <Player.Media
+          style={{
+            position: 'static',
+            zIndex: 1,
+            width: '50%',
+            height: '25%'
+          }}
+        />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  const mount = part('media');
+  expect(mount.tagName).toBe('DIV');
+  expect(mount.style.position).toBe('static');
+  expect(mount.style.zIndex).toBe('1');
+  expect(mount.style.width).toBe('50%');
+  expect(mount.style.height).toBe('25%');
+});
+
+test('Media geometry on the Vimeo mount is a default the consumer can override', () => {
+  mockedLoadProvider.mockReturnValue(deferred().promise as never);
+  render(
+    <Player.Root loading="eager" source="https://vimeo.com/76979871?h=abc123">
+      <Player.Viewport>
+        <Player.Media
+          style={{
+            position: 'static',
+            zIndex: 1,
+            width: '50%',
+            height: '25%'
+          }}
+        />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  const mount = part('media');
+  expect(mount.tagName).toBe('DIV');
+  expect(mount.style.position).toBe('static');
+  expect(mount.style.zIndex).toBe('1');
+  expect(mount.style.width).toBe('50%');
+  expect(mount.style.height).toBe('25%');
+});
+
 test('Poster visibility is state-derived and the consumer cannot override it', () => {
   // `eager`, not the default `viewport`: the default needs an
   // IntersectionObserver to make the media eligible, and the observer is not

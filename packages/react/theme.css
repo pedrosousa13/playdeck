@@ -47,11 +47,12 @@
  *   Poster       --reely-poster-fit          cover      (read by PosterImage)
  *                --reely-poster-position     center     (read by PosterImage)
  *
- * Layer geometry is deliberately NOT here. `Player.Poster` and
+ * Layer geometry is deliberately NOT here. `Player.Media`, `Player.Poster` and
  * `Player.PosterImage` apply position, inset, sizing and object-fit inline, so
  * the stable-geometry guarantee holds for consumers who ship no stylesheet at
  * all. Inline styles beat any stylesheet, so restating those rules here would
- * be dead CSS. The last two tokens above are the ones those components read.
+ * be dead CSS. The last two tokens above are the ones the poster components
+ * read.
  */
 
 @layer reely {
@@ -74,9 +75,6 @@
    * Appearance only; layer geometry belongs to the components (see above).
    */
   :where([data-reely-part='media']) {
-    display: block;
-    width: 100%;
-    height: 100%;
     background-color: var(--reely-color-backdrop, #000);
   }
 

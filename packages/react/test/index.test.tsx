@@ -1697,6 +1697,27 @@ test('forwards a ref, custom attributes, style, and aria-label to the native vid
   expect(video.getAttribute('data-reely-part')).toBe('media');
 });
 
+test('sizes the native video to fill its viewport and letterbox by default', () => {
+  // #150: stated inline, so a consumer who ships no stylesheet gets the same
+  // frame the theme draws. `style-precedence.test.tsx` pins that each of these
+  // is overridable.
+  render(
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media />
+    </LegacyRoot>
+  );
+
+  const video = screen.getByLabelText('Reely media');
+  expect(video.style.position).toBe('relative');
+  expect(video.style.zIndex).toBe('0');
+  // Inline-level by default, which would hang a descender gap below the frame.
+  expect(video.style.display).toBe('block');
+  expect(video.style.width).toBe('100%');
+  expect(video.style.height).toBe('100%');
+  // The frame is content, not decoration, so the default letterboxes.
+  expect(video.style.objectFit).toBe('contain');
+});
+
 test('an inline ref on Media does not reload the provider on parent re-renders', () => {
   const loadSpy = vi.spyOn(HTMLMediaElement.prototype, 'load');
   const Harness = () => {
