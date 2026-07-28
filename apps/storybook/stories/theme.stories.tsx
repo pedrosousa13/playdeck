@@ -32,24 +32,65 @@ const viewportStyle = {
   width: 640
 };
 
+// Icon children, supplied here as a consumer supplies them -- the theme sizes
+// every button-shaped control to `--reely-control-size` and its `svg` to
+// `--reely-control-icon-size`, so the default text labels ("Enter
+// fullscreen", "Enter picture-in-picture", ...) do not fit a 44px box.
+//
+// The icons are the static enter-state ones. These stories are static: none of
+// them plays, mutes, or enters picture-in-picture or fullscreen, so a
+// state-driven icon swap would be dead in every one of them. That swap is
+// demonstrated where it belongs, in reference/reference-player.tsx.
 const ThemedPlayer = () => (
   <Player.Viewport style={viewportStyle}>
     <Player.Controls
       style={{ position: 'absolute', inset: 'auto 0 0 0' }}
       aria-label="Video player controls"
     >
-      <Player.PlayButton />
+      <Player.PlayButton>
+        <Player.PlayIcon />
+      </Player.PlayButton>
       <Player.Time />
       <Player.SeekSlider />
-      <Player.MuteButton />
+      <Player.MuteButton>
+        <Player.VolumeHighIcon />
+      </Player.MuteButton>
       <Player.VolumeSlider />
-      <Player.CaptionsButton />
-      <Player.PipButton />
-      <Player.AirPlayButton />
-      <Player.FullscreenButton />
+      <Player.CaptionsButton>
+        <Player.CaptionsIcon />
+      </Player.CaptionsButton>
+      <Player.PipButton>
+        <Player.PipEnterIcon />
+      </Player.PipButton>
+      <Player.AirPlayButton>
+        <Player.AirPlayIcon />
+      </Player.AirPlayButton>
+      <Player.FullscreenButton>
+        <Player.FullscreenEnterIcon />
+      </Player.FullscreenButton>
     </Player.Controls>
   </Player.Viewport>
 );
+
+// The row fits inside its own box, on both axes.
+//
+// Oversized children never widen a control: every button is `flex: 0 0 auto`
+// with a fixed `inline-size` (packages/react/theme.css) floored by an inline
+// `min-width`/`min-height` of 44 (packages/react/src/index.tsx), so the
+// measured box never grows to fit its content. A default text label wraps
+// inside that fixed box and spills out of it instead -- downwards on whichever
+// control carries it, and past the inline end when that control is the
+// trailing one. So the vertical axis is the one that has to be asserted: it is
+// the only one that catches a wrapped interior control, whose spill overlaps
+// its neighbours without ever reaching the row's inline end. With the default
+// text labels at 44px controls, this row measures scrollWidth 645 against
+// clientWidth 640, and scrollHeight 70 against clientHeight 64.
+const expectControlsFit = async (controls: HTMLElement) => {
+  await expect(controls.scrollWidth).toBeLessThanOrEqual(controls.clientWidth);
+  await expect(controls.scrollHeight).toBeLessThanOrEqual(
+    controls.clientHeight
+  );
+};
 
 const fullyCapable = ready({
   seek: available,
@@ -93,6 +134,12 @@ export const Default: Story = {
     await expect(styles.width).toBe('44px');
     await expect(styles.height).toBe('44px');
     await expect(styles.cursor).toBe('pointer');
+
+    // Icon children fit the box; the primitives' default text labels do not.
+    const controls = await canvas.findByRole('group', {
+      name: 'Video player controls'
+    });
+    await expectControlsFit(controls);
   }
 };
 
@@ -118,7 +165,9 @@ export const ConsumerCssWins: Story = {
         style={{ position: 'absolute', inset: 'auto 0 0 0' }}
         aria-label="Video player controls"
       >
-        <Player.PlayButton />
+        <Player.PlayButton>
+          <Player.PlayIcon />
+        </Player.PlayButton>
       </Player.Controls>
     </Player.Viewport>
   ),
@@ -152,6 +201,16 @@ export const AccentAndSizeTokens: Story = {
     const play = await canvas.findByRole('button', { name: 'Play' });
     // Tokens cascade in from an ancestor, no stylesheet edit required.
     await expect(globalThis.getComputedStyle(play).width).toBe('56px');
+
+    // And the row still fits at the largest size these stories demonstrate.
+    // A guard on the row, not on the icon children: at 3.5rem the labels have
+    // enough box to wrap into (640/640 and 72/72 either way), so it is Default
+    // that proves the icons are load-bearing. This one catches the row itself
+    // outgrowing the viewport, the way it did at width 480.
+    const controls = await canvas.findByRole('group', {
+      name: 'Video player controls'
+    });
+    await expectControlsFit(controls);
   }
 };
 
