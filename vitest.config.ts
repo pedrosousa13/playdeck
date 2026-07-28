@@ -27,6 +27,10 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
+    // Vitest replaces CSS imports with empty strings by default, which would
+    // make `theme.contract.test.ts`'s "the <style> carries the stylesheet"
+    // assertion pass against nothing. Processed for that one file only.
+    css: { include: [/theme\.css/] },
     include: [
       'packages/**/*.test.{ts,tsx}',
       'apps/storybook/stories/**/*.contract.test.ts'

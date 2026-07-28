@@ -1,25 +1,8 @@
 import type { CSSProperties, ReactElement } from 'react';
 import * as Player from '@reely/react';
-// Read as text, not injected. A plain `import '@reely/react/theme.css'`
-// attaches it to the whole Storybook preview -- every story renders in the same
-// document, and the rest assert unthemed computed styles -- so the theme is
-// mounted per story below and torn down with it.
-//
-// Imported by path rather than as `@reely/react/theme.css?inline`, because Vite
-// cannot carry a query through the package exports map. The published entry is
-// covered where it belongs: packages/react/test/theme.test.ts asserts the
-// exports and files entries, and publint/attw check the tarball.
-import themeCss from '../../../packages/react/theme.css?inline';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { available, ready } from './support';
-
-const withTheme = (Story: () => ReactElement) => (
-  <>
-    <style>{themeCss}</style>
-    <Story />
-  </>
-);
 
 const viewportStyle = {
   position: 'relative' as const,
@@ -104,7 +87,10 @@ const fullyCapable = ready({
 const meta = {
   title: 'Theme/Theme',
   component: ThemedPlayer,
-  decorators: [withTheme],
+  // These stories are about the stylesheet, so they pin the toolbar's Theme
+  // toggle on for themselves. The mounting is the shared decorator's, in
+  // .storybook/preview.tsx -- there is one mechanism, and this is it turned on.
+  globals: { theme: 'themed' },
   parameters: {
     ...fullyCapable,
     docs: {
@@ -155,8 +141,7 @@ export const ConsumerCssWins: Story = {
         <style>{`.consumer-tint { background-color: rgb(1, 2, 3); }`}</style>
         <Story />
       </>
-    ),
-    withTheme
+    )
   ],
   render: () => (
     <Player.Viewport style={viewportStyle}>
@@ -240,5 +225,35 @@ export const ControlSizeFloorHolds: Story = {
     await expect(styles.height).toBe('44px');
     // Tokens that do not fight a locked guarantee still apply.
     await expect(styles.borderRadius).toBe('0px');
+  }
+};
+
+// The theme leaves with the story that mounted it. Every story above is themed
+// through the meta-level `globals`; this one opts back out, and runs last, so
+// it renders in a document four themed stories have already used. An unthemed
+// control here is the proof that the toolbar decorator's `<style>` was torn
+// down with each of them rather than left behind in the shared preview
+// document -- which is the reason the theme is mounted per story at all.
+//
+// Its strength is entirely that ordering: run alone (`-t`, or opened directly
+// in the UI), or with these exports reordered, it passes without proving
+// anything. It is the only test that exercises real DOM teardown, so it stays;
+// the unconditional cover for the decorator's two branches is
+// `stories/theme.contract.test.ts`, which asserts them structurally.
+//
+// On the generated autodocs page this story renders themed, because every
+// story in a file co-mounts in one document there and the themed ones bring
+// the stylesheet with them. That is a property of autodocs, not a leak.
+export const TearsDownWithTheStory: Story = {
+  globals: { theme: 'headless' },
+  play: async ({ canvas }) => {
+    const play = await canvas.findByRole('button', { name: 'Play' });
+    // `cursor: pointer` is the theme's, and Default above asserts it arrives.
+    await expect(globalThis.getComputedStyle(play).cursor).toBe('default');
+    const viewport = play.closest('[data-reely-part="viewport"]')!;
+    // The theme paints the viewport `--reely-color-backdrop` (#000).
+    await expect(globalThis.getComputedStyle(viewport).backgroundColor).toBe(
+      'rgba(0, 0, 0, 0)'
+    );
   }
 };
