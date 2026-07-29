@@ -2,6 +2,12 @@ import * as Player from '@reely/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { ReactNode } from 'react';
+import { withCss } from '../.storybook/theme';
+// The stylesheet the Styled story mounts, read as text so the same string is
+// both what renders and what the docs block below prints. `?raw` and not
+// `?inline` for the reason spelled out in play-button.stories.tsx: a production
+// build minifies `?inline` css, and the printed example has to stay readable.
+import partCss from '../../../examples/css-poster.css?raw';
 
 const Frame = ({ children }: { readonly children: ReactNode }) => (
   <Player.Viewport style={{ width: 480, height: 270, background: '#0b0e13' }}>
@@ -32,7 +38,12 @@ const meta = {
           '',
           '**Contract** — `data-reely-part="poster"`, `data-state`.',
           '',
-          '**Note** — children replace the default image.'
+          '**Note** — children replace the default image.',
+          '',
+          '**Styling** — plain CSS against the parts; the primitive keeps its own geometry and `visibility`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
+          '```css',
+          partCss.trim(),
+          '```'
         ].join('\n')
       }
     }
@@ -110,6 +121,31 @@ export const ErrorState: Story = {
   play: async ({ canvasElement }) => {
     await waitFor(() =>
       expect(posterImage(canvasElement)).toHaveAttribute('data-state', 'error')
+    );
+  }
+};
+
+/**
+ * The same poster with the CSS from this page's **Styling** section applied.
+ * Mounted as a `<style>` inside this story's own tree, so it is torn down with
+ * the story and no other story on the page sees it.
+ */
+export const Styled: Story = {
+  decorators: [withCss(partCss)],
+  render: () => (
+    <Frame>
+      <Player.Poster>
+        <Player.PosterImage src={loadedPosterSrc} />
+      </Player.Poster>
+    </Frame>
+  ),
+  play: async ({ canvasElement }) => {
+    const image = posterImage(canvasElement);
+    await waitFor(() => expect(image).toHaveAttribute('data-state', 'loaded'));
+    // The `[data-state='loaded']` rule, not the base one: the image starts at
+    // opacity 0 and only the state selector brings it back.
+    await waitFor(() =>
+      expect(globalThis.getComputedStyle(image).opacity).toBe('1')
     );
   }
 };

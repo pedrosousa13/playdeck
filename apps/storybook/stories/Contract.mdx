@@ -7,7 +7,8 @@ import { Meta } from '@storybook/addon-docs/blocks';
 Every primitive exposes a stable styling/testing contract via data attributes.
 
 - **`data-reely-part`** — the primitive's stable name (`play-button`,
-  `mute-button`, `volume-slider`, `seek-slider` / `seek-buffered`,
+  `mute-button`, `volume-slider`, `seek-slider` / `seek-slider-input` /
+  `seek-buffered` / `seek-buffered-range`,
   `fullscreen-button`, `pip-button`, `airplay-button`, `time`, `controls`, `poster`,
   `poster-image`, `loading-indicator`, `activation`, `viewport`, `media`,
   `error` / `error-message` / `error-retry`, `captions` / `captions-button` /
@@ -37,6 +38,224 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   `state.buffering`.
 
 Style and query against these attributes rather than internal class names.
+
+## Styling a part
+
+The attributes above _are_ the selectors, so a headless player needs no class
+names to look like something. Four parts carry a worked example below — a
+button, a slider, an overlay, and one whose `data-state` is the whole point.
+Four, not twenty: the lesson is the same for the rest.
+
+Each block is generated from a file in `examples/`, and the story it names
+mounts that same file for its `Styled` story, so what you read here is what
+rendered there. Plain CSS, because a data attribute is a plain CSS selector and
+every consumer — Tailwind, CSS modules, styled-components, none of the above —
+can translate from that.
+
+**A button** — `Player/PlayButton`. `data-state` carries the playback state,
+which is `paused`, `playing` or `ended`, and `data-autoplay-state` reports a
+refused autoplay:
+
+{/* example:css-play-button */}
+
+```css
+/* Styling a part: a button.
+   `data-reely-part` is the hook and `data-state` is the primitive's output, so
+   the pressed look needs no class name, no wrapper and no JavaScript. */
+
+[data-reely-part='play-button'] {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #101828;
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-reely-part='play-button']:hover {
+  background: #1d2939;
+}
+
+[data-reely-part='play-button']:focus-visible {
+  outline: 2px solid #7aa7ff;
+  outline-offset: 2px;
+}
+
+/* Playing, so the button now offers "Pause". */
+[data-reely-part='play-button'][data-state='playing'] {
+  background: #2e5aac;
+}
+
+/* Autoplay was refused by the browser: draw attention to the one control that
+   can start playback, because nothing else will. */
+[data-reely-part='play-button'][data-autoplay-state='blocked'] {
+  outline: 2px solid #f2b53d;
+  outline-offset: 2px;
+}
+```
+
+{/* /example */}
+
+**A slider** — `Player/SeekSlider`. One part contains three others
+(`seek-slider-input`, `seek-buffered`, and a `seek-buffered-range` per range),
+and `data-buffering` is a second axis beside `data-state`:
+
+{/* example:css-seek-slider */}
+
+```css
+/* Styling a part: a slider.
+   Four parts, no markup of your own: `seek-slider` is the positioned box,
+   `seek-buffered` the layer under the scrubber, `seek-buffered-range` one span
+   per buffered range, and `seek-slider-input` the native range input. Reach for
+   the part name rather than a tag selector — the part is the contract, the
+   element type is the primitive's business. */
+
+[data-reely-part='seek-slider'] {
+  display: flex;
+  align-items: center;
+}
+
+[data-reely-part='seek-slider-input'] {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  background: transparent;
+  accent-color: #7aa7ff;
+}
+
+[data-reely-part='seek-buffered'] {
+  position: absolute;
+  inset-inline: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: #2a3140;
+}
+
+/* The ranges are placed by the primitive — `position`, `left` and `width` are
+   inline and state-derived — so only the paint is left to do here. */
+[data-reely-part='seek-buffered-range'] {
+  top: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #4b566b;
+}
+
+/* No seek window yet — a live edge, or a duration nobody knows. Say so rather
+   than showing a scrubber that cannot move. */
+[data-reely-part='seek-slider'][data-state='idle'] {
+  opacity: 0.5;
+}
+
+/* A stall that outlasted the debounce. A separate axis from `data-state`,
+   which reports whether a seek window exists and does not move during one. */
+[data-reely-part='seek-slider'][data-buffering='true']
+  [data-reely-part='seek-buffered'] {
+  background: #6b4a12;
+}
+```
+
+{/* /example */}
+
+**An overlay** — `Player/Poster`. The primitive owns the structural geometry
+and the `visibility`; the appearance is yours:
+
+{/* example:css-poster */}
+
+```css
+/* Styling a part: an overlay.
+   `Poster` carries its own structural geometry — absolutely positioned, inset
+   0, z-index 10 — and computes its `visibility` from player state, while
+   `PosterImage` sets `display`, `width` and `height` inline. None of that can
+   be beaten from a stylesheet, so restating any of it here would be dead CSS
+   rather than a conflict (ADR-0001). A stylesheet paints, and that is all. */
+
+[data-reely-part='poster'] {
+  background: #0b0e13;
+}
+
+[data-reely-part='poster-image'] {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+/* The load state is on the element, so the frame fades in once it has actually
+   decoded rather than flashing in half-painted. An image that fails to load
+   never reaches `loaded`, so it never fades in: the state machine hides it,
+   and `[data-state='error']` needs no rule of its own to do that. */
+[data-reely-part='poster-image'][data-state='loaded'] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reely-part='poster-image'] {
+    transition: none;
+  }
+}
+```
+
+{/* /example */}
+
+**A `data-state` worth styling** — `Player/ActivationButton`. Read the states
+before you style them: `dormant` and `error` are the two a press acts on,
+`eligible` means activation has already been committed, and the overlay
+unmounts at `ready` rather than wearing it:
+
+{/* example:css-activation */}
+
+```css
+/* Styling a part whose `data-state` is the whole point.
+   The overlay carries `dormant`, `eligible`, `loading-provider` and `error`;
+   it unmounts at `ready`, so no stylesheet ever sees that value. Each of the
+   four wants a different affordance. The button positions itself (absolutely,
+   inset 0, z-index 30), so this only paints. */
+
+[data-reely-part='activation'] {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: rgb(11 14 19 / 65%);
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The resting state: a press here starts activation. One of the two states a
+   press acts on at all — `error` below is the other. */
+[data-reely-part='activation'][data-state='dormant']:hover {
+  background: rgb(11 14 19 / 40%);
+}
+
+/* Activation is committed and the provider is on its way. Pressing again does
+   nothing from here, so stop inviting it. */
+[data-reely-part='activation'][data-state='eligible'] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Mid-load, and `aria-disabled`: it must not look pressable. */
+[data-reely-part='activation'][data-state='loading-provider'] {
+  cursor: progress;
+}
+
+/* The child text reads "Retry", and a press does retry — activation acts on
+   this state as well as on `dormant`. So colour it as a recovery, and keep the
+   affordance. The exception is a configuration error, which is `aria-disabled`
+   and says so through that rather than through colour. */
+[data-reely-part='activation'][data-state='error'] {
+  background: rgb(63 18 18 / 85%);
+}
+
+[data-reely-part='activation'][data-state='error']:hover {
+  background: rgb(90 26 26 / 85%);
+}
+```
+
+{/* /example */}
+
+None of this is `@reely/react/theme.css`, which is a whole opinion you can take
+or leave. These are the smallest rules that make one part look deliberate.
 
 ## The `style` prop and a primitive's own geometry
 

@@ -65,6 +65,8 @@ ordering games, no `:not()` tricks.
 **Every selector is wrapped in `:where()`,** which contributes zero specificity.
 A single class of your own outranks any rule in the file.
 
+{/* example:ignore two lines demonstrating the cascade rule itself; there is no part and no stylesheet behind them */}
+
 ```css
 /* Wins over the theme. That's all it takes. */
 .my-controls {
@@ -80,6 +82,8 @@ player element — would beat a value you set on an ancestor, because a
 declaration always wins over inheritance. Reading with fallbacks means you can
 set tokens **anywhere above the player**, or on the player itself, and they take
 effect. It also means nothing leaks into the surrounding document.
+
+{/* example:ignore three token declarations, showing where tokens go rather than a stylesheet to copy */}
 
 ```css
 /* Anywhere above the player. */

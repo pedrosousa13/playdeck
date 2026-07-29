@@ -2,6 +2,12 @@ import * as Player from '@reely/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { MockPlayerParameters } from '../.storybook/mock-player';
+import { withCss } from '../.storybook/theme';
+// The stylesheet the Styled story mounts, read as text so the same string is
+// both what renders and what the docs block below prints. `?raw` and not
+// `?inline` for the reason spelled out in play-button.stories.tsx: a production
+// build minifies `?inline` css, and the printed example has to stay readable.
+import partCss from '../../../examples/css-activation.css?raw';
 
 const overlayState = (
   state: MockPlayerParameters['state']
@@ -30,7 +36,12 @@ const meta = {
           '',
           '**Children** — `children` replaces the default text child (`Play`, or `Retry` in the error state); pass an icon or image instead. See `OverlayOnPoster`.',
           '',
-          '**Accessibility** — native `<button>`, keyboard-operable. The accessible name comes from `aria-label` (default `Play video`, or `Retry loading video` in the error state), never from `children`, so a decorative child is safe.'
+          '**Accessibility** — native `<button>`, keyboard-operable. The accessible name comes from `aria-label` (default `Play video`, or `Retry loading video` in the error state), never from `children`, so a decorative child is safe.',
+          '',
+          '**Styling** — plain CSS against the part, one selector per `data-state`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
+          '```css',
+          partCss.trim(),
+          '```'
         ].join('\n')
       }
     }
@@ -97,6 +108,30 @@ export const ErrorState: Story = {
       name: 'Retry loading video'
     });
     await waitFor(() => expect(button).toHaveAttribute('data-state', 'error'));
+  }
+};
+
+/**
+ * The same overlay with the CSS from this page's **Styling** section applied,
+ * in `dormant` — one of the two states a press acts on, `error` (which retries)
+ * being the other. Mounted as a `<style>` inside this story's own tree, so it
+ * is torn down with the story and no other story on the page sees it.
+ */
+export const Styled: Story = {
+  decorators: [withCss(partCss)],
+  parameters: overlayState({ activation: 'dormant', lifecycle: 'idle' }),
+  play: async ({ canvas }) => {
+    const button = await canvas.findByRole('button', { name: 'Play video' });
+    await waitFor(() =>
+      expect(button).toHaveAttribute('data-state', 'dormant')
+    );
+    const styles = globalThis.getComputedStyle(button);
+    await expect(styles.backgroundColor).toBe('rgba(11, 14, 19, 0.65)');
+    // `dormant` must NOT be wearing the receded look, which belongs to
+    // `eligible` — activation is already committed by then and a further press
+    // does nothing. The two were shipped swapped once; this is what catches it.
+    await expect(styles.opacity).toBe('1');
+    await expect(styles.cursor).toBe('pointer');
   }
 };
 

@@ -11,18 +11,28 @@ import type { Decorator } from '@storybook/react-vite';
 import themeCss from '../../../packages/react/theme.css?inline';
 
 /**
- * Mounts the optional theme when the toolbar's Theme toggle is on, as a
- * `<style>` inside the story's own tree so it unmounts with the story. This is
- * the only place the stylesheet is mounted; a story that wants it regardless of
- * the toolbar pins itself with `globals: { theme: 'themed' }` (see
+ * Mounts a stylesheet as a `<style>` inside the story's own tree, so it is torn
+ * down with the story rather than leaking into the next one in the same
+ * document. The mechanism the theme toggle needs, and the one the per-part CSS
+ * examples need too — `stories/*.stories.tsx` reach for it directly to mount
+ * the `examples/css-*.css` file their docs page shows.
+ */
+export const withCss =
+  (css: string): Decorator =>
+  (Story) => (
+    <>
+      <style>{css}</style>
+      <Story />
+    </>
+  );
+
+const withThemeCss = withCss(themeCss);
+
+/**
+ * Mounts the optional theme when the toolbar's Theme toggle is on. This is the
+ * only place the stylesheet is mounted; a story that wants it regardless of the
+ * toolbar pins itself with `globals: { theme: 'themed' }` (see
  * `stories/theme.stories.tsx`).
  */
 export const withTheme: Decorator = (Story, context) =>
-  context.globals.theme === 'themed' ? (
-    <>
-      <style>{themeCss}</style>
-      <Story />
-    </>
-  ) : (
-    <Story />
-  );
+  context.globals.theme === 'themed' ? withThemeCss(Story, context) : <Story />;

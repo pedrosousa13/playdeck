@@ -1,11 +1,19 @@
 #!/usr/bin/env node
-// Keeps the docs' code examples honest: every `ts`/`tsx` block inside an
-// `example:` marker is generated from a real file in `examples/`, which the
-// `examples` tsconfig project compiles against the built declarations. Prose
-// and code cannot drift, because the code is not written in the prose.
+// Keeps the docs' code examples honest: every `ts`/`tsx`/`css` block inside an
+// `example:` marker is generated from a real file in `examples/`. The ts/tsx
+// ones are compiled by the `examples` tsconfig project against the built
+// declarations; the css ones are mounted by the story they document, which
+// imports the same file with Vite's `?raw`. Prose and code cannot drift,
+// because the code is not written in the prose.
+//
+// `?raw` and not `?inline`, deliberately: a production Storybook build runs
+// `?inline` css through the minifier, so the story's docs page would print the
+// example as one comment-less line while the fence generated here kept the
+// readable source. `?raw` is unprocessed, which is what keeps the two surfaces
+// byte-identical. Do not "fix" it back.
 
 import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import ts from 'typescript';
 
@@ -14,8 +22,12 @@ const process = globalThis.process;
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 /**
- * @typedef {{ source: string; language: 'ts' | 'tsx' }} Fixture
+ * @typedef {'ts' | 'tsx' | 'css'} Language
+ * @typedef {{ source: string; language: Language }} Fixture
  */
+
+/** @type {Record<string, Language>} */
+const LANGUAGES = { '.ts': 'ts', '.tsx': 'tsx', '.css': 'css' };
 
 // `.mdx` cannot carry HTML comments — MDX 2 parses them as JSX and fails — so
 // the two syntaxes differ. Storybook's MDX is v3.
@@ -33,13 +45,63 @@ export const MARKERS = {
 };
 
 /**
- * The 1-based line numbers of `ts`/`tsx` fences that no `example:` region
+ * The fixtures a directory listing holds, keyed by the name a marker carries.
+ *
+ * That name is the bare filename: `MARKERS` allows `[a-z0-9-]` only, so it can
+ * hold neither an extension nor a directory, and `play-button.css` alongside a
+ * `play-button.tsx` would otherwise be a silent last-one-wins. Two files that
+ * would answer to one name is an error, which is what keeps the flat directory
+ * safe now that it holds more than one language.
+ * @param {readonly { file: string; source: string }[]} entries
+ * @returns {Map<string, Fixture>}
+ */
+export const indexFixtures = (entries) => {
+  /** @type {Map<string, Fixture>} */
+  const fixtures = new Map();
+  /** @type {Map<string, string>} */
+  const files = new Map();
+
+  for (const { file, source } of entries) {
+    const language = LANGUAGES[extname(file)];
+    if (!language) continue;
+    const name = file.slice(0, -extname(file).length);
+    const taken = files.get(name);
+    if (taken !== undefined) {
+      throw new Error(
+        `examples/${taken} and examples/${file} would both answer to the marker example:${name}. Rename one.`
+      );
+    }
+    files.set(name, file);
+    fixtures.set(name, { source, language });
+  }
+
+  return fixtures;
+};
+
+/**
+ * The sources of the fixtures the `examples` tsconfig project compiles.
+ *
+ * Export coverage is measured over these and not over every fixture: a
+ * stylesheet is tokenised the same way, so a css file with the word `Poster` in
+ * a comment would satisfy that export's coverage requirement while no example
+ * that actually compiles uses it.
+ * @param {Map<string, Fixture>} fixtures
+ * @returns {string[]}
+ */
+export const compilingSources = (fixtures) =>
+  [...fixtures.values()]
+    .filter((fixture) => fixture.language !== 'css')
+    .map((fixture) => fixture.source);
+
+/**
+ * The 1-based line numbers of `ts`/`tsx`/`css` fences that no `example:` region
  * generates and no `example:ignore` comment excuses.
  *
  * Without this, the gate only checks what is already inside a marker: a new
- * hand-written example added next to a generated one compiles nowhere and
- * nothing complains. That is the exact hole this whole mechanism exists to
- * close, so an unmarked fence is a failure and an exception has to say why.
+ * hand-written example added next to a generated one is backed by no file — so
+ * nothing compiles it, nothing mounts it — and nothing complains. That is the
+ * exact hole this whole mechanism exists to close, so an unmarked fence is a
+ * failure and an exception has to say why.
  * @param {string} text
  * @param {'md' | 'mdx'} syntax
  * @returns {number[]}
@@ -56,7 +118,7 @@ export const ungatedFences = (text, syntax) => {
     if (marker.open.test(line)) inRegion = true;
     else if (marker.close.test(line)) inRegion = false;
     else if (marker.ignore.test(line)) excused = true;
-    else if (/^```tsx?$/.test(line)) {
+    else if (/^```(tsx?|css)$/.test(line)) {
       if (!inRegion && !excused) ungated.push(index + 1);
       excused = false;
     }
@@ -228,28 +290,24 @@ const docs = [
   'packages/provider-youtube/README.md',
   'packages/provider-vimeo/README.md',
   'apps/storybook/stories/CapabilitiesMatrix.mdx',
+  'apps/storybook/stories/Contract.mdx',
   'apps/storybook/stories/Theme.mdx'
 ];
 
 /** @returns {Promise<Map<string, Fixture>>} */
 const readFixtures = async () => {
   const dir = join(repoRoot, 'examples');
-  /** @type {Map<string, Fixture>} */
-  const fixtures = new Map();
-  for (const entry of (await readdir(dir)).sort()) {
-    /** @type {'ts' | 'tsx' | undefined} */
-    const language = entry.endsWith('.tsx')
-      ? 'tsx'
-      : entry.endsWith('.ts')
-        ? 'ts'
-        : undefined;
-    if (!language) continue;
-    fixtures.set(entry.replace(/\.tsx?$/, ''), {
-      source: await readFile(join(dir, entry), 'utf8'),
-      language
-    });
-  }
-  return fixtures;
+  const files = (await readdir(dir))
+    .sort()
+    .filter((file) => extname(file) in LANGUAGES);
+  return indexFixtures(
+    await Promise.all(
+      files.map(async (file) => ({
+        file,
+        source: await readFile(join(dir, file), 'utf8')
+      }))
+    )
+  );
 };
 
 const main = async () => {
@@ -287,7 +345,7 @@ const main = async () => {
 
   const uncovered = uncoveredExports(
     publicValueExports(),
-    [...fixtures.values()].map((fixture) => fixture.source)
+    compilingSources(fixtures)
   );
 
   if (!check) {
@@ -305,7 +363,7 @@ const main = async () => {
       ),
       ...ungated.map(
         (where) =>
-          `  ${where} is a ts/tsx block nothing compiles — wrap it in an example: marker, or precede it with an example:ignore comment saying why not.`
+          `  ${where} is a ts/tsx/css block no fixture generates — wrap it in an example: marker, or precede it with an example:ignore comment saying why not.`
       ),
       ...orphans.map(
         (name) =>
