@@ -66,3 +66,37 @@ Real playback (real providers, real media) is demonstrated in the
 `Real playback/Providers` stories, with the `Fixtures/PlayerFixture` stories
 driven by the e2e suite. Those stories hit the network and are excluded from
 the deterministic story test run (tagged `!test`).
+
+## Element types are fixed
+
+Each primitive renders fixed element types, and that is a decision rather than
+an omission: `PlayButton` renders a `<button>`, `Viewport` a `<div>`, `Time` a
+`<time>`. No prop swaps those elements for others.
+
+Where a primitive hands over what goes inside one, it does so through an
+explicit, typed prop rather than a general substitution mechanism:
+`ErrorDisplay` takes render-prop children called with `{ error, retry }`, and
+`Captions` takes `renderCue`. Both replace inner rendering while keeping their
+own element and its part attribute.
+
+What you extend otherwise:
+
+- **Children.** The button primitives above and `Time` render children in place
+  of their default content.
+  `<Player.PlayButton><PlayIcon /></Player.PlayButton>` swaps the label and
+  keeps the button's accessible name. `SeekSlider` renders children inside its
+  `seek-slider` element, after the input; `VolumeSlider`, a bare
+  `<input type="range">`, takes none.
+- **`className` and `style`**, plus a primitive's own props where it has them —
+  `SeekSlider`'s `inputProps`, `PosterImage`'s `objectFit` and
+  `objectPosition`. `style` follows the precedence rules above.
+
+The part attributes work the other way round: `data-reely-part` and
+`data-state` are spread after your props, so they are the primitive's output —
+yours to read from CSS and tests, not to set.
+
+The reason is accessibility. The button primitives above set `type="button"`,
+an `aria-label`, and `aria-pressed` where there is a pressed state to report,
+on an element whose shape they know. None of that survives being moved onto an
+element the primitive has never seen, and WCAG 2.2 AA is a release gate here
+rather than an aspiration.
