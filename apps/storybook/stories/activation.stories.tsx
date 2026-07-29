@@ -7,6 +7,14 @@ const overlayState = (
   state: MockPlayerParameters['state']
 ): { player: MockPlayerParameters } => ({ player: { state } });
 
+const part = (root: HTMLElement, name: string): HTMLElement => {
+  const element = root.querySelector<HTMLElement>(
+    `[data-reely-part="${name}"]`
+  );
+  if (!element) throw new Error(`Expected a ${name} part in the story.`);
+  return element;
+};
+
 const meta = {
   title: 'Player/ActivationButton',
   component: Player.ActivationButton,
@@ -16,7 +24,9 @@ const meta = {
         component: [
           '`Player.ActivationButton` triggers pre-provider activation (`dormant`/`eligible`/`loading-provider`/`error`).',
           '',
-          '**Contract** — `data-reely-part="activation"`, `data-state="<activation>"`. It is a full-bleed overlay (`position: absolute; inset: 0; z-index: 30`) meant to sit over a poster, not a button beside one.',
+          '**Contract** — `data-reely-part="activation"`, `data-state="<activation>"`.',
+          '',
+          '**Layout** — a full-bleed overlay (`position: absolute; inset: 0; z-index: 30`) meant to sit over a poster, not a button beside one.',
           '',
           '**Children** — `children` replaces the default text child (`Play`, or `Retry` in the error state); pass an icon or image instead. See `OverlayOnPoster`.',
           '',
@@ -100,11 +110,7 @@ export const OverlayOnPoster: Story = {
   render: () => (
     <Player.Viewport style={{ width: 480, height: 270, background: '#0b0e13' }}>
       <Player.Poster>
-        <Player.PosterImage
-          alt=""
-          src="/poster.svg"
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        />
+        <Player.PosterImage src="/poster.svg" />
       </Player.Poster>
       <Player.ActivationButton>
         <Player.PlayIcon style={{ color: '#fff', fontSize: '3rem' }} />
@@ -119,22 +125,18 @@ export const OverlayOnPoster: Story = {
     await expect(button).toHaveAttribute('aria-label', 'Play video');
     await expect(button.textContent).toBe('');
 
-    const part = (name: string): HTMLElement => {
-      const element = canvasElement.querySelector<HTMLElement>(
-        `[data-reely-part="${name}"]`
-      );
-      if (!element) throw new Error(`Expected a ${name} part in the story.`);
-      return element;
-    };
-    const poster = part('poster');
+    const poster = part(canvasElement, 'poster');
     await waitFor(() =>
-      expect(part('poster-image')).toHaveAttribute('data-state', 'loaded')
+      expect(part(canvasElement, 'poster-image')).toHaveAttribute(
+        'data-state',
+        'loaded'
+      )
     );
 
-    // Stacked, not merely both present. `elementsFromPoint` cannot see the
+    // Stacked, not merely both present. `elementFromPoint` cannot see the
     // poster — it is `pointer-events: none` — so the layering is read off the
-    // boxes and the stacking order: the overlay covers exactly what the poster
-    // covers, and paints above it.
+    // boxes and the stacking order rather than off a hit-test stack: the
+    // overlay covers exactly what the poster covers, and paints above it.
     const overlayBox = button.getBoundingClientRect();
     await expect(overlayBox.toJSON()).toEqual(
       poster.getBoundingClientRect().toJSON()
@@ -143,11 +145,35 @@ export const OverlayOnPoster: Story = {
       Number(globalThis.getComputedStyle(element).zIndex);
     await expect(zIndex(button)).toBeGreaterThan(zIndex(poster));
 
-    // And the overlay is what a click in the middle of the poster reaches.
-    const hit = document.elementFromPoint(
-      overlayBox.left + overlayBox.width / 2,
-      overlayBox.top + overlayBox.height / 2
+    // The centring claim, made load-bearing: nothing styles the button, so a
+    // centred icon is the `<button>` centring its own content across the
+    // full-bleed box. Not an exact match — the UA button stylesheet's
+    // asymmetric padding/border offsets the content box by ~1.5px vertically
+    // — so allow a few pixels, and measure against the boxes rather than
+    // fixed coordinates so a viewport-size change does not rewrite the test.
+    const centre = (box: DOMRect) => ({
+      x: box.left + box.width / 2,
+      y: box.top + box.height / 2
+    });
+    const icon = button.querySelector('svg');
+    if (!icon) throw new Error('Expected a play icon in the story.');
+    const iconBox = icon.getBoundingClientRect();
+    const overlayCentre = centre(overlayBox);
+    const iconCentre = centre(iconBox);
+    await expect(Math.abs(iconCentre.x - overlayCentre.x)).toBeLessThanOrEqual(
+      3
     );
+    await expect(Math.abs(iconCentre.y - overlayCentre.y)).toBeLessThanOrEqual(
+      3
+    );
+
+    // And the overlay is what a click in the middle of the poster reaches.
+    const hit = document.elementFromPoint(overlayCentre.x, overlayCentre.y);
+    if (!hit) {
+      throw new Error(
+        'No element at the overlay centre: the point is outside the viewport, so the story is scrolled out of view rather than the overlay being unreachable.'
+      );
+    }
     await expect(button.contains(hit)).toBe(true);
   }
 };
