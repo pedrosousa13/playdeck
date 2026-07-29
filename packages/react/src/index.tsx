@@ -1072,9 +1072,18 @@ export const Poster = ({ children, style, ...safeRest }: PosterProps) => {
 
 export type ActivationButtonProps = ComponentPropsWithRef<'button'>;
 
+// #160: `margin: auto` is a no-op on the default path — with `inset: 0` and an
+// auto width and height, CSS 2.1 §10.3.7 (inline axis) and §10.6.4 (block axis)
+// both resolve auto margins to zero, so the unstyled overlay is still the
+// full-bleed click target. It engages only once a stylesheet gives the box a
+// fixed size, which four zero offsets over-constrain: without it the leftover
+// space all falls to `right`/`bottom` and the box lands in the corner. Stating
+// it here rather than in `theme.css` centres the box for any consumer
+// stylesheet that sizes this part, not just the bundled theme.
 const activationOverlayStyle: CSSProperties = {
   position: 'absolute',
   inset: 0,
+  margin: 'auto',
   zIndex: 30
 };
 

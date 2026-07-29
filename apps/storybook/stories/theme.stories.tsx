@@ -228,9 +228,63 @@ export const ControlSizeFloorHolds: Story = {
   }
 };
 
+// The activation overlay is the one part whose box the theme replaces rather
+// than decorates: the primitive pins `position: absolute; inset: 0` inline so
+// an unstyled overlay is a full-bleed click target, and the theme sizes it down
+// to a 4rem circle. A fixed size against four zero offsets is over-constrained,
+// and the circle landed in the corner (#160) until the primitive started
+// stating `margin: auto` alongside the offsets it over-constrains. The theme
+// itself says nothing about position -- this story is the bundled-theme case of
+// that inline default, and `activation.stories.tsx`'s `SizedByConsumerCss` is
+// the general one. `place-items: center` does not do it -- that centres the
+// icon inside the circle, not the circle inside the viewport.
+//
+// Themed through the meta-level `globals`, and with no example stylesheet in
+// the tree: `Player/ActivationButton`'s own `Styled` story mounts
+// `examples/css-activation.css` unlayered, which beats `@layer reely` and would
+// measure that file instead of the theme.
+export const ActivationIsCentred: Story = {
+  parameters: {
+    player: { state: { activation: 'dormant', lifecycle: 'idle' } }
+  },
+  render: () => (
+    // Not the shared `viewportStyle`: its 640 is sized to fit the control row,
+    // which this story does not render, and 480x270 is where #160 was measured.
+    <Player.Viewport style={{ width: 480, height: 270 }}>
+      <Player.ActivationButton>
+        <Player.PlayIcon />
+      </Player.ActivationButton>
+    </Player.Viewport>
+  ),
+  play: async ({ canvas }) => {
+    const button = await canvas.findByRole('button', { name: 'Play video' });
+    const styles = globalThis.getComputedStyle(button);
+    // First that the theme reached the part at all -- an unthemed overlay fills
+    // the viewport, and a full-bleed box is trivially concentric with it, so
+    // the centring assertion below is only meaningful once the box is 4rem.
+    await expect(styles.width).toBe('64px');
+    await expect(styles.height).toBe('64px');
+    await expect(styles.borderRadius).toBe('50%');
+
+    const viewport = button.closest('[data-reely-part="viewport"]')!;
+    const centre = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    };
+    const buttonCentre = centre(button);
+    const viewportCentre = centre(viewport);
+    await expect(
+      Math.abs(buttonCentre.x - viewportCentre.x)
+    ).toBeLessThanOrEqual(1);
+    await expect(
+      Math.abs(buttonCentre.y - viewportCentre.y)
+    ).toBeLessThanOrEqual(1);
+  }
+};
+
 // The theme leaves with the story that mounted it. Every story above is themed
 // through the meta-level `globals`; this one opts back out, and runs last, so
-// it renders in a document four themed stories have already used. An unthemed
+// it renders in a document five themed stories have already used. An unthemed
 // control here is the proof that the toolbar decorator's `<style>` was torn
 // down with each of them rather than left behind in the shared preview
 // document -- which is the reason the theme is mounted per story at all.

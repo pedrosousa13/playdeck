@@ -43,16 +43,36 @@ token on any ancestor wins without importing anything.
   `object-fit: contain` (#150) is a literal, so a CSS-only consumer who wants
   cropping must reach for the `style` prop — recorded as a caveat in that
   changeset. Tokenising it is the fix if it comes up again.
-- `theme.css` must not set a structural property the primitive already sets, or
-  the two fight. It does today: the activation button's 4rem square collides
-  with the primitive's `inset: 0`, over-constraining the box so it renders in
-  the viewport's corner (#160). "Appearance only" is the rule that prevents this
-  whole class of bug.
+- What `theme.css` and a primitive fight over is interaction, not duplication.
+  This bullet used to say the opposite — that `theme.css` must not set a
+  structural property the primitive already sets, with #160 as the proof — and
+  that reading was wrong on both halves, so record it as wrong rather than let
+  it be re-derived. The sets never overlapped: the primitive states `position`,
+  `inset`, `z-index` and now `margin`, while the theme sized the activation
+  button with `inline-size`/`block-size`, which is exactly the "sizing that is
+  an opinion rather than a requirement" the boundary above hands to `theme.css`.
+  And duplication cannot fight anyway — an inline value simply wins, which is
+  the next bullet. #160 was two individually legitimate declarations that
+  interact: a fixed size against four zero offsets over-constrains the box, the
+  excess fell to `right`/`bottom`, and the 4rem circle rendered in the
+  viewport's corner. The lesson survives the correction and generalises past
+  the theme, because a consumer stylesheet can size that part just as well: an
+  inline structural value has to be written so it degrades gracefully when a
+  stylesheet sets something that interacts with it. `ActivationButton` now
+  states `margin: auto` beside `inset: 0` — inert while the box is auto-sized
+  (CSS 2.1 §10.3.7 on the inline axis and §10.6.4 on the block axis both
+  resolve auto margins to zero, so the unstyled full-bleed click target is
+  unchanged), and centring the moment any stylesheet gives the box a size.
+  `theme.css` is untouched, because nothing in it was the defect.
 - Restating an inline value in `theme.css` is dead CSS rather than a conflict —
   harmless, but it drifts. #150 removed three such declarations from the media
   block.
-- Nothing tests the boundary. Both failure modes above are invisible to the
-  current suites, which is why both reached `main`.
+- The boundary is still untested; only the one instance is. Two stories now pin
+  #160 — a themed one and one mounting a consumer stylesheet that sizes the
+  part — but interaction is a property of a pair of declarations, and nothing
+  looks for the next pair, on this part or any other. Dead restatement stays
+  invisible too. That is why both failure modes reached `main` in the first
+  place, and why the wrong diagnosis above went a whole ADR unchallenged.
 - Moving to a `base.css` later would be breaking in practice, even though no
   types or exports would change: every consumer who never imported it would
   need to start.
