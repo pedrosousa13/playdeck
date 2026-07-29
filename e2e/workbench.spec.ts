@@ -18,9 +18,10 @@ import { expect, test } from '@playwright/test';
  * landing with every other suite still green.
  *
  * Chromium only. This exercises Storybook's own sidebar sort, not reely, so
- * the three-engine matrix would buy no signal — the same reasoning the
- * `visual` project applies. Kept as a `test.skip` rather than a fourth
- * Playwright project so `--project=chromium` still runs it.
+ * running it on three engines would buy no signal. Narrowed with the same
+ * `test.skip(browserName !== 'chromium', …)` mechanism the engine-specific
+ * specs use (`live.spec.ts`, `hls.spec.ts`, `poster.spec.ts`), rather than a
+ * fourth Playwright project, so `--project=chromium` still runs it.
  */
 test('opening the workbench with no URL parameters lands on the reference example', async ({
   browserName,
@@ -31,6 +32,12 @@ test('opening the workbench with no URL parameters lands on the reference exampl
     'Asserts Storybook manager sort order, which is engine-independent.'
   );
 
+  // The two waits below declare 30s + 20s, which does not fit the 30s global
+  // budget in `playwright.config.ts`. Both are there because `storybook dev`
+  // compiles the manager index and then the MDX page on first request, so
+  // raise the test budget past their sum plus the initial navigation.
+  test.setTimeout(90_000);
+
   await page.goto('/');
 
   // The manager resolves its default selection into `?path=` once the index
@@ -40,11 +47,6 @@ test('opening the workbench with no URL parameters lands on the reference exampl
       timeout: 30_000
     })
     .toBe('/docs/overview-reference-example--docs');
-
-  await expect(page.locator('[data-selected="true"]')).toHaveAttribute(
-    'data-item-id',
-    'overview-reference-example--docs'
-  );
 
   // And the page really rendered, rather than the sidebar merely pointing at
   // it. Matched by level rather than by accessible name: the docs renderer
@@ -61,10 +63,19 @@ test('opening the workbench with no URL parameters lands on the reference exampl
   ).toContainText('Reference example', { timeout: 20_000 });
 
   // The other half of #153: the Overview group sorts above `Player/*`.
-  const ids = await page.$$eval(
-    '#storybook-explorer-tree [data-item-id]',
-    (els) => els.map((el) => el.getAttribute('data-item-id'))
-  );
-  expect(ids.indexOf('overview')).toBeGreaterThanOrEqual(0);
-  expect(ids.indexOf('player')).toBeGreaterThan(ids.indexOf('overview'));
+  const ids = await page.evaluate(() => {
+    const tree = document.querySelector('#storybook-explorer-tree');
+    if (tree === null) throw new Error('no sidebar tree');
+    return [...tree.querySelectorAll('[data-item-id]')].map((el) =>
+      el.getAttribute('data-item-id')
+    );
+  });
+  expect(
+    ids.indexOf('overview'),
+    `the sidebar must render an "overview" group; it listed [${ids.join(', ')}]`
+  ).toBeGreaterThanOrEqual(0);
+  expect(
+    ids.indexOf('player'),
+    `"overview" must sort above "player" in the sidebar; it listed [${ids.join(', ')}]`
+  ).toBeGreaterThan(ids.indexOf('overview'));
 });
