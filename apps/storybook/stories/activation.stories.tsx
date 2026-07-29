@@ -7,6 +7,14 @@ const overlayState = (
   state: MockPlayerParameters['state']
 ): { player: MockPlayerParameters } => ({ player: { state } });
 
+const part = (root: HTMLElement, name: string): HTMLElement => {
+  const element = root.querySelector<HTMLElement>(
+    `[data-reely-part="${name}"]`
+  );
+  if (!element) throw new Error(`Expected a ${name} part in the story.`);
+  return element;
+};
+
 const meta = {
   title: 'Player/ActivationButton',
   component: Player.ActivationButton,
@@ -18,7 +26,11 @@ const meta = {
           '',
           '**Contract** — `data-reely-part="activation"`, `data-state="<activation>"`.',
           '',
-          '**Accessibility** — native `<button>`, keyboard-operable.'
+          '**Layout** — a full-bleed overlay (`position: absolute; inset: 0; z-index: 30`) meant to sit over a poster, not a button beside one.',
+          '',
+          '**Children** — `children` replaces the default text child (`Play`, or `Retry` in the error state); pass an icon or image instead. See `OverlayOnPoster`.',
+          '',
+          '**Accessibility** — native `<button>`, keyboard-operable. The accessible name comes from `aria-label` (default `Play video`, or `Retry loading video` in the error state), never from `children`, so a decorative child is safe.'
         ].join('\n')
       }
     }
@@ -85,6 +97,84 @@ export const ErrorState: Story = {
       name: 'Retry loading video'
     });
     await waitFor(() => expect(button).toHaveAttribute('data-state', 'error'));
+  }
+};
+
+/**
+ * The realistic shape: a poster underneath, the button full-bleed on top of it
+ * with an icon child instead of the default `Play` text. Nothing here styles
+ * the button — a `<button>` centres its own content, so the full-bleed overlay
+ * puts the icon in the middle of the viewport unaided.
+ */
+export const OverlayOnPoster: Story = {
+  render: () => (
+    <Player.Viewport style={{ width: 480, height: 270, background: '#0b0e13' }}>
+      <Player.Poster>
+        <Player.PosterImage src="/poster.svg" />
+      </Player.Poster>
+      <Player.ActivationButton>
+        <Player.PlayIcon style={{ color: '#fff', fontSize: '3rem' }} />
+      </Player.ActivationButton>
+    </Player.Viewport>
+  ),
+  play: async ({ canvas, canvasElement }) => {
+    // The name is the `aria-label`'s, not the child's: the icon is
+    // `aria-hidden`, so the button contributes no text of its own — which is
+    // also the proof that `children` replaced the default `Play` text.
+    const button = await canvas.findByRole('button', { name: 'Play video' });
+    await expect(button).toHaveAttribute('aria-label', 'Play video');
+    await expect(button.textContent).toBe('');
+
+    const poster = part(canvasElement, 'poster');
+    await waitFor(() =>
+      expect(part(canvasElement, 'poster-image')).toHaveAttribute(
+        'data-state',
+        'loaded'
+      )
+    );
+
+    // Stacked, not merely both present. `elementFromPoint` cannot see the
+    // poster — it is `pointer-events: none` — so the layering is read off the
+    // boxes and the stacking order rather than off a hit-test stack: the
+    // overlay covers exactly what the poster covers, and paints above it.
+    const overlayBox = button.getBoundingClientRect();
+    await expect(overlayBox.toJSON()).toEqual(
+      poster.getBoundingClientRect().toJSON()
+    );
+    const zIndex = (element: HTMLElement) =>
+      Number(globalThis.getComputedStyle(element).zIndex);
+    await expect(zIndex(button)).toBeGreaterThan(zIndex(poster));
+
+    // The centring claim, made load-bearing: nothing styles the button, so a
+    // centred icon is the `<button>` centring its own content across the
+    // full-bleed box. Not an exact match — the UA button stylesheet's
+    // asymmetric padding/border offsets the content box by ~1.5px vertically
+    // — so allow a few pixels, and measure against the boxes rather than
+    // fixed coordinates so a viewport-size change does not rewrite the test.
+    const centre = (box: DOMRect) => ({
+      x: box.left + box.width / 2,
+      y: box.top + box.height / 2
+    });
+    const icon = button.querySelector('svg');
+    if (!icon) throw new Error('Expected a play icon in the story.');
+    const iconBox = icon.getBoundingClientRect();
+    const overlayCentre = centre(overlayBox);
+    const iconCentre = centre(iconBox);
+    await expect(Math.abs(iconCentre.x - overlayCentre.x)).toBeLessThanOrEqual(
+      3
+    );
+    await expect(Math.abs(iconCentre.y - overlayCentre.y)).toBeLessThanOrEqual(
+      3
+    );
+
+    // And the overlay is what a click in the middle of the poster reaches.
+    const hit = document.elementFromPoint(overlayCentre.x, overlayCentre.y);
+    if (!hit) {
+      throw new Error(
+        'No element at the overlay centre: the point is outside the viewport, so the story is scrolled out of view rather than the overlay being unreachable.'
+      );
+    }
+    await expect(button.contains(hit)).toBe(true);
   }
 };
 
