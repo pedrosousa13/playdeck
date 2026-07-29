@@ -22,6 +22,11 @@ literal: `PosterImage` already reads `object-fit: var(--reely-poster-fit,
 cover)`, which resolves through the cascade, so a consumer rule setting that
 token on any ancestor wins without importing anything.
 
+The boundary below places values the primitive needs. A value travelling the
+other way — a measurement the library publishes for a consumer's own CSS to
+read — is a different question, answered in
+[ADR-0002](0002-published-measurements-are-outputs.md).
+
 ## The boundary
 
 - **Inline, on the primitive** — geometry the primitive needs in order to
