@@ -3,11 +3,11 @@
 Each provider package puts effectively its whole implementation inside one
 `create*Provider` closure:
 
-| Package            | Closure               | Lines |
-| ------------------ | --------------------- | ----- |
-| `provider-hls`     | `createHlsProvider`   | 783   |
-| `provider-vimeo`   | `createVimeoProvider`  | 724   |
-| `provider-native`  | `createNativeProvider` | 627   |
+| Package            | Closure                 | Lines |
+| ------------------ | ----------------------- | ----- |
+| `provider-hls`     | `createHlsProvider`     | 783   |
+| `provider-vimeo`   | `createVimeoProvider`   | 724   |
+| `provider-native`  | `createNativeProvider`  | 627   |
 | `provider-youtube` | `createYouTubeProvider` | 574   |
 
 Everything inside shares one lexical scope, so any state is reachable from any
@@ -29,7 +29,7 @@ with `REELY_REAL_PROVIDERS=1`. So the safety net for exactly this kind of
 refactor is manual, which raises the price of the change and lowers the odds a
 regression is caught.
 
-There is also nothing obvious to extract *to*. The four adapters differ enough
+There is also nothing obvious to extract _to_. The four adapters differ enough
 that a shared base class or common lifecycle abstraction would be speculative —
 invented to justify the split rather than discovered from the code. A refactor
 that has to invent its own target is the kind that leaves the codebase harder to

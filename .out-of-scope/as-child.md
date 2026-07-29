@@ -8,7 +8,7 @@ renders.
 Children are the extension point. You can put anything inside a control — an
 icon, an image, a design-system component — and you can reach any rendered
 element through its `data-reely-part` attribute or the `style` prop. What you
-cannot do is make some other component *be* the control.
+cannot do is make some other component _be_ the control.
 
 ## Why this is out of scope
 
@@ -54,7 +54,7 @@ have to answer.
 
 `asChild` is an additive prop. Nothing here forecloses adding it later if a
 concrete need turns up — a real composition that children cannot express, with
-the a11y question answered for it. What is rejected is adding it *speculatively*,
+the a11y question answered for it. What is rejected is adding it _speculatively_,
 ahead of that need, and paying the merging-contract cost from then on.
 
 If it is reconsidered, delete this file and scope the merging contract in its
