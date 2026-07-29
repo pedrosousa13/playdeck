@@ -32,7 +32,7 @@ const meta = {
           '',
           '**Contract** — `data-reely-part="activation"`, `data-state="<activation>"`.',
           '',
-          '**Layout** — a full-bleed overlay (`position: absolute; inset: 0; z-index: 30`) meant to sit over a poster, not a button beside one.',
+          '**Layout** — a full-bleed overlay (`position: absolute; inset: 0; margin: auto; z-index: 30`) meant to sit over a poster, not a button beside one. The `margin` does nothing at that size — an auto margin resolves to zero against an auto width and height — and exists for the case where your CSS gives the part a size of its own: four zero offsets over-constrain a sized box, and the margin is what centres it in the viewport rather than leaving it in the corner. See `SizedByConsumerCss`.',
           '',
           '**Children** — `children` replaces the default text child (`Play`, or `Retry` in the error state); pass an icon or image instead. See `OverlayOnPoster`.',
           '',
@@ -132,6 +132,59 @@ export const Styled: Story = {
     // does nothing. The two were shipped swapped once; this is what catches it.
     await expect(styles.opacity).toBe('1');
     await expect(styles.cursor).toBe('pointer');
+  }
+};
+
+// A consumer stylesheet, unlayered and with no relation to `theme.css`, that
+// gives the overlay a fixed size. Local to this story rather than
+// `examples/css-activation.css`: that file is a docs fixture printed on this
+// page and pinned by `docs:check`, and it teaches painting a full-bleed
+// overlay — sizing it would change the lesson.
+const sizedCss = `
+[data-reely-part='activation'] {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: rgb(29 78 216 / 85%);
+  color: #ffffff;
+}
+`;
+
+/**
+ * The overlay sized down by a consumer's own CSS, rather than left full-bleed.
+ * A fixed size against the primitive's four zero offsets is over-constrained,
+ * and the box landed in the viewport's top-left corner (#160) until
+ * `ActivationButton` started stating `margin: auto` alongside the offsets that
+ * over-constrain it. The bundled theme hits the same case, but it is not the
+ * only stylesheet that will ever size this part and for a headless library it
+ * is not even the likely one — which is why the `auto` margin is inline on the
+ * primitive and not in `theme.css` (ADR-0001).
+ */
+export const SizedByConsumerCss: Story = {
+  decorators: [withCss(sizedCss)],
+  parameters: overlayState({ activation: 'dormant', lifecycle: 'idle' }),
+  play: async ({ canvas, canvasElement }) => {
+    const button = await canvas.findByRole('button', { name: 'Play video' });
+    const styles = globalThis.getComputedStyle(button);
+    // First that the stylesheet reached the part at all — an unsized overlay is
+    // full-bleed, and a full-bleed box is trivially concentric with its
+    // viewport, so the centring assertion below only says something once the
+    // box is 96px.
+    await expect(styles.width).toBe('96px');
+    await expect(styles.height).toBe('96px');
+
+    const centre = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    };
+    const buttonCentre = centre(button);
+    const viewportCentre = centre(part(canvasElement, 'viewport'));
+    await expect(
+      Math.abs(buttonCentre.x - viewportCentre.x)
+    ).toBeLessThanOrEqual(1);
+    await expect(
+      Math.abs(buttonCentre.y - viewportCentre.y)
+    ).toBeLessThanOrEqual(1);
   }
 };
 
