@@ -12,11 +12,14 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   `fullscreen-button`, `pip-button`, `airplay-button`, `time`, `controls`,
   `poster`, `poster-image`, `loading-indicator`, `activation`, `viewport`,
   `media`, `error` / `error-message` / `error-retry`, `captions` /
-  `captions-button` / `captions-announcer`). A part name is not a primitive's
-  name, and several parts can come from one primitive. `ErrorDisplay` renders
-  `error`, and by default `error-message` and a recoverable error's
-  `error-retry` inside it. The slashes above only group related names —
-  `captions` / `captions-button` / `captions-announcer` spans two primitives.
+  `captions-button` / `captions-announcer` / `caption-cue` / `caption-line`,
+  `settings-menu-root` / `settings-menu-trigger` / `settings-menu`,
+  `menu-item` / `menu-radio-group` / `menu-radio-item` / `menu-radio-indicator`,
+  `gestures`). A part name is not a primitive's name, and several parts can
+  come from one primitive. `ErrorDisplay` renders `error`, and by default
+  `error-message` and a recoverable error's `error-retry` inside it. The
+  slashes above only group related names — `captions` / `captions-button` /
+  `captions-announcer` spans two primitives.
 - **`data-state`** — the part's derived state (e.g. `paused`/`playing`,
   `muted`/`unmuted`, `idle`/`ready`, `loading`/`loaded`/`error`,
   `global`/`scoped`, the error category on `error`, or the activation state).
