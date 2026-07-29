@@ -49,7 +49,7 @@ _Avoid_: status, phase
 
 **Committed source**:
 The source whose media element may mount, because its identity matches the one
-activation committed to. Named `mediaEligible` in code, pending a rename.
+activation committed to.
 _Avoid_: eligible media
 
 ### Styling

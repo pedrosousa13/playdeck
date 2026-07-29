@@ -942,16 +942,17 @@ export const Media = ({
   'aria-label': ariaLabel,
   ...rest
 }: MediaProps) => {
-  const { mediaEligible, preload, registerMedia, source } = usePlayer();
+  const { preload, registerMedia, source, sourceCommitted } = usePlayer();
   // Merge the consumer ref onto the internal registration inside one callback
   // ref (rather than Viewport's stable-callback + separate `[ref]` effect):
-  // Media is eligibility-gated and mounts its <video> late, so a `[ref]`
+  // Media is committed-source-gated and mounts its <video> late, so a `[ref]`
   // effect would run before the element exists and never forward the ref when
   // it finally mounts. Consumer refs on Media are expected to be stable; the
   // trade-off is that a volatile (inline) ref re-runs this callback each
   // render — behavior-preserving, verified to not reload the provider. Only
   // the native <video> branch attaches this; the iframe mounts aren't a video
-  // element. Declared before the eligibility returns to keep hook order stable.
+  // element. Declared before the committed-source gate returns to keep hook
+  // order stable.
   const mediaRef = useCallback(
     (node: HTMLVideoElement | null) => {
       registerMedia(node);
@@ -965,7 +966,7 @@ export const Media = ({
     },
     [registerMedia, ref]
   );
-  if (!mediaEligible || source.status === 'failure') {
+  if (!sourceCommitted || source.status === 'failure') {
     return null;
   }
 
