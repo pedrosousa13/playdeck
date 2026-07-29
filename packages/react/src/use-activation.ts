@@ -24,10 +24,10 @@ export type PlayerPreload = 'none' | 'metadata' | 'auto';
 export type ActivationBindings = {
   readonly activateFromInteraction: () => void;
   readonly loading: PlayerLoadingStrategy;
-  readonly mediaEligible: boolean;
   readonly preload: PlayerPreload;
   readonly registerMedia: (media: PlayerMediaMount | null) => void;
   readonly registerViewport: (viewport: HTMLDivElement | null) => void;
+  readonly sourceCommitted: boolean;
 };
 
 export type UseActivationOptions = {
@@ -176,7 +176,7 @@ export const useActivation = (
   const [eligibleIdentity, setEligibleIdentity] = useState<string | undefined>(
     undefined
   );
-  const mediaEligible = eligibleIdentity === currentActivationIdentity;
+  const sourceCommitted = eligibleIdentity === currentActivationIdentity;
 
   useLayoutEffect(() => {
     optionsRef.current = options;
@@ -573,7 +573,7 @@ export const useActivation = (
           error: providerError(cause)
         });
       });
-  }, [currentKey, mediaEligible, mediaVersion]);
+  }, [currentKey, mediaVersion, sourceCommitted]);
 
   useEffect(
     () => () => {
@@ -589,18 +589,18 @@ export const useActivation = (
     () => ({
       activateFromInteraction,
       loading: options.loading,
-      mediaEligible,
       preload: options.preload,
       registerMedia,
-      registerViewport
+      registerViewport,
+      sourceCommitted
     }),
     [
       activateFromInteraction,
-      mediaEligible,
       options.loading,
       options.preload,
       registerMedia,
-      registerViewport
+      registerViewport,
+      sourceCommitted
     ]
   );
 };

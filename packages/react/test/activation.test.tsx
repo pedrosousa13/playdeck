@@ -110,9 +110,9 @@ const ActivationProbe = ({
 }: ActivationProbeProps) => {
   const {
     activateFromInteraction,
-    mediaEligible,
     registerMedia,
-    registerViewport
+    registerViewport,
+    sourceCommitted
   } = useActivation({
     autoplay,
     controller,
@@ -136,7 +136,7 @@ const ActivationProbe = ({
           ref={registerViewport}
         />
       ) : null}
-      {mediaEligible && showMedia ? (
+      {sourceCommitted && showMedia ? (
         <video
           data-source={source}
           data-testid="activation-media"
