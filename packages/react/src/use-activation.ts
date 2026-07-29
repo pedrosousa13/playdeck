@@ -63,7 +63,7 @@ type ObserverRegistration = {
   readonly target: HTMLDivElement;
 };
 
-type CommittedIdentity = {
+type ActivationInputs = {
   readonly configuration: ActivationConfiguration;
   readonly loading: PlayerLoadingStrategy;
   readonly nativeOptions: NativePlaybackOptions;
@@ -161,7 +161,7 @@ export const useActivation = (
     started: false,
     queuedPlay: false
   });
-  const committedIdentity = useRef<CommittedIdentity>({
+  const latestInputsRef = useRef<ActivationInputs>({
     configuration: currentConfiguration,
     loading: options.loading,
     nativeOptions: currentNativeOptions,
@@ -173,14 +173,14 @@ export const useActivation = (
   const loadingGeneration = useRef<number | undefined>(undefined);
   const [mediaVersion, setMediaVersion] = useState(0);
   const [viewportVersion, setViewportVersion] = useState(0);
-  const [eligibleIdentity, setEligibleIdentity] = useState<string | undefined>(
-    undefined
-  );
-  const sourceCommitted = eligibleIdentity === currentActivationIdentity;
+  const [committedIdentity, setCommittedIdentity] = useState<
+    string | undefined
+  >(undefined);
+  const sourceCommitted = committedIdentity === currentActivationIdentity;
 
   useLayoutEffect(() => {
     optionsRef.current = options;
-    committedIdentity.current = {
+    latestInputsRef.current = {
       configuration: currentConfiguration,
       loading: options.loading,
       nativeOptions: currentNativeOptions,
@@ -205,7 +205,7 @@ export const useActivation = (
       observerRef.current = undefined;
       options.controller.setProvider(undefined);
       options.controller.setActivation({ activation: 'dormant' });
-      setEligibleIdentity(undefined);
+      setCommittedIdentity(undefined);
       return;
     }
 
@@ -234,7 +234,7 @@ export const useActivation = (
     active.started = true;
     active.queuedPlay = queuePlay;
     current.controller.setActivation({ activation: 'eligible' });
-    setEligibleIdentity(
+    setCommittedIdentity(
       activationIdentityKey(key, current.loading, configuration)
     );
   }, []);
@@ -282,7 +282,7 @@ export const useActivation = (
       loadingGeneration.current = undefined;
       current.controller.setProvider(undefined);
       current.controller.setActivation({ activation: 'eligible' });
-      setEligibleIdentity(
+      setCommittedIdentity(
         activationIdentityKey(
           active.sourceKey,
           active.loading,
@@ -369,7 +369,7 @@ export const useActivation = (
     const configuration = active.configuration;
     let registration: ObserverRegistration | undefined;
     const isCurrentObservation = (): boolean => {
-      const committed = committedIdentity.current;
+      const inputs = latestInputsRef.current;
       return (
         registration !== undefined &&
         observerRef.current === registration &&
@@ -378,9 +378,9 @@ export const useActivation = (
         session.current.sourceKey === key &&
         session.current.loading === loading &&
         session.current.configuration === configuration &&
-        committed.sourceKey === key &&
-        committed.loading === loading &&
-        committed.configuration === configuration
+        inputs.sourceKey === key &&
+        inputs.loading === loading &&
+        inputs.configuration === configuration
       );
     };
     try {
@@ -414,12 +414,12 @@ export const useActivation = (
       if (observerRef.current === registration) {
         observerRef.current = undefined;
       }
-      const committed = committedIdentity.current;
+      const inputs = latestInputsRef.current;
       if (
         session.current.generation === generation &&
-        committed.sourceKey === key &&
-        committed.loading === loading &&
-        committed.configuration === configuration
+        inputs.sourceKey === key &&
+        inputs.loading === loading &&
+        inputs.configuration === configuration
       ) {
         options.controller.setActivation({
           activation: 'error',
@@ -463,17 +463,17 @@ export const useActivation = (
     const replacingProvider = controller.getState().provider !== null;
     const isCurrentLoad = (): boolean => {
       const current = session.current;
-      const committed = committedIdentity.current;
+      const inputs = latestInputsRef.current;
       return (
         current.generation === generation &&
         current.sourceKey === key &&
         current.loading === loading &&
         current.configuration === configuration &&
         nativeOptionsEqual(current.nativeOptions, nativeOptions) &&
-        committed.sourceKey === key &&
-        committed.loading === loading &&
-        committed.configuration === configuration &&
-        nativeOptionsEqual(committed.nativeOptions, nativeOptions) &&
+        inputs.sourceKey === key &&
+        inputs.loading === loading &&
+        inputs.configuration === configuration &&
+        nativeOptionsEqual(inputs.nativeOptions, nativeOptions) &&
         mediaRef.current === media
       );
     };
