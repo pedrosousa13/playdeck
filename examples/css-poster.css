@@ -1,0 +1,29 @@
+/* Styling a part: an overlay.
+   `Poster` carries its own structural geometry — absolutely positioned, inset
+   0, z-index 10 — and computes its `visibility` from player state, while
+   `PosterImage` sets `display`, `width` and `height` inline. None of that can
+   be beaten from a stylesheet, so restating any of it here would be dead CSS
+   rather than a conflict (ADR-0001). A stylesheet paints, and that is all. */
+
+[data-reely-part='poster'] {
+  background: #0b0e13;
+}
+
+[data-reely-part='poster-image'] {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+/* The load state is on the element, so the frame fades in once it has actually
+   decoded rather than flashing in half-painted. An image that fails to load
+   never reaches `loaded`, so it never fades in: the state machine hides it,
+   and `[data-state='error']` needs no rule of its own to do that. */
+[data-reely-part='poster-image'][data-state='loaded'] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reely-part='poster-image'] {
+    transition: none;
+  }
+}

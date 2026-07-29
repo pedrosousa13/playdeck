@@ -1,0 +1,35 @@
+/* Styling a part: a button.
+   `data-reely-part` is the hook and `data-state` is the primitive's output, so
+   the pressed look needs no class name, no wrapper and no JavaScript. */
+
+[data-reely-part='play-button'] {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #101828;
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-reely-part='play-button']:hover {
+  background: #1d2939;
+}
+
+[data-reely-part='play-button']:focus-visible {
+  outline: 2px solid #7aa7ff;
+  outline-offset: 2px;
+}
+
+/* Playing, so the button now offers "Pause". */
+[data-reely-part='play-button'][data-state='playing'] {
+  background: #2e5aac;
+}
+
+/* Autoplay was refused by the browser: draw attention to the one control that
+   can start playback, because nothing else will. */
+[data-reely-part='play-button'][data-autoplay-state='blocked'] {
+  outline: 2px solid #f2b53d;
+  outline-offset: 2px;
+}

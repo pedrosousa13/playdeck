@@ -1,7 +1,13 @@
 import * as Player from '@reely/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
+import { withCss } from '../.storybook/theme';
 import { available, notReady, ready } from './support';
+// The stylesheet the Styled story mounts, read as text so the same string is
+// both what renders and what the docs block below prints. `?raw` and not
+// `?inline` for the reason spelled out in play-button.stories.tsx: a production
+// build minifies `?inline` css, and the printed example has to stay readable.
+import partCss from '../../../examples/css-seek-slider.css?raw';
 
 const meta = {
   title: 'Player/SeekSlider',
@@ -27,7 +33,12 @@ const meta = {
           '',
           '**Accessibility** — a range control; arrow keys seek.',
           '',
-          '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.'
+          '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.',
+          '',
+          '**Styling** — plain CSS against the parts. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
+          '```css',
+          partCss.trim(),
+          '```'
         ].join('\n')
       }
     }
@@ -100,6 +111,69 @@ export const Stalled: Story = {
     );
     // The seek window is a separate axis and must not move during a stall.
     await expect(root).toHaveAttribute('data-state', 'ready');
+  }
+};
+
+/**
+ * The same slider with the CSS from this page's **Styling** section applied.
+ * Mounted as a `<style>` inside this story's own tree, so it is torn down with
+ * the story and no other story on the page sees it.
+ */
+export const Styled: Story = {
+  decorators: [withCss(partCss)],
+  // Stalled mid-playback, so the story exercises the fixture's state-derived
+  // rule and not only its base paint. A seek window still exists, so the
+  // buffered ranges render and the example is shown doing its actual job.
+  parameters: ready(
+    { seek: available },
+    {
+      playback: 'playing',
+      currentTime: 30,
+      duration: 100,
+      buffered: [
+        { start: 0, end: 45 },
+        { start: 60, end: 80 }
+      ],
+      buffering: true
+    }
+  ),
+  play: async ({ canvas, canvasElement }) => {
+    const input = await canvas.findByRole('slider', { name: 'Seek' });
+    const root = canvasElement.querySelector(
+      '[data-reely-part="seek-slider"]'
+    ) as HTMLElement;
+    const buffered = canvasElement.querySelector(
+      '[data-reely-part="seek-buffered"]'
+    ) as HTMLElement;
+
+    // The buffered layer is a child part with no size of its own until CSS
+    // gives it one, so a measurable height is the example having applied.
+    await expect(globalThis.getComputedStyle(buffered).height).toBe('4px');
+    // The example selects the input by part name rather than by tag, as this
+    // page's own rule demands. Nothing else would fail if that part name were
+    // wrong, so it is asserted here.
+    await expect(input).toHaveAttribute('data-reely-part', 'seek-slider-input');
+    await expect(globalThis.getComputedStyle(input).accentColor).toBe(
+      'rgb(122, 167, 255)'
+    );
+
+    // The `[data-buffering='true']` rule. A stall must persist 500ms before it
+    // is admitted (#35), hence the explicit timeout, as in `Stalled`.
+    await waitFor(
+      () => expect(root).toHaveAttribute('data-buffering', 'true'),
+      { timeout: 2_000 }
+    );
+    await waitFor(() =>
+      expect(globalThis.getComputedStyle(buffered).backgroundColor).toBe(
+        'rgb(107, 74, 18)'
+      )
+    );
+    // And the other axis is untouched by the stall, so the fixture's
+    // `[data-state='idle']` rule must NOT be firing. That rule's positive case
+    // needs a player with no seek window, which is a different story than this
+    // one — a story is in one state at a time.
+    await expect(root).toHaveAttribute('data-state', 'ready');
+    await expect(globalThis.getComputedStyle(root).opacity).toBe('1');
   }
 };
 
