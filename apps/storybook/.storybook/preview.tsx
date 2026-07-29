@@ -28,6 +28,43 @@ const preview: Preview = {
     a11y: {
       // Fail the Vitest story test when axe reports a violation.
       test: 'error'
+    },
+    options: {
+      // Storybook opens on the first leaf in the sidebar, and left to sort
+      // itself that was `Overview/Capabilities matrix` — a table. Every
+      // per-part story is unstyled and inert by design (no CSS, mock provider,
+      // no media), so whichever one sorts first reads as a broken widget on
+      // first contact. `Overview/Reference example` is the page that answers
+      // "what is this", so it goes first and the workbench opens there.
+      //
+      // Sorting only. Story ids come from each story's `title`, which nothing
+      // here touches, so the e2e suite keeps addressing stories by the same ids.
+      storySort: {
+        // Reading order: what it is, then the parts, then the parts composed,
+        // then the optional theme, then the stories that need the network.
+        order: [
+          'Overview',
+          [
+            // The composed player first — it is where the sidebar lands.
+            'Reference example',
+            // Then the workbench's own conventions, then the contract every
+            // primitive obeys, then the narrower topics, then the optional
+            // stylesheet the library does not require.
+            'Introduction',
+            'Contract',
+            'Captions',
+            'Capabilities matrix',
+            'Theme'
+          ],
+          'Player',
+          'Reference',
+          'Theme',
+          // Both hit the network or exist to be driven by e2e, so they sit
+          // below everything a visitor reads.
+          'Real playback',
+          'Fixtures'
+        ]
+      }
     }
   }
 };
