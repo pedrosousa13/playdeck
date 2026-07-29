@@ -855,6 +855,14 @@ const viewportStyle: CSSProperties = {
   overflow: 'hidden'
 };
 
+// The library's one output property, read by the consumer as
+// `aspect-ratio: var(--reely-media-aspect-ratio, 16 / 9)`. That fallback is
+// why an unknown size removes the property rather than writing a zero or a
+// guess: only an absent property lets the consumer's own value apply, and
+// `0 / 0` is not something CSS can use. Every provider that measures nothing
+// usable therefore publishes `undefined` rather than a number pair.
+const MEDIA_ASPECT_RATIO_PROPERTY = '--reely-media-aspect-ratio';
+
 const assignRef = <Value,>(
   ref: Ref<Value> | undefined,
   value: Value | null
@@ -868,7 +876,7 @@ const assignRef = <Value,>(
 };
 
 export const Viewport = ({ children, ref, style, ...rest }: ViewportProps) => {
-  const { registerViewport } = usePlayer();
+  const { controller, registerViewport } = usePlayer();
   const viewportNode = useRef<HTMLDivElement | null>(null);
   const mergedRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -894,6 +902,25 @@ export const Viewport = ({ children, ref, style, ...rest }: ViewportProps) => {
       }
     };
   }, [ref]);
+  // #174: written straight to the node, never through state. Only CSS reads
+  // this, and a `PlayerState` field would wake every state consumer on every
+  // source change and every dimension change. Deliberately `useEffect` rather
+  // than the `useSyncExternalStore` that `usePlayerState` and `useActiveCues`
+  // use — subscribing through that hook is what re-renders.
+  useEffect(() => {
+    const node = viewportNode.current;
+    if (!node) return;
+    return controller.subscribeDimensions((dimensions) => {
+      if (dimensions) {
+        node.style.setProperty(
+          MEDIA_ASPECT_RATIO_PROPERTY,
+          `${dimensions.width} / ${dimensions.height}`
+        );
+      } else {
+        node.style.removeProperty(MEDIA_ASPECT_RATIO_PROPERTY);
+      }
+    });
+  }, [controller]);
   return (
     <div
       {...rest}

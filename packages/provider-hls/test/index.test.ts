@@ -1305,3 +1305,43 @@ test('the hls.js engine declares readiness on MEDIA_ATTACHED', async () => {
     expect.objectContaining({ commandsReady: true })
   );
 });
+
+// Dimensions are read off the shared <video> element, which both engines
+// play into and whose `resize`/`loadedmetadata` listeners `native.attach()`
+// installs either way — so unlike `subscribeCues`, this forward is NOT gated
+// to the native engine. hls.js owns captions; it does not own the element's
+// intrinsic size.
+const stubIntrinsicSize = (
+  media: HTMLVideoElement,
+  width: number,
+  height: number
+): void => {
+  Object.defineProperty(media, 'videoWidth', {
+    configurable: true,
+    get: () => width
+  });
+  Object.defineProperty(media, 'videoHeight', {
+    configurable: true,
+    get: () => height
+  });
+};
+
+test.each([
+  ['native', stubNativeHlsSupport],
+  ['hls.js', stubMseOnlySupport]
+] as const)(
+  'forwards the intrinsic dimensions on the %s engine',
+  async (_engine, support) => {
+    const { media, provider } = createHarness(support);
+    stubIntrinsicSize(media, 1080, 1920);
+    const seen: Array<{ width: number; height: number } | undefined> = [];
+    expect(provider.subscribeDimensions).toBeTypeOf('function');
+    provider.subscribeDimensions?.((dimensions) => seen.push(dimensions));
+
+    await provider.attach();
+    await provider.load();
+    media.dispatchEvent(new Event('loadedmetadata'));
+
+    expect(seen.at(-1)).toEqual({ width: 1080, height: 1920 });
+  }
+);

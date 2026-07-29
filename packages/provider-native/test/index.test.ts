@@ -2,7 +2,11 @@
 
 import { runInNewContext } from 'node:vm';
 import { expect, test, vi } from 'vitest';
-import type { ProviderAdapter, ProviderStateListener } from '@reely/core';
+import type {
+  MediaDimensions,
+  ProviderAdapter,
+  ProviderStateListener
+} from '@reely/core';
 import { createNativeProvider } from '../src/index';
 
 type ContractAdapter = {
@@ -871,4 +875,119 @@ test('native is command-ready while activation is still loading-provider', async
   expect(patches).not.toContainEqual(
     expect.objectContaining({ activation: 'ready' })
   );
+});
+
+// happy-dom implements neither `videoWidth` nor `videoHeight` (both read
+// `undefined`), so every dimension test defines them itself — the same
+// mutable-getter shape the `readyState` test above uses.
+const videoWithDimensions = (
+  width: number | undefined,
+  height: number | undefined
+): { media: HTMLVideoElement; resize: (w: number, h: number) => void } => {
+  const media = document.createElement('video');
+  let current = { width, height };
+  Object.defineProperty(media, 'videoWidth', {
+    configurable: true,
+    get: () => current.width
+  });
+  Object.defineProperty(media, 'videoHeight', {
+    configurable: true,
+    get: () => current.height
+  });
+  vi.spyOn(media, 'load').mockImplementation(() => undefined);
+  return {
+    media,
+    resize: (w, h) => {
+      current = { width: w, height: h };
+      media.dispatchEvent(new Event('resize'));
+    }
+  };
+};
+
+const collectDimensions = (
+  provider: ProviderAdapter
+): Array<MediaDimensions | undefined> => {
+  const subscribe = provider.subscribeDimensions;
+  // Asserted, never optional-chained: an absent channel has to fail these
+  // tests, not quietly satisfy every `toBeUndefined()` in them.
+  expect(subscribe).toBeTypeOf('function');
+  const seen: Array<MediaDimensions | undefined> = [];
+  subscribe!((dimensions) => seen.push(dimensions));
+  return seen;
+};
+
+test('native publishes the intrinsic dimensions at loadedmetadata', async () => {
+  const { media } = videoWithDimensions(1080, 1920);
+  const provider = createNativeProvider(media);
+  const seen = collectDimensions(provider);
+
+  await provider.attach();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(seen.at(-1)).toEqual({ width: 1080, height: 1920 });
+});
+
+// The intrinsic size changes mid-playback on adaptive renditions and on a
+// `loadVideo`-style swap into the same element, and `resize` is the only event
+// that reports it — `loadedmetadata` has already been and gone.
+test('native republishes the intrinsic dimensions on resize', async () => {
+  const { media, resize } = videoWithDimensions(1080, 1920);
+  const provider = createNativeProvider(media);
+  const seen = collectDimensions(provider);
+
+  await provider.attach();
+  media.dispatchEvent(new Event('loadedmetadata'));
+  resize(1920, 1080);
+
+  expect(seen.at(-1)).toEqual({ width: 1920, height: 1080 });
+});
+
+test('native reports unknown rather than a zero ratio', async () => {
+  const { media } = videoWithDimensions(0, 0);
+  const provider = createNativeProvider(media);
+  const seen = collectDimensions(provider);
+
+  await provider.attach();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(seen.at(-1)).toBeUndefined();
+});
+
+test('native reports unknown when the element exposes no intrinsic size', async () => {
+  const { media } = videoWithDimensions(undefined, undefined);
+  const provider = createNativeProvider(media);
+  const seen = collectDimensions(provider);
+
+  await provider.attach();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(seen.at(-1)).toBeUndefined();
+});
+
+test('native clears the dimensions on destroy', async () => {
+  const { media } = videoWithDimensions(1080, 1920);
+  const provider = createNativeProvider(media);
+  const seen = collectDimensions(provider);
+
+  await provider.attach();
+  media.dispatchEvent(new Event('loadedmetadata'));
+  await provider.destroy();
+
+  expect(seen.at(-1)).toBeUndefined();
+});
+
+// `addListeners`/`removeListeners` mirror each other; a `resize` listener
+// added to only one keeps the destroyed provider publishing off the element.
+test('native stops observing resize after destroy', async () => {
+  const { media, resize } = videoWithDimensions(1080, 1920);
+  const provider = createNativeProvider(media);
+  const seen = collectDimensions(provider);
+
+  await provider.attach();
+  media.dispatchEvent(new Event('loadedmetadata'));
+  await provider.destroy();
+  const afterDestroy = seen.length;
+  resize(1920, 1080);
+
+  expect(seen).toHaveLength(afterDestroy);
 });

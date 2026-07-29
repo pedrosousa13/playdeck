@@ -943,6 +943,12 @@ export const createHlsProvider = (
     requestPictureInPicture: native.requestPictureInPicture,
     exitPictureInPicture: native.exitPictureInPicture,
     showAirPlayPicker: native.showAirPlayPicker,
+    // Ungated, unlike `subscribeCues` below: the intrinsic size is read off
+    // the <video> element, which both engines play into and whose
+    // `loadedmetadata`/`resize` listeners `native.attach()` installs on either
+    // path. hls.js owns captions — it does not own the element's own geometry,
+    // so the reasoning that gates the caption members does not carry over.
+    subscribeDimensions: native.subscribeDimensions,
     // Embedded WebVTT on the native HLS engine surfaces through the same
     // `HTMLMediaElement.textTracks` API the native provider already
     // handles — `native.attach()`/`load()`/`destroy()` above already drive

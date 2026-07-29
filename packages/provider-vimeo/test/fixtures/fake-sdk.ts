@@ -33,6 +33,10 @@ export type FakePlayerOptions = {
   readonly requestFullscreen?: () => Promise<unknown>;
   readonly requestPictureInPicture?: () => Promise<unknown>;
   readonly getBuffered?: () => Promise<ReadonlyArray<readonly number[]>>;
+  readonly videoWidth?: number;
+  readonly videoHeight?: number;
+  readonly getVideoWidth?: () => Promise<number>;
+  readonly getVideoHeight?: () => Promise<number>;
 };
 
 export class FakeVimeoPlayer implements VimeoSdkPlayer {
@@ -136,6 +140,18 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
 
   getTextTracks: Mock<() => Promise<ReadonlyArray<VimeoSdkTextTrack>>> = vi.fn(
     () => Promise.resolve(this.#textTracks)
+  );
+
+  getVideoWidth: Mock<() => Promise<number>> = vi.fn(
+    () =>
+      this.#options.getVideoWidth?.() ??
+      Promise.resolve(this.#options.videoWidth ?? 1920)
+  );
+
+  getVideoHeight: Mock<() => Promise<number>> = vi.fn(
+    () =>
+      this.#options.getVideoHeight?.() ??
+      Promise.resolve(this.#options.videoHeight ?? 1080)
   );
 
   getQualities: Mock<() => Promise<ReadonlyArray<VimeoSdkQuality>>> = vi.fn(

@@ -71,6 +71,14 @@ export type TextCue = {
   readonly text: string;
 };
 
+// The media's own pixel dimensions, not the layout box it is drawn into.
+// Numbers only: core's public types compile with `"lib": ["ES2022"]`, so no
+// element the figures were read off may appear here.
+export type MediaDimensions = {
+  readonly width: number;
+  readonly height: number;
+};
+
 export type CommandResult =
   | { ok: true }
   | { ok: false; reason: CommandFailureReason; error?: PlayerError };
@@ -289,6 +297,14 @@ export type ProviderAdapter = {
   showAirPlayPicker?: () => Promise<CommandResult>;
   retry?: () => Promise<CommandResult>;
   subscribeCues?: (listener: (cues: readonly TextCue[]) => void) => () => void;
+  // A side channel like `subscribeCues`, and deliberately not `PlayerState`:
+  // the React layer writes the ratio straight to the DOM, so routing it
+  // through state would re-render every state consumer on every source and
+  // dimension change. `undefined` is how "not known" is expressed — including
+  // clearing.
+  subscribeDimensions?: (
+    listener: (dimensions: MediaDimensions | undefined) => void
+  ) => () => void;
   setCaptionRenderer?: (mode: 'custom' | 'native') => void;
 };
 
@@ -649,8 +665,13 @@ export class PlayerController {
   #provider: ProviderAdapter | undefined;
   #unsubscribe: (() => void) | undefined;
   #cueUnsubscribe: (() => void) | undefined;
+  #dimensionUnsubscribe: (() => void) | undefined;
   #activeCues: readonly TextCue[] = Object.freeze([]);
   #cueListeners = new Set<(cues: readonly TextCue[]) => void>();
+  #dimensions: MediaDimensions | undefined;
+  #dimensionListeners = new Set<
+    (dimensions: MediaDimensions | undefined) => void
+  >();
   #listeners = new Set<(state: PlayerState) => void>();
   #readyWaiters = new Set<(ready: boolean) => void>();
   #eventListeners = new Map<
@@ -746,13 +767,19 @@ export class PlayerController {
     const generation = ++this.#generation;
     const unsubscribe = this.#unsubscribe;
     const cueUnsubscribe = this.#cueUnsubscribe;
+    const dimensionUnsubscribe = this.#dimensionUnsubscribe;
     const previousProvider = this.#provider;
     this.#unsubscribe = undefined;
     this.#cueUnsubscribe = undefined;
+    this.#dimensionUnsubscribe = undefined;
     this.#provider = undefined;
     unsubscribeSafely(unsubscribe);
     unsubscribeSafely(cueUnsubscribe);
+    unsubscribeSafely(dimensionUnsubscribe);
     this.#setActiveCues([]);
+    // Cleared before the next provider gets a chance to measure: a ratio must
+    // never outlive the source it described.
+    this.#setDimensions(undefined);
     if (previousProvider) {
       destroyProviderSafely(previousProvider);
     }
@@ -821,6 +848,15 @@ export class PlayerController {
         this.#setActiveCues(cues);
       });
     }
+    if (provider.subscribeDimensions) {
+      this.#dimensionUnsubscribe = provider.subscribeDimensions(
+        (dimensions) => {
+          if (generation !== this.#generation || provider !== this.#provider)
+            return;
+          this.#setDimensions(dimensions);
+        }
+      );
+    }
     try {
       provider.setCaptionRenderer?.(this.#captionRenderer);
     } catch {
@@ -887,6 +923,14 @@ export class PlayerController {
   };
 
   getActiveCues = (): readonly TextCue[] => this.#activeCues;
+
+  subscribeDimensions = (
+    listener: (dimensions: MediaDimensions | undefined) => void
+  ): (() => void) => {
+    this.#dimensionListeners.add(listener);
+    listener(this.#dimensions);
+    return () => this.#dimensionListeners.delete(listener);
+  };
 
   setCaptionRenderer = (mode: 'custom' | 'native'): void => {
     this.#captionRenderer = mode;
@@ -1086,6 +1130,11 @@ export class PlayerController {
   #setActiveCues = (cues: readonly TextCue[]): void => {
     this.#activeCues = Object.freeze(cues.map((c) => Object.freeze({ ...c })));
     this.#cueListeners.forEach((l) => notifySafely(l, this.#activeCues));
+  };
+
+  #setDimensions = (dimensions: MediaDimensions | undefined): void => {
+    this.#dimensions = dimensions && Object.freeze({ ...dimensions });
+    this.#dimensionListeners.forEach((l) => notifySafely(l, this.#dimensions));
   };
 
   #applyPatch = (patch: ProviderStatePatch, acceptAutoplay = true): void => {

@@ -1,6 +1,7 @@
 import type {
   Availability,
   CommandResult,
+  MediaDimensions,
   PlayerCapabilities,
   PlayerError,
   PlayerEventDetailMap,
@@ -202,6 +203,9 @@ export const createNativeProvider = (
   options: NativePlaybackOptions = {}
 ): NativeProviderAdapter => {
   const listeners = new Set<ProviderStateListener>();
+  const dimensionListeners = new Set<
+    (dimensions: MediaDimensions | undefined) => void
+  >();
   const ownerDocument = media.ownerDocument;
   const webkitMedia: WebKitHTMLVideoElement = media;
   const startTime =
@@ -225,6 +229,22 @@ export const createNativeProvider = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
   ): void => listeners.forEach((listener) => listener(patch, event));
+
+  // Before metadata arrives, and on an audio-only or errored source, both
+  // dimensions read 0 — and some DOM test environments omit them entirely.
+  // Either way the size is not known, so unusable pairs publish `undefined`.
+  const publishDimensions = (): void => {
+    const width = media.videoWidth;
+    const height = media.videoHeight;
+    const dimensions =
+      Number.isFinite(width) &&
+      Number.isFinite(height) &&
+      width > 0 &&
+      height > 0
+        ? { width, height }
+        : undefined;
+    dimensionListeners.forEach((listener) => listener(dimensions));
+  };
 
   const event = <Type extends PlayerEventType>(
     type: Type,
@@ -436,8 +456,13 @@ export const createNativeProvider = (
   };
   const onLoadedMetadata = (originalEvent: Event): void => {
     applyInitialPosition();
+    publishDimensions();
     onCanPlay(originalEvent);
   };
+  // The intrinsic size can change after metadata — an adaptive rendition
+  // switch, or a new source loaded into the same element. `resize` is the only
+  // event that reports it; `loadedmetadata` has already fired by then.
+  const onResize = (): void => publishDimensions();
   const onSeeking = (originalEvent: Event): void => {
     if (boundaryEnded && beforeEffectiveEnd(media.currentTime)) {
       boundaryEnded = false;
@@ -554,6 +579,7 @@ export const createNativeProvider = (
     media.addEventListener('waiting', onWaiting);
     media.addEventListener('canplay', onCanPlay);
     media.addEventListener('loadedmetadata', onLoadedMetadata);
+    media.addEventListener('resize', onResize);
     media.addEventListener('seeking', onSeeking);
     media.addEventListener('seeked', onSeeked);
     media.addEventListener('timeupdate', onTimeUpdate);
@@ -584,6 +610,7 @@ export const createNativeProvider = (
     media.removeEventListener('waiting', onWaiting);
     media.removeEventListener('canplay', onCanPlay);
     media.removeEventListener('loadedmetadata', onLoadedMetadata);
+    media.removeEventListener('resize', onResize);
     media.removeEventListener('seeking', onSeeking);
     media.removeEventListener('seeked', onSeeked);
     media.removeEventListener('timeupdate', onTimeUpdate);
@@ -652,12 +679,20 @@ export const createNativeProvider = (
         }
       }
       listeners.clear();
+      // Announced before the set is dropped: whatever this element measured
+      // stops being true the moment the provider lets go of it.
+      dimensionListeners.forEach((listener) => listener(undefined));
+      dimensionListeners.clear();
     },
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     subscribeCues: textTracks.subscribeCues,
+    subscribeDimensions: (listener) => {
+      dimensionListeners.add(listener);
+      return () => dimensionListeners.delete(listener);
+    },
     play: () =>
       runCommand(() => {
         if (

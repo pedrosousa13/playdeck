@@ -53,6 +53,13 @@
  * all. Inline styles beat any stylesheet, so restating those rules here would
  * be dead CSS. The last two tokens above are the ones the poster components
  * read.
+ *
+ * `--reely-media-aspect-ratio` is a `--reely-*` name that is deliberately NOT
+ * in the table above, because it is not a token: the library writes it onto the
+ * viewport part when a provider can measure its media, and a consumer reads it.
+ * That is the opposite direction to everything here, all of which a primitive
+ * reads from you. This file neither declares it nor reads it. It is documented
+ * with the library's other outputs on the Contract docs page.
  */
 
 @layer reely {

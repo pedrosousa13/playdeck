@@ -2,6 +2,7 @@ import type {
   Availability,
   CaptionRendering,
   CommandResult,
+  MediaDimensions,
   PlayerCapabilities,
   PlayerError,
   PlayerEventDetailMap,
@@ -463,6 +464,9 @@ export const createVimeoProvider = (
 ): VimeoProviderAdapter => {
   const listeners = new Set<ProviderStateListener>();
   const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
+  const dimensionListeners = new Set<
+    (dimensions: MediaDimensions | undefined) => void
+  >();
   let attached = false;
   let destroyed = false;
   let started = false;
@@ -483,6 +487,7 @@ export const createVimeoProvider = (
   let customControlsAvailability: Availability = providerCheck;
   let captionRenderer: 'custom' | 'native' = 'custom';
   let activeCues: readonly TextCue[] = [];
+  let activeDimensions: MediaDimensions | undefined;
   // The track this adapter last asked Vimeo to enable. Vimeo's own UI can
   // change the active track too, and only this tells the two apart.
   let lastEnabledTrackId: string | null = null;
@@ -495,6 +500,26 @@ export const createVimeoProvider = (
   const clearCues = (): void => {
     if (activeCues.length === 0) return;
     emitCues([]);
+  };
+
+  // Anything that is not two finite positive numbers publishes as "not known".
+  // A missing figure defaults to 0 so it fails the same `> 0` test the SDK's
+  // own zeroes do, rather than needing a separate undefined check.
+  const emitDimensions = (width = 0, height = 0): void => {
+    const dimensions =
+      Number.isFinite(width) &&
+      Number.isFinite(height) &&
+      width > 0 &&
+      height > 0
+        ? { width, height }
+        : undefined;
+    activeDimensions = dimensions;
+    dimensionListeners.forEach((listener) => listener(dimensions));
+  };
+
+  const clearDimensions = (): void => {
+    if (activeDimensions === undefined) return;
+    emitDimensions();
   };
 
   // `showing: false` is what makes Vimeo hand the cues over instead of drawing
@@ -559,10 +584,14 @@ export const createVimeoProvider = (
     activePlayer = undefined;
     activeIframe = undefined;
     // Cues belong to the player being discarded; a retry must not inherit them.
-    // Neither must the memory of what was enabled: the fresh player has nothing
-    // enabled, so a stale id would both re-enable a track the state reports as
-    // unselected and swallow a real Vimeo-UI change as our own echo.
+    // Neither must its measured shape: the replacement may take a while to
+    // answer, or never answer, and until it does a leftover ratio describes a
+    // video that is no longer there. Neither must the memory of what was
+    // enabled: the fresh player has nothing enabled, so a stale id would both
+    // re-enable a track the state reports as unselected and swallow a real
+    // Vimeo-UI change as our own echo.
     clearCues();
+    clearDimensions();
     lastEnabledTrackId = null;
     if (player) {
       try {
@@ -636,6 +665,16 @@ export const createVimeoProvider = (
           emit({ buffered: toRanges(ranges) });
         },
         () => undefined
+      );
+    });
+    // Unlike `progress`, `resize` carries the new intrinsic size in its own
+    // payload, so it needs no getter round trip — and therefore no second,
+    // post-await `isStale` guard the way `progress` does above. The one `on`
+    // already applies to every listener is the only one this needs.
+    on('resize', (data) => {
+      emitDimensions(
+        numberField(data, 'videoWidth'),
+        numberField(data, 'videoHeight')
       );
     });
     on('bufferstart', () => emit({ buffering: true }));
@@ -887,7 +926,9 @@ export const createVimeoProvider = (
         initialPlaybackRate,
         initialTracks,
         initialQualities,
-        chromeless
+        chromeless,
+        initialWidth,
+        initialHeight
       ] = await Promise.all([
         player.getDuration().catch(() => null),
         player.getMuted().catch(() => mount.muted ?? false),
@@ -897,9 +938,15 @@ export const createVimeoProvider = (
           .getTextTracks()
           .catch((): ReadonlyArray<VimeoSdkTextTrack> => []),
         player.getQualities().catch((): ReadonlyArray<VimeoSdkQuality> => []),
-        availabilityPromise
+        availabilityPromise,
+        // An embed that does not answer these leaves the size unknown, which
+        // is a fallback the consumer already handles — never a reason to fail
+        // the attach.
+        player.getVideoWidth().catch((): undefined => undefined),
+        player.getVideoHeight().catch((): undefined => undefined)
       ]);
       if (isStale(thisGeneration, player)) return { ok: true };
+      emitDimensions(initialWidth, initialHeight);
       duration = initialDuration;
       textTracks = initialTracks;
       selectedTextTrackId = showingVimeoTextTrackId(initialTracks);
@@ -1018,10 +1065,15 @@ export const createVimeoProvider = (
       teardown();
       listeners.clear();
       cueListeners.clear();
+      dimensionListeners.clear();
     },
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    subscribeDimensions: (listener) => {
+      dimensionListeners.add(listener);
+      return () => dimensionListeners.delete(listener);
     },
     play: () => runCommand((player) => player.play()),
     pause: () => runCommand((player) => player.pause()),

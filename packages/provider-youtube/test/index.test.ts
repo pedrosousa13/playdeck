@@ -1057,3 +1057,19 @@ test('youtube declares command readiness only at onReady', async () => {
     expect.objectContaining({ commandsReady: true })
   );
 });
+
+// The mount is a bare <div> and the IFrame API exposes no intrinsic media
+// size, so there is nothing to measure. Absence is the contract: it is what
+// leaves `--reely-media-aspect-ratio` unset, so the consumer's own
+// `var(…, 16 / 9)` fallback is the one that applies. A member returning
+// `undefined` forever would be a worse lie than not having one.
+test('youtube declares no dimension channel', async () => {
+  const adapter = createAdapter();
+
+  await adapter.provider.attach();
+  await adapter.provider.load();
+  adapter.fake.players.at(-1)?.fireReady();
+
+  expect(adapter.provider.subscribeDimensions).toBeUndefined();
+  expect('subscribeDimensions' in adapter.provider).toBe(false);
+});

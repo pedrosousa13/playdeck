@@ -30,6 +30,39 @@ the test origin.
   no-external-request guard in `.storybook/vitest.setup.ts` enforces this per
   story.
 
+## Fixture media
+
+`public/` holds the clips the `Real playback/*` stories play. Both are one
+second, 30fps, video-only H.264 with `+faststart`, so they behave identically
+offline and in CI.
+
+- `tracer.mp4` — 320×180 (16:9). It arrived whole in the commit that added it
+  and how it was produced is recorded nowhere, which is why the next entry
+  exists.
+- `tracer-portrait.mp4` — 360×640 (9:16), 8,373 bytes. Added for
+  `Real playback/AspectRatio`, which needs a source that is visibly not 16:9.
+  9:16 rather than the issue's 1080×1920 because only the ratio is load-bearing
+  and a small encode keeps the fixture under 10KB. Reproduce it with:
+
+  ```sh
+  ffmpeg -y \
+    -f lavfi -i "color=c=0x0b0e13:s=360x640:r=30:d=1" \
+    -f lavfi -i "color=c=0x3ea6ff:s=344x24:r=30:d=1" \
+    -filter_complex "[0:v]drawbox=x=8:y=8:w=344:h=624:color=0x3ea6ff:t=4[bg];\
+  [bg][1:v]overlay=x=8:y='8+(600)*t'[v0];\
+  [v0]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:\
+  text='9\:16':fontcolor=white:fontsize=88:x=(w-text_w)/2:y=(h-text_h)/2-60,\
+  drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:\
+  text='PORTRAIT':fontcolor=0x3ea6ff:fontsize=40:x=(w-text_w)/2:y=(h-text_h)/2+50[out]" \
+    -map "[out]" -c:v libx264 -profile:v high -preset veryslow -crf 30 \
+    -pix_fmt yuv420p -an -movflags +faststart \
+    public/tracer-portrait.mp4
+  ```
+
+  The sweeping bar is an `overlay`, not a `drawbox`: `t` inside a `drawbox`
+  expression is the box's thickness, not the timestamp, so the box silently
+  lands off-frame and the clip renders as a still.
+
 ## Mock player decorator
 
 `.storybook/mock-player.tsx` wraps every story in a `Player.Root` backed by a
