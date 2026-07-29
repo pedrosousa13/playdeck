@@ -6,24 +6,28 @@ import { Meta } from '@storybook/addon-docs/blocks';
 
 Every primitive exposes a stable styling/testing contract via data attributes.
 
-- **`data-reely-part`** — the primitive's stable name (`play-button`,
-  `mute-button`, `volume-slider`, `seek-slider` / `seek-slider-input` /
-  `seek-buffered` / `seek-buffered-range`,
-  `fullscreen-button`, `pip-button`, `airplay-button`, `time`, `controls`, `poster`,
-  `poster-image`, `loading-indicator`, `activation`, `viewport`, `media`,
-  `error` / `error-message` / `error-retry`, `captions` / `captions-button` /
-  `captions-announcer`).
-- **`data-state`** — the component's derived state (e.g. `paused`/`playing`,
+- **`data-reely-part`** — the stable name of a part: one named element in the
+  rendered DOM (`play-button`, `mute-button`, `volume-slider`, `seek-slider` /
+  `seek-slider-input` / `seek-buffered` / `seek-buffered-range`,
+  `fullscreen-button`, `pip-button`, `airplay-button`, `time`, `controls`,
+  `poster`, `poster-image`, `loading-indicator`, `activation`, `viewport`,
+  `media`, `error` / `error-message` / `error-retry`, `captions` /
+  `captions-button` / `captions-announcer`). A part name is not a primitive's
+  name, and several parts can come from one primitive. `ErrorDisplay` renders
+  `error`, and by default `error-message` and a recoverable error's
+  `error-retry` inside it. The slashes above only group related names —
+  `captions` / `captions-button` / `captions-announcer` spans two primitives.
+- **`data-state`** — the part's derived state (e.g. `paused`/`playing`,
   `muted`/`unmuted`, `idle`/`ready`, `loading`/`loaded`/`error`,
   `global`/`scoped`, the error category on `error`, or the activation state).
-  Absent where the primitive has no observable state: `airplay-button` opens a
+  Absent where the part has no observable state: `airplay-button` opens a
   system picker, and Reely does not currently surface an active-route flag, so
   it exposes no `data-state` rather than a value that never changes. That is
   today's behaviour rather than a permanent guarantee — WebKit can report an
   active wireless route, and Reely has deferred plumbing it.
 - **`data-provider`** — carries the active provider name, or is absent when
   no provider is attached. By design it appears only on the provider-bound
-  control primitives (`play-button`, `mute-button`, `volume-slider`,
+  control parts (`play-button`, `mute-button`, `volume-slider`,
   `seek-slider`, `time`, `fullscreen-button`, `pip-button`, `airplay-button`, `controls`,
   `error`, `captions-button`), not
   on the structural/activation parts (`viewport`, `poster`, `poster-image`,
@@ -42,9 +46,9 @@ Style and query against these attributes rather than internal class names.
 ## Styling a part
 
 The attributes above _are_ the selectors, so a headless player needs no class
-names to look like something. Four parts carry a worked example below — a
-button, a slider, an overlay, and one whose `data-state` is the whole point.
-Four, not twenty: the lesson is the same for the rest.
+names to look like something. Four worked examples follow — a button, a slider,
+an overlay, and one whose `data-state` is the whole point. Four, not twenty: the
+lesson is the same for the rest.
 
 Each block is generated from a file in `examples/`, and the story it names
 mounts that same file for its `Styled` story, so what you read here is what
