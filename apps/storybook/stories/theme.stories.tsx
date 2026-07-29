@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
 import * as Player from '@reely/react';
+import { createPortal } from 'react-dom';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { available, ready } from './support';
@@ -131,14 +132,41 @@ export const Default: Story = {
 
 // The override contract, which is the whole reason for the layer and :where().
 // If this ever fails, consumers are back to specificity fights.
+//
+// This story owns the layer half of that. The `:where()` half is asserted over
+// the stylesheet text in packages/react/test/theme.test.ts, not here.
+//
+// The consumer rule is rigged to lose on every cascade axis except the layer,
+// so that the layer is the only thing left that can explain the win. It is
+// `:where(.consumer-tint)`, 0-0-0, exactly tying the theme's
+// `:where([data-reely-part='controls'])` on specificity -- a bare
+// `.consumer-tint` would be 0-1-0 and win outright, layer or no layer. And it
+// is declared earlier, so on source order alone the theme would take the tie.
+// What remains is the cascade layer: unlayered declarations beat layered ones
+// before specificity is ever consulted. Delete `@layer reely` from theme.css
+// and this story goes red.
+//
+// Earlier means portalled into `document.head`, not mounted with `withCss`:
+// that puts the `<style>` inside the story tree (.storybook/theme.tsx), which
+// is the one thing this story has to escape. The theme is mounted by the
+// project decorator in .storybook/preview.tsx, which wraps this story-level
+// one, so its `<style>` lands ahead of anything rendered here in `<body>`
+// (measured: theme at document index 2, a sibling `<style>` at 4). Everything
+// in `<head>` precedes everything in `<body>`, and the portal still unmounts
+// with the story. What it does not do is scope to this subtree the way
+// `withCss` does -- it is document-global while mounted, which is visible only
+// on the autodocs page discussed below, where the whole file co-mounts. Nothing
+// else here carries `.consumer-tint`, so it stays harmless. The play function
+// asserts the ordering rather than assuming it -- it is what silently inverted
+// and left this story proving nothing.
 export const ConsumerCssWins: Story = {
   decorators: [
     (Story: () => ReactElement) => (
       <>
-        {/* Unlayered, single class, declared BEFORE the theme in document
-            order -- so if this wins it is the cascade layer doing the work,
-            not source order. */}
-        <style>{`.consumer-tint { background-color: rgb(1, 2, 3); }`}</style>
+        {createPortal(
+          <style>{`:where(.consumer-tint) { background-color: rgb(1, 2, 3); }`}</style>,
+          document.head
+        )}
         <Story />
       </>
     )
@@ -157,6 +185,34 @@ export const ConsumerCssWins: Story = {
     </Player.Viewport>
   ),
   play: async ({ canvas }) => {
+    // The premise, checked rather than trusted: a layered theme is in the
+    // document, and the consumer rule really is the earlier declaration, so
+    // source order is working against it.
+    const styles = [...document.querySelectorAll('style')];
+    // Matched on the at-rule itself, brace included: theme.css's header comment
+    // says "@layer reely" in prose too, and a bare substring match resolves to
+    // the stylesheet even after the real wrapper is deleted -- which would let
+    // the de-layered case pass this probe and then throw somewhere else. The
+    // brace is optionally spaced because the production Storybook build
+    // minifies `?inline` CSS to `@layer reely{`.
+    const themeStyle = styles.find((style) =>
+      /@layer\s+reely\s*\{/.test(style.textContent ?? '')
+    )!;
+    const consumerStyle = styles.find((style) =>
+      style.textContent?.includes('.consumer-tint')
+    )!;
+    // Both found, asserted by name: with `@layer reely` deleted the theme probe
+    // matches nothing, and this reports that as the missing layer rather than
+    // crashing on an undefined argument to compareDocumentPosition below.
+    await expect({
+      layeredTheme: Boolean(themeStyle),
+      consumerRule: Boolean(consumerStyle)
+    }).toEqual({ layeredTheme: true, consumerRule: true });
+    await expect(
+      consumerStyle.compareDocumentPosition(themeStyle) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeGreaterThan(0);
+
     const controls = await canvas.findByRole('group', {
       name: 'Video player controls'
     });
