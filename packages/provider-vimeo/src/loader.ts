@@ -35,6 +35,12 @@ export type VimeoSdkPlayer = {
   setVolume: (volume: number) => Promise<unknown>;
   getPlaybackRate: () => Promise<number>;
   setPlaybackRate: (rate: number) => Promise<unknown>;
+  // The media's own pixel size, not the iframe's. Before playback begins the
+  // SDK reports the highest rendition available, which is the same shape the
+  // ratio describes. The `resize` event carries the pair again on every change
+  // as `{ videoWidth, videoHeight }`.
+  getVideoWidth: () => Promise<number>;
+  getVideoHeight: () => Promise<number>;
   getQualities: () => Promise<ReadonlyArray<VimeoSdkQuality>>;
   // An id the player never offered never settles at all — the SDK neither
   // resolves nor rejects it (#82), so every call has to be resolved against the

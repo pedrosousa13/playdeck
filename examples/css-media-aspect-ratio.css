@@ -1,0 +1,14 @@
+/* Reading a value the library writes.
+   `--reely-media-aspect-ratio` is an output, not a token: Reely sets it on the
+   viewport part once a provider has measured its media, and this one rule is
+   what opts in to it. Nothing in the library reads it back, so without a rule
+   like this the player is shaped by whatever you already sized it to.
+
+   The fallback is not decoration. It is the whole behaviour wherever no ratio
+   is known — every YouTube source, and any other source until its metadata has
+   arrived — because the property is absent then rather than zero. Pick a value
+   you are happy to render, and size the box's width yourself as usual. */
+
+[data-reely-part='viewport'] {
+  aspect-ratio: var(--reely-media-aspect-ratio, 16 / 9);
+}

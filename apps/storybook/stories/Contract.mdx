@@ -261,6 +261,65 @@ unmounts at `ready` rather than wearing it:
 None of this is `@reely/react/theme.css`, which is a whole opinion you can take
 or leave. These are the smallest rules that make one part look deliberate.
 
+## The media's aspect ratio
+
+One more output, and the only one that is not an attribute. When the active
+provider can measure the media it is playing, Reely writes that media's own
+ratio onto the `viewport` part as a custom property — for a vertical clip,
+`--reely-media-aspect-ratio: 1080 / 1920`.
+
+It runs the opposite way to a theme token. A token is a value you set and a
+primitive reads; this one the library writes and you read, which makes it a
+sibling of `data-state` rather than of anything in `theme.css`. Reely never
+applies it to anything, so opting in is one rule of your own:
+
+{/* example:css-media-aspect-ratio */}
+
+```css
+/* Reading a value the library writes.
+   `--reely-media-aspect-ratio` is an output, not a token: Reely sets it on the
+   viewport part once a provider has measured its media, and this one rule is
+   what opts in to it. Nothing in the library reads it back, so without a rule
+   like this the player is shaped by whatever you already sized it to.
+
+   The fallback is not decoration. It is the whole behaviour wherever no ratio
+   is known — every YouTube source, and any other source until its metadata has
+   arrived — because the property is absent then rather than zero. Pick a value
+   you are happy to render, and size the box's width yourself as usual. */
+
+[data-reely-part='viewport'] {
+  aspect-ratio: var(--reely-media-aspect-ratio, 16 / 9);
+}
+```
+
+{/* /example */}
+
+`Real playback/AspectRatio` mounts that same file over a portrait source next to
+a 16:9 one, so you can see one rule produce two shapes.
+
+Which providers measure, and what from:
+
+| Provider | Reports the ratio                                                                                                                      |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| native   | Yes — the media's own `videoWidth`/`videoHeight`, once metadata has loaded and again whenever the frame size changes under it.         |
+| hls      | Yes, on both engines. The picture is drawn into the same `<video>` the native provider drives, so the measurement is the native one.   |
+| vimeo    | Yes — the size the Vimeo SDK reports, once the embed is ready and again when it changes.                                               |
+| youtube  | **No.** The IFrame API exposes no intrinsic size, and what Reely mounts for it is not a media element, so there is nothing to measure. |
+
+Reely does not guess a ratio it cannot measure, and does not read one out of a
+source URL — a `/shorts/` path is not a measurement. A consumer who knows they
+are rendering a Short can set the property themselves.
+
+**Absent, never defaulted.** Before metadata arrives, on every YouTube source,
+and on audio-only or errored media, the property is simply not there — which is
+what lets the `var()` fallback in your rule apply. It clears the same way:
+changing source publishes the new ratio or removes the property, and never
+leaves the previous source's shape behind. So the fallback you choose is the
+shape a YouTube player will always have.
+
+The value is written straight to the DOM rather than through player state, so a
+ratio arriving mid-load re-renders nothing.
+
 ## The `style` prop and a primitive's own geometry
 
 Some primitives set geometry on themselves — `Viewport` is `position: relative`,

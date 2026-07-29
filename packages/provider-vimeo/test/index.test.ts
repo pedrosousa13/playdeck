@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   detectSource,
+  type MediaDimensions,
   type ProviderAdapter,
   type ProviderEvent,
   type ProviderStateListener,
@@ -59,6 +60,9 @@ type Setup = {
   readonly provider: ReturnType<typeof createVimeoProvider>;
   readonly patches: ProviderStatePatch[];
   readonly events: ProviderEvent[];
+  // Subscribed before `attach()`, as the controller does — attach publishes
+  // the first measurement, so a later subscriber would miss it.
+  readonly dimensions: Array<MediaDimensions | undefined>;
 };
 
 const setup = async ({
@@ -84,9 +88,11 @@ const setup = async ({
     patches.push(patch);
     if (event) events.push(event);
   });
+  const dimensions: Array<MediaDimensions | undefined> = [];
+  provider.subscribeDimensions?.((next) => dimensions.push(next));
   await provider.attach();
   await provider.load();
-  return { mount, sdk, provider, patches, events };
+  return { mount, sdk, provider, patches, events, dimensions };
 };
 
 const embedUrl = (setupResult: Setup): URL =>
@@ -1871,4 +1877,77 @@ test('re-derives the selection from the player a retry builds', async () => {
 
   const ready = patches.filter((patch) => patch.lifecycle === 'ready');
   expect(ready.at(-1)?.selectedQualityId).toBeNull();
+});
+
+// --- intrinsic dimensions ---
+
+test('vimeo publishes the intrinsic dimensions read from the SDK at attach', async () => {
+  const { provider, dimensions } = await setup({
+    fake: { videoWidth: 1080, videoHeight: 1920 }
+  });
+
+  expect(provider.subscribeDimensions).toBeTypeOf('function');
+  expect(dimensions.at(-1)).toEqual({ width: 1080, height: 1920 });
+});
+
+// The SDK's own `resize` event carries the new intrinsic size in its payload
+// ({ videoWidth, videoHeight }), so it needs no follow-up getter round trip.
+test('vimeo republishes the intrinsic dimensions on the SDK resize event', async () => {
+  const { sdk, dimensions } = await setup({
+    fake: { videoWidth: 1080, videoHeight: 1920 }
+  });
+
+  sdk.instances[0]!.emit('resize', { videoWidth: 1920, videoHeight: 1080 });
+  await flushMicrotasks();
+
+  expect(dimensions.at(-1)).toEqual({ width: 1920, height: 1080 });
+});
+
+// A rejected getter is a measurement that did not happen, not a ratio of
+// zero — the swallowed rejection has to reach the consumer as "not known".
+test('vimeo reports unknown when the dimension getters reject', async () => {
+  const { dimensions } = await setup({
+    fake: {
+      getVideoWidth: () => Promise.reject(new Error('no width')),
+      getVideoHeight: () => Promise.reject(new Error('no height'))
+    }
+  });
+
+  expect(dimensions).toContain(undefined);
+  expect(dimensions.filter((entry) => entry !== undefined)).toEqual([]);
+});
+
+// `retry()` tears the embed down and builds another. Between the two, the old
+// embed's ratio must not still be published: the replacement may take a while
+// to answer, or never answer at all, and until it does a leftover ratio is
+// reporting the shape of a video that is no longer there.
+test('vimeo clears the dimensions when the player is torn down for a retry', async () => {
+  let players = 0;
+  const { provider, dimensions } = await setup({
+    fake: {
+      videoWidth: 1080,
+      videoHeight: 1920,
+      // Only the first embed ever becomes ready, so nothing masks a stale
+      // value with a fresh measurement.
+      ready: () =>
+        ++players === 1 ? Promise.resolve() : new Promise<void>(() => {})
+    }
+  });
+  expect(dimensions.at(-1)).toEqual({ width: 1080, height: 1920 });
+
+  void provider.retry!();
+  await flushMicrotasks();
+
+  expect(dimensions.at(-1)).toBeUndefined();
+});
+
+test('vimeo clears the dimensions on destroy', async () => {
+  const { provider, dimensions } = await setup({
+    fake: { videoWidth: 1080, videoHeight: 1920 }
+  });
+  expect(dimensions).toContainEqual({ width: 1080, height: 1920 });
+
+  await provider.destroy();
+
+  expect(dimensions.at(-1)).toBeUndefined();
 });

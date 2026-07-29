@@ -1,6 +1,7 @@
 import type {
   AutoplayMode,
   CommandResult,
+  MediaDimensions,
   PlayerController,
   ProviderAdapter,
   ProviderStateListener,
@@ -23,6 +24,10 @@ import { useEffect, useRef, type ReactNode } from 'react';
  * - `cues` — active `TextCue[]` emitted through the fake provider's cue
  *   channel after mount, so a story can drive `Player.Captions` without a
  *   real track.
+ * - `dimensions` — intrinsic media size published through the fake provider's
+ *   dimension channel after mount, so a story can drive
+ *   `--reely-media-aspect-ratio` on the viewport without real media. Omit it
+ *   to leave the property unwritten, which is the `var()` fallback case.
  * - `rootProps` — overrides for the `Player.Root` the decorator renders.
  *   Use the `autoplay` knob above rather than `rootProps.autoplay`: the Root
  *   prop re-applies its own `configureAutoplay` and collides with the mock.
@@ -32,6 +37,7 @@ export type MockPlayerParameters = {
   readonly autoplay?: AutoplayMode;
   readonly playResult?: CommandResult;
   readonly cues?: readonly TextCue[];
+  readonly dimensions?: MediaDimensions;
   readonly rootProps?: Partial<Omit<RootProps, 'children' | 'ref'>>;
 };
 
@@ -49,6 +55,9 @@ const mockSource: RootProps['source'] = {
 const createMockAdapter = (playResult: CommandResult) => {
   const listeners = new Set<ProviderStateListener>();
   const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
+  const dimensionListeners = new Set<
+    (dimensions: MediaDimensions | undefined) => void
+  >();
   const ok = async (): Promise<CommandResult> => ({ ok: true });
   const adapter: ProviderAdapter = {
     provider: 'native',
@@ -62,6 +71,10 @@ const createMockAdapter = (playResult: CommandResult) => {
     subscribeCues: (listener) => {
       cueListeners.add(listener);
       return () => cueListeners.delete(listener);
+    },
+    subscribeDimensions: (listener) => {
+      dimensionListeners.add(listener);
+      return () => dimensionListeners.delete(listener);
     },
     play: async () => playResult,
     pause: ok,
@@ -77,6 +90,9 @@ const createMockAdapter = (playResult: CommandResult) => {
     },
     emitCues: (cues: readonly TextCue[]) => {
       cueListeners.forEach((listener) => listener(cues));
+    },
+    emitDimensions: (dimensions: MediaDimensions) => {
+      dimensionListeners.forEach((listener) => listener(dimensions));
     }
   };
 };
@@ -89,10 +105,17 @@ const MockPlayerRoot = ({
   readonly parameters: MockPlayerParameters;
 }) => {
   const handleRef = useRef<PlayerHandle>(null);
-  const { autoplay, cues, playResult, rootProps, state } = parameters;
+  const { autoplay, cues, dimensions, playResult, rootProps, state } =
+    parameters;
 
   useEffect(() => {
-    if (autoplay === undefined && playResult === undefined && !state && !cues)
+    if (
+      autoplay === undefined &&
+      playResult === undefined &&
+      !state &&
+      !cues &&
+      !dimensions
+    )
       return;
     // Player.Root's imperative handle is its PlayerController; the cast opens
     // the provider-facing surface (setProvider) that PlayerHandle omits.
@@ -103,10 +126,11 @@ const MockPlayerRoot = ({
     if (autoplay !== undefined) controller.configureAutoplay(autoplay);
     if (state) mock.emit(state);
     if (cues) mock.emitCues(cues);
+    if (dimensions) mock.emitDimensions(dimensions);
     return () => {
       controller.setProvider(undefined);
     };
-  }, [autoplay, cues, playResult, state]);
+  }, [autoplay, cues, dimensions, playResult, state]);
 
   return (
     <Root
