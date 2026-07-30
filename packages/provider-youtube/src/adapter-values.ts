@@ -5,10 +5,19 @@ import type {
   PlayerError,
   PlayerEventDetailMap,
   PlayerEventType,
+  ProviderEvent,
   ProviderEventFor,
+  ProviderStatePatch,
   TextTrack
 } from '@reely/core';
 import { textTrackLabel } from '@reely/core';
+
+// Publishes a provider-state patch to every subscriber, optionally paired
+// with the provider event that caused it. Every seam takes this as its sink.
+export type EmitProviderState = (
+  patch: ProviderStatePatch,
+  event?: ProviderEvent
+) => void;
 
 export const providerEvent = <Type extends PlayerEventType>(
   type: Type,
@@ -160,6 +169,22 @@ export const loadFailure = (
     cause
   }
 });
+
+// Runs one iframe API call against a player the caller has already guarded for
+// readiness, keeping a throwing player inside the provider boundary. Generic
+// in the player so each seam passes only the slice of it that seam calls.
+export const runYouTubeCommand = async <Player>(
+  current: Player | undefined,
+  command: (player: Player) => void
+): Promise<CommandResult> => {
+  if (!current) return { ok: false, reason: 'not-ready' };
+  try {
+    command(current);
+    return { ok: true };
+  } catch (cause) {
+    return commandFailure(cause);
+  }
+};
 
 export const clamp01 = (value: number): number =>
   Math.min(1, Math.max(0, value));

@@ -1,6 +1,7 @@
 import type {
   Availability,
   CommandResult,
+  PlayerCapabilities,
   ProviderAdapter,
   ProviderEvent,
   ProviderStateListener,
@@ -12,7 +13,6 @@ import {
   browserUnavailable,
   clamp01,
   commandFailure,
-  findYouTubeTextTrackId,
   loadFailure,
   nextBufferView,
   playbackError,
@@ -20,18 +20,15 @@ import {
   preReadyCapabilities,
   providerEvent,
   readyCapabilities,
-  resolveYouTubeTextTrack,
-  sourceUnavailable,
-  toCoreTextTracks,
-  youtubeCaptionRendering,
-  type BufferView,
-  type YouTubeCaptionTrack
+  runYouTubeCommand,
+  type BufferView
 } from './adapter-values.js';
 import {
   loadYouTubeIframeApi,
   type YouTubeIframeApi,
   type YouTubePlayer
 } from './loader.js';
+import { createYouTubeTextTracks } from './text-tracks.js';
 
 export {
   loadYouTubeIframeApi,
@@ -106,8 +103,6 @@ export const createYouTubeProvider = (
   let knownVolume = 1;
   let knownCurrentTime = 0;
   let bufferView: BufferView | undefined;
-  let textTracks: readonly YouTubeCaptionTrack[] = [];
-  let selectedTextTrackId: string | null = null;
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
@@ -196,8 +191,18 @@ export const createYouTubeProvider = (
       : browserUnavailable;
   };
 
-  const textTrackAvailability = (): Availability =>
-    textTracks.length > 0 ? available : sourceUnavailable;
+  function playerCapabilities(): PlayerCapabilities {
+    return readyCapabilities(
+      fullscreenAvailability(),
+      textTracks.textTrackAvailability()
+    );
+  }
+
+  const textTracks = createYouTubeTextTracks({
+    emit,
+    getReadyPlayer: () => guardReady(),
+    getCapabilities: playerCapabilities
+  });
 
   const emitReadyState = (): void => {
     const current = player;
@@ -219,55 +224,10 @@ export const createYouTubeProvider = (
         muted: knownMuted,
         volume: knownVolume,
         playbackRate: current.getPlaybackRate(),
-        capabilities: readyCapabilities(
-          fullscreenAvailability(),
-          textTrackAvailability()
-        )
+        capabilities: playerCapabilities()
       },
       providerEvent('ready', undefined)
     );
-  };
-
-  // The captions module is undocumented: onApiChange is the community-known
-  // signal that it (and its tracklist) has become available. Unverified
-  // against a real player (see issue #11).
-  const discoverCaptionTracks = (): void => {
-    const current = guardReady();
-    if (!current) return;
-    let rawTracklist: unknown;
-    try {
-      rawTracklist = current.getOption('captions', 'tracklist');
-    } catch {
-      rawTracklist = undefined;
-    }
-    textTracks = Array.isArray(rawTracklist)
-      ? (rawTracklist as YouTubeCaptionTrack[])
-      : [];
-    let rawTrack: unknown;
-    try {
-      rawTrack = current.getOption('captions', 'track');
-    } catch {
-      rawTrack = undefined;
-    }
-    const languageCode =
-      rawTrack !== null &&
-      typeof rawTrack === 'object' &&
-      'languageCode' in rawTrack
-        ? (rawTrack as { languageCode?: unknown }).languageCode
-        : undefined;
-    selectedTextTrackId =
-      typeof languageCode === 'string' && languageCode
-        ? findYouTubeTextTrackId(languageCode, textTracks)
-        : null;
-    emit({
-      textTracks: toCoreTextTracks(textTracks),
-      selectedTextTrackId,
-      captionRendering: youtubeCaptionRendering(textTracks),
-      capabilities: readyCapabilities(
-        fullscreenAvailability(),
-        textTrackAvailability()
-      )
-    });
   };
 
   const emitVolumeIntent = (): void => {
@@ -354,8 +314,7 @@ export const createYouTubeProvider = (
     // into the new session's capabilities before its own onApiChange fires.
     // Neither must a buffer anchor: the new player has loaded nothing.
     bufferView = undefined;
-    textTracks = [];
-    selectedTextTrackId = null;
+    textTracks.reset();
     const current = player;
     player = undefined;
     if (current) {
@@ -423,7 +382,7 @@ export const createYouTubeProvider = (
         },
         onApiChange: () => {
           if (destroyed || forGeneration !== generation) return;
-          discoverCaptionTracks();
+          textTracks.discover();
         }
       }
     });
@@ -432,18 +391,9 @@ export const createYouTubeProvider = (
   const guardReady = (): YouTubePlayer | undefined =>
     destroyed || !ready ? undefined : player;
 
-  const runCommand = async (
+  const runCommand = (
     command: (current: YouTubePlayer) => void
-  ): Promise<CommandResult> => {
-    const current = guardReady();
-    if (!current) return { ok: false, reason: 'not-ready' };
-    try {
-      command(current);
-      return { ok: true };
-    } catch (cause) {
-      return commandFailure(cause);
-    }
-  };
+  ): Promise<CommandResult> => runYouTubeCommand(guardReady(), command);
 
   const seekToTime = (time: number): Promise<CommandResult> => {
     if (!Number.isFinite(time)) {
@@ -577,29 +527,7 @@ export const createYouTubeProvider = (
       }
       return runCommand((current) => current.setPlaybackRate(rate));
     },
-    selectTextTrack: (id) => {
-      if (id === null) {
-        return runCommand((current) => {
-          // Community convention for turning captions off; unverified
-          // against a real player (see issue #11).
-          current.setOption('captions', 'track', {});
-          selectedTextTrackId = null;
-          emit({ selectedTextTrackId: null });
-        });
-      }
-      const match = resolveYouTubeTextTrack(id, textTracks);
-      if (!match) return Promise.resolve({ ok: false, reason: 'unsupported' });
-      return runCommand((current) => {
-        current.setOption('captions', 'track', {
-          languageCode: match.languageCode
-        });
-        // Intent model, consistent with the rest of this provider: emit the
-        // requested track immediately rather than waiting on a confirming
-        // event the unofficial API does not reliably provide.
-        selectedTextTrackId = id;
-        emit({ selectedTextTrackId: id });
-      });
-    },
+    selectTextTrack: textTracks.selectTextTrack,
     requestFullscreen: async () => {
       if (destroyed || !player) return { ok: false, reason: 'not-ready' };
       // Fullscreen must wrap the whole iframe: YouTube policy requires the
