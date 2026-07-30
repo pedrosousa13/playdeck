@@ -49,9 +49,16 @@ const loadFailure = (cause: unknown): PlayerError => {
   };
 };
 
+// The fields of the host's options the embed url carries, read when the embed
+// is built rather than snapshotted at construction.
+type VimeoEmbedOptions = {
+  readonly controls?: boolean;
+  readonly dnt?: boolean;
+};
+
 const vimeoEmbedUrl = (
   source: VimeoSource,
-  options: VimeoProviderOptions,
+  options: VimeoEmbedOptions,
   muted: boolean | undefined
 ): string => {
   const url = new URL(`https://player.vimeo.com/video/${source.videoId}`);
@@ -65,7 +72,7 @@ const vimeoEmbedUrl = (
 
 export type VimeoAttachmentDeps = {
   readonly emit: EmitProviderState;
-  readonly options: VimeoProviderOptions;
+  readonly options: VimeoEmbedOptions;
   // The host's capabilities snapshot, for the state published on ready.
   readonly getCapabilities: () => PlayerCapabilities;
   readonly chromeless: Pick<VimeoChromelessAvailability, 'probe' | 'adopt'>;
