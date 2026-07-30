@@ -1,16 +1,11 @@
 import type {
-  MediaDimensions,
   PlayerCapabilities,
   ProviderAdapter,
   ProviderEvent,
   ProviderStateListener
 } from '@reely/core';
-import {
-  available,
-  HAVE_METADATA,
-  providerEvent,
-  toRanges
-} from './media-helpers.js';
+import { createNativeLifecycle } from './lifecycle.js';
+import { available } from './media-helpers.js';
 import {
   createNativePlayback,
   type NativePlaybackOptions
@@ -49,13 +44,6 @@ export const createNativeProvider = (
   options: NativePlaybackOptions = {}
 ): NativeProviderAdapter => {
   const listeners = new Set<ProviderStateListener>();
-  const dimensionListeners = new Set<
-    (dimensions: MediaDimensions | undefined) => void
-  >();
-  const ownerDocument = media.ownerDocument;
-  let attached = false;
-  let destroyed = false;
-  let loaded = false;
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
@@ -64,24 +52,8 @@ export const createNativeProvider = (
 
   const playback = createNativePlayback(media, options, {
     emit,
-    isDestroyed: () => destroyed
+    isDestroyed: () => lifecycle.isDestroyed()
   });
-
-  // Before metadata arrives, and on an audio-only or errored source, both
-  // dimensions read 0 — and some DOM test environments omit them entirely.
-  // Either way the size is not known, so unusable pairs publish `undefined`.
-  const publishDimensions = (): void => {
-    const width = media.videoWidth;
-    const height = media.videoHeight;
-    const dimensions =
-      Number.isFinite(width) &&
-      Number.isFinite(height) &&
-      width > 0 &&
-      height > 0
-        ? { width, height }
-        : undefined;
-    dimensionListeners.forEach((listener) => listener(dimensions));
-  };
 
   const presentation = createNativePresentation(media, {
     emit,
@@ -111,202 +83,26 @@ export const createNativeProvider = (
     };
   }
 
-  const emitMediaState = (originalEvent?: Event): void =>
-    emit(
-      {
-        lifecycle: media.readyState >= HAVE_METADATA ? 'ready' : 'loading',
-        activation:
-          media.readyState >= HAVE_METADATA ? 'ready' : 'loading-provider',
-        currentTime: media.currentTime,
-        duration: Number.isFinite(media.duration) ? media.duration : null,
-        buffered: toRanges(media.buffered),
-        seekable: toRanges(media.seekable),
-        muted: media.muted,
-        volume: media.volume,
-        playbackRate: media.playbackRate,
-        capabilities: mediaCapabilities()
-      },
-      originalEvent
-        ? providerEvent('ready', originalEvent, undefined)
-        : undefined
-    );
-
-  const {
-    onPlay,
-    onPlaying,
-    onPause,
-    onEnded,
-    onWaiting,
-    onSeeking,
-    onSeeked,
-    onTimeUpdate,
-    onError
-  } = playback.handlers;
-
-  const onCanPlay = (originalEvent: Event): void => {
-    emit({ buffering: false });
-    emitMediaState(originalEvent);
-  };
-  const onLoadedMetadata = (originalEvent: Event): void => {
-    playback.applyInitialPosition();
-    publishDimensions();
-    onCanPlay(originalEvent);
-  };
-  // The intrinsic size can change after metadata — an adaptive rendition
-  // switch, or a new source loaded into the same element. `resize` is the only
-  // event that reports it; `loadedmetadata` has already fired by then.
-  const onResize = (): void => publishDimensions();
-  const onProgress = (): void =>
-    emit({
-      buffered: toRanges(media.buffered),
-      seekable: toRanges(media.seekable)
-    });
-  const onVolumeChange = (originalEvent: Event): void =>
-    emit(
-      { muted: media.muted, volume: media.volume },
-      providerEvent('volumechange', originalEvent, {
-        muted: media.muted,
-        volume: media.volume
-      })
-    );
-  const onRateChange = (originalEvent: Event): void =>
-    emit(
-      { playbackRate: media.playbackRate },
-      providerEvent('ratechange', originalEvent, {
-        playbackRate: media.playbackRate
-      })
-    );
-
-  const {
-    onFullscreenChange,
-    onPictureInPictureChange,
-    onWebKitFullscreenChange,
-    onWebKitPresentationModeChange,
-    onAirPlayTargetAvailabilityChange
-  } = presentation.handlers;
-
-  const addListeners = (): void => {
-    media.addEventListener('play', onPlay);
-    media.addEventListener('playing', onPlaying);
-    media.addEventListener('pause', onPause);
-    media.addEventListener('ended', onEnded);
-    media.addEventListener('waiting', onWaiting);
-    media.addEventListener('canplay', onCanPlay);
-    media.addEventListener('loadedmetadata', onLoadedMetadata);
-    media.addEventListener('resize', onResize);
-    media.addEventListener('seeking', onSeeking);
-    media.addEventListener('seeked', onSeeked);
-    media.addEventListener('timeupdate', onTimeUpdate);
-    media.addEventListener('progress', onProgress);
-    media.addEventListener('volumechange', onVolumeChange);
-    media.addEventListener('ratechange', onRateChange);
-    media.addEventListener('error', onError);
-    ownerDocument.addEventListener('fullscreenchange', onFullscreenChange);
-    media.addEventListener('enterpictureinpicture', onPictureInPictureChange);
-    media.addEventListener('leavepictureinpicture', onPictureInPictureChange);
-    media.addEventListener('webkitbeginfullscreen', onWebKitFullscreenChange);
-    media.addEventListener('webkitendfullscreen', onWebKitFullscreenChange);
-    media.addEventListener(
-      'webkitpresentationmodechanged',
-      onWebKitPresentationModeChange
-    );
-    media.addEventListener(
-      'webkitplaybacktargetavailabilitychanged',
-      onAirPlayTargetAvailabilityChange
-    );
-  };
-
-  const removeListeners = (): void => {
-    media.removeEventListener('play', onPlay);
-    media.removeEventListener('playing', onPlaying);
-    media.removeEventListener('pause', onPause);
-    media.removeEventListener('ended', onEnded);
-    media.removeEventListener('waiting', onWaiting);
-    media.removeEventListener('canplay', onCanPlay);
-    media.removeEventListener('loadedmetadata', onLoadedMetadata);
-    media.removeEventListener('resize', onResize);
-    media.removeEventListener('seeking', onSeeking);
-    media.removeEventListener('seeked', onSeeked);
-    media.removeEventListener('timeupdate', onTimeUpdate);
-    media.removeEventListener('progress', onProgress);
-    media.removeEventListener('volumechange', onVolumeChange);
-    media.removeEventListener('ratechange', onRateChange);
-    media.removeEventListener('error', onError);
-    ownerDocument.removeEventListener('fullscreenchange', onFullscreenChange);
-    media.removeEventListener(
-      'enterpictureinpicture',
-      onPictureInPictureChange
-    );
-    media.removeEventListener(
-      'leavepictureinpicture',
-      onPictureInPictureChange
-    );
-    media.removeEventListener(
-      'webkitbeginfullscreen',
-      onWebKitFullscreenChange
-    );
-    media.removeEventListener('webkitendfullscreen', onWebKitFullscreenChange);
-    media.removeEventListener(
-      'webkitpresentationmodechanged',
-      onWebKitPresentationModeChange
-    );
-    media.removeEventListener(
-      'webkitplaybacktargetavailabilitychanged',
-      onAirPlayTargetAvailabilityChange
-    );
-  };
+  const lifecycle = createNativeLifecycle(media, {
+    emit,
+    getCapabilities: mediaCapabilities,
+    playback,
+    presentation,
+    textTracks,
+    clearStateListeners: () => listeners.clear()
+  });
 
   return {
     provider: 'native',
-    attach: () => {
-      if (attached || destroyed) return;
-      attached = true;
-      addListeners();
-      textTracks.attachListeners();
-      textTracks.discover();
-      emitMediaState();
-    },
-    load: () => {
-      if (destroyed || loaded) return;
-      loaded = true;
-      // Caption state is deliberately left alone: `load()` runs once, right
-      // after `attach()` discovered this source's tracks. A source switch
-      // creates a new provider, and the controller clears caption state on
-      // the swap.
-      media.load();
-      // Declared here rather than at attach: the commands operate on the
-      // element from birth, but the load algorithm resets `playbackRate` to
-      // `defaultPlaybackRate`, so anything applied earlier is undone (#69).
-      emit({ commandsReady: true });
-    },
-    destroy: () => {
-      if (destroyed) return;
-      destroyed = true;
-      playback.cancelPendingReplay();
-      if (attached) removeListeners();
-      textTracks.destroy();
-      if (!media.paused) {
-        try {
-          media.pause();
-        } catch {
-          // Teardown must not escape the provider boundary.
-        }
-      }
-      listeners.clear();
-      // Announced before the set is dropped: whatever this element measured
-      // stops being true the moment the provider lets go of it.
-      dimensionListeners.forEach((listener) => listener(undefined));
-      dimensionListeners.clear();
-    },
+    attach: lifecycle.attach,
+    load: lifecycle.load,
+    destroy: lifecycle.destroy,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     subscribeCues: textTracks.subscribeCues,
-    subscribeDimensions: (listener) => {
-      dimensionListeners.add(listener);
-      return () => dimensionListeners.delete(listener);
-    },
+    subscribeDimensions: lifecycle.subscribeDimensions,
     play: playback.play,
     pause: playback.pause,
     seekTo: playback.seekTo,
