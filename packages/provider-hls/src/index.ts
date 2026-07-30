@@ -33,6 +33,7 @@ import {
   type HlsParsedCueLike,
   type HlsSubtitleTrackLike
 } from './adapter-values.js';
+import { createHlsErrorRecovery } from './error-recovery.js';
 
 export type {
   HlsConfigLike,
@@ -98,8 +99,6 @@ export const deriveLiveState = (
 
 const NATIVE_HLS_MIME = 'application/vnd.apple.mpegurl';
 const MSE_TEST_CODEC = 'video/mp4; codecs="avc1.42E01E,mp4a.40.2"';
-const MAX_FATAL_NETWORK_RECOVERIES = 2;
-const MAX_FATAL_MEDIA_RECOVERIES = 2;
 // Ordinary-live tolerances. At-edge is a coarse "close to the live edge"
 // window, not the tight target of DVR/LL-HLS tuning (out of MVP scope). A
 // seekable span below the minimum is treated as pure live edge with no
@@ -199,8 +198,6 @@ export const createHlsProvider = (
   let hls: HlsInstanceLike | undefined;
   let hlsConstructor: HlsConstructorLike | undefined;
   let generation = 0;
-  let networkRecoveries = 0;
-  let mediaRecoveries = 0;
   let selectQualityAvailability: Availability = {
     status: 'unknown',
     reason: 'provider-check'
@@ -376,61 +373,10 @@ export const createHlsProvider = (
     );
   };
 
-  const handleHlsError = (
-    instance: HlsInstanceLike,
-    Hls: HlsConstructorLike,
-    data: unknown
-  ): void => {
-    if (destroyed || hls !== instance) return;
-    const errorData = data as {
-      type?: string;
-      details?: string;
-      fatal?: boolean;
-    };
-    if (!errorData.fatal) return;
-    if (errorData.type === Hls.ErrorTypes.NETWORK_ERROR) {
-      if (networkRecoveries < MAX_FATAL_NETWORK_RECOVERIES) {
-        networkRecoveries += 1;
-        instance.startLoad();
-        return;
-      }
-      surfaceFatal({
-        category: 'network',
-        fatal: true,
-        recoverable: true,
-        message: 'HLS playback failed after bounded network error recovery.',
-        cause: data
-      });
-      return;
-    }
-    if (errorData.type === Hls.ErrorTypes.MEDIA_ERROR) {
-      if (mediaRecoveries < MAX_FATAL_MEDIA_RECOVERIES) {
-        mediaRecoveries += 1;
-        // Per the hls.js recovery contract, a repeated fatal media error
-        // needs an audio codec swap before the next recovery attempt.
-        if (mediaRecoveries > 1) instance.swapAudioCodec();
-        instance.recoverMediaError();
-        return;
-      }
-      surfaceFatal({
-        category: 'decode',
-        fatal: true,
-        recoverable: true,
-        message: 'HLS playback failed after bounded media error recovery.',
-        cause: data
-      });
-      return;
-    }
-    surfaceFatal({
-      category: 'provider',
-      fatal: true,
-      recoverable: true,
-      message: errorData.details
-        ? `hls.js reported an unrecoverable fatal error: ${errorData.details}`
-        : 'hls.js reported an unrecoverable fatal error.',
-      cause: data
-    });
-  };
+  const errorRecovery = createHlsErrorRecovery({
+    isStale: (instance) => destroyed || hls !== instance,
+    surfaceFatal
+  });
 
   // Content-derived, never index-derived: hls.js removes levels from `levels`
   // after repeated errors, so an index-keyed id would silently repoint a held
@@ -705,7 +651,7 @@ export const createHlsProvider = (
     hls = instance;
     media.addEventListener('timeupdate', recomputeActiveHlsCues);
     instance.on(HlsRuntime.Events.ERROR, (_event, data) =>
-      handleHlsError(instance, HlsRuntime, data)
+      errorRecovery.handleError(instance, HlsRuntime, data)
     );
     instance.on(HlsRuntime.Events.LEVEL_SWITCHED, (_event, data) => {
       if (destroyed || hls !== instance) return;
@@ -880,8 +826,7 @@ export const createHlsProvider = (
         return { ok: false, reason: 'unsupported', error: selection.error };
       }
       if (engine === 'native') return native.retry();
-      networkRecoveries = 0;
-      mediaRecoveries = 0;
+      errorRecovery.reset();
       selectQualityAvailability = {
         status: 'unknown',
         reason: 'provider-check'
