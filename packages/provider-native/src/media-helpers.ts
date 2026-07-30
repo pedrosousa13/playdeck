@@ -2,8 +2,31 @@ import type {
   Availability,
   CommandResult,
   PlayerError,
+  PlayerEventDetailMap,
+  PlayerEventType,
+  ProviderEvent,
+  ProviderEventFor,
+  ProviderStatePatch,
   TimeRange
 } from '@reely/core';
+
+// Publishes a provider-state patch to every subscriber, optionally paired
+// with the provider event that caused it. Every seam takes this as its sink.
+export type EmitProviderState = (
+  patch: ProviderStatePatch,
+  event?: ProviderEvent
+) => void;
+
+export const providerEvent = <Type extends PlayerEventType>(
+  type: Type,
+  originalEvent: Event,
+  detail: PlayerEventDetailMap[Type]
+): ProviderEventFor<Type> => ({
+  type,
+  detail,
+  origin: 'provider',
+  originalEvent
+});
 
 export const available: Availability = { status: 'available' };
 export const unsupported: Availability = {

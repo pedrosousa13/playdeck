@@ -2,30 +2,31 @@ import type {
   Availability,
   MediaDimensions,
   PlayerCapabilities,
-  PlayerEventDetailMap,
-  PlayerEventType,
   ProviderAdapter,
   ProviderEvent,
-  ProviderEventFor,
   ProviderStateListener
 } from '@reely/core';
 import {
   available,
-  commandError,
   HAVE_METADATA,
-  mediaError,
   notReady,
   policyBlocked,
   policyDisallowed,
+  providerEvent,
   runCommand,
   toRanges,
-  unsupported,
-  withinMediaBounds
+  unsupported
 } from './media-helpers.js';
+import {
+  createNativePlayback,
+  type NativePlaybackOptions
+} from './playback.js';
 import {
   createNativeTextTracks,
   type NativeTextTracks
 } from './text-tracks.js';
+
+export type { NativePlaybackOptions } from './playback.js';
 
 type WebKitPresentationMode = 'inline' | 'picture-in-picture' | 'fullscreen';
 
@@ -47,12 +48,6 @@ type WebKitHTMLVideoElement = HTMLVideoElement & {
   // changed` event would drive it.
   readonly webkitCurrentPlaybackTargetIsWireless?: boolean;
   readonly disableRemotePlayback?: boolean;
-};
-
-export type NativePlaybackOptions = {
-  readonly loop?: boolean;
-  readonly startTime?: number;
-  readonly endTime?: number;
 };
 
 type NativeCommand =
@@ -86,27 +81,19 @@ export const createNativeProvider = (
   >();
   const ownerDocument = media.ownerDocument;
   const webkitMedia: WebKitHTMLVideoElement = media;
-  const startTime =
-    Number.isFinite(options.startTime) && (options.startTime ?? 0) > 0
-      ? (options.startTime ?? 0)
-      : 0;
-  const endTime =
-    Number.isFinite(options.endTime) && (options.endTime ?? 0) > startTime
-      ? options.endTime
-      : undefined;
-  const loop = options.loop ?? false;
   let attached = false;
   let destroyed = false;
   let loaded = false;
-  let positioned = false;
-  let boundaryEnded = false;
-  let seekingFromEnded = false;
-  let replayGeneration = 0;
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
   ): void => listeners.forEach((listener) => listener(patch, event));
+
+  const playback = createNativePlayback(media, options, {
+    emit,
+    isDestroyed: () => destroyed
+  });
 
   // Before metadata arrives, and on an audio-only or errored source, both
   // dimensions read 0 — and some DOM test environments omit them entirely.
@@ -123,17 +110,6 @@ export const createNativeProvider = (
         : undefined;
     dimensionListeners.forEach((listener) => listener(dimensions));
   };
-
-  const event = <Type extends PlayerEventType>(
-    type: Type,
-    originalEvent: Event,
-    detail: PlayerEventDetailMap[Type]
-  ): ProviderEventFor<Type> => ({
-    type,
-    detail,
-    origin: 'provider',
-    originalEvent
-  });
 
   const fullscreenAvailability = (): Availability => {
     if (typeof media.requestFullscreen === 'function') {
@@ -243,93 +219,29 @@ export const createNativeProvider = (
         playbackRate: media.playbackRate,
         capabilities: mediaCapabilities()
       },
-      originalEvent ? event('ready', originalEvent, undefined) : undefined
+      originalEvent
+        ? providerEvent('ready', originalEvent, undefined)
+        : undefined
     );
 
-  const onPlay = (originalEvent: Event): void => {
-    boundaryEnded = false;
-    seekingFromEnded = false;
-    emit(
-      {
-        playback: 'playing',
-        buffering: false,
-        currentTime: media.currentTime
-      },
-      event('play', originalEvent, undefined)
-    );
-  };
-  const onPlaying = (): void => emit({ playback: 'playing', buffering: false });
-  const onPause = (originalEvent: Event): void => {
-    if (boundaryEnded) return;
-    emit({ playback: 'paused' }, event('pause', originalEvent, undefined));
-  };
-  const boundaryStart = (): number =>
-    withinMediaBounds(media, startTime, startTime, endTime) ?? startTime;
-  const beforeEffectiveEnd = (time: number): boolean => {
-    const duration = Number.isFinite(media.duration)
-      ? media.duration
-      : undefined;
-    const effectiveEnd =
-      endTime === undefined
-        ? duration
-        : duration === undefined
-          ? endTime
-          : Math.min(endTime, duration);
-    return effectiveEnd === undefined || time < effectiveEnd;
-  };
-  const restartFromBoundary = (): void => {
-    boundaryEnded = false;
-    seekingFromEnded = false;
-    const restartTime = boundaryStart();
-    const generation = ++replayGeneration;
-    media.currentTime = restartTime;
-    emit({ currentTime: restartTime, buffering: false });
-    void Promise.resolve().then(async () => {
-      if (destroyed || generation !== replayGeneration) return;
-      try {
-        await media.play();
-      } catch (cause) {
-        if (destroyed || generation !== replayGeneration) return;
-        boundaryEnded = true;
-        const failure = commandError(cause);
-        emit({
-          playback: 'ended',
-          buffering: false,
-          seeking: false,
-          error: failure.error
-        });
-      }
-    });
-  };
-  const onEnded = (originalEvent: Event): void => {
-    if (loop) {
-      restartFromBoundary();
-      return;
-    }
-    boundaryEnded = true;
-    emit(
-      { playback: 'ended', buffering: false },
-      event('ended', originalEvent, undefined)
-    );
-  };
-  const onWaiting = (): void => emit({ buffering: true });
-  const applyInitialPosition = (): void => {
-    if (positioned) return;
-    positioned = true;
-    const initialPosition = withinMediaBounds(
-      media,
-      startTime,
-      startTime,
-      endTime
-    );
-    if (initialPosition !== undefined) media.currentTime = initialPosition;
-  };
+  const {
+    onPlay,
+    onPlaying,
+    onPause,
+    onEnded,
+    onWaiting,
+    onSeeking,
+    onSeeked,
+    onTimeUpdate,
+    onError
+  } = playback.handlers;
+
   const onCanPlay = (originalEvent: Event): void => {
     emit({ buffering: false });
     emitMediaState(originalEvent);
   };
   const onLoadedMetadata = (originalEvent: Event): void => {
-    applyInitialPosition();
+    playback.applyInitialPosition();
     publishDimensions();
     onCanPlay(originalEvent);
   };
@@ -337,44 +249,6 @@ export const createNativeProvider = (
   // switch, or a new source loaded into the same element. `resize` is the only
   // event that reports it; `loadedmetadata` has already fired by then.
   const onResize = (): void => publishDimensions();
-  const onSeeking = (originalEvent: Event): void => {
-    if (boundaryEnded && beforeEffectiveEnd(media.currentTime)) {
-      boundaryEnded = false;
-      seekingFromEnded = true;
-    }
-    emit(
-      { seeking: true },
-      event('seeking', originalEvent, { currentTime: media.currentTime })
-    );
-  };
-  const onSeeked = (originalEvent: Event): void => {
-    const playback = seekingFromEnded ? { playback: 'paused' as const } : {};
-    seekingFromEnded = false;
-    emit(
-      { seeking: false, currentTime: media.currentTime, ...playback },
-      event('seeked', originalEvent, { currentTime: media.currentTime })
-    );
-  };
-  const onTimeUpdate = (originalEvent: Event): void => {
-    if (endTime !== undefined && media.currentTime >= endTime) {
-      if (loop) {
-        restartFromBoundary();
-        return;
-      }
-      media.currentTime = endTime;
-      if (!boundaryEnded) {
-        boundaryEnded = true;
-        media.pause();
-        emit(
-          { currentTime: endTime, playback: 'ended', buffering: false },
-          event('ended', originalEvent, undefined)
-        );
-      }
-      return;
-    }
-    boundaryEnded = false;
-    emit({ currentTime: media.currentTime });
-  };
   const onProgress = (): void =>
     emit({
       buffered: toRanges(media.buffered),
@@ -383,7 +257,7 @@ export const createNativeProvider = (
   const onVolumeChange = (originalEvent: Event): void =>
     emit(
       { muted: media.muted, volume: media.volume },
-      event('volumechange', originalEvent, {
+      providerEvent('volumechange', originalEvent, {
         muted: media.muted,
         volume: media.volume
       })
@@ -391,38 +265,21 @@ export const createNativeProvider = (
   const onRateChange = (originalEvent: Event): void =>
     emit(
       { playbackRate: media.playbackRate },
-      event('ratechange', originalEvent, {
+      providerEvent('ratechange', originalEvent, {
         playbackRate: media.playbackRate
       })
     );
-  const onError = (originalEvent: Event): void => {
-    ++replayGeneration;
-    boundaryEnded = false;
-    seekingFromEnded = false;
-    const error = mediaError(media);
-    emit(
-      {
-        lifecycle: 'error',
-        activation: 'error',
-        playback: 'paused',
-        buffering: false,
-        seeking: false,
-        error
-      },
-      event('error', originalEvent, error)
-    );
-  };
   const onFullscreenChange = (originalEvent: Event): void =>
     emit(
       { fullscreen: ownerDocument.fullscreenElement === media },
-      event('fullscreenchange', originalEvent, {
+      providerEvent('fullscreenchange', originalEvent, {
         fullscreen: ownerDocument.fullscreenElement === media
       })
     );
   const onPictureInPictureChange = (originalEvent: Event): void =>
     emit(
       { pictureInPicture: ownerDocument.pictureInPictureElement === media },
-      event('pictureinpicturechange', originalEvent, {
+      providerEvent('pictureinpicturechange', originalEvent, {
         pictureInPicture: ownerDocument.pictureInPictureElement === media
       })
     );
@@ -430,7 +287,7 @@ export const createNativeProvider = (
     const fullscreen = originalEvent.type === 'webkitbeginfullscreen';
     emit(
       { fullscreen },
-      event('fullscreenchange', originalEvent, { fullscreen })
+      providerEvent('fullscreenchange', originalEvent, { fullscreen })
     );
   };
   // Only picture-in-picture state is derived here; fullscreen presentation
@@ -441,7 +298,9 @@ export const createNativeProvider = (
       webkitMedia.webkitPresentationMode === 'picture-in-picture';
     emit(
       { pictureInPicture },
-      event('pictureinpicturechange', originalEvent, { pictureInPicture })
+      providerEvent('pictureinpicturechange', originalEvent, {
+        pictureInPicture
+      })
     );
   };
 
@@ -542,7 +401,7 @@ export const createNativeProvider = (
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
-      ++replayGeneration;
+      playback.cancelPendingReplay();
       if (attached) removeListeners();
       textTracks.destroy();
       if (!media.paused) {
@@ -567,76 +426,14 @@ export const createNativeProvider = (
       dimensionListeners.add(listener);
       return () => dimensionListeners.delete(listener);
     },
-    play: () =>
-      runCommand(() => {
-        if (
-          boundaryEnded ||
-          (endTime !== undefined && media.currentTime >= endTime)
-        ) {
-          boundaryEnded = false;
-          media.currentTime = boundaryStart();
-        }
-        return media.play();
-      }),
-    pause: () => {
-      ++replayGeneration;
-      return runCommand(() => media.pause());
-    },
-    seekTo: (time) => {
-      if (!Number.isFinite(time))
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      const target = withinMediaBounds(media, time, startTime, endTime);
-      if (target === undefined)
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      return runCommand(() => {
-        if (boundaryEnded && beforeEffectiveEnd(target)) {
-          boundaryEnded = false;
-          seekingFromEnded = true;
-        }
-        media.currentTime = target;
-      });
-    },
-    seekBy: (offset) => {
-      if (!Number.isFinite(offset))
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      const target = withinMediaBounds(
-        media,
-        media.currentTime + offset,
-        startTime,
-        endTime
-      );
-      if (target === undefined)
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      return runCommand(() => {
-        if (boundaryEnded && beforeEffectiveEnd(target)) {
-          boundaryEnded = false;
-          seekingFromEnded = true;
-        }
-        media.currentTime = target;
-      });
-    },
-    mute: () =>
-      runCommand(() => {
-        media.muted = true;
-      }),
-    unmute: () =>
-      runCommand(() => {
-        media.muted = false;
-      }),
-    setVolume: (volume) => {
-      if (!Number.isFinite(volume))
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      return runCommand(() => {
-        media.volume = Math.min(1, Math.max(0, volume));
-      });
-    },
-    setPlaybackRate: (rate) => {
-      if (!Number.isFinite(rate) || rate <= 0)
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      return runCommand(() => {
-        media.playbackRate = rate;
-      });
-    },
+    play: playback.play,
+    pause: playback.pause,
+    seekTo: playback.seekTo,
+    seekBy: playback.seekBy,
+    mute: playback.mute,
+    unmute: playback.unmute,
+    setVolume: playback.setVolume,
+    setPlaybackRate: playback.setPlaybackRate,
     requestFullscreen: async () => {
       if (typeof media.requestFullscreen === 'function') {
         if (ownerDocument.fullscreenEnabled === false) {
@@ -721,14 +518,7 @@ export const createNativeProvider = (
       }
       return runCommand(() => showPicker.call(media));
     },
-    retry: () => {
-      ++replayGeneration;
-      return runCommand(() => {
-        positioned = false;
-        boundaryEnded = false;
-        media.load();
-      });
-    },
+    retry: playback.retry,
     selectTextTrack: textTracks.selectTextTrack,
     setCaptionRenderer: textTracks.setCaptionRenderer
   };
