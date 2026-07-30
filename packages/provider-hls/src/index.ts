@@ -1,119 +1,46 @@
 import type {
-  Availability,
-  CaptionRendering,
-  CommandResult,
-  HlsEngine,
   HlsSource,
   PlayerCapabilities,
   PlayerError,
   PlayerLiveState,
-  PlayerQuality,
   ProviderAdapter,
   ProviderEvent,
   ProviderStateListener,
   ProviderStatePatch,
-  TextCue,
-  TextTrack,
-  TextTrackKind,
   TimeRange
 } from '@reely/core';
-import { textTrackLabel } from '@reely/core';
 import {
   createNativeProvider,
   type NativePlaybackOptions
 } from '@reely/provider-native';
+import {
+  liveStateEqual,
+  readMediaRanges,
+  unsupportedSelection,
+  type HlsEngineSelection,
+  type HlsModuleLoader
+} from './adapter-values.js';
+import { createHlsAttachment } from './attachment.js';
+import { createHlsErrorRecovery } from './error-recovery.js';
+import { createHlsPlayback } from './playback.js';
+import { createHlsQualityLevels } from './quality-levels.js';
+import { createHlsTextTracks } from './text-tracks.js';
+
+export type {
+  HlsConfigLike,
+  HlsConstructorLike,
+  HlsEngineSelection,
+  HlsInstanceLike,
+  HlsLevelLike,
+  HlsModuleLoader,
+  HlsParsedCueLike,
+  HlsSubtitleTrackLike
+} from './adapter-values.js';
 
 export type HlsEnvironment = {
   readonly nativeHls: boolean;
   readonly mse: boolean;
 };
-
-export type HlsEngineSelection =
-  | { readonly engine: HlsEngine }
-  | { readonly engine: null; readonly error: PlayerError };
-
-export type HlsLevelLike = {
-  readonly height?: number;
-  readonly width?: number;
-  readonly bitrate?: number;
-};
-
-// Structural slice of hls.js's `MediaPlaylist` for a subtitle/closed-caption
-// track, as delivered on `SUBTITLE_TRACKS_UPDATED`/`instance.subtitleTracks`.
-// `id` is always present on real hls.js tracks; optional here only so a
-// stripped-down fake can omit it and exercise the index fallback.
-export type HlsSubtitleTrackLike = {
-  readonly id?: number;
-  readonly name: string;
-  readonly lang?: string;
-  readonly default: boolean;
-  readonly type?: string;
-};
-
-// hls.js's `CuesParsedData.cues` is typed `any` upstream: it carries either
-// WebVTT cues or CEA-608/708 caption cues, both produced by the same
-// internal `Cues.newCue` helper and both exposing this shape. This is the
-// minimal structural slice this adapter reads off each entry.
-export type HlsParsedCueLike = {
-  readonly id?: string | null;
-  readonly startTime: number;
-  readonly endTime: number;
-  readonly text?: string;
-};
-
-export type HlsConfigLike = {
-  readonly renderTextTracksNatively?: boolean;
-};
-
-export type HlsInstanceLike = {
-  readonly levels: ReadonlyArray<HlsLevelLike>;
-  currentLevel: number;
-  // The target live edge (behind the raw seekable end by the configured live
-  // sync latency); null on VOD or before the first live level update.
-  readonly liveSyncPosition?: number | null;
-  readonly subtitleTracks: ReadonlyArray<HlsSubtitleTrackLike>;
-  subtitleTrack: number;
-  // Method shorthand, not a property-typed function, and deliberately so:
-  // method parameters are checked bivariantly, so a real hls.js `Hls`, whose
-  // `on` only accepts its own `keyof HlsListeners`, satisfies this. Written as
-  // `on: (event: string, ...) => void` it did not, and every consumer passing
-  // `loadHls: () => import('hls.js')` — the form this package's README
-  // documents — needed `as unknown as`. This adapter only ever calls `on` with
-  // names taken from the constructor's own `Events`.
-  on(event: string, listener: (event: string, data: unknown) => void): void;
-  startLoad: () => void;
-  recoverMediaError: () => void;
-  swapAudioCodec: () => void;
-  attachMedia: (media: HTMLMediaElement) => void;
-  loadSource: (url: string) => void;
-  destroy: () => void;
-};
-
-export type HlsConstructorLike = {
-  new (config?: HlsConfigLike): HlsInstanceLike;
-  isSupported: () => boolean;
-  readonly Events: {
-    readonly ERROR: string;
-    readonly LEVEL_SWITCHED: string;
-    readonly LEVEL_UPDATED: string;
-    // Plural: the level *array* changed, which is what `removeLevel` does when
-    // hls.js prunes a rung. Not to be confused with the singular event above.
-    readonly LEVELS_UPDATED: string;
-    readonly MANIFEST_PARSED: string;
-    readonly MEDIA_ATTACHED: string;
-    readonly SUBTITLE_TRACKS_UPDATED: string;
-    readonly SUBTITLE_TRACK_SWITCH: string;
-    readonly CUES_PARSED: string;
-  };
-  readonly ErrorTypes: {
-    readonly NETWORK_ERROR: string;
-    readonly MEDIA_ERROR: string;
-  };
-};
-
-export type HlsModuleLoader = () => Promise<{
-  readonly default: HlsConstructorLike;
-}>;
 
 export type HlsProviderOptions = NativePlaybackOptions & {
   readonly loadHls?: HlsModuleLoader;
@@ -163,29 +90,12 @@ export const deriveLiveState = (
 
 const NATIVE_HLS_MIME = 'application/vnd.apple.mpegurl';
 const MSE_TEST_CODEC = 'video/mp4; codecs="avc1.42E01E,mp4a.40.2"';
-const MAX_FATAL_NETWORK_RECOVERIES = 2;
-const MAX_FATAL_MEDIA_RECOVERIES = 2;
 // Ordinary-live tolerances. At-edge is a coarse "close to the live edge"
 // window, not the tight target of DVR/LL-HLS tuning (out of MVP scope). A
 // seekable span below the minimum is treated as pure live edge with no
 // meaningful window to scrub.
 const LIVE_EDGE_THRESHOLD_SECONDS = 10;
 const LIVE_MIN_SEEK_WINDOW_SECONDS = 2;
-
-const readMediaRanges = (
-  ranges: globalThis.TimeRanges
-): ReadonlyArray<TimeRange> =>
-  Array.from({ length: ranges.length }, (_, index) => ({
-    start: ranges.start(index),
-    end: ranges.end(index)
-  }));
-
-const liveStateEqual = (a: PlayerLiveState, b: PlayerLiveState): boolean =>
-  a === b ||
-  (a !== null &&
-    b !== null &&
-    a.isLive === b.isLive &&
-    a.atLiveEdge === b.atLiveEdge);
 
 type MediaSourceLike = { isTypeSupported?: (type: string) => boolean };
 
@@ -215,16 +125,6 @@ export const detectHlsEnvironment = (
       supportsMse(globals.MediaSource)
   };
 };
-
-const unsupportedSelection = (message: string): HlsEngineSelection => ({
-  engine: null,
-  error: {
-    category: 'unsupported',
-    fatal: true,
-    recoverable: false,
-    message
-  }
-});
 
 export const selectHlsEngine = (
   requested: NonNullable<HlsSource['engine']>,
@@ -284,49 +184,13 @@ export const createHlsProvider = (
   const engine = selection.engine;
   const native = createNativeProvider(media, nativeOptions);
   const listeners = new Set<ProviderStateListener>();
-  let attached = false;
-  let destroyed = false;
-  let hls: HlsInstanceLike | undefined;
-  let hlsConstructor: HlsConstructorLike | undefined;
-  let generation = 0;
-  let networkRecoveries = 0;
-  let mediaRecoveries = 0;
-  let selectQualityAvailability: Availability = {
-    status: 'unknown',
-    reason: 'provider-check'
-  };
-  let selectTextTrackAvailability: Availability = {
-    status: 'unknown',
-    reason: 'provider-check'
-  };
   let lastCapabilities: PlayerCapabilities | undefined;
   let hlsLiveHint: boolean | undefined;
   let liveState: PlayerLiveState = null;
   let liveSeekMeaningful = true;
-  // hls.js quality state: the derived ladder and the held selection (`null` is
-  // auto). Unlike captions there is no "explicitly chosen" flag — see
-  // `refreshHlsQualities` for why quality needs no default-track rule.
-  let hlsQualityList: PlayerQuality[] = [];
-  let hlsSelectedQualityId: string | null = null;
-  // The held selection's collision-free base id, kept so a selection can be
-  // re-matched after its `:<idx>` suffix shifts or collapses.
-  let hlsSelectedQualityBaseId: string | null = null;
-  // hls.js text-track state — mirrors packages/provider-native/src/text-tracks.ts's
-  // shape (held selection + "has the user explicitly chosen" flag so a later
-  // SUBTITLE_TRACKS_UPDATED can tell "keep the held id" apart from "apply the
-  // default-track rule"), but keyed to hls.js's own subtitleTracks/subtitleTrack
-  // surface instead of `<track>` elements.
-  let hlsTextTracks: TextTrack[] = [];
-  let hlsSelectedTextTrackId: string | null = null;
-  let hlsHasExplicitTextTrackSelection = false;
-  // Cues parsed for the held selection (see `startHlsJs`'s `CUES_PARSED`
-  // listener for why no further per-track filtering is needed), windowed
-  // down to the currently active ones on every `timeupdate`.
-  let hlsParsedCues: TextCue[] = [];
-  const hlsCueListeners = new Set<(cues: readonly TextCue[]) => void>();
 
   const emit = (patch: ProviderStatePatch, event?: ProviderEvent): void => {
-    if (destroyed) return;
+    if (attachment.isDestroyed()) return;
     listeners.forEach((listener) => listener(patch, event));
   };
 
@@ -338,16 +202,37 @@ export const createHlsProvider = (
       selectQuality:
         engine === 'native'
           ? { status: 'unavailable', reason: 'provider' }
-          : selectQualityAvailability,
+          : qualityLevels.selectQualityAvailability(),
       selectTextTrack:
         engine === 'hls.js'
-          ? selectTextTrackAvailability
+          ? textTracks.selectTextTrackAvailability()
           : capabilities.selectTextTrack
     };
     return liveSeekMeaningful
       ? withQuality
       : { ...withQuality, seek: { status: 'unavailable', reason: 'source' } };
   };
+
+  // The last-seen capabilities snapshot, re-decorated, as a spreadable patch
+  // fragment — empty until the native adapter has published one.
+  const capabilitiesPatch = (): ProviderStatePatch =>
+    lastCapabilities
+      ? { capabilities: decorateCapabilities(lastCapabilities) }
+      : {};
+
+  const textTracks = createHlsTextTracks(media, {
+    emit,
+    isDestroyed: () => attachment.isDestroyed(),
+    getInstance: () => attachment.getInstance(),
+    capabilitiesPatch
+  });
+
+  const qualityLevels = createHlsQualityLevels({
+    emit,
+    isDestroyed: () => attachment.isDestroyed(),
+    getInstance: () => attachment.getInstance(),
+    capabilitiesPatch
+  });
 
   const computeLiveState = (): PlayerLiveState =>
     deriveLiveState({
@@ -356,7 +241,9 @@ export const createHlsProvider = (
       seekable: readMediaRanges(media.seekable),
       currentTime: media.currentTime,
       liveEdge:
-        engine === 'hls.js' ? (hls?.liveSyncPosition ?? undefined) : undefined,
+        engine === 'hls.js'
+          ? (attachment.getInstance()?.liveSyncPosition ?? undefined)
+          : undefined,
       atEdgeThreshold: LIVE_EDGE_THRESHOLD_SECONDS
     });
 
@@ -416,7 +303,7 @@ export const createHlsProvider = (
   };
 
   const unsubscribeNative = native.subscribe((patch, event) => {
-    if (destroyed) return;
+    if (attachment.isDestroyed()) return;
     if (engine === 'hls.js' && patch.lifecycle === 'error') {
       // hls.js owns error recovery and surfacing on the MSE path; raw media
       // element errors would preempt its bounded recovery table.
@@ -429,24 +316,9 @@ export const createHlsProvider = (
     );
   });
 
-  const teardownHls = (): void => {
-    const instance = hls;
-    hls = undefined;
-    media.removeEventListener('timeupdate', recomputeActiveHlsCues);
-    if (!instance) return;
-    try {
-      instance.destroy();
-    } catch {
-      // Teardown must not escape the provider boundary.
-    }
-  };
-
   const surfaceFatal = (error: PlayerError): void => {
-    teardownHls();
-    selectQualityAvailability = { status: 'unavailable', reason: 'provider' };
-    hlsQualityList = [];
-    hlsSelectedQualityId = null;
-    hlsSelectedQualityBaseId = null;
+    attachment.teardownEngine();
+    qualityLevels.clearForFatal();
     emit(
       {
         lifecycle: 'error',
@@ -457,492 +329,70 @@ export const createHlsProvider = (
         quality: null,
         qualities: [],
         selectedQualityId: null,
-        ...(lastCapabilities
-          ? { capabilities: decorateCapabilities(lastCapabilities) }
-          : {}),
+        ...capabilitiesPatch(),
         error
       },
       { type: 'error', detail: error, origin: 'provider' }
     );
   };
 
-  const handleHlsError = (
-    instance: HlsInstanceLike,
-    Hls: HlsConstructorLike,
-    data: unknown
-  ): void => {
-    if (destroyed || hls !== instance) return;
-    const errorData = data as {
-      type?: string;
-      details?: string;
-      fatal?: boolean;
-    };
-    if (!errorData.fatal) return;
-    if (errorData.type === Hls.ErrorTypes.NETWORK_ERROR) {
-      if (networkRecoveries < MAX_FATAL_NETWORK_RECOVERIES) {
-        networkRecoveries += 1;
-        instance.startLoad();
-        return;
-      }
-      surfaceFatal({
-        category: 'network',
-        fatal: true,
-        recoverable: true,
-        message: 'HLS playback failed after bounded network error recovery.',
-        cause: data
-      });
-      return;
-    }
-    if (errorData.type === Hls.ErrorTypes.MEDIA_ERROR) {
-      if (mediaRecoveries < MAX_FATAL_MEDIA_RECOVERIES) {
-        mediaRecoveries += 1;
-        // Per the hls.js recovery contract, a repeated fatal media error
-        // needs an audio codec swap before the next recovery attempt.
-        if (mediaRecoveries > 1) instance.swapAudioCodec();
-        instance.recoverMediaError();
-        return;
-      }
-      surfaceFatal({
-        category: 'decode',
-        fatal: true,
-        recoverable: true,
-        message: 'HLS playback failed after bounded media error recovery.',
-        cause: data
-      });
-      return;
-    }
-    surfaceFatal({
-      category: 'provider',
-      fatal: true,
-      recoverable: true,
-      message: errorData.details
-        ? `hls.js reported an unrecoverable fatal error: ${errorData.details}`
-        : 'hls.js reported an unrecoverable fatal error.',
-      cause: data
-    });
-  };
+  const errorRecovery = createHlsErrorRecovery({
+    isStale: (instance) =>
+      attachment.isDestroyed() || attachment.getInstance() !== instance,
+    surfaceFatal
+  });
 
-  // Content-derived, never index-derived: hls.js removes levels from `levels`
-  // after repeated errors, so an index-keyed id would silently repoint a held
-  // selection at a different rung. `HlsLevelLike`'s fields are all optional
-  // (audio-only renditions carry no dimensions), so a missing one renders as
-  // `-` rather than the string "undefined".
-  // `== null` rather than `=== undefined`: the sibling mapping below uses
-  // `?? null`, and the two must agree about what a missing dimension is, or a
-  // null from hls.js would read `hls:nullx…` in the id while the exposed field
-  // read `null`.
-  const hlsLevelToken = (value: number | null | undefined): string =>
-    value == null ? '-' : String(value);
+  const attachment = createHlsAttachment(media, source, selection, {
+    emit,
+    loadHls,
+    native,
+    textTracks,
+    qualityLevels,
+    errorRecovery,
+    surfaceFatal,
+    setLiveHint: (live) => {
+      hlsLiveHint = live;
+    },
+    emitLiveUpdate,
+    unsubscribeNative,
+    clearStateListeners: () => listeners.clear()
+  });
 
-  const hlsQualityBaseId = (level: HlsLevelLike): string =>
-    `hls:${hlsLevelToken(level.height)}x${hlsLevelToken(level.width)}` +
-    `@${hlsLevelToken(level.bitrate)}`;
-
-  // Rungs identical on every field this contract exposes are separated by a
-  // `:<idx>` suffix. That suffix moves when the collision set changes — and
-  // the id also loses it entirely when a pair collapses to one — so a held
-  // selection is re-matched by `baseId`, never by the suffixed id alone. See
-  // `refreshHlsQualities`.
-  const hlsQualityEntries = (
-    levels: ReadonlyArray<HlsLevelLike>
-  ): ReadonlyArray<{
-    readonly quality: PlayerQuality;
-    readonly baseId: string;
-  }> => {
-    const rungs = levels.map((level) => ({
-      level,
-      baseId: hlsQualityBaseId(level)
-    }));
-    const collisions = new Map<string, number>();
-    rungs.forEach(({ baseId }) =>
-      collisions.set(baseId, (collisions.get(baseId) ?? 0) + 1)
-    );
-    const assigned = new Map<string, number>();
-    return rungs.map(({ baseId, level }) => {
-      let id = baseId;
-      if ((collisions.get(baseId) ?? 0) > 1) {
-        const ordinal = assigned.get(baseId) ?? 0;
-        assigned.set(baseId, ordinal + 1);
-        id = `${baseId}:${ordinal}`;
-      }
-      return {
-        baseId,
-        quality: {
-          id,
-          height: level.height ?? null,
-          width: level.width ?? null,
-          bitrate: level.bitrate ?? null
-        }
-      };
-    });
-  };
-
-  const hlsQualities = (levels: ReadonlyArray<HlsLevelLike>): PlayerQuality[] =>
-    hlsQualityEntries(levels).map((entry) => entry.quality);
-
-  // Gated on list length, the way `resolveHlsCaptionRendering` gates on track
-  // count. An empty list once the manifest has parsed is `unavailable/source`,
-  // never `unknown` — a verdict that cannot resolve is the same defect this
-  // change fixes in provider-native.
-  const refreshHlsQualities = (instance: HlsInstanceLike): void => {
-    if (destroyed || hls !== instance) return;
-    const entries = hlsQualityEntries(instance.levels);
-    hlsQualityList = entries.map((entry) => entry.quality);
-    selectQualityAvailability =
-      hlsQualityList.length === 0
-        ? { status: 'unavailable', reason: 'source' }
-        : { status: 'available' };
-    // A held selection may not outlive the rung it names — but it must also
-    // survive a rung that still exists under a different id. Pruning one of a
-    // pair of indistinguishable rungs collapses the survivor's `:<idx>` suffix
-    // away, so an id-only membership test would drop a selection whose rung is
-    // still right there, while the engine stays pinned to it: state would
-    // report auto while playback was locked to one level, with no way back.
-    // Matching on `baseId` re-adopts the survivor under its new id. Rungs
-    // sharing a baseId are identical on every field this contract exposes, so
-    // which one is adopted is not observable.
-    if (hlsSelectedQualityId !== null) {
-      const held =
-        entries.find((entry) => entry.quality.id === hlsSelectedQualityId) ??
-        entries.find((entry) => entry.baseId === hlsSelectedQualityBaseId);
-      hlsSelectedQualityId = held?.quality.id ?? null;
-      hlsSelectedQualityBaseId = held?.baseId ?? null;
-    }
-    // `currentLevel` is deliberately not written: hls.js prunes levels as part
-    // of its own error recovery and reindexes `currentLevel` itself, so
-    // writing into the middle of that fights the engine over state it is
-    // still repairing.
-    emit({
-      qualities: hlsQualityList,
-      selectedQualityId: hlsSelectedQualityId,
-      ...(lastCapabilities
-        ? { capabilities: decorateCapabilities(lastCapabilities) }
-        : {})
-    });
-  };
-
-  const hlsSubtitleTrackId = (
-    track: HlsSubtitleTrackLike,
-    index: number
-  ): string =>
-    track.id !== undefined && track.id !== null
-      ? `hls:${track.id}`
-      : `hls:${index}`;
-
-  const hlsSubtitleTrackKind = (track: HlsSubtitleTrackLike): TextTrackKind =>
-    track.type === 'CLOSED-CAPTIONS' ? 'captions' : 'subtitles';
-
-  // Mirrors provider-native's `resolveSelection`: a held explicit selection
-  // always overrides and persists as long as it still names an existing
-  // track; otherwise the `default` track applies (native's `<track
-  // default>` rule, here hls.js's `MediaPlaylist.default` flag); otherwise
-  // no selection.
-  const resolveHlsTextTrackSelection = (
-    ids: ReadonlyArray<string>,
-    defaultIndex: number
-  ): string | null => {
-    if (hlsHasExplicitTextTrackSelection) {
-      return hlsSelectedTextTrackId !== null &&
-        ids.includes(hlsSelectedTextTrackId)
-        ? hlsSelectedTextTrackId
-        : null;
-    }
-    return defaultIndex === -1 ? null : (ids[defaultIndex] ?? null);
-  };
-
-  // No 'native' branch: real browser-native rendering needs hls.js's
-  // `renderTextTracksNatively`, which `startHlsJs` keeps off (see the
-  // comment there), so there is no native surface to report. See
-  // `setCaptionRenderer` below.
-  const resolveHlsCaptionRendering = (): CaptionRendering =>
-    hlsTextTracks.length === 0 ? 'unavailable' : 'custom';
-
-  const emitHlsCues = (cues: readonly TextCue[]): void =>
-    hlsCueListeners.forEach((listener) => listener(cues));
-
-  const normalizeHlsCue = (cue: HlsParsedCueLike): TextCue => {
-    const text = typeof cue.text === 'string' ? cue.text : '';
-    return {
-      id: cue.id ?? null,
-      startTime: cue.startTime,
-      endTime: cue.endTime,
-      text: text.trim().length === 0 ? '' : text
-    };
-  };
-
-  // Windows the held cues down to the ones active at the media's current
-  // time — mirrors what a native `TextTrack`'s `activeCues`/`cuechange`
-  // would give us, computed by hand since `CUES_PARSED` delivers cues as
-  // they are parsed (which can be well ahead of playback), not as they
-  // become active. Driven by `timeupdate`, which the HTML spec fires at
-  // roughly 4Hz — cue enter/exit precision is bounded by that cadence, an
-  // accepted limitation for this hand-rolled windowing (a real `cuechange`
-  // event would be exact).
-  const recomputeActiveHlsCues = (): void => {
-    const currentTime = media.currentTime;
-    emitHlsCues(
-      hlsParsedCues.filter(
-        (cue) => currentTime >= cue.startTime && currentTime < cue.endTime
-      )
-    );
-  };
-
-  // Pushes the held selection down into the engine (`instance.subtitleTrack`,
-  // `-1` for none) and clears the held cues — the previous selection's cues
-  // no longer apply, and hls.js only fetches/parses fragments for the
-  // subtitle track that is actually selected, so nothing will refill the
-  // buffer until the new selection's own cues are parsed.
-  const applyHlsTextTrackSelection = (): void => {
-    const instance = hls;
-    if (!instance) return;
-    instance.subtitleTrack =
-      hlsSelectedTextTrackId === null
-        ? -1
-        : hlsTextTracks.findIndex(
-            (track) => track.id === hlsSelectedTextTrackId
-          );
-    hlsParsedCues = [];
-    emitHlsCues([]);
-  };
-
-  const startHlsJs = async (): Promise<CommandResult> => {
-    const startGeneration = ++generation;
-    // Starting owns teardown, rather than each caller remembering it. `retry()`
-    // used to do this itself and `load()` did not, so a second `load()` left
-    // the previous instance attached with its listeners live, still loading
-    // fragments (#85). Every handler is generation- and identity-guarded, so
-    // nothing was corrupted — it was a resource leak, not a state bug. A no-op
-    // on a first load, where there is nothing to tear down.
-    teardownHls();
-    // Both `load()` and `retry()` route through here, so this is the one place
-    // a new engine instance's empty ladder has to be published: without it,
-    // state would keep advertising a dead instance's rungs until the new
-    // manifest parsed. Guarded because on a first load there is nothing to
-    // clear, and an unconditional patch would publish a no-op change.
-    // Also fires on a stale verdict alone: a previous instance that parsed an
-    // empty manifest left `unavailable/source`, which is too confident for a
-    // brand-new instance whose manifest has not been read yet.
-    if (
-      hlsQualityList.length > 0 ||
-      hlsSelectedQualityId !== null ||
-      selectQualityAvailability.status !== 'unknown'
-    ) {
-      hlsQualityList = [];
-      hlsSelectedQualityId = null;
-      hlsSelectedQualityBaseId = null;
-      // The capability and the list are one claim and may not disagree, even
-      // for the window before the new manifest parses. `retry()` already sets
-      // this same verdict; a plain second `load()` does not, so it is set here
-      // rather than left to the caller.
-      selectQualityAvailability = {
-        status: 'unknown',
-        reason: 'provider-check'
-      };
-      emit({
-        qualities: [],
-        selectedQualityId: null,
-        ...(lastCapabilities
-          ? { capabilities: decorateCapabilities(lastCapabilities) }
-          : {})
-      });
-    }
-    let Hls = hlsConstructor;
-    if (!Hls) {
-      try {
-        Hls = (await loadHls()).default;
-      } catch (cause) {
-        if (destroyed || generation !== startGeneration) {
-          return { ok: false, reason: 'not-ready' };
-        }
-        const error: PlayerError = {
-          category: 'provider',
-          fatal: true,
-          recoverable: true,
-          message: 'Unable to load the hls.js engine module.',
-          cause
-        };
-        surfaceFatal(error);
-        return { ok: false, reason: 'provider-error', error };
-      }
-    }
-    if (destroyed || generation !== startGeneration) {
-      return { ok: false, reason: 'not-ready' };
-    }
-    hlsConstructor = Hls;
-    if (!Hls.isSupported()) {
-      const error: PlayerError = {
-        category: 'unsupported',
-        fatal: true,
-        recoverable: false,
-        message: 'hls.js does not support this browser environment.'
-      };
-      surfaceFatal(error);
-      return { ok: false, reason: 'unsupported', error };
-    }
-    const HlsRuntime = Hls;
-    // `renderTextTracksNatively` (hls.js's own default is `true`) makes
-    // hls.js auto-create a native `TextTrack` per subtitle on
-    // `media.textTracks` and manage its mode itself. That collides with
-    // `createNativeProvider`'s own caption subsystem below (`native`),
-    // which is always wired to the same `media.textTracks` list (it owns
-    // captions for the *native* HLS engine's embedded `<track>` elements)
-    // and reacts to any track's `mode` changing — including hls.js's own —
-    // by re-discovering and re-applying its unrelated selection, fighting
-    // hls.js over the very tracks it just created. Keeping it off is what
-    // lets this engine's caption pipeline (`CUES_PARSED`, below) stay fully
-    // self-contained; see `setCaptionRenderer` for what this costs.
-    const instance = new HlsRuntime({ renderTextTracksNatively: false });
-    hls = instance;
-    media.addEventListener('timeupdate', recomputeActiveHlsCues);
-    instance.on(HlsRuntime.Events.ERROR, (_event, data) =>
-      handleHlsError(instance, HlsRuntime, data)
-    );
-    instance.on(HlsRuntime.Events.LEVEL_SWITCHED, (_event, data) => {
-      if (destroyed || hls !== instance) return;
-      const index = (data as { level: number }).level;
-      // Resolved through the same derivation as the list, so the active
-      // level's id and its list entry's id cannot drift apart.
-      emit({ quality: hlsQualities(instance.levels)[index] ?? null });
-    });
-    instance.on(HlsRuntime.Events.MANIFEST_PARSED, () => {
-      refreshHlsQualities(instance);
-    });
-    instance.on(HlsRuntime.Events.LEVELS_UPDATED, () => {
-      refreshHlsQualities(instance);
-    });
-    instance.on(HlsRuntime.Events.LEVEL_UPDATED, (_event, data) => {
-      if (destroyed || hls !== instance) return;
-      const live = (data as { details?: { live?: boolean } }).details?.live;
-      if (typeof live === 'boolean') hlsLiveHint = live;
-      emitLiveUpdate();
-    });
-    instance.on(HlsRuntime.Events.SUBTITLE_TRACKS_UPDATED, (_event, data) => {
-      if (destroyed || hls !== instance) return;
-      const rawTracks =
-        (data as { subtitleTracks?: ReadonlyArray<HlsSubtitleTrackLike> })
-          .subtitleTracks ?? instance.subtitleTracks;
-      const ids = rawTracks.map((track, index) =>
-        hlsSubtitleTrackId(track, index)
-      );
-      hlsTextTracks = rawTracks.map((track, index) => ({
-        id: ids[index],
-        label: textTrackLabel(track.name, track.lang),
-        language: track.lang || null,
-        kind: hlsSubtitleTrackKind(track),
-        readiness: 'loaded'
-      }));
-      const defaultIndex = rawTracks.findIndex((track) => track.default);
-      hlsSelectedTextTrackId = resolveHlsTextTrackSelection(ids, defaultIndex);
-      // Mirrors the native engine's `hasSelectableTextTracks()` rule: the
-      // capability is only 'available' once there is at least one track to
-      // select among.
-      selectTextTrackAvailability =
-        hlsTextTracks.length > 0
-          ? { status: 'available' }
-          : { status: 'unavailable', reason: 'source' };
-      applyHlsTextTrackSelection();
-      emit({
-        textTracks: hlsTextTracks,
-        selectedTextTrackId: hlsSelectedTextTrackId,
-        captionRendering: resolveHlsCaptionRendering(),
-        ...(lastCapabilities
-          ? { capabilities: decorateCapabilities(lastCapabilities) }
-          : {})
-      });
-    });
-    // hls.js only downloads/parses subtitle fragments for the currently
-    // selected `subtitleTrack`, so every cue that arrives while a selection
-    // is held belongs to it — no need to correlate hls.js's internal
-    // `data.track` label (an implementation-private "default"/"subtitlesN"
-    // string, not a documented stable identifier) back to our own track ids.
-    instance.on(HlsRuntime.Events.CUES_PARSED, (_event, data) => {
-      if (destroyed || hls !== instance || hlsSelectedTextTrackId === null) {
-        return;
-      }
-      const parsedCues =
-        (data as { cues?: ReadonlyArray<HlsParsedCueLike> }).cues ?? [];
-      hlsParsedCues = [...hlsParsedCues, ...parsedCues.map(normalizeHlsCue)];
-      recomputeActiveHlsCues();
-    });
-    instance.on(HlsRuntime.Events.MEDIA_ATTACHED, () => {
-      if (destroyed || hls !== instance) return;
-      // attachMedia points `media.src` at an MSE blob, which re-runs the load
-      // algorithm and resets `playbackRate`. Commands land and stick from
-      // here, well before the manifest parses (#69).
-      emit({ commandsReady: true });
-    });
-    instance.attachMedia(media);
-    instance.loadSource(source.src);
-    return { ok: true };
-  };
-
-  const emitSelectionFailure = (): void => {
-    if (selection.engine !== null) return;
-    emit(
-      {
-        lifecycle: 'error',
-        activation: 'error',
-        hlsEngine: null,
-        error: selection.error
-      },
-      { type: 'error', detail: selection.error, origin: 'provider' }
-    );
-  };
+  const playback = createHlsPlayback(native, selection, {
+    isDestroyed: () => attachment.isDestroyed(),
+    resetEngineState: () => {
+      errorRecovery.reset();
+      qualityLevels.reset();
+      hlsLiveHint = undefined;
+      liveState = null;
+      liveSeekMeaningful = true;
+      textTracks.reset();
+    },
+    startHlsJs: attachment.startHlsJs
+  });
 
   return {
     provider: 'hls',
-    attach: () => {
-      if (destroyed || attached) return;
-      attached = true;
-      if (!engine) {
-        emitSelectionFailure();
-        return;
-      }
-      emit({ hlsEngine: engine });
-      native.attach();
-    },
-    load: async () => {
-      if (destroyed || !engine) return;
-      if (engine === 'native') {
-        media.src = source.src;
-        await native.load();
-        return;
-      }
-      await startHlsJs();
-    },
-    destroy: () => {
-      if (destroyed) return;
-      destroyed = true;
-      generation += 1;
-      teardownHls();
-      unsubscribeNative();
-      native.destroy();
-      if (engine === 'native') {
-        // The native engine owns media.src (React sets none on the HLS
-        // <video>); detach it so the element stops buffering the manifest.
-        media.removeAttribute('src');
-        media.load();
-      }
-      listeners.clear();
-      hlsCueListeners.clear();
-    },
+    attach: attachment.attach,
+    load: attachment.load,
+    destroy: attachment.destroy,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    play: native.play,
-    pause: native.pause,
-    seekTo: native.seekTo,
-    seekBy: native.seekBy,
-    mute: native.mute,
-    unmute: native.unmute,
-    setVolume: native.setVolume,
-    setPlaybackRate: native.setPlaybackRate,
-    requestFullscreen: native.requestFullscreen,
-    exitFullscreen: native.exitFullscreen,
-    requestPictureInPicture: native.requestPictureInPicture,
-    exitPictureInPicture: native.exitPictureInPicture,
-    showAirPlayPicker: native.showAirPlayPicker,
+    play: playback.play,
+    pause: playback.pause,
+    seekTo: playback.seekTo,
+    seekBy: playback.seekBy,
+    mute: playback.mute,
+    unmute: playback.unmute,
+    setVolume: playback.setVolume,
+    setPlaybackRate: playback.setPlaybackRate,
+    requestFullscreen: playback.requestFullscreen,
+    exitFullscreen: playback.exitFullscreen,
+    requestPictureInPicture: playback.requestPictureInPicture,
+    exitPictureInPicture: playback.exitPictureInPicture,
+    showAirPlayPicker: playback.showAirPlayPicker,
     // Ungated, unlike `subscribeCues` below: the intrinsic size is read off
     // the <video> element, which both engines play into and whose
     // `loadedmetadata`/`resize` listeners `native.attach()` installs on either
@@ -964,98 +414,13 @@ export const createHlsProvider = (
           setCaptionRenderer: native.setCaptionRenderer
         }
       : {}),
-    retry: async (): Promise<CommandResult> => {
-      if (destroyed) return { ok: false, reason: 'not-ready' };
-      if (!engine) {
-        return { ok: false, reason: 'unsupported', error: selection.error };
-      }
-      if (engine === 'native') return native.retry();
-      networkRecoveries = 0;
-      mediaRecoveries = 0;
-      selectQualityAvailability = {
-        status: 'unknown',
-        reason: 'provider-check'
-      };
-      selectTextTrackAvailability = {
-        status: 'unknown',
-        reason: 'provider-check'
-      };
-      hlsLiveHint = undefined;
-      liveState = null;
-      liveSeekMeaningful = true;
-      hlsTextTracks = [];
-      hlsSelectedTextTrackId = null;
-      hlsHasExplicitTextTrackSelection = false;
-      hlsParsedCues = [];
-      emitHlsCues([]);
-      // No `teardownHls()` here: `startHlsJs()` owns it now (#85).
-      return startHlsJs();
-    },
+    retry: playback.retry,
     ...(engine === 'hls.js'
       ? {
-          selectQuality: async (id: string | null): Promise<CommandResult> => {
-            const instance = hls;
-            if (destroyed || !instance) {
-              return { ok: false, reason: 'not-ready' };
-            }
-            if (id === null) {
-              instance.currentLevel = -1;
-              hlsSelectedQualityId = null;
-              hlsSelectedQualityBaseId = null;
-              emit({ selectedQualityId: null });
-              return { ok: true };
-            }
-            // Resolved against a fresh derivation over the live `levels`
-            // array, so a rung hls.js has pruned is `unsupported` rather than
-            // a silent switch to whatever now occupies that index.
-            // Deliberately NOT `hlsQualityList`, which is what the mirrored
-            // `selectTextTrack` below checks: hls.js mutates `levels` through
-            // `removeLevel` and only then fires `LEVELS_UPDATED`, so the live
-            // array is the authority and the published list can lag it.
-            const entries = hlsQualityEntries(instance.levels);
-            const index = entries.findIndex((entry) => entry.quality.id === id);
-            if (index === -1) return { ok: false, reason: 'unsupported' };
-            instance.currentLevel = index;
-            hlsSelectedQualityId = id;
-            hlsSelectedQualityBaseId = entries[index]?.baseId ?? null;
-            emit({ selectedQualityId: id });
-            return { ok: true };
-          },
-          selectTextTrack: async (
-            id: string | null
-          ): Promise<CommandResult> => {
-            const instance = hls;
-            if (destroyed || !instance) {
-              return { ok: false, reason: 'not-ready' };
-            }
-            if (
-              id !== null &&
-              !hlsTextTracks.some((track) => track.id === id)
-            ) {
-              return { ok: false, reason: 'unsupported' };
-            }
-            hlsHasExplicitTextTrackSelection = true;
-            hlsSelectedTextTrackId = id;
-            applyHlsTextTrackSelection();
-            emit({
-              selectedTextTrackId: hlsSelectedTextTrackId,
-              captionRendering: resolveHlsCaptionRendering()
-            });
-            return { ok: true };
-          },
-          subscribeCues: (listener: (cues: readonly TextCue[]) => void) => {
-            hlsCueListeners.add(listener);
-            return () => hlsCueListeners.delete(listener);
-          },
-          // Real browser-native rendering needs `renderTextTracksNatively`,
-          // which `startHlsJs` keeps off (see its comment), so there is no
-          // native surface this engine can hand a 'native' request to.
-          // Honor the call without pretending otherwise: cues keep flowing
-          // through `subscribeCues` either way, and captionRendering keeps
-          // honestly reporting 'custom'.
-          setCaptionRenderer: () => {
-            emit({ captionRendering: resolveHlsCaptionRendering() });
-          }
+          selectQuality: qualityLevels.selectQuality,
+          selectTextTrack: textTracks.selectTextTrack,
+          subscribeCues: textTracks.subscribeCues,
+          setCaptionRenderer: textTracks.setCaptionRenderer
         }
       : {})
   };
