@@ -7,7 +7,6 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStateListener,
-  TimeRange,
   VimeoSource
 } from '@reely/core';
 import {
@@ -17,7 +16,8 @@ import {
   numberField,
   providerCheck,
   providerEvent,
-  runVimeoCommand
+  runVimeoCommand,
+  type VimeoMountElement
 } from './adapter-values.js';
 import {
   loadVimeoSdk,
@@ -25,9 +25,11 @@ import {
   type VimeoSdkQuality,
   type VimeoSdkTextTrack
 } from './loader.js';
+import { createVimeoPlayback } from './playback.js';
 import { createVimeoQualityLevels } from './quality-levels.js';
 import { createVimeoTextTracks } from './text-tracks.js';
 
+export type { VimeoMountElement } from './adapter-values.js';
 export { loadVimeoSdk, resetVimeoSdkLoader } from './loader.js';
 export type {
   VimeoSdkConstructor,
@@ -37,12 +39,6 @@ export type {
   VimeoSdkQuality,
   VimeoSdkTextTrack
 } from './loader.js';
-
-export type VimeoMountElement = HTMLElement & {
-  muted?: boolean;
-  volume?: number;
-  playbackRate?: number;
-};
 
 export type VimeoProviderOptions = {
   readonly controls?: boolean;
@@ -170,21 +166,6 @@ const settleWithFallback = <Value>(
     );
   });
 
-// The SDK hands back `[start, end]` pairs. Anything else is not a range we can
-// vouch for, so it is dropped rather than guessed at.
-const toRanges = (
-  ranges: ReadonlyArray<readonly number[]>
-): readonly TimeRange[] =>
-  ranges.flatMap(([start, end]) =>
-    typeof start === 'number' &&
-    typeof end === 'number' &&
-    Number.isFinite(start) &&
-    Number.isFinite(end) &&
-    end >= start
-      ? [{ start, end }]
-      : []
-  );
-
 export const createVimeoProvider = (
   mount: VimeoMountElement,
   source: VimeoSource,
@@ -200,10 +181,6 @@ export const createVimeoProvider = (
   let generation = 0;
   let activePlayer: VimeoSdkPlayer | undefined;
   let activeIframe: HTMLIFrameElement | undefined;
-  let currentTime = 0;
-  let duration: number | null = null;
-  let volumeAvailability: Availability = available;
-  let playbackRateAvailability: Availability = available;
   let pictureInPictureAvailability: Availability = available;
   let customControlsAvailability: Availability = providerCheck;
   let activeDimensions: MediaDimensions | undefined;
@@ -233,6 +210,13 @@ export const createVimeoProvider = (
     event?: ProviderEvent
   ): void => listeners.forEach((listener) => listener(patch, event));
 
+  const playback = createVimeoPlayback(mount, {
+    emit,
+    isStale: (player) => destroyed || player !== activePlayer,
+    getPlayer: () => (destroyed ? undefined : activePlayer),
+    getCapabilities: () => capabilities()
+  });
+
   const qualityLevels = createVimeoQualityLevels({
     emit,
     getPlayer: () => (destroyed ? undefined : activePlayer)
@@ -242,14 +226,14 @@ export const createVimeoProvider = (
     emit,
     isStale: (player) => destroyed || player !== activePlayer,
     getPlayer: () => (destroyed ? undefined : activePlayer),
-    getCurrentTime: () => currentTime,
+    getCurrentTime: playback.getCurrentTime,
     getCapabilities: () => capabilities()
   });
 
   const capabilities = (): PlayerCapabilities => ({
     seek: available,
-    setVolume: volumeAvailability,
-    setPlaybackRate: playbackRateAvailability,
+    setVolume: playback.setVolumeAvailability(),
+    setPlaybackRate: playback.setPlaybackRateAvailability(),
     selectQuality: qualityLevels.selectQualityAvailability(),
     selectTextTrack: textTracks.selectTextTrackAvailability(),
     fullscreen: available,
@@ -294,63 +278,13 @@ export const createVimeoProvider = (
         listener(data);
       });
 
-    on('play', (data) => {
-      const seconds = numberField(data, 'seconds');
-      if (seconds !== undefined) currentTime = seconds;
-      emit(
-        {
-          playback: 'playing',
-          buffering: false,
-          ...(seconds === undefined ? {} : { currentTime: seconds })
-        },
-        providerEvent('play', undefined, data)
-      );
-    });
-    on('playing', () => emit({ playback: 'playing', buffering: false }));
-    on('pause', (data) => {
-      if (numberField(data, 'percent') === 1) return;
-      const seconds = numberField(data, 'seconds');
-      if (seconds !== undefined) currentTime = seconds;
-      emit(
-        {
-          playback: 'paused',
-          ...(seconds === undefined ? {} : { currentTime: seconds })
-        },
-        providerEvent('pause', undefined, data)
-      );
-    });
-    on('ended', (data) => {
-      const seconds = numberField(data, 'seconds') ?? duration ?? currentTime;
-      currentTime = seconds;
-      emit(
-        { playback: 'ended', buffering: false, currentTime: seconds },
-        providerEvent('ended', undefined, data)
-      );
-    });
-    on('timeupdate', (data) => {
-      const seconds = numberField(data, 'seconds');
-      const nextDuration = numberField(data, 'duration');
-      if (seconds === undefined) return;
-      currentTime = seconds;
-      if (nextDuration !== undefined) duration = nextDuration;
-      emit({
-        currentTime: seconds,
-        ...(nextDuration === undefined ? {} : { duration: nextDuration })
-      });
-    });
-    // `progress.seconds` is the end of the range holding the playhead, not a
-    // range from zero, so it cannot describe the buffer on its own: after a
-    // seek it both hides real ranges and spans the hole in between (#91).
-    // `getBuffered()` reports the ranges themselves.
-    on('progress', () => {
-      void player.getBuffered().then(
-        (ranges) => {
-          if (isStale(thisGeneration, player)) return;
-          emit({ buffered: toRanges(ranges) });
-        },
-        () => undefined
-      );
-    });
+    const { handlers: playbackHandlers } = playback;
+    on('play', playbackHandlers.onPlay);
+    on('playing', playbackHandlers.onPlaying);
+    on('pause', playbackHandlers.onPause);
+    on('ended', playbackHandlers.onEnded);
+    on('timeupdate', playbackHandlers.onTimeUpdate);
+    on('progress', () => playbackHandlers.onProgress(player));
     // Unlike `progress`, `resize` carries the new intrinsic size in its own
     // payload, so it needs no getter round trip — and therefore no second,
     // post-await `isStale` guard the way `progress` does above. The one `on`
@@ -361,55 +295,14 @@ export const createVimeoProvider = (
         numberField(data, 'videoHeight')
       );
     });
-    on('bufferstart', () => emit({ buffering: true }));
-    on('bufferend', () => emit({ buffering: false }));
-    on('seeking', (data) => {
-      const seconds = numberField(data, 'seconds') ?? currentTime;
-      emit(
-        { seeking: true },
-        providerEvent('seeking', { currentTime: seconds }, data)
-      );
-    });
-    on('seeked', (data) => {
-      const seconds = numberField(data, 'seconds') ?? currentTime;
-      currentTime = seconds;
-      emit(
-        { seeking: false, currentTime: seconds },
-        providerEvent('seeked', { currentTime: seconds }, data)
-      );
-    });
-    on('volumechange', (data) => {
-      const volume = numberField(data, 'volume');
-      if (volume === undefined) return;
-      void player.getMuted().then(
-        (muted) => {
-          if (isStale(thisGeneration, player)) return;
-          emit(
-            { muted, volume },
-            providerEvent('volumechange', { muted, volume }, data)
-          );
-        },
-        () => undefined
-      );
-    });
-    on('playbackratechange', (data) => {
-      const playbackRate = numberField(data, 'playbackRate');
-      if (playbackRate === undefined) return;
-      emit(
-        { playbackRate },
-        providerEvent('ratechange', { playbackRate }, data)
-      );
-    });
+    on('bufferstart', playbackHandlers.onBufferStart);
+    on('bufferend', playbackHandlers.onBufferEnd);
+    on('seeking', playbackHandlers.onSeeking);
+    on('seeked', playbackHandlers.onSeeked);
+    on('volumechange', (data) => playbackHandlers.onVolumeChange(player, data));
+    on('playbackratechange', playbackHandlers.onPlaybackRateChange);
     on('qualitychange', qualityLevels.handlers.onQualityChange);
-    on('durationchange', (data) => {
-      const nextDuration = numberField(data, 'duration');
-      if (nextDuration === undefined) return;
-      duration = nextDuration;
-      emit({
-        duration: nextDuration,
-        seekable: [{ start: 0, end: nextDuration }]
-      });
-    });
+    on('durationchange', playbackHandlers.onDurationChange);
     on('fullscreenchange', (data) => {
       const fullscreen = asRecord(data).fullscreen === true;
       emit(
@@ -534,27 +427,15 @@ export const createVimeoProvider = (
       ]);
       if (isStale(thisGeneration, player)) return { ok: true };
       emitDimensions(initialWidth, initialHeight);
-      duration = initialDuration;
       const textTrackPatch = textTracks.adopt(player, initialTracks);
       const qualityPatch = qualityLevels.adopt(initialQualities);
       customControlsAvailability = chromeless;
-      if (
-        mount.volume !== undefined &&
-        Number.isFinite(mount.volume) &&
-        mount.volume !== initialVolume
-      ) {
-        void player
-          .setVolume(Math.min(1, Math.max(0, mount.volume)))
-          .catch(() => undefined);
-      }
-      if (
-        mount.playbackRate !== undefined &&
-        Number.isFinite(mount.playbackRate) &&
-        mount.playbackRate > 0 &&
-        mount.playbackRate !== initialPlaybackRate
-      ) {
-        void player.setPlaybackRate(mount.playbackRate).catch(() => undefined);
-      }
+      const playbackPatch = playback.adopt(player, {
+        duration: initialDuration,
+        muted: initialMuted,
+        volume: initialVolume,
+        playbackRate: initialPlaybackRate
+      });
       emit(
         {
           lifecycle: 'ready',
@@ -562,14 +443,7 @@ export const createVimeoProvider = (
           playback: 'paused',
           buffering: false,
           seeking: false,
-          currentTime,
-          duration,
-          muted: initialMuted,
-          volume: initialVolume,
-          playbackRate: initialPlaybackRate,
-          ...(duration === null
-            ? {}
-            : { seekable: [{ start: 0, end: duration }] }),
+          ...playbackPatch,
           ...textTrackPatch,
           ...qualityPatch,
           capabilities: capabilities()
@@ -622,55 +496,14 @@ export const createVimeoProvider = (
       dimensionListeners.add(listener);
       return () => dimensionListeners.delete(listener);
     },
-    play: () => runCommand((player) => player.play()),
-    pause: () => runCommand((player) => player.pause()),
-    seekTo: (time) => {
-      if (!Number.isFinite(time))
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      const target = Math.max(
-        0,
-        duration === null ? time : Math.min(duration, time)
-      );
-      return runCommand((player) => player.setCurrentTime(target));
-    },
-    seekBy: (offset) => {
-      if (!Number.isFinite(offset))
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      const target = Math.max(
-        0,
-        duration === null
-          ? currentTime + offset
-          : Math.min(duration, currentTime + offset)
-      );
-      return runCommand((player) => player.setCurrentTime(target));
-    },
-    mute: () => runCommand((player) => player.setMuted(true)),
-    unmute: () => runCommand((player) => player.setMuted(false)),
-    setVolume: async (volume) => {
-      if (!Number.isFinite(volume))
-        return { ok: false, reason: 'provider-error' };
-      const result = await runCommand((player) =>
-        player.setVolume(Math.min(1, Math.max(0, volume)))
-      );
-      if (!result.ok && result.reason === 'unsupported') {
-        volumeAvailability = { status: 'unavailable', reason: 'provider' };
-        emit({ capabilities: capabilities() });
-      }
-      return result;
-    },
-    setPlaybackRate: async (rate) => {
-      if (!Number.isFinite(rate) || rate <= 0)
-        return { ok: false, reason: 'provider-error' };
-      const result = await runCommand((player) => player.setPlaybackRate(rate));
-      if (!result.ok && result.reason === 'unsupported') {
-        playbackRateAvailability = {
-          status: 'unavailable',
-          reason: 'provider-plan'
-        };
-        emit({ capabilities: capabilities() });
-      }
-      return result;
-    },
+    play: playback.play,
+    pause: playback.pause,
+    seekTo: playback.seekTo,
+    seekBy: playback.seekBy,
+    mute: playback.mute,
+    unmute: playback.unmute,
+    setVolume: playback.setVolume,
+    setPlaybackRate: playback.setPlaybackRate,
     selectQuality: qualityLevels.selectQuality,
     selectTextTrack: textTracks.selectTextTrack,
     subscribeCues: textTracks.subscribeCues,

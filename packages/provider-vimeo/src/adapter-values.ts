@@ -8,6 +8,15 @@ import type {
   ProviderStatePatch
 } from '@reely/core';
 
+// The element a Vimeo player mounts into. A consumer may set the media-ish
+// properties on it before attach, and the adapter pushes them into the embed
+// once the player answers.
+export type VimeoMountElement = HTMLElement & {
+  muted?: boolean;
+  volume?: number;
+  playbackRate?: number;
+};
+
 // Publishes a provider-state patch to every subscriber, optionally paired with
 // the provider event that caused it. Every seam takes this as its sink.
 export type EmitProviderState = (
