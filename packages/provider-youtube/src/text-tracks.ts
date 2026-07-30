@@ -1,20 +1,85 @@
 import type {
   Availability,
   CommandResult,
-  PlayerCapabilities
+  PlayerCapabilities,
+  TextTrack
 } from '@reely/core';
+import { textTrackLabel } from '@reely/core';
 import {
   available,
-  findYouTubeTextTrackId,
-  resolveYouTubeTextTrack,
   runYouTubeCommand,
-  sourceUnavailable,
-  toCoreTextTracks,
-  youtubeCaptionRendering,
-  type EmitProviderState,
-  type YouTubeCaptionTrack
+  type EmitProviderState
 } from './adapter-values.js';
 import type { YouTubePlayer } from './loader.js';
+
+// A video without caption tracks is a property of the source, not of the
+// provider — every provider reports the empty-track case the same way.
+const sourceUnavailable: Availability = {
+  status: 'unavailable',
+  reason: 'source'
+};
+
+// YouTube renders captions inside its own iframe (captionRendering:
+// 'provider'), so this adapter only normalizes track discovery and
+// selection -- no cue overlay. Shape and field names follow the
+// community-documented (unofficial) "captions" module; unverified against a
+// real player (see issue #11).
+type YouTubeCaptionTrack = {
+  readonly languageCode: string;
+  readonly displayName?: string;
+  readonly languageName?: string;
+  readonly vssId?: string;
+  readonly kind?: string;
+};
+
+const youtubeTextTrackId = (
+  track: YouTubeCaptionTrack,
+  index: number,
+  tracks: readonly YouTubeCaptionTrack[]
+): string =>
+  tracks.filter((candidate) => candidate.languageCode === track.languageCode)
+    .length > 1
+    ? `youtube:${track.languageCode}:${index}`
+    : `youtube:${track.languageCode}`;
+
+const resolveYouTubeTextTrack = (
+  id: string,
+  tracks: readonly YouTubeCaptionTrack[]
+): YouTubeCaptionTrack | undefined =>
+  tracks.find(
+    (candidate, index) => youtubeTextTrackId(candidate, index, tracks) === id
+  );
+
+const findYouTubeTextTrackId = (
+  languageCode: string,
+  tracks: readonly YouTubeCaptionTrack[]
+): string | null => {
+  const index = tracks.findIndex(
+    (track) => track.languageCode === languageCode
+  );
+  return index === -1
+    ? null
+    : youtubeTextTrackId(tracks[index]!, index, tracks);
+};
+
+const toCoreTextTracks = (
+  tracks: readonly YouTubeCaptionTrack[]
+): TextTrack[] =>
+  tracks.map((track, index) => ({
+    id: youtubeTextTrackId(track, index, tracks),
+    label: textTrackLabel(
+      track.displayName || track.languageName,
+      track.languageCode
+    ),
+    language: track.languageCode,
+    kind: 'captions',
+    readiness: 'loaded'
+  }));
+
+const youtubeCaptionRendering = (
+  tracks: readonly YouTubeCaptionTrack[]
+): 'provider' | 'unavailable' =>
+  tracks.length > 0 ? 'provider' : 'unavailable';
 
 // The slice of the player this seam drives: the unofficial "captions" module's
 // option accessors, nothing else.

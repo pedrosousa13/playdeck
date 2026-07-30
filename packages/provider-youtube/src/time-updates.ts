@@ -1,13 +1,32 @@
 import type { TimeRange } from '@reely/core';
-import {
-  clamp01,
-  nextBufferView,
-  type BufferView,
-  type EmitProviderState
-} from './adapter-values.js';
+import { clamp01, type EmitProviderState } from './adapter-values.js';
 import type { YouTubePlayer } from './loader.js';
 
 const TIME_UPDATE_INTERVAL_MS = 250;
+
+// The iframe API exposes no ranges, only `getVideoLoadedFraction()`, which
+// measures the end of the range the playhead sits in, never its start (#91).
+// Every playhead position seen while that same range held it is a start we can
+// prove, so the earliest one anchors the range -- reporting less than is
+// buffered, never more, and without the start sliding along with the thumb.
+export type BufferView = { readonly anchor: number; readonly end: number };
+
+export const nextBufferView = (
+  previous: BufferView | undefined,
+  currentTime: number,
+  end: number
+): BufferView | undefined => {
+  // A seek can leave the playhead outside the buffer for a poll or two, and
+  // playback can outrun it entirely. Neither leaves a range to report.
+  if (end <= currentTime) return undefined;
+  // A playhead past the edge we knew is in a range we were not tracking, so
+  // nothing we remember about the old one applies to it.
+  const continuous = previous !== undefined && currentTime <= previous.end;
+  return {
+    anchor: continuous ? Math.min(previous.anchor, currentTime) : currentTime,
+    end
+  };
+};
 
 // The slice of the player this seam reads: position, duration and the loaded
 // fraction the buffered range is derived from.

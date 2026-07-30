@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { nextBufferView } from '../src/adapter-values';
+import { nextBufferView } from '../src/time-updates';
 
 test('reports no range while the buffer end sits at or behind the playhead', () => {
   expect(nextBufferView(undefined, 10, 10)).toBeUndefined();
