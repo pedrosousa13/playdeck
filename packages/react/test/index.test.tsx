@@ -1301,7 +1301,7 @@ test('renders opaque custom and native picture posters in the decorative layer',
   // property below is the consumer's value, not the primitive's. `visibility`
   // is the exception and is the point of the exception: it is derived from
   // `posterState`, so overriding it would not be overriding layout, it would
-  // be pinning a state machine's output and permanently defeating the hide.
+  // be pinning a state machine open and permanently defeating the hide.
   expect((poster as HTMLElement).style).toMatchObject({
     position: 'fixed',
     inset: '12px',

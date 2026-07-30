@@ -4,8 +4,7 @@
 // its own:
 //
 //   Static geometry is a DEFAULT the consumer's `style` prop overrides.
-//   Properties derived from player state are the primitive's OUTPUT and are
-//   not overridable.
+//   A state-derived property is the primitive's OWN and is not overridable.
 //
 // Before #89 the library was split — 15 spread sites put `...style` last and
 // 7 put it first, with no principle separating them (`Captions` at z-index 20

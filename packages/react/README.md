@@ -283,8 +283,8 @@ export const CustomPlayButton = () => (
 Every primitive exposes `data-reely-part` (its stable name), `data-state` (its
 derived state) and, on provider-bound controls, `data-provider`. Style and query
 against those rather than internal class names. Geometry a primitive sets on
-itself is a default your `style` prop overrides; properties derived from player
-state are the primitive's own. The full contract is in the workbench docs under
+itself is a default your `style` prop overrides; state-derived properties are
+the primitive's own. The full contract is in the workbench docs under
 **Overview/Contract**.
 
 ## Browser support

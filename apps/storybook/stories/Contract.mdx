@@ -333,11 +333,11 @@ Where that collides with a `style` prop you pass, the rule is:
   primitive hardcodes for layout is spread _before_ `...style`, so passing
   `style={{ zIndex: 5 }}` to `ErrorDisplay` gives you 5, not 40. Layout is the
   consumer's job, and this is the escape hatch that makes that true.
-- **State-derived properties are the primitive's output. Your `style` does
-  not win.** `Poster` computes `visibility` from whether the poster has been
-  hidden yet; overriding it would not adjust layout, it would pin a state
-  machine open for every source. The test is mechanical: if the value comes
-  from player state, it is not yours to override.
+- **State-derived properties are the primitive's own. Your `style` does not
+  win.** `Poster` computes `visibility` from whether the poster has been hidden
+  yet; overriding it would not adjust layout, it would pin a state machine open
+  for every source. The test is mechanical: if the value comes from player
+  state, it is not yours to override.
 - **An explicit prop beats `style`.** `PosterImage` takes `objectFit` and
   `objectPosition` props whose defaults are the `--reely-poster-fit` and
   `--reely-poster-position` theming variables. Precedence runs prop →

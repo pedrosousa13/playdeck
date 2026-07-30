@@ -848,8 +848,8 @@ export const Root = ({
 
 // #89: geometry a primitive sets for itself is a default the consumer's
 // `style` prop overrides, so it is spread *before* `...style` everywhere. The
-// only exception is a property derived from player state — that is the
-// primitive's output, not layout, and stays after `...style`.
+// only exception is a state-derived property — computed from player state
+// rather than chosen as layout, and so it stays after `...style`.
 const viewportStyle: CSSProperties = {
   position: 'relative',
   overflow: 'hidden'
