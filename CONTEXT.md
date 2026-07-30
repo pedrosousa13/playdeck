@@ -48,9 +48,8 @@ attaches, and the provider's own from then on.
 _Avoid_: status, phase
 
 **Activation identity**:
-The source, loading strategy and configuration that together decide whether an
-activation still applies. Change any of the three and the commitment made under
-the old one is retired.
+The source, loading strategy and configuration an activation commits to. Change
+any of the three and the commitment made under the old one is retired.
 
 **Committed source**:
 The source whose media element may mount, because its activation identity
