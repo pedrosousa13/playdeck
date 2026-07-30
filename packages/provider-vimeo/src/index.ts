@@ -6,10 +6,7 @@ import type {
   VimeoSource
 } from '@reely/core';
 import { available, type VimeoMountElement } from './adapter-values.js';
-import {
-  createVimeoAttachment,
-  type VimeoProviderOptions
-} from './attachment.js';
+import { createVimeoAttachment } from './attachment.js';
 import { createVimeoChromelessAvailability } from './chromeless-availability.js';
 import { createVimeoPlayback } from './playback.js';
 import { createVimeoPresentation } from './presentation.js';
@@ -17,7 +14,6 @@ import { createVimeoQualityLevels } from './quality-levels.js';
 import { createVimeoTextTracks } from './text-tracks.js';
 
 export type { VimeoMountElement } from './adapter-values.js';
-export type { VimeoProviderOptions } from './attachment.js';
 export { loadVimeoSdk, resetVimeoSdkLoader } from './loader.js';
 export type {
   VimeoSdkConstructor,
@@ -27,6 +23,11 @@ export type {
   VimeoSdkQuality,
   VimeoSdkTextTrack
 } from './loader.js';
+
+export type VimeoProviderOptions = {
+  readonly controls?: boolean;
+  readonly dnt?: boolean;
+};
 
 type VimeoCommand =
   | 'play'

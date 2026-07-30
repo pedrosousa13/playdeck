@@ -26,11 +26,6 @@ import type { VimeoPresentation } from './presentation.js';
 import type { VimeoQualityLevels } from './quality-levels.js';
 import type { VimeoTextTracks } from './text-tracks.js';
 
-export type VimeoProviderOptions = {
-  readonly controls?: boolean;
-  readonly dnt?: boolean;
-};
-
 const loadFailure = (cause: unknown): PlayerError => {
   const name = errorString(cause, 'name');
   const category =
