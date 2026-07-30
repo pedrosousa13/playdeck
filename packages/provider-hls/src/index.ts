@@ -2,7 +2,6 @@ import type {
   Availability,
   CaptionRendering,
   CommandResult,
-  HlsEngine,
   HlsSource,
   PlayerCapabilities,
   PlayerError,
@@ -22,98 +21,34 @@ import {
   createNativeProvider,
   type NativePlaybackOptions
 } from '@reely/provider-native';
+import {
+  liveStateEqual,
+  readMediaRanges,
+  unsupportedSelection,
+  type HlsConstructorLike,
+  type HlsEngineSelection,
+  type HlsInstanceLike,
+  type HlsLevelLike,
+  type HlsModuleLoader,
+  type HlsParsedCueLike,
+  type HlsSubtitleTrackLike
+} from './adapter-values.js';
+
+export type {
+  HlsConfigLike,
+  HlsConstructorLike,
+  HlsEngineSelection,
+  HlsInstanceLike,
+  HlsLevelLike,
+  HlsModuleLoader,
+  HlsParsedCueLike,
+  HlsSubtitleTrackLike
+} from './adapter-values.js';
 
 export type HlsEnvironment = {
   readonly nativeHls: boolean;
   readonly mse: boolean;
 };
-
-export type HlsEngineSelection =
-  | { readonly engine: HlsEngine }
-  | { readonly engine: null; readonly error: PlayerError };
-
-export type HlsLevelLike = {
-  readonly height?: number;
-  readonly width?: number;
-  readonly bitrate?: number;
-};
-
-// Structural slice of hls.js's `MediaPlaylist` for a subtitle/closed-caption
-// track, as delivered on `SUBTITLE_TRACKS_UPDATED`/`instance.subtitleTracks`.
-// `id` is always present on real hls.js tracks; optional here only so a
-// stripped-down fake can omit it and exercise the index fallback.
-export type HlsSubtitleTrackLike = {
-  readonly id?: number;
-  readonly name: string;
-  readonly lang?: string;
-  readonly default: boolean;
-  readonly type?: string;
-};
-
-// hls.js's `CuesParsedData.cues` is typed `any` upstream: it carries either
-// WebVTT cues or CEA-608/708 caption cues, both produced by the same
-// internal `Cues.newCue` helper and both exposing this shape. This is the
-// minimal structural slice this adapter reads off each entry.
-export type HlsParsedCueLike = {
-  readonly id?: string | null;
-  readonly startTime: number;
-  readonly endTime: number;
-  readonly text?: string;
-};
-
-export type HlsConfigLike = {
-  readonly renderTextTracksNatively?: boolean;
-};
-
-export type HlsInstanceLike = {
-  readonly levels: ReadonlyArray<HlsLevelLike>;
-  currentLevel: number;
-  // The target live edge (behind the raw seekable end by the configured live
-  // sync latency); null on VOD or before the first live level update.
-  readonly liveSyncPosition?: number | null;
-  readonly subtitleTracks: ReadonlyArray<HlsSubtitleTrackLike>;
-  subtitleTrack: number;
-  // Method shorthand, not a property-typed function, and deliberately so:
-  // method parameters are checked bivariantly, so a real hls.js `Hls`, whose
-  // `on` only accepts its own `keyof HlsListeners`, satisfies this. Written as
-  // `on: (event: string, ...) => void` it did not, and every consumer passing
-  // `loadHls: () => import('hls.js')` — the form this package's README
-  // documents — needed `as unknown as`. This adapter only ever calls `on` with
-  // names taken from the constructor's own `Events`.
-  on(event: string, listener: (event: string, data: unknown) => void): void;
-  startLoad: () => void;
-  recoverMediaError: () => void;
-  swapAudioCodec: () => void;
-  attachMedia: (media: HTMLMediaElement) => void;
-  loadSource: (url: string) => void;
-  destroy: () => void;
-};
-
-export type HlsConstructorLike = {
-  new (config?: HlsConfigLike): HlsInstanceLike;
-  isSupported: () => boolean;
-  readonly Events: {
-    readonly ERROR: string;
-    readonly LEVEL_SWITCHED: string;
-    readonly LEVEL_UPDATED: string;
-    // Plural: the level *array* changed, which is what `removeLevel` does when
-    // hls.js prunes a rung. Not to be confused with the singular event above.
-    readonly LEVELS_UPDATED: string;
-    readonly MANIFEST_PARSED: string;
-    readonly MEDIA_ATTACHED: string;
-    readonly SUBTITLE_TRACKS_UPDATED: string;
-    readonly SUBTITLE_TRACK_SWITCH: string;
-    readonly CUES_PARSED: string;
-  };
-  readonly ErrorTypes: {
-    readonly NETWORK_ERROR: string;
-    readonly MEDIA_ERROR: string;
-  };
-};
-
-export type HlsModuleLoader = () => Promise<{
-  readonly default: HlsConstructorLike;
-}>;
 
 export type HlsProviderOptions = NativePlaybackOptions & {
   readonly loadHls?: HlsModuleLoader;
@@ -172,21 +107,6 @@ const MAX_FATAL_MEDIA_RECOVERIES = 2;
 const LIVE_EDGE_THRESHOLD_SECONDS = 10;
 const LIVE_MIN_SEEK_WINDOW_SECONDS = 2;
 
-const readMediaRanges = (
-  ranges: globalThis.TimeRanges
-): ReadonlyArray<TimeRange> =>
-  Array.from({ length: ranges.length }, (_, index) => ({
-    start: ranges.start(index),
-    end: ranges.end(index)
-  }));
-
-const liveStateEqual = (a: PlayerLiveState, b: PlayerLiveState): boolean =>
-  a === b ||
-  (a !== null &&
-    b !== null &&
-    a.isLive === b.isLive &&
-    a.atLiveEdge === b.atLiveEdge);
-
 type MediaSourceLike = { isTypeSupported?: (type: string) => boolean };
 
 const supportsMse = (candidate: unknown): boolean => {
@@ -215,16 +135,6 @@ export const detectHlsEnvironment = (
       supportsMse(globals.MediaSource)
   };
 };
-
-const unsupportedSelection = (message: string): HlsEngineSelection => ({
-  engine: null,
-  error: {
-    category: 'unsupported',
-    fatal: true,
-    recoverable: false,
-    message
-  }
-});
 
 export const selectHlsEngine = (
   requested: NonNullable<HlsSource['engine']>,
