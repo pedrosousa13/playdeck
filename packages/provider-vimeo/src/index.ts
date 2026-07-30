@@ -16,7 +16,6 @@ import {
   numberField,
   providerCheck,
   providerEvent,
-  runVimeoCommand,
   type VimeoMountElement
 } from './adapter-values.js';
 import {
@@ -26,6 +25,7 @@ import {
   type VimeoSdkTextTrack
 } from './loader.js';
 import { createVimeoPlayback } from './playback.js';
+import { createVimeoPresentation } from './presentation.js';
 import { createVimeoQualityLevels } from './quality-levels.js';
 import { createVimeoTextTracks } from './text-tracks.js';
 
@@ -181,7 +181,6 @@ export const createVimeoProvider = (
   let generation = 0;
   let activePlayer: VimeoSdkPlayer | undefined;
   let activeIframe: HTMLIFrameElement | undefined;
-  let pictureInPictureAvailability: Availability = available;
   let customControlsAvailability: Availability = providerCheck;
   let activeDimensions: MediaDimensions | undefined;
 
@@ -222,6 +221,12 @@ export const createVimeoProvider = (
     getPlayer: () => (destroyed ? undefined : activePlayer)
   });
 
+  const presentation = createVimeoPresentation({
+    emit,
+    getPlayer: () => (destroyed ? undefined : activePlayer),
+    getCapabilities: () => capabilities()
+  });
+
   const textTracks = createVimeoTextTracks({
     emit,
     isStale: (player) => destroyed || player !== activePlayer,
@@ -237,7 +242,7 @@ export const createVimeoProvider = (
     selectQuality: qualityLevels.selectQualityAvailability(),
     selectTextTrack: textTracks.selectTextTrackAvailability(),
     fullscreen: available,
-    pictureInPicture: pictureInPictureAvailability,
+    pictureInPicture: presentation.pictureInPictureAvailability(),
     // The SDK exposes remote-playback methods, but this adapter wires no
     // command surface for them yet, so they are unavailable through Reely
     // rather than forever "unknown".
@@ -303,33 +308,9 @@ export const createVimeoProvider = (
     on('playbackratechange', playbackHandlers.onPlaybackRateChange);
     on('qualitychange', qualityLevels.handlers.onQualityChange);
     on('durationchange', playbackHandlers.onDurationChange);
-    on('fullscreenchange', (data) => {
-      const fullscreen = asRecord(data).fullscreen === true;
-      emit(
-        { fullscreen },
-        providerEvent('fullscreenchange', { fullscreen }, data)
-      );
-    });
-    on('enterpictureinpicture', (data) =>
-      emit(
-        { pictureInPicture: true },
-        providerEvent(
-          'pictureinpicturechange',
-          { pictureInPicture: true },
-          data
-        )
-      )
-    );
-    on('leavepictureinpicture', (data) =>
-      emit(
-        { pictureInPicture: false },
-        providerEvent(
-          'pictureinpicturechange',
-          { pictureInPicture: false },
-          data
-        )
-      )
-    );
+    on('fullscreenchange', presentation.handlers.onFullscreenChange);
+    on('enterpictureinpicture', presentation.handlers.onEnterPictureInPicture);
+    on('leavepictureinpicture', presentation.handlers.onLeavePictureInPicture);
     on('cuechange', textTracks.handlers.onCueChange);
     on('texttrackchange', (data) =>
       textTracks.handlers.onTextTrackChange(player, data)
@@ -463,11 +444,6 @@ export const createVimeoProvider = (
     }
   };
 
-  const runCommand = (
-    command: (player: VimeoSdkPlayer) => Promise<unknown>
-  ): Promise<CommandResult> =>
-    runVimeoCommand(destroyed ? undefined : activePlayer, command);
-
   return {
     provider: 'vimeo',
     attach: () => {
@@ -508,23 +484,10 @@ export const createVimeoProvider = (
     selectTextTrack: textTracks.selectTextTrack,
     subscribeCues: textTracks.subscribeCues,
     setCaptionRenderer: textTracks.setCaptionRenderer,
-    requestFullscreen: () => runCommand((player) => player.requestFullscreen()),
-    exitFullscreen: () => runCommand((player) => player.exitFullscreen()),
-    requestPictureInPicture: async () => {
-      const result = await runCommand((player) =>
-        player.requestPictureInPicture()
-      );
-      if (!result.ok && result.reason === 'unsupported') {
-        pictureInPictureAvailability = {
-          status: 'unavailable',
-          reason: 'provider'
-        };
-        emit({ capabilities: capabilities() });
-      }
-      return result;
-    },
-    exitPictureInPicture: () =>
-      runCommand((player) => player.exitPictureInPicture()),
+    requestFullscreen: presentation.requestFullscreen,
+    exitFullscreen: presentation.exitFullscreen,
+    requestPictureInPicture: presentation.requestPictureInPicture,
+    exitPictureInPicture: presentation.exitPictureInPicture,
     retry: async () => {
       if (destroyed) return { ok: false, reason: 'not-ready' };
       const thisGeneration = ++generation;
