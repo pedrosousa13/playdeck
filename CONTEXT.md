@@ -3,8 +3,9 @@
 A headless video player: React primitives over a framework-agnostic core, with
 provider adapters for native media, HLS, YouTube and Vimeo. The project's
 language separates what a consumer composes (primitives), what they can target
-(parts), what they may restyle (structural geometry, appearance, tokens), and
-how a player gets from mounted to playing (activation, then lifecycle).
+(parts), what they may restyle (structural geometry, appearance, tokens), what
+they can read but not set (outputs), and how a player gets from mounted to
+playing (activation, then lifecycle).
 
 ## Language
 
@@ -58,8 +59,8 @@ _Avoid_: eligible media
 
 ### Styling
 
-See [ADR-0001](docs/adr/0001-structural-css-ships-inline.md) for why the first
-two are separate, and
+See [ADR-0001](docs/adr/0001-structural-css-ships-inline.md) for why structural
+geometry and appearance are separate, and
 [ADR-0002](docs/adr/0002-published-measurements-are-outputs.md) for why an
 output is not a token.
 
@@ -68,6 +69,12 @@ The positioning a primitive needs in order to function — stacking, insets, the
 media element filling its viewport. Set inline by the primitive, ahead of the
 consumer's `style` prop.
 _Avoid_: layout CSS, base styles
+
+**State-derived property**:
+A style property a primitive computes from player state, such as `Poster`'s
+`visibility`. Set inline by the primitive after the consumer's `style` prop,
+because overriding it would pin a state machine rather than adjust layout.
+_Avoid_: output
 
 **Appearance**:
 Everything a player can look like without changing what works — colour, radius,
