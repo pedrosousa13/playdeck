@@ -1,6 +1,5 @@
 import type {
   Availability,
-  CommandResult,
   PlayerCapabilities,
   ProviderAdapter,
   ProviderEvent,
@@ -9,18 +8,14 @@ import type {
 } from '@reely/core';
 import {
   available,
-  blockedError,
   browserUnavailable,
   clamp01,
   commandFailure,
   loadFailure,
   nextBufferView,
-  playbackError,
-  playerStates,
   preReadyCapabilities,
   providerEvent,
   readyCapabilities,
-  runYouTubeCommand,
   type BufferView
 } from './adapter-values.js';
 import {
@@ -28,6 +23,7 @@ import {
   type YouTubeIframeApi,
   type YouTubePlayer
 } from './loader.js';
+import { createYouTubePlayback } from './playback.js';
 import { createYouTubeTextTracks } from './text-tracks.js';
 
 export {
@@ -39,11 +35,7 @@ export {
   type YouTubePlayerOptions
 } from './loader.js';
 
-/**
- * YouTube reports a blocked autoplay attempt by silently staying paused, so an
- * unconfirmed play request is reported as blocked after this window.
- */
-export const PLAYBACK_CONFIRMATION_TIMEOUT_MS = 3_000;
+export { PLAYBACK_CONFIRMATION_TIMEOUT_MS } from './playback.js';
 
 const TIME_UPDATE_INTERVAL_MS = 250;
 
@@ -73,11 +65,6 @@ export type YouTubeProviderAdapter = ProviderAdapter &
     readonly provider: 'youtube';
   };
 
-type PendingPlay = {
-  readonly resolve: (result: CommandResult) => void;
-  readonly timer: ReturnType<typeof setTimeout>;
-};
-
 export const createYouTubeProvider = (
   mount: HTMLElement,
   videoId: string,
@@ -94,13 +81,10 @@ export const createYouTubeProvider = (
   let generation = 0;
   let player: YouTubePlayer | undefined;
   let playerTarget: HTMLElement | undefined;
-  let pendingPlays: PendingPlay[] = [];
   let timeInterval: ReturnType<typeof setInterval> | undefined;
   // The iframe API proxies commands over postMessage, so getters read stale
-  // values right after a command. These mirrors track the last confirmed or
-  // intended values instead; commands emit intent, events and polling confirm.
-  let knownMuted = false;
-  let knownVolume = 1;
+  // values right after a command. This mirror tracks the last confirmed or
+  // intended position instead; commands emit intent, polling confirms.
   let knownCurrentTime = 0;
   let bufferView: BufferView | undefined;
 
@@ -115,15 +99,6 @@ export const createYouTubeProvider = (
     } catch {
       return undefined;
     }
-  };
-
-  const settlePendingPlays = (result: CommandResult): void => {
-    const settled = pendingPlays;
-    pendingPlays = [];
-    settled.forEach(({ resolve, timer }) => {
-      clearTimeout(timer);
-      resolve(result);
-    });
   };
 
   const bufferedRanges = (
@@ -163,6 +138,27 @@ export const createYouTubeProvider = (
       }
     }, TIME_UPDATE_INTERVAL_MS);
   };
+
+  const timeUpdates = {
+    start: startTimePolling,
+    stop: stopTimePolling,
+    adoptCurrentTime: (current: Pick<YouTubePlayer, 'getCurrentTime'>) => {
+      knownCurrentTime = current.getCurrentTime();
+      return knownCurrentTime;
+    },
+    setCurrentTime: (time: number) => {
+      knownCurrentTime = time;
+    },
+    getCurrentTime: () => knownCurrentTime
+  };
+
+  const playback = createYouTubePlayback({
+    emit,
+    isDestroyed: () => destroyed,
+    getPlayer: () => player,
+    getReadyPlayer: () => guardReady(),
+    timeUpdates
+  });
 
   const fullscreenElementIsOurs = (): boolean => {
     const fullscreenElement = ownerDocument.fullscreenElement;
@@ -209,9 +205,8 @@ export const createYouTubeProvider = (
     if (!current) return;
     const duration = current.getDuration();
     // No command has run yet, so these reads are the player's own state.
-    knownMuted = current.isMuted();
-    knownVolume = clamp01(current.getVolume() / 100);
-    knownCurrentTime = current.getCurrentTime();
+    const { muted, volume } = playback.adoptVolume(current);
+    const currentTime = timeUpdates.adoptCurrentTime(current);
     emit(
       {
         lifecycle: 'ready',
@@ -219,10 +214,10 @@ export const createYouTubeProvider = (
         // The iframe API drops calls made before onReady, so this is the first
         // moment a command lands (#69).
         commandsReady: true,
-        currentTime: knownCurrentTime,
+        currentTime,
         duration: Number.isFinite(duration) && duration > 0 ? duration : null,
-        muted: knownMuted,
-        volume: knownVolume,
+        muted,
+        volume,
         playbackRate: current.getPlaybackRate(),
         capabilities: playerCapabilities()
       },
@@ -230,84 +225,8 @@ export const createYouTubeProvider = (
     );
   };
 
-  const emitVolumeIntent = (): void => {
-    const muted = knownMuted;
-    const volume = knownVolume;
-    emit({ muted, volume }, providerEvent('volumechange', { muted, volume }));
-  };
-
-  const onPlayerStateChange = (data: number): void => {
-    const current = player;
-    if (destroyed || !current) return;
-    if (data === playerStates.PLAYING) {
-      settlePendingPlays({ ok: true });
-      const duration = current.getDuration();
-      knownCurrentTime = current.getCurrentTime();
-      emit(
-        {
-          playback: 'playing',
-          buffering: false,
-          currentTime: knownCurrentTime,
-          duration: Number.isFinite(duration) && duration > 0 ? duration : null
-        },
-        providerEvent('play', undefined)
-      );
-      startTimePolling();
-      return;
-    }
-    if (data === playerStates.PAUSED) {
-      stopTimePolling();
-      knownCurrentTime = current.getCurrentTime();
-      emit(
-        { playback: 'paused', currentTime: knownCurrentTime },
-        providerEvent('pause', undefined)
-      );
-      return;
-    }
-    if (data === playerStates.ENDED) {
-      stopTimePolling();
-      knownCurrentTime = current.getCurrentTime();
-      emit(
-        {
-          playback: 'ended',
-          buffering: false,
-          currentTime: knownCurrentTime
-        },
-        providerEvent('ended', undefined)
-      );
-      return;
-    }
-    if (data === playerStates.BUFFERING) {
-      // Buffering means the play request was accepted and media is loading.
-      // Blocked autoplay never buffers, so a pending play is confirmed here
-      // instead of timing out as blocked on a slow network.
-      settlePendingPlays({ ok: true });
-      emit({ buffering: true });
-      return;
-    }
-    if (data === playerStates.CUED) {
-      emit({ buffering: false });
-    }
-  };
-
-  const onPlayerError = (code: number): void => {
-    if (destroyed) return;
-    stopTimePolling();
-    const error = playbackError(code);
-    settlePendingPlays({ ok: false, reason: 'provider-error', error });
-    emit(
-      {
-        lifecycle: 'error',
-        activation: 'error',
-        buffering: false,
-        error
-      },
-      providerEvent('error', error)
-    );
-  };
-
   const teardownPlayer = (): void => {
-    settlePendingPlays({ ok: false, reason: 'not-ready' });
+    playback.settlePendingPlays({ ok: false, reason: 'not-ready' });
     stopTimePolling();
     ready = false;
     // A retry recreates the player, so cached caption state must not leak
@@ -367,11 +286,11 @@ export const createYouTubeProvider = (
         },
         onStateChange: ({ data }) => {
           if (destroyed || forGeneration !== generation) return;
-          onPlayerStateChange(data);
+          playback.handlers.onPlayerStateChange(data);
         },
         onError: ({ data }) => {
           if (destroyed || forGeneration !== generation) return;
-          onPlayerError(data);
+          playback.handlers.onPlayerError(data);
         },
         onPlaybackRateChange: ({ data }) => {
           if (destroyed || forGeneration !== generation) return;
@@ -390,24 +309,6 @@ export const createYouTubeProvider = (
 
   const guardReady = (): YouTubePlayer | undefined =>
     destroyed || !ready ? undefined : player;
-
-  const runCommand = (
-    command: (current: YouTubePlayer) => void
-  ): Promise<CommandResult> => runYouTubeCommand(guardReady(), command);
-
-  const seekToTime = (time: number): Promise<CommandResult> => {
-    if (!Number.isFinite(time)) {
-      return Promise.resolve({ ok: false, reason: 'provider-error' });
-    }
-    const target = Math.max(0, time);
-    return runCommand((current) => {
-      current.seekTo(target, true);
-      // Emit the intended position: a read-back here would still return the
-      // pre-seek time, and paused playback never polls a correction.
-      knownCurrentTime = target;
-      emit({ currentTime: target });
-    });
-  };
 
   return {
     provider: 'youtube',
@@ -443,90 +344,14 @@ export const createYouTubeProvider = (
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    play: () => {
-      const current = guardReady();
-      if (!current) {
-        return Promise.resolve({ ok: false, reason: 'not-ready' });
-      }
-      if (current.getPlayerState() === playerStates.PLAYING) {
-        return Promise.resolve({ ok: true });
-      }
-      return new Promise<CommandResult>((resolve) => {
-        const pending: PendingPlay = {
-          resolve,
-          timer: setTimeout(() => {
-            pendingPlays = pendingPlays.filter((entry) => entry !== pending);
-            // Double-check before reporting blocked in case a state-change
-            // event was missed: an accepted request shows up as playing or
-            // buffering. A play that starts from the iframe chrome after a
-            // genuine blocked report is a user action, so the blocked
-            // autoplay outcome stays accurate, matching the core semantics.
-            let playerState: number | undefined;
-            try {
-              playerState = current.getPlayerState();
-            } catch {
-              playerState = undefined;
-            }
-            if (
-              playerState === playerStates.PLAYING ||
-              playerState === playerStates.BUFFERING
-            ) {
-              resolve({ ok: true });
-              return;
-            }
-            resolve({ ok: false, reason: 'blocked', error: blockedError() });
-          }, PLAYBACK_CONFIRMATION_TIMEOUT_MS)
-        };
-        pendingPlays.push(pending);
-        try {
-          current.playVideo();
-        } catch (cause) {
-          pendingPlays = pendingPlays.filter((entry) => entry !== pending);
-          clearTimeout(pending.timer);
-          resolve(commandFailure(cause));
-        }
-      });
-    },
-    pause: () => runCommand((current) => current.pauseVideo()),
-    seekTo: (time) => seekToTime(time),
-    seekBy: (offset) => {
-      if (!Number.isFinite(offset)) {
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      }
-      const current = guardReady();
-      if (!current) return Promise.resolve({ ok: false, reason: 'not-ready' });
-      // The mirror is the freshest honest base: a getter read right after an
-      // earlier seek command would still return the pre-seek position.
-      return seekToTime(knownCurrentTime + offset);
-    },
-    mute: () =>
-      runCommand((current) => {
-        current.mute();
-        knownMuted = true;
-        emitVolumeIntent();
-      }),
-    unmute: () =>
-      runCommand((current) => {
-        current.unMute();
-        knownMuted = false;
-        emitVolumeIntent();
-      }),
-    setVolume: (volume) => {
-      if (!Number.isFinite(volume)) {
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      }
-      return runCommand((current) => {
-        current.setVolume(Math.round(clamp01(volume) * 100));
-        knownVolume = clamp01(volume);
-        emitVolumeIntent();
-      });
-    },
-    setPlaybackRate: (rate) => {
-      if (!Number.isFinite(rate) || rate <= 0) {
-        return Promise.resolve({ ok: false, reason: 'provider-error' });
-      }
-      return runCommand((current) => current.setPlaybackRate(rate));
-    },
+    play: playback.play,
+    pause: playback.pause,
+    seekTo: playback.seekTo,
+    seekBy: playback.seekBy,
+    mute: playback.mute,
+    unmute: playback.unmute,
+    setVolume: playback.setVolume,
+    setPlaybackRate: playback.setPlaybackRate,
     selectTextTrack: textTracks.selectTextTrack,
     requestFullscreen: async () => {
       if (destroyed || !player) return { ok: false, reason: 'not-ready' };
