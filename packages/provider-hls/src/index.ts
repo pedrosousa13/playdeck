@@ -1,5 +1,4 @@
 import type {
-  CommandResult,
   HlsSource,
   PlayerCapabilities,
   PlayerError,
@@ -18,11 +17,10 @@ import {
   liveStateEqual,
   readMediaRanges,
   unsupportedSelection,
-  type HlsConstructorLike,
   type HlsEngineSelection,
-  type HlsInstanceLike,
   type HlsModuleLoader
 } from './adapter-values.js';
+import { createHlsAttachment } from './attachment.js';
 import { createHlsErrorRecovery } from './error-recovery.js';
 import { createHlsPlayback } from './playback.js';
 import { createHlsQualityLevels } from './quality-levels.js';
@@ -186,18 +184,13 @@ export const createHlsProvider = (
   const engine = selection.engine;
   const native = createNativeProvider(media, nativeOptions);
   const listeners = new Set<ProviderStateListener>();
-  let attached = false;
-  let destroyed = false;
-  let hls: HlsInstanceLike | undefined;
-  let hlsConstructor: HlsConstructorLike | undefined;
-  let generation = 0;
   let lastCapabilities: PlayerCapabilities | undefined;
   let hlsLiveHint: boolean | undefined;
   let liveState: PlayerLiveState = null;
   let liveSeekMeaningful = true;
 
   const emit = (patch: ProviderStatePatch, event?: ProviderEvent): void => {
-    if (destroyed) return;
+    if (attachment.isDestroyed()) return;
     listeners.forEach((listener) => listener(patch, event));
   };
 
@@ -229,15 +222,15 @@ export const createHlsProvider = (
 
   const textTracks = createHlsTextTracks(media, {
     emit,
-    isDestroyed: () => destroyed,
-    getInstance: () => hls,
+    isDestroyed: () => attachment.isDestroyed(),
+    getInstance: () => attachment.getInstance(),
     capabilitiesPatch
   });
 
   const qualityLevels = createHlsQualityLevels({
     emit,
-    isDestroyed: () => destroyed,
-    getInstance: () => hls,
+    isDestroyed: () => attachment.isDestroyed(),
+    getInstance: () => attachment.getInstance(),
     capabilitiesPatch
   });
 
@@ -248,7 +241,9 @@ export const createHlsProvider = (
       seekable: readMediaRanges(media.seekable),
       currentTime: media.currentTime,
       liveEdge:
-        engine === 'hls.js' ? (hls?.liveSyncPosition ?? undefined) : undefined,
+        engine === 'hls.js'
+          ? (attachment.getInstance()?.liveSyncPosition ?? undefined)
+          : undefined,
       atEdgeThreshold: LIVE_EDGE_THRESHOLD_SECONDS
     });
 
@@ -308,7 +303,7 @@ export const createHlsProvider = (
   };
 
   const unsubscribeNative = native.subscribe((patch, event) => {
-    if (destroyed) return;
+    if (attachment.isDestroyed()) return;
     if (engine === 'hls.js' && patch.lifecycle === 'error') {
       // hls.js owns error recovery and surfacing on the MSE path; raw media
       // element errors would preempt its bounded recovery table.
@@ -321,20 +316,8 @@ export const createHlsProvider = (
     );
   });
 
-  const teardownHls = (): void => {
-    const instance = hls;
-    hls = undefined;
-    media.removeEventListener('timeupdate', textTracks.handlers.onTimeUpdate);
-    if (!instance) return;
-    try {
-      instance.destroy();
-    } catch {
-      // Teardown must not escape the provider boundary.
-    }
-  };
-
   const surfaceFatal = (error: PlayerError): void => {
-    teardownHls();
+    attachment.teardownEngine();
     qualityLevels.clearForFatal();
     emit(
       {
@@ -354,111 +337,29 @@ export const createHlsProvider = (
   };
 
   const errorRecovery = createHlsErrorRecovery({
-    isStale: (instance) => destroyed || hls !== instance,
+    isStale: (instance) =>
+      attachment.isDestroyed() || attachment.getInstance() !== instance,
     surfaceFatal
   });
 
-  const startHlsJs = async (): Promise<CommandResult> => {
-    const startGeneration = ++generation;
-    // Starting owns teardown, rather than each caller remembering it. `retry()`
-    // used to do this itself and `load()` did not, so a second `load()` left
-    // the previous instance attached with its listeners live, still loading
-    // fragments (#85). Every handler is generation- and identity-guarded, so
-    // nothing was corrupted — it was a resource leak, not a state bug. A no-op
-    // on a first load, where there is nothing to tear down.
-    teardownHls();
-    qualityLevels.prepareForStart();
-    let Hls = hlsConstructor;
-    if (!Hls) {
-      try {
-        Hls = (await loadHls()).default;
-      } catch (cause) {
-        if (destroyed || generation !== startGeneration) {
-          return { ok: false, reason: 'not-ready' };
-        }
-        const error: PlayerError = {
-          category: 'provider',
-          fatal: true,
-          recoverable: true,
-          message: 'Unable to load the hls.js engine module.',
-          cause
-        };
-        surfaceFatal(error);
-        return { ok: false, reason: 'provider-error', error };
-      }
-    }
-    if (destroyed || generation !== startGeneration) {
-      return { ok: false, reason: 'not-ready' };
-    }
-    hlsConstructor = Hls;
-    if (!Hls.isSupported()) {
-      const error: PlayerError = {
-        category: 'unsupported',
-        fatal: true,
-        recoverable: false,
-        message: 'hls.js does not support this browser environment.'
-      };
-      surfaceFatal(error);
-      return { ok: false, reason: 'unsupported', error };
-    }
-    const HlsRuntime = Hls;
-    // `renderTextTracksNatively` (hls.js's own default is `true`) makes
-    // hls.js auto-create a native `TextTrack` per subtitle on
-    // `media.textTracks` and manage its mode itself. That collides with
-    // `createNativeProvider`'s own caption subsystem below (`native`),
-    // which is always wired to the same `media.textTracks` list (it owns
-    // captions for the *native* HLS engine's embedded `<track>` elements)
-    // and reacts to any track's `mode` changing — including hls.js's own —
-    // by re-discovering and re-applying its unrelated selection, fighting
-    // hls.js over the very tracks it just created. Keeping it off is what
-    // lets this engine's caption pipeline (`CUES_PARSED`, below) stay fully
-    // self-contained; see `setCaptionRenderer` for what this costs.
-    const instance = new HlsRuntime({ renderTextTracksNatively: false });
-    hls = instance;
-    media.addEventListener('timeupdate', textTracks.handlers.onTimeUpdate);
-    instance.on(HlsRuntime.Events.ERROR, (_event, data) =>
-      errorRecovery.handleError(instance, HlsRuntime, data)
-    );
-    instance.on(HlsRuntime.Events.LEVEL_SWITCHED, (_event, data) => {
-      if (destroyed || hls !== instance) return;
-      qualityLevels.onLevelSwitched(instance, data);
-    });
-    instance.on(HlsRuntime.Events.MANIFEST_PARSED, () => {
-      if (destroyed || hls !== instance) return;
-      qualityLevels.refresh(instance);
-    });
-    instance.on(HlsRuntime.Events.LEVELS_UPDATED, () => {
-      if (destroyed || hls !== instance) return;
-      qualityLevels.refresh(instance);
-    });
-    instance.on(HlsRuntime.Events.LEVEL_UPDATED, (_event, data) => {
-      if (destroyed || hls !== instance) return;
-      const live = (data as { details?: { live?: boolean } }).details?.live;
-      if (typeof live === 'boolean') hlsLiveHint = live;
-      emitLiveUpdate();
-    });
-    instance.on(HlsRuntime.Events.SUBTITLE_TRACKS_UPDATED, (_event, data) => {
-      if (destroyed || hls !== instance) return;
-      textTracks.handlers.onSubtitleTracksUpdated(instance, data);
-    });
-    instance.on(HlsRuntime.Events.CUES_PARSED, (_event, data) => {
-      if (destroyed || hls !== instance) return;
-      textTracks.handlers.onCuesParsed(data);
-    });
-    instance.on(HlsRuntime.Events.MEDIA_ATTACHED, () => {
-      if (destroyed || hls !== instance) return;
-      // attachMedia points `media.src` at an MSE blob, which re-runs the load
-      // algorithm and resets `playbackRate`. Commands land and stick from
-      // here, well before the manifest parses (#69).
-      emit({ commandsReady: true });
-    });
-    instance.attachMedia(media);
-    instance.loadSource(source.src);
-    return { ok: true };
-  };
+  const attachment = createHlsAttachment(media, source, selection, {
+    emit,
+    loadHls,
+    native,
+    textTracks,
+    qualityLevels,
+    errorRecovery,
+    surfaceFatal,
+    setLiveHint: (live) => {
+      hlsLiveHint = live;
+    },
+    emitLiveUpdate,
+    unsubscribeNative,
+    clearStateListeners: () => listeners.clear()
+  });
 
   const playback = createHlsPlayback(native, selection, {
-    isDestroyed: () => destroyed,
+    isDestroyed: () => attachment.isDestroyed(),
     resetEngineState: () => {
       errorRecovery.reset();
       qualityLevels.reset();
@@ -467,59 +368,14 @@ export const createHlsProvider = (
       liveSeekMeaningful = true;
       textTracks.reset();
     },
-    startHlsJs
+    startHlsJs: attachment.startHlsJs
   });
-
-  const emitSelectionFailure = (): void => {
-    if (selection.engine !== null) return;
-    emit(
-      {
-        lifecycle: 'error',
-        activation: 'error',
-        hlsEngine: null,
-        error: selection.error
-      },
-      { type: 'error', detail: selection.error, origin: 'provider' }
-    );
-  };
 
   return {
     provider: 'hls',
-    attach: () => {
-      if (destroyed || attached) return;
-      attached = true;
-      if (!engine) {
-        emitSelectionFailure();
-        return;
-      }
-      emit({ hlsEngine: engine });
-      native.attach();
-    },
-    load: async () => {
-      if (destroyed || !engine) return;
-      if (engine === 'native') {
-        media.src = source.src;
-        await native.load();
-        return;
-      }
-      await startHlsJs();
-    },
-    destroy: () => {
-      if (destroyed) return;
-      destroyed = true;
-      generation += 1;
-      teardownHls();
-      unsubscribeNative();
-      native.destroy();
-      if (engine === 'native') {
-        // The native engine owns media.src (React sets none on the HLS
-        // <video>); detach it so the element stops buffering the manifest.
-        media.removeAttribute('src');
-        media.load();
-      }
-      listeners.clear();
-      textTracks.destroy();
-    },
+    attach: attachment.attach,
+    load: attachment.load,
+    destroy: attachment.destroy,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
