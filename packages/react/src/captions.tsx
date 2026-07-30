@@ -1,14 +1,7 @@
 import type { TextCue, TextTrack } from '@reely/core';
 import { CaptionsIcon } from './icons.js';
-import {
-  controlTargetStyle,
-  visuallyHiddenStyle
-} from './loading-error.js';
-import {
-  useActiveCues,
-  usePlayer,
-  usePlayerState
-} from './player-context.js';
+import { controlTargetStyle, visuallyHiddenStyle } from './loading-error.js';
+import { useActiveCues, usePlayer, usePlayerState } from './player-context.js';
 import {
   MenuRadioGroup,
   MenuRadioItem,

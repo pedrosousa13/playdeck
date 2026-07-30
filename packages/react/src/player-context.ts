@@ -108,7 +108,7 @@ const selectionsEqual = (left: unknown, right: unknown): boolean => {
   );
 };
 
-export const usePlayerState = <Selected,>(
+export const usePlayerState = <Selected>(
   selector: (state: PlayerState) => Selected
 ): Selected => {
   const { controller } = usePlayer();

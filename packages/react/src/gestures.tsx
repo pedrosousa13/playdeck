@@ -1,10 +1,6 @@
 import { isNativeActivationTarget } from './controls.js';
 import { usePlayer } from './player-context.js';
-import {
-  useEffect,
-  useRef,
-  type ComponentPropsWithRef
-} from 'react';
+import { useEffect, useRef, type ComponentPropsWithRef } from 'react';
 
 const DOUBLE_TAP_WINDOW_MS = 300;
 

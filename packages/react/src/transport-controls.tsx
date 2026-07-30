@@ -1,8 +1,5 @@
 import type { TimeRange } from '@reely/core';
-import {
-  controlTargetStyle,
-  useLoadingPresentation
-} from './loading-error.js';
+import { controlTargetStyle, useLoadingPresentation } from './loading-error.js';
 import { usePlayer, usePlayerState } from './player-context.js';
 import type { ComponentPropsWithRef } from 'react';
 
