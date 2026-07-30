@@ -28,7 +28,7 @@ const probeFor = (
   fetchMock.mockResolvedValue(oembedResponse({ account_type: accountType }));
   return createVimeoChromelessAvailability({
     source,
-    controls: undefined
+    options: {}
   }).probe();
 };
 
@@ -100,7 +100,7 @@ test('leaves the verdict unresolved when oEmbed refuses the request', async () =
   await expect(
     createVimeoChromelessAvailability({
       source: publicSource,
-      controls: undefined
+      options: {}
     }).probe()
   ).resolves.toEqual({ status: 'unknown', reason: 'provider-check' });
 });
@@ -110,7 +110,7 @@ test('leaves the verdict unresolved when the request itself fails', async () => 
   await expect(
     createVimeoChromelessAvailability({
       source: publicSource,
-      controls: undefined
+      options: {}
     }).probe()
   ).resolves.toEqual({ status: 'unknown', reason: 'provider-check' });
 });
@@ -120,7 +120,7 @@ test('leaves the verdict unresolved when the body is not JSON', async () => {
   await expect(
     createVimeoChromelessAvailability({
       source: publicSource,
-      controls: undefined
+      options: {}
     }).probe()
   ).resolves.toEqual({ status: 'unknown', reason: 'provider-check' });
 });
@@ -130,7 +130,7 @@ test('gives up on a probe that outruns the attach it would have informed', async
   fetchMock.mockImplementation(() => new Promise(() => undefined));
   const probe = createVimeoChromelessAvailability({
     source: publicSource,
-    controls: undefined
+    options: {}
   }).probe();
   await vi.advanceTimersByTimeAsync(CHROMELESS_PROBE_TIMEOUT_MS);
   await expect(probe).resolves.toEqual({
@@ -143,7 +143,7 @@ test('never asks oEmbed about an embed that shows Vimeo own controls', async () 
   await expect(
     createVimeoChromelessAvailability({
       source: publicSource,
-      controls: true
+      options: { controls: true }
     }).probe()
   ).resolves.toEqual({ status: 'unavailable', reason: 'provider' });
   expect(fetchMock).not.toHaveBeenCalled();
@@ -152,7 +152,7 @@ test('never asks oEmbed about an embed that shows Vimeo own controls', async () 
 test('holds the verdict unresolved until one is adopted', async () => {
   const chromeless = createVimeoChromelessAvailability({
     source: publicSource,
-    controls: undefined
+    options: {}
   });
   expect(chromeless.customControlsAvailability()).toEqual({
     status: 'unknown',

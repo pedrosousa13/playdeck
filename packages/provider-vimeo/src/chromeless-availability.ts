@@ -76,8 +76,9 @@ const settleWithFallback = <Value>(
 
 export type VimeoChromelessAvailabilityDeps = {
   readonly source: Pick<VimeoSource, 'videoId' | 'hash'>;
-  // Whether the embed was asked to draw Vimeo's own controls.
-  readonly controls: boolean | undefined;
+  // The host's options, read when the probe starts rather than snapshotted at
+  // construction: an embed that draws Vimeo's own controls is never chromeless.
+  readonly options: { readonly controls?: boolean };
 };
 
 // The chromeless-availability seam: whether this embed will hand its controls
@@ -98,13 +99,13 @@ export type VimeoChromelessAvailability = {
 
 export const createVimeoChromelessAvailability = ({
   source,
-  controls
+  options
 }: VimeoChromelessAvailabilityDeps): VimeoChromelessAvailability => {
   let customControlsAvailability: Availability = providerCheck;
 
   return {
     probe: () =>
-      controls === true
+      options.controls === true
         ? Promise.resolve<Availability>({
             status: 'unavailable',
             reason: 'provider'

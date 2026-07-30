@@ -63,10 +63,7 @@ export const createVimeoProvider = (
     event?: ProviderEvent
   ): void => listeners.forEach((listener) => listener(patch, event));
 
-  const chromeless = createVimeoChromelessAvailability({
-    source,
-    controls: options.controls
-  });
+  const chromeless = createVimeoChromelessAvailability({ source, options });
 
   const playback = createVimeoPlayback(mount, {
     emit,
