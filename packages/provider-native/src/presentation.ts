@@ -13,7 +13,7 @@ import {
   runCommand,
   unsupported,
   type EmitProviderState
-} from './media-helpers.js';
+} from './adapter-values.js';
 
 type WebKitPresentationMode = 'inline' | 'picture-in-picture' | 'fullscreen';
 

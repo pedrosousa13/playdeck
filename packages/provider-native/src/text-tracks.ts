@@ -10,7 +10,7 @@ import type {
   TextTrackReadiness
 } from '@reely/core';
 import { textTrackLabel } from '@reely/core';
-import { available } from './media-helpers.js';
+import { available } from './adapter-values.js';
 
 // The `default` IDL attribute lives on HTMLTrackElement per spec, but engines
 // commonly surface it on the associated TextTrack too; treat it as optional.
