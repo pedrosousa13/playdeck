@@ -10,6 +10,13 @@ import {
   usePlayerState
 } from './player-context.js';
 import {
+  MenuRadioGroup,
+  MenuRadioItem,
+  SettingsMenu,
+  SettingsMenuContent,
+  SettingsMenuTrigger
+} from './settings-menu.js';
+import {
   useRef,
   type ComponentPropsWithRef,
   type CSSProperties,
@@ -183,5 +190,61 @@ export const CaptionsButton = ({
         {announcementText}
       </div>
     </>
+  );
+};
+
+// Disambiguates tracks that share a label (e.g. two "English" tracks with
+// different kinds) by appending the language, rather than always showing it.
+const disambiguateTrackLabel = (
+  track: TextTrack,
+  tracks: readonly TextTrack[]
+): string => {
+  const sharesLabel =
+    tracks.filter((candidate) => candidate.label === track.label).length > 1;
+  if (!sharesLabel || !track.language) return track.label;
+  return `${track.label} (${track.language})`;
+};
+
+export type CaptionsMenuProps = ComponentPropsWithRef<'div'>;
+
+/**
+ * Preset assembly over `SettingsMenu`/`MenuRadioGroup`: lists the current
+ * text tracks plus an "Off" option. Pass children to fully customize the
+ * trigger/content; omit them to get the default track list.
+ */
+export const CaptionsMenu = ({ children, ...props }: CaptionsMenuProps) => {
+  const { selectedId, status, textTracks } = usePlayerState((state) => ({
+    selectedId: state.selectedTextTrackId,
+    status: state.capabilities.selectTextTrack.status,
+    textTracks: state.textTracks
+  }));
+  const { controller } = usePlayer();
+  if (status !== 'available' || textTracks.length === 0) return null;
+
+  return (
+    <SettingsMenu {...props}>
+      {children ?? (
+        <>
+          <SettingsMenuTrigger aria-label="Captions">
+            <CaptionsIcon />
+          </SettingsMenuTrigger>
+          <SettingsMenuContent>
+            <MenuRadioGroup
+              onValueChange={(value) => {
+                void controller.selectTextTrack(value === '' ? null : value);
+              }}
+              value={selectedId ?? ''}
+            >
+              <MenuRadioItem value="">Off</MenuRadioItem>
+              {textTracks.map((track) => (
+                <MenuRadioItem key={track.id} value={track.id}>
+                  {disambiguateTrackLabel(track, textTracks)}
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+          </SettingsMenuContent>
+        </>
+      )}
+    </SettingsMenu>
   );
 };
