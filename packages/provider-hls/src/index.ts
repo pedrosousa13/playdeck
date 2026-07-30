@@ -24,6 +24,7 @@ import {
   type HlsModuleLoader
 } from './adapter-values.js';
 import { createHlsErrorRecovery } from './error-recovery.js';
+import { createHlsPlayback } from './playback.js';
 import { createHlsQualityLevels } from './quality-levels.js';
 import { createHlsTextTracks } from './text-tracks.js';
 
@@ -456,6 +457,19 @@ export const createHlsProvider = (
     return { ok: true };
   };
 
+  const playback = createHlsPlayback(native, selection, {
+    isDestroyed: () => destroyed,
+    resetEngineState: () => {
+      errorRecovery.reset();
+      qualityLevels.reset();
+      hlsLiveHint = undefined;
+      liveState = null;
+      liveSeekMeaningful = true;
+      textTracks.reset();
+    },
+    startHlsJs
+  });
+
   const emitSelectionFailure = (): void => {
     if (selection.engine !== null) return;
     emit(
@@ -510,19 +524,19 @@ export const createHlsProvider = (
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    play: native.play,
-    pause: native.pause,
-    seekTo: native.seekTo,
-    seekBy: native.seekBy,
-    mute: native.mute,
-    unmute: native.unmute,
-    setVolume: native.setVolume,
-    setPlaybackRate: native.setPlaybackRate,
-    requestFullscreen: native.requestFullscreen,
-    exitFullscreen: native.exitFullscreen,
-    requestPictureInPicture: native.requestPictureInPicture,
-    exitPictureInPicture: native.exitPictureInPicture,
-    showAirPlayPicker: native.showAirPlayPicker,
+    play: playback.play,
+    pause: playback.pause,
+    seekTo: playback.seekTo,
+    seekBy: playback.seekBy,
+    mute: playback.mute,
+    unmute: playback.unmute,
+    setVolume: playback.setVolume,
+    setPlaybackRate: playback.setPlaybackRate,
+    requestFullscreen: playback.requestFullscreen,
+    exitFullscreen: playback.exitFullscreen,
+    requestPictureInPicture: playback.requestPictureInPicture,
+    exitPictureInPicture: playback.exitPictureInPicture,
+    showAirPlayPicker: playback.showAirPlayPicker,
     // Ungated, unlike `subscribeCues` below: the intrinsic size is read off
     // the <video> element, which both engines play into and whose
     // `loadedmetadata`/`resize` listeners `native.attach()` installs on either
@@ -544,21 +558,7 @@ export const createHlsProvider = (
           setCaptionRenderer: native.setCaptionRenderer
         }
       : {}),
-    retry: async (): Promise<CommandResult> => {
-      if (destroyed) return { ok: false, reason: 'not-ready' };
-      if (!engine) {
-        return { ok: false, reason: 'unsupported', error: selection.error };
-      }
-      if (engine === 'native') return native.retry();
-      errorRecovery.reset();
-      qualityLevels.reset();
-      hlsLiveHint = undefined;
-      liveState = null;
-      liveSeekMeaningful = true;
-      textTracks.reset();
-      // No `teardownHls()` here: `startHlsJs()` owns it now (#85).
-      return startHlsJs();
-    },
+    retry: playback.retry,
     ...(engine === 'hls.js'
       ? {
           selectQuality: qualityLevels.selectQuality,
