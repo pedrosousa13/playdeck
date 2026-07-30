@@ -55,7 +55,9 @@ _Avoid_: eligible media
 ### Styling
 
 See [ADR-0001](docs/adr/0001-structural-css-ships-inline.md) for why the first
-two are separate.
+two are separate, and
+[ADR-0002](docs/adr/0002-published-measurements-are-outputs.md) for why an
+output is not a token.
 
 **Structural geometry**:
 The positioning a primitive needs in order to function — stacking, insets, the
@@ -73,3 +75,9 @@ _Avoid_: theming, skin
 A CSS custom property a primitive reads inline with a fallback, so a consumer
 can change a value from a stylesheet without importing one.
 _Avoid_: variable, custom property
+
+**Output**:
+Something the library states about itself for a consumer's CSS or tests to
+read — a part name, a `data-state`, or a measurement written as a CSS custom
+property. The library writes it and the consumer reads it, the opposite
+direction to a token.
