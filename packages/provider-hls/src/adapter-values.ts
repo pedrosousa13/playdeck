@@ -2,8 +2,17 @@ import type {
   HlsEngine,
   PlayerError,
   PlayerLiveState,
+  ProviderEvent,
+  ProviderStatePatch,
   TimeRange
 } from '@reely/core';
+
+// Publishes a provider-state patch to every subscriber, optionally paired
+// with the provider event that caused it. Every seam takes this as its sink.
+export type EmitProviderState = (
+  patch: ProviderStatePatch,
+  event?: ProviderEvent
+) => void;
 
 export type HlsEngineSelection =
   | { readonly engine: HlsEngine }

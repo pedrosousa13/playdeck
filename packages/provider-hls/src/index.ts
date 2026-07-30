@@ -1,6 +1,5 @@
 import type {
   Availability,
-  CaptionRendering,
   CommandResult,
   HlsSource,
   PlayerCapabilities,
@@ -11,12 +10,8 @@ import type {
   ProviderEvent,
   ProviderStateListener,
   ProviderStatePatch,
-  TextCue,
-  TextTrack,
-  TextTrackKind,
   TimeRange
 } from '@reely/core';
-import { textTrackLabel } from '@reely/core';
 import {
   createNativeProvider,
   type NativePlaybackOptions
@@ -29,11 +24,10 @@ import {
   type HlsEngineSelection,
   type HlsInstanceLike,
   type HlsLevelLike,
-  type HlsModuleLoader,
-  type HlsParsedCueLike,
-  type HlsSubtitleTrackLike
+  type HlsModuleLoader
 } from './adapter-values.js';
 import { createHlsErrorRecovery } from './error-recovery.js';
+import { createHlsTextTracks } from './text-tracks.js';
 
 export type {
   HlsConfigLike,
@@ -202,10 +196,6 @@ export const createHlsProvider = (
     status: 'unknown',
     reason: 'provider-check'
   };
-  let selectTextTrackAvailability: Availability = {
-    status: 'unknown',
-    reason: 'provider-check'
-  };
   let lastCapabilities: PlayerCapabilities | undefined;
   let hlsLiveHint: boolean | undefined;
   let liveState: PlayerLiveState = null;
@@ -218,19 +208,6 @@ export const createHlsProvider = (
   // The held selection's collision-free base id, kept so a selection can be
   // re-matched after its `:<idx>` suffix shifts or collapses.
   let hlsSelectedQualityBaseId: string | null = null;
-  // hls.js text-track state — mirrors packages/provider-native/src/text-tracks.ts's
-  // shape (held selection + "has the user explicitly chosen" flag so a later
-  // SUBTITLE_TRACKS_UPDATED can tell "keep the held id" apart from "apply the
-  // default-track rule"), but keyed to hls.js's own subtitleTracks/subtitleTrack
-  // surface instead of `<track>` elements.
-  let hlsTextTracks: TextTrack[] = [];
-  let hlsSelectedTextTrackId: string | null = null;
-  let hlsHasExplicitTextTrackSelection = false;
-  // Cues parsed for the held selection (see `startHlsJs`'s `CUES_PARSED`
-  // listener for why no further per-track filtering is needed), windowed
-  // down to the currently active ones on every `timeupdate`.
-  let hlsParsedCues: TextCue[] = [];
-  const hlsCueListeners = new Set<(cues: readonly TextCue[]) => void>();
 
   const emit = (patch: ProviderStatePatch, event?: ProviderEvent): void => {
     if (destroyed) return;
@@ -248,13 +225,27 @@ export const createHlsProvider = (
           : selectQualityAvailability,
       selectTextTrack:
         engine === 'hls.js'
-          ? selectTextTrackAvailability
+          ? textTracks.selectTextTrackAvailability()
           : capabilities.selectTextTrack
     };
     return liveSeekMeaningful
       ? withQuality
       : { ...withQuality, seek: { status: 'unavailable', reason: 'source' } };
   };
+
+  // The last-seen capabilities snapshot, re-decorated, as a spreadable patch
+  // fragment — empty until the native adapter has published one.
+  const capabilitiesPatch = (): ProviderStatePatch =>
+    lastCapabilities
+      ? { capabilities: decorateCapabilities(lastCapabilities) }
+      : {};
+
+  const textTracks = createHlsTextTracks(media, {
+    emit,
+    isDestroyed: () => destroyed,
+    getInstance: () => hls,
+    capabilitiesPatch
+  });
 
   const computeLiveState = (): PlayerLiveState =>
     deriveLiveState({
@@ -339,7 +330,7 @@ export const createHlsProvider = (
   const teardownHls = (): void => {
     const instance = hls;
     hls = undefined;
-    media.removeEventListener('timeupdate', recomputeActiveHlsCues);
+    media.removeEventListener('timeupdate', textTracks.handlers.onTimeUpdate);
     if (!instance) return;
     try {
       instance.destroy();
@@ -364,9 +355,7 @@ export const createHlsProvider = (
         quality: null,
         qualities: [],
         selectedQualityId: null,
-        ...(lastCapabilities
-          ? { capabilities: decorateCapabilities(lastCapabilities) }
-          : {}),
+        ...capabilitiesPatch(),
         error
       },
       { type: 'error', detail: error, origin: 'provider' }
@@ -471,94 +460,8 @@ export const createHlsProvider = (
     emit({
       qualities: hlsQualityList,
       selectedQualityId: hlsSelectedQualityId,
-      ...(lastCapabilities
-        ? { capabilities: decorateCapabilities(lastCapabilities) }
-        : {})
+      ...capabilitiesPatch()
     });
-  };
-
-  const hlsSubtitleTrackId = (
-    track: HlsSubtitleTrackLike,
-    index: number
-  ): string =>
-    track.id !== undefined && track.id !== null
-      ? `hls:${track.id}`
-      : `hls:${index}`;
-
-  const hlsSubtitleTrackKind = (track: HlsSubtitleTrackLike): TextTrackKind =>
-    track.type === 'CLOSED-CAPTIONS' ? 'captions' : 'subtitles';
-
-  // Mirrors provider-native's `resolveSelection`: a held explicit selection
-  // always overrides and persists as long as it still names an existing
-  // track; otherwise the `default` track applies (native's `<track
-  // default>` rule, here hls.js's `MediaPlaylist.default` flag); otherwise
-  // no selection.
-  const resolveHlsTextTrackSelection = (
-    ids: ReadonlyArray<string>,
-    defaultIndex: number
-  ): string | null => {
-    if (hlsHasExplicitTextTrackSelection) {
-      return hlsSelectedTextTrackId !== null &&
-        ids.includes(hlsSelectedTextTrackId)
-        ? hlsSelectedTextTrackId
-        : null;
-    }
-    return defaultIndex === -1 ? null : (ids[defaultIndex] ?? null);
-  };
-
-  // No 'native' branch: real browser-native rendering needs hls.js's
-  // `renderTextTracksNatively`, which `startHlsJs` keeps off (see the
-  // comment there), so there is no native surface to report. See
-  // `setCaptionRenderer` below.
-  const resolveHlsCaptionRendering = (): CaptionRendering =>
-    hlsTextTracks.length === 0 ? 'unavailable' : 'custom';
-
-  const emitHlsCues = (cues: readonly TextCue[]): void =>
-    hlsCueListeners.forEach((listener) => listener(cues));
-
-  const normalizeHlsCue = (cue: HlsParsedCueLike): TextCue => {
-    const text = typeof cue.text === 'string' ? cue.text : '';
-    return {
-      id: cue.id ?? null,
-      startTime: cue.startTime,
-      endTime: cue.endTime,
-      text: text.trim().length === 0 ? '' : text
-    };
-  };
-
-  // Windows the held cues down to the ones active at the media's current
-  // time — mirrors what a native `TextTrack`'s `activeCues`/`cuechange`
-  // would give us, computed by hand since `CUES_PARSED` delivers cues as
-  // they are parsed (which can be well ahead of playback), not as they
-  // become active. Driven by `timeupdate`, which the HTML spec fires at
-  // roughly 4Hz — cue enter/exit precision is bounded by that cadence, an
-  // accepted limitation for this hand-rolled windowing (a real `cuechange`
-  // event would be exact).
-  const recomputeActiveHlsCues = (): void => {
-    const currentTime = media.currentTime;
-    emitHlsCues(
-      hlsParsedCues.filter(
-        (cue) => currentTime >= cue.startTime && currentTime < cue.endTime
-      )
-    );
-  };
-
-  // Pushes the held selection down into the engine (`instance.subtitleTrack`,
-  // `-1` for none) and clears the held cues — the previous selection's cues
-  // no longer apply, and hls.js only fetches/parses fragments for the
-  // subtitle track that is actually selected, so nothing will refill the
-  // buffer until the new selection's own cues are parsed.
-  const applyHlsTextTrackSelection = (): void => {
-    const instance = hls;
-    if (!instance) return;
-    instance.subtitleTrack =
-      hlsSelectedTextTrackId === null
-        ? -1
-        : hlsTextTracks.findIndex(
-            (track) => track.id === hlsSelectedTextTrackId
-          );
-    hlsParsedCues = [];
-    emitHlsCues([]);
   };
 
   const startHlsJs = async (): Promise<CommandResult> => {
@@ -597,9 +500,7 @@ export const createHlsProvider = (
       emit({
         qualities: [],
         selectedQualityId: null,
-        ...(lastCapabilities
-          ? { capabilities: decorateCapabilities(lastCapabilities) }
-          : {})
+        ...capabilitiesPatch()
       });
     }
     let Hls = hlsConstructor;
@@ -649,7 +550,7 @@ export const createHlsProvider = (
     // self-contained; see `setCaptionRenderer` for what this costs.
     const instance = new HlsRuntime({ renderTextTracksNatively: false });
     hls = instance;
-    media.addEventListener('timeupdate', recomputeActiveHlsCues);
+    media.addEventListener('timeupdate', textTracks.handlers.onTimeUpdate);
     instance.on(HlsRuntime.Events.ERROR, (_event, data) =>
       errorRecovery.handleError(instance, HlsRuntime, data)
     );
@@ -674,51 +575,11 @@ export const createHlsProvider = (
     });
     instance.on(HlsRuntime.Events.SUBTITLE_TRACKS_UPDATED, (_event, data) => {
       if (destroyed || hls !== instance) return;
-      const rawTracks =
-        (data as { subtitleTracks?: ReadonlyArray<HlsSubtitleTrackLike> })
-          .subtitleTracks ?? instance.subtitleTracks;
-      const ids = rawTracks.map((track, index) =>
-        hlsSubtitleTrackId(track, index)
-      );
-      hlsTextTracks = rawTracks.map((track, index) => ({
-        id: ids[index],
-        label: textTrackLabel(track.name, track.lang),
-        language: track.lang || null,
-        kind: hlsSubtitleTrackKind(track),
-        readiness: 'loaded'
-      }));
-      const defaultIndex = rawTracks.findIndex((track) => track.default);
-      hlsSelectedTextTrackId = resolveHlsTextTrackSelection(ids, defaultIndex);
-      // Mirrors the native engine's `hasSelectableTextTracks()` rule: the
-      // capability is only 'available' once there is at least one track to
-      // select among.
-      selectTextTrackAvailability =
-        hlsTextTracks.length > 0
-          ? { status: 'available' }
-          : { status: 'unavailable', reason: 'source' };
-      applyHlsTextTrackSelection();
-      emit({
-        textTracks: hlsTextTracks,
-        selectedTextTrackId: hlsSelectedTextTrackId,
-        captionRendering: resolveHlsCaptionRendering(),
-        ...(lastCapabilities
-          ? { capabilities: decorateCapabilities(lastCapabilities) }
-          : {})
-      });
+      textTracks.handlers.onSubtitleTracksUpdated(instance, data);
     });
-    // hls.js only downloads/parses subtitle fragments for the currently
-    // selected `subtitleTrack`, so every cue that arrives while a selection
-    // is held belongs to it — no need to correlate hls.js's internal
-    // `data.track` label (an implementation-private "default"/"subtitlesN"
-    // string, not a documented stable identifier) back to our own track ids.
     instance.on(HlsRuntime.Events.CUES_PARSED, (_event, data) => {
-      if (destroyed || hls !== instance || hlsSelectedTextTrackId === null) {
-        return;
-      }
-      const parsedCues =
-        (data as { cues?: ReadonlyArray<HlsParsedCueLike> }).cues ?? [];
-      hlsParsedCues = [...hlsParsedCues, ...parsedCues.map(normalizeHlsCue)];
-      recomputeActiveHlsCues();
+      if (destroyed || hls !== instance) return;
+      textTracks.handlers.onCuesParsed(data);
     });
     instance.on(HlsRuntime.Events.MEDIA_ATTACHED, () => {
       if (destroyed || hls !== instance) return;
@@ -780,7 +641,7 @@ export const createHlsProvider = (
         media.load();
       }
       listeners.clear();
-      hlsCueListeners.clear();
+      textTracks.destroy();
     },
     subscribe: (listener) => {
       listeners.add(listener);
@@ -831,18 +692,10 @@ export const createHlsProvider = (
         status: 'unknown',
         reason: 'provider-check'
       };
-      selectTextTrackAvailability = {
-        status: 'unknown',
-        reason: 'provider-check'
-      };
       hlsLiveHint = undefined;
       liveState = null;
       liveSeekMeaningful = true;
-      hlsTextTracks = [];
-      hlsSelectedTextTrackId = null;
-      hlsHasExplicitTextTrackSelection = false;
-      hlsParsedCues = [];
-      emitHlsCues([]);
+      textTracks.reset();
       // No `teardownHls()` here: `startHlsJs()` owns it now (#85).
       return startHlsJs();
     },
@@ -876,41 +729,9 @@ export const createHlsProvider = (
             emit({ selectedQualityId: id });
             return { ok: true };
           },
-          selectTextTrack: async (
-            id: string | null
-          ): Promise<CommandResult> => {
-            const instance = hls;
-            if (destroyed || !instance) {
-              return { ok: false, reason: 'not-ready' };
-            }
-            if (
-              id !== null &&
-              !hlsTextTracks.some((track) => track.id === id)
-            ) {
-              return { ok: false, reason: 'unsupported' };
-            }
-            hlsHasExplicitTextTrackSelection = true;
-            hlsSelectedTextTrackId = id;
-            applyHlsTextTrackSelection();
-            emit({
-              selectedTextTrackId: hlsSelectedTextTrackId,
-              captionRendering: resolveHlsCaptionRendering()
-            });
-            return { ok: true };
-          },
-          subscribeCues: (listener: (cues: readonly TextCue[]) => void) => {
-            hlsCueListeners.add(listener);
-            return () => hlsCueListeners.delete(listener);
-          },
-          // Real browser-native rendering needs `renderTextTracksNatively`,
-          // which `startHlsJs` keeps off (see its comment), so there is no
-          // native surface this engine can hand a 'native' request to.
-          // Honor the call without pretending otherwise: cues keep flowing
-          // through `subscribeCues` either way, and captionRendering keeps
-          // honestly reporting 'custom'.
-          setCaptionRenderer: () => {
-            emit({ captionRendering: resolveHlsCaptionRendering() });
-          }
+          selectTextTrack: textTracks.selectTextTrack,
+          subscribeCues: textTracks.subscribeCues,
+          setCaptionRenderer: textTracks.setCaptionRenderer
         }
       : {})
   };
