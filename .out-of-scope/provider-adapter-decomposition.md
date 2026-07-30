@@ -11,49 +11,50 @@ Each provider package puts effectively its whole implementation inside one
 | `provider-youtube` | `createYouTubeProvider` | 574   |
 
 Everything inside shares one lexical scope, so any state is reachable from any
-handler and the units inside are not separately testable. Breaking them apart —
-by lifecycle seam, one provider per PR — is not planned.
+handler and the units inside are not separately testable.
 
-## Why this is out of scope
+## Status: reversed on 2026-07-30
 
-The cost of the current shape is navigability and test granularity. It is not
-correctness: all four adapters pass the `@real` provider suite against the live
-SDKs, and the capability contract they implement is covered by unit tests at the
-boundary.
+The `wontfix` recorded here on 2026-07-29 was reversed by the maintainer on
+2026-07-30, as part of the codebase-wide maintainability pass that also split
+the react and core entry modules (SIDEPRO-186, SIDEPRO-187). The decomposition
+is now planned work: SIDEPRO-135 is the umbrella, with one child issue per
+provider — SIDEPRO-188 (native, first), SIDEPRO-189 (HLS), SIDEPRO-190
+(YouTube), SIDEPRO-191 (Vimeo, last).
 
-Against that, restructuring four working adapters is a large change whose only
-guard is a suite that **no longer runs on a schedule** — the scheduled `@real`
-workflow was retired because a hosted runner's IP reputation, not our code,
-decided whether it passed. `@real` now runs only when someone runs it locally
-with `REELY_REAL_PROVIDERS=1`. So the safety net for exactly this kind of
-refactor is manual, which raises the price of the change and lowers the odds a
-regression is caught.
+Nothing changed in the measurement above — what changed is the decision. The
+maintainer accepted the cost the original closing weighed: the `@real` suite
+runs only manually now (`REELY_REAL_PROVIDERS=1 pnpm test:e2e
+--project=chromium --grep @real`), and that manual run is a hard gate on this
+work, not a formality.
 
-There is also nothing obvious to extract _to_. The four adapters differ enough
-that a shared base class or common lifecycle abstraction would be speculative —
-invented to justify the split rather than discovered from the code. A refactor
-that has to invent its own target is the kind that leaves the codebase harder to
-follow than it found it.
+## What still binds
 
-Weighed together: real, ongoing risk against an improvement no consumer sees and
-no test asserts.
+The prerequisites recorded on SIDEPRO-135 apply to every child issue:
 
-## What would change this
+- `@real` green before and after, per provider, run locally. A provider whose
+  baseline cannot be made green stops there and reports on its issue.
+- One provider per PR.
+- Extraction by lifecycle seam (load/attach, playback commands, tracks and
+  captions, presentation modes, teardown), with explicit dependencies — never
+  by line count.
+- **Still no shared cross-provider abstraction.** The four adapters differ
+  enough that a shared base or common lifecycle abstraction would be invented
+  to justify the split rather than discovered from the code. That part of the
+  original decision stands.
 
-Concrete friction, not size. If a provider bug takes an unreasonable amount of
-time to locate because of the scope sharing, or a behaviour genuinely cannot be
-tested without splitting the closure, that is the evidence this decision is
-missing. Line count alone is not it — the measurement above was already taken
-and deliberately not acted on.
+## What would re-close it
 
-If it is reconsidered, the prerequisites recorded on the original issue still
-apply and still make it safe: `@real` green before and after per provider, one
-provider per PR, and extraction by lifecycle seam (load / playback / tracks /
-teardown) rather than by line count.
+The first child issue failing its `@real` baseline gate with no reasonable
+path to green — that is the original risk argument proven out, and per
+SIDEPRO-135's reopen comment it should be weighed again rather than
+overridden.
 
-## Prior requests
+## History
 
 - SIDEPRO-135 — "Provider adapters: the create*Provider closures are 574-783
   lines each" (2026-07-29). Recorded from a security and simplification review
-  that found the measurement and deliberately did not act on it; the issue
-  itself named `wontfix` a legitimate outcome.
+  that found the measurement and deliberately did not act on it; closed
+  `wontfix` on 2026-07-29 (PR #127 recorded the reasoning here), reopened by
+  the maintainer on 2026-07-30 as the umbrella for the per-provider child
+  issues.
