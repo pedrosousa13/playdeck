@@ -13,7 +13,6 @@ import type { YouTubeTimeUpdates } from './time-updates.js';
 
 export type YouTubeAttachmentDeps = {
   readonly emit: EmitProviderState;
-  /** Embed host; defaults to the privacy-enhanced youtube-nocookie.com. */
   readonly host: string;
   readonly loadIframeApi: () => Promise<YouTubeIframeApi>;
   // The host's ready capabilities snapshot, for the state published on ready.
