@@ -1,5 +1,4 @@
 import type {
-  Availability,
   CommandResult,
   MediaDimensions,
   PlayerCapabilities,
@@ -14,10 +13,10 @@ import {
   available,
   errorString,
   numberField,
-  providerCheck,
   providerEvent,
   type VimeoMountElement
 } from './adapter-values.js';
+import { createVimeoChromelessAvailability } from './chromeless-availability.js';
 import {
   loadVimeoSdk,
   type VimeoSdkPlayer,
@@ -85,9 +84,6 @@ const loadFailure = (cause: unknown): PlayerError => {
   };
 };
 
-const vimeoWatchUrl = (source: VimeoSource): string =>
-  `https://vimeo.com/${source.videoId}${source.hash ? `/${source.hash}` : ''}`;
-
 const vimeoEmbedUrl = (
   source: VimeoSource,
   options: VimeoProviderOptions,
@@ -101,70 +97,6 @@ const vimeoEmbedUrl = (
   if (muted) url.searchParams.set('muted', '1');
   return url.href;
 };
-
-const planLimitedAccountTypes = new Set(['free', 'basic']);
-
-// Tiers verified against the live oEmbed API plus Vimeo's documented paid
-// lineups (legacy and 2023 rename). Unknown future tiers stay unresolved so a
-// gated tier is never misreported as chromeless-capable.
-const chromelessAccountTypes = new Set([
-  'plus',
-  'pro',
-  'business',
-  'premium',
-  'enterprise',
-  'custom',
-  'starter',
-  'standard',
-  'advanced'
-]);
-
-const chromelessAvailability = async (
-  source: VimeoSource
-): Promise<Availability> => {
-  try {
-    const response = await fetch(
-      `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(
-        vimeoWatchUrl(source)
-      )}`
-    );
-    if (!response.ok) return providerCheck;
-    const data: unknown = await response.json();
-    const accountType =
-      typeof data === 'object' &&
-      data !== null &&
-      'account_type' in data &&
-      typeof data.account_type === 'string'
-        ? data.account_type
-        : undefined;
-    if (!accountType) return providerCheck;
-    if (planLimitedAccountTypes.has(accountType)) {
-      return { status: 'unavailable', reason: 'provider-plan' };
-    }
-    return chromelessAccountTypes.has(accountType) ? available : providerCheck;
-  } catch {
-    return providerCheck;
-  }
-};
-
-const settleWithFallback = <Value>(
-  promise: Promise<Value>,
-  fallback: Value,
-  milliseconds: number
-): Promise<Value> =>
-  new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(fallback), milliseconds);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      () => {
-        clearTimeout(timer);
-        resolve(fallback);
-      }
-    );
-  });
 
 export const createVimeoProvider = (
   mount: VimeoMountElement,
@@ -181,7 +113,6 @@ export const createVimeoProvider = (
   let generation = 0;
   let activePlayer: VimeoSdkPlayer | undefined;
   let activeIframe: HTMLIFrameElement | undefined;
-  let customControlsAvailability: Availability = providerCheck;
   let activeDimensions: MediaDimensions | undefined;
 
   // Anything that is not two finite positive numbers publishes as "not known".
@@ -208,6 +139,11 @@ export const createVimeoProvider = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
   ): void => listeners.forEach((listener) => listener(patch, event));
+
+  const chromeless = createVimeoChromelessAvailability({
+    source,
+    controls: options.controls
+  });
 
   const playback = createVimeoPlayback(mount, {
     emit,
@@ -247,7 +183,7 @@ export const createVimeoProvider = (
     // command surface for them yet, so they are unavailable through Reely
     // rather than forever "unknown".
     airPlay: { status: 'unavailable', reason: 'provider' },
-    customControls: customControlsAvailability
+    customControls: chromeless.customControlsAvailability()
   });
 
   const isStale = (thisGeneration: number, player?: VimeoSdkPlayer): boolean =>
@@ -367,17 +303,7 @@ export const createVimeoProvider = (
       // before its own ready resolves. Declaring at `player.ready()` instead
       // would never fire behind a blocked iframe (#69).
       emit({ commandsReady: true });
-      const availabilityPromise =
-        options.controls === true
-          ? Promise.resolve<Availability>({
-              status: 'unavailable',
-              reason: 'provider'
-            })
-          : settleWithFallback(
-              chromelessAvailability(source),
-              providerCheck,
-              4000
-            );
+      const chromelessProbe = chromeless.probe();
       await player.ready();
       if (isStale(thisGeneration, player)) return { ok: true };
       const [
@@ -387,7 +313,7 @@ export const createVimeoProvider = (
         initialPlaybackRate,
         initialTracks,
         initialQualities,
-        chromeless,
+        chromelessVerdict,
         initialWidth,
         initialHeight
       ] = await Promise.all([
@@ -399,7 +325,7 @@ export const createVimeoProvider = (
           .getTextTracks()
           .catch((): ReadonlyArray<VimeoSdkTextTrack> => []),
         player.getQualities().catch((): ReadonlyArray<VimeoSdkQuality> => []),
-        availabilityPromise,
+        chromelessProbe,
         // An embed that does not answer these leaves the size unknown, which
         // is a fallback the consumer already handles — never a reason to fail
         // the attach.
@@ -410,7 +336,7 @@ export const createVimeoProvider = (
       emitDimensions(initialWidth, initialHeight);
       const textTrackPatch = textTracks.adopt(player, initialTracks);
       const qualityPatch = qualityLevels.adopt(initialQualities);
-      customControlsAvailability = chromeless;
+      chromeless.adopt(chromelessVerdict);
       const playbackPatch = playback.adopt(player, {
         duration: initialDuration,
         muted: initialMuted,
