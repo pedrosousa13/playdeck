@@ -5,12 +5,9 @@ import type {
   MediaDimensions,
   PlayerCapabilities,
   PlayerError,
-  PlayerEventDetailMap,
-  PlayerEventType,
   PlayerQuality,
   ProviderAdapter,
   ProviderEvent,
-  ProviderEventFor,
   ProviderStateListener,
   TextCue,
   TextTrack,
@@ -19,6 +16,15 @@ import type {
   VimeoSource
 } from '@reely/core';
 import { textTrackLabel } from '@reely/core';
+import {
+  asRecord,
+  available,
+  errorString,
+  numberField,
+  providerCheck,
+  providerEvent,
+  runVimeoCommand
+} from './adapter-values.js';
 import {
   loadVimeoSdk,
   type VimeoSdkPlayer,
@@ -35,12 +41,6 @@ export type {
   VimeoSdkQuality,
   VimeoSdkTextTrack
 } from './loader.js';
-
-const available: Availability = { status: 'available' };
-const providerCheck: Availability = {
-  status: 'unknown',
-  reason: 'provider-check'
-};
 
 export type VimeoMountElement = HTMLElement & {
   muted?: boolean;
@@ -74,65 +74,6 @@ export type VimeoProviderAdapter = ProviderAdapter &
   Required<Pick<ProviderAdapter, VimeoCommand>> & {
     readonly provider: 'vimeo';
   };
-
-const errorString = (cause: unknown, property: 'message' | 'name') => {
-  if (
-    (typeof cause !== 'object' || cause === null) &&
-    typeof cause !== 'function'
-  ) {
-    return undefined;
-  }
-  try {
-    const value = Reflect.get(cause, property);
-    return typeof value === 'string' ? value : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const commandFailure = (
-  cause: unknown
-): Exclude<CommandResult, { ok: true }> => {
-  const name = errorString(cause, 'name');
-  const message = errorString(cause, 'message') || 'The Vimeo command failed.';
-  if (name === 'NotAllowedError') {
-    return {
-      ok: false,
-      reason: 'blocked',
-      error: {
-        category: 'policy',
-        fatal: false,
-        recoverable: true,
-        message,
-        cause
-      }
-    };
-  }
-  if (name === 'UnsupportedError' || name === 'NotSupportedError') {
-    return {
-      ok: false,
-      reason: 'unsupported',
-      error: {
-        category: 'unsupported',
-        fatal: false,
-        recoverable: true,
-        message,
-        cause
-      }
-    };
-  }
-  return {
-    ok: false,
-    reason: 'provider-error',
-    error: {
-      category: 'provider',
-      fatal: false,
-      recoverable: true,
-      message,
-      cause
-    }
-  };
-};
 
 const loadFailure = (cause: unknown): PlayerError => {
   const name = errorString(cause, 'name');
@@ -232,18 +173,6 @@ const settleWithFallback = <Value>(
       }
     );
   });
-
-const asRecord = (data: unknown): Record<string, unknown> =>
-  typeof data === 'object' && data !== null
-    ? (data as Record<string, unknown>)
-    : {};
-
-const numberField = (data: unknown, field: string): number | undefined => {
-  const value = asRecord(data)[field];
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
-};
 
 const stringField = (data: unknown, field: string): string | undefined => {
   const value = asRecord(data)[field];
@@ -547,17 +476,6 @@ export const createVimeoProvider = (
     event?: ProviderEvent
   ): void => listeners.forEach((listener) => listener(patch, event));
 
-  const event = <Type extends PlayerEventType>(
-    type: Type,
-    detail: PlayerEventDetailMap[Type],
-    originalEvent?: unknown
-  ): ProviderEventFor<Type> => ({
-    type,
-    detail,
-    origin: 'provider',
-    ...(originalEvent === undefined ? {} : { originalEvent })
-  });
-
   const capabilities = (): PlayerCapabilities => ({
     seek: available,
     setVolume: volumeAvailability,
@@ -619,7 +537,7 @@ export const createVimeoProvider = (
           buffering: false,
           ...(seconds === undefined ? {} : { currentTime: seconds })
         },
-        event('play', undefined, data)
+        providerEvent('play', undefined, data)
       );
     });
     on('playing', () => emit({ playback: 'playing', buffering: false }));
@@ -632,7 +550,7 @@ export const createVimeoProvider = (
           playback: 'paused',
           ...(seconds === undefined ? {} : { currentTime: seconds })
         },
-        event('pause', undefined, data)
+        providerEvent('pause', undefined, data)
       );
     });
     on('ended', (data) => {
@@ -640,7 +558,7 @@ export const createVimeoProvider = (
       currentTime = seconds;
       emit(
         { playback: 'ended', buffering: false, currentTime: seconds },
-        event('ended', undefined, data)
+        providerEvent('ended', undefined, data)
       );
     });
     on('timeupdate', (data) => {
@@ -681,14 +599,17 @@ export const createVimeoProvider = (
     on('bufferend', () => emit({ buffering: false }));
     on('seeking', (data) => {
       const seconds = numberField(data, 'seconds') ?? currentTime;
-      emit({ seeking: true }, event('seeking', { currentTime: seconds }, data));
+      emit(
+        { seeking: true },
+        providerEvent('seeking', { currentTime: seconds }, data)
+      );
     });
     on('seeked', (data) => {
       const seconds = numberField(data, 'seconds') ?? currentTime;
       currentTime = seconds;
       emit(
         { seeking: false, currentTime: seconds },
-        event('seeked', { currentTime: seconds }, data)
+        providerEvent('seeked', { currentTime: seconds }, data)
       );
     });
     on('volumechange', (data) => {
@@ -699,7 +620,7 @@ export const createVimeoProvider = (
           if (isStale(thisGeneration, player)) return;
           emit(
             { muted, volume },
-            event('volumechange', { muted, volume }, data)
+            providerEvent('volumechange', { muted, volume }, data)
           );
         },
         () => undefined
@@ -708,7 +629,10 @@ export const createVimeoProvider = (
     on('playbackratechange', (data) => {
       const playbackRate = numberField(data, 'playbackRate');
       if (playbackRate === undefined) return;
-      emit({ playbackRate }, event('ratechange', { playbackRate }, data));
+      emit(
+        { playbackRate },
+        providerEvent('ratechange', { playbackRate }, data)
+      );
     });
     // Vimeo's own settings menu can pin a rung too, on an embed that shows it.
     // The event reports the *selection*, not the rung adaptive playback is on:
@@ -733,18 +657,29 @@ export const createVimeoProvider = (
     });
     on('fullscreenchange', (data) => {
       const fullscreen = asRecord(data).fullscreen === true;
-      emit({ fullscreen }, event('fullscreenchange', { fullscreen }, data));
+      emit(
+        { fullscreen },
+        providerEvent('fullscreenchange', { fullscreen }, data)
+      );
     });
     on('enterpictureinpicture', (data) =>
       emit(
         { pictureInPicture: true },
-        event('pictureinpicturechange', { pictureInPicture: true }, data)
+        providerEvent(
+          'pictureinpicturechange',
+          { pictureInPicture: true },
+          data
+        )
       )
     );
     on('leavepictureinpicture', (data) =>
       emit(
         { pictureInPicture: false },
-        event('pictureinpicturechange', { pictureInPicture: false }, data)
+        providerEvent(
+          'pictureinpicturechange',
+          { pictureInPicture: false },
+          data
+        )
       )
     );
     on('cuechange', (data) => {
@@ -875,7 +810,7 @@ export const createVimeoProvider = (
           seeking: false,
           error
         },
-        event('error', error, data)
+        providerEvent('error', error, data)
       );
     });
   };
@@ -1019,7 +954,7 @@ export const createVimeoProvider = (
           selectedQualityId,
           capabilities: capabilities()
         },
-        event('ready', undefined)
+        providerEvent('ready', undefined)
       );
       return { ok: true };
     } catch (cause) {
@@ -1028,24 +963,16 @@ export const createVimeoProvider = (
       const error = loadFailure(cause);
       emit(
         { lifecycle: 'error', activation: 'error', error },
-        event('error', error)
+        providerEvent('error', error)
       );
       return { ok: false, reason: 'provider-error', error };
     }
   };
 
-  const runCommand = async (
+  const runCommand = (
     command: (player: VimeoSdkPlayer) => Promise<unknown>
-  ): Promise<CommandResult> => {
-    const player = activePlayer;
-    if (destroyed || !player) return { ok: false, reason: 'not-ready' };
-    try {
-      await command(player);
-      return { ok: true };
-    } catch (cause) {
-      return commandFailure(cause);
-    }
-  };
+  ): Promise<CommandResult> =>
+    runVimeoCommand(destroyed ? undefined : activePlayer, command);
 
   return {
     provider: 'vimeo',
