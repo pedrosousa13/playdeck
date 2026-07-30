@@ -10,6 +10,7 @@ import {
   type EmitProviderState
 } from './adapter-values.js';
 import type { YouTubePlayer } from './loader.js';
+import type { YouTubeTimeUpdates } from './time-updates.js';
 
 /**
  * YouTube reports a blocked autoplay attempt by silently staying paused, so an
@@ -50,18 +51,6 @@ type YouTubeCommand =
   | 'setVolume'
   | 'setPlaybackRate';
 
-// The polling seam holds the position mirror, so playback reads and reports
-// the playhead through it rather than keeping a second copy.
-export type YouTubePlaybackTimeUpdates = {
-  readonly start: () => void;
-  readonly stop: () => void;
-  readonly adoptCurrentTime: (
-    current: Pick<YouTubePlayer, 'getCurrentTime'>
-  ) => number;
-  readonly setCurrentTime: (time: number) => void;
-  readonly getCurrentTime: () => number;
-};
-
 export type YouTubePlaybackDeps = {
   readonly emit: EmitProviderState;
   readonly isDestroyed: () => boolean;
@@ -71,7 +60,12 @@ export type YouTubePlaybackDeps = {
   // The player once it will accept a command; undefined before onReady, after
   // a teardown, and after destroy.
   readonly getReadyPlayer: () => YouTubeCommandPlayer | undefined;
-  readonly timeUpdates: YouTubePlaybackTimeUpdates;
+  // The polling seam holds the position mirror, so playback reads and reports
+  // the playhead through it rather than keeping a second copy.
+  readonly timeUpdates: Pick<
+    YouTubeTimeUpdates,
+    'start' | 'stop' | 'adoptCurrentTime' | 'setCurrentTime' | 'getCurrentTime'
+  >;
 };
 
 // The playback-command seam: the transport commands, the volume mirrors they

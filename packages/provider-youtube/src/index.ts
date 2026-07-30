@@ -3,20 +3,16 @@ import type {
   PlayerCapabilities,
   ProviderAdapter,
   ProviderEvent,
-  ProviderStateListener,
-  TimeRange
+  ProviderStateListener
 } from '@reely/core';
 import {
   available,
   browserUnavailable,
-  clamp01,
   commandFailure,
   loadFailure,
-  nextBufferView,
   preReadyCapabilities,
   providerEvent,
-  readyCapabilities,
-  type BufferView
+  readyCapabilities
 } from './adapter-values.js';
 import {
   loadYouTubeIframeApi,
@@ -25,6 +21,7 @@ import {
 } from './loader.js';
 import { createYouTubePlayback } from './playback.js';
 import { createYouTubeTextTracks } from './text-tracks.js';
+import { createYouTubeTimeUpdates } from './time-updates.js';
 
 export {
   loadYouTubeIframeApi,
@@ -36,8 +33,6 @@ export {
 } from './loader.js';
 
 export { PLAYBACK_CONFIRMATION_TIMEOUT_MS } from './playback.js';
-
-const TIME_UPDATE_INTERVAL_MS = 250;
 
 export type YouTubeProviderOptions = {
   /** Embed host; defaults to the privacy-enhanced youtube-nocookie.com. */
@@ -81,12 +76,6 @@ export const createYouTubeProvider = (
   let generation = 0;
   let player: YouTubePlayer | undefined;
   let playerTarget: HTMLElement | undefined;
-  let timeInterval: ReturnType<typeof setInterval> | undefined;
-  // The iframe API proxies commands over postMessage, so getters read stale
-  // values right after a command. This mirror tracks the last confirmed or
-  // intended position instead; commands emit intent, polling confirms.
-  let knownCurrentTime = 0;
-  let bufferView: BufferView | undefined;
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
@@ -101,56 +90,11 @@ export const createYouTubeProvider = (
     }
   };
 
-  const bufferedRanges = (
-    current: YouTubePlayer,
-    currentTime: number
-  ): readonly TimeRange[] => {
-    const duration = current.getDuration();
-    const fraction = current.getVideoLoadedFraction();
-    bufferView =
-      Number.isFinite(duration) && duration > 0 && Number.isFinite(fraction)
-        ? nextBufferView(bufferView, currentTime, clamp01(fraction) * duration)
-        : undefined;
-    return bufferView
-      ? [{ start: bufferView.anchor, end: bufferView.end }]
-      : [];
-  };
-
-  const stopTimePolling = (): void => {
-    if (timeInterval === undefined) return;
-    clearInterval(timeInterval);
-    timeInterval = undefined;
-  };
-
-  const startTimePolling = (): void => {
-    if (timeInterval !== undefined) return;
-    timeInterval = setInterval(() => {
-      const current = player;
-      if (destroyed || !current) return;
-      try {
-        knownCurrentTime = current.getCurrentTime();
-        emit({
-          currentTime: knownCurrentTime,
-          buffered: bufferedRanges(current, knownCurrentTime)
-        });
-      } catch {
-        // Polling must not escape the provider boundary.
-      }
-    }, TIME_UPDATE_INTERVAL_MS);
-  };
-
-  const timeUpdates = {
-    start: startTimePolling,
-    stop: stopTimePolling,
-    adoptCurrentTime: (current: Pick<YouTubePlayer, 'getCurrentTime'>) => {
-      knownCurrentTime = current.getCurrentTime();
-      return knownCurrentTime;
-    },
-    setCurrentTime: (time: number) => {
-      knownCurrentTime = time;
-    },
-    getCurrentTime: () => knownCurrentTime
-  };
+  const timeUpdates = createYouTubeTimeUpdates({
+    emit,
+    isDestroyed: () => destroyed,
+    getPlayer: () => player
+  });
 
   const playback = createYouTubePlayback({
     emit,
@@ -227,12 +171,11 @@ export const createYouTubeProvider = (
 
   const teardownPlayer = (): void => {
     playback.settlePendingPlays({ ok: false, reason: 'not-ready' });
-    stopTimePolling();
-    ready = false;
     // A retry recreates the player, so cached caption state must not leak
     // into the new session's capabilities before its own onApiChange fires.
     // Neither must a buffer anchor: the new player has loaded nothing.
-    bufferView = undefined;
+    timeUpdates.reset();
+    ready = false;
     textTracks.reset();
     const current = player;
     player = undefined;
