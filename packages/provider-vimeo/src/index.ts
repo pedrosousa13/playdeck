@@ -4,7 +4,6 @@ import type {
   MediaDimensions,
   PlayerCapabilities,
   PlayerError,
-  PlayerQuality,
   ProviderAdapter,
   ProviderEvent,
   ProviderStateListener,
@@ -26,6 +25,7 @@ import {
   type VimeoSdkQuality,
   type VimeoSdkTextTrack
 } from './loader.js';
+import { createVimeoQualityLevels } from './quality-levels.js';
 import { createVimeoTextTracks } from './text-tracks.js';
 
 export { loadVimeoSdk, resetVimeoSdkLoader } from './loader.js';
@@ -170,11 +170,6 @@ const settleWithFallback = <Value>(
     );
   });
 
-const stringField = (data: unknown, field: string): string | undefined => {
-  const value = asRecord(data)[field];
-  return typeof value === 'string' ? value : undefined;
-};
-
 // The SDK hands back `[start, end]` pairs. Anything else is not a range we can
 // vouch for, so it is dropped rather than guessed at.
 const toRanges = (
@@ -189,65 +184,6 @@ const toRanges = (
       ? [{ start, end }]
       : []
   );
-
-// Vimeo's rung ids are its own stable keys, so they double as the Reely id
-// under the `vimeo:` prefix the text tracks already use. `auto` is one of them,
-// but it is a mode rather than a rung: the state contract carries that as
-// `selectedQualityId: null`, the way it does for hls.js, so it is filtered out
-// of the published list instead of appearing as something to pick.
-const vimeoQualityId = (id: string): string => `vimeo:${id}`;
-
-const isVimeoRung = (quality: VimeoSdkQuality): boolean =>
-  quality.id !== 'auto';
-
-// An embed that does not implement `getQualities` still answers it, so what
-// comes back is not guaranteed to be a list of rungs at all. Same rule as the
-// buffered ranges: a shape we cannot vouch for is dropped, not guessed at.
-const toVimeoQualities = (value: unknown): ReadonlyArray<VimeoSdkQuality> =>
-  Array.isArray(value)
-    ? (value as ReadonlyArray<VimeoSdkQuality>).filter(
-        (quality) => typeof quality?.id === 'string'
-      )
-    : [];
-
-// The rung label is Vimeo's nominal name for it, not a measurement — the rung
-// it calls `240p` renders at 480x270 (#82). It is still the name Vimeo's own
-// menu shows, so it is the honest thing to label with; width and bitrate the
-// SDK does not report at all.
-const vimeoQualityHeight = (id: string): number | null => {
-  const match = /^(\d+)p$/.exec(id);
-  return match ? Number(match[1]) : null;
-};
-
-const toCoreQualities = (
-  qualities: ReadonlyArray<VimeoSdkQuality>
-): PlayerQuality[] =>
-  qualities.filter(isVimeoRung).map((quality) => ({
-    id: vimeoQualityId(quality.id),
-    height: vimeoQualityHeight(quality.id),
-    width: null,
-    bitrate: null
-  }));
-
-const resolveVimeoQuality = (
-  id: string,
-  qualities: ReadonlyArray<VimeoSdkQuality>
-): VimeoSdkQuality | undefined =>
-  qualities
-    .filter(isVimeoRung)
-    .find((quality) => vimeoQualityId(quality.id) === id);
-
-// `active` marks the entry the player is honouring, which under adaptive
-// playback is `auto` itself — the rung actually rendering is not identified,
-// and `null` says exactly that.
-const activeVimeoQualityId = (
-  qualities: ReadonlyArray<VimeoSdkQuality>
-): string | null => {
-  const active = qualities
-    .filter(isVimeoRung)
-    .find((quality) => quality.active);
-  return active ? vimeoQualityId(active.id) : null;
-};
 
 export const createVimeoProvider = (
   mount: VimeoMountElement,
@@ -266,9 +202,6 @@ export const createVimeoProvider = (
   let activeIframe: HTMLIFrameElement | undefined;
   let currentTime = 0;
   let duration: number | null = null;
-  let qualities: ReadonlyArray<VimeoSdkQuality> = [];
-  let selectedQualityId: string | null = null;
-  let qualityAvailability: Availability = providerCheck;
   let volumeAvailability: Availability = available;
   let playbackRateAvailability: Availability = available;
   let pictureInPictureAvailability: Availability = available;
@@ -300,6 +233,11 @@ export const createVimeoProvider = (
     event?: ProviderEvent
   ): void => listeners.forEach((listener) => listener(patch, event));
 
+  const qualityLevels = createVimeoQualityLevels({
+    emit,
+    getPlayer: () => (destroyed ? undefined : activePlayer)
+  });
+
   const textTracks = createVimeoTextTracks({
     emit,
     isStale: (player) => destroyed || player !== activePlayer,
@@ -312,7 +250,7 @@ export const createVimeoProvider = (
     seek: available,
     setVolume: volumeAvailability,
     setPlaybackRate: playbackRateAvailability,
-    selectQuality: qualityAvailability,
+    selectQuality: qualityLevels.selectQualityAvailability(),
     selectTextTrack: textTracks.selectTextTrackAvailability(),
     fullscreen: available,
     pictureInPicture: pictureInPictureAvailability,
@@ -462,18 +400,7 @@ export const createVimeoProvider = (
         providerEvent('ratechange', { playbackRate }, data)
       );
     });
-    // Vimeo's own settings menu can pin a rung too, on an embed that shows it.
-    // The event reports the *selection*, not the rung adaptive playback is on:
-    // under auto the rendition moved 720 -> 540 with nothing fired (#82).
-    on('qualitychange', (data) => {
-      const quality = stringField(data, 'quality');
-      if (quality === undefined) return;
-      const next = quality === 'auto' ? null : vimeoQualityId(quality);
-      if (next !== null && !resolveVimeoQuality(next, qualities)) return;
-      if (next === selectedQualityId) return;
-      selectedQualityId = next;
-      emit({ selectedQualityId: next });
-    });
+    on('qualitychange', qualityLevels.handlers.onQualityChange);
     on('durationchange', (data) => {
       const nextDuration = numberField(data, 'duration');
       if (nextDuration === undefined) return;
@@ -609,16 +536,7 @@ export const createVimeoProvider = (
       emitDimensions(initialWidth, initialHeight);
       duration = initialDuration;
       const textTrackPatch = textTracks.adopt(player, initialTracks);
-      qualities = toVimeoQualities(initialQualities);
-      // Re-derived from the player in hand, never carried over: a retry builds
-      // an embed with nothing pinned, and a stale id would report a rung it is
-      // not honouring.
-      selectedQualityId = activeVimeoQualityId(qualities);
-      const rungs = toCoreQualities(qualities);
-      qualityAvailability =
-        rungs.length > 0
-          ? available
-          : { status: 'unavailable', reason: 'source' };
+      const qualityPatch = qualityLevels.adopt(initialQualities);
       customControlsAvailability = chromeless;
       if (
         mount.volume !== undefined &&
@@ -653,8 +571,7 @@ export const createVimeoProvider = (
             ? {}
             : { seekable: [{ start: 0, end: duration }] }),
           ...textTrackPatch,
-          qualities: rungs,
-          selectedQualityId,
+          ...qualityPatch,
           capabilities: capabilities()
         },
         providerEvent('ready', undefined)
@@ -754,25 +671,7 @@ export const createVimeoProvider = (
       }
       return result;
     },
-    // Resolved against the list the player published before the SDK is called:
-    // an id it never offered never settles at all, so an unchecked pass-through
-    // is a command that hangs rather than one that fails (#82).
-    selectQuality: (id) => {
-      const target =
-        id === null
-          ? qualities.find((quality) => !isVimeoRung(quality))
-          : resolveVimeoQuality(id, qualities);
-      if (!target) return Promise.resolve({ ok: false, reason: 'unsupported' });
-      return runCommand((player) => player.setQuality(target.id)).then(
-        (result) => {
-          if (result.ok) {
-            selectedQualityId = id;
-            emit({ selectedQualityId: id });
-          }
-          return result;
-        }
-      );
-    },
+    selectQuality: qualityLevels.selectQuality,
     selectTextTrack: textTracks.selectTextTrack,
     subscribeCues: textTracks.subscribeCues,
     setCaptionRenderer: textTracks.setCaptionRenderer,
