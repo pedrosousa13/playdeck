@@ -43,7 +43,7 @@ export type YouTubeTextTracks = {
   readonly discover: () => void;
   readonly selectTextTrack: (id: string | null) => Promise<CommandResult>;
   // The `selectTextTrack` facet of the host's capabilities.
-  readonly textTrackAvailability: () => Availability;
+  readonly selectTextTrackAvailability: () => Availability;
   // Forgets the discovered tracks; called when the player is torn down.
   readonly reset: () => void;
 };
@@ -118,7 +118,7 @@ export const createYouTubeTextTracks = ({
         emit({ selectedTextTrackId: id });
       });
     },
-    textTrackAvailability: () =>
+    selectTextTrackAvailability: () =>
       textTracks.length > 0 ? available : sourceUnavailable,
     reset: () => {
       textTracks = [];

@@ -94,7 +94,7 @@ export const createYouTubeProvider = (
   function playerCapabilities(): PlayerCapabilities {
     return readyCapabilities(
       presentation.fullscreenAvailability(),
-      textTracks.textTrackAvailability()
+      textTracks.selectTextTrackAvailability()
     );
   }
 
