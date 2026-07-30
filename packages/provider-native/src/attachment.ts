@@ -4,12 +4,12 @@ import {
   providerEvent,
   toRanges,
   type EmitProviderState
-} from './media-helpers.js';
+} from './adapter-values.js';
 import type { NativePlayback } from './playback.js';
 import type { NativePresentation } from './presentation.js';
 import type { NativeTextTracks } from './text-tracks.js';
 
-export type NativeLifecycleDeps = {
+export type NativeAttachmentDeps = {
   readonly emit: EmitProviderState;
   // Recomputes the host's full `PlayerCapabilities` snapshot for the media
   // state published on attach/ready.
@@ -31,7 +31,7 @@ export type NativeLifecycleDeps = {
 // wires every seam's event handlers to the media element (and its document)
 // on attach, unwires them on destroy, and publishes the media-state and
 // dimension snapshots that are not driven by any one seam's state.
-export type NativeLifecycle = {
+export type NativeAttachment = {
   readonly attach: () => void;
   readonly load: () => void;
   readonly destroy: () => void;
@@ -41,7 +41,7 @@ export type NativeLifecycle = {
   ) => () => void;
 };
 
-export const createNativeLifecycle = (
+export const createNativeAttachment = (
   media: HTMLVideoElement,
   {
     emit,
@@ -50,8 +50,8 @@ export const createNativeLifecycle = (
     presentation,
     textTracks,
     clearStateListeners
-  }: NativeLifecycleDeps
-): NativeLifecycle => {
+  }: NativeAttachmentDeps
+): NativeAttachment => {
   const ownerDocument = media.ownerDocument;
   const dimensionListeners = new Set<
     (dimensions: MediaDimensions | undefined) => void

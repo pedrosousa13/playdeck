@@ -6,7 +6,7 @@ import {
   runCommand,
   withinMediaBounds,
   type EmitProviderState
-} from './media-helpers.js';
+} from './adapter-values.js';
 
 export type NativePlaybackOptions = {
   readonly loop?: boolean;

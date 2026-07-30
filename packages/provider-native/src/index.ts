@@ -4,8 +4,8 @@ import type {
   ProviderEvent,
   ProviderStateListener
 } from '@reely/core';
-import { createNativeLifecycle } from './lifecycle.js';
-import { available } from './media-helpers.js';
+import { createNativeAttachment } from './attachment.js';
+import { available } from './adapter-values.js';
 import {
   createNativePlayback,
   type NativePlaybackOptions
@@ -52,7 +52,7 @@ export const createNativeProvider = (
 
   const playback = createNativePlayback(media, options, {
     emit,
-    isDestroyed: () => lifecycle.isDestroyed()
+    isDestroyed: () => attachment.isDestroyed()
   });
 
   const presentation = createNativePresentation(media, {
@@ -83,7 +83,7 @@ export const createNativeProvider = (
     };
   }
 
-  const lifecycle = createNativeLifecycle(media, {
+  const attachment = createNativeAttachment(media, {
     emit,
     getCapabilities: mediaCapabilities,
     playback,
@@ -94,15 +94,15 @@ export const createNativeProvider = (
 
   return {
     provider: 'native',
-    attach: lifecycle.attach,
-    load: lifecycle.load,
-    destroy: lifecycle.destroy,
+    attach: attachment.attach,
+    load: attachment.load,
+    destroy: attachment.destroy,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     subscribeCues: textTracks.subscribeCues,
-    subscribeDimensions: lifecycle.subscribeDimensions,
+    subscribeDimensions: attachment.subscribeDimensions,
     play: playback.play,
     pause: playback.pause,
     seekTo: playback.seekTo,

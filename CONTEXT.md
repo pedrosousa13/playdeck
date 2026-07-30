@@ -57,6 +57,19 @@ The source whose media element may mount, because its activation identity
 matches the one activation committed to.
 _Avoid_: eligible media
 
+### Adapters
+
+**Seam**:
+A boundary along which a provider adapter's implementation splits — playback,
+presentation, tracks and captions, attachment. Each seam takes its dependencies
+explicitly instead of sharing the adapter's whole scope.
+_Avoid_: layer, subsystem
+
+**Attachment**:
+An adapter's binding to its media element — attach, load, listener wiring and
+teardown. Not Lifecycle, which is what the player state reports.
+_Avoid_: adapter lifecycle, setup
+
 ### Styling
 
 See [ADR-0001](docs/adr/0001-structural-css-ships-inline.md) for why structural
