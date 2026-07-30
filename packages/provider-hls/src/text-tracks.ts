@@ -48,7 +48,7 @@ export type HlsTextTracksDeps = {
   readonly capabilitiesPatch: () => ProviderStatePatch;
 };
 
-// The hls.js subtitle and track seam: track discovery, selection, cue
+// The hls.js tracks-and-captions seam: track discovery, selection, cue
 // windowing and delivery, keyed to hls.js's own subtitleTracks/subtitleTrack
 // surface instead of `<track>` elements. Mirrors
 // packages/provider-native/src/text-tracks.ts's shape (held selection + "has

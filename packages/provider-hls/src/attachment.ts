@@ -38,7 +38,7 @@ export type HlsAttachmentDeps = {
 // engine — attach, load on either engine path, hls.js instance start with
 // its event wiring, and teardown. Owns the attached/destroyed flags, the
 // live engine instance, the cached hls.js constructor, and the start
-// generation, and exposes the lifecycle guards every other seam depends on.
+// generation, and exposes the attachment guards every other seam depends on.
 export type HlsAttachment = {
   readonly attach: () => void;
   readonly load: () => Promise<void>;
