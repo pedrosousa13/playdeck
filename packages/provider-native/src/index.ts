@@ -22,7 +22,10 @@ import {
   unsupported,
   withinMediaBounds
 } from './media-helpers.js';
-import { createNativeTextTracks, type NativeTextTracks } from './text-tracks';
+import {
+  createNativeTextTracks,
+  type NativeTextTracks
+} from './text-tracks.js';
 
 type WebKitPresentationMode = 'inline' | 'picture-in-picture' | 'fullscreen';
 
@@ -202,10 +205,8 @@ export const createNativeProvider = (
     emit({ capabilities: mediaCapabilities() });
   };
 
-  const textTracks: NativeTextTracks = createNativeTextTracks(
-    media,
-    (patch) => emit(patch),
-    () => mediaCapabilities()
+  const textTracks: NativeTextTracks = createNativeTextTracks(media, emit, () =>
+    mediaCapabilities()
   );
 
   function mediaCapabilities(): PlayerCapabilities {
@@ -219,9 +220,7 @@ export const createNativeProvider = (
       // consumer gating a quality menu on it waited on a verdict that never
       // arrived.
       selectQuality: { status: 'unavailable', reason: 'source' },
-      selectTextTrack: textTracks.hasSelectableTextTracks()
-        ? available
-        : { status: 'unavailable', reason: 'source' },
+      selectTextTrack: textTracks.selectTextTrackAvailability(),
       fullscreen: fullscreenAvailability(),
       pictureInPicture: pictureInPictureAvailability(),
       airPlay: airPlayAvailability(),

@@ -1,4 +1,5 @@
 import type {
+  Availability,
   CaptionRendering,
   CommandResult,
   PlayerCapabilities,
@@ -9,6 +10,7 @@ import type {
   TextTrackReadiness
 } from '@reely/core';
 import { textTrackLabel } from '@reely/core';
+import { available } from './media-helpers.js';
 
 // The `default` IDL attribute lives on HTMLTrackElement per spec, but engines
 // commonly surface it on the associated TextTrack too; treat it as optional.
@@ -28,7 +30,9 @@ export type NativeTextTracks = {
   readonly discover: () => void;
   readonly attachListeners: () => void;
   readonly destroy: () => void;
-  readonly hasSelectableTextTracks: () => boolean;
+  // The `selectTextTrack` facet of the host's capabilities: available only
+  // while the current source exposes at least one caption/subtitle track.
+  readonly selectTextTrackAvailability: () => Availability;
 };
 
 const isCaptionTrackKind = (kind: string): kind is TextTrackKind =>
@@ -305,6 +309,9 @@ export const createNativeTextTracks = (
       detachCueChangeTrack();
       cueListeners.clear();
     },
-    hasSelectableTextTracks: () => hasSelectableTextTracks
+    selectTextTrackAvailability: () =>
+      hasSelectableTextTracks
+        ? available
+        : { status: 'unavailable', reason: 'source' }
   };
 };
