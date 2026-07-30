@@ -47,9 +47,14 @@ Whether media is loaded and playable. Derived from activation until a provider
 attaches, and the provider's own from then on.
 _Avoid_: status, phase
 
+**Activation identity**:
+The source, loading strategy and configuration that together decide whether an
+activation still applies. Change any of the three and the commitment made under
+the old one is retired.
+
 **Committed source**:
-The source whose media element may mount, because its identity matches the one
-activation committed to.
+The source whose media element may mount, because its activation identity
+matches the one activation committed to.
 _Avoid_: eligible media
 
 ### Styling

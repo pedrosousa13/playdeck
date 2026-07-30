@@ -359,11 +359,11 @@ test('source changes invalidate a pending loader', async () => {
   expect(stale.counts()).toMatchObject({ attachCount: 0, loadCount: 0 });
 });
 
-test('interaction eligibility is dormant during the first commit of a new source', async () => {
+test('a new source is not committed on the render that introduces it', async () => {
   const pending = deferred<ProviderAdapter>();
   const controller = new PlayerController();
   let activateFromInteraction!: () => void;
-  let renderedSecondSourceAsEligible: boolean | undefined;
+  let secondSourceCommitted: boolean | undefined;
   mockedLoadProvider.mockReturnValue(pending.promise);
   const onActivate = (activate: () => void) => {
     activateFromInteraction = activate;
@@ -385,7 +385,7 @@ test('interaction eligibility is dormant during the first commit of a new source
       loading="interaction"
       onActivate={onActivate}
       onLayout={() => {
-        renderedSecondSourceAsEligible =
+        secondSourceCommitted =
           screen.queryByTestId('activation-media')?.dataset.source ===
           '/second.mp4';
       }}
@@ -393,7 +393,7 @@ test('interaction eligibility is dormant during the first commit of a new source
     />
   );
 
-  expect(renderedSecondSourceAsEligible).toBe(false);
+  expect(secondSourceCommitted).toBe(false);
 });
 
 test('a stale viewport callback cannot activate after switching to interaction', async () => {
