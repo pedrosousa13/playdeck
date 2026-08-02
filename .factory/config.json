@@ -1,0 +1,10 @@
+{
+  "stampVersion": "2.0.0",
+  "tracker": {
+    "kind": "linear"
+  },
+  "merge": {
+    "policy": "squash"
+  },
+  "attackSurface": true
+}
