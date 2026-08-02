@@ -182,23 +182,11 @@ export const Media = ({
     return null;
   }
 
-  if (source.source.type === 'youtube') {
-    // A plain mount for the YouTube iframe. The provider chrome inside the
-    // iframe is the single control layer; Reely renders nothing over it.
-    return (
-      <div
-        data-reely-part="media"
-        key={sourceKey(source)}
-        ref={registerMedia}
-        style={{ ...mediaStyle, ...style }}
-      />
-    );
-  }
-
-  if (source.source.type === 'vimeo') {
-    // A mount for the Vimeo iframe embed. When chromeless controls are
-    // plan-gated, Vimeo's own controls stay the single layer; Reely renders
-    // nothing over the embed.
+  // A plain mount for an iframe-embedding provider to attach into. Both are the
+  // same element for the same reason: the chrome inside the iframe is the
+  // single control layer, so Reely renders nothing over it — YouTube always,
+  // Vimeo whenever chromeless controls are plan-gated.
+  if (source.source.type === 'youtube' || source.source.type === 'vimeo') {
     return (
       <div
         data-reely-part="media"
