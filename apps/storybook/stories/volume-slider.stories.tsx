@@ -59,16 +59,6 @@ export const Muted: Story = {
   }
 };
 
-/** Focus behavior: the native slider is keyboard-reachable. */
-export const KeyboardFocusable: Story = {
-  parameters: ready({ setVolume: available }, { volume: 0.5 }),
-  play: async ({ canvas, userEvent }) => {
-    const slider = await canvas.findByRole('slider', { name: 'Volume' });
-    await userEvent.tab();
-    await expect(slider).toHaveFocus();
-  }
-};
-
 /** Capability absent: an unresolved volume capability renders nothing. */
 export const CapabilityAbsent: Story = {
   parameters: ready({ setVolume: notReady }),

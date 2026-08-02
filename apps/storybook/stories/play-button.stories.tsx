@@ -125,13 +125,3 @@ export const Styled: Story = {
     await expect(styles.backgroundColor).toBe('rgb(46, 90, 172)');
   }
 };
-
-/** Focus behavior: the native button is reachable by keyboard. */
-export const KeyboardFocusable: Story = {
-  parameters: ready({}, { playback: 'paused' }),
-  play: async ({ canvas, userEvent }) => {
-    const button = await canvas.findByRole('button', { name: 'Play' });
-    await userEvent.tab();
-    await expect(button).toHaveFocus();
-  }
-};

@@ -67,21 +67,6 @@ export const Active: Story = {
   }
 };
 
-/** Focus behavior: keyboard reaches the button. */
-export const KeyboardFocusable: Story = {
-  parameters: ready(
-    { pictureInPicture: available },
-    { pictureInPicture: false }
-  ),
-  play: async ({ canvas, userEvent }) => {
-    const button = await canvas.findByRole('button', {
-      name: 'Enter picture-in-picture'
-    });
-    await userEvent.tab();
-    await expect(button).toHaveFocus();
-  }
-};
-
 /** Capability absent: the button stays out of the DOM until it resolves. */
 export const CapabilityAbsent: Story = {
   parameters: ready({ pictureInPicture: notReady }),

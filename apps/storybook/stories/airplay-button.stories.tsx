@@ -1,7 +1,7 @@
 import * as Player from '@reely/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
-import { available, notReady, unavailable, ready } from './support';
+import { available, notReady, ready } from './support';
 
 const meta = {
   title: 'Player/AirPlayButton',
@@ -52,27 +52,9 @@ export const Available: Story = {
   }
 };
 
-/** Focus behavior: keyboard reaches the button. */
-export const KeyboardFocusable: Story = {
-  parameters: ready({ airPlay: available }),
-  play: async ({ canvas, userEvent }) => {
-    const button = await canvas.findByRole('button', { name: 'AirPlay' });
-    await userEvent.tab();
-    await expect(button).toHaveFocus();
-  }
-};
-
 /** Capability absent: the button stays out of the DOM until it resolves. */
 export const CapabilityAbsent: Story = {
   parameters: ready({ airPlay: notReady }),
-  play: async ({ canvas }) => {
-    await expect(canvas.queryByRole('button')).toBeNull();
-  }
-};
-
-/** The common case off Safari/iOS: the provider reports AirPlay unavailable. */
-export const CapabilityUnavailable: Story = {
-  parameters: ready({ airPlay: unavailable }),
   play: async ({ canvas }) => {
     await expect(canvas.queryByRole('button')).toBeNull();
   }

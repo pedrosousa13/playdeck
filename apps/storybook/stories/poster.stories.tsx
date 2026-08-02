@@ -36,9 +36,9 @@ const meta = {
         component: [
           '`Player.Poster` is the pre-playback surface; wrap a `Player.PosterImage` or arbitrary children.',
           '',
-          '**Contract** — `data-reely-part="poster"`, `data-state`.',
+          '**Contract** — `data-reely-part="poster"`, `data-state="visible" | "hidden"`. The state is derived, so the `visibility` it computes is written after the consumer\'s `style` prop and cannot be overridden.',
           '',
-          '**Note** — children replace the default image.',
+          "**Note** — children replace the default image. The bitmap's own load lifecycle (`idle`/`loading`/`loaded`/`error`) belongs to `Player.PosterImage` and is documented on its page.",
           '',
           '**Styling** — plain CSS against the parts; the primitive keeps its own geometry and `visibility`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
           '```css',
@@ -54,46 +54,17 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** No source configured: the image idles without requesting anything. */
-export const Idle: Story = {
-  render: () => (
-    <Frame>
-      <Player.Poster>
-        <Player.PosterImage />
-      </Player.Poster>
-    </Frame>
-  ),
-  play: async ({ canvasElement }) => {
-    await expect(posterImage(canvasElement)).toHaveAttribute(
-      'data-state',
-      'idle'
-    );
-  }
-};
-
 /**
- * The dev server holds `/__reely__/pending.png` open forever, so the image
- * stays in `loading` deterministically. In a static Storybook build the URL
- * 404s and this story falls through to the error state instead.
+ * Poster's own contract, which is the surface rather than the bitmap inside it:
+ * the part name, the `data-state` it publishes, the `aria-hidden` that keeps a
+ * decorative overlay out of the accessibility tree, and the `visibility` it
+ * derives from that state.
+ *
+ * Only `visible` is reachable here. `hidden` is set from a real `loadeddata`
+ * on a real media element, which the mock provider never fires — so the
+ * transition is covered where it can be driven for real, in `e2e/poster.spec.ts`.
  */
-export const Loading: Story = {
-  render: () => (
-    <Frame>
-      <Player.Poster>
-        <Player.PosterImage src="/__reely__/pending.png" />
-      </Player.Poster>
-    </Frame>
-  ),
-  play: async ({ canvasElement }) => {
-    await expect(posterImage(canvasElement)).toHaveAttribute(
-      'data-state',
-      'loading'
-    );
-  }
-};
-
-/** A data-URI poster resolves without any request leaving the page. */
-export const Loaded: Story = {
+export const Default: Story = {
   render: () => (
     <Frame>
       <Player.Poster>
@@ -102,25 +73,14 @@ export const Loaded: Story = {
     </Frame>
   ),
   play: async ({ canvasElement }) => {
-    await waitFor(() =>
-      expect(posterImage(canvasElement)).toHaveAttribute('data-state', 'loaded')
+    const poster = canvasElement.querySelector<HTMLElement>(
+      '[data-reely-part="poster"]'
     );
-  }
-};
-
-/** An unparsable data URI fails to decode without touching the network. */
-export const ErrorState: Story = {
-  name: 'Error',
-  render: () => (
-    <Frame>
-      <Player.Poster>
-        <Player.PosterImage src="data:image/png;base64,AAAA" />
-      </Player.Poster>
-    </Frame>
-  ),
-  play: async ({ canvasElement }) => {
-    await waitFor(() =>
-      expect(posterImage(canvasElement)).toHaveAttribute('data-state', 'error')
+    if (!poster) throw new Error('Expected a poster in the story.');
+    await expect(poster).toHaveAttribute('data-state', 'visible');
+    await expect(poster).toHaveAttribute('aria-hidden', 'true');
+    await expect(globalThis.getComputedStyle(poster).visibility).toBe(
+      'visible'
     );
   }
 };

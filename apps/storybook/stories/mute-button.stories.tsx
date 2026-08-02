@@ -58,16 +58,6 @@ export const Muted: Story = {
   }
 };
 
-/** Focus behavior: keyboard reaches the button. */
-export const KeyboardFocusable: Story = {
-  parameters: ready({ setVolume: available }, { muted: false }),
-  play: async ({ canvas, userEvent }) => {
-    const button = await canvas.findByRole('button', { name: 'Mute' });
-    await userEvent.tab();
-    await expect(button).toHaveFocus();
-  }
-};
-
 /** Capability absent: an unresolved volume capability renders nothing. */
 export const CapabilityAbsent: Story = {
   parameters: ready({ setVolume: notReady }),

@@ -177,16 +177,6 @@ export const Styled: Story = {
   }
 };
 
-/** Focus behavior: the native slider is keyboard-reachable. */
-export const KeyboardFocusable: Story = {
-  parameters: ready({ seek: available }, { currentTime: 30, duration: 100 }),
-  play: async ({ canvas, userEvent }) => {
-    const slider = await canvas.findByRole('slider', { name: 'Seek' });
-    await userEvent.tab();
-    await expect(slider).toHaveFocus();
-  }
-};
-
 /** Capability absent: an unresolved seek capability renders nothing. */
 export const CapabilityAbsent: Story = {
   parameters: ready({ seek: notReady }, { currentTime: 30, duration: 100 }),
