@@ -8,7 +8,7 @@ import {
   screen,
   waitFor
 } from '@testing-library/react';
-import { createRef, type ReactNode } from 'react';
+import { createRef, Profiler, type ReactNode } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   type Availability,
@@ -431,6 +431,44 @@ describe('Time', () => {
       duration: 100
     });
     expect(screen.getByText('-1:10')).toBeDefined();
+  });
+
+  // A duration readout's text changes once per source, but `timeupdate` fires
+  // several times a second. Selecting `currentTime` regardless of `type` woke
+  // it on every one of them, so the type now decides what it subscribes to.
+  test('a duration readout does not re-render as the playhead moves', () => {
+    const onRender = vi.fn();
+    const { emit } = renderWithPlayer(
+      <Profiler id="duration" onRender={onRender}>
+        <Player.Time type="duration" />
+      </Profiler>,
+      { currentTime: 10, duration: 3725 }
+    );
+    const initialRenders = onRender.mock.calls.length;
+
+    emit({ currentTime: 11 });
+    emit({ currentTime: 12 });
+
+    expect(screen.getByText('1:02:05')).toBeDefined();
+    expect(onRender).toHaveBeenCalledTimes(initialRenders);
+  });
+
+  // The converse, so the test above cannot pass because the probe is blind:
+  // the two types that do track the playhead must still follow it.
+  test('current and remaining readouts do re-render as the playhead moves', () => {
+    const onRender = vi.fn();
+    const { emit } = renderWithPlayer(
+      <Profiler id="current" onRender={onRender}>
+        <Player.Time />
+      </Profiler>,
+      { currentTime: 10, duration: 3725 }
+    );
+    const initialRenders = onRender.mock.calls.length;
+
+    emit({ currentTime: 11 });
+
+    expect(screen.getByText('0:11')).toBeDefined();
+    expect(onRender.mock.calls.length).toBeGreaterThan(initialRenders);
   });
 });
 

@@ -244,8 +244,12 @@ export type TimeProps = ComponentPropsWithRef<'time'> & {
 };
 
 export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
+  // `duration` readouts do not select `currentTime`. The selected object is
+  // shallow-compared, so pulling a field that moves on every `timeupdate` would
+  // re-render a readout whose text changes once per source — several times a
+  // second, for nothing. The other two types genuinely track the playhead.
   const { currentTime, duration, provider } = usePlayerState((state) => ({
-    currentTime: state.currentTime,
+    currentTime: type === 'duration' ? 0 : state.currentTime,
     duration: state.duration,
     provider: state.provider
   }));
