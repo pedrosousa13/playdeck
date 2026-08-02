@@ -27,11 +27,11 @@ When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the 
 
 Alongside its state label, every issue gets exactly one category label. These are scoped the same way as the state labels above:
 
-| Label         | Meaning                              |
-| ------------- | ------------------------------------ |
-| `Feature`     | New capability                       |
-| `Improvement` | Enhancement to existing behavior     |
-| `Bug`         | Something is wrong                   |
+| Label         | Meaning                          |
+| ------------- | -------------------------------- |
+| `Feature`     | New capability                   |
+| `Improvement` | Enhancement to existing behavior |
+| `Bug`         | Something is wrong               |
 
 Use these exact names — not `enhancement`, not lowercase `bug`.
 
@@ -73,9 +73,9 @@ section.
 **Started state.** One label, orthogonal to everything above — it is not a
 triage state, and an issue carrying it still carries exactly one of the five:
 
-| Label         | Meaning                                            |
-| ------------- | -------------------------------------------------- |
-| `in-progress` | A session has picked this issue up and is on it    |
+| Label         | Meaning                                         |
+| ------------- | ----------------------------------------------- |
+| `in-progress` | A session has picked this issue up and is on it |
 
 **Priority.** Exactly one per issue, and what makes the Queue's order
 deterministic. Highest first; an issue with none sorts last:
