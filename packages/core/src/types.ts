@@ -80,7 +80,7 @@ export type PlayerLiveState = {
   readonly atLiveEdge: boolean;
 } | null;
 
-export type PlayerProvider = 'native' | 'hls' | 'youtube' | 'vimeo';
+export type PlayerProvider = 'native' | 'hls' | 'youtube' | 'vimeo' | 'wistia';
 
 export type HlsEngine = 'native' | 'hls.js';
 
@@ -218,8 +218,15 @@ export type YouTubeSource = { type: 'youtube'; videoId: string };
 
 export type VimeoSource = { type: 'vimeo'; videoId: string; hash?: string };
 
+export type WistiaSource = { type: 'wistia'; mediaId: string };
+
 export type PlayerSource =
-  string | VideoFileSource | HlsSource | YouTubeSource | VimeoSource;
+  | string
+  | VideoFileSource
+  | HlsSource
+  | YouTubeSource
+  | VimeoSource
+  | WistiaSource;
 
 export type ResolvedPlayerSource = Exclude<PlayerSource, string>;
 

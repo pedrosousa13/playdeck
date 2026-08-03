@@ -6,6 +6,7 @@ import type {
   SourceDetectionResult,
   VideoFileSource,
   VimeoSource,
+  WistiaSource,
   YouTubeSource
 } from './types.js';
 
@@ -25,6 +26,9 @@ const isVimeoVideoId = (value: unknown): value is string =>
   isNonEmptyString(value) && /^\d+$/.test(value);
 
 const isVimeoHash = (value: unknown): value is string =>
+  isNonEmptyString(value) && /^[A-Za-z0-9]+$/.test(value);
+
+const isWistiaMediaId = (value: unknown): value is string =>
   isNonEmptyString(value) && /^[A-Za-z0-9]+$/.test(value);
 
 const failure = (
@@ -63,6 +67,14 @@ const isVimeoHost = (hostname: string): boolean =>
   hostname === 'vimeo.com' ||
   hostname === 'www.vimeo.com' ||
   hostname === 'player.vimeo.com';
+
+// The account subdomain is per-customer and cannot be enumerated, so this
+// matches the registrable suffix instead of a fixed host list.
+const isWistiaHost = (hostname: string): boolean =>
+  hostname === 'wistia.com' ||
+  hostname === 'wistia.net' ||
+  hostname.endsWith('.wistia.com') ||
+  hostname.endsWith('.wistia.net');
 
 const sourceFromYouTubeUrl = (url: URL): YouTubeSource | undefined => {
   if (!isYouTubeHost(url.hostname)) return undefined;
@@ -113,6 +125,22 @@ const sourceFromVimeoUrl = (url: URL): VimeoSource | undefined => {
   return { type: 'vimeo', videoId, ...(hash ? { hash } : {}) };
 };
 
+const sourceFromWistiaUrl = (url: URL): WistiaSource | undefined => {
+  if (!isWistiaHost(url.hostname)) return undefined;
+
+  const embedIframeMatch = /^\/embed\/iframe\/([A-Za-z0-9]+)$/.exec(
+    url.pathname
+  );
+  const embedMediaMatch = /^\/embed\/medias\/([A-Za-z0-9]+)$/.exec(
+    url.pathname
+  );
+  const mediaPageMatch = /^\/medias\/([A-Za-z0-9]+)$/.exec(url.pathname);
+  const mediaId =
+    embedIframeMatch?.[1] ?? embedMediaMatch?.[1] ?? mediaPageMatch?.[1];
+
+  return isWistiaMediaId(mediaId) ? { type: 'wistia', mediaId } : undefined;
+};
+
 const sourceFromExplicitObject = (
   input: Record<string, unknown>
 ): ResolvedPlayerSource | undefined => {
@@ -155,6 +183,10 @@ const sourceFromExplicitObject = (
     if (!isVimeoVideoId(input.videoId)) return undefined;
     if (input.hash !== undefined && !isVimeoHash(input.hash)) return undefined;
     return input as VimeoSource;
+  }
+
+  if (input.type === 'wistia') {
+    return isWistiaMediaId(input.mediaId) ? (input as WistiaSource) : undefined;
   }
 
   return undefined;
@@ -207,6 +239,12 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
       }
       if (isVimeoHost(url.hostname)) {
         const source = sourceFromVimeoUrl(url);
+        return source
+          ? { status: 'success', input, source }
+          : failure(input, 'malformed-string');
+      }
+      if (isWistiaHost(url.hostname)) {
+        const source = sourceFromWistiaUrl(url);
         return source
           ? { status: 'success', input, source }
           : failure(input, 'malformed-string');
