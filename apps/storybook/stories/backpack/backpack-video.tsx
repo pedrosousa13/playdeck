@@ -216,10 +216,18 @@ const BackpackVideoSurface = ({
           ) : (
             // The wrapper's own `<img>`, not `Player.PosterImage`: that
             // primitive hard-codes `alt=""` after its prop spread
-            // (`packages/react/src/poster.tsx:157-159`) because
-            // `Player.Poster` is `aria-hidden`, so an `alt` passed to it would
-            // be silently discarded — and `renderCustomImage` needs a
+            // (`packages/react/src/poster.tsx:157-159`), so an `alt` passed to
+            // it would be silently discarded — and `renderCustomImage` needs a
             // consumer element type in this position anyway.
+            //
+            // What this keeps is the DOM attribute, not an accessible name:
+            // `Player.Poster` sets `aria-hidden="true"`
+            // (`packages/react/src/poster.tsx:65`), so nothing rendered inside
+            // it reaches the accessibility tree either way. Backpack does
+            // expose the text — `VideoCoverImage` puts `role="button"` and
+            // `aria-label={alt}` on the cover container itself
+            // (`VideoCoverImage.tsx:99-101`) — where here the labelled
+            // affordance is the real button underneath, reading "Play video".
             <img alt={alt} className="ef-video-cover-image" src={coverSrc} />
           )}
         </Player.Poster>
@@ -254,10 +262,17 @@ const BackpackVideoSurface = ({
       <Player.ActivationButton
         aria-label={ariaLabel}
         className="ef-video-controller"
-        // Backpack's `onClickPreview={start}`: clicking the cover both loads
-        // the player and starts it, unlike a bare click on a coverless
-        // dormant player, which only loads it. Scoped to `showsCover` so the
-        // coverless stories keep their existing click-to-load-only behaviour.
+        // Backpack's `onClickPreview={start}`, which is optimistic: it flips
+        // Backpack's own playing state at click time rather than on the
+        // player's confirmation. Reely already starts playback from this
+        // click on its own — `activateFromInteraction` calls `activate(true)`
+        // (`packages/react/src/use-activation.ts:296`), which queues the play
+        // (`:235`) for the loader to replay once the provider's `load()`
+        // resolves (`:501-514`) — so what this handler adds is only the
+        // optimistic half: the cover comes off and `onPlayChange(true)` fires
+        // immediately instead of after the provider reports playing. Scoped
+        // to `showsCover` so the coverless stories keep reporting only what
+        // the player confirms.
         onClick={showsCover ? () => requestPlayback(true) : undefined}
       >
         {''}

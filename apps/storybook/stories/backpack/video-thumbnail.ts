@@ -55,9 +55,20 @@ export const useVideoThumbnail = (
   // so the effect below only ever runs for a source actually worth fetching.
   const endpoint =
     placeholderImageSrc || !url ? undefined : thumbnailEndpoint(url);
-  const [fetchedThumbnail, setFetchedThumbnail] = useState<string | undefined>(
-    undefined
-  );
+  // Keyed by the endpoint it was fetched for, so a thumbnail can never outlive
+  // the source it belongs to. The reset happens during render rather than from
+  // the effect below — the workbench exposes `url` as a control, and an effect
+  // would leave the previous provider's image on screen for a frame before the
+  // new lookup even starts.
+  const [fetched, setFetched] = useState<{
+    readonly endpoint: string | undefined;
+    readonly thumbnail: string | undefined;
+  }>({ endpoint, thumbnail: undefined });
+  if (fetched.endpoint !== endpoint) {
+    setFetched({ endpoint, thumbnail: undefined });
+  }
+  const fetchedThumbnail =
+    fetched.endpoint === endpoint ? fetched.thumbnail : undefined;
 
   useEffect(() => {
     if (!endpoint) return;
@@ -72,12 +83,15 @@ export const useVideoThumbnail = (
         if (controller.signal.aborted) return;
         const thumbnailUrl = (data as { thumbnail_url?: unknown } | undefined)
           ?.thumbnail_url;
-        setFetchedThumbnail(
-          typeof thumbnailUrl === 'string' ? thumbnailUrl : undefined
-        );
+        setFetched({
+          endpoint,
+          thumbnail: typeof thumbnailUrl === 'string' ? thumbnailUrl : undefined
+        });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setFetchedThumbnail(undefined);
+        if (!controller.signal.aborted) {
+          setFetched({ endpoint, thumbnail: undefined });
+        }
       });
 
     return () => controller.abort();

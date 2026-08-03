@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, fn, waitFor } from 'storybook/test';
-import { page } from 'vitest/browser';
 import {
   useMockPlayer,
   type MockPlayerParameters
@@ -55,15 +54,46 @@ const scaleOf = (element: Element): number => {
   return transform === 'none' ? 1 : new DOMMatrix(transform).a;
 };
 
+/** Vitest browser mode's page handle — see {@link hover} for why it is lazy. */
+type BrowserPage = Awaited<typeof import('vitest/browser')>['page'];
+
 /**
  * Real `:hover`, not `userEvent.hover`'s dispatched events: a real browser
  * only matches `:hover` from its own hit-testing against actual pointer
  * position, which a synthetic (untrusted) event never updates. Vitest's
  * browser-mode locator drives the underlying automation provider (Playwright)
  * instead, which moves a real pointer.
+ *
+ * `vitest/browser` cannot be a static import. It is a virtual module that
+ * exists only while Vitest browser mode is running; everywhere else the
+ * specifier resolves to the stub shipped on disk
+ * (`vitest/browser/context.js`), whose body is a bare `throw`. Imported at
+ * module scope it would take this whole story file down in `pnpm dev`, and in
+ * the static build — where the `throw` is tree-shaken and its `page` export
+ * folds to `null` — it would leave a `null.elementLocator(...)` call to blow up
+ * when the story renders. Resolved from inside `play` instead: under
+ * `pnpm test:storybook` it always yields Playwright's driver, so the callers
+ * below always assert; in the workbench it yields nothing and they skip the
+ * settled-transform check, where a viewer hovers with a real pointer anyway.
  */
-const hover = (element: Element): Promise<void> =>
-  page.elementLocator(element).hover();
+const browserPage = async (): Promise<BrowserPage | undefined> => {
+  try {
+    return (await import('vitest/browser')).page ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Moves a real pointer over `element`. `false` — the caller skips whatever it
+ * meant to observe — when no automation driver is available.
+ */
+const hover = async (element: Element): Promise<boolean> => {
+  const driver = await browserPage();
+  if (!driver) return false;
+  await driver.elementLocator(element).hover();
+  return true;
+};
 
 /**
  * Installs the workbench's mock provider into the wrapper's own `Player.Root`
@@ -350,8 +380,9 @@ export const CustomCoverImage: Story = {
     // carries the CSS hover rule instead.
     const player = canvasElement.querySelector('.ef-video-player');
     await expect(player).not.toBeNull();
-    await hover(player as Element);
-    await waitFor(() => expect(scaleOf(cover)).toBeGreaterThan(1));
+    if (await hover(player as Element)) {
+      await waitFor(() => expect(scaleOf(cover)).toBeGreaterThan(1));
+    }
   }
 };
 
@@ -402,8 +433,9 @@ export const WithoutHoverEffect: Story = {
 
     const player = canvasElement.querySelector('.ef-video-player');
     await expect(player).not.toBeNull();
-    await hover(player as Element);
-    await waitFor(() => expect(scaleOf(cover)).toBe(1));
+    if (await hover(player as Element)) {
+      await waitFor(() => expect(scaleOf(cover)).toBe(1));
+    }
   }
 };
 
@@ -489,5 +521,48 @@ export const CoverYieldsToPlayback: Story = {
       expect(canvas.queryByAltText('custom cover image')).toBeNull()
     );
     await expect(args.onPlayChange).toHaveBeenLastCalledWith(true);
+  }
+};
+
+/**
+ * The other click target, pinned on its own: while the cover is up and no
+ * provider has attached, `Player.ActivationButton` is what the viewer clicks,
+ * and the wrapper hangs its own `onClick` on it (Backpack's
+ * `onClickPreview={start}`). That handler is the optimistic half — it removes
+ * the cover and reports `onPlayChange(true)` at click time, without waiting
+ * for the player to confirm anything — so this story pins exactly that, with
+ * neither a staged player nor a real one to confirm it.
+ *
+ * `mock://reely/unresolvable.mp4` is what keeps it deterministic and offline:
+ * the scheme is not `http(s)`, so Reely's source detection fails it, no
+ * provider is ever loaded and `Player.Media` mounts nothing — the same trick
+ * `PlaybackRequestedButNeverStarted` above uses. Clicking this button on
+ * `CustomCoverImage`'s resolvable Vimeo URL would instead load the real
+ * provider, which this suite forbids.
+ */
+export const CoverClickRequestsPlayback: Story = {
+  args: {
+    url: 'mock://reely/unresolvable.mp4',
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageDataUri,
+    alt: 'custom cover image'
+  },
+  parameters: { player: {} },
+  play: async ({ args, canvas, canvasElement, userEvent }) => {
+    await canvas.findByAltText('custom cover image');
+    const activate = await canvas.findByRole('button', { name: 'Play video' });
+    await expect(activate).toHaveAttribute('data-reely-part', 'activation');
+
+    await userEvent.click(activate);
+    await waitFor(() =>
+      expect(canvas.queryByAltText('custom cover image')).toBeNull()
+    );
+    await expect(args.onPlayChange).toHaveBeenLastCalledWith(true);
+    // Nothing confirmed playback — no provider can attach to this source — so
+    // the removal and the report came from the wrapper's own `onClick`.
+    await expect(
+      canvasElement.querySelector('[data-reely-part="media"]')
+    ).toBeNull();
   }
 };

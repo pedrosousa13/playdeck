@@ -116,6 +116,53 @@ describe('useVideoThumbnail', () => {
     expect(result.current).toBeUndefined();
   });
 
+  test('resolves a non-OK oEmbed response to undefined', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: () =>
+        Promise.resolve({ thumbnail_url: 'https://example.com/never.jpg' })
+    });
+    globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() =>
+      useVideoThumbnail('https://www.youtube.com/watch?v=mhN3E_hlWmU')
+    );
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(result.current).toBeUndefined();
+  });
+
+  test('drops the previous source thumbnail when the url changes', async () => {
+    const youtubeThumbnail = 'https://i.ytimg.com/vi/mhN3E_hlWmU/hqdefault.jpg';
+    const vimeoThumbnail = 'https://i.vimeocdn.com/video/336066147.jpg';
+    const fetch = vi.fn((endpoint: string) =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            thumbnail_url: endpoint.includes('vimeo')
+              ? vimeoThumbnail
+              : youtubeThumbnail
+          })
+      })
+    );
+    globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
+
+    const { rerender, result } = renderHook(
+      ({ url }: { url: string }) => useVideoThumbnail(url),
+      { initialProps: { url: 'https://www.youtube.com/watch?v=mhN3E_hlWmU' } }
+    );
+
+    await waitFor(() => expect(result.current).toBe(youtubeThumbnail));
+
+    // The previous provider's thumbnail must not survive the source change,
+    // not even until the new lookup lands.
+    rerender({ url: 'https://vimeo.com/336066147' });
+    expect(result.current).not.toBe(youtubeThumbnail);
+
+    await waitFor(() => expect(result.current).toBe(vimeoThumbnail));
+  });
+
   test('never calls fetch for a source with no endpoint', () => {
     const fetch = vi.fn();
     globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
