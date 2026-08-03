@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, fn, waitFor } from 'storybook/test';
+import { page } from 'vitest/browser';
 import {
   useMockPlayer,
   type MockPlayerParameters
@@ -22,6 +23,15 @@ import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 const vimeoUrl = 'https://vimeo.com/336066147';
 const youtubeUrl = 'https://www.youtube.com/watch?v=mhN3E_hlWmU';
 
+/**
+ * A cover image small enough to inline, standing in for Backpack's own
+ * `a.storyblok.com` cover photo: an external URL may never reach the DOM here
+ * (README's "Story conventions"), and a `data:` URI is the guard's documented
+ * escape hatch. `Real playback/BackpackVideo` uses Backpack's real image.
+ */
+const coverImageDataUri =
+  'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="4" height="3"%3E%3Crect width="4" height="3" fill="%23808080"/%3E%3C/svg%3E';
+
 const pausedPlayer = ready({}, { playback: 'paused' });
 const playingPlayer = ready({}, { playback: 'playing' });
 
@@ -34,6 +44,26 @@ const affordances = (canvasElement: HTMLElement): string[] =>
 
 const playIcon = (canvasElement: HTMLElement): Element | null =>
   canvasElement.querySelector('.ef-video-play-icon');
+
+/**
+ * The uniform scale factor of an element's computed `transform`: `1` for
+ * `none` or an identity matrix, greater than `1` once the hover-zoom rule in
+ * `backpack-video-css.ts` has applied.
+ */
+const scaleOf = (element: Element): number => {
+  const { transform } = getComputedStyle(element);
+  return transform === 'none' ? 1 : new DOMMatrix(transform).a;
+};
+
+/**
+ * Real `:hover`, not `userEvent.hover`'s dispatched events: a real browser
+ * only matches `:hover` from its own hit-testing against actual pointer
+ * position, which a synthetic (untrusted) event never updates. Vitest's
+ * browser-mode locator drives the underlying automation provider (Playwright)
+ * instead, which moves a real pointer.
+ */
+const hover = (element: Element): Promise<void> =>
+  page.elementLocator(element).hover();
 
 /**
  * Installs the workbench's mock provider into the wrapper's own `Player.Root`
@@ -279,5 +309,185 @@ export const WithClassName: Story = {
     await expect(player).toHaveClass('story-video');
     await expect(playIcon(canvasElement)).not.toBeNull();
     await expect(affordances(canvasElement)).toEqual(['BUTTON[Play video]']);
+  }
+};
+
+/**
+ * Backpack's `CustomCoverImage` args (its `a.storyblok.com` URL swapped for
+ * `coverImageDataUri`). Pristine mock player, so the cover sits over
+ * `Player.Poster` above `Player.ActivationButton` — nothing has attached yet.
+ * Pins: the cover renders with the caller's `alt` and `src`; `Player.Media`
+ * mounts nothing because no source is committed; and the hover-zoom rule
+ * settles the cover to a scale above `1`.
+ *
+ * Clicking through to activation is deliberately not exercised here: with a
+ * pristine player and this real, resolvable `url`, that click is exactly what
+ * commits the source and starts loading the real Vimeo provider (an iframe
+ * pointed at `player.vimeo.com` lands a moment later) — precisely what
+ * `Real playback/BackpackVideo` is for, and what this suite's offline guard
+ * forbids. `CoverYieldsToPlayback` below pins "clicking removes the cover"
+ * against a player that never needs to attach one for real.
+ */
+export const CustomCoverImage: Story = {
+  args: {
+    url: vimeoUrl,
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageDataUri,
+    alt: 'custom cover image'
+  },
+  parameters: { player: {} },
+  play: async ({ canvas, canvasElement }) => {
+    const cover = await canvas.findByAltText('custom cover image');
+    await expect(cover).toHaveAttribute('src', coverImageDataUri);
+    await expect(cover.closest('[data-reely-part="poster"]')).not.toBeNull();
+    await expect(
+      canvasElement.querySelector('[data-reely-part="media"]')
+    ).toBeNull();
+
+    // The cover itself is `pointer-events: none` (it sits inside
+    // `Player.Poster`), so the hover has to land on the player surface that
+    // carries the CSS hover rule instead.
+    const player = canvasElement.querySelector('.ef-video-player');
+    await expect(player).not.toBeNull();
+    await hover(player as Element);
+    await waitFor(() => expect(scaleOf(cover)).toBeGreaterThan(1));
+  }
+};
+
+/**
+ * The same over a YouTube source. The cover-removal and hover behavior are
+ * already pinned above, so this only pins that the cover renders and mounts
+ * no media over a different provider's URL.
+ */
+export const CustomCoverImageYouTube: Story = {
+  args: {
+    url: youtubeUrl,
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageDataUri,
+    alt: 'custom cover image'
+  },
+  parameters: { player: {} },
+  play: async ({ canvas, canvasElement }) => {
+    const cover = await canvas.findByAltText('custom cover image');
+    await expect(cover).toHaveAttribute('src', coverImageDataUri);
+    await expect(
+      canvasElement.querySelector('[data-reely-part="media"]')
+    ).toBeNull();
+  }
+};
+
+/**
+ * `hoverEffect: false` (Backpack's `WithoutHoverEffect`) sets
+ * `data-hover-effect="false"` on `Player.Poster` and the CSS hover rule in
+ * `backpack-video-css.ts` no longer matches, so hovering leaves the cover at
+ * its resting scale instead of zooming.
+ */
+export const WithoutHoverEffect: Story = {
+  args: {
+    url: vimeoUrl,
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageDataUri,
+    alt: 'custom cover image',
+    hoverEffect: false
+  },
+  parameters: { player: {} },
+  play: async ({ canvas, canvasElement }) => {
+    const cover = await canvas.findByAltText('custom cover image');
+    await expect(
+      canvasElement.querySelector('.ef-video-cover')
+    ).toHaveAttribute('data-hover-effect', 'false');
+
+    const player = canvasElement.querySelector('.ef-video-player');
+    await expect(player).not.toBeNull();
+    await hover(player as Element);
+    await waitFor(() => expect(scaleOf(cover)).toBe(1));
+  }
+};
+
+/**
+ * Backpack's `WithRenderCustomImage` element, verbatim: it spreads the
+ * wrapper's own `props` (`src`, `className` and the wrapper's `alt`) onto its
+ * `<img>` before setting its own `alt`, so its `alt` wins over the one passed
+ * to `BackpackVideo` — pinning that `renderCustomImage` hands the resolved
+ * cover through rather than rendering it itself.
+ */
+export const WithRenderCustomImage: Story = {
+  args: {
+    url: vimeoUrl,
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageDataUri,
+    renderCustomImage: (props) => (
+      <img
+        id="custom-framework-image"
+        {...props}
+        alt="custom framework element"
+      />
+    )
+  },
+  parameters: { player: {} },
+  play: async ({ canvasElement }) => {
+    const image = canvasElement.querySelector('#custom-framework-image');
+    await expect(image).toHaveAttribute('src', coverImageDataUri);
+    await expect(image).toHaveAttribute('alt', 'custom framework element');
+  }
+};
+
+/**
+ * Backpack's `YouTubeShortsVideoAndCustomCoverImage` args, minus
+ * `aspectRatios` (SIDEPRO-202). `light: false` pins that a caller-supplied
+ * `placeholderImageSrc` shows a cover regardless — the wrapper's own
+ * `hasCustomCoverImage` independence from `light`.
+ */
+export const YouTubeShortsVideoAndCustomCoverImage: Story = {
+  args: {
+    url: 'https://www.youtube.com/shorts/n3eC51ZaDlk',
+    muted: true,
+    light: false,
+    placeholderImageSrc: coverImageDataUri,
+    alt: 'custom cover image',
+    hoverEffect: true
+  },
+  parameters: { player: {} },
+  play: async ({ canvas }) => {
+    const cover = await canvas.findByAltText('custom cover image');
+    await expect(cover).toHaveAttribute('src', coverImageDataUri);
+  }
+};
+
+/**
+ * The other half of the acceptance criteria, deterministically: once the
+ * provider is ready (`pausedPlayer`), `Player.ActivationButton` renders
+ * nothing and the wrapper's own toggle is the only click target. Clicking it
+ * requests playback, which is enough to remove the cover — proving the cover
+ * yields to playback having started rather than to any particular click
+ * target, and doing so with a player that never has to attach a real
+ * provider, unlike a click on `CustomCoverImage`'s pristine activation
+ * button.
+ */
+export const CoverYieldsToPlayback: Story = {
+  args: {
+    url: vimeoUrl,
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageDataUri,
+    alt: 'custom cover image'
+  },
+  parameters: pausedPlayer,
+  play: async ({ args, canvas, canvasElement, userEvent }) => {
+    await canvas.findByAltText('custom cover image');
+    await expect(
+      canvasElement.querySelector('[data-reely-part="activation"]')
+    ).toBeNull();
+
+    const toggle = await canvas.findByRole('button', { name: 'Play video' });
+    await userEvent.click(toggle);
+    await waitFor(() =>
+      expect(canvas.queryByAltText('custom cover image')).toBeNull()
+    );
+    await expect(args.onPlayChange).toHaveBeenLastCalledWith(true);
   }
 };
