@@ -82,6 +82,12 @@ const config: StorybookConfig = {
             import.meta.url
           )
         ),
+        '@reely/provider-wistia': fileURLToPath(
+          new URL(
+            '../../../packages/provider-wistia/src/index.ts',
+            import.meta.url
+          )
+        ),
         '@reely/react': fileURLToPath(
           new URL('../../../packages/react/src/index.tsx', import.meta.url)
         )

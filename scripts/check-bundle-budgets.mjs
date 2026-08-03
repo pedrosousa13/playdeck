@@ -70,6 +70,11 @@ const targets = [
     name: '@reely/provider-vimeo',
     path: '../packages/provider-vimeo/dist/index.js',
     budget: null
+  },
+  {
+    name: '@reely/provider-wistia',
+    path: '../packages/provider-wistia/dist/index.js',
+    budget: null
   }
 ];
 

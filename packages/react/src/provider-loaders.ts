@@ -42,6 +42,13 @@ export const loadProvider = async ({
     const { createVimeoProvider } = await import('@reely/provider-vimeo');
     return createVimeoProvider(media, source);
   }
+  if (source.type === 'wistia') {
+    if (!media) {
+      throw new Error('The Wistia provider requires a media mount.');
+    }
+    const { createWistiaProvider } = await import('@reely/provider-wistia');
+    return createWistiaProvider(media, source);
+  }
   // Every known source type is handled above, so `source` narrows to `never`
   // here; read the type defensively for a runtime-only unknown source.
   const unknownType = (source as { type?: string }).type ?? 'unknown';

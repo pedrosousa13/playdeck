@@ -123,8 +123,8 @@ export const sourceKey = (source: ReturnType<typeof detectSource>): string =>
     ? JSON.stringify(source.source)
     : 'unsupported-source';
 
-// #150: the native <video> and the two iframe mounts are one layer wearing
-// three shapes, so all three state one geometry — filling the viewport they
+// #150: the native <video> and the three embed mounts are one layer wearing
+// four shapes, so all four state one geometry — filling the viewport they
 // are laid into.
 const mediaStyle: CSSProperties = {
   position: 'relative',
@@ -133,7 +133,7 @@ const mediaStyle: CSSProperties = {
   height: '100%'
 };
 
-// The two mounts are <div>s and need nothing more, but the native <video> is
+// The three mounts are <div>s and need nothing more, but the native <video> is
 // inline-level, so without `display: block` it sits on a text baseline and
 // hangs a descender gap below the frame. And the frame is content, so a box
 // that does not match its aspect ratio must letterbox rather than crop away
@@ -199,6 +199,21 @@ export const Media = ({
     // A mount for the Vimeo iframe embed. When chromeless controls are
     // plan-gated, Vimeo's own controls stay the single layer; Reely renders
     // nothing over the embed.
+    return (
+      <div
+        data-reely-part="media"
+        key={sourceKey(source)}
+        ref={registerMedia}
+        style={{ ...mediaStyle, ...style }}
+      />
+    );
+  }
+
+  if (source.source.type === 'wistia') {
+    // A mount for the `<wistia-player>` custom element the provider appends
+    // into it. Unlike YouTube and Vimeo, the embed is chromeless by default —
+    // the provider switches every Wistia control off by name — so Reely's own
+    // controls are the layer, which is what `customControls: available` says.
     return (
       <div
         data-reely-part="media"

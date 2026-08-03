@@ -1,0 +1,53 @@
+{
+  "name": "@reely/provider-wistia",
+  "version": "0.0.0",
+  "description": "Wistia player SDK provider for Reely.",
+  "keywords": [
+    "media",
+    "player",
+    "video",
+    "wistia"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/provider-wistia#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "directory": "packages/provider-wistia"
+  },
+  "bugs": {
+    "url": "https://github.com/pedrosousa13/reely/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "browserslist": [
+    "chrome >= 99",
+    "edge >= 99",
+    "firefox >= 97",
+    "safari >= 15.4",
+    "ios_saf >= 15.4"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.d.ts.map",
+    "!dist/.tsbuildinfo*"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@reely/core": "workspace:^",
+    "@wistia/wistia-player": "0.7.12"
+  },
+  "scripts": {
+    "build": "vite build && tsc -b",
+    "test": "vitest run --config ../../vitest.config.ts packages/provider-wistia/test"
+  }
+}

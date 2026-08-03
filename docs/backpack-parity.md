@@ -30,7 +30,7 @@ provider actually attaches.
 | `YouTubeVideo`                          | `Backpack parity/Video → YouTubeVideo` | `full`    | `youtube.com/watch?v=mhN3E_hlWmU`, muted. `Real playback/BackpackVideo → YouTube` attaches the provider and plays.                                                                                                                                                                                                   |
 | `YouTubeShortsVideo`                    | —                                      | `gap`     | SIDEPRO-202 — `aspectRatios: '9/16'` over a Shorts URL.                                                                                                                                                                                                                                                              |
 | `YouTubeShortsVideoAndCustomCoverImage` | —                                      | `gap`     | SIDEPRO-199 — `placeholderImageSrc` plus `alt` over a Shorts source. Its `aspectRatios: '9/16'` arrives with SIDEPRO-202.                                                                                                                                                                                            |
-| `WistiaVideo`                           | —                                      | `gap`     | SIDEPRO-205 — blocked on the Wistia provider, which SIDEPRO-198 builds.                                                                                                                                                                                                                                              |
+| `WistiaVideo`                           | —                                      | `gap`     | SIDEPRO-205 — the Wistia provider SIDEPRO-198 built is in place; only the wrapper story is missing.                                                                                                                                                                                                                  |
 | `WistiaWithPlayerConfig`                | —                                      | `gap`     | SIDEPRO-205 — `playerConfig.wistia` passthrough for `swatch` and `playerColor`.                                                                                                                                                                                                                                      |
 | `WithControls`                          | `Backpack parity/Video → WithControls` | `partial` | `controls: true` replaces the wrapper's click-to-toggle surface, which matches. What differs is the chrome: Backpack forwards `controls` to react-player and gets the provider's own controls, while the wrapper renders Reely's `Player.Controls`, because Reely renders its controls itself.                       |
 | `Loop`                                  | `Backpack parity/Video → Loop`         | `partial` | `controls: true`, `loop: true`. `loop` reaches `Player.Root` but never the provider: Reely forwards its native playback options to the HLS and native branches only, so a Vimeo or YouTube source is unaffected and the video does not loop. Tracked as SIDEPRO-210; this row converts under SIDEPRO-197 regardless. |
@@ -51,12 +51,12 @@ provider actually attaches.
 
 ## AutoplayVideo.stories.tsx
 
-| Backpack story               | Reely story | Status | Notes                                                                                                  |
-| ---------------------------- | ----------- | ------ | ------------------------------------------------------------------------------------------------------ |
-| `Default`                    | —           | `gap`  | SIDEPRO-203 — a `BackpackAutoplayVideo` composition that starts muted playback on viewport entry.      |
-| `WithCustomPlaceholderImage` | —           | `gap`  | SIDEPRO-203 — `placeholderImageSrc` shows until autoplay starts.                                       |
-| `WistiaVideo`                | —           | `gap`  | SIDEPRO-205 — Wistia autoplay through `playerConfig.wistia`; blocked on the provider from SIDEPRO-198. |
-| `InPage`                     | —           | `gap`  | SIDEPRO-203 — the scroll-container decorator that shows entry and exit.                                |
+| Backpack story               | Reely story | Status | Notes                                                                                                   |
+| ---------------------------- | ----------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| `Default`                    | —           | `gap`  | SIDEPRO-203 — a `BackpackAutoplayVideo` composition that starts muted playback on viewport entry.       |
+| `WithCustomPlaceholderImage` | —           | `gap`  | SIDEPRO-203 — `placeholderImageSrc` shows until autoplay starts.                                        |
+| `WistiaVideo`                | —           | `gap`  | SIDEPRO-205 — Wistia autoplay through `playerConfig.wistia`. The provider from SIDEPRO-198 is in place. |
+| `InPage`                     | —           | `gap`  | SIDEPRO-203 — the scroll-container decorator that shows entry and exit.                                 |
 
 ## VideoHoverPreview.stories.tsx
 

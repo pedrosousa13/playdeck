@@ -3,19 +3,19 @@
 A performant, composable, accessible React 19 media player with
 capability-aware providers.
 
-One API across native MP4/WebM, HLS (VOD and live), YouTube and Vimeo. The
-primitives are headless — no CSS is imported, nothing is rendered you did not
-compose — and every control is gated on what the active provider can actually
-do, so a control whose command cannot be honoured is absent rather than present
-and disabled.
+One API across native MP4/WebM, HLS (VOD and live), YouTube, Vimeo and Wistia.
+The primitives are headless — no CSS is imported, nothing is rendered you did
+not compose — and every control is gated on what the active provider can
+actually do, so a control whose command cannot be honoured is absent rather than
+present and disabled.
 
 <!-- example:quickstart -->
 
 ```tsx
 import * as Player from '@reely/react';
 
-// One API across MP4/WebM, HLS, YouTube and Vimeo: the source decides which
-// provider loads, and nothing else changes.
+// One API across MP4/WebM, HLS, YouTube, Vimeo and Wistia: the source decides
+// which provider loads, and nothing else changes.
 export const Clip = () => (
   <Player.Root source="https://example.com/clip.mp4">
     <Player.Viewport>
@@ -43,22 +43,23 @@ export const Clip = () => (
 | [`@reely/provider-hls`](packages/provider-hls)         | HLS via hls.js, or the browser's own, chosen per environment. |
 | [`@reely/provider-youtube`](packages/provider-youtube) | YouTube IFrame Player API.                                    |
 | [`@reely/provider-vimeo`](packages/provider-vimeo)     | Vimeo player SDK.                                             |
+| [`@reely/provider-wistia`](packages/provider-wistia)   | Wistia's Aurora `<wistia-player>` element.                    |
 
 Only `@reely/react` needs installing: it depends on the rest and loads each
 provider lazily, once source detection says the active source needs it. A
-consumer playing MP4 ships no YouTube, Vimeo or hls.js code in its initial
-graph.
+consumer playing MP4 ships no YouTube, Vimeo, Wistia or hls.js code in its
+initial graph.
 
 ## Honesty about providers
 
-The reason for the capability contract is that these four backends do not have
+The reason for the capability contract is that these five providers do not have
 parity, and pretending otherwise moves the surprise from build time to your
 users. Every capability answers `available`, `unknown`, or `unavailable` with a
 reason, and every provider difference that matters is measured against the real
 SDK rather than inferred from its documentation. YouTube will not honour a
 quality choice, Vimeo needs a paid plan for chromeless playback, YouTube's
-buffered range cannot see buffer loaded before you arrived: each package README
-says so, and so does the workbench.
+buffered range cannot see buffer loaded before you arrived, Wistia reports no
+buffered range at all: each package README says so, and so does the workbench.
 
 ## Docs
 
@@ -89,12 +90,12 @@ Packaging is verified against real tarballs (`pnpm test:packages`), bundle
 budgets are enforced (`pnpm test:budgets`), and a Next.js integration is built
 and driven in a browser (`pnpm test:integrations`).
 
-The `@real` e2e tests talk to live YouTube and Vimeo. They never run in CI, and
-there is no scheduled run either (#118): YouTube will not serve video to a
-runner's datacenter IP, so the result reported its opinion of that IP rather
-than whether our adapters are correct. Vimeo still plays there, but it runs on
-the same goodwill, so it goes the same way. Run them by hand when you touch a
-provider adapter:
+The `@real` e2e tests talk to live YouTube, Vimeo and Wistia. They never run in
+CI, and there is no scheduled run either (#118): YouTube will not serve video to
+a runner's datacenter IP, so the result reported its opinion of that IP rather
+than whether our adapters are correct. Vimeo and Wistia still play there, but
+they run on the same goodwill, so they go the same way. Run them by hand when
+you touch a provider adapter:
 
 ```sh
 REELY_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
