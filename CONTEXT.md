@@ -72,6 +72,14 @@ An adapter's binding to its media element — attach, load, listener wiring and
 teardown. Not Lifecycle, which is what the player state reports.
 _Avoid_: adapter lifecycle, setup
 
+**Aurora**:
+Wistia's current player generation — the `<wistia-player>` custom element the
+Wistia provider targets, and the only one it supports. Named here because the
+distinction is load-bearing: Wistia's legacy player (the `E-v1.js` script tag
+and `window._wq`) has a different API and a different embed, and the provider
+deliberately drives neither.
+_Avoid_: the Wistia SDK, the Wistia embed
+
 ### Styling
 
 See [ADR-0001](docs/adr/0001-structural-css-ships-inline.md) for why structural

@@ -52,7 +52,7 @@ initial graph.
 
 ## Honesty about providers
 
-The reason for the capability contract is that these five backends do not have
+The reason for the capability contract is that these five providers do not have
 parity, and pretending otherwise moves the surprise from build time to your
 users. Every capability answers `available`, `unknown`, or `unavailable` with a
 reason, and every provider difference that matters is measured against the real

@@ -1,40 +1,23 @@
 import type {
   Attributes,
-  MediaData,
   PlayerState,
   PublicApi
 } from '@wistia/wistia-player/dist/types/types/player-api-types.js';
 import type {
-  AFTER_REPLACE_EVENT_TYPE,
   API_READY_EVENT_TYPE,
-  BEFORE_REPLACE_EVENT_TYPE,
-  IMPL_CREATED_EVENT_TYPE,
-  LOADED_MEDIA_DATA_EVENT_TYPE,
-  MUTE_CHANGE_EVENT_TYPE,
-  PLAYER_COLOR_CHANGE_EVENT_TYPE,
-  WistiaPlayerEvents
+  MUTE_CHANGE_EVENT_TYPE
 } from '@wistia/wistia-player/dist/types/types/events.js';
 
 // Wistia's package has no `exports` map and points `types` at the element
-// class alone, so the handle, attribute, media and event declarations are
-// reachable only by their path inside `dist/types`. They are imported once,
-// here, and everything else in this package reads them through this module.
-export type { MediaData, PublicApi };
-
-// Wistia's own event declarations, re-exported rather than restated. Only two
-// of them describe an event this adapter listens for — the rest cover replace,
-// colour and impl-creation events it does not wire — but they are what a
-// consumer needs to type a listener it adds to the same element.
-export type {
-  AFTER_REPLACE_EVENT_TYPE,
-  API_READY_EVENT_TYPE,
-  BEFORE_REPLACE_EVENT_TYPE,
-  IMPL_CREATED_EVENT_TYPE,
-  LOADED_MEDIA_DATA_EVENT_TYPE,
-  MUTE_CHANGE_EVENT_TYPE,
-  PLAYER_COLOR_CHANGE_EVENT_TYPE,
-  WistiaPlayerEvents
-};
+// class alone, so the handle, attribute and event declarations are reachable
+// only by their path inside `dist/types`. They are imported once, here, and
+// everything else in this package reads them through this module.
+//
+// Only what this adapter drives is imported, and only what it drives is
+// re-exported. Wistia also declares replace, colour, impl-creation and
+// media-data types; publishing those would put a `playerConfig` surface this
+// package does not wire into its public API ahead of the issue that wires it.
+export type { PublicApi };
 
 // The payloads of the two declared events this adapter reads. Naming the
 // detail separately is what lets a handler cite Wistia's own field names

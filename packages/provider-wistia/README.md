@@ -60,23 +60,21 @@ are the only ones on screen, and `dnt` is on unless you turn it off.
 
 ## Exports
 
-| Export                                                                                                                                                                                                 | What it is                                                                                                               |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `createWistiaProvider`                                                                                                                                                                                 | Builds the adapter over a mount element and a `WistiaSource`.                                                            |
-| `loadWistiaPlayer`                                                                                                                                                                                     | Loads the player bundle and resolves the `<wistia-player>` registration. Cached across players; takes your own importer. |
-| `resetWistiaPlayerLoader`                                                                                                                                                                              | Drops the cached registration — for tests that need a clean load.                                                        |
-| `API_READY_TIMEOUT_MS`                                                                                                                                                                                 | How long the `api-ready` handshake is given before the attach reports an error.                                          |
-| `WistiaProviderOptions`                                                                                                                                                                                | `controls`, `dnt`, `loop`.                                                                                               |
-| `WistiaProviderAdapter`                                                                                                                                                                                | The adapter's own type.                                                                                                  |
-| `WistiaMountElement`                                                                                                                                                                                   | What the adapter can mount into.                                                                                         |
-| `WistiaPlayerElement`                                                                                                                                                                                  | The `<wistia-player>` element as this adapter types it.                                                                  |
-| `WistiaPlayerApi`                                                                                                                                                                                      | The slice of Wistia's `PublicApi` this adapter drives.                                                                   |
-| `WistiaPlayerState`                                                                                                                                                                                    | Wistia's own `beforeplay` / `playing` / `paused` / `ended` vocabulary.                                                   |
-| `WistiaPlayerAttribute`                                                                                                                                                                                | Every embed-option name the element accepts, from Wistia's `Attributes`.                                                 |
-| `PublicApi`, `MediaData`                                                                                                                                                                               | Wistia's own declarations, re-exported rather than restated.                                                             |
-| `WistiaPlayerEvents`                                                                                                                                                                                   | Wistia's own event map, keyed by event name.                                                                             |
-| `API_READY_EVENT_TYPE`, `MUTE_CHANGE_EVENT_TYPE`, `LOADED_MEDIA_DATA_EVENT_TYPE`, `BEFORE_REPLACE_EVENT_TYPE`, `AFTER_REPLACE_EVENT_TYPE`, `IMPL_CREATED_EVENT_TYPE`, `PLAYER_COLOR_CHANGE_EVENT_TYPE` | Wistia's own event declarations, for a listener you add to the same element.                                             |
-| `WistiaApiReadyDetail`, `WistiaMuteChangeDetail`                                                                                                                                                       | The payloads of the two declared events this adapter reads.                                                              |
+| Export                                           | What it is                                                                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `createWistiaProvider`                           | Builds the adapter over a mount element and a `WistiaSource`.                                                            |
+| `loadWistiaPlayer`                               | Loads the player bundle and resolves the `<wistia-player>` registration. Cached across players; takes your own importer. |
+| `resetWistiaPlayerLoader`                        | Drops the cached registration — for tests that need a clean load.                                                        |
+| `API_READY_TIMEOUT_MS`                           | How long the `api-ready` handshake is given before the attach reports an error.                                          |
+| `WistiaProviderOptions`                          | `controls`, `dnt`, `loop`.                                                                                               |
+| `WistiaProviderAdapter`                          | The adapter's own type.                                                                                                  |
+| `WistiaMountElement`                             | What the adapter can mount into.                                                                                         |
+| `WistiaPlayerElement`                            | The `<wistia-player>` element as this adapter types it.                                                                  |
+| `WistiaPlayerApi`                                | The slice of Wistia's `PublicApi` this adapter drives.                                                                   |
+| `WistiaPlayerState`                              | Wistia's own `beforeplay` / `playing` / `paused` / `ended` vocabulary.                                                   |
+| `WistiaPlayerAttribute`                          | Every embed-option name the element accepts, from Wistia's `Attributes`.                                                 |
+| `PublicApi`                                      | Wistia's own handle declaration, re-exported rather than restated.                                                       |
+| `WistiaApiReadyDetail`, `WistiaMuteChangeDetail` | The payloads of the two declared events this adapter reads, for a listener you add to the same element.                  |
 
 ## What it reports honestly
 
@@ -91,6 +89,28 @@ are the only ones on screen, and `dnt` is on unless you turn it off.
   `settings-control`, `fullscreen-control`, `big-play-button` and
   `play-pause-notifier` are all set off with it. Wistia's own logo is not one
   of them: the player exposes no attribute that hides it.
+- **`seek` is `available`.** `PublicApi.time(seconds)` seeks, and `seeked`
+  reports the settled playhead.
+- **`fullscreen` is `available`.** `PublicApi.requestFullscreen()` and
+  `cancelFullscreen()` drive the player's own fullscreen element, and its
+  `enter-fullscreen` / `cancel-fullscreen` events confirm the change.
+- **`setVolume` starts `available` and can downgrade to `unavailable` /
+  `browser`.** Aurora declares `volume()` on every player, so there is nothing to
+  check up front. A device that refuses the change is the only proof: when
+  `volume()` throws `UnsupportedError` or `NotSupportedError` — iOS pins media
+  volume to the hardware switch and refuses every programmatic change — the
+  adapter republishes its capabilities with `setVolume` `unavailable`, reason
+  `browser`, because the limit is the browser's and not Wistia's. The refused
+  command still answers `{ ok: false, reason: 'unsupported' }`. The downgrade
+  holds for the life of the adapter, including across `retry()`; it is the
+  device that changed the answer, and the device is still the same one.
+- **`setPlaybackRate` starts `available` and can downgrade to `unavailable` /
+  `provider`.** Same shape, different reason: `playbackRate()` is declared on
+  every player too, and a media that withholds it refuses the call rather than
+  announcing itself. The reason is `provider` because it is Wistia withholding
+  the rate, not the browser. The downgrade holds for the life of the adapter, as
+  above. Nothing else corrects it either — Wistia dispatches `rate-change` when
+  the rate does change, and nothing at all when it does not.
 - **`selectQuality` is `unavailable` / `provider`.** Aurora exposes a coarse
   `videoQuality()` setter and `quality-min` / `quality-max` attributes, but no
   rung ladder this adapter could publish, so quality selection is not wired.
