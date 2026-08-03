@@ -19,7 +19,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`). Click the activation overlay to load. HLS/live/native are local fixtures; YouTube and Vimeo hit the network.'
+          'Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`). Click the activation overlay to load. HLS/live/native are local fixtures; YouTube, Vimeo and Wistia hit the network.'
       }
     }
   }
@@ -94,6 +94,19 @@ export const YouTube: Story = {
 export const Vimeo: Story = {
   render: () => (
     <Player.Root loading="interaction" source="https://vimeo.com/76979871">
+      <Stage>
+        <Player.Media />
+      </Stage>
+    </Player.Root>
+  )
+};
+
+export const Wistia: Story = {
+  render: () => (
+    <Player.Root
+      loading="interaction"
+      source="https://wesleyluyten.wistia.com/medias/oifkgmxnkb"
+    >
       <Stage>
         <Player.Media />
       </Stage>

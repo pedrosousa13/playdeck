@@ -90,10 +90,8 @@ export type WistiaPlayback = Required<
       detail?: unknown
     ) => void;
     readonly onTimeUpdate: (player: Pick<WistiaPlaybackPlayer, 'time'>) => void;
-    readonly onSeeking: (
-      player: Pick<WistiaPlaybackPlayer, 'time'>,
-      detail?: unknown
-    ) => void;
+    // No `onSeeking` counterpart: the attachment seam does not bind Wistia's
+    // `seeking`, because the live player dispatches it after its own `seeked`.
     readonly onSeeked: (
       player: Pick<WistiaPlaybackPlayer, 'time'>,
       detail?: unknown
@@ -267,11 +265,6 @@ export const createWistiaPlayback = (
         currentTime = readTime(player);
         emit({ currentTime });
       },
-      onSeeking: (player, detail) =>
-        emit(
-          { seeking: true },
-          providerEvent('seeking', { currentTime: readTime(player) }, detail)
-        ),
       onSeeked: (player, detail) => {
         currentTime = readTime(player);
         emit(

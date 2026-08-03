@@ -274,7 +274,13 @@ export const createWistiaAttachment = (
     on('pause', handlers.onPause);
     on('ended', (detail) => handlers.onEnded(api, detail));
     on('time-update', () => handlers.onTimeUpdate(api));
-    on('seeking', (detail) => handlers.onSeeking(api, detail));
+    // `seeking` is deliberately not bound, though the element does fire it.
+    // Measured against the live player (`e2e/wistia-smoke.spec.ts`): one
+    // unpaired `seeking` arrives during the initial load, and every seek after
+    // that dispatches `seeked` about a millisecond BEFORE its `seeking`. Wiring
+    // the pair as a round trip therefore leaves `seeking` pinned true for the
+    // rest of the session. `seeked` alone reports the settled playhead, which
+    // is the half of the pair Wistia's ordering makes trustworthy.
     on('seeked', (detail) => handlers.onSeeked(api, detail));
     on('volume-change', handlers.onVolumeChange);
     on('mute-change', handlers.onMuteChange);

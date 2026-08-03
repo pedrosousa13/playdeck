@@ -109,6 +109,12 @@ are the only ones on screen, and `dnt` is on unless you turn it off.
   ever. The adapter gives the `api-ready` handshake `API_READY_TIMEOUT_MS` and
   then publishes a recoverable `lifecycle: 'error'`, so the host has something
   to offer `retry()` on.
+- **`seeking` is never `true`.** The element does fire a `seeking` event, but
+  measured against the live player it cannot bracket a seek: one unpaired
+  `seeking` arrives during the initial load, and every seek after that
+  dispatches `seeked` about a millisecond before its `seeking`. Binding the pair
+  would pin `seeking` true for the rest of the session, so only `seeked` is
+  wired, and it reports the settled playhead.
 - **`buffered` is never published.** Aurora fires no buffering events and the
   handle exposes no buffered ranges, so the adapter reports nothing rather than
   a guess. `buffering` stays `false` for the same reason.

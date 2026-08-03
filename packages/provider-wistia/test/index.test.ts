@@ -367,17 +367,17 @@ test('tracks the playhead from time-update, which carries no detail', async () =
   expect(result.patches).toContainEqual({ currentTime: 12.5 });
 });
 
-test('publishes the seek round trip', async () => {
+// Only the settled half. `seeking` is not bound at all — measured against the
+// live player, it arrives AFTER the `seeked` for the same seek, so binding it
+// would leave the state seeking for ever. Asserting the element's `seeking`
+// publishes nothing is what keeps that decision from being undone by accident.
+test('publishes the settled playhead from seeked, and nothing from seeking', async () => {
   const result = await setup();
   const player = element(result);
 
   player.handle.currentTime = 4;
   player.emit(WISTIA_EVENTS.seeking);
-  expect(result.patches).toContainEqual({ seeking: true });
-  expect(lastEvent(result.events)).toMatchObject({
-    type: 'seeking',
-    detail: { currentTime: 4 }
-  });
+  expect(result.patches).not.toContainEqual({ seeking: true });
 
   player.handle.currentTime = 30;
   player.emit(WISTIA_EVENTS.seeked);

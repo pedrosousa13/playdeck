@@ -1,8 +1,9 @@
 import { vi, type Mock } from 'vitest';
 import type { WistiaPlayerApi, WistiaPlayerState } from '../../src/loader';
 
-// Aurora's element events, spelled exactly as Wistia's reference documents
-// them and as `utilities/eventConstants.d.ts` spells the two it declares.
+// Aurora's element events. Every name here has been observed firing on a live
+// player — see `e2e/wistia-smoke.spec.ts`, which exists because this fixture
+// and the adapter would otherwise agree on a name neither had ever seen.
 export const WISTIA_EVENTS = {
   apiReady: 'api-ready',
   cancelFullscreen: 'cancel-fullscreen',

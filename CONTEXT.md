@@ -1,11 +1,11 @@
 # Reely
 
 A headless video player: React primitives over a framework-agnostic core, with
-provider adapters for native media, HLS, YouTube and Vimeo. The project's
-language separates what a consumer composes (primitives), what they can target
-(parts), what they may restyle (structural geometry, appearance, tokens), what
-they can read but not set (outputs), and how a player gets from mounted to
-playing (activation, then lifecycle).
+provider adapters for native media, HLS, YouTube, Vimeo and Wistia. The
+project's language separates what a consumer composes (primitives), what they
+can target (parts), what they may restyle (structural geometry, appearance,
+tokens), what they can read but not set (outputs), and how a player gets from
+mounted to playing (activation, then lifecycle).
 
 ## Language
 
@@ -28,7 +28,7 @@ overlay positions against. Not the browser viewport.
 
 **Provider**:
 The integration that drives playback for one kind of source — native, HLS,
-YouTube or Vimeo. The object implementing one is a provider adapter.
+YouTube, Vimeo or Wistia. The object implementing one is a provider adapter.
 _Avoid_: engine, backend, player
 
 **Source**:
