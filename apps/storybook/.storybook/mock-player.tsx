@@ -41,7 +41,11 @@ export type MockPlayerParameters = {
   readonly rootProps?: Partial<Omit<RootProps, 'children' | 'ref'>>;
 };
 
-/** Never fetched: stories do not render `Player.Media`. */
+/**
+ * Never fetched. The decorator's root commits no source — nothing calls
+ * `activateFromInteraction` on it — so `Player.Media` mounts nothing even in a
+ * story whose component renders one.
+ */
 const mockSource: RootProps['source'] = {
   type: 'video',
   sources: [{ src: 'mock://reely/video.mp4', mimeType: 'video/mp4' }]
@@ -97,16 +101,16 @@ const createMockAdapter = (playResult: CommandResult) => {
   };
 };
 
-const MockPlayerRoot = ({
-  children,
-  parameters
-}: {
-  readonly children: ReactNode;
-  readonly parameters: MockPlayerParameters;
-}) => {
+/**
+ * A ref to hand to a `Player.Root`, which stages {@link MockPlayerParameters}
+ * into that root's controller once it mounts. `withMockPlayer` uses it for the
+ * root it renders itself; a story whose component owns its own `Player.Root`
+ * (because a prop of its own decides the source) reaches for it directly, so
+ * both paths stage state through one implementation.
+ */
+export const useMockPlayer = (parameters: MockPlayerParameters) => {
   const handleRef = useRef<PlayerHandle>(null);
-  const { autoplay, cues, dimensions, playResult, rootProps, state } =
-    parameters;
+  const { autoplay, cues, dimensions, playResult, state } = parameters;
 
   useEffect(() => {
     if (
@@ -132,17 +136,25 @@ const MockPlayerRoot = ({
     };
   }, [autoplay, cues, dimensions, playResult, state]);
 
-  return (
-    <Root
-      loading="interaction"
-      ref={handleRef}
-      source={mockSource}
-      {...rootProps}
-    >
-      {children}
-    </Root>
-  );
+  return handleRef;
 };
+
+const MockPlayerRoot = ({
+  children,
+  parameters
+}: {
+  readonly children: ReactNode;
+  readonly parameters: MockPlayerParameters;
+}) => (
+  <Root
+    loading="interaction"
+    ref={useMockPlayer(parameters)}
+    source={mockSource}
+    {...parameters.rootProps}
+  >
+    {children}
+  </Root>
+);
 
 /**
  * Wraps every story in a `Player.Root` backed by a mock provider. Stories

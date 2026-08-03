@@ -14,7 +14,11 @@ the test origin.
 
 ## Story conventions
 
-- Stories live in `stories/<part>.stories.tsx`, titled `Player/<Component>`.
+- Stories live in `stories/<part>.stories.tsx`, titled `Player/<Component>`. A
+  composition with a component file of its own keeps both in a subdirectory —
+  `stories/backpack/` holds the Backpack compat wrapper, its deterministic
+  stories under `Backpack parity/*` and its real-playback story under
+  `Real playback/*`.
 - One story per meaningful component state, named after the state
   (`Dormant`, `Buffering`, ...). New visual states added by later issues get
   their story in the same change.
@@ -23,12 +27,21 @@ the test origin.
   `storybook/test`. `ActivatesOnClick` in `stories/activation.stories.tsx` is
   the reference. Whole-player flows with real media belong in Playwright e2e,
   logic-level tests in plain Vitest — not here.
-- Stories must be deterministic and offline: never render `Player.Media`,
-  never reference an external URL. Use data URIs for images that must load or
-  fail, and `/__reely__/pending.png` (held open forever by a dev-server
-  middleware in `.storybook/main.ts`) for permanently-pending loads. The
-  no-external-request guard in `.storybook/vitest.setup.ts` enforces this per
-  story.
+- Stories must be deterministic and offline: **no story may request anything
+  from outside the test origin**, and no external URL may reach the DOM. Use
+  data URIs for images that must load or fail, and `/__reely__/pending.png`
+  (held open forever by a dev-server middleware in `.storybook/main.ts`) for
+  permanently-pending loads. The guard in `.storybook/vitest.setup.ts` enforces
+  it per story, checking fetch, resource timing, and the URLs the DOM declares.
+- `Player.Media` may render only where no source is committed. It returns null
+  until activation commits one, so a story that never activates mounts no media
+  and an external `source` never reaches the DOM — which is what lets a wrapper
+  story pass a real provider URL as an argument. Committing a source loads a
+  provider and hits the network, so any story that activates one carries both
+  `real-playback` and `!test` — which keeps it out of the automated run. The
+  tag pairing is what matters and is enforced by
+  `stories/real-playback.contract.test.ts`; the title is not, and such stories
+  sit under `Real playback/*` or their own section (`Fixtures/*`) as suits.
 
 ## Fixture media
 
@@ -95,6 +108,13 @@ means no provider load).
 
 The parameter shape is `MockPlayerParameters` in `.storybook/mock-player.tsx`;
 see its doc comments for the full contract.
+
+A story whose own component renders `Player.Root` — because a prop of its own
+decides the source — cannot be staged through the decorator's root, which that
+inner root shadows. Hand the ref from `useMockPlayer` (same module) to the root
+the component owns: it stages the same `parameters.player` into that
+controller, so both paths share one implementation.
+`stories/backpack/backpack-video.stories.tsx` does this.
 
 ## Theme toggle
 

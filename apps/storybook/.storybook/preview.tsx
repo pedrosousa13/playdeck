@@ -59,6 +59,9 @@ const preview: Preview = {
           'Player',
           'Reference',
           'Theme',
+          // The compat wrapper: it reads as a case study over the parts
+          // above, so it sits after them and before the network stories.
+          'Backpack parity',
           // Both hit the network or exist to be driven by e2e, so they sit
           // below everything a visitor reads.
           'Real playback',
