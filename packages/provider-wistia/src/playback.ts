@@ -216,14 +216,22 @@ export const createWistiaPlayback = (
     getCurrentTime: () => currentTime,
     adopt: (player, values) => {
       duration = values.duration;
-      volume = values.volume;
       muted = values.muted;
+      // The overrides are pushed into the player, so the ready patch has to
+      // carry what is in effect after them rather than what the player reported
+      // before. Wistia confirms a volume override with its own `volume-change`
+      // eventually, but nothing at all confirms a playback-rate one — so a
+      // patch built from the pre-override reads would leave the host showing a
+      // rate the player is not running at, indefinitely.
+      let nextVolume = values.volume;
+      let nextPlaybackRate = values.playbackRate;
       if (
         mount.volume !== undefined &&
         Number.isFinite(mount.volume) &&
         mount.volume !== values.volume
       ) {
-        player.volume(clampVolume(mount.volume));
+        nextVolume = clampVolume(mount.volume);
+        player.volume(nextVolume);
       }
       if (
         mount.playbackRate !== undefined &&
@@ -231,14 +239,16 @@ export const createWistiaPlayback = (
         mount.playbackRate > 0 &&
         mount.playbackRate !== values.playbackRate
       ) {
-        player.playbackRate(mount.playbackRate);
+        nextPlaybackRate = mount.playbackRate;
+        player.playbackRate(nextPlaybackRate);
       }
+      volume = nextVolume;
       return {
         currentTime,
         duration,
         muted: values.muted,
-        volume: values.volume,
-        playbackRate: values.playbackRate,
+        volume: nextVolume,
+        playbackRate: nextPlaybackRate,
         ...(duration === null
           ? {}
           : { seekable: [{ start: 0, end: duration }] })

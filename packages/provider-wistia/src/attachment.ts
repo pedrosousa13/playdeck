@@ -77,7 +77,7 @@ const attributeName = (option: WistiaPlayerAttribute): string =>
 
 // The embed options this adapter expresses, read when the element is built
 // rather than snapshotted at construction.
-export type WistiaEmbedOptions = {
+type WistiaEmbedOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
   readonly loop?: boolean;
@@ -297,7 +297,7 @@ export const createWistiaAttachment = (
 
   const start = async (thisGeneration: number): Promise<CommandResult> => {
     try {
-      const element = activeElement ?? buildElement();
+      const element = buildElement();
       const handle = activeHandle;
       await loadWistiaPlayer();
       // Teardown settles the handshake with nothing rather than leaving it
@@ -357,10 +357,15 @@ export const createWistiaAttachment = (
   };
 
   return {
+    // Nothing is built here, and nothing joins the document. Appending a
+    // `<wistia-player>` upgrades it the moment `customElements` knows the tag —
+    // which is true as soon as any other Wistia player on the page has loaded
+    // the bundle — and an upgraded element fetches its media data straight
+    // away. Under `loading="interaction"` that would be a network request the
+    // host has not permitted yet, so the element is built in `load()` instead.
     attach: () => {
       if (attached || destroyed) return;
       attached = true;
-      buildElement();
     },
     load: async () => {
       if (destroyed || started) return;

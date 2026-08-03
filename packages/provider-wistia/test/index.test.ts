@@ -200,13 +200,29 @@ test('keeps Wistia controls as the single layer when requested', async () => {
   expect(player.getAttribute('play-pause-notifier')).toBeNull();
 });
 
-test('mounts the element on attach, before the player is loaded', async () => {
+// `attach()` must not build the element. `<wistia-player>` is a custom element,
+// so appending it once anything on the page has registered the tag upgrades it
+// synchronously and it fetches its media data — a network request before the
+// host has permitted loading, which `loading="interaction"` forbids. The fake
+// registers the tag in `installFakeWistiaPlayer`, so this is the already-defined
+// case: any construction would show up in `sdk.elements`.
+test('builds nothing on attach, so no media data is fetched before load', async () => {
   const mount = document.createElement('div') as WistiaMountElement;
   document.body.appendChild(mount);
   const sdk = installFakeWistiaPlayer({ deferApiReady: true });
   sdkState.load = sdk.load;
-  createWistiaProvider(mount, source).attach();
+  expect(customElements.get('wistia-player')).toBeDefined();
+  const provider = createWistiaProvider(mount, source);
 
+  await provider.attach();
+
+  expect(sdk.elements).toHaveLength(0);
+  expect(mount.querySelector('wistia-player')).toBeNull();
+
+  void provider.load();
+  await Promise.resolve();
+
+  expect(sdk.elements).toHaveLength(1);
   const player = mount.querySelector('wistia-player');
   expect(player).not.toBeNull();
   expect(player?.getAttribute('media-id')).toBe('oifkgmxnkb');
@@ -242,6 +258,32 @@ test('applies seeded volume and playback rate preferences after ready', async ()
   const api = element(result).handle;
   expect(api.volume).toHaveBeenCalledWith(0.4);
   expect(api.playbackRate).toHaveBeenCalledWith(1.5);
+});
+
+test('publishes the seeded volume and rate, not the ones they replaced', async () => {
+  // The player reports 1 and 1; the mount asks for 0.4 and 1.5, and the
+  // overrides are pushed into the player before ready is published. Reporting
+  // the pre-override reads would have the host showing 1 while the player runs
+  // at 0.4 — and nothing confirms a rate override afterwards at all.
+  const result = await setup({
+    fake: { volume: 1, playbackRate: 1 },
+    prepareMount: (mount) => {
+      mount.volume = 0.4;
+      mount.playbackRate = 1.5;
+    }
+  });
+  expect(readyPatch(result.patches)).toMatchObject({
+    volume: 0.4,
+    playbackRate: 1.5
+  });
+
+  // And the seam tracks the seeded volume too: `mute-change` carries no volume,
+  // so the pair its event publishes is drawn from whatever the seam holds.
+  element(result).emit(WISTIA_EVENTS.muteChange, { isMuted: true });
+  expect(lastEvent(result.events)).toMatchObject({
+    type: 'volumechange',
+    detail: { muted: true, volume: 0.4 }
+  });
 });
 
 // --- ready state ---
