@@ -377,7 +377,12 @@ test('publishes the settled playhead from seeked, and nothing from seeking', asy
 
   player.handle.currentTime = 4;
   player.emit(WISTIA_EVENTS.seeking);
-  expect(result.patches).not.toContainEqual({ seeking: true });
+  // `objectContaining`, not a bare `{ seeking: true }`: `toContainEqual` is
+  // exact deep equality, so re-binding `seeking` alongside anything else --
+  // a playhead, say -- would slip past the literal form.
+  expect(result.patches).not.toContainEqual(
+    expect.objectContaining({ seeking: true })
+  );
 
   player.handle.currentTime = 30;
   player.emit(WISTIA_EVENTS.seeked);

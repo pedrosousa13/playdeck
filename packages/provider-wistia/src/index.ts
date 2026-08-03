@@ -61,9 +61,11 @@ export type WistiaProviderAdapter = ProviderAdapter &
     readonly provider: 'wistia';
   };
 
-// What this adapter does not drive at all. Aurora has a `videoQuality()` coarse
-// setter and a captions API, but neither is wired here, so both report
-// unavailable through Reely rather than staying forever "unknown".
+// What this adapter does not drive at all, for either of two reasons. Aurora
+// has a `videoQuality()` coarse setter and a captions API, but neither is wired
+// here, so `selectQuality` and `selectTextTrack` report unavailable rather than
+// staying forever "unknown". `pictureInPicture` and `airPlay` have no surface
+// to wire at all: `PublicApi` declares no member for either.
 const outOfScope: Availability = { status: 'unavailable', reason: 'provider' };
 
 export const createWistiaProvider = (
@@ -103,8 +105,6 @@ export const createWistiaProvider = (
       selectTextTrack: outOfScope,
       // `PublicApi.requestFullscreen()` / `cancelFullscreen()`.
       fullscreen: available,
-      // Not in Aurora's public API: `PublicApi` declares no picture-in-picture
-      // member at all.
       pictureInPicture: outOfScope,
       airPlay: outOfScope,
       // Chromeless is a plain set of embed attributes, declared in Wistia's own

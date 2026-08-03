@@ -70,8 +70,10 @@ replayed once the provider comes up.
 Each provider declares readiness for itself, because the moment differs and
 core cannot derive it: native declares after `media.load()` (which resets
 `playbackRate`, so anything applied earlier is undone), hls.js at
-`MEDIA_ATTACHED`, YouTube at `onReady`, and Vimeo when its player is
-constructed. `activation` is not a substitute — native with `preload="none"`
+`MEDIA_ATTACHED`, YouTube at `onReady`, Vimeo when its player is constructed,
+and Wistia at `api-ready` — the moment `<wistia-player>` hands over the
+`PublicApi` handle, which is the adapter's only command surface and does not
+exist before it. `activation` is not a substitute — native with `preload="none"`
 accepts commands while `activation` is still `loading-provider`.
 
 `whenReady()` is the imperative form, and it sits on the player actions, on the
@@ -120,17 +122,18 @@ export const RateWhenReady = () => {
 A call made before a provider is attached waits rather than answering `false`,
 so it is safe to await from an effect that runs before mount finishes.
 
-## `buffered`: every provider reports, not every provider sees the same thing
+## `buffered`: not every provider reports, and not every provider that does sees the same thing
 
-`PlayerState.buffered` is what `Player.SeekSlider` paints behind the thumb. Every
-provider populates it and none of them invent a range, but two of them are
-working from a narrower view than the other two:
+`PlayerState.buffered` is what `Player.SeekSlider` paints behind the thumb. No
+provider invents a range, but they see different amounts — and one sees nothing
+at all:
 
 | Provider    | What the ranges are                                                          |
 | ----------- | ---------------------------------------------------------------------------- |
 | native, hls | The `<video>` element's own `TimeRanges` — every range, exactly as buffered. |
 | vimeo       | The SDK's `getBuffered()` — every range, including gaps left by a seek.      |
 | youtube     | One range, from where playback entered the buffer to that buffer's edge.     |
+| wistia      | Nothing — the ranges are never published, and stay empty for the session.    |
 
 YouTube is the odd one out because its iframe API exposes no ranges at all —
 only `getVideoLoadedFraction()`, which despite the name reports the _end_ of the
@@ -138,16 +141,23 @@ range the playhead is in, over duration. The start of that range is never
 exposed, so the adapter reports the earliest playhead position it has seen while
 that same range held it: a start it can prove rather than one it assumes.
 
-The practical difference from the other three: buffer loaded _before_ you
+The practical difference from native, hls and vimeo: buffer loaded _before_ you
 arrived is invisible. Join a video at 30s and the bar starts at 30s, however
 much sits behind it; seek backwards out of the range being tracked and the bar
 restarts from where you land, even though the region you left is still loaded.
 Everything YouTube reports is genuinely buffered — it just reports less than it
 holds.
 
-An empty array therefore means "nothing is buffered ahead of the playhead", on
-every provider. It is not a signal that the provider cannot answer — there is no
-such provider, so there is no capability to check.
+Wistia is the one provider that reports nothing. Aurora fires no buffering
+events and its `PublicApi` handle exposes no buffered ranges, so the adapter
+publishes no ranges rather than a guess — and `PlayerState.buffering` stays
+`false` throughout for the same reason.
+
+On the other four, an empty array means "nothing is buffered ahead of the
+playhead". On Wistia it means only that Wistia does not say. There is no
+capability to check for the difference: gate on the provider if you need to
+tell the two apart, or treat an empty bar as "no information" and paint
+nothing.
 
 ## `selectQuality`: two providers can, one is asked and ignored
 
@@ -157,6 +167,7 @@ such provider, so there is no capability to check.
 | vimeo    | `available` with a ladder        | `getQualities()` — one entry per rung, height only    |
 | native   | `unavailable`, reason `source`   | The browser picks; nothing to enumerate               |
 | youtube  | `unavailable`, reason `provider` | Enumerable, but not selectable — see below            |
+| wistia   | `unavailable`, reason `provider` | No rung ladder to publish — see below                 |
 
 `auto` is not a rung. Vimeo returns it as a member of `getQualities()` and
 hls.js has an equivalent mode; both are reported as `selectedQualityId: null`
@@ -182,3 +193,8 @@ bandwidth or viewport ceiling: the argument is discarded, not clamped.
 Publishing the list anyway would put rungs in the menu that cannot be chosen, so
 the capability stays `unavailable` and `qualities` stays empty. The full
 measurement is on [#82](https://github.com/pedrosousa13/reely/issues/82).
+
+**Wistia has no ladder to publish.** Aurora offers a coarse `videoQuality()`
+setter and `quality-min` / `quality-max` attributes, but nothing that enumerates
+the rungs actually available for a media, so the adapter does not wire quality
+selection at all and `qualities` stays empty.
