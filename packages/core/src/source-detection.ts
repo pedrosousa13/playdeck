@@ -245,9 +245,15 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
       }
       if (isWistiaHost(url.hostname)) {
         const source = sourceFromWistiaUrl(url);
-        return source
-          ? { status: 'success', input, source }
-          : failure(input, 'malformed-string');
+        if (source) return { status: 'success', input, source };
+        // Unlike YouTube and Vimeo, Wistia serves media files on its own hosts
+        // -- `.m3u8` manifests under `/embed/medias/` and `.mp4` under
+        // `/deliveries/` are its documented way to play without its player. So
+        // a Wistia URL that is not an embed shape falls through to the file
+        // extension before the recognised-host rule fails it outright.
+        const fileSource = sourceFromFileExtension(input);
+        if (fileSource) return { status: 'success', input, source: fileSource };
+        return failure(input, 'malformed-string');
       }
     }
 

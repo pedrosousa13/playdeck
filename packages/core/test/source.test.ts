@@ -105,6 +105,35 @@ test('resolves a bare Wistia host the same as its subdomains', () => {
   );
 });
 
+// Wistia is the one recognised host that also serves plain media files -- its
+// HLS manifests and direct deliveries are the documented way to play without
+// its player. Detecting the embed shapes must not take that away (#198).
+test.each([
+  [
+    'HLS manifest',
+    'https://fast.wistia.net/embed/medias/oifkgmxnkb.m3u8',
+    { type: 'hls', src: 'https://fast.wistia.net/embed/medias/oifkgmxnkb.m3u8' }
+  ],
+  [
+    'direct delivery',
+    'https://embed-ssl.wistia.com/deliveries/oifkgmxnkb.mp4',
+    {
+      type: 'video',
+      sources: [
+        {
+          src: 'https://embed-ssl.wistia.com/deliveries/oifkgmxnkb.mp4',
+          mimeType: 'video/mp4'
+        }
+      ]
+    }
+  ]
+])(
+  'still resolves a Wistia-hosted %s by file extension',
+  (_form, input, source) => {
+    expect(expectDetected(input).source).toEqual(source);
+  }
+);
+
 test('accepts and preserves every explicit source object', () => {
   const video: VideoFileSource = {
     type: 'video',
@@ -179,7 +208,10 @@ test.each([
   'https://fast.wistia.net/embed/iframe',
   'https://wesleyluyten.wistia.com/oifkgmxnkb',
   // A disallowed character in the id breaks the path pattern itself.
-  'https://fast.wistia.net/embed/iframe/oif-gmxnkb'
+  'https://fast.wistia.net/embed/iframe/oif-gmxnkb',
+  // The media-file fall-through above is not a way in for junk: an extension
+  // Reely does not play leaves the recognised-host rule to fail it.
+  'https://fast.wistia.net/embed/medias/oifkgmxnkb.avi'
 ])('rejects malformed provider strings: %s', (input) => {
   expect(detectSource(input)).toMatchObject({
     status: 'failure',
