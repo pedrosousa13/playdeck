@@ -190,6 +190,9 @@ importers:
       '@reely/provider-vimeo':
         specifier: workspace:^
         version: link:../provider-vimeo
+      '@reely/provider-wistia':
+        specifier: workspace:^
+        version: link:../provider-wistia
       '@reely/provider-youtube':
         specifier: workspace:^
         version: link:../provider-youtube

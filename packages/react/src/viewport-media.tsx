@@ -209,6 +209,20 @@ export const Media = ({
     );
   }
 
+  if (source.source.type === 'wistia') {
+    // A mount for the `<wistia-player>` custom element the provider appends
+    // into it. Like YouTube and Vimeo, the embed's own chrome is the single
+    // control layer.
+    return (
+      <div
+        data-reely-part="media"
+        key={sourceKey(source)}
+        ref={registerMedia}
+        style={{ ...mediaStyle, ...style }}
+      />
+    );
+  }
+
   if (source.source.type !== 'video' && source.source.type !== 'hls') {
     return null;
   }
