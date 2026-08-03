@@ -114,6 +114,11 @@ test(
 // listens for. So each name is driven against the live player here, and both
 // halves are asserted: the element really dispatched it, AND the state Reely
 // publishes moved because of it.
+//
+// One name is the exception, and it is marked at its own assertion:
+// `loaded-metadata` gets the fire half alone. Everything its handler publishes
+// is already published by the ready-time `adopt` patch, so on this player no
+// state assertion can be attributed to it.
 test(
   'every element event the adapter binds fires on the live player and moves Reely state',
   { tag: '@real' },
@@ -122,11 +127,31 @@ test(
     await recordElementEvents(page);
     await activate(page);
 
-    // `play` and `loaded-metadata`: both land during activation.
-    expect(await firedTypes(page)).toEqual(
-      expect.arrayContaining(['play', 'loaded-metadata'])
-    );
+    // `play`, both halves: the recorder proves the live element dispatched it,
+    // and `playback: 'playing'` is published by no other handler.
+    expect(await firedTypes(page)).toContain('play');
     expect((await state(page))?.playback).toBe('playing');
+
+    // `loaded-metadata`, FIRE HALF ONLY — deliberately, and this is the file's
+    // one gap. `onLoadedMetadata` publishes `duration` and `seekable` and
+    // nothing else, both read from `player.duration()`; `attachment.ts` reads
+    // the same call at `api-ready` and hands it to `playback.adopt`, which
+    // publishes the same two fields. Measured on this media, `api.duration()`
+    // already answers 115.434 at `api-ready` (t=2225ms), and `loaded-metadata`
+    // lands ~490ms later (t=2714ms), by which time the ready patch has already
+    // published both. A probe that recorded Reely's state either side of the
+    // live dispatch found it unchanged across it:
+    //   before {"duration":115.434,"seekable":[{"start":0,"end":115.434}]}
+    //   after  {"duration":115.434,"seekable":[{"start":0,"end":115.434}]}
+    // So there is no field, and no moment, at which this binding is separable
+    // from the ready patch: a state assertion here would pass with the
+    // `on('loaded-metadata', …)` line deleted. Rather than dress one up, this
+    // records what is proved — the name is real and the live element dispatches
+    // it, which is what closes the shared-misreading hole for the literal — and
+    // leaves the binding itself covered only by the unit suite.
+    expect(await firedTypes(page)).toContain('loaded-metadata');
+    // Published by `adopt` at ready, not by the event above. Asserted for the
+    // ready patch's sake, and attributed to nothing else.
     expect((await state(page))?.seekable).not.toEqual([]);
 
     // `time-update`, which carries no detail — the playhead is read back off
