@@ -12,6 +12,7 @@ import { createWistiaPlayback } from './playback.js';
 import { createWistiaPresentation } from './presentation.js';
 
 export type { WistiaMountElement } from './adapter-values.js';
+export { API_READY_TIMEOUT_MS } from './attachment.js';
 export { loadWistiaPlayer, resetWistiaPlayerLoader } from './loader.js';
 export type {
   MediaData,

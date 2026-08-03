@@ -1,5 +1,6 @@
 import { PlayerController } from '@reely/core';
 import {
+  API_READY_TIMEOUT_MS,
   createWistiaProvider,
   loadWistiaPlayer,
   resetWistiaPlayerLoader
@@ -27,3 +28,8 @@ export const warm = (): Promise<unknown> => loadWistiaPlayer();
 // Drops the cached registration — for tests that need a clean load, not for
 // app code.
 export const reset = (): void => resetWistiaPlayerLoader();
+
+// How long the player is given to hand over its API before the attach reports
+// a recoverable error. Aurora fires no failure event of its own, so without
+// this an unreachable media would leave the player loading for ever.
+export const apiReadyTimeout = API_READY_TIMEOUT_MS; // 15000

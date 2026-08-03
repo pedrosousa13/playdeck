@@ -10,6 +10,7 @@ import type {
   WistiaSource
 } from '@reely/core';
 import {
+  API_READY_TIMEOUT_MS,
   createWistiaProvider,
   type WistiaMountElement,
   type WistiaProviderOptions
@@ -408,6 +409,34 @@ test('publishes volume and mute changes from their own event details', async () 
   });
 });
 
+test('publishes whichever half of the volume pair the detail carries', async () => {
+  // Wistia's shipped declarations describe no `volume-change` payload, so a
+  // detail carrying one half has to be published rather than dropped.
+  const result = await setup({ fake: { volume: 0.8, muted: false } });
+  const player = element(result);
+
+  player.emit(WISTIA_EVENTS.volumeChange, { volume: 0.3 });
+  expect(result.patches.at(-1)).toEqual({ volume: 0.3 });
+  expect(lastEvent(result.events)).toMatchObject({
+    type: 'volumechange',
+    detail: { muted: false, volume: 0.3 }
+  });
+
+  player.emit(WISTIA_EVENTS.volumeChange, { isMuted: true });
+  expect(result.patches.at(-1)).toEqual({ muted: true });
+  expect(lastEvent(result.events)).toMatchObject({
+    detail: { muted: true, volume: 0.3 }
+  });
+
+  // The mute a `mute-change` reported has to survive into the next
+  // volume-only report, or the pair the event carries goes stale.
+  player.emit(WISTIA_EVENTS.muteChange, { isMuted: false });
+  player.emit(WISTIA_EVENTS.volumeChange, { volume: 0.6 });
+  expect(lastEvent(result.events)).toMatchObject({
+    detail: { muted: false, volume: 0.6 }
+  });
+});
+
 test('publishes playback rate changes', async () => {
   const result = await setup();
   element(result).emit(WISTIA_EVENTS.rateChange, { playbackRate: 2 });
@@ -437,12 +466,11 @@ test('publishes the fullscreen round trip', async () => {
   });
 });
 
-test('ignores a detail-less volume-change rather than publishing a guess', async () => {
+test('ignores an event whose detail carries nothing it can act on', async () => {
   const result = await setup();
   const before = result.patches.length;
   element(result).emit(WISTIA_EVENTS.volumeChange, {});
-  element(result).emit(WISTIA_EVENTS.volumeChange, { volume: 0.3 });
-  element(result).emit(WISTIA_EVENTS.volumeChange, { isMuted: true });
+  element(result).emit(WISTIA_EVENTS.volumeChange, { volume: 'loud' });
   element(result).emit(WISTIA_EVENTS.muteChange, {});
   element(result).emit(WISTIA_EVENTS.rateChange, {});
   expect(result.patches).toHaveLength(before);
@@ -727,6 +755,62 @@ test('retry after destroy is refused', async () => {
     ok: false,
     reason: 'not-ready'
   });
+});
+
+test('reports a handshake that never arrives rather than hanging in loading', async () => {
+  // Aurora fires no failure event: media data that asks for the legacy iframe
+  // embed, or an engine fetch a blocker stops, leaves the element silent.
+  vi.useFakeTimers();
+  try {
+    const mount = document.createElement('div') as WistiaMountElement;
+    document.body.appendChild(mount);
+    const sdk = installFakeWistiaPlayer({ deferApiReady: true });
+    sdkState.load = sdk.load;
+    const provider = createWistiaProvider(mount, source);
+    const patches: ProviderStatePatch[] = [];
+    const events: ProviderEvent[] = [];
+    provider.subscribe((patch, event) => {
+      patches.push(patch);
+      if (event) events.push(event);
+    });
+    provider.attach();
+
+    const loading = provider.load();
+    await vi.advanceTimersByTimeAsync(API_READY_TIMEOUT_MS);
+    await loading;
+
+    expect(patches).toContainEqual(
+      expect.objectContaining({
+        lifecycle: 'error',
+        activation: 'error',
+        error: expect.objectContaining({
+          category: 'provider',
+          fatal: true,
+          // The host has to be able to offer `retry()`, which is the only way
+          // out of this.
+          recoverable: true,
+          message: expect.stringContaining('did not become ready')
+        })
+      })
+    );
+    expect(lastEvent(events)).toMatchObject({ type: 'error' });
+    expect(mount.querySelector('wistia-player')).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('leaves no deadline pending once the handshake lands', async () => {
+  vi.useFakeTimers();
+  try {
+    const result = await setup();
+    expect(readyPatch(result.patches).lifecycle).toBe('ready');
+    // A deadline left armed would fire long after the player was ready and
+    // report a healthy attach as failed.
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('reports a load that never produced a player as a fatal provider error', async () => {

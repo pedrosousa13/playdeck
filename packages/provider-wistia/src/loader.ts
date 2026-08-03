@@ -4,12 +4,43 @@ import type {
   PlayerState,
   PublicApi
 } from '@wistia/wistia-player/dist/types/types/player-api-types.js';
+import type {
+  AFTER_REPLACE_EVENT_TYPE,
+  API_READY_EVENT_TYPE,
+  BEFORE_REPLACE_EVENT_TYPE,
+  IMPL_CREATED_EVENT_TYPE,
+  LOADED_MEDIA_DATA_EVENT_TYPE,
+  MUTE_CHANGE_EVENT_TYPE,
+  PLAYER_COLOR_CHANGE_EVENT_TYPE,
+  WistiaPlayerEvents
+} from '@wistia/wistia-player/dist/types/types/events.js';
 
 // Wistia's package has no `exports` map and points `types` at the element
-// class alone, so the handle, attribute and media declarations are reachable
-// only by their path inside `dist/types`. They are imported once, here, and
-// everything else in this package reads them through this module.
+// class alone, so the handle, attribute, media and event declarations are
+// reachable only by their path inside `dist/types`. They are imported once,
+// here, and everything else in this package reads them through this module.
 export type { MediaData, PublicApi };
+
+// Wistia's own event declarations, re-exported rather than restated. Only two
+// of them describe an event this adapter listens for — the rest cover replace,
+// colour and impl-creation events it does not wire — but they are what a
+// consumer needs to type a listener it adds to the same element.
+export type {
+  AFTER_REPLACE_EVENT_TYPE,
+  API_READY_EVENT_TYPE,
+  BEFORE_REPLACE_EVENT_TYPE,
+  IMPL_CREATED_EVENT_TYPE,
+  LOADED_MEDIA_DATA_EVENT_TYPE,
+  MUTE_CHANGE_EVENT_TYPE,
+  PLAYER_COLOR_CHANGE_EVENT_TYPE,
+  WistiaPlayerEvents
+};
+
+// The payloads of the two declared events this adapter reads. Naming the
+// detail separately is what lets a handler cite Wistia's own field names
+// instead of matching a string nobody checks.
+export type WistiaApiReadyDetail = API_READY_EVENT_TYPE['detail'];
+export type WistiaMuteChangeDetail = MUTE_CHANGE_EVENT_TYPE['detail'];
 
 export const WISTIA_PLAYER_TAG = 'wistia-player';
 

@@ -15,7 +15,11 @@ import {
   type IsStalePlayer,
   type WistiaMountElement
 } from './adapter-values.js';
-import type { WistiaPlayerApi, WistiaPlayerState } from './loader.js';
+import type {
+  WistiaMuteChangeDetail,
+  WistiaPlayerApi,
+  WistiaPlayerState
+} from './loader.js';
 
 // Wistia reports `beforeplay` for a player that has never started, which core
 // has no separate state for: nothing is playing and nothing has ended.
@@ -116,6 +120,7 @@ export const createWistiaPlayback = (
   let currentTime = 0;
   let duration: number | null = null;
   let volume = 1;
+  let muted = false;
   let volumeAvailability: Availability = available;
   let playbackRateAvailability: Availability = available;
 
@@ -128,6 +133,26 @@ export const createWistiaPlayback = (
   const readTime = (player: Pick<WistiaPlaybackPlayer, 'time'>): number => {
     const time = player.time();
     return Number.isFinite(time) ? time : currentTime;
+  };
+
+  // The state patch carries only what the player actually reported; the
+  // provider event carries the whole pair, because core's `volumechange`
+  // detail has no way to say "unchanged".
+  const publishVolume = (
+    nextVolume: number | undefined,
+    nextMuted: boolean | undefined,
+    detail: unknown
+  ): void => {
+    if (nextVolume === undefined && nextMuted === undefined) return;
+    if (nextVolume !== undefined) volume = nextVolume;
+    if (nextMuted !== undefined) muted = nextMuted;
+    emit(
+      {
+        ...(nextVolume === undefined ? {} : { volume }),
+        ...(nextMuted === undefined ? {} : { muted })
+      },
+      providerEvent('volumechange', { muted, volume }, detail)
+    );
   };
 
   return {
@@ -194,6 +219,7 @@ export const createWistiaPlayback = (
     adopt: (player, values) => {
       duration = values.duration;
       volume = values.volume;
+      muted = values.muted;
       if (
         mount.volume !== undefined &&
         Number.isFinite(mount.volume) &&
@@ -253,26 +279,27 @@ export const createWistiaPlayback = (
           providerEvent('seeked', { currentTime }, detail)
         );
       },
-      onVolumeChange: (detail) => {
-        const level = numberField(detail, 'volume');
-        const muted = booleanField(detail, 'isMuted');
-        // Wistia sends both halves of the pair. A payload missing either
-        // describes a state this cannot report without guessing the other.
-        if (level === undefined || muted === undefined) return;
-        volume = level;
-        emit(
-          { muted, volume },
-          providerEvent('volumechange', { muted, volume }, detail)
-        );
-      },
-      onMuteChange: (detail) => {
-        const muted = booleanField(detail, 'isMuted');
-        if (muted === undefined) return;
-        emit(
-          { muted },
-          providerEvent('volumechange', { muted, volume }, detail)
-        );
-      },
+      // Wistia declares no `volume-change` payload, so which halves of the
+      // pair arrive is not something this can rely on. Whichever half is
+      // there is published; the other is carried over from the last state the
+      // player reported, which is what the event's own type requires. Only a
+      // payload with neither is a report this cannot act on.
+      onVolumeChange: (detail) =>
+        publishVolume(
+          numberField(detail, 'volume'),
+          booleanField(detail, 'isMuted'),
+          detail
+        ),
+      // `mute-change` is declared, and carries the mute state alone.
+      onMuteChange: (detail) =>
+        publishVolume(
+          undefined,
+          booleanField(
+            detail,
+            'isMuted' satisfies keyof WistiaMuteChangeDetail
+          ),
+          detail
+        ),
       onRateChange: (detail) => {
         const playbackRate = numberField(detail, 'playbackRate');
         if (playbackRate === undefined) return;

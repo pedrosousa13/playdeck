@@ -18,6 +18,7 @@ the element hands over on `api-ready`.
 ```ts
 import { PlayerController } from '@reely/core';
 import {
+  API_READY_TIMEOUT_MS,
   createWistiaProvider,
   loadWistiaPlayer,
   resetWistiaPlayerLoader
@@ -45,6 +46,11 @@ export const warm = (): Promise<unknown> => loadWistiaPlayer();
 // Drops the cached registration — for tests that need a clean load, not for
 // app code.
 export const reset = (): void => resetWistiaPlayerLoader();
+
+// How long the player is given to hand over its API before the attach reports
+// a recoverable error. Aurora fires no failure event of its own, so without
+// this an unreachable media would leave the player loading for ever.
+export const apiReadyTimeout = API_READY_TIMEOUT_MS; // 15000
 ```
 
 <!-- /example -->
@@ -54,14 +60,22 @@ are the only ones on screen, and `dnt` is on unless you turn it off.
 
 ## Exports
 
-| Export                  | What it is                                                    |
-| ----------------------- | ------------------------------------------------------------- |
-| `createWistiaProvider`  | Builds the adapter over a mount element and a `WistiaSource`. |
-| `WistiaProviderOptions` | `controls`, `dnt`, `loop`.                                    |
-| `WistiaMountElement`    | What the adapter can mount into.                              |
-| `WistiaProviderAdapter` | The adapter's own type.                                       |
-| `WistiaPlayerApi`       | The slice of Wistia's `PublicApi` this adapter drives.        |
-| `WistiaPlayerElement`   | The `<wistia-player>` element as this adapter types it.       |
+| Export                                              | What it is                                                                                                               |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `createWistiaProvider`                              | Builds the adapter over a mount element and a `WistiaSource`.                                                            |
+| `loadWistiaPlayer`                                  | Loads the player bundle and resolves the `<wistia-player>` registration. Cached across players; takes your own importer. |
+| `resetWistiaPlayerLoader`                           | Drops the cached registration — for tests that need a clean load.                                                        |
+| `API_READY_TIMEOUT_MS`                              | How long the `api-ready` handshake is given before the attach reports an error.                                          |
+| `WistiaProviderOptions`                             | `controls`, `dnt`, `loop`.                                                                                               |
+| `WistiaProviderAdapter`                             | The adapter's own type.                                                                                                  |
+| `WistiaMountElement`                                | What the adapter can mount into.                                                                                         |
+| `WistiaPlayerElement`                               | The `<wistia-player>` element as this adapter types it.                                                                  |
+| `WistiaPlayerApi`                                   | The slice of Wistia's `PublicApi` this adapter drives.                                                                   |
+| `WistiaPlayerState`                                 | Wistia's own `beforeplay` / `playing` / `paused` / `ended` vocabulary.                                                   |
+| `WistiaPlayerAttribute`                             | Every embed-option name the element accepts, from Wistia's `Attributes`.                                                 |
+| `PublicApi`, `MediaData`                            | Wistia's own declarations, re-exported rather than restated.                                                             |
+| `WistiaPlayerEvents` and the `*_EVENT_TYPE` aliases | Wistia's own event declarations, for a listener you add to the same element.                                             |
+| `WistiaApiReadyDetail`, `WistiaMuteChangeDetail`    | The payloads of the two declared events this adapter reads.                                                              |
 
 ## What it reports honestly
 
@@ -88,6 +102,12 @@ are the only ones on screen, and `dnt` is on unless you turn it off.
 - **`customControls` is `available`.** Chromeless playback is a plain set of
   embed attributes, declared in Wistia's own `Attributes` type and gated by no
   account tier — unlike Vimeo, where it needs a paid plan.
+- **A player that never answers is reported, not waited on.** Aurora dispatches
+  no failure event: media data that asks for the legacy iframe embed, or a
+  player engine an ad-blocker stops reaching, leaves the element silent for
+  ever. The adapter gives the `api-ready` handshake `API_READY_TIMEOUT_MS` and
+  then publishes a recoverable `lifecycle: 'error'`, so the host has something
+  to offer `retry()` on.
 - **`buffered` is never published.** Aurora fires no buffering events and the
   handle exposes no buffered ranges, so the adapter reports nothing rather than
   a guess. `buffering` stays `false` for the same reason.

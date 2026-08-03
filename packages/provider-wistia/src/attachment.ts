@@ -32,6 +32,42 @@ const loadFailure = (cause: unknown): PlayerError => ({
   cause
 });
 
+// How long the `api-ready` handshake is given before the attach is reported
+// as failed. Aurora has no failure event to wait for instead: when the media
+// data comes back asking for the legacy iframe embed, the element writes that
+// iframe into its shadow root and returns without ever initialising a public
+// API, and when the fetch rejects it re-throws inside its own promise chain
+// (`WistiaPlayer.tsx:2597-2651` in the published source map). Either way
+// nothing is dispatched, so without a deadline the adapter would sit in
+// `loading` for ever with nothing for the host to retry.
+//
+// Fifteen seconds, not four: the handshake covers a media-data request and the
+// engine import from Wistia's CDN, which retries three times on its own before
+// giving up. This is a "that is never coming" backstop, not a performance
+// budget, and cutting it short would report a slow connection as a failure.
+export const API_READY_TIMEOUT_MS = 15_000;
+
+// Rejects if `settled` has not answered within the deadline. The timer is
+// cleared the moment it does, so a normal attach leaves nothing pending.
+const withDeadline = <Value>(
+  settled: Promise<Value>,
+  milliseconds: number,
+  onTimeout: () => Error
+): Promise<Value> =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(onTimeout()), milliseconds);
+    settled.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (cause: unknown) => {
+        clearTimeout(timer);
+        reject(cause as Error);
+      }
+    );
+  });
+
 // Wistia names its embed options in camelCase and reads them off kebab-case
 // attributes, so the two spellings are one conversion rather than a table to
 // keep in step. `WistiaPlayerAttribute` is derived from the SDK's own
@@ -259,8 +295,16 @@ export const createWistiaAttachment = (
       const handle = activeHandle;
       await loadWistiaPlayer();
       // Teardown settles the handshake with nothing rather than leaving it
-      // pending, so one check after it covers both awaits above.
-      const api = await handle;
+      // pending, so one check after it covers both awaits above. The deadline
+      // covers the third way out: the element never answering at all.
+      const api = await withDeadline(
+        Promise.resolve(handle),
+        API_READY_TIMEOUT_MS,
+        () =>
+          new Error(
+            'The Wistia player did not become ready. Its media data or player engine could not be loaded.'
+          )
+      );
       if (isStale(thisGeneration, element)) return { ok: true };
       if (!api) {
         throw new Error(
