@@ -182,6 +182,7 @@ test('embeds a chromeless, Do-Not-Track player by default', async () => {
   expect(player.getAttribute('settings-control')).toBe('false');
   expect(player.getAttribute('fullscreen-control')).toBe('false');
   expect(player.getAttribute('big-play-button')).toBe('false');
+  expect(player.getAttribute('play-pause-notifier')).toBe('false');
   expect(player.getAttribute('end-video-behavior')).toBeNull();
 });
 
@@ -195,6 +196,7 @@ test('keeps Wistia controls as the single layer when requested', async () => {
   expect(player.getAttribute('settings-control')).toBeNull();
   expect(player.getAttribute('fullscreen-control')).toBeNull();
   expect(player.getAttribute('big-play-button')).toBeNull();
+  expect(player.getAttribute('play-pause-notifier')).toBeNull();
 });
 
 test('mounts the element on attach, before the player is loaded', async () => {

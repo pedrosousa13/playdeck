@@ -73,8 +73,9 @@ are the only ones on screen, and `dnt` is on unless you turn it off.
 - **`controls: false` switches off every control by name.**
   `controls-visible-on-load` alone only hides Wistia's chrome until the first
   hover or click, so `play-pause-control`, `play-bar-control`, `volume-control`,
-  `settings-control`, `fullscreen-control` and `big-play-button` are all set
-  off with it.
+  `settings-control`, `fullscreen-control`, `big-play-button` and
+  `play-pause-notifier` are all set off with it. Wistia's own logo is not one
+  of them: the player exposes no attribute that hides it.
 - **`selectQuality` is `unavailable` / `provider`.** Aurora exposes a coarse
   `videoQuality()` setter and `quality-min` / `quality-max` attributes, but no
   rung ladder this adapter could publish, so quality selection is not wired.

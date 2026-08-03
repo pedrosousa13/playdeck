@@ -49,14 +49,19 @@ export type WistiaEmbedOptions = {
 
 // Every piece of Wistia's own chrome. `controls-visible-on-load` alone only
 // hides them until the first hover or click, so a genuinely chromeless embed
-// has to switch each one off by name.
+// has to switch each one off by name. `playPauseNotifier` is on the list for
+// the same reason the controls are: it draws Wistia's own play and pause
+// symbols over the video, which survives the control bar being gone.
+// `playbackRateControl` and `qualityControl` are not, because both live inside
+// the settings menu this already switches off.
 const CHROME_OPTIONS: readonly WistiaPlayerAttribute[] = [
   'playPauseControl',
   'playBarControl',
   'volumeControl',
   'settingsControl',
   'fullscreenControl',
-  'bigPlayButton'
+  'bigPlayButton',
+  'playPauseNotifier'
 ];
 
 export type WistiaAttachmentDeps = {
