@@ -60,9 +60,11 @@ _Avoid_: eligible media
 ### Adapters
 
 **Seam**:
-A boundary along which a provider adapter's implementation splits — playback,
-presentation, tracks and captions, attachment. Each seam takes its dependencies
-explicitly instead of sharing the adapter's whole scope.
+A part of a provider adapter that exclusively owns one slice of the adapter's
+state and the commands over it — playback, presentation, tracks and captions,
+attachment, and whatever else a platform demands, such as HLS's quality levels
+and fatal-error recovery. Exclusive ownership is the whole test, so the list is
+open rather than closed, and a seam is named for the slice it owns.
 _Avoid_: layer, subsystem
 
 **Attachment**:
