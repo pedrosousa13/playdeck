@@ -24,8 +24,10 @@ const { capturedProviderOptions } = vi.hoisted(() => ({
 }));
 
 // `mergeWistiaPlayerConfig`/`translateWistiaPlayerConfig` above are this
-// wrapper's own pure functions, not Backpack's -- Backpack has no equivalent,
-// and crediting it with this wrapper's own implementation is exactly what
+// wrapper's own pure functions, not Backpack's -- the merge mirrors the shape of
+// Backpack's `mergePlayerConfig` (`VideoPlayer.tsx:45-55`, `mergePlayerConfig`)
+// and the translation has no Backpack counterpart at all, but both are this
+// wrapper's own code, and crediting Backpack with them is exactly what
 // ADR-0003 forbids (`docs/adr/0003-backpack-is-a-scenario-source-not-a-spec.md`)
 // -- pinned directly by the two `describe` blocks below. But nothing there
 // proves `BackpackVideoInternal` actually calls them and hands the result to
