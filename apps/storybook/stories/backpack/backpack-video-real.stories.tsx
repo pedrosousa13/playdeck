@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { withCss } from '../../.storybook/theme';
 import { backpackVideoCss } from './backpack-video-css';
 import { BackpackVideo } from './backpack-video';
+import { InPageLayout } from './in-page-layout';
 
 // The wrapper against real providers: real embeds, real network. Excluded from
 // the deterministic story test suite (`!test`) and opted out of the mock player
@@ -151,4 +152,66 @@ export const YouTubeShortsVideoAndCustomCoverImage: Story = {
     alt: 'custom cover image',
     hoverEffect: true
   }
+};
+
+/*
+ * Backpack's three `InPageLayout` stories, with its args verbatim. Click the
+ * video to start it, then scroll the panel: `pauseOnOutOfViewport` pauses it
+ * when it leaves and resumes it when it comes back, and the badge in the
+ * panel's top-right tracks what `onPlayChange` reports.
+ *
+ * `InPage` is muted where the other two are not — Backpack's own inconsistency
+ * (`Video.stories.tsx:367-395`), reproduced rather than tidied, since these
+ * stories exist to carry its args. Unmuted playback works here because it takes
+ * a click to start: what a browser blocks is an *autoplay* with sound, which is
+ * `playing` rather than anything on this page. `Backpack parity/Video` covers
+ * the behaviour deterministically, and stays muted throughout.
+ */
+
+/** Backpack's `InPage`: `pauseOnOutOfViewport` on, muted. */
+export const InPage: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    pauseOnOutOfViewport: true
+  },
+  parameters: { layout: 'fullscreen' },
+  render: (args) => (
+    <InPageLayout
+      height="100vh"
+      video={(videoProps) => <BackpackVideo {...args} {...videoProps} />}
+    />
+  )
+};
+
+/** Backpack's `WithoutPauseOnOutOfViewport`: it keeps playing off screen. */
+export const WithoutPauseOnOutOfViewport: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: false,
+    pauseOnOutOfViewport: false
+  },
+  parameters: { layout: 'fullscreen' },
+  render: (args) => (
+    <InPageLayout
+      height="100vh"
+      video={(videoProps) => <BackpackVideo {...args} {...videoProps} />}
+    />
+  )
+};
+
+/** Backpack's `WithPauseOnOutOfViewport`: the same as `InPage`, unmuted. */
+export const WithPauseOnOutOfViewport: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: false,
+    pauseOnOutOfViewport: true
+  },
+  parameters: { layout: 'fullscreen' },
+  render: (args) => (
+    <InPageLayout
+      height="100vh"
+      video={(videoProps) => <BackpackVideo {...args} {...videoProps} />}
+    />
+  )
 };
