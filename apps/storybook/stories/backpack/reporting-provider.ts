@@ -11,14 +11,14 @@ import { useEffect, useRef } from 'react';
 /**
  * A provider that reports playback back: with no provider attached, nothing
  * ever moves `state.playback`, so the wrapper's player-report fold
- * (`backpack-video.tsx:307-311`, the `playerReported` branch) never runs and the
+ * (`backpack-video.tsx:281-285`, the `playerReported` branch) never runs and the
  * only way in is its own
  * toggle. Under `controls: true` the toggle is not on the surface at all —
  * the click target is `Player.Controls`, which drives the controller
  * directly and reaches the wrapper only as a report.
  *
  * Everything else is a no-op, as in `.storybook/mock-player.tsx`'s adapter
- * without its `reportsPlayback` knob set (`mock-player.tsx:24-32`): the two
+ * without its `reportsPlayback` knob set (`mock-player.tsx:24-35`): the two
  * commands that emit are the two a sequence under test issues.
  *
  * Shared by `off-screen-pause.contract.test.ts` and

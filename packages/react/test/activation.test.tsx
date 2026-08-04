@@ -1783,12 +1783,14 @@ test('usePlayerActions() reaches the same activateFromInteraction binding', asyn
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
 });
 
-// The Storybook mock-player decorator and the off-screen-pause contract test
-// both cast this same handle back to `PlayerController` to reach
-// `setProvider` directly (apps/storybook/.storybook/mock-player.tsx:124-130,
-// apps/storybook/stories/backpack/off-screen-pause.contract.test.ts:567-574).
-// Composing the handle from the controller plus `activateFromInteraction`
-// must not lose that escape hatch.
+// Two places in the Storybook workspace cast this same handle back to
+// `PlayerController` to reach `setProvider` directly: the mock-player decorator
+// (apps/storybook/.storybook/mock-player.tsx:178, its
+// `as PlayerController` cast, reaching `:184`'s `controller.setProvider`) and
+// `useReportingProvider`, which every wrapper contract test stages its provider
+// through (apps/storybook/stories/backpack/reporting-provider.ts:72, the same
+// cast, reaching `:75`'s `controller.setProvider`). Composing the handle from the
+// controller plus `activateFromInteraction` must not lose that escape hatch.
 test('the ref handle still exposes the provider-facing setProvider escape hatch', () => {
   const handle = createRef<Player.PlayerHandle>();
   render(fixture({ ref: handle }));

@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 /**
  * What the wrapper knows and this hook deliberately does not own. Playback
  * state stays in `BackpackVideoSurface`'s machine
- * (`backpack-video.tsx:194-236`) — Backpack keeps both in one hook
+ * (`backpack-video.tsx:256-308`, from its `isPlaying` state to the `useOnChange`
+ * that drives the player) — Backpack keeps both in one hook
  * (`useVideoPlayerState`), but here the machine already exists and folding a
  * second owner of `isPlaying` into it would give the same value two homes.
  *
@@ -41,7 +42,8 @@ export type OffScreenPauseOptions = {
   readonly root?: Element | null;
   /**
    * Whether playback has started at least once
-   * (`backpack-video.tsx:195,216`), Backpack's `startedPlaying`.
+   * (`backpack-video.tsx:257,278`, its `startedPlaying` state and the
+   * `requestPlayback` that sets it), Backpack's `startedPlaying`.
    */
   readonly startedPlaying: boolean;
   /** Backpack's `threshold` (`Video/VideoPlayer.tsx:204,226`). */
@@ -52,7 +54,8 @@ export type OffScreenPauseOptions = {
  * A request for the wrapper's machine, not a state to render. Identity is the
  * signal: a new object is a new request, so the wrapper folds it in with the
  * `useChanged` it already uses for the player's own reports
- * (`backpack-video.tsx:81-86,223-236`), and re-rendering the same object asks
+ * (`backpack-video.tsx:258,274`, its two `useChanged` calls), and re-rendering the
+ * same object asks
  * for nothing. A plain boolean could not say that — it would keep asking for a
  * pause for as long as the video stayed off screen, and so would undo a play
  * the viewer started while it was there.
@@ -109,7 +112,8 @@ const INITIAL_INTENT: OffScreenPlaybackIntent = { playing: false };
  *   `VideoPlayer.test.tsx:207-243`.
  * - `controlledPaused` as a dependency would re-run the effect the moment a
  *   parent lifts `playing={false}`. The wrapper applies that prop during the
- *   same render (`backpack-video.tsx:236`), so playback is already live when
+ *   same render (`backpack-video.tsx:298`, its `propChanged` branch), so playback
+ *   is already live when
  *   the effect runs, and off screen the pause branch would pause the video the
  *   parent just asked to play — inverting the wrapper's own precedence, where
  *   `playing` is the last word.

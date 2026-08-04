@@ -82,7 +82,7 @@ export const scrollToVisibleFraction = (
 export type InPageVideoProps = {
   /**
    * The scroll container, or `null` on the first render — the video's own
-   * observer waits for it (`off-screen-pause.ts:208-222`).
+   * observer waits for it (`off-screen-pause.ts:212-226`).
    */
   readonly intersectionObserverRoot: Element | null;
   /** Drives the badge, and the story's own `onPlayChange` under it. */

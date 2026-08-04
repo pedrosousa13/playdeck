@@ -97,6 +97,19 @@ describe('resolveAspectRatios', () => {
 describe('backpackVideoCss', () => {
   const css = backpackVideoCss('480px');
 
+  /**
+   * The declarations of one rule, so that asserting a property is *in that rule*
+   * cannot be satisfied by the same property in another one. Needed because this
+   * stylesheet is one string: a `toContain` against the whole of it says only that
+   * a declaration exists somewhere.
+   */
+  const ruleBody = (selector: string): string => {
+    const from = css.indexOf(selector);
+    expect(from, `no rule for ${selector}`).toBeGreaterThan(-1);
+    const rule = css.slice(from);
+    return rule.slice(0, rule.indexOf('}'));
+  };
+
   it('reads the base breakpoint’s property outside any media query', () => {
     const base = css.slice(0, css.indexOf('@media'));
     expect(base).toContain(`aspect-ratio: var(${aspectRatioProperty('s')})`);
@@ -138,6 +151,45 @@ describe('backpackVideoCss', () => {
 
   it('exposes the natural value it falls back to', () => {
     expect(naturalAspectRatio).toBe(naturalValue);
+  });
+
+  // `BackpackVideoHoverPreview` renders its cover layer as a sibling of the
+  // player box rather than inside it, because `Player.Poster` cannot host a
+  // cover that returns — its own file argues that at length. The layer therefore
+  // has nothing positioning it, and these two rules are what make it a cover at
+  // all rather than a block stacked above the video. Asserted here because a
+  // deterministic story cannot see a stylesheet, and without them the component
+  // is visibly broken while every one of its own tests still passes.
+  it('lays the hover-preview cover over the player box', () => {
+    // Sliced to the rule rather than searched for in the whole sheet. Both
+    // declarations below happen to be unique strings in this file today, so a
+    // file-wide `toContain` would fail if either were deleted — but it would pass
+    // just as happily with the declaration sitting in some other rule, which is
+    // the failure this test exists to catch. The neighbour below has always had
+    // to slice, `pointer-events: none` appearing twice.
+    //
+    // Shrink-to-fit, so the root is the player's box and not the page's width:
+    // `.ef-video-player` is given a fixed width, and a full-width root would
+    // stretch an `inset: 0` cover well past the video.
+    expect(ruleBody('.ef-video-hover-preview {')).toContain(
+      'width: fit-content;'
+    );
+    // The layer sits over the media and under the play icon and the click
+    // target, which is `Player.Poster`'s own z-index
+    // (`packages/react/src/poster.tsx:55`) against the two rules above.
+    expect(ruleBody('.ef-video-hover-preview > .ef-video-cover {')).toContain(
+      'z-index: 10;'
+    );
+  });
+
+  // The cover covers the button that plays the video, so a layer that took
+  // pointer events would leave the resting surface with no working affordance.
+  // `Player.Poster` sets the same property for the same reason
+  // (`packages/react/src/poster.tsx:56`).
+  it('lets clicks through the hover-preview cover', () => {
+    expect(ruleBody('.ef-video-hover-preview > .ef-video-cover {')).toContain(
+      'pointer-events: none;'
+    );
   });
 });
 
