@@ -42,7 +42,8 @@ import { playerBox, playIcon } from './story-queries';
  *
  * So the source here is unresolvable by construction. `mock://` is not
  * `http(s)`, so Reely's source detection fails it
- * (`packages/react/src/use-activation.ts:330-336`), nothing is ever loaded, and
+ * (`packages/react/src/use-activation.ts:389-395`, its `unsupportedError`
+ * branch), nothing is ever loaded, and
  * no URL in this file can reach the DOM — the same trick
  * `Backpack parity/Video`'s `PlaybackRequestedButNeverStarted` and
  * `CoverClickRequestsPlayback` use, and the one

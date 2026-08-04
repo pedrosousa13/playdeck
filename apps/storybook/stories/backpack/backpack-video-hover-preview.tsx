@@ -111,7 +111,8 @@ export type BackpackVideoHoverPreviewProps = Omit<
  * `!startedPlaying` (`backpack-video.tsx:314`), so it never returns, and it
  * renders inside `Player.Poster`, which Reely hides on the first reported
  * playback and does not restore for the same source
- * (`packages/react/src/poster.tsx:75`, driven from `root.tsx:462-467`). A
+ * (`packages/react/src/poster.tsx:75`, driven from `root.tsx:471-476`, the
+ * `unsubscribePoster` subscription). A
  * returning cover is this component's whole point, so the *container* is local —
  * and only the container. The image inside it is {@link VideoCoverImage}, the same
  * component `BackpackVideo` renders inside its `Player.Poster`; the source comes

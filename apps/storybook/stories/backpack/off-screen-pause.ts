@@ -130,7 +130,8 @@ const INITIAL_INTENT: OffScreenPlaybackIntent = { playing: false };
  *   the wrapper has nothing to pass.
  * - The `window.IntersectionObserver` support check (`:36`). Reely's own
  *   activation path already requires the API
- *   (`packages/react/src/use-activation.ts:348-355`), so a branch here could
+ *   (`packages/react/src/use-activation.ts:407-414`, its
+ *   `'Viewport loading requires IntersectionObserver.'`), so a branch here could
  *   only guard an environment where the player itself does not run.
  */
 export const useOffScreenPause = ({

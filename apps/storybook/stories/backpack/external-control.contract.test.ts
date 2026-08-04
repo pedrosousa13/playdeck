@@ -12,7 +12,8 @@ import { useReportingProvider } from './reporting-provider';
  * `:499`), plus
  * `activateFromInteraction`, which Task 1 put on that handle so a dormant
  * interaction-loading player can be started from outside
- * (`packages/react/src/use-activation.ts:265-297`). External commands arrive
+ * (`packages/react/src/use-activation.ts:324-356`, its
+ * `const activateFromInteraction = useCallback`). External commands arrive
  * as ordinary player reports, so what every test below actually exercises is
  * the wrapper's existing three-deep playback fold (`backpack-video.tsx:281-298`,
  * the three `requestPlayback` branches) and its `onPlayChange` reporting
@@ -25,21 +26,23 @@ import { useReportingProvider } from './reporting-provider';
  * the wrapper's own ref, bypassing real activation. `activateFromInteraction`
  * is exercised too — it is half of the external "play" command — but only in
  * its no-op branch, which is what a `ready` player puts it in
- * (`packages/react/src/use-activation.ts:295`). Reaching a genuinely
+ * (`packages/react/src/use-activation.ts:354`, its
+ * `if (activation !== 'dormant') return`). Reaching a genuinely
  * `dormant` player through to a real `play` would need `Player.Root` to load
  * an actual provider through `@reely/react`'s own, unmocked `loadProvider`
  * (`packages/react/src/provider-loaders.ts`): an http(s) source would touch
  * the network for real, which this suite forbids, and a `mock://` source
  * fails detection before `loadProvider` is ever called
- * (`packages/react/src/use-activation.ts:453`). Mocking that module from
+ * (`packages/react/src/use-activation.ts:512`, its
+ * `source.status !== 'success'` early return). Mocking that module from
  * outside the package it belongs to would be the kind of private-boundary
  * reach this repository does not make elsewhere. That half is already
  * pinned inside `packages/react/test/activation.test.tsx`, against the real
  * pipeline with `loadProvider` mocked at the package's own boundary:
  * `'interaction plays once when installation synchronously becomes ready'`
- * (`:469-505`), `'interaction queues its play behind load when attach
- * reports readiness'` (`:507-550`), and `'interaction plays exactly once
- * after asynchronous readiness'` (`:983-1011`).
+ * (`:472-508`), `'interaction queues its play behind load when attach
+ * reports readiness'` (`:510-553`), and `'interaction plays exactly once
+ * after asynchronous readiness'` (`:1159-1187`).
  */
 
 /**
@@ -129,7 +132,8 @@ describe('BackpackVideo external play-state control', () => {
     const { external, reported } = renderExternallyControlled();
 
     // A no-op: activation is already `ready`, not `dormant`
-    // (`packages/react/src/use-activation.ts:295`), so this returns without
+    // (`packages/react/src/use-activation.ts:354`,
+    // `if (activation !== 'dormant') return`), so this returns without
     // touching anything. Pinned so the assertion below is about the `play`
     // call alone, not this having quietly done part of the work.
     external.current!.activateFromInteraction();

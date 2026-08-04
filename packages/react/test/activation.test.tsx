@@ -1864,7 +1864,8 @@ test('retries an installed provider error with one queued user play', async () =
 // SIDEPRO-201: an external controller drives activation through the
 // forwarded ref alone -- no click, no `Player.ActivationButton` in the tree
 // at all. The single `activateFromInteraction()` call below has to queue the
-// same play `useActivation` queues for a click (use-activation.ts:234-235),
+// same play `useActivation` queues for a click (use-activation.ts:293-294,
+// `active.started = true; active.queuedPlay = queuePlay`),
 // and that queued play has to reach the provider exactly once.
 test('a dormant interaction root activates and plays from a single ref call', async () => {
   const fake = createFakeProvider();
@@ -1885,7 +1886,9 @@ test('a dormant interaction root activates and plays from a single ref call', as
 // The test above calls `activateFromInteraction` alone and lets the
 // auto-queued play do the rest; SIDEPRO-201's external "play" command is
 // the pair, in this order — `activateFromInteraction()` then `play()`
-// (`use-activation.ts:265-297`, `player-controller.ts:381-386`) — the way
+// (`use-activation.ts:324-356`, its
+// `const activateFromInteraction = useCallback`;
+// `player-controller.ts:381-386`) — the way
 // `apps/storybook/stories/backpack/backpack-video.stories.tsx`'s
 // `ExternalEventsVideo`/`SocialCarouselIntegrationVideo` and
 // `external-control.contract.test.ts`'s file-level comment both describe
@@ -1989,7 +1992,8 @@ test('the ref handle still exposes the provider-facing setProvider escape hatch'
 // An external controller calls `activateFromInteraction()` unconditionally
 // before `play()`, so a player that has already activated has to tolerate
 // the call rather than restart itself or throw
-// (use-activation.ts:275-296 only proceeds from `dormant` or `error`).
+// (use-activation.ts:334-355, from `const activation = state.activation`, only
+// proceeds from `dormant` or `error`).
 test('activateFromInteraction on an already-ready player is a no-op', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);

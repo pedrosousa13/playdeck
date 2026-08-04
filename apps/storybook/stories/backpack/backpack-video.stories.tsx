@@ -1212,7 +1212,9 @@ export const WithThreshold: Story = inPageStory(
  * The external "play" command SIDEPRO-201 documents: `activateFromInteraction`
  * then `play`, in that order, against the same `PlayerHandle` ref
  * (`activateFromInteraction`'s dormant-or-error branches are
- * `use-activation.ts:265-297`; `play`'s not-ready short-circuit is
+ * `use-activation.ts:324-356`, its
+ * `const activateFromInteraction = useCallback`; `play`'s not-ready
+ * short-circuit is
  * `player-controller.ts:381-386`). One named function rather than one copy
  * of the pair per button, so the two calls have a single home to drift from
  * instead of two.

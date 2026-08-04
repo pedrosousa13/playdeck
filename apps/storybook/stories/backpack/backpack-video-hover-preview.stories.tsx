@@ -40,8 +40,8 @@ import { playerBox, playIcon } from './story-queries';
  * committed and `Player.Media` mounts no embed. Hover would ordinarily be the
  * thing that loads it — the composition issues `activateFromInteraction()`
  * before `play()` — but that call returns early for any activation other than
- * `dormant` or a recoverable `error` (`packages/react/src/use-activation.ts:265`,
- * its `activateFromInteraction`, and `:295`, its
+ * `dormant` or a recoverable `error` (`packages/react/src/use-activation.ts:324`,
+ * its `activateFromInteraction`, and `:354`, its
  * `if (activation !== 'dormant') return`). A staged-ready player has
  * nothing to activate, so hovering it reaches the provider as a `play` and
  * nothing else.
@@ -71,8 +71,10 @@ import { playerBox, playIcon } from './story-queries';
  * could travel is a provider's:
  *
  * - `muted` is reconciled by issuing `mute`/`unmute` at the controller
- *   (`packages/react/src/root.tsx:170`, from the reconcile at `:242-257`) and, on
- *   the native path only, by setting the property on a media element (`:325`).
+ *   (`packages/react/src/root.tsx:178`, `value ? controller.mute() :
+ *   controller.unmute()`, from the reconcile at `:250-265`) and, on
+ *   the native path only, by setting the property on a media element (`:333`,
+ *   `media.muted = controlledMuted.current ?? desiredMuted.current`).
  *   With no source committed there is no element and no adapter to command
  *   (`packages/react/src/viewport-media.tsx:181-183,227-229`). The `mute` command
  *   `backpack-autoplay-video.contract.test.ts` watches for is not available
@@ -80,7 +82,8 @@ import { playerBox, playIcon } from './story-queries';
  *   (`packages/core/src/player-controller.ts:657-695`), and nothing here
  *   autoplays.
  * - `loop` travels in the `nativeOptions` handed to the provider loader
- *   (`root.tsx:431`), so nothing carries it when nothing loads.
+ *   (`root.tsx:439`, `nativeOptions: { endTime, loop, startTime }`), so nothing
+ *   carries it when nothing loads.
  *
  * Both stories therefore pin what *is* here — the arg accepted, the preview
  * unchanged — and `Real playback/BackpackVideoHoverPreview` is where `muted`
@@ -444,7 +447,8 @@ export const WithPlayIcon: Story = {
  * Backpack's arg over a real Vimeo embed, which implements `mute`/`unmute`
  * (`packages/provider-vimeo/src/index.ts:140-141`) and takes `muted` in its embed
  * URL (`provider-vimeo/src/attachment.ts:64`), with `Player.Root` reconciling the
- * controlled value through the controller (`packages/react/src/root.tsx:170`). So
+ * controlled value through the controller (`packages/react/src/root.tsx:178`,
+ * `value ? controller.mute() : controller.unmute()`). So
  * what this story pins is the arg being accepted and changing nothing else: the
  * preview still starts on hover and still stops on leave.
  */

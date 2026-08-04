@@ -34,9 +34,12 @@ import { createReportingProvider } from './reporting-provider';
  * because this rig cannot observe them: `muted` and `loop` both need a provider,
  * and no provider attaches to a source that fails detection. `muted` is
  * reconciled by issuing `mute`/`unmute` at the controller
- * (`packages/react/src/root.tsx:170`, from the reconcile at `:242-257`) and, on
- * the native path only, by setting the property on a media element (`:325`);
- * `loop` travels in the `nativeOptions` handed to the loader (`:431`); and
+ * (`packages/react/src/root.tsx:178`, `value ? controller.mute() :
+ * controller.unmute()`, from the reconcile at `:250-265`) and, on
+ * the native path only, by setting the property on a media element (`:333`,
+ * `media.muted = controlledMuted.current ?? desiredMuted.current`);
+ * `loop` travels in the `nativeOptions` handed to the loader (`:439`,
+ * `nativeOptions: { endTime, loop, startTime }`); and
  * `Player.Media` renders no element at all for a source that fails detection
  * (`packages/react/src/viewport-media.tsx:181-183,227-229`). The `mute` command
  * `backpack-autoplay-video.contract.test.ts` watches for is not available either:
@@ -451,7 +454,7 @@ describe('BackpackVideoHoverPreview', () => {
  * it could not even if that gate were relaxed, because it renders inside
  * `Player.Poster`, which Reely turns `visibility: hidden` on the first reported
  * playback and never restores for the same source
- * (`packages/react/src/poster.tsx:75`, against `root.tsx:462-467`, the
+ * (`packages/react/src/poster.tsx:75`, against `root.tsx:471-476`, the
  * `setHiddenTransition` on `playback === 'playing'`).
  *
  * So the layer is the composition's own, exactly as it is Backpack's own

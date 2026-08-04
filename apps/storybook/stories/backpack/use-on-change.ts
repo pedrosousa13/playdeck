@@ -21,7 +21,8 @@ import { useEffect, useRef, useState } from 'react';
  * True on the render that first sees a new `value`. The update is applied during
  * render rather than from an effect, so a caller's own state settles in the same
  * commit instead of a second one — the shape `Root` uses for its source
- * transition (`packages/react/src/root.tsx:150-152`).
+ * transition (`packages/react/src/root.tsx:158-160`, its
+ * `if (sourceTransition.key !== sourceKeyForRender)`).
  */
 export const useChanged = <Value>(value: Value): boolean => {
   const [seen, setSeen] = useState(value);
