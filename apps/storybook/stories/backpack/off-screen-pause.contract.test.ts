@@ -1,14 +1,25 @@
 import {
+  createInitialPlayerState,
+  type PlayerController,
+  type ProviderAdapter,
+  type ProviderStateListener,
+  type ProviderStatePatch
+} from '@reely/core';
+import type { PlayerHandle } from '@reely/react';
+import {
   act,
   cleanup,
   fireEvent,
   render,
   renderHook
 } from '@testing-library/react';
-import { createElement, useRef } from 'react';
+import { createElement, useEffect, useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
-import { useViewportPause, type ViewportPauseOptions } from './viewport-pause';
+import {
+  useOffScreenPause,
+  type OffScreenPauseOptions
+} from './off-screen-pause';
 
 /**
  * A controllable `IntersectionObserver`, copied from
@@ -83,8 +94,10 @@ const latestObserver = (): ControlledIntersectionObserver => {
  * started — playing, started, pausing enabled, no explicit `playing={false}` —
  * and attaches a node, since a hook with no node to observe can do nothing.
  */
-const renderViewportPause = (overrides: Partial<ViewportPauseOptions> = {}) => {
-  let props: ViewportPauseOptions = {
+const renderOffScreenPause = (
+  overrides: Partial<OffScreenPauseOptions> = {}
+) => {
+  let props: OffScreenPauseOptions = {
     controlledPaused: false,
     isPlaying: true,
     pauseOnOutOfViewport: true,
@@ -94,16 +107,16 @@ const renderViewportPause = (overrides: Partial<ViewportPauseOptions> = {}) => {
   /** Every intent the wrapper would have folded into `requestPlayback`. */
   const requests: boolean[] = [];
   const view = renderHook(() => {
-    const viewport = useViewportPause(props);
+    const offScreen = useOffScreenPause(props);
     // The fold `BackpackVideoSurface` performs on a changed value
-    // (`backpack-video.tsx:69-74,167-182`): identity is the signal, so a new
+    // (`backpack-video.tsx:81-86,223-236`): identity is the signal, so a new
     // intent object is a new request, and re-rendering the same one is not.
-    const applied = useRef(viewport.intent);
-    if (applied.current !== viewport.intent) {
-      applied.current = viewport.intent;
-      requests.push(viewport.intent.playing);
+    const applied = useRef(offScreen.intent);
+    if (applied.current !== offScreen.intent) {
+      applied.current = offScreen.intent;
+      requests.push(offScreen.intent.playing);
     }
-    return viewport;
+    return offScreen;
   });
   const node = document.createElement('div');
   act(() => {
@@ -126,7 +139,7 @@ const renderViewportPause = (overrides: Partial<ViewportPauseOptions> = {}) => {
       });
     },
     /** Feeds the hook the wrapper's next set of values. */
-    update: (next: Partial<ViewportPauseOptions>) => {
+    update: (next: Partial<OffScreenPauseOptions>) => {
       props = { ...props, ...next };
       act(() => {
         view.rerender();
@@ -135,7 +148,7 @@ const renderViewportPause = (overrides: Partial<ViewportPauseOptions> = {}) => {
   };
 };
 
-describe('useViewportPause', () => {
+describe('useOffScreenPause', () => {
   beforeEach(() => {
     ControlledIntersectionObserver.instances = [];
     globalThis.IntersectionObserver =
@@ -148,7 +161,7 @@ describe('useViewportPause', () => {
   });
 
   it('pauses a playing video when it scrolls out of view', () => {
-    const { requests, scrollTo } = renderViewportPause();
+    const { requests, scrollTo } = renderOffScreenPause();
 
     scrollTo(true);
     scrollTo(false);
@@ -157,7 +170,7 @@ describe('useViewportPause', () => {
   });
 
   it('resumes the video it paused when it scrolls back in', () => {
-    const { requests, scrollTo, update } = renderViewportPause();
+    const { requests, scrollTo, update } = renderOffScreenPause();
 
     scrollTo(true);
     scrollTo(false);
@@ -172,18 +185,21 @@ describe('useViewportPause', () => {
   // is no evidence the video is off screen, and treating that as "not visible"
   // pauses an autoplaying video before it has ever rendered.
   it('requests nothing before the observer reports its first entry', () => {
-    const { node, observer, requests } = renderViewportPause();
+    const { node, observer, requests } = renderOffScreenPause();
 
     expect(observer().observe).toHaveBeenCalledWith(node);
     expect(requests).toEqual([]);
   });
 
-  // `startedPlaying` (`useVideoPlayerState.ts:145`). The wrapper's machine
-  // cannot currently produce playing-but-never-started — `requestPlayback(true)`
-  // sets both (`backpack-video.tsx:170-173`) — but the guard is Backpack's, and
-  // it is what keeps a video the viewer never touched out of the picture.
+  // `startedPlaying` is what keeps a video nobody has ever played out of the
+  // behaviour entirely: with no playback to preserve there is nothing to pause
+  // and nothing to come back to, and a hook that acted anyway would be deciding
+  // playback rather than restoring it. The wrapper's machine cannot currently
+  // produce playing-but-never-started — `requestPlayback(true)` sets both
+  // (`backpack-video.tsx:214-217`) — so the guard is pinned here rather than
+  // reachable from outside. Backpack's is at `useVideoPlayerState.ts:145`.
   it('leaves a video that never started playing alone', () => {
-    const { requests, scrollTo } = renderViewportPause({
+    const { requests, scrollTo } = renderOffScreenPause({
       startedPlaying: false
     });
 
@@ -194,7 +210,7 @@ describe('useViewportPause', () => {
   });
 
   it('requests nothing while pauseOnOutOfViewport is false', () => {
-    const { requests, scrollTo, update } = renderViewportPause({
+    const { requests, scrollTo, update } = renderOffScreenPause({
       pauseOnOutOfViewport: false
     });
 
@@ -210,8 +226,8 @@ describe('useViewportPause', () => {
   // (`useVideoPlayerState.ts:147,150-151`): the flag is only ever set by a
   // pause this hook performed, so a video that was already paused when it left
   // has nothing to come back to.
-  it('does not resume a video that was already paused when it left the viewport', () => {
-    const { requests, scrollTo } = renderViewportPause({ isPlaying: false });
+  it('does not resume a video that was already paused when it went off screen', () => {
+    const { requests, scrollTo } = renderOffScreenPause({ isPlaying: false });
 
     scrollTo(true);
     scrollTo(false);
@@ -220,39 +236,60 @@ describe('useViewportPause', () => {
     expect(requests).toEqual([]);
   });
 
-  // Second half: Backpack clears the flag from `start` and `toggle`
-  // (`useVideoPlayerState.ts:167,174`) so a hand-paused video stays paused.
-  it('does not resume after cancelResume, so a hand-paused video stays paused', () => {
-    const { requests, result, scrollTo, update } = renderViewportPause();
+  // Live playback must not be a dependency of the decision, or starting a video
+  // while it is off screen re-runs it and pauses what the viewer just started.
+  // Backpack describes the same hazard under "Why isPlayingRef exists"
+  // (`useVideoPlayerState.ts:40-45`).
+  it('leaves playback it did not ask for alone while the video is out of view', () => {
+    const { requests, scrollTo, update } = renderOffScreenPause();
 
     scrollTo(true);
     scrollTo(false);
     update({ isPlaying: false });
-    act(() => {
-      result.current.cancelResume();
-    });
+    // The viewer plays the off-screen video.
+    update({ isPlaying: true });
     scrollTo(true);
 
     expect(requests).toEqual([false]);
   });
 
-  // The hazard Backpack's "Why isPlayingRef exists" describes
-  // (`useVideoPlayerState.ts:40-45`): live playback must not be a dependency of
-  // the decision, or starting a video while it is off screen re-runs it and
-  // pauses what the viewer just started.
-  it('leaves playback it did not ask for alone while the video is out of view', () => {
-    const { requests, result, scrollTo, update } = renderViewportPause();
+  // The acceptance criterion, at the level the hook can enforce it on its own:
+  // any transition the hook did not ask for is somebody else's instruction, and
+  // it outranks a resume the hook was still holding. Nothing the wrapper could
+  // call would cover it, because the pause need not come from a click handler at
+  // all — under visible controls it arrives as a player report.
+  it('drops the pending resume when playback stops for a reason it did not request', () => {
+    const { requests, scrollTo, update } = renderOffScreenPause();
 
     scrollTo(true);
     scrollTo(false);
+    // The hook's own pause, applied by the wrapper.
     update({ isPlaying: false });
-    // The viewer plays the off-screen video, which reaches the hook the way
-    // any click does: `cancelResume`, then the wrapper's new `isPlaying`.
-    act(() => {
-      result.current.cancelResume();
-    });
+    // The viewer plays the off-screen video, then pauses it again — neither
+    // transition announced to the hook, which is what the player-report path
+    // looks like from in here.
     update({ isPlaying: true });
+    update({ isPlaying: false });
     scrollTo(true);
+
+    expect(requests).toEqual([false]);
+  });
+
+  // The same hazard, for the controlled pause rather than for playback:
+  // Backpack reads `playing` out of the decision effect's closure and does not
+  // declare it (`useVideoPlayerState.ts:118,154`), so lifting an explicit pause
+  // does not re-run the decision over an off-screen video.
+  it('leaves an off-screen video alone when the parent lifts an explicit pause', () => {
+    const { requests, scrollTo, update } = renderOffScreenPause();
+
+    scrollTo(true);
+    scrollTo(false);
+    // The parent sets `playing={false}` over the video this hook just paused.
+    update({ controlledPaused: true, isPlaying: false });
+    // Then flips it back to `true`. The wrapper applies the prop during the
+    // same render (`backpack-video.tsx:236`), so playback is live again while
+    // the video is still off screen — and the hook must not undo it.
+    update({ controlledPaused: false, isPlaying: true });
 
     expect(requests).toEqual([false]);
   });
@@ -260,7 +297,7 @@ describe('useViewportPause', () => {
   // `requestPlayUnlessControlledPaused` (`useVideoPlayerState.ts:117-124`):
   // an explicit `playing={false}` outranks a scroll-back-in.
   it('keeps the video paused on scroll-back while an explicit pause is in force', () => {
-    const { requests, scrollTo, update } = renderViewportPause();
+    const { requests, scrollTo, update } = renderOffScreenPause();
 
     scrollTo(true);
     scrollTo(false);
@@ -272,13 +309,13 @@ describe('useViewportPause', () => {
 
   it('passes threshold and root to the observer', () => {
     const root = document.createElement('div');
-    const { observer } = renderViewportPause({ root, threshold: 0.5 });
+    const { observer } = renderOffScreenPause({ root, threshold: 0.5 });
 
     expect(observer().init).toEqual({ root, threshold: 0.5 });
   });
 
   it('re-observes with a new observer when the threshold changes', () => {
-    const { node, observers, update } = renderViewportPause({ threshold: 0 });
+    const { node, observers, update } = renderOffScreenPause({ threshold: 0 });
 
     update({ threshold: 0.75 });
 
@@ -289,7 +326,7 @@ describe('useViewportPause', () => {
   });
 
   it('re-observes with a new observer when the root changes', () => {
-    const { node, observers, update } = renderViewportPause();
+    const { node, observers, update } = renderOffScreenPause();
     const root = document.createElement('div');
 
     update({ root });
@@ -301,7 +338,7 @@ describe('useViewportPause', () => {
   });
 
   it('disconnects the observer on unmount', () => {
-    const { observer, unmount } = renderViewportPause();
+    const { observer, unmount } = renderOffScreenPause();
 
     expect(observer().disconnect).not.toHaveBeenCalled();
     unmount();
@@ -315,7 +352,7 @@ describe('useViewportPause', () => {
  * transition below is the wrapper's own machine and nothing else.
  *
  * `playing: true` is what puts the wrapper's own play/pause toggle on the
- * surface from the first render: it loads eagerly (`backpack-video.tsx:320`),
+ * surface from the first render: it loads eagerly (`backpack-video.tsx:385`),
  * so `awaitingActivation` is false and `Player.ActivationButton` renders
  * nothing (`packages/react/src/loading-error.tsx:41`). The `mock://` scheme
  * then fails Reely's source detection, so no provider ever attaches and
@@ -361,13 +398,16 @@ const renderWrapper = (overrides: Partial<BackpackVideoProps> = {}) => {
 /**
  * The wiring the hook's own tests cannot see: that its intent reaches
  * `requestPlayback`, so a scroll-driven pause is reported through
- * `onPlayChange` like any other transition; that both click handlers cancel a
- * pending resume; that `controlledPaused` is the wrapper's `playing === false`;
- * and that the ref lands on `Player.Viewport`'s node with the three props'
- * values. Kept here rather than in a story because `Backpack parity/Video`'s
- * scroll stories belong to the same issue's next task.
+ * `onPlayChange` like any other transition; that a pause the viewer makes off
+ * screen survives the scroll back in; that `controlledPaused` is the wrapper's
+ * `playing === false`; and that the ref lands on `Player.Viewport`'s node with
+ * the three props' values.
+ *
+ * Kept here rather than in a story because a browser story cannot pause a video
+ * that is off screen — the automation driver scrolls its click target into view
+ * first, undoing the scroll under test.
  */
-describe('BackpackVideo viewport pause', () => {
+describe('BackpackVideo off-screen pause', () => {
   beforeEach(() => {
     ControlledIntersectionObserver.instances = [];
     globalThis.IntersectionObserver =
@@ -424,8 +464,9 @@ describe('BackpackVideo viewport pause', () => {
     expect(reported()).toEqual([true]);
   });
 
-  // The toggle is Backpack's `toggle`, which drops the pending auto-resume
-  // (`useVideoPlayerState.ts:174`).
+  // The acceptance criterion on the wrapper's own toggle. The same sequence
+  // through `Player.Controls` is at the bottom of this file, which is the path
+  // that has no click handler on it at all.
   it('keeps a video the viewer paused off screen paused when it scrolls back', () => {
     const { reported, scrollTo, toggle } = renderWrapper();
 
@@ -440,6 +481,23 @@ describe('BackpackVideo viewport pause', () => {
     expect(reported()).toEqual([true, false, true, false]);
   });
 
+  // The wrapper's documented precedence, from the other side: `playing` is the
+  // parent's last word, so a parent that lifts `playing={false}` over a video
+  // this hook paused gets playback — the hook must not pause it straight
+  // back. Backpack keeps this by leaving the controlled pause out of the
+  // decision effect's dependencies (`useVideoPlayerState.ts:154`).
+  it('keeps playing when the parent lifts playing={false} off screen', () => {
+    const { reported, scrollTo, setProps, toggle } = renderWrapper();
+
+    toggle();
+    scrollTo(true);
+    scrollTo(false);
+    setProps({ playing: false });
+    setProps({ playing: true });
+
+    expect(reported()).toEqual([true, false, true]);
+  });
+
   // `controlledPaused`, which the wrapper answers with its own `playing` prop.
   it('keeps the video paused on scroll-back while playing is false', () => {
     const { reported, scrollTo, setProps, toggle } = renderWrapper();
@@ -451,5 +509,147 @@ describe('BackpackVideo viewport pause', () => {
     scrollTo(true);
 
     expect(reported()).toEqual([true, false]);
+  });
+});
+
+/**
+ * A provider that reports playback back, which is the one thing the wrapper
+ * harness above cannot do: with no provider attached, nothing ever moves
+ * `state.playback`, so the wrapper's player-report fold
+ * (`backpack-video.tsx:223`) never runs and the only way in is its own toggle.
+ * Under `controls: true` the toggle is not on the surface at all — the click
+ * target is `Player.Controls`, which drives the controller directly and reaches
+ * the wrapper only as a report.
+ *
+ * Everything else is a no-op, as in `.storybook/mock-player.tsx`'s adapter:
+ * the two commands that emit are the two the sequence under test issues.
+ */
+const createReportingProvider = () => {
+  const listeners = new Set<ProviderStateListener>();
+  const emit = (patch: ProviderStatePatch): void => {
+    listeners.forEach((listener) => listener(patch));
+  };
+  const ok = async (): Promise<{ readonly ok: true }> => ({ ok: true });
+  const adapter: ProviderAdapter = {
+    provider: 'native',
+    attach: () => {},
+    load: () => {},
+    destroy: () => {},
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    play: async () => {
+      emit({ playback: 'playing' });
+      return { ok: true };
+    },
+    pause: async () => {
+      emit({ playback: 'paused' });
+      return { ok: true };
+    },
+    mute: ok,
+    unmute: ok,
+    setVolume: ok,
+    setPlaybackRate: ok
+  };
+  return { adapter, emit };
+};
+
+/**
+ * The wrapper with {@link createReportingProvider} staged into its own
+ * `Player.Root` — the trick `MockedBackpackVideo` uses in the stories
+ * (`backpack-video.stories.tsx:191-196`), by way of the `ref` the wrapper
+ * forwards. Reported ready, so `awaitingActivation` is false and the surface
+ * hands over to `Player.Controls`; no `playing` prop, so the root loads on
+ * interaction and nothing commits the inert `mock://` source.
+ */
+const useReportingProvider = () => {
+  const handle = useRef<PlayerHandle>(null);
+  useEffect(() => {
+    // `Player.Root`'s imperative handle is its `PlayerController`; the cast
+    // opens the provider-facing `setProvider` that `PlayerHandle` omits.
+    const controller = handle.current as PlayerController | null;
+    if (!controller) return;
+    const provider = createReportingProvider();
+    controller.setProvider(provider.adapter);
+    provider.emit({
+      activation: 'ready',
+      capabilities: createInitialPlayerState().capabilities,
+      lifecycle: 'ready',
+      playback: 'paused',
+      provider: 'native'
+    });
+    return () => controller.setProvider(undefined);
+  }, []);
+  return handle;
+};
+
+const StagedVideo = (props: BackpackVideoProps) =>
+  // Returned straight from the hook rather than held in a local, which is what
+  // `react-hooks/refs` asks for: a ref that never becomes a value in this
+  // scope cannot be read during render. `MockedBackpackVideo` does the same
+  // with `useMockPlayer` (`backpack-video.stories.tsx:195`).
+  createElement(BackpackVideo, { ...props, ref: useReportingProvider() });
+
+/**
+ * The acceptance criterion end to end, on the path that has no click handler on
+ * it: under visible controls every play and pause the viewer makes reaches the
+ * wrapper as a player report, so nothing along the way can announce "the viewer
+ * did this" — only the hook's own record of what it asked for can tell the two
+ * apart.
+ */
+describe('BackpackVideo off-screen pause under visible controls', () => {
+  beforeEach(() => {
+    ControlledIntersectionObserver.instances = [];
+    globalThis.IntersectionObserver =
+      ControlledIntersectionObserver as unknown as typeof globalThis.IntersectionObserver;
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.IntersectionObserver = originalIntersectionObserver;
+  });
+
+  it('keeps a video the viewer paused off screen through the controls paused when it scrolls back', () => {
+    const onPlayChange = vi.fn<(isPlaying: boolean) => void>();
+    const view = render(
+      createElement(StagedVideo, {
+        controls: true,
+        muted: true,
+        onPlayChange,
+        url: 'mock://reely/unresolvable.mp4'
+      })
+    );
+    const reported = () => onPlayChange.mock.calls.map(([playing]) => playing);
+    const playButton = view.container.querySelector(
+      '[data-reely-part="play-button"]'
+    )!;
+    const press = () => {
+      act(() => {
+        fireEvent.click(playButton);
+      });
+    };
+    const scrollTo = (visible: boolean) => {
+      act(() => {
+        latestObserver().emit(visible);
+      });
+    };
+
+    press();
+    expect(reported()).toEqual([true]);
+
+    scrollTo(true);
+    scrollTo(false);
+    expect(reported()).toEqual([true, false]);
+
+    // The viewer plays the off-screen video and pauses it again, both through
+    // the player's own controls.
+    press();
+    press();
+    expect(reported()).toEqual([true, false, true, false]);
+
+    scrollTo(true);
+
+    expect(reported()).toEqual([true, false, true, false]);
   });
 });

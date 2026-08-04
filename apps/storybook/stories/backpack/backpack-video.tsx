@@ -1,7 +1,7 @@
 import * as Player from '@reely/react';
 import { useEffect, useRef, useState, type ElementType, type Ref } from 'react';
 import { useVideoThumbnail } from './video-thumbnail';
-import { useViewportPause } from './viewport-pause';
+import { useOffScreenPause } from './off-screen-pause';
 
 /**
  * The slice of EF Backpack's `VideoPlayer` prop API this wrapper reimplements
@@ -45,7 +45,7 @@ export type BackpackVideoProps = {
   readonly muted?: boolean;
   /** Callback function when the video is played or paused. */
   readonly onPlayChange?: (isPlaying: boolean) => void;
-  /** Whether to pause the video when it goes out of the viewport. */
+  /** Whether to pause the video when it scrolls off screen. */
   readonly pauseOnOutOfViewport?: boolean;
   /** Set to `true` to start playing on load. */
   readonly playing?: boolean;
@@ -117,9 +117,10 @@ type SurfaceProps = Pick<
   readonly loadsOnInteraction: boolean;
   /**
    * Required where the public prop is optional: `BackpackVideo` has already
-   * applied Backpack's default, and `useViewportPause` asks for the answer
-   * rather than re-defaulting it. `threshold` and `intersectionObserverRoot`
-   * above stay optional because the observer's own defaults are Backpack's.
+   * applied the default, and `useOffScreenPause` asks for the answer rather
+   * than re-defaulting it. `threshold` and `intersectionObserverRoot` above
+   * stay optional because `IntersectionObserver` already defaults them to the
+   * same values, so nothing here has to restate them.
    */
   readonly pauseOnOutOfViewport: boolean;
 };
@@ -128,10 +129,12 @@ type SurfaceProps = Pick<
  * Everything below `Player.Root`, so it can read player state and issue player
  * commands.
  *
- * `isPlaying` is component state rather than a read of `state.playback`, which
- * is how Backpack's `useVideoPlayerState` models it: the component asks for
- * playback and the player confirms it afterwards. Reely is driven from here,
- * and what Reely confirms is folded back in.
+ * `isPlaying` is component state rather than a read of `state.playback`, because
+ * this component is what asks for playback and the player only confirms it
+ * afterwards: a request has to be representable before there is anything to
+ * confirm, and `state.playback` can only ever report the confirmation. What the
+ * player confirms is folded back in. Backpack models it the same way, in
+ * `useVideoPlayerState`.
  *
  * Which affordance is on screen, in every state. `awaitingActivation` below is
  * exactly the condition `Player.ActivationButton` renders itself under
@@ -149,9 +152,12 @@ type SurfaceProps = Pick<
  * only under the interaction strategy, which is why `awaitingActivation` is
  * false for the whole of an eagerly-loaded (`playing`) player: there the toggle
  * is the target from the start, and a command issued before the provider
- * attaches simply reports not-ready. The play icon follows Backpack's own
- * condition (`VideoPlayer.tsx:349-351`), which keeps showing it under visible
- * controls until playback has started once.
+ * attaches simply reports not-ready. The play icon stays up under visible
+ * controls until playback has started once, because until then it is the only
+ * thing on the surface that says this box is a video worth clicking; afterwards
+ * the controls' own button carries the state and a second icon would just
+ * contradict it. Backpack's condition is the same
+ * (`VideoPlayer.tsx:349-351`).
  *
  * A cover image, when there is one, sits above `Player.Media` for as long as
  * playback has never started — independent of every row in the table above,
@@ -193,11 +199,7 @@ const BackpackVideoSurface = ({
   // Destructured under other names because `react-hooks/refs` reads a member
   // named `ref` as a ref object being dereferenced during render, and would
   // then treat every other member of the same object as one too.
-  const {
-    cancelResume: cancelViewportResume,
-    intent: viewportIntent,
-    ref: observeViewport
-  } = useViewportPause({
+  const { intent: offScreenIntent, ref: observeViewport } = useOffScreenPause({
     // The wrapper's answer to "is an explicit pause in force": Backpack asks
     // `(playing ?? parentPlaying) === false` (`useVideoPlayerState.ts:118`)
     // and there is no `parentPlaying` here.
@@ -208,7 +210,7 @@ const BackpackVideoSurface = ({
     startedPlaying,
     threshold
   });
-  const viewportRequested = useChanged(viewportIntent);
+  const offScreenRequested = useChanged(offScreenIntent);
 
   const requestPlayback = (next: boolean) => {
     setIsPlaying(next);
@@ -223,29 +225,16 @@ const BackpackVideoSurface = ({
   // A scroll took the video off screen or brought it back. Applied *after* the
   // player's report: the report says what playback already was, where the
   // intent decides what it should be now, and the hook raises each intent once
-  // (`viewport-pause.ts:48-57`) — so a report that lands in the same commit
+  // (`off-screen-pause.ts:51-60`) — so a report that lands in the same commit
   // (a provider confirming the play the viewer just started) would swallow the
   // pause with nothing left to raise it again. Applied *before* the `playing`
   // prop for the reason below: the parent's explicit value stays the last
   // word, which is also why the hook takes `controlledPaused` and asks for a
   // pause rather than a resume while one is in force.
-  if (viewportRequested) requestPlayback(viewportIntent.playing);
+  if (offScreenRequested) requestPlayback(offScreenIntent.playing);
   // `playing` is the parent's explicit override, so it is applied after the
   // player's own report and wins a render where both changed.
   if (propChanged && playing !== undefined) requestPlayback(playing);
-
-  // A request the viewer made, Backpack's `start` and `toggle`, which drop any
-  // pending auto-resume before they touch playback
-  // (`useVideoPlayerState.ts:167,174`): a video paused by hand while off
-  // screen must stay paused when it scrolls back in. On the cover click below
-  // there is provably nothing to drop — the cover is only up while playback
-  // has never started, which is also the state the hook does nothing in — but
-  // both handlers go through here, because "which click is user-initiated" is
-  // a smaller thing to keep right than "which click can leave a flag set".
-  const requestPlaybackFromViewer = (next: boolean) => {
-    cancelViewportResume();
-    requestPlayback(next);
-  };
 
   // The one place the player is driven. Both commands are idempotent, so a
   // change the player reported itself costs a redundant no-op rather than a
@@ -267,8 +256,11 @@ const BackpackVideoSurface = ({
     <Player.Viewport
       className={['ef-video-player', className].filter(Boolean).join(' ')}
       data-playing={isPlaying}
-      // The element the viewport observer watches: the outer player box, which
-      // is what Backpack observes too (`VideoPlayer.tsx:225,312`).
+      // The element the off-screen observer watches: the outer player box, since
+      // that is the thing whose visibility the behaviour is about. The media
+      // element inside it is the wrong target — it is absent until a provider
+      // attaches, and an embed may size itself independently. Backpack observes
+      // the same box (`VideoPlayer.tsx:225,312`).
       // `Player.Viewport` merges this with the ref it keeps for itself
       // (`packages/react/src/viewport-media.tsx:63-89`).
       ref={observeViewport}
@@ -320,7 +312,7 @@ const BackpackVideoSurface = ({
           aria-label={ariaLabel}
           aria-pressed={isPlaying}
           className="ef-video-controller"
-          onClick={() => requestPlaybackFromViewer(!isPlaying)}
+          onClick={() => requestPlayback(!isPlaying)}
           type="button"
         />
       ) : null}
@@ -344,7 +336,7 @@ const BackpackVideoSurface = ({
         // immediately instead of after the provider reports playing. Scoped
         // to `showsCover` so the coverless stories keep reporting only what
         // the player confirms.
-        onClick={showsCover ? () => requestPlaybackFromViewer(true) : undefined}
+        onClick={showsCover ? () => requestPlayback(true) : undefined}
       >
         {''}
       </Player.ActivationButton>

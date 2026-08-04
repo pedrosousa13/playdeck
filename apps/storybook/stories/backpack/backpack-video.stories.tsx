@@ -9,7 +9,7 @@ import { withCss } from '../../.storybook/theme';
 import { backpackVideoCss } from './backpack-video-css';
 import { ready } from '../support';
 import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
-import { InPageLayout, scrollContainerClass } from './in-page-layout';
+import { InPageLayout } from './in-page-layout';
 
 // Deterministic and offline (apps/storybook/README.md), even though the args
 // below are Backpack's own provider URLs: every story here stages a player that
@@ -128,7 +128,7 @@ const clearOfTheEdge = -0.5;
 
 /** The scroll container and the player box inside it. */
 const inPageParts = (canvasElement: HTMLElement) => ({
-  container: canvasElement.querySelector(`.${scrollContainerClass}`)!,
+  container: canvasElement.querySelector('[role="region"]')!,
   video: canvasElement.querySelector('.ef-video-player')!
 });
 
@@ -684,13 +684,56 @@ export const CoverClickRequestsPlayback: Story = {
  * nothing here fakes the API. `Real playback/BackpackVideo` carries Backpack's
  * exact args for the same three.
  *
- * Two properties of the wrapper are left to `viewport-pause.contract.test.ts`,
+ * Two properties of the wrapper are left to `off-screen-pause.contract.test.ts`,
  * which can drive the observer directly. Neither is observable here: a pause
  * the viewer issues while the video is off screen (the automation driver
  * scrolls an element into view before clicking it, which would undo the scroll
- * under test), and the precedence between a viewport intent and a `playing`
+ * under test), and the precedence between an off-screen intent and a `playing`
  * prop that change in one commit.
+ *
+ * All four render the same thing — `MockedInPageVideo` over a staged paused
+ * player, full-bleed — and open the same way, so the render and the opening are
+ * the two helpers below. What is left in each story is its args and the scroll
+ * sequence it asserts, which is all they differ on.
  */
+
+const inPageStory = (args: Story['args'], play: Story['play']): Story => ({
+  args,
+  parameters: { ...pausedPlayer, layout: 'fullscreen' },
+  render: (storyArgs, { parameters }) => (
+    <MockedInPageVideo
+      {...storyArgs}
+      player={parameters.player as MockPlayerParameters}
+    />
+  ),
+  play
+});
+
+/** The context a `play` function is given, for {@link startPlaying} to take. */
+type PlayContext = Parameters<NonNullable<Story['play']>>[0];
+
+/**
+ * The opening all four share: the badge at rest, "scroll down to see the
+ * video", and playback started from the wrapper's own toggle. Returns the three
+ * things the rest of a scroll sequence is written against.
+ */
+const startPlaying = async ({
+  canvas,
+  canvasElement,
+  userEvent
+}: PlayContext) => {
+  const { container, video } = inPageParts(canvasElement);
+  const badge = canvas.getByRole('status');
+  await expect(badge).toHaveTextContent('Paused');
+
+  scrollToVisibleFraction(container, video, fullyVisible);
+  await userEvent.click(
+    await canvas.findByRole('button', { name: 'Play video' })
+  );
+  await waitFor(() => expect(badge).toHaveTextContent('Playing'));
+
+  return { badge, container, video };
+};
 
 /**
  * Backpack's `InPage`: its `InPageLayout` with `pauseOnOutOfViewport` on and
@@ -699,26 +742,11 @@ export const CoverClickRequestsPlayback: Story = {
  * badge the layout drives from `onPlayChange`. Every step is a positive
  * assertion, so each one waits for the observer rather than for a clock.
  */
-export const InPage: Story = {
-  args: { url: vimeoUrl, muted: true, pauseOnOutOfViewport: true },
-  parameters: { ...pausedPlayer, layout: 'fullscreen' },
-  render: (args, { parameters }) => (
-    <MockedInPageVideo
-      {...args}
-      player={parameters.player as MockPlayerParameters}
-    />
-  ),
-  play: async ({ args, canvas, canvasElement, userEvent }) => {
-    const { container, video } = inPageParts(canvasElement);
-    const badge = canvas.getByRole('status');
-    await expect(badge).toHaveTextContent('Paused');
-
-    // "Scroll down to see the video", then start it.
-    scrollToVisibleFraction(container, video, fullyVisible);
-    await userEvent.click(
-      await canvas.findByRole('button', { name: 'Play video' })
-    );
-    await waitFor(() => expect(badge).toHaveTextContent('Playing'));
+export const InPage: Story = inPageStory(
+  { url: vimeoUrl, muted: true, pauseOnOutOfViewport: true },
+  async (context) => {
+    const { args } = context;
+    const { badge, container, video } = await startPlaying(context);
 
     scrollToVisibleFraction(container, video, clearOfTheEdge);
     await waitFor(() => expect(badge).toHaveTextContent('Paused'));
@@ -728,7 +756,7 @@ export const InPage: Story = {
 
     await expect(args.onPlayChange).toHaveBeenCalledTimes(3);
   }
-};
+);
 
 /**
  * Backpack's `WithoutPauseOnOutOfViewport` args (muted here, unmuted in
@@ -741,26 +769,13 @@ export const InPage: Story = {
  * would land in one frame, the browser would never sample the video off screen,
  * and this story would pass over a wrapper that pauses on every scroll. The
  * hand pause at the end is the settle point: a positive transition, awaited
- * long enough that a viewport-driven one would have been reported by then too.
+ * long enough that an off-screen-driven one would have been reported by then too.
  */
-export const WithoutPauseOnOutOfViewport: Story = {
-  args: { url: vimeoUrl, muted: true, pauseOnOutOfViewport: false },
-  parameters: { ...pausedPlayer, layout: 'fullscreen' },
-  render: (args, { parameters }) => (
-    <MockedInPageVideo
-      {...args}
-      player={parameters.player as MockPlayerParameters}
-    />
-  ),
-  play: async ({ args, canvas, canvasElement, userEvent }) => {
-    const { container, video } = inPageParts(canvasElement);
-    const badge = canvas.getByRole('status');
-
-    scrollToVisibleFraction(container, video, fullyVisible);
-    await userEvent.click(
-      await canvas.findByRole('button', { name: 'Play video' })
-    );
-    await waitFor(() => expect(badge).toHaveTextContent('Playing'));
+export const WithoutPauseOnOutOfViewport: Story = inPageStory(
+  { url: vimeoUrl, muted: true, pauseOnOutOfViewport: false },
+  async (context) => {
+    const { args, canvas, userEvent } = context;
+    const { badge, container, video } = await startPlaying(context);
 
     scrollToVisibleFraction(container, video, clearOfTheEdge);
     await observedVisibility(container, video, false);
@@ -776,41 +791,29 @@ export const WithoutPauseOnOutOfViewport: Story = {
     // out would have added one and its resume another.
     await expect(args.onPlayChange).toHaveBeenCalledTimes(2);
   }
-};
+);
 
 /**
  * Backpack's `WithPauseOnOutOfViewport` args, which differ from its `InPage`
  * only in `muted` — so where the deterministic `InPage` above pins the
  * pause-and-resume cycle, this one pins the exception to it: a video the viewer
- * paused by hand is not started again by scrolling it back into view. Backpack
- * keeps that in `wasPlayingBeforeOutOfViewRef`, set only by a pause it
- * performed itself (`useVideoPlayerState.ts:147,150-151`).
+ * paused by hand is not started again by scrolling it back into view, because a
+ * resume restores playback the wrapper interrupted and there was none to
+ * interrupt. Backpack's equivalent bookkeeping is `wasPlayingBeforeOutOfViewRef`
+ * (`useVideoPlayerState.ts:147,150-151`).
  *
  * The hand pause happens while the video is on screen, which is the half of
  * that guard a browser can show: pausing it while it is off screen means
  * clicking an element the automation driver would scroll into view first, so
- * that half stays in `viewport-pause.contract.test.ts`. Same shape as above —
+ * that half stays in `off-screen-pause.contract.test.ts`. Same shape as above —
  * both scrolls awaited on the story's own observer, and the final click is the
  * settle point.
  */
-export const WithPauseOnOutOfViewport: Story = {
-  args: { url: vimeoUrl, muted: true, pauseOnOutOfViewport: true },
-  parameters: { ...pausedPlayer, layout: 'fullscreen' },
-  render: (args, { parameters }) => (
-    <MockedInPageVideo
-      {...args}
-      player={parameters.player as MockPlayerParameters}
-    />
-  ),
-  play: async ({ args, canvas, canvasElement, userEvent }) => {
-    const { container, video } = inPageParts(canvasElement);
-    const badge = canvas.getByRole('status');
-
-    scrollToVisibleFraction(container, video, fullyVisible);
-    await userEvent.click(
-      await canvas.findByRole('button', { name: 'Play video' })
-    );
-    await waitFor(() => expect(badge).toHaveTextContent('Playing'));
+export const WithPauseOnOutOfViewport: Story = inPageStory(
+  { url: vimeoUrl, muted: true, pauseOnOutOfViewport: true },
+  async (context) => {
+    const { args, canvas, userEvent } = context;
+    const { badge, container, video } = await startPlaying(context);
 
     await userEvent.click(
       await canvas.findByRole('button', { name: 'Pause video' })
@@ -827,11 +830,11 @@ export const WithPauseOnOutOfViewport: Story = {
     );
     await waitFor(() => expect(badge).toHaveTextContent('Playing'));
 
-    // Three transitions, the three clicks: the video left the viewport already
+    // Three transitions, the three clicks: the video went off screen already
     // paused, so there was nothing to pause and nothing to come back to.
     await expect(args.onPlayChange).toHaveBeenCalledTimes(3);
   }
-};
+);
 
 /**
  * `threshold`, which Backpack exposes but has no story for. At `0.5` the
@@ -841,29 +844,16 @@ export const WithPauseOnOutOfViewport: Story = {
  * this story makes, and it is why both positions are a wide margin from the
  * threshold rather than a pixel either side of it.
  */
-export const WithThreshold: Story = {
-  args: {
+export const WithThreshold: Story = inPageStory(
+  {
     url: vimeoUrl,
     muted: true,
     pauseOnOutOfViewport: true,
     threshold: 0.5
   },
-  parameters: { ...pausedPlayer, layout: 'fullscreen' },
-  render: (args, { parameters }) => (
-    <MockedInPageVideo
-      {...args}
-      player={parameters.player as MockPlayerParameters}
-    />
-  ),
-  play: async ({ args, canvas, canvasElement, userEvent }) => {
-    const { container, video } = inPageParts(canvasElement);
-    const badge = canvas.getByRole('status');
-
-    scrollToVisibleFraction(container, video, fullyVisible);
-    await userEvent.click(
-      await canvas.findByRole('button', { name: 'Play video' })
-    );
-    await waitFor(() => expect(badge).toHaveTextContent('Playing'));
+  async (context) => {
+    const { args } = context;
+    const { badge, container, video } = await startPlaying(context);
 
     scrollToVisibleFraction(container, video, quarterVisible);
     await waitFor(() => expect(badge).toHaveTextContent('Paused'));
@@ -873,4 +863,4 @@ export const WithThreshold: Story = {
 
     await expect(args.onPlayChange).toHaveBeenCalledTimes(3);
   }
-};
+);

@@ -8,25 +8,30 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
  * the container and back.
  *
  * Shared by the deterministic `Backpack parity/Video` stories and the
- * `Real playback/BackpackVideo` ones — like `backpack-video-css.ts` — because
- * the layout is the whole of what those two sets have in common and the video
- * inside it is the whole of what they differ on. Which video that is, is the
- * `video` prop's business: the deterministic stories put a mock-staged player
- * there, the real-playback ones the wrapper itself.
+ * `Real playback/BackpackVideo` ones, because the layout is the whole of what
+ * those two sets have in common and the video inside it is the whole of what
+ * they differ on. Which video that is, is the `video` prop's business: the
+ * deterministic stories put a mock-staged player there, the real-playback ones
+ * the wrapper itself.
  *
  * Backpack's Tailwind classes and its `Text` component are not reproduced —
- * behaviour is what the wrapper is for, so the styling here is story-local
- * inline CSS in the shape of Backpack's own classes.
+ * behaviour is what the wrapper is for, so the styling is story-local.
+ *
+ * Inline `style`, where the neighbouring `backpack-video-css.ts` is a stylesheet
+ * mounted by `withCss`: nothing here needs a selector, so nothing here needs a
+ * stylesheet. That file exists because the rules it carries cannot be written
+ * inline — a `:hover` state, a `::after` play triangle, and descendant matches
+ * against class names the wrapper itself emits, which no caller of the wrapper
+ * is in a position to set a `style` on. This layout renders its own elements
+ * and every rule below applies unconditionally to one of them, so the styles
+ * live on the elements they style and there is no second file to keep in step.
  */
-
-/** Class on the scroll container, so a `play` function can scroll it. */
-export const scrollContainerClass = 'story-in-page-scroll';
 
 /** What the layout hands the video it wraps. */
 export type InPageVideoProps = {
   /**
    * The scroll container, or `null` on the first render — the video's own
-   * observer waits for it (`viewport-pause.ts:148-162`).
+   * observer waits for it (`off-screen-pause.ts:208-222`).
    */
   readonly intersectionObserverRoot: Element | null;
   /** Drives the badge, and the story's own `onPlayChange` under it. */
@@ -96,22 +101,28 @@ export const InPageLayout = ({
   video
 }: InPageLayoutProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  // `useState` rather than `useRef`, and Backpack's own comment says why
-  // (`Video.stories.tsx:321-322`): setting the element triggers a re-render,
-  // giving the video a defined root before its `IntersectionObserver` is set
-  // up. A ref would still be empty on the render that passed it down.
+  // `useState` rather than `useRef`: setting the element triggers a re-render,
+  // so the video has a defined root before its `IntersectionObserver` is set up.
+  // A ref would still be empty on the render that passed it down. Backpack's own
+  // comment says the same (`Video.stories.tsx:321-322`).
   const [scrollContainer, setScrollContainer] = useState<Element | null>(null);
 
   return (
+    // A named region, for the same reason the badge below is a `status`: it is
+    // the other thing a `play` function reaches for — the element it scrolls —
+    // so it gets a role to find it by rather than an exported class name that
+    // would carry no styles. Naming a scrollable area is what a real page would
+    // do with its own landmarks anyway.
     <div
-      className={scrollContainerClass}
+      aria-label="In-page content"
       ref={setScrollContainer}
+      role="region"
       style={{ height, overflowY: 'auto', position: 'relative' }}
     >
       <div style={badgeBarStyle}>
         {/*
-          A live region, where Backpack's badge is a plain `div`: it is the one
-          thing in the layout a `play` function reads, so it gets a role to
+          A live region, where Backpack's badge is a plain `div`: it is what a
+          `play` function reads the playback state off, so it gets a role to
           find it by rather than a class, and "the playback state changed" is
           what `status` is for.
         */}
