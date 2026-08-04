@@ -119,6 +119,39 @@ export type BackpackVideoProps = {
 };
 
 /**
+ * {@link BackpackVideoProps} plus the one prop that is not Backpack's. Kept out
+ * of the exported type deliberately: that type is a compatibility obligation to
+ * Backpack's consumers (ADR-0003, `docs/adr/0003-backpack-is-a-scenario-source-not-a-spec.md:54-57`)
+ * and this is no part of it — it exists so a composition in this repository can
+ * reach a `Player.Root` setting Backpack's API has no word for.
+ *
+ * Exported for {@link BackpackVideoInternal}'s signature only. `BackpackVideo`,
+ * the public name, takes {@link BackpackVideoProps} and forces the extra prop
+ * off, so "internal" is enforced by the compiler and at runtime rather than
+ * asserted in a comment — pinned in
+ * `backpack-autoplay-video.contract.test.ts`.
+ */
+export type BackpackVideoInternalProps = BackpackVideoProps & {
+  /**
+   * Load the provider when the player's box first scrolls into view, and — with
+   * `playing` left at its default — start playing there. Internal to this
+   * wrapper, not part of Backpack's prop API, and with `BackpackAutoplayVideo`
+   * as its only caller: Backpack has no equivalent prop because it has no
+   * equivalent strategy, its `AutoplayVideo` mounting a player that plays at
+   * once and leaving `pauseOnOutOfViewport` to stop it again if that happened
+   * off screen (`Video/AutoplayVideo.tsx:30`,
+   * `Video/useVideoPlayerState.ts:144-154`).
+   *
+   * Defaults to `false`, so every other caller keeps the strategy `playing`
+   * chose for it. Read live rather than frozen at mount like `playing` below,
+   * because the one caller passes a constant — a flip would tear down the
+   * attached provider, as a change of strategy always does
+   * (`packages/react/src/use-activation.ts:191-209`).
+   */
+  readonly autoplayOnViewportEntry?: boolean;
+};
+
+/**
  * True on the render that first sees a new `value`. The update is applied
  * during render rather than from an effect, so a caller's own state settles in
  * the same commit instead of a second one — the shape `Root` uses for its
@@ -419,9 +452,16 @@ const BackpackVideoSurface = ({
   );
 };
 
-export const BackpackVideo = ({
+/**
+ * The whole wrapper, with the one setting Backpack's API has no word for
+ * ({@link BackpackVideoInternalProps}) reachable. Not the name a Backpack
+ * consumer imports — {@link BackpackVideo} below is — and
+ * `BackpackAutoplayVideo` is its only other caller.
+ */
+export const BackpackVideoInternal = ({
   alt = '',
   aspectRatios,
+  autoplayOnViewportEntry = false,
   className,
   controls = false,
   hoverEffect = true,
@@ -441,16 +481,28 @@ export const BackpackVideo = ({
   threshold = 0,
   url,
   variant
-}: BackpackVideoProps) => {
+}: BackpackVideoInternalProps) => {
   // Backpack's `playing` means "start playing on load", which on Reely is
-  // autoplay — and Reely rejects `interaction` loading together with autoplay
-  // (`packages/react/src/use-activation.ts:85`), since a strategy that waits
-  // for a click cannot also start by itself. So the strategy follows the prop:
-  // start-on-load loads eagerly and autoplays, everything else loads on the
-  // first interaction, which `Player.ActivationButton` performs. Read once at
-  // mount because it is a load-time decision: re-deciding it later tears down
-  // the attached provider and reloads the source.
+  // autoplay. Read once at mount because it is a load-time decision:
+  // re-deciding it later tears down the attached provider and reloads the
+  // source.
   const [startsPlaying] = useState(playing ?? false);
+  // Where the load happens. Named rather than inlined because two things follow
+  // from it — the strategy `Player.Root` gets, and whether the surface expects
+  // `Player.ActivationButton` to be its click target — and a second copy of the
+  // decision would be free to disagree with the first. For a Backpack caller the
+  // prop above decides it: start-on-load loads eagerly and autoplays,
+  // everything else loads on the first interaction, which
+  // `Player.ActivationButton` performs, because Reely rejects `interaction`
+  // loading together with autoplay (`packages/react/src/use-activation.ts:85`)
+  // — a strategy that waits for a click cannot also start by itself. `viewport`
+  // is reachable only through the internal prop, and is legal with autoplay
+  // where `interaction` is not.
+  const loading = autoplayOnViewportEntry
+    ? 'viewport'
+    : startsPlaying
+      ? 'eager'
+      : 'interaction';
   // Mirrors Backpack's `light={videoLight && !playing && !startedPlaying}`: a
   // player asked to start on load has no pre-play surface to present, so it
   // must not pay for a thumbnail lookup either.
@@ -462,7 +514,17 @@ export const BackpackVideo = ({
   return (
     <Player.Root
       autoplay={startsPlaying ? (muted ? 'muted' : 'audible') : false}
-      loading={startsPlaying ? 'eager' : 'interaction'}
+      // Under the `viewport` strategy, activation is what starts playback: it
+      // does not queue a play of its own (`use-activation.ts:397`), so the
+      // autoplay attempt that follows the provider becoming ready is the whole
+      // of the start. Loading early would therefore also play early — off
+      // screen, which is the thing the strategy was chosen to avoid — so the
+      // preload margin `Player.Root` defaults to (`packages/react/src/root.tsx:91`)
+      // is dropped to nothing. `undefined` everywhere else, where no observer
+      // reads it at all (`use-activation.ts:329`), leaving Reely's own default
+      // in place rather than restating a value nothing consults.
+      loadMargin={autoplayOnViewportEntry ? '0px' : undefined}
+      loading={loading}
       loop={loop}
       muted={muted}
       ref={ref}
@@ -480,7 +542,7 @@ export const BackpackVideo = ({
         coverSrc={coverSrc}
         hoverEffect={hoverEffect}
         intersectionObserverRoot={intersectionObserverRoot}
-        loadsOnInteraction={!startsPlaying}
+        loadsOnInteraction={loading === 'interaction'}
         onPlayChange={onPlayChange}
         pauseOnOutOfViewport={pauseOnOutOfViewport}
         playIconSize={playIconSize}
@@ -494,3 +556,26 @@ export const BackpackVideo = ({
     </Player.Root>
   );
 };
+
+/**
+ * Backpack's `VideoPlayer` on Reely primitives, as a Backpack consumer imports
+ * it: {@link BackpackVideoProps} exactly, and nothing besides.
+ *
+ * A pass straight through to {@link BackpackVideoInternal} with
+ * `autoplayOnViewportEntry` forced off after the spread, which is what makes
+ * "internal" a fact rather than a claim. Two things follow, and both are the
+ * point: the prop is absent from this component's props type, so passing it is a
+ * compile error, and forcing it *after* the spread means a caller who gets round
+ * the compiler — an `any`, an untyped spread of unknown props — still gets the
+ * loading strategy every Backpack caller expects instead of silently opting into
+ * a strategy this name does not offer.
+ *
+ * The ordering is Backpack's own trick, the one its `AutoplayVideo` uses on
+ * `light` and `muted` (`Video/AutoplayVideo.tsx:33-34`) — used here for a prop
+ * that must not be reachable on this name, rather than for one that is offered
+ * and then discarded, which is the half of it recorded as a divergence in
+ * `docs/backpack-parity.md`.
+ */
+export const BackpackVideo = (props: BackpackVideoProps) => (
+  <BackpackVideoInternal {...props} autoplayOnViewportEntry={false} />
+);

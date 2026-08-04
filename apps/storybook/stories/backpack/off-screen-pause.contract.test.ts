@@ -12,69 +12,12 @@ import {
   useOffScreenPause,
   type OffScreenPauseOptions
 } from './off-screen-pause';
+import {
+  ControlledIntersectionObserver,
+  installObserver,
+  restoreObserver
+} from './controlled-intersection-observer';
 import { useReportingProvider } from './reporting-provider';
-
-/**
- * A controllable `IntersectionObserver`, copied from
- * `packages/react/test/activation.test.tsx:29-71` and extended so a test can
- * report a *non*-intersecting entry too — scrolling out is half of what this
- * hook does. `init` is kept verbatim so a test can assert what the hook asked
- * the browser for, rather than what the normalised `root`/`thresholds`
- * properties make of it.
- */
-class ControlledIntersectionObserver implements IntersectionObserver {
-  static instances: ControlledIntersectionObserver[] = [];
-  readonly init: IntersectionObserverInit;
-  readonly root: Element | Document | null;
-  readonly rootMargin: string;
-  readonly scrollMargin = '0px';
-  readonly thresholds: ReadonlyArray<number>;
-  private readonly callback: IntersectionObserverCallback;
-  private target?: Element;
-
-  constructor(
-    callback: IntersectionObserverCallback,
-    options: IntersectionObserverInit = {}
-  ) {
-    this.callback = callback;
-    this.init = options;
-    this.root = options.root ?? null;
-    this.rootMargin = options.rootMargin ?? '0px';
-    this.thresholds =
-      typeof options.threshold === 'number'
-        ? [options.threshold]
-        : (options.threshold ?? [0]);
-    ControlledIntersectionObserver.instances.push(this);
-  }
-
-  disconnect = vi.fn();
-  observe = vi.fn((target: Element) => {
-    this.target = target;
-  });
-  takeRecords = () => [];
-  unobserve = vi.fn();
-
-  /** Reports the observed target as intersecting or not, as a scroll would. */
-  emit(isIntersecting: boolean) {
-    const target = this.target!;
-    this.callback(
-      [
-        {
-          boundingClientRect: target.getBoundingClientRect(),
-          intersectionRatio: isIntersecting ? 1 : 0,
-          intersectionRect: target.getBoundingClientRect(),
-          isIntersecting,
-          rootBounds: null,
-          target,
-          time: 0
-        }
-      ],
-      this
-    );
-  }
-}
-
-const originalIntersectionObserver = globalThis.IntersectionObserver;
 
 /** The observer in use, whichever hook or component mounted it. */
 const latestObserver = (): ControlledIntersectionObserver => {
@@ -142,15 +85,11 @@ const renderOffScreenPause = (
 };
 
 describe('useOffScreenPause', () => {
-  beforeEach(() => {
-    ControlledIntersectionObserver.instances = [];
-    globalThis.IntersectionObserver =
-      ControlledIntersectionObserver as unknown as typeof globalThis.IntersectionObserver;
-  });
+  beforeEach(installObserver);
 
   afterEach(() => {
     cleanup();
-    globalThis.IntersectionObserver = originalIntersectionObserver;
+    restoreObserver();
   });
 
   it('pauses a playing video when it scrolls out of view', () => {
@@ -401,15 +340,11 @@ const renderWrapper = (overrides: Partial<BackpackVideoProps> = {}) => {
  * first, undoing the scroll under test.
  */
 describe('BackpackVideo off-screen pause', () => {
-  beforeEach(() => {
-    ControlledIntersectionObserver.instances = [];
-    globalThis.IntersectionObserver =
-      ControlledIntersectionObserver as unknown as typeof globalThis.IntersectionObserver;
-  });
+  beforeEach(installObserver);
 
   afterEach(() => {
     cleanup();
-    globalThis.IntersectionObserver = originalIntersectionObserver;
+    restoreObserver();
   });
 
   it('observes the player viewport with the props observer options', () => {
@@ -509,7 +444,7 @@ const StagedVideo = (props: BackpackVideoProps) =>
   // Returned straight from the hook rather than held in a local, which is what
   // `react-hooks/refs` asks for: a ref that never becomes a value in this
   // scope cannot be read during render. `MockedBackpackVideo` does the same
-  // with `useMockPlayer` (`backpack-video.stories.tsx:195`).
+  // with `useMockPlayer` (`backpack-video.stories.tsx:159`).
   createElement(BackpackVideo, { ...props, ref: useReportingProvider() });
 
 /**
@@ -520,15 +455,11 @@ const StagedVideo = (props: BackpackVideoProps) =>
  * apart.
  */
 describe('BackpackVideo off-screen pause under visible controls', () => {
-  beforeEach(() => {
-    ControlledIntersectionObserver.instances = [];
-    globalThis.IntersectionObserver =
-      ControlledIntersectionObserver as unknown as typeof globalThis.IntersectionObserver;
-  });
+  beforeEach(installObserver);
 
   afterEach(() => {
     cleanup();
-    globalThis.IntersectionObserver = originalIntersectionObserver;
+    restoreObserver();
   });
 
   it('keeps a video the viewer paused off screen through the controls paused when it scrolls back', () => {
@@ -623,15 +554,11 @@ const MirroringVideo = ({ onPlayChange, ...rest }: BackpackVideoProps) => {
  * `playing` prop first, the `IntersectionObserver` last.
  */
 describe('BackpackVideo playback source precedence', () => {
-  beforeEach(() => {
-    ControlledIntersectionObserver.instances = [];
-    globalThis.IntersectionObserver =
-      ControlledIntersectionObserver as unknown as typeof globalThis.IntersectionObserver;
-  });
+  beforeEach(installObserver);
 
   afterEach(() => {
     cleanup();
-    globalThis.IntersectionObserver = originalIntersectionObserver;
+    restoreObserver();
   });
 
   // The hazard `backpack-video.tsx:228-233` describes in full: the report says
