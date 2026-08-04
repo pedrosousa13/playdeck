@@ -1147,14 +1147,37 @@ export const WithThreshold: Story = inPageStory(
  */
 
 /**
+ * The external "play" command SIDEPRO-201 documents: `activateFromInteraction`
+ * then `play`, in that order, against the same `PlayerHandle` ref
+ * (`activateFromInteraction`'s dormant-or-error branches are
+ * `use-activation.ts:265-297`; `play`'s not-ready short-circuit is
+ * `player-controller.ts:381-386`). One named function rather than one copy
+ * of the pair per button, so the two calls have a single home to drift from
+ * instead of two.
+ *
+ * Why the pair, and not just `play`: `activateFromInteraction` is a no-op
+ * unless the player is `dormant` or in a recoverable `error`, so the same
+ * call starts a dormant player and is silently skipped against an
+ * already-active one — no branch here has to tell the two apart. `play` is
+ * what an already-active player needs, and is a harmless
+ * `{ ok: false, reason: 'not-ready' }` no-op against a player the first call
+ * just set loading, because nothing has attached to it yet. That the pair
+ * costs exactly one real play either way, rather than a queued one plus a
+ * doubled-up second, is pinned in `packages/react/test/activation.test.tsx`'s
+ * `'interaction issues exactly one play when activateFromInteraction is
+ * immediately followed by play'`.
+ */
+const playExternally = (ref: ReturnType<typeof useMockPlayer>): void => {
+  ref.current?.activateFromInteraction();
+  void ref.current?.play();
+};
+
+/**
  * Two buttons standing in for an external consumer that holds
  * `BackpackVideo`'s `PlayerHandle` ref (`backpack-video.tsx:90-94,468`) and
  * drives it directly, the way `WithEvents` below needs one to. "External
- * play" is the two-call command SIDEPRO-201 documents —
- * `activateFromInteraction` then `play`, so the same handler starts a
- * dormant player and resumes an already-active one without a branch to tell
- * the two apart (`use-activation.ts:265-297`); "External pause" is the one
- * call that command has no dormant half to worry about.
+ * pause" is the one call {@link playExternally}'s pair has no dormant half
+ * to worry about.
  */
 const ExternalEventsVideo = ({
   player,
@@ -1164,13 +1187,7 @@ const ExternalEventsVideo = ({
   return (
     <>
       <BackpackVideo {...props} ref={ref} />
-      <button
-        onClick={() => {
-          ref.current?.activateFromInteraction();
-          void ref.current?.play();
-        }}
-        type="button"
-      >
+      <button onClick={() => playExternally(ref)} type="button">
         External play
       </button>
       <button onClick={() => void ref.current?.pause()} type="button">
@@ -1249,13 +1266,7 @@ const SocialCarouselIntegrationVideo = ({
   return (
     <>
       <BackpackVideo {...props} ref={ref} />
-      <button
-        onClick={() => {
-          ref.current?.activateFromInteraction();
-          void ref.current?.play();
-        }}
-        type="button"
-      >
+      <button onClick={() => playExternally(ref)} type="button">
         Simulate slide active (play)
       </button>
       <button onClick={() => void ref.current?.pause()} type="button">
