@@ -1,25 +1,18 @@
 import {
-  createInitialPlayerState,
-  type PlayerController,
-  type ProviderAdapter,
-  type ProviderStateListener,
-  type ProviderStatePatch
-} from '@reely/core';
-import type { PlayerHandle } from '@reely/react';
-import {
   act,
   cleanup,
   fireEvent,
   render,
   renderHook
 } from '@testing-library/react';
-import { createElement, useEffect, useRef, useState } from 'react';
+import { createElement, useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 import {
   useOffScreenPause,
   type OffScreenPauseOptions
 } from './off-screen-pause';
+import { useReportingProvider } from './reporting-provider';
 
 /**
  * A controllable `IntersectionObserver`, copied from
@@ -511,78 +504,6 @@ describe('BackpackVideo off-screen pause', () => {
     expect(reported()).toEqual([true, false]);
   });
 });
-
-/**
- * A provider that reports playback back, which is the one thing the wrapper
- * harness above cannot do: with no provider attached, nothing ever moves
- * `state.playback`, so the wrapper's player-report fold
- * (`backpack-video.tsx:223`) never runs and the only way in is its own toggle.
- * Under `controls: true` the toggle is not on the surface at all — the click
- * target is `Player.Controls`, which drives the controller directly and reaches
- * the wrapper only as a report.
- *
- * Everything else is a no-op, as in `.storybook/mock-player.tsx`'s adapter:
- * the two commands that emit are the two the sequence under test issues.
- */
-const createReportingProvider = () => {
-  const listeners = new Set<ProviderStateListener>();
-  const emit = (patch: ProviderStatePatch): void => {
-    listeners.forEach((listener) => listener(patch));
-  };
-  const ok = async (): Promise<{ readonly ok: true }> => ({ ok: true });
-  const adapter: ProviderAdapter = {
-    provider: 'native',
-    attach: () => {},
-    load: () => {},
-    destroy: () => {},
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    play: async () => {
-      emit({ playback: 'playing' });
-      return { ok: true };
-    },
-    pause: async () => {
-      emit({ playback: 'paused' });
-      return { ok: true };
-    },
-    mute: ok,
-    unmute: ok,
-    setVolume: ok,
-    setPlaybackRate: ok
-  };
-  return { adapter, emit };
-};
-
-/**
- * The wrapper with {@link createReportingProvider} staged into its own
- * `Player.Root` — the trick `MockedBackpackVideo` uses in the stories
- * (`backpack-video.stories.tsx:191-196`), by way of the `ref` the wrapper
- * forwards. Reported ready, so `awaitingActivation` is false and the surface
- * hands over to `Player.Controls`; no `playing` prop, so the root loads on
- * interaction and nothing commits the inert `mock://` source.
- */
-const useReportingProvider = () => {
-  const handle = useRef<PlayerHandle>(null);
-  useEffect(() => {
-    // `Player.Root`'s imperative handle is its `PlayerController`; the cast
-    // opens the provider-facing `setProvider` that `PlayerHandle` omits.
-    const controller = handle.current as PlayerController | null;
-    if (!controller) return;
-    const provider = createReportingProvider();
-    controller.setProvider(provider.adapter);
-    provider.emit({
-      activation: 'ready',
-      capabilities: createInitialPlayerState().capabilities,
-      lifecycle: 'ready',
-      playback: 'paused',
-      provider: 'native'
-    });
-    return () => controller.setProvider(undefined);
-  }, []);
-  return handle;
-};
 
 const StagedVideo = (props: BackpackVideoProps) =>
   // Returned straight from the hook rather than held in a local, which is what
