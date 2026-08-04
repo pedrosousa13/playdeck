@@ -21,6 +21,15 @@ import { useEffect, useRef, type ReactNode } from 'react';
  *   failing `playResult` (`{ ok: false, reason: 'blocked' }`) and a ready
  *   `state` to reproduce blocked autoplay.
  * - `playResult` — what the fake provider's `play()` resolves to.
+ * - `reportsPlayback` — makes the fake provider's `play`/`pause` emit a
+ *   confirming `playback` patch instead of doing nothing, so a story can
+ *   drive playback through the `PlayerHandle` ref it already gets back —
+ *   `activateFromInteraction` then `play`, or `pause` on its own — and see
+ *   `onPlayChange` and the surface follow, the same way
+ *   `createReportingProvider` lets a contract test do it
+ *   (`stories/backpack/reporting-provider.ts`). `playResult` still decides
+ *   what `play()` resolves to, and a failing one still emits nothing: a
+ *   command that did not succeed has nothing to confirm.
  * - `cues` — active `TextCue[]` emitted through the fake provider's cue
  *   channel after mount, so a story can drive `Player.Captions` without a
  *   real track.
@@ -36,6 +45,7 @@ export type MockPlayerParameters = {
   readonly state?: ProviderStatePatch;
   readonly autoplay?: AutoplayMode;
   readonly playResult?: CommandResult;
+  readonly reportsPlayback?: boolean;
   readonly cues?: readonly TextCue[];
   readonly dimensions?: MediaDimensions;
   readonly rootProps?: Partial<Omit<RootProps, 'children' | 'ref'>>;
@@ -54,14 +64,24 @@ const mockSource: RootProps['source'] = {
 /**
  * A `ProviderAdapter` with the same surface the contract tests fake: every
  * lifecycle hook is a no-op and state is pushed by emitting patches, so a
- * story renders no media element and issues no requests.
+ * story renders no media element and issues no requests. `reportsPlayback`
+ * is the one command surface that is not a plain no-op when set: `play` and
+ * `pause` emit the `playback` patch a real provider would confirm a command
+ * with, rather than emitting nothing, so a story driving them through the
+ * `PlayerHandle` ref sees `onPlayChange` and the surface follow.
  */
-const createMockAdapter = (playResult: CommandResult) => {
+const createMockAdapter = (
+  playResult: CommandResult,
+  reportsPlayback: boolean
+) => {
   const listeners = new Set<ProviderStateListener>();
   const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
   const dimensionListeners = new Set<
     (dimensions: MediaDimensions | undefined) => void
   >();
+  const emit = (patch: ProviderStatePatch) => {
+    listeners.forEach((listener) => listener(patch));
+  };
   const ok = async (): Promise<CommandResult> => ({ ok: true });
   const adapter: ProviderAdapter = {
     provider: 'native',
@@ -80,8 +100,17 @@ const createMockAdapter = (playResult: CommandResult) => {
       dimensionListeners.add(listener);
       return () => dimensionListeners.delete(listener);
     },
-    play: async () => playResult,
-    pause: ok,
+    play: async () => {
+      // A failed command has nothing to confirm.
+      if (reportsPlayback && playResult.ok) emit({ playback: 'playing' });
+      return playResult;
+    },
+    pause: reportsPlayback
+      ? async () => {
+          emit({ playback: 'paused' });
+          return { ok: true };
+        }
+      : ok,
     mute: ok,
     unmute: ok,
     setVolume: ok,
@@ -89,9 +118,7 @@ const createMockAdapter = (playResult: CommandResult) => {
   };
   return {
     adapter,
-    emit: (patch: ProviderStatePatch) => {
-      listeners.forEach((listener) => listener(patch));
-    },
+    emit,
     emitCues: (cues: readonly TextCue[]) => {
       cueListeners.forEach((listener) => listener(cues));
     },
@@ -110,12 +137,14 @@ const createMockAdapter = (playResult: CommandResult) => {
  */
 export const useMockPlayer = (parameters: MockPlayerParameters) => {
   const handleRef = useRef<PlayerHandle>(null);
-  const { autoplay, cues, dimensions, playResult, state } = parameters;
+  const { autoplay, cues, dimensions, playResult, reportsPlayback, state } =
+    parameters;
 
   useEffect(() => {
     if (
       autoplay === undefined &&
       playResult === undefined &&
+      !reportsPlayback &&
       !state &&
       !cues &&
       !dimensions
@@ -125,7 +154,10 @@ export const useMockPlayer = (parameters: MockPlayerParameters) => {
     // the provider-facing surface (setProvider) that PlayerHandle omits.
     const controller = handleRef.current as PlayerController | null;
     if (!controller) return;
-    const mock = createMockAdapter(playResult ?? { ok: true });
+    const mock = createMockAdapter(
+      playResult ?? { ok: true },
+      reportsPlayback ?? false
+    );
     controller.setProvider(mock.adapter);
     if (autoplay !== undefined) controller.configureAutoplay(autoplay);
     if (state) mock.emit(state);
@@ -134,7 +166,7 @@ export const useMockPlayer = (parameters: MockPlayerParameters) => {
     return () => {
       controller.setProvider(undefined);
     };
-  }, [autoplay, cues, dimensions, playResult, state]);
+  }, [autoplay, cues, dimensions, playResult, reportsPlayback, state]);
 
   return handleRef;
 };
