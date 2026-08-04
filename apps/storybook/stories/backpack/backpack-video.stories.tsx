@@ -54,6 +54,21 @@ const scaleOf = (element: Element): number => {
   return transform === 'none' ? 1 : new DOMMatrix(transform).a;
 };
 
+/**
+ * Resolves once the element's own transition has had time to run, read from
+ * the element rather than hard-coded so it tracks `backpack-video-css.ts`.
+ * What a negative hover assertion needs: the cover's resting scale is already
+ * `1`, so a `waitFor` alone would pass on its first tick without ever giving a
+ * zoom the chance to apply, and a rule that did match would go unnoticed.
+ */
+const afterTransition = (element: Element): Promise<void> => {
+  const { transitionDuration } = getComputedStyle(element);
+  const settleMs = Number.parseFloat(transitionDuration) * 1000 + 50;
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, settleMs);
+  });
+};
+
 /** Vitest browser mode's page handle — see {@link hover} for why it is lazy. */
 type BrowserPage = Awaited<typeof import('vitest/browser')>['page'];
 
@@ -434,7 +449,8 @@ export const WithoutHoverEffect: Story = {
     const player = canvasElement.querySelector('.ef-video-player');
     await expect(player).not.toBeNull();
     if (await hover(player as Element)) {
-      await waitFor(() => expect(scaleOf(cover)).toBe(1));
+      await afterTransition(cover);
+      await expect(scaleOf(cover)).toBe(1);
     }
   }
 };

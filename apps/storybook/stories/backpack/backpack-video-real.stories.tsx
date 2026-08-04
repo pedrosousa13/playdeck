@@ -10,6 +10,10 @@ import { BackpackVideo } from './backpack-video';
 // what show that `BackpackVideo` attaches a provider rather than only working
 // against a mock; `Backpack parity/Video` covers the behaviour deterministically.
 
+/** Backpack's own cover photo, as its `Video.stories.tsx` stories pass it. */
+const coverImageUrl =
+  'https://a.storyblok.com/f/171771/4656x3492/bbf48d4721/wojciech-then-dija5f0vogq-unsplash.jpg';
+
 const meta = {
   title: 'Real playback/BackpackVideo',
   component: BackpackVideo,
@@ -101,8 +105,7 @@ export const CustomCoverImage: Story = {
     url: 'https://vimeo.com/336066147',
     muted: true,
     light: true,
-    placeholderImageSrc:
-      'https://a.storyblok.com/f/171771/4656x3492/bbf48d4721/wojciech-then-dija5f0vogq-unsplash.jpg',
+    placeholderImageSrc: coverImageUrl,
     alt: 'custom cover image'
   }
 };
@@ -113,8 +116,7 @@ export const CustomCoverImageYouTube: Story = {
     url: 'https://www.youtube.com/watch?v=mhN3E_hlWmU',
     muted: true,
     light: true,
-    placeholderImageSrc:
-      'https://a.storyblok.com/f/171771/4656x3492/bbf48d4721/wojciech-then-dija5f0vogq-unsplash.jpg',
+    placeholderImageSrc: coverImageUrl,
     alt: 'custom cover image'
   }
 };
@@ -125,8 +127,7 @@ export const WithRenderCustomImage: Story = {
     url: 'https://vimeo.com/336066147',
     muted: true,
     light: true,
-    placeholderImageSrc:
-      'https://a.storyblok.com/f/171771/4656x3492/bbf48d4721/wojciech-then-dija5f0vogq-unsplash.jpg',
+    placeholderImageSrc: coverImageUrl,
     renderCustomImage: (props) => (
       <img
         id="custom-framework-image"
@@ -146,8 +147,7 @@ export const YouTubeShortsVideoAndCustomCoverImage: Story = {
     url: 'https://www.youtube.com/shorts/n3eC51ZaDlk',
     muted: true,
     light: false,
-    placeholderImageSrc:
-      'https://a.storyblok.com/f/171771/4656x3492/bbf48d4721/wojciech-then-dija5f0vogq-unsplash.jpg',
+    placeholderImageSrc: coverImageUrl,
     alt: 'custom cover image',
     hoverEffect: true
   }
