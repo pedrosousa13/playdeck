@@ -1,6 +1,7 @@
 import * as Player from '@reely/react';
 import { useEffect, useRef, useState, type ElementType, type Ref } from 'react';
 import { useVideoThumbnail } from './video-thumbnail';
+import { useOffScreenPause } from './off-screen-pause';
 
 /**
  * The slice of EF Backpack's `VideoPlayer` prop API this wrapper reimplements
@@ -18,6 +19,13 @@ export type BackpackVideoProps = {
   readonly controls?: boolean;
   /** Zoom the cover image while hovered and not playing. */
   readonly hoverEffect?: boolean;
+  /**
+   * Root element for the `IntersectionObserver` behind
+   * `pauseOnOutOfViewport`. `null`, the default, is the browser viewport; pass
+   * a scroll container's element when the video lives inside one rather than
+   * in the page itself — a modal or a custom scroll area.
+   */
+  readonly intersectionObserverRoot?: Element | null;
   /**
    * Show the provider's own thumbnail as a cover instead of mounting the
    * player until the viewer asks for playback. Backpack types this
@@ -37,6 +45,8 @@ export type BackpackVideoProps = {
   readonly muted?: boolean;
   /** Callback function when the video is played or paused. */
   readonly onPlayChange?: (isPlaying: boolean) => void;
+  /** Whether to pause the video when it scrolls off screen. */
+  readonly pauseOnOutOfViewport?: boolean;
   /** Set to `true` to start playing on load. */
   readonly playing?: boolean;
   /**
@@ -56,6 +66,8 @@ export type BackpackVideoProps = {
   readonly renderCustomImage?: ElementType;
   /** Whether to show the play icon when the video is not playing. */
   readonly showPlayIcon?: boolean;
+  /** `IntersectionObserver` threshold behind `pauseOnOutOfViewport`. */
+  readonly threshold?: number;
   /** The url of a video to play. */
   readonly url: string;
 };
@@ -92,25 +104,37 @@ type SurfaceProps = Pick<
   | 'className'
   | 'controls'
   | 'hoverEffect'
+  | 'intersectionObserverRoot'
   | 'onPlayChange'
   | 'playing'
   | 'renderCustomImage'
   | 'showPlayIcon'
+  | 'threshold'
 > & {
   /** The resolved cover image source, or `undefined` when there is none. */
   readonly coverSrc?: string;
   /** Whether `Player.Root` was given the interaction loading strategy. */
   readonly loadsOnInteraction: boolean;
+  /**
+   * Required where the public prop is optional: `BackpackVideo` has already
+   * applied the default, and `useOffScreenPause` asks for the answer rather
+   * than re-defaulting it. `threshold` and `intersectionObserverRoot` above
+   * stay optional because `IntersectionObserver` already defaults them to the
+   * same values, so nothing here has to restate them.
+   */
+  readonly pauseOnOutOfViewport: boolean;
 };
 
 /**
  * Everything below `Player.Root`, so it can read player state and issue player
  * commands.
  *
- * `isPlaying` is component state rather than a read of `state.playback`, which
- * is how Backpack's `useVideoPlayerState` models it: the component asks for
- * playback and the player confirms it afterwards. Reely is driven from here,
- * and what Reely confirms is folded back in.
+ * `isPlaying` is component state rather than a read of `state.playback`, because
+ * this component is what asks for playback and the player only confirms it
+ * afterwards: a request has to be representable before there is anything to
+ * confirm, and `state.playback` can only ever report the confirmation. What the
+ * player confirms is folded back in. Backpack models it the same way, in
+ * `useVideoPlayerState`.
  *
  * Which affordance is on screen, in every state. `awaitingActivation` below is
  * exactly the condition `Player.ActivationButton` renders itself under
@@ -128,9 +152,12 @@ type SurfaceProps = Pick<
  * only under the interaction strategy, which is why `awaitingActivation` is
  * false for the whole of an eagerly-loaded (`playing`) player: there the toggle
  * is the target from the start, and a command issued before the provider
- * attaches simply reports not-ready. The play icon follows Backpack's own
- * condition (`VideoPlayer.tsx:349-351`), which keeps showing it under visible
- * controls until playback has started once.
+ * attaches simply reports not-ready. The play icon stays up under visible
+ * controls until playback has started once, because until then it is the only
+ * thing on the surface that says this box is a video worth clicking; afterwards
+ * the controls' own button carries the state and a second icon would just
+ * contradict it. Backpack's condition is the same
+ * (`VideoPlayer.tsx:349-351`).
  *
  * A cover image, when there is one, sits above `Player.Media` for as long as
  * playback has never started — independent of every row in the table above,
@@ -145,11 +172,14 @@ const BackpackVideoSurface = ({
   controls,
   coverSrc,
   hoverEffect,
+  intersectionObserverRoot,
   loadsOnInteraction,
   onPlayChange,
+  pauseOnOutOfViewport,
   playing,
   renderCustomImage: CustomImage,
-  showPlayIcon
+  showPlayIcon,
+  threshold
 }: SurfaceProps) => {
   const actions = Player.usePlayerActions();
   const { playerPlaying, ready } = Player.usePlayerState((state) => ({
@@ -166,6 +196,21 @@ const BackpackVideoSurface = ({
   const [startedPlaying, setStartedPlaying] = useState(false);
   const playerReported = useChanged(playerPlaying);
   const propChanged = useChanged(playing);
+  // Destructured under other names because `react-hooks/refs` reads a member
+  // named `ref` as a ref object being dereferenced during render, and would
+  // then treat every other member of the same object as one too.
+  const { intent: offScreenIntent, ref: observeViewport } = useOffScreenPause({
+    // The wrapper's answer to "is an explicit pause in force": Backpack asks
+    // `(playing ?? parentPlaying) === false` (`useVideoPlayerState.ts:118`)
+    // and there is no `parentPlaying` here.
+    controlledPaused: playing === false,
+    isPlaying,
+    pauseOnOutOfViewport,
+    root: intersectionObserverRoot,
+    startedPlaying,
+    threshold
+  });
+  const offScreenRequested = useChanged(offScreenIntent);
 
   const requestPlayback = (next: boolean) => {
     setIsPlaying(next);
@@ -177,6 +222,16 @@ const BackpackVideoSurface = ({
   // nothing (no provider attached yet) leaves the requested state alone
   // instead of clobbering it.
   if (playerReported) requestPlayback(playerPlaying);
+  // A scroll took the video off screen or brought it back. Applied *after* the
+  // player's report: the report says what playback already was, where the
+  // intent decides what it should be now, and the hook raises each intent once
+  // (`off-screen-pause.ts:51-60`) — so a report that lands in the same commit
+  // (a provider confirming the play the viewer just started) would swallow the
+  // pause with nothing left to raise it again. Applied *before* the `playing`
+  // prop for the reason below: the parent's explicit value stays the last
+  // word, which is also why the hook takes `controlledPaused` and asks for a
+  // pause rather than a resume while one is in force.
+  if (offScreenRequested) requestPlayback(offScreenIntent.playing);
   // `playing` is the parent's explicit override, so it is applied after the
   // player's own report and wins a render where both changed.
   if (propChanged && playing !== undefined) requestPlayback(playing);
@@ -201,6 +256,14 @@ const BackpackVideoSurface = ({
     <Player.Viewport
       className={['ef-video-player', className].filter(Boolean).join(' ')}
       data-playing={isPlaying}
+      // The element the off-screen observer watches: the outer player box, since
+      // that is the thing whose visibility the behaviour is about. The media
+      // element inside it is the wrong target — it is absent until a provider
+      // attaches, and an embed may size itself independently. Backpack observes
+      // the same box (`VideoPlayer.tsx:225,312`).
+      // `Player.Viewport` merges this with the ref it keeps for itself
+      // (`packages/react/src/viewport-media.tsx:63-89`).
+      ref={observeViewport}
     >
       {showsCover ? (
         <Player.Poster
@@ -286,15 +349,18 @@ export const BackpackVideo = ({
   className,
   controls = false,
   hoverEffect = true,
+  intersectionObserverRoot = null,
   light = false,
   loop = false,
   muted = false,
   onPlayChange,
+  pauseOnOutOfViewport = true,
   placeholderImageSrc,
   playing,
   ref,
   renderCustomImage,
   showPlayIcon = true,
+  threshold = 0,
   url
 }: BackpackVideoProps) => {
   // Backpack's `playing` means "start playing on load", which on Reely is
@@ -329,11 +395,14 @@ export const BackpackVideo = ({
         controls={controls}
         coverSrc={coverSrc}
         hoverEffect={hoverEffect}
+        intersectionObserverRoot={intersectionObserverRoot}
         loadsOnInteraction={!startsPlaying}
         onPlayChange={onPlayChange}
+        pauseOnOutOfViewport={pauseOnOutOfViewport}
         playing={playing}
         renderCustomImage={renderCustomImage}
         showPlayIcon={showPlayIcon}
+        threshold={threshold}
       />
     </Player.Root>
   );
