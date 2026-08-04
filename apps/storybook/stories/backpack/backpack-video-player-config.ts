@@ -31,13 +31,22 @@ export type BackpackVideoPlayerConfig = {
 };
 
 /**
- * The wrapper's own Wistia default: `swatch: true` is `@wistia/wistia-player`'s
- * own default presentation, so merging it in ahead of a caller's config
- * changes nothing already on screen.
+ * The wrapper's own Wistia defaults: empty. `swatch: true` looked like a safe
+ * default — `@wistia/wistia-player` shows a swatch unless told otherwise — but
+ * "unless told otherwise" is exactly what an absent attribute already means to
+ * the element: its `_getValueFromAttribute` returns `null` for a missing
+ * attribute specifically so a project- or media-level swatch setting is not
+ * overridden, and `defaultEmbedOptions` carries no `swatch` entry for
+ * `_getSyncedEmbedOption` to fall back to either (verified against
+ * `@wistia/wistia-player@0.7.12`'s `dist/wistia-player.js`). Defaulting to
+ * `swatch: true` here would therefore emit a `swatch="true"` attribute that
+ * can override a media-level setting the pre-`playerConfig` wrapper never
+ * touched — `packages/provider-wistia/src/attachment.ts:212-220` already
+ * relies on an omitted option setting no attribute for this reason. So no
+ * default here either: only a caller who sets `swatch` explicitly produces an
+ * attribute.
  */
-const wistiaPlayerConfigDefaults: BackpackWistiaPlayerConfig = {
-  swatch: true
-};
+const wistiaPlayerConfigDefaults: BackpackWistiaPlayerConfig = {};
 
 /**
  * Backpack's own merge (`VideoPlayer.tsx:45-55`, `mergePlayerConfig`): a

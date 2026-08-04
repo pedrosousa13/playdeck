@@ -85,10 +85,11 @@ export type BackpackVideoProps = {
    * (`VideoPlayer.tsx:45-55`'s `playerConfig`). Only `wistia` is wired, and
    * only its four keys documented on {@link BackpackVideoPlayerConfig} — a
    * passthrough for every option a provider takes is out of scope. Merged
-   * over this wrapper's own Wistia defaults (`swatch: true`, caller wins on a
-   * shared key) and translated to Reely's own option names by
-   * `translateWistiaPlayerConfig`, whose doc comment carries the translation
-   * table.
+   * over this wrapper's own Wistia defaults — empty today, so an omitted key
+   * keeps `@wistia/wistia-player`'s own behavior rather than this wrapper's;
+   * a caller wins on any key it sets — and translated to Reely's own option
+   * names by `translateWistiaPlayerConfig`, whose doc comment carries the
+   * translation table.
    */
   readonly playerConfig?: BackpackVideoPlayerConfig;
   /**

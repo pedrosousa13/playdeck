@@ -335,8 +335,10 @@ export const WistiaVideo: Story = {
       stillUrl: transparentPosterDataUri,
       wmode: 'transparent'
     });
-    // What the wrapper makes of them, with its own `swatch: true` default still
-    // merged in underneath and `playerColor` left unset.
+    // What the wrapper makes of them: `playerColor` and `swatch` both left
+    // unset by the wrapper's own (empty) defaults, so neither becomes an
+    // attribute -- only `stillUrl`/`wmode` translate here, to
+    // `poster`/`transparentLetterbox`.
     await expect(
       translateWistiaPlayerConfig(
         mergeWistiaPlayerConfig(args.playerConfig?.wistia)
@@ -344,7 +346,7 @@ export const WistiaVideo: Story = {
     ).toEqual({
       playerColor: undefined,
       poster: transparentPosterDataUri,
-      swatch: true,
+      swatch: undefined,
       transparentLetterbox: true
     });
 

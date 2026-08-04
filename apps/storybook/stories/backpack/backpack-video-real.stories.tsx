@@ -61,8 +61,9 @@ export const Wistia: Story = {
  * (`Video.stories.tsx:162-176`), and the acceptance criterion for SIDEPRO-205
  * that only a human can sign off: click the player, and the embed that attaches
  * has red chrome (`playerColor: 'ff0000'`) and no blurred placeholder behind the
- * first frame (`swatch: false`). Compare it with `Wistia` above, which keeps the
- * swatch — the wrapper's own default is `swatch: true`, Wistia's own behaviour.
+ * first frame (`swatch: false`). Compare it with `Wistia` above, which keeps
+ * the swatch — the wrapper sets no `swatch` attribute by default, so the
+ * element falls back to its own behaviour, which shows one.
  *
  * This is the only place the two options can be seen at all: they become
  * `player-color` and `swatch` attributes on the element, and the deterministic

@@ -420,9 +420,9 @@ export const WistiaWithPlayerConfig: Story = {
       swatch: false
     });
     // What the wrapper makes of them: `playerColor` straight across, the
-    // caller's `swatch: false` winning over the wrapper's own `swatch: true`
-    // default, and the two keys these args leave out staying unset rather than
-    // becoming an attribute with a computed value.
+    // caller's `swatch: false` explicit rather than defaulted, and the two
+    // keys these args leave out staying unset rather than becoming an
+    // attribute with a computed value.
     await expect(
       translateWistiaPlayerConfig(
         mergeWistiaPlayerConfig(args.playerConfig?.wistia)

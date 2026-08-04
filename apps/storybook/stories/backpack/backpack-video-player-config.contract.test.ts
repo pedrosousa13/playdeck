@@ -23,11 +23,14 @@ const { capturedProviderOptions } = vi.hoisted(() => ({
   capturedProviderOptions: [] as unknown[]
 }));
 
-// Backpack's `mergeWistiaPlayerConfig`/`translateWistiaPlayerConfig` above are
-// pure functions, pinned directly by the two `describe` blocks above -- but
-// nothing there proves `BackpackVideoInternal` actually calls them and hands
-// the result to `Player.Root`. This intercepts `@reely/react`'s own `Root`,
-// Backpack's real `Player.Root` call site, recording the `providerOptions`
+// `mergeWistiaPlayerConfig`/`translateWistiaPlayerConfig` above are this
+// wrapper's own pure functions, not Backpack's -- Backpack has no equivalent,
+// and crediting it with this wrapper's own implementation is exactly what
+// ADR-0003 forbids (`docs/adr/0003-backpack-is-a-scenario-source-not-a-spec.md`)
+// -- pinned directly by the two `describe` blocks below. But nothing there
+// proves `BackpackVideoInternal` actually calls them and hands the result to
+// `Player.Root`. This intercepts `@reely/react`'s own `Root` -- Reely's
+// `Player.Root` call site, not Backpack's -- recording the `providerOptions`
 // prop it receives and then rendering the genuine component underneath, so
 // `BackpackVideoSurface`'s hooks still run against a real
 // `PlayerContext.Provider`. This is the boundary because reaching one layer
@@ -53,18 +56,17 @@ vi.mock('@reely/react', async (importOriginal) => {
 });
 
 describe('mergeWistiaPlayerConfig', () => {
-  it('keeps the wrapper’s own swatch default when the caller omits playerConfig entirely', () => {
-    expect(mergeWistiaPlayerConfig(undefined)).toEqual({ swatch: true });
+  it('merges to an empty bag when the caller omits playerConfig entirely', () => {
+    expect(mergeWistiaPlayerConfig(undefined)).toEqual({});
   });
 
-  it('keeps the swatch default when the caller’s wistia entry omits it', () => {
+  it('leaves swatch unset when the caller’s wistia entry omits it', () => {
     expect(mergeWistiaPlayerConfig({ playerColor: 'ff0000' })).toEqual({
-      playerColor: 'ff0000',
-      swatch: true
+      playerColor: 'ff0000'
     });
   });
 
-  it('lets the caller win on swatch', () => {
+  it('lets the caller set swatch explicitly', () => {
     expect(mergeWistiaPlayerConfig({ swatch: false })).toEqual({
       swatch: false
     });
@@ -107,6 +109,24 @@ describe('translateWistiaPlayerConfig', () => {
       transparentLetterbox: undefined
     });
   });
+
+  // The regression this guards against: defaulting `swatch` to `true` would
+  // pass this test above (a key the bag omits) but not this one -- a caller
+  // who never mentions `swatch` at all must not get an attribute-backed
+  // `swatch: true` out the other end, because that attribute can override a
+  // project- or media-level swatch setting `@wistia/wistia-player` would
+  // otherwise respect (`backpack-video-player-config.ts`'s
+  // `wistiaPlayerConfigDefaults` doc comment carries the verification).
+  it('omits swatch when the merged bag has no opinion on it, so no attribute is emitted', () => {
+    expect(
+      translateWistiaPlayerConfig(mergeWistiaPlayerConfig(undefined))
+    ).toEqual({
+      playerColor: undefined,
+      poster: undefined,
+      swatch: undefined,
+      transparentLetterbox: undefined
+    });
+  });
 });
 
 // Closes the gap the two `describe` blocks above leave open on their own:
@@ -138,9 +158,13 @@ describe('BackpackVideo playerConfig wiring', () => {
     });
   });
 
-  // The default merge (`swatch: true`) has to reach `Player.Root` too, for a
-  // caller who never passes `playerConfig` at all -- the ordinary case for
-  // every `BackpackVideo` today.
+  // The empty default merge has to reach `Player.Root` too, for a caller who
+  // never passes `playerConfig` at all -- the ordinary case for every
+  // `BackpackVideo` today. `swatch: undefined` here is the point: no attribute
+  // reaches `<wistia-player>` unless a caller sets `swatch` explicitly
+  // (`packages/provider-wistia/src/attachment.ts:218-219` only writes the
+  // attribute when the option is not `undefined`), so a media-level swatch
+  // setting stays in force.
   it('hands Player.Root the wrapper’s own default when playerConfig is omitted', () => {
     render(
       createElement(BackpackVideo, { url: 'https://reely.dev/tracer.mp4' })
@@ -150,7 +174,7 @@ describe('BackpackVideo playerConfig wiring', () => {
       wistia: {
         playerColor: undefined,
         poster: undefined,
-        swatch: true,
+        swatch: undefined,
         transparentLetterbox: undefined
       }
     });
