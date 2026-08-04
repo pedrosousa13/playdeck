@@ -126,6 +126,16 @@ describe('backpackVideoCss', () => {
     expect(css).not.toContain('aspect-ratio: 16 / 9;');
   });
 
+  // Both halves are asserted because the first is what makes the second
+  // load-bearing rather than decorative; the rule's own comment in
+  // `backpack-video-styles.ts` is the argument, and this is only its guard.
+  it('clears the player box’s own backdrop for an autoplaying video', () => {
+    expect(css).toContain('background: #0b0e13;');
+    expect(css).toContain(
+      '.ef-video-player.ef-autoplay-video {\n  background: transparent;\n}'
+    );
+  });
+
   it('exposes the natural value it falls back to', () => {
     expect(naturalAspectRatio).toBe(naturalValue);
   });

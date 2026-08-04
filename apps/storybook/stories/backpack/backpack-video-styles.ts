@@ -267,6 +267,25 @@ export const backpackVideoCss = (width: string): string => `
   border-radius: 0.25rem;
   overflow: hidden;
 }
+
+/* Backpack's root slot carries this whenever the autoplay class is present
+   (video.styles.ts:5, [&.ef-autoplay-video]:bg-system-surface-transparent), and
+   BackpackAutoplayVideo is the only thing that adds that class. Reproduced
+   rather than skipped because it changes something here: the rule above fills
+   the box, so without this an autoplaying player would show a dark backdrop
+   wherever the video does not cover it — a letterboxed frame, or the gap before
+   the first frame arrives — where Backpack's shows the page behind.
+
+   The token resolves to rgba(255, 255, 255, 0) (tw-tokens.ts:143, reached from
+   tw-colors-theme.preset.ts:256-257), a zero-alpha white. Written as the
+   keyword rather than resolved by hand like the two variant tokens below,
+   because at zero alpha the colour channels cannot be observed: the two
+   composite identically against anything. A compound selector rather than the
+   bare class, so the override wins on specificity instead of on where in this
+   sheet it happens to sit. */
+.ef-video-player.ef-autoplay-video {
+  background: transparent;
+}
 ${aspectRatioMediaQueries}
 
 /* Backpack's outline and shadow-m variants (video.styles.ts:18-20,24-26) with

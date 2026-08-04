@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
+import { playerBox } from './story-queries';
 
 /**
  * Backpack's `InPageLayout` (`stories/components/Video/Video.stories.tsx:314-355`)
@@ -27,6 +28,55 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
  * of them, so the styles live on the elements they style and there is no second
  * file to keep in step.
  */
+
+/*
+ * What a `play` function needs to drive this layout: the height to build it at,
+ * the two elements to reach for, and the scroll that puts the video at a chosen
+ * position. They live here rather than in a story file because they are this
+ * layout's own driving surface — every one of them is written against the
+ * geometry below — and because two story suites now scroll it
+ * (`Backpack parity/Video` and `Backpack parity/AutoplayVideo`), so a second
+ * copy would be a second set of numbers free to disagree with these.
+ */
+
+/**
+ * Height of the scroll container the deterministic in-page stories build.
+ * Fixed rather than Backpack's `h-screen`, so the geometry their `play`
+ * functions scroll through cannot depend on the runner's window size, and
+ * taller than the player box in either suite — 270px at `Video`'s 480px width,
+ * 338px at `AutoplayVideo`'s 600px — so "the whole video is inside the
+ * container" is a position that exists in both.
+ */
+export const scrollPanelHeight = '360px';
+
+/** How much of the video's own height is inside the container's top edge. */
+export const fullyVisible = 1;
+export const quarterVisible = 0.25;
+/** Negative: half the video's height *past* the edge, so none of it shows. */
+export const clearOfTheEdge = -0.5;
+
+/** The scroll container and the player box inside it. */
+export const inPageParts = (canvasElement: HTMLElement) => ({
+  container: canvasElement.querySelector('[role="region"]')!,
+  video: playerBox(canvasElement)
+});
+
+/**
+ * Scrolls `container` so that `fraction` of the video's own height is left
+ * inside the container's top edge. Every number comes from live geometry, so
+ * the spacers, the player's width and the runner's window can all change
+ * without the scroll losing its meaning — and there is no distance to
+ * hard-code.
+ */
+export const scrollToVisibleFraction = (
+  container: Element,
+  video: Element,
+  fraction: number
+): void => {
+  const { bottom, height } = video.getBoundingClientRect();
+  container.scrollTop +=
+    bottom - container.getBoundingClientRect().top - fraction * height;
+};
 
 /** What the layout hands the video it wraps. */
 export type InPageVideoProps = {

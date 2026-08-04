@@ -9,7 +9,16 @@ import { withCss } from '../../.storybook/theme';
 import { backpackVideoCss, backpackVideoStyles } from './backpack-video-styles';
 import { ready } from '../support';
 import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
-import { InPageLayout } from './in-page-layout';
+import {
+  clearOfTheEdge,
+  fullyVisible,
+  InPageLayout,
+  inPageParts,
+  quarterVisible,
+  scrollPanelHeight,
+  scrollToVisibleFraction
+} from './in-page-layout';
+import { playerBox, playIcon } from './story-queries';
 
 // Deterministic and offline (apps/storybook/README.md), even though the args
 // below are Backpack's own provider URLs: every story here stages a player that
@@ -41,13 +50,6 @@ const affordances = (canvasElement: HTMLElement): string[] =>
     (element) =>
       `${element.tagName}[${element.getAttribute('aria-label') ?? element.textContent?.trim() ?? ''}]`
   );
-
-const playIcon = (canvasElement: HTMLElement): Element | null =>
-  canvasElement.querySelector('.ef-video-play-icon');
-
-/** The player box, which is what carries the aspect-ratio and variant CSS. */
-const playerBox = (canvasElement: HTMLElement): Element =>
-  canvasElement.querySelector('.ef-video-player')!;
 
 /**
  * The uniform scale factor of an element's computed `transform`: `1` for
@@ -113,44 +115,6 @@ const hover = async (element: Element): Promise<boolean> => {
   if (!driver) return false;
   await driver.elementLocator(element).hover();
   return true;
-};
-
-/**
- * Height of the scroll container the `pauseOnOutOfViewport` stories drive.
- * Fixed rather than Backpack's `h-screen`, so the geometry their `play`
- * functions scroll through cannot depend on the runner's window size, and
- * taller than the 480px-wide player's 270px box, so "the whole video is inside
- * the container" is a position that exists.
- */
-const scrollPanelHeight = '360px';
-
-/** How much of the video's own height is inside the container's top edge. */
-const fullyVisible = 1;
-const quarterVisible = 0.25;
-/** Negative: half the video's height *past* the edge, so none of it shows. */
-const clearOfTheEdge = -0.5;
-
-/** The scroll container and the player box inside it. */
-const inPageParts = (canvasElement: HTMLElement) => ({
-  container: canvasElement.querySelector('[role="region"]')!,
-  video: canvasElement.querySelector('.ef-video-player')!
-});
-
-/**
- * Scrolls `container` so that `fraction` of the video's own height is left
- * inside the container's top edge. Every number comes from live geometry, so
- * the spacers, the player's width and the runner's window can all change
- * without the scroll losing its meaning — and there is no distance to
- * hard-code.
- */
-const scrollToVisibleFraction = (
-  container: Element,
-  video: Element,
-  fraction: number
-): void => {
-  const { bottom, height } = video.getBoundingClientRect();
-  container.scrollTop +=
-    bottom - container.getBoundingClientRect().top - fraction * height;
 };
 
 /**
@@ -1174,7 +1138,8 @@ const playExternally = (ref: ReturnType<typeof useMockPlayer>): void => {
 
 /**
  * Two buttons standing in for an external consumer that holds
- * `BackpackVideo`'s `PlayerHandle` ref (`backpack-video.tsx:90-94,468`) and
+ * `BackpackVideo`'s `PlayerHandle` ref (`backpack-video.tsx:90-94`, forwarded at
+ * `:530`) and
  * drives it directly, the way `WithEvents` below needs one to. "External
  * pause" is the one call {@link playExternally}'s pair has no dormant half
  * to worry about.
@@ -1200,13 +1165,14 @@ const ExternalEventsVideo = ({
 /**
  * Backpack's `WithEvents` is `Default`'s args plus an `onPlayChange` that
  * logs (`Video.stories.tsx:304-312`) — nothing the meta's own spy
- * (`:250` above) does not already prove, and `Default` already asserts that
- * spy for the viewer's own click (`:296-307`). What earns this row its own
+ * (`:214` above, the meta's `args`) does not already prove, and `Default` already asserts that
+ * spy for the viewer's own click (`:260-271`). What earns this row its own
  * story instead of staying `Default`'s alias is the other source
  * `onPlayChange` has to report from: a transition the wrapper did not click
  * for itself, arriving as an ordinary player report the way an external
  * `activateFromInteraction` then `play`, or `pause` on its own, would
- * (`backpack-video.tsx:296-301`) — in both directions, and without reporting
+ * (`backpack-video.tsx:329-334`, the two `useOnChange` calls) — in both
+ * directions, and without reporting
  * a transition nothing actually changed a second time.
  */
 export const WithEvents: Story = {
