@@ -822,6 +822,92 @@ test('replaces the installed adapter when a same-media provider option changes',
   expect(previous.counts().destroyCount).toBe(1);
 });
 
+// A caller that assembles its bag from its own props writes
+// `poster: props.poster`, so a key is present and `undefined` on one render and
+// absent on the next. Both build the identical element, so neither is a reason
+// to rebuild a live embed.
+test.each([
+  [
+    'a key present and undefined against that key absent',
+    { wistia: { swatch: false } } satisfies Player.PlayerProviderOptions,
+    {
+      wistia: { swatch: false, poster: undefined }
+    } satisfies Player.PlayerProviderOptions
+  ],
+  [
+    'no bag at all against an empty bag',
+    undefined,
+    { wistia: {} } satisfies Player.PlayerProviderOptions
+  ]
+])(
+  'keeps the installed adapter when the bag changes only by %s',
+  async (_case, initialOptions, nextOptions) => {
+    const previous = createFakeProvider();
+    const replacement = createFakeProvider();
+    const controller = new PlayerController();
+    mockedLoadProvider
+      .mockResolvedValueOnce(previous.adapter)
+      .mockResolvedValueOnce(replacement.adapter);
+    const { rerender } = render(
+      <ActivationProbe
+        controller={controller}
+        providerOptions={initialOptions}
+      />
+    );
+    await vi.waitFor(() =>
+      expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+    );
+
+    rerender(
+      <ActivationProbe controller={controller} providerOptions={nextOptions} />
+    );
+    await act(async () => undefined);
+
+    expect(mockedLoadProvider).toHaveBeenCalledOnce();
+    expect(replacement.counts()).toMatchObject({
+      attachCount: 0,
+      loadCount: 0
+    });
+    expect(previous.counts().destroyCount).toBe(0);
+  }
+);
+
+// The other direction of dropping the key-count check: a key added with a real
+// value is a change, and is only seen by comparing the keys of both bags.
+test('replaces the installed adapter when a provider option is added to the bag', async () => {
+  const previous = createFakeProvider();
+  const replacement = createFakeProvider();
+  const controller = new PlayerController();
+  mockedLoadProvider
+    .mockResolvedValueOnce(previous.adapter)
+    .mockResolvedValueOnce(replacement.adapter);
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await vi.waitFor(() =>
+    expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false, poster: '/still.png' } }}
+    />
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledTimes(2));
+  expect(mockedLoadProvider.mock.calls[1]?.[0].providerOptions).toEqual({
+    wistia: { swatch: false, poster: '/still.png' }
+  });
+  await vi.waitFor(() =>
+    expect(replacement.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+  expect(previous.counts().destroyCount).toBe(1);
+});
+
 test('native option changes invalidate an older pending load', async () => {
   const firstLoad = deferred<ProviderAdapter>();
   const stale = createFakeProvider();

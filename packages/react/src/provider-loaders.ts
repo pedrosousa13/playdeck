@@ -11,10 +11,13 @@ export type PlayerMediaMount = HTMLVideoElement | HTMLDivElement;
  * native, HLS, YouTube and Vimeo providers wait on their own issues, so a
  * missing key here is a deliberate absence rather than an oversight.
  *
- * Where a Reely prop and a provider option overlap, the Reely prop wins:
- * `loop` reaches every provider through `NativePlaybackOptions`, so a `loop`
- * in the Wistia bag is redundant even though `WistiaProviderOptions` declares
- * it.
+ * Where a Reely prop and a provider option share a name, the overlap is only
+ * nominal. `Root`'s `loop` travels in `NativePlaybackOptions`, which
+ * `loadProvider` hands to the native and HLS providers and to no others, so it
+ * never reaches a Wistia embed; `packages/core` has no notion of looping at
+ * all. `loop` in this bag is therefore not redundant -- it is the only way to
+ * make a Wistia embed loop, by setting `endVideoBehavior`
+ * (`provider-wistia/src/attachment.ts:209`, `if (options.loop === true)`).
  */
 export type PlayerProviderOptions = {
   readonly wistia?: WistiaProviderOptions;

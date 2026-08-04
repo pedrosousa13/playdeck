@@ -115,19 +115,25 @@ const nativeOptionsEqual = (
 // is a new object on every render, and a reference compare would tear the embed
 // down and rebuild it each time. Own keys rather than each declared field, so
 // this stays correct as a provider's options grow, and shallow because every
-// option a provider bag declares is a primitive. A key set to `undefined`
-// equals that key being absent, which is what both mean to the provider.
+// option a provider bag declares is a primitive.
+//
+// Every key either side declares, compared as a value: a key set to `undefined`
+// therefore equals that key being absent, and an absent bag equals an empty one.
+// All three mean the same thing to a provider, which sets an attribute only for
+// an option that is not `undefined` (`provider-wistia/src/attachment.ts:215`,
+// `if (options.playerColor !== undefined)`). Counting keys instead would rebuild
+// a live embed for two bags that build the identical element -- which is what a
+// caller assembling its bag per render, one key at a time from its own props,
+// hands this function.
 const providerBagEqual = (
   left: Readonly<Record<string, unknown>> | undefined,
   right: Readonly<Record<string, unknown>> | undefined
 ): boolean => {
-  if (left === right) return true;
-  if (!left || !right) return false;
-  const keys = Object.keys(left);
-  return (
-    keys.length === Object.keys(right).length &&
-    keys.every((key) => Object.is(left[key], right[key]))
-  );
+  const keys = new Set([
+    ...Object.keys(left ?? {}),
+    ...Object.keys(right ?? {})
+  ]);
+  return [...keys].every((key) => Object.is(left?.[key], right?.[key]));
 };
 
 // One line per provider key, as `nativeOptionsEqual` names its own three.
