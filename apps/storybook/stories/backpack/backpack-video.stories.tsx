@@ -1132,3 +1132,210 @@ export const WithThreshold: Story = inPageStory(
     await expect(args.onPlayChange).toHaveBeenCalledTimes(3);
   }
 );
+
+/*
+ * SIDEPRO-201's two stories. Both stage the mock player already `ready` with
+ * `reportsPlayback: true` (`mock-player.tsx:24-32`), so `play`/`pause` issued
+ * through the `PlayerHandle` ref actually move `state.playback` — the same
+ * gap `createReportingProvider` closes for the contract tests
+ * (`reporting-provider.ts`), given a story instead. Both drive that ref from
+ * a button *inside* the rendered tree rather than reaching in from a `play`
+ * function: the button's own `onClick` closes over the ref exactly as an
+ * external consumer's own code would, and the `play` function only clicks
+ * it and reads the result — no merged ref, no imperative handle exported
+ * out of the story, because nothing outside the tree needs one here.
+ */
+
+/**
+ * The external "play" command SIDEPRO-201 documents: `activateFromInteraction`
+ * then `play`, in that order, against the same `PlayerHandle` ref
+ * (`activateFromInteraction`'s dormant-or-error branches are
+ * `use-activation.ts:265-297`; `play`'s not-ready short-circuit is
+ * `player-controller.ts:381-386`). One named function rather than one copy
+ * of the pair per button, so the two calls have a single home to drift from
+ * instead of two.
+ *
+ * Why the pair, and not just `play`: `activateFromInteraction` is a no-op
+ * unless the player is `dormant` or in a recoverable `error`, so the same
+ * call starts a dormant player and is silently skipped against an
+ * already-active one — no branch here has to tell the two apart. `play` is
+ * what an already-active player needs, and is a harmless
+ * `{ ok: false, reason: 'not-ready' }` no-op against a player the first call
+ * just set loading, because nothing has attached to it yet. That the pair
+ * costs exactly one real play either way, rather than a queued one plus a
+ * doubled-up second, is pinned in `packages/react/test/activation.test.tsx`'s
+ * `'interaction issues exactly one play when activateFromInteraction is
+ * immediately followed by play'`.
+ */
+const playExternally = (ref: ReturnType<typeof useMockPlayer>): void => {
+  ref.current?.activateFromInteraction();
+  void ref.current?.play();
+};
+
+/**
+ * Two buttons standing in for an external consumer that holds
+ * `BackpackVideo`'s `PlayerHandle` ref (`backpack-video.tsx:90-94,468`) and
+ * drives it directly, the way `WithEvents` below needs one to. "External
+ * pause" is the one call {@link playExternally}'s pair has no dormant half
+ * to worry about.
+ */
+const ExternalEventsVideo = ({
+  player,
+  ...props
+}: BackpackVideoProps & { readonly player: MockPlayerParameters }) => {
+  const ref = useMockPlayer(player);
+  return (
+    <>
+      <BackpackVideo {...props} ref={ref} />
+      <button onClick={() => playExternally(ref)} type="button">
+        External play
+      </button>
+      <button onClick={() => void ref.current?.pause()} type="button">
+        External pause
+      </button>
+    </>
+  );
+};
+
+/**
+ * Backpack's `WithEvents` is `Default`'s args plus an `onPlayChange` that
+ * logs (`Video.stories.tsx:304-312`) — nothing the meta's own spy
+ * (`:250` above) does not already prove, and `Default` already asserts that
+ * spy for the viewer's own click (`:296-307`). What earns this row its own
+ * story instead of staying `Default`'s alias is the other source
+ * `onPlayChange` has to report from: a transition the wrapper did not click
+ * for itself, arriving as an ordinary player report the way an external
+ * `activateFromInteraction` then `play`, or `pause` on its own, would
+ * (`backpack-video.tsx:296-301`) — in both directions, and without reporting
+ * a transition nothing actually changed a second time.
+ */
+export const WithEvents: Story = {
+  args: { url: vimeoUrl, muted: true },
+  parameters: {
+    player: { ...pausedPlayer.player, reportsPlayback: true }
+  },
+  render: (args, { parameters }) => (
+    <ExternalEventsVideo
+      {...args}
+      player={parameters.player as MockPlayerParameters}
+    />
+  ),
+  play: async ({ args, canvas, userEvent }) => {
+    const externalPlay = await canvas.findByRole('button', {
+      name: 'External play'
+    });
+    const externalPause = await canvas.findByRole('button', {
+      name: 'External pause'
+    });
+
+    await userEvent.click(externalPlay);
+    await waitFor(() =>
+      expect(args.onPlayChange).toHaveBeenLastCalledWith(true)
+    );
+    await expect(args.onPlayChange).toHaveBeenCalledTimes(1);
+
+    // The same external command again, still playing: nothing changed for
+    // the wrapper to fold in, so nothing is reported a second time.
+    await userEvent.click(externalPlay);
+    await expect(args.onPlayChange).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(externalPause);
+    await waitFor(() =>
+      expect(args.onPlayChange).toHaveBeenLastCalledWith(false)
+    );
+    await expect(args.onPlayChange).toHaveBeenCalledTimes(2);
+  }
+};
+
+/**
+ * Three buttons standing in for Backpack's carousel, which drives one
+ * video's play state through a module-global jotai atom
+ * (`video.store.ts:20`). This wrapper has no such atom — Reely's commands
+ * are imperative and scoped to the `PlayerHandle` ref a caller already
+ * holds — so the equivalent buttons drive the same player directly through
+ * that ref instead of through a shared store. "Reset" is where the two
+ * diverge: Backpack's atom has an `undefined` state, "no opinion", for its
+ * third button to reset to; Reely's ref retains nothing a reset could
+ * release, so this button is wired to nothing, on purpose.
+ */
+const SocialCarouselIntegrationVideo = ({
+  player,
+  ...props
+}: BackpackVideoProps & { readonly player: MockPlayerParameters }) => {
+  const ref = useMockPlayer(player);
+  return (
+    <>
+      <BackpackVideo {...props} ref={ref} />
+      <button onClick={() => playExternally(ref)} type="button">
+        Simulate slide active (play)
+      </button>
+      <button onClick={() => void ref.current?.pause()} type="button">
+        Simulate slide change (pause)
+      </button>
+      {/* No `onClick`: Reely retains nothing for a reset to release. */}
+      <button type="button">Reset (no-op)</button>
+    </>
+  );
+};
+
+/**
+ * Backpack's `SocialCarouselAtomIntegration`
+ * (`Video.stories.tsx:441-488`, named `'Regression: SocialCarousel atom
+ * integration'`): three buttons coordinating one video the way a carousel
+ * would. Its args for the video are `url='https://vimeo.com/336066147' muted
+ * light={false}`, carried verbatim (`vimeoUrl` is this file's own name for
+ * that URL). The mechanism differs — {@link SocialCarouselIntegrationVideo}
+ * says how and why — while the behaviour it exercises matches: play, pause,
+ * and a reset that changes nothing, proven by a later command still working
+ * after it, which is what makes the "nothing to release" divergence safe
+ * rather than merely convenient.
+ */
+export const SocialCarouselAtomIntegration: Story = {
+  name: 'Regression: SocialCarousel atom integration',
+  args: { url: vimeoUrl, muted: true, light: false },
+  parameters: {
+    player: { ...pausedPlayer.player, reportsPlayback: true }
+  },
+  render: (args, { parameters }) => (
+    <SocialCarouselIntegrationVideo
+      {...args}
+      player={parameters.player as MockPlayerParameters}
+    />
+  ),
+  play: async ({ canvas, userEvent }) => {
+    const play = await canvas.findByRole('button', {
+      name: 'Simulate slide active (play)'
+    });
+    const pause = await canvas.findByRole('button', {
+      name: 'Simulate slide change (pause)'
+    });
+    const reset = await canvas.findByRole('button', { name: 'Reset (no-op)' });
+
+    await userEvent.click(play);
+    await waitFor(() =>
+      expect(
+        canvas.getByRole('button', { name: 'Pause video' })
+      ).toHaveAttribute('aria-pressed', 'true')
+    );
+
+    await userEvent.click(pause);
+    await waitFor(() =>
+      expect(
+        canvas.getByRole('button', { name: 'Play video' })
+      ).toHaveAttribute('aria-pressed', 'false')
+    );
+
+    await userEvent.click(reset);
+    // The no-op: the surface is exactly as the pause above left it.
+    await expect(
+      canvas.getByRole('button', { name: 'Play video' })
+    ).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(play);
+    await waitFor(() =>
+      expect(
+        canvas.getByRole('button', { name: 'Pause video' })
+      ).toHaveAttribute('aria-pressed', 'true')
+    );
+  }
+};

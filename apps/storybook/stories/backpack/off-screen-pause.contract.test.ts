@@ -1,25 +1,18 @@
 import {
-  createInitialPlayerState,
-  type PlayerController,
-  type ProviderAdapter,
-  type ProviderStateListener,
-  type ProviderStatePatch
-} from '@reely/core';
-import type { PlayerHandle } from '@reely/react';
-import {
   act,
   cleanup,
   fireEvent,
   render,
   renderHook
 } from '@testing-library/react';
-import { createElement, useEffect, useRef } from 'react';
+import { createElement, useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 import {
   useOffScreenPause,
   type OffScreenPauseOptions
 } from './off-screen-pause';
+import { useReportingProvider } from './reporting-provider';
 
 /**
  * A controllable `IntersectionObserver`, copied from
@@ -512,78 +505,6 @@ describe('BackpackVideo off-screen pause', () => {
   });
 });
 
-/**
- * A provider that reports playback back, which is the one thing the wrapper
- * harness above cannot do: with no provider attached, nothing ever moves
- * `state.playback`, so the wrapper's player-report fold
- * (`backpack-video.tsx:223`) never runs and the only way in is its own toggle.
- * Under `controls: true` the toggle is not on the surface at all — the click
- * target is `Player.Controls`, which drives the controller directly and reaches
- * the wrapper only as a report.
- *
- * Everything else is a no-op, as in `.storybook/mock-player.tsx`'s adapter:
- * the two commands that emit are the two the sequence under test issues.
- */
-const createReportingProvider = () => {
-  const listeners = new Set<ProviderStateListener>();
-  const emit = (patch: ProviderStatePatch): void => {
-    listeners.forEach((listener) => listener(patch));
-  };
-  const ok = async (): Promise<{ readonly ok: true }> => ({ ok: true });
-  const adapter: ProviderAdapter = {
-    provider: 'native',
-    attach: () => {},
-    load: () => {},
-    destroy: () => {},
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    play: async () => {
-      emit({ playback: 'playing' });
-      return { ok: true };
-    },
-    pause: async () => {
-      emit({ playback: 'paused' });
-      return { ok: true };
-    },
-    mute: ok,
-    unmute: ok,
-    setVolume: ok,
-    setPlaybackRate: ok
-  };
-  return { adapter, emit };
-};
-
-/**
- * The wrapper with {@link createReportingProvider} staged into its own
- * `Player.Root` — the trick `MockedBackpackVideo` uses in the stories
- * (`backpack-video.stories.tsx:191-196`), by way of the `ref` the wrapper
- * forwards. Reported ready, so `awaitingActivation` is false and the surface
- * hands over to `Player.Controls`; no `playing` prop, so the root loads on
- * interaction and nothing commits the inert `mock://` source.
- */
-const useReportingProvider = () => {
-  const handle = useRef<PlayerHandle>(null);
-  useEffect(() => {
-    // `Player.Root`'s imperative handle is its `PlayerController`; the cast
-    // opens the provider-facing `setProvider` that `PlayerHandle` omits.
-    const controller = handle.current as PlayerController | null;
-    if (!controller) return;
-    const provider = createReportingProvider();
-    controller.setProvider(provider.adapter);
-    provider.emit({
-      activation: 'ready',
-      capabilities: createInitialPlayerState().capabilities,
-      lifecycle: 'ready',
-      playback: 'paused',
-      provider: 'native'
-    });
-    return () => controller.setProvider(undefined);
-  }, []);
-  return handle;
-};
-
 const StagedVideo = (props: BackpackVideoProps) =>
   // Returned straight from the hook rather than held in a local, which is what
   // `react-hooks/refs` asks for: a ref that never becomes a value in this
@@ -651,5 +572,152 @@ describe('BackpackVideo off-screen pause under visible controls', () => {
     scrollTo(true);
 
     expect(reported()).toEqual([true, false, true, false]);
+  });
+});
+
+/**
+ * A controlled consumer: `playing` follows every state the wrapper reports.
+ * `renderWrapper`'s `setProps` cannot stand in for it, because a rerender from
+ * the test body lands in a commit of its own — where `onPlayChange` fires from
+ * an effect (`backpack-video.tsx:247`) declared after the off-screen hook's
+ * decision effect (`off-screen-pause.ts:235-258`, mounted at
+ * `backpack-video.tsx:202`), so the prop this parent sets from it is batched
+ * with the intent that effect raised and both reach the same render.
+ *
+ * `playing` starts `true` for the reason `renderWrapper` passes it: the root
+ * then loads eagerly (`backpack-video.tsx:386`), so `awaitingActivation` is
+ * false for the whole test and the wrapper's own toggle is the click target from
+ * the first render.
+ */
+const MirroringVideo = ({ onPlayChange, ...rest }: BackpackVideoProps) => {
+  const [playing, setPlaying] = useState(true);
+  return createElement(BackpackVideo, {
+    ...rest,
+    onPlayChange: (next: boolean) => {
+      setPlaying(next);
+      onPlayChange?.(next);
+    },
+    playing
+  });
+};
+
+/**
+ * The fold order itself. `BackpackVideoSurface` applies three sources of
+ * playback truth in a fixed sequence — what the player reports
+ * (`backpack-video.tsx:224`), then the off-screen intent (`:234`), then the
+ * `playing` prop (`:237`) — and each `requestPlayback` sets `isPlaying` during
+ * render (`:215-218`), so within one render pass the last line to run is the one
+ * whose value survives.
+ *
+ * Order is therefore invisible unless two sources change in the *same* render,
+ * which is why every other test in this file passes with either adjacent pair
+ * swapped. Both tests below stage that render by letting the second source
+ * arrive from an effect of the commit the first one is applied in: the click
+ * changes `isPlaying`, whose commit runs the decision effect (a `setIntent`) and
+ * then, after it, `useOnChange(isPlaying)` — which issues the player command
+ * (`:242-244`) and reports the new state to the parent (`:247`). Whatever those
+ * two produce is batched into the render that also sees the new intent.
+ *
+ * Backpack states the same order from the top, as a comment rather than as
+ * anything its own machine enforces (`useVideoPlayerState.ts:30-38`): the
+ * `playing` prop first, the `IntersectionObserver` last.
+ */
+describe('BackpackVideo playback source precedence', () => {
+  beforeEach(() => {
+    ControlledIntersectionObserver.instances = [];
+    globalThis.IntersectionObserver =
+      ControlledIntersectionObserver as unknown as typeof globalThis.IntersectionObserver;
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.IntersectionObserver = originalIntersectionObserver;
+  });
+
+  // The hazard `backpack-video.tsx:228-233` describes in full: the report says
+  // what playback already was, where the intent says what it should be now, and
+  // the hook raises each intent once (`off-screen-pause.ts:242-245`) — so a
+  // report that won here would swallow the pause with nothing left to raise it
+  // again, and the video would keep playing off screen.
+  it('applies the off-screen pause over the player report that lands with it', () => {
+    const onPlayChange = vi.fn<(isPlaying: boolean) => void>();
+    const view = render(
+      createElement(StagedVideo, {
+        muted: true,
+        onPlayChange,
+        url: 'mock://reely/unresolvable.mp4'
+      })
+    );
+    const reported = () => onPlayChange.mock.calls.map(([playing]) => playing);
+    // Re-queried rather than held: the toggle only replaces
+    // `Player.ActivationButton` once the staged provider reports ready, and both
+    // carry the same class (`backpack-video.tsx:314,327`).
+    const toggle = () => view.container.querySelector('.ef-video-controller')!;
+
+    // The observer's first entry, on screen and with nothing played yet, so the
+    // decision effect's `startedPlaying` guard stands down
+    // (`off-screen-pause.ts:236`).
+    act(() => {
+      latestObserver().emit(true);
+    });
+
+    // One commit, two sources. The click is the only thing the test does to
+    // playback; the player's report is what the commit's own effects produce,
+    // because `actions.play()` reaches the staged provider's `play`, which
+    // emits `playback: 'playing'` before it returns — a provider confirming the
+    // play the viewer just started, arriving with the pause the same scroll
+    // asked for.
+    act(() => {
+      fireEvent.click(toggle());
+      latestObserver().emit(false);
+    });
+
+    expect(reported()).toEqual([true, false]);
+    expect(toggle().getAttribute('aria-label')).toBe('Play video');
+    expect(toggle().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  // The other half of the documented precedence: the parent's explicit value is
+  // the last word, which is what lets a controlled consumer play a video that is
+  // off screen at all. The two tests above named "when the parent lifts" cover
+  // the case where the hook merely has to leave that playback alone; this is the
+  // tie itself, where the prop and the intent disagree within one render.
+  it('applies the playing prop over the off-screen intent that lands with it', () => {
+    const onPlayChange = vi.fn<(isPlaying: boolean) => void>();
+    const view = render(
+      createElement(MirroringVideo, {
+        muted: true,
+        onPlayChange,
+        url: 'mock://reely/unresolvable.mp4'
+      })
+    );
+    const reported = () => onPlayChange.mock.calls.map(([playing]) => playing);
+    const toggle = () => view.container.querySelector('.ef-video-controller')!;
+
+    act(() => {
+      latestObserver().emit(true);
+    });
+
+    // Played and paused by hand, which leaves the mirroring parent holding
+    // `playing={false}` — the value the commit below then changes. Nothing here
+    // is a conflict: each click is one source, in a commit of its own.
+    fireEvent.click(toggle());
+    fireEvent.click(toggle());
+    expect(reported()).toEqual([true, false]);
+
+    // One commit, two sources: the scroll takes the video off screen while the
+    // click starts it, so the intent asks for a pause and the parent — mirroring
+    // the play it was just told about — asks for `playing: true`, in the same
+    // render. The `mock://` scheme fails Reely's source detection, as in
+    // `renderWrapper` above, so no provider ever attaches and nothing reports
+    // playback — the only two sources in this render are these.
+    act(() => {
+      fireEvent.click(toggle());
+      latestObserver().emit(false);
+    });
+
+    expect(reported()).toEqual([true, false, true]);
+    expect(toggle().getAttribute('aria-label')).toBe('Pause video');
+    expect(toggle().getAttribute('aria-pressed')).toBe('true');
   });
 });

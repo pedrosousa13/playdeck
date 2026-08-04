@@ -162,8 +162,6 @@ export const Root = ({
   mediaMetadataSeed.current = mediaMetadata;
   /* eslint-enable react-hooks/refs */
 
-  useImperativeHandle(ref, () => controller, [controller]);
-
   const reconcileMuted = useCallback(
     (value: boolean) => {
       if (pendingMuted.current?.value === value) return;
@@ -435,6 +433,23 @@ export const Root = ({
     preload,
     source: detectedSource
   });
+
+  // The handle is still the controller instance -- `Object.assign` mutates
+  // and returns it rather than spreading into a copy -- so the Storybook
+  // mock-player decorator and the off-screen-pause contract test, which both
+  // cast this same ref back to `PlayerController` to reach `setProvider`/
+  // `configureAutoplay` directly, keep resolving against the real controller.
+  // `activateFromInteraction` is an activation concern `useActivation` owns,
+  // not a controller method, so it joins the instance here rather than
+  // widening `PlayerController`'s own surface.
+  useImperativeHandle(
+    ref,
+    () =>
+      Object.assign(controller, {
+        activateFromInteraction: activation.activateFromInteraction
+      }),
+    [activation.activateFromInteraction, controller]
+  );
   const registerActivationMedia = activation.registerMedia;
   const registerMedia = useCallback(
     (media: PlayerMediaMount | null) => {

@@ -13,6 +13,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   detectSource,
   PlayerController,
+  type CommandResult,
   type ProviderAdapter,
   type ProviderStateListener
 } from '@reely/core';
@@ -1657,7 +1658,7 @@ test('retries an installed provider error with one queued user play', async () =
   render(interactionFixture({ ref: handle }));
 
   const button = screen.getByRole('button', { name: 'Play video' });
-  const controller = handle.current as PlayerController;
+  const controller = handle.current as unknown as PlayerController;
   const playWithOrigin = vi.spyOn(controller, 'playWithOrigin');
   button.focus();
   fireEvent.click(button);
@@ -1682,4 +1683,149 @@ test('retries an installed provider error with one queued user play', async () =
   await vi.waitFor(() =>
     expect(playWithOrigin).toHaveBeenCalledExactlyOnceWith('user')
   );
+});
+
+// SIDEPRO-201: an external controller drives activation through the
+// forwarded ref alone -- no click, no `Player.ActivationButton` in the tree
+// at all. The single `activateFromInteraction()` call below has to queue the
+// same play `useActivation` queues for a click (use-activation.ts:234-235),
+// and that queued play has to reach the provider exactly once.
+test('a dormant interaction root activates and plays from a single ref call', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'interaction', ref: handle }));
+
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+
+  act(() => handle.current?.activateFromInteraction());
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+});
+
+// The test above calls `activateFromInteraction` alone and lets the
+// auto-queued play do the rest; SIDEPRO-201's external "play" command is
+// the pair, in this order — `activateFromInteraction()` then `play()`
+// (`use-activation.ts:265-297`, `player-controller.ts:381-386`) — the way
+// `apps/storybook/stories/backpack/backpack-video.stories.tsx`'s
+// `ExternalEventsVideo`/`SocialCarouselIntegrationVideo` and
+// `external-control.contract.test.ts`'s file-level comment both describe
+// issuing it. Against a still-`dormant` player, the explicit `play()` has
+// no provider to reach yet and resolves `{ ok: false, reason: 'not-ready' }`
+// (`player-controller.ts:383-384`) rather than queuing anything — dropped,
+// not doubled — so the pair must not cost a second, real play once the
+// provider this same `activateFromInteraction` call set loading actually
+// attaches. Asserted on `fake.counts().playCount` directly, not on a spy
+// over `handle.current.play`/`activateFromInteraction` themselves: those
+// are expected to be called once each here regardless of whether the drop
+// is working, so only a count on the provider itself can tell a correct
+// drop from a bug that lets the early call double up the queued one.
+test('interaction issues exactly one play when activateFromInteraction is immediately followed by play', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'interaction', ref: handle }));
+  let immediateResult: CommandResult | undefined;
+
+  act(() => {
+    handle.current?.activateFromInteraction();
+    void handle.current?.play().then((result) => {
+      immediateResult = result;
+    });
+  });
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  // Read only once the microtask above has had a chance to run — `act` for a
+  // synchronous callback does not itself drain it, so a check placed
+  // straight off that `act` would see `undefined` regardless of what
+  // `play()` actually returned.
+  expect(immediateResult).toEqual({ ok: false, reason: 'not-ready' });
+
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+  // The regression this test exists to catch would land moments after the
+  // count first reaches one, not before, so a check placed only right after
+  // the assertion above would pass over it just as easily as no check at
+  // all.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(fake.counts().playCount).toBe(1);
+});
+
+test('usePlayerActions() reaches the same activateFromInteraction binding', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  let activateFromInteraction!: () => void;
+  const Probe = () => {
+    const actions = Player.usePlayerActions();
+    useLayoutEffect(() => {
+      activateFromInteraction = actions.activateFromInteraction;
+    }, [actions]);
+    return null;
+  };
+  render(
+    <Player.Root loading="interaction" source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+      <Probe />
+    </Player.Root>
+  );
+
+  act(() => activateFromInteraction());
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+});
+
+// The Storybook mock-player decorator and the off-screen-pause contract test
+// both cast this same handle back to `PlayerController` to reach
+// `setProvider` directly (apps/storybook/.storybook/mock-player.tsx:124-130,
+// apps/storybook/stories/backpack/off-screen-pause.contract.test.ts:567-574).
+// Composing the handle from the controller plus `activateFromInteraction`
+// must not lose that escape hatch.
+test('the ref handle still exposes the provider-facing setProvider escape hatch', () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ ref: handle }));
+
+  const controller = handle.current as unknown as PlayerController;
+  expect(controller.setProvider).toBeTypeOf('function');
+  const adapter: ProviderAdapter = {
+    provider: 'native',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: () => () => undefined
+  };
+
+  act(() => controller.setProvider(adapter));
+
+  expect(controller.getState().activation).toBe('loading-provider');
+});
+
+// An external controller calls `activateFromInteraction()` unconditionally
+// before `play()`, so a player that has already activated has to tolerate
+// the call rather than restart itself or throw
+// (use-activation.ts:275-296 only proceeds from `dormant` or `error`).
+test('activateFromInteraction on an already-ready player is a no-op', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'interaction', ref: handle }));
+
+  act(() => handle.current?.activateFromInteraction());
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+
+  expect(() =>
+    act(() => handle.current?.activateFromInteraction())
+  ).not.toThrow();
+  expect(mockedLoadProvider).toHaveBeenCalledOnce();
+  expect(fake.counts().playCount).toBe(1);
 });
