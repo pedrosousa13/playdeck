@@ -86,7 +86,13 @@ const INITIAL_INTENT: OffScreenPlaybackIntent = { playing: false };
  * viewer's clicks reach the wrapper as player reports, with no handler on the
  * path that could announce them — which is why it keeps a record of what it
  * asked for. Backpack instead cancels from its own `start` and `toggle`
- * (`:167,174`), and so misses a pause issued through the player's controls.
+ * (`:167,174`) — which works there, because its `onPlay` handler routes through
+ * `start()`, so a video can never be playing off screen with the flag still
+ * armed. This wrapper has no such chokepoint: playback can become live through
+ * the player-report fold without passing a handler at all, which is how an
+ * earlier revision of this file let a controls-issued pause auto-resume.
+ * Recording the request rather than trusting the handlers removes the class of
+ * bug instead of the one instance.
  *
  * ## Why `isPlaying` and `controlledPaused` are read from refs
  * A scroll is the only event that may re-run the decision, so the decision
