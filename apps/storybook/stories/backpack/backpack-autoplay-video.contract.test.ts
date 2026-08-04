@@ -46,7 +46,7 @@ import { createReportingProvider } from './reporting-provider';
  * The observers Reely's own viewport activation made, told from the
  * off-screen-pause hook's by the options each side constructs with: activation
  * passes `{ rootMargin }` alone (`packages/react/src/use-activation.ts:399`),
- * the hook passes `{ root, threshold }` (`off-screen-pause.ts:224`).
+ * the hook passes `{ root, threshold }` (`off-screen-pause.ts:228`).
  */
 const activationObservers = (): ControlledIntersectionObserver[] =>
   ControlledIntersectionObserver.instances.filter(
@@ -199,7 +199,7 @@ describe('BackpackAutoplayVideo', () => {
     // The autoplay attempt, whole: mute then play. A third command follows it —
     // the wrapper folding the player's own report back in and issuing the play
     // again, which it documents as a deliberate idempotent no-op
-    // (`backpack-video.tsx:326-330`, the `useOnChange` that drives the player) —
+    // (`backpack-video.tsx:300-305`, the `useOnChange` that drives the player) —
     // and is left out of the assertion rather
     // than pinned here, so a future change to that echo fails its own test and
     // not this one.

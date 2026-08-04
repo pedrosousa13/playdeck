@@ -389,4 +389,42 @@ ${aspectRatioMediaQueries}
 .ef-video-player:hover .ef-video-cover[data-hover-effect='true'] .ef-video-cover-image {
   transform: scale(1.05);
 }
+
+/* BackpackVideoHoverPreview's own root, which wraps the player box and carries
+   the cover layer beside it. Backpack's root is the same shape — its
+   VideoCoverImage sits outside its VideoPlayer
+   (Video/VideoHoverPreview.tsx:144-155, its VideoCoverImage) — and here it has
+   to be, because
+   Player.Poster cannot host a cover that comes back: Reely hides it on the first
+   reported playback and never restores it for the same source
+   (packages/react/src/poster.tsx:75, driven from root.tsx:462-467).
+
+   Shrink-to-fit rather than the block default, because the cover below is
+   positioned against this box: .ef-video-player is given a fixed width above, so
+   a root that filled its parent would stretch the cover well past the video. The
+   radius repeats the player box's own so that the layer over it is clipped to
+   the same corners — Backpack's rounded-[inherit] on this element
+   (video.styles.ts:125) against Backpack's radius='xs' default for the component
+   (VideoHoverPreview.tsx:55). No background: this box is exactly the player's
+   size, and the player already paints one. */
+.ef-video-hover-preview {
+  position: relative;
+  width: fit-content;
+  border-radius: 0.25rem;
+  overflow: hidden;
+}
+
+/* The cover layer, with Player.Poster's own geometry (poster.tsx:50-58) since it
+   is standing in the same place: over the media, under the play icon (z-index
+   20) and the click target (z-index 30). pointer-events is the load-bearing one
+   — the layer covers the button that plays the video, so a cover that took
+   clicks would leave the resting surface with no working affordance. Its
+   appearance comes from the .ef-video-cover and .ef-video-cover-image rules
+   above, which is the whole of what this reuses from BackpackVideo. */
+.ef-video-hover-preview > .ef-video-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
 `;

@@ -2,6 +2,7 @@ import {
   BackpackVideoInternal,
   type BackpackVideoProps
 } from './backpack-video';
+import { composeClassName } from './compose-class-name';
 
 /**
  * The prop API of EF Backpack's `AutoplayVideo`
@@ -94,7 +95,7 @@ export const BackpackAutoplayVideo = ({
     // class stays last. The name also carries a background of its own, which is
     // where `backpack-video-styles.ts`'s `.ef-video-player.ef-autoplay-video`
     // rule comes from — its comment is the argument.
-    className={['ef-autoplay-video', className].filter(Boolean).join(' ')}
+    className={composeClassName('ef-autoplay-video', className)}
     muted
     playing={playing}
   />

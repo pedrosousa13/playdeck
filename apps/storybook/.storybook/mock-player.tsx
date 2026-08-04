@@ -29,7 +29,10 @@ import { useEffect, useRef, type ReactNode } from 'react';
  *   `createReportingProvider` lets a contract test do it
  *   (`stories/backpack/reporting-provider.ts`). `playResult` still decides
  *   what `play()` resolves to, and a failing one still emits nothing: a
- *   command that did not succeed has nothing to confirm.
+ *   command that did not succeed has nothing to confirm. `seekTo` is reported
+ *   under the same knob — it emits the new `currentTime` when set and is a
+ *   silent `ok` when not — so "not set" still means a mock that answers
+ *   commands and reports nothing at all.
  * - `cues` — active `TextCue[]` emitted through the fake provider's cue
  *   channel after mount, so a story can drive `Player.Captions` without a
  *   real track.
@@ -108,6 +111,26 @@ const createMockAdapter = (
     pause: reportsPlayback
       ? async () => {
           emit({ playback: 'paused' });
+          return { ok: true };
+        }
+      : ok,
+    // Always answers — a real provider can seek whether or not a story wants to
+    // watch the result, and reporting `unsupported` here would misdescribe the
+    // player's capabilities — but reports the new position only under
+    // `reportsPlayback`, alongside `play` and `pause`. The knob is named for
+    // playback and this is a position, so the generalisation is deliberate: what
+    // it really selects is whether commands confirm themselves, and a mock left
+    // without it stays one that emits nothing at all. Otherwise a story that
+    // asked for a non-reporting player would quietly get `currentTime` updates it
+    // never staged.
+    //
+    // Reporting it is what lets a story put a position on the player at all —
+    // nothing here decodes, so no position arrives by itself — which is what
+    // `Backpack parity/VideoHoverPreview` needs to watch a preview window
+    // enforced by position rather than by a clock.
+    seekTo: reportsPlayback
+      ? async (time: number) => {
+          emit({ currentTime: time });
           return { ok: true };
         }
       : ok,

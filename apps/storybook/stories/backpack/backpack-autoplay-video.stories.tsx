@@ -89,7 +89,7 @@ const coverImageDataUri =
  *   `playback: 'playing'` would let every story below pass with autoplay
  *   removed entirely.
  * - `reportsPlayback` — the mock's `play`/`pause` emit the confirming patch a
- *   real provider would (`mock-player.tsx:24-32`), which is what the wrapper
+ *   real provider would (`mock-player.tsx:24-35`), which is what the wrapper
  *   reads playback off. Without it the attempt's `play()` would resolve into
  *   silence and no story could see that it happened.
  */

@@ -1099,7 +1099,7 @@ export const WithThreshold: Story = inPageStory(
 
 /*
  * SIDEPRO-201's two stories. Both stage the mock player already `ready` with
- * `reportsPlayback: true` (`mock-player.tsx:24-32`), so `play`/`pause` issued
+ * `reportsPlayback: true` (`mock-player.tsx:24-35`), so `play`/`pause` issued
  * through the `PlayerHandle` ref actually move `state.playback` — the same
  * gap `createReportingProvider` closes for the contract tests
  * (`reporting-provider.ts`), given a story instead. Both drive that ref from
@@ -1139,7 +1139,7 @@ const playExternally = (ref: ReturnType<typeof useMockPlayer>): void => {
 /**
  * Two buttons standing in for an external consumer that holds
  * `BackpackVideo`'s `PlayerHandle` ref (`backpack-video.tsx:90-94`, forwarded at
- * `:530`) and
+ * `:499`) and
  * drives it directly, the way `WithEvents` below needs one to. "External
  * pause" is the one call {@link playExternally}'s pair has no dormant half
  * to worry about.
@@ -1171,7 +1171,7 @@ const ExternalEventsVideo = ({
  * `onPlayChange` has to report from: a transition the wrapper did not click
  * for itself, arriving as an ordinary player report the way an external
  * `activateFromInteraction` then `play`, or `pause` on its own, would
- * (`backpack-video.tsx:329-334`, the two `useOnChange` calls) — in both
+ * (`backpack-video.tsx:303-308`, the two `useOnChange` calls) — in both
  * directions, and without reporting
  * a transition nothing actually changed a second time.
  */

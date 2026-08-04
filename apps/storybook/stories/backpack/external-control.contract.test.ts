@@ -9,12 +9,12 @@ import { useReportingProvider } from './reporting-provider';
  * SIDEPRO-201: external play-state control for `BackpackVideo`, through the
  * mechanism already settled rather than a new prop — the `PlayerHandle` ref
  * the wrapper already forwards (`backpack-video.tsx:90-94`, forwarded at
- * `:530`), plus
+ * `:499`), plus
  * `activateFromInteraction`, which Task 1 put on that handle so a dormant
  * interaction-loading player can be started from outside
  * (`packages/react/src/use-activation.ts:265-297`). External commands arrive
  * as ordinary player reports, so what every test below actually exercises is
- * the wrapper's existing three-deep playback fold (`backpack-video.tsx:307-324`,
+ * the wrapper's existing three-deep playback fold (`backpack-video.tsx:281-298`,
  * the three `requestPlayback` branches) and its `onPlayChange` reporting
  * (`:329-334`, the two `useOnChange` calls) — nothing here adds a fourth
  * source of playback truth.
@@ -170,7 +170,7 @@ describe('BackpackVideo external play-state control', () => {
   // does not report twice — `usePlayerState`'s selector already returns the
   // same `playerPlaying` boolean for a second `play` against a provider that
   // was already playing, so the wrapper's `useChanged` fold
-  // (`backpack-video.tsx:284`, `playerReported`) never sees a change to fold in.
+  // (`backpack-video.tsx:258`, `playerReported`) never sees a change to fold in.
   it('reports each externally caused transition once, in both directions', async () => {
     const { external, reported } = renderExternallyControlled();
 

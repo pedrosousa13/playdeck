@@ -45,7 +45,8 @@ const renderOffScreenPause = (
   const view = renderHook(() => {
     const offScreen = useOffScreenPause(props);
     // The fold `BackpackVideoSurface` performs on a changed value
-    // (`backpack-video.tsx:81-86,223-236`): identity is the signal, so a new
+    // (`backpack-video.tsx:274,295`, its `useChanged(offScreenIntent)` and the
+    // `requestPlayback` it gates): identity is the signal, so a new
     // intent object is a new request, and re-rendering the same one is not.
     const applied = useRef(offScreen.intent);
     if (applied.current !== offScreen.intent) {
@@ -128,7 +129,8 @@ describe('useOffScreenPause', () => {
   // and nothing to come back to, and a hook that acted anyway would be deciding
   // playback rather than restoring it. The wrapper's machine cannot currently
   // produce playing-but-never-started — `requestPlayback(true)` sets both
-  // (`backpack-video.tsx:214-217`) — so the guard is pinned here rather than
+  // (`backpack-video.tsx:276-279`, its `requestPlayback`) — so the guard is pinned
+  // here rather than
   // reachable from outside. Backpack's is at `useVideoPlayerState.ts:145`.
   it('leaves a video that never started playing alone', () => {
     const { requests, scrollTo } = renderOffScreenPause({
@@ -219,7 +221,8 @@ describe('useOffScreenPause', () => {
     // The parent sets `playing={false}` over the video this hook just paused.
     update({ controlledPaused: true, isPlaying: false });
     // Then flips it back to `true`. The wrapper applies the prop during the
-    // same render (`backpack-video.tsx:236`), so playback is live again while
+    // same render (`backpack-video.tsx:298`, its `propChanged` branch), so playback is
+    // live again while
     // the video is still off screen — and the hook must not undo it.
     update({ controlledPaused: false, isPlaying: true });
 
@@ -284,7 +287,8 @@ describe('useOffScreenPause', () => {
  * transition below is the wrapper's own machine and nothing else.
  *
  * `playing: true` is what puts the wrapper's own play/pause toggle on the
- * surface from the first render: it loads eagerly (`backpack-video.tsx:385`),
+ * surface from the first render: it loads eagerly (`backpack-video.tsx:470-474`, its
+ * `const loading` and the `'eager'` branch `startsPlaying` chooses),
  * so `awaitingActivation` is false and `Player.ActivationButton` renders
  * nothing (`packages/react/src/loading-error.tsx:41`). The `mock://` scheme
  * then fails Reely's source detection, so no provider ever attaches and
@@ -510,13 +514,15 @@ describe('BackpackVideo off-screen pause under visible controls', () => {
  * A controlled consumer: `playing` follows every state the wrapper reports.
  * `renderWrapper`'s `setProps` cannot stand in for it, because a rerender from
  * the test body lands in a commit of its own — where `onPlayChange` fires from
- * an effect (`backpack-video.tsx:247`) declared after the off-screen hook's
- * decision effect (`off-screen-pause.ts:235-258`, mounted at
- * `backpack-video.tsx:202`), so the prop this parent sets from it is batched
+ * an effect (`backpack-video.tsx:308`, its
+ * `useOnChange(isPlaying, onPlayChange)`) declared after the off-screen hook's
+ * decision effect (`off-screen-pause.ts:239-262`, mounted at
+ * `backpack-video.tsx:263`, its `useOffScreenPause` call), so the prop this parent sets from it is batched
  * with the intent that effect raised and both reach the same render.
  *
  * `playing` starts `true` for the reason `renderWrapper` passes it: the root
- * then loads eagerly (`backpack-video.tsx:386`), so `awaitingActivation` is
+ * then loads eagerly (`backpack-video.tsx:470-474`, its `const loading`), so
+ * `awaitingActivation` is
  * false for the whole test and the wrapper's own toggle is the click target from
  * the first render.
  */
@@ -535,9 +541,9 @@ const MirroringVideo = ({ onPlayChange, ...rest }: BackpackVideoProps) => {
 /**
  * The fold order itself. `BackpackVideoSurface` applies three sources of
  * playback truth in a fixed sequence — what the player reports
- * (`backpack-video.tsx:224`), then the off-screen intent (`:234`), then the
- * `playing` prop (`:237`) — and each `requestPlayback` sets `isPlaying` during
- * render (`:215-218`), so within one render pass the last line to run is the one
+ * (`backpack-video.tsx:285`), then the off-screen intent (`:295`), then the
+ * `playing` prop (`:298`) — and each `requestPlayback` sets `isPlaying` during
+ * render (`:276-279`), so within one render pass the last line to run is the one
  * whose value survives.
  *
  * Order is therefore invisible unless two sources change in the *same* render,
@@ -561,9 +567,9 @@ describe('BackpackVideo playback source precedence', () => {
     restoreObserver();
   });
 
-  // The hazard `backpack-video.tsx:228-233` describes in full: the report says
+  // The hazard `backpack-video.tsx:286-294` describes in full: the report says
   // what playback already was, where the intent says what it should be now, and
-  // the hook raises each intent once (`off-screen-pause.ts:242-245`) — so a
+  // the hook raises each intent once (`off-screen-pause.ts:246-249`) — so a
   // report that won here would swallow the pause with nothing left to raise it
   // again, and the video would keep playing off screen.
   it('applies the off-screen pause over the player report that lands with it', () => {
@@ -578,12 +584,13 @@ describe('BackpackVideo playback source precedence', () => {
     const reported = () => onPlayChange.mock.calls.map(([playing]) => playing);
     // Re-queried rather than held: the toggle only replaces
     // `Player.ActivationButton` once the staged provider reports ready, and both
-    // carry the same class (`backpack-video.tsx:314,327`).
+    // carry the same class (`backpack-video.tsx:391,404`, both
+    // `ef-video-controller`).
     const toggle = () => view.container.querySelector('.ef-video-controller')!;
 
     // The observer's first entry, on screen and with nothing played yet, so the
     // decision effect's `startedPlaying` guard stands down
-    // (`off-screen-pause.ts:236`).
+    // (`off-screen-pause.ts:240`).
     act(() => {
       latestObserver().emit(true);
     });

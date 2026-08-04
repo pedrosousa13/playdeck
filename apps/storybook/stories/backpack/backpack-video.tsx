@@ -1,7 +1,5 @@
 import * as Player from '@reely/react';
 import {
-  useEffect,
-  useRef,
   useState,
   type CSSProperties,
   type ElementType,
@@ -17,6 +15,8 @@ import {
   type BackpackVideoThemeConfig,
   type BackpackVideoVariant
 } from './backpack-video-styles';
+import { useChanged, useOnChange } from './use-on-change';
+import { VideoCoverImage } from './video-cover-image';
 import { useVideoThumbnail } from './video-thumbnail';
 import { useOffScreenPause } from './off-screen-pause';
 
@@ -149,32 +149,6 @@ export type BackpackVideoInternalProps = BackpackVideoProps & {
    * (`packages/react/src/use-activation.ts:191-209`).
    */
   readonly autoplayOnViewportEntry?: boolean;
-};
-
-/**
- * True on the render that first sees a new `value`. The update is applied
- * during render rather than from an effect, so a caller's own state settles in
- * the same commit instead of a second one — the shape `Root` uses for its
- * source transition (`packages/react/src/root.tsx:150-152`).
- */
-const useChanged = <Value,>(value: Value): boolean => {
-  const [seen, setSeen] = useState(value);
-  if (Object.is(seen, value)) return false;
-  setSeen(value);
-  return true;
-};
-
-/** Runs `onChange` when `value` changes, never for the value it started with. */
-const useOnChange = <Value,>(
-  value: Value,
-  onChange?: (value: Value) => void
-): void => {
-  const seen = useRef(value);
-  useEffect(() => {
-    if (Object.is(seen.current, value)) return;
-    seen.current = value;
-    onChange?.(value);
-  }, [onChange, value]);
 };
 
 type SurfaceProps = Pick<
@@ -312,7 +286,7 @@ const BackpackVideoSurface = ({
   // A scroll took the video off screen or brought it back. Applied *after* the
   // player's report: the report says what playback already was, where the
   // intent decides what it should be now, and the hook raises each intent once
-  // (`off-screen-pause.ts:51-60`) — so a report that lands in the same commit
+  // (`off-screen-pause.ts:53-63`) — so a report that lands in the same commit
   // (a provider confirming the play the viewer just started) would swallow the
   // pause with nothing left to raise it again. Applied *before* the `playing`
   // prop for the reason below: the parent's explicit value stays the last
@@ -366,34 +340,29 @@ const BackpackVideoSurface = ({
       // custom-property keys.
       style={resolveAspectRatios(aspectRatios) as CSSProperties}
     >
-      {showsCover ? (
+      {/* `coverSrc` again beside `showsCover`, which already implies it: the
+          shared cover image below takes a `string`, and this is what narrows the
+          optional one for the compiler. */}
+      {showsCover && coverSrc ? (
+        // `Player.Poster` is the container, and it is what makes the `alt` inside
+        // a DOM attribute rather than an accessible name: it sets
+        // `aria-hidden="true"` (`packages/react/src/poster.tsx:66`), so nothing
+        // rendered in it reaches the accessibility tree. Backpack does expose the
+        // text — `VideoCoverImage` puts `role="button"` and `aria-label={alt}` on
+        // its cover container (`VideoCoverImage.tsx:99-100`) — where here the
+        // labelled affordance is the real button underneath, reading "Play video"
+        // (SIDEPRO-214). {@link VideoCoverImage} carries the rest of the argument,
+        // and `BackpackVideoHoverPreview` gives the same image a container that is
+        // not hidden.
         <Player.Poster
           className="ef-video-cover"
           data-hover-effect={hoverEffect}
         >
-          {CustomImage ? (
-            <CustomImage
-              alt={alt}
-              className="ef-video-cover-image"
-              src={coverSrc}
-            />
-          ) : (
-            // The wrapper's own `<img>`, not `Player.PosterImage`: that
-            // primitive hard-codes `alt=""` after its prop spread
-            // (`packages/react/src/poster.tsx:157-159`), so an `alt` passed to
-            // it would be silently discarded — and `renderCustomImage` needs a
-            // consumer element type in this position anyway.
-            //
-            // What this keeps is the DOM attribute, not an accessible name:
-            // `Player.Poster` sets `aria-hidden="true"`
-            // (`packages/react/src/poster.tsx:65`), so nothing rendered inside
-            // it reaches the accessibility tree either way. Backpack does
-            // expose the text — `VideoCoverImage` puts `role="button"` and
-            // `aria-label={alt}` on the cover container itself
-            // (`VideoCoverImage.tsx:99-101`) — where here the labelled
-            // affordance is the real button underneath, reading "Play video".
-            <img alt={alt} className="ef-video-cover-image" src={coverSrc} />
-          )}
+          <VideoCoverImage
+            alt={alt}
+            renderCustomImage={CustomImage}
+            src={coverSrc}
+          />
         </Player.Poster>
       ) : null}
       <Player.Media />
