@@ -950,7 +950,7 @@ test('keeps the imperative handle backed by the full PlayerController', () => {
   );
 
   expect(handle.current).toBeInstanceOf(PlayerController);
-  const controller = handle.current as PlayerController;
+  const controller = handle.current as unknown as PlayerController;
   const adapter: ProviderAdapter = {
     provider: 'native',
     attach: () => undefined,
