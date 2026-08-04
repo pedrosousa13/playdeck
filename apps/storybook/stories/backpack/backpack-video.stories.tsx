@@ -6,7 +6,7 @@ import {
   type MockPlayerParameters
 } from '../../.storybook/mock-player';
 import { withCss } from '../../.storybook/theme';
-import { backpackVideoCss } from './backpack-video-css';
+import { backpackVideoCss, backpackVideoStyles } from './backpack-video-styles';
 import { ready } from '../support';
 import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 import { InPageLayout } from './in-page-layout';
@@ -45,10 +45,14 @@ const affordances = (canvasElement: HTMLElement): string[] =>
 const playIcon = (canvasElement: HTMLElement): Element | null =>
   canvasElement.querySelector('.ef-video-play-icon');
 
+/** The player box, which is what carries the aspect-ratio and variant CSS. */
+const playerBox = (canvasElement: HTMLElement): Element =>
+  canvasElement.querySelector('.ef-video-player')!;
+
 /**
  * The uniform scale factor of an element's computed `transform`: `1` for
  * `none` or an identity matrix, greater than `1` once the hover-zoom rule in
- * `backpack-video-css.ts` has applied.
+ * `backpack-video-styles.ts` has applied.
  */
 const scaleOf = (element: Element): number => {
   const { transform } = getComputedStyle(element);
@@ -57,7 +61,7 @@ const scaleOf = (element: Element): number => {
 
 /**
  * Resolves once the element's own transition has had time to run, read from
- * the element rather than hard-coded so it tracks `backpack-video-css.ts`.
+ * the element rather than hard-coded so it tracks `backpack-video-styles.ts`.
  * What a negative hover assertion needs: the cover's resting scale is already
  * `1`, so a `waitFor` alone would pass on its first tick without ever giving a
  * zoom the chance to apply, and a rule that did match would go unnoticed.
@@ -260,12 +264,28 @@ type Story = StoryObj<typeof meta>;
  * Backpack's `Default` args, verbatim. With `controls` off and the provider
  * attached, the whole player surface is the play/pause toggle and it is the
  * only clickable thing — Backpack's `VideoHiddenControls`.
+ *
+ * Also where the two appearance defaults are pinned, because every other story
+ * in this file inherits them: `aspectRatios` defaults to `{ s: 'natural' }`,
+ * which is `--reely-media-aspect-ratio` with a 16/9 fallback — and the mock
+ * player publishes no dimensions, so the fallback is what applies. The play
+ * icon defaults to Backpack's `m`, a 3rem box.
  */
 export const Default: Story = {
   args: { url: vimeoUrl, muted: true },
   parameters: pausedPlayer,
   play: async ({ args, canvas, canvasElement, userEvent }) => {
+    await expect(getComputedStyle(playerBox(canvasElement)).aspectRatio).toBe(
+      '16 / 9'
+    );
     await expect(playIcon(canvasElement)).not.toBeNull();
+    await expect(playIcon(canvasElement)).toHaveAttribute(
+      'data-play-icon-size',
+      'm'
+    );
+    await expect(playIcon(canvasElement)!.getBoundingClientRect().width).toBe(
+      48
+    );
     const paused = await canvas.findByRole('button', { name: 'Play video' });
     await expect(paused.tagName).toBe('BUTTON');
     await expect(paused).toHaveAttribute('aria-pressed', 'false');
@@ -519,7 +539,7 @@ export const CustomCoverImageYouTube: Story = {
 /**
  * `hoverEffect: false` (Backpack's `WithoutHoverEffect`) sets
  * `data-hover-effect="false"` on `Player.Poster` and the CSS hover rule in
- * `backpack-video-css.ts` no longer matches, so hovering leaves the cover at
+ * `backpack-video-styles.ts` no longer matches, so hovering leaves the cover at
  * its resting scale instead of zooming.
  */
 export const WithoutHoverEffect: Story = {
@@ -577,10 +597,67 @@ export const WithRenderCustomImage: Story = {
 };
 
 /**
- * Backpack's `YouTubeShortsVideoAndCustomCoverImage` args, minus
- * `aspectRatios` (SIDEPRO-202). `light: false` pins that a caller-supplied
+ * Backpack's `YouTube Shorts Video` args, verbatim, and its own narrower box
+ * with them: Backpack wraps this story in `TestWrapper maxWidth='400px'` where
+ * the 480px of every other story here comes from the meta's. The width lives on
+ * the player box rather than a wrapper, so it arrives as a second stylesheet —
+ * one rule, not a second copy of `backpackVideoCss`, which would re-emit some
+ * 300 lines to change one declaration.
+ *
+ * The mechanism is cascade order: a story's own decorators render inside the
+ * meta's, so this `<style>` comes later in the document and its
+ * `.ef-video-player` rule wins the tie at equal specificity. The `width`
+ * assertion below is what makes that load-bearing — reorder the decorators and
+ * the story fails loudly rather than silently rendering at 480px.
+ *
+ * A portrait player, which is the point of the story: `aspectRatios: '9/16'`
+ * applies at every width, so the 400px box is 711px tall and the play icon sits
+ * centred in it — by `inset: 0; margin: auto`, which knows nothing about the
+ * box's shape.
+ */
+export const YouTubeShortsVideo: Story = {
+  name: 'YouTube Shorts Video',
+  args: {
+    url: 'https://www.youtube.com/shorts/n3eC51ZaDlk',
+    muted: true,
+    light: false,
+    aspectRatios: '9/16'
+  },
+  decorators: [
+    withCss(`
+.ef-video-player {
+  width: 400px;
+}
+`)
+  ],
+  parameters: pausedPlayer,
+  play: async ({ canvas, canvasElement }) => {
+    const player = playerBox(canvasElement);
+    await expect(getComputedStyle(player).aspectRatio).toBe('9 / 16');
+    const { height, width } = player.getBoundingClientRect();
+    await expect(width).toBe(400);
+    await expect(Math.round(height)).toBe(Math.round((400 * 16) / 9));
+
+    // The icon is inside the portrait box, and centred in it.
+    const icon = playIcon(canvasElement)!;
+    const box = icon.getBoundingClientRect();
+    await expect(Math.round(box.left + box.width / 2)).toBe(
+      Math.round(player.getBoundingClientRect().left + width / 2)
+    );
+    await canvas.findByRole('button', { name: 'Play video' });
+  }
+};
+
+/**
+ * Backpack's `YouTubeShortsVideoAndCustomCoverImage` args, now including its
+ * `aspectRatios: '9/16'`. `light: false` pins that a caller-supplied
  * `placeholderImageSrc` shows a cover regardless — the wrapper's own
- * `hasCustomCoverImage` independence from `light`.
+ * `hasCustomCoverImage` independence from `light` — and the cover fills the
+ * portrait box rather than a 16/9 one.
+ *
+ * "Fills" is both dimensions and the fit: the cover image is a 4×3 SVG, so
+ * `object-fit: cover` is the whole of what makes it fill a 9/16 box instead of
+ * letterboxing inside it.
  */
 export const YouTubeShortsVideoAndCustomCoverImage: Story = {
   args: {
@@ -589,12 +666,19 @@ export const YouTubeShortsVideoAndCustomCoverImage: Story = {
     light: false,
     placeholderImageSrc: coverImageDataUri,
     alt: 'custom cover image',
-    hoverEffect: true
+    hoverEffect: true,
+    aspectRatios: '9/16'
   },
   parameters: { player: {} },
-  play: async ({ canvas }) => {
+  play: async ({ canvas, canvasElement }) => {
     const cover = await canvas.findByAltText('custom cover image');
     await expect(cover).toHaveAttribute('src', coverImageDataUri);
+    const player = playerBox(canvasElement);
+    await expect(getComputedStyle(player).aspectRatio).toBe('9 / 16');
+    const box = player.getBoundingClientRect();
+    await expect(cover.getBoundingClientRect().height).toBe(box.height);
+    await expect(cover.getBoundingClientRect().width).toBe(box.width);
+    await expect(getComputedStyle(cover).objectFit).toBe('cover');
   }
 };
 
@@ -672,6 +756,190 @@ export const CoverClickRequestsPlayback: Story = {
     await expect(
       canvasElement.querySelector('[data-reely-part="media"]')
     ).toBeNull();
+  }
+};
+
+/**
+ * A breakpoint map, which no Backpack story exercises. `s` is the unprefixed
+ * base and `m` is its 768px query, so the wrapper writes `9 / 16` for `s` and
+ * carries `16 / 9` from `m` up through the three wider breakpoints the args do
+ * not name — the same thing Backpack's `aspect-9-16 md:aspect-16-9` does, where
+ * a min-width prefix keeps applying above its own breakpoint.
+ *
+ * Which of the five applies is the runner's own window width, so the story reads
+ * it from `matchMedia` against the same query the stylesheet declares rather
+ * than assuming a viewport size — and the five properties are asserted
+ * directly, so what the wrapper wrote is pinned whichever branch the window
+ * takes. That the stylesheet declares a query per breakpoint at all is pinned
+ * in `backpack-video-styles.contract.test.ts`, which does not need a window.
+ */
+export const AspectRatiosPerBreakpoint: Story = {
+  args: { url: vimeoUrl, muted: true, aspectRatios: { s: '9/16', m: '16/9' } },
+  parameters: pausedPlayer,
+  play: async ({ canvasElement }) => {
+    const styles = getComputedStyle(playerBox(canvasElement));
+    const property = (name: string) => styles.getPropertyValue(name).trim();
+
+    await expect(property('--ef-video-aspect-s')).toBe('9 / 16');
+    await expect(property('--ef-video-aspect-m')).toBe('16 / 9');
+    await expect(property('--ef-video-aspect-l')).toBe('16 / 9');
+    await expect(property('--ef-video-aspect-xl')).toBe('16 / 9');
+    await expect(property('--ef-video-aspect-xxl')).toBe('16 / 9');
+
+    const wide = window.matchMedia('(min-width: 768px)').matches;
+    await expect(styles.aspectRatio).toBe(wide ? '16 / 9' : '9 / 16');
+  }
+};
+
+/**
+ * `'natural'` — Backpack's default value, and the one mapping this wrapper
+ * deliberately does not copy. Backpack's `'natural'` for a video is
+ * `aspect-video`, a fixed 16/9 (`useAspectRatio.tsx:15-17`); here it is
+ * `aspect-ratio: var(--reely-media-aspect-ratio, 16 / 9)`, so the box follows
+ * whatever the media measures and falls back to Backpack's value until
+ * something does. `Default` pins the fallback; this pins the measurement, with
+ * the mock player publishing 640×480 through its `dimensions` knob rather than
+ * any real media — a 4:3 ratio precisely because it is neither the 16/9
+ * fallback nor a portrait ratio another story already shows.
+ */
+export const NaturalAspectRatio: Story = {
+  args: { url: vimeoUrl, muted: true, aspectRatios: 'natural' },
+  parameters: {
+    player: { ...pausedPlayer.player, dimensions: { width: 640, height: 480 } }
+  },
+  play: async ({ canvasElement }) => {
+    const player = playerBox(canvasElement);
+    // `Player.Viewport` publishes the property from an effect after mount
+    // (`packages/react/src/viewport-media.tsx:95-108`), so the first frame is
+    // still the fallback.
+    await waitFor(() =>
+      expect(getComputedStyle(player).aspectRatio).toBe('640 / 480')
+    );
+    const { height, width } = player.getBoundingClientRect();
+    await expect(Math.round((width / height) * 100)).toBe(133);
+  }
+};
+
+/**
+ * Backpack's `WithShadowVariant` args. `variant` resolves to a class from
+ * `backpackVideoStyles`, and the story-local CSS approximates Backpack's
+ * `shadow-dark-m-15` token with the value that token resolves to.
+ */
+export const WithShadowVariant: Story = {
+  args: { url: vimeoUrl, muted: true, variant: 'shadow-m' },
+  parameters: pausedPlayer,
+  play: async ({ canvasElement }) => {
+    const player = playerBox(canvasElement);
+    await expect(player).toHaveClass('ef-video-variant-shadow-m');
+    await expect(getComputedStyle(player).boxShadow).toBe(
+      'rgba(26, 26, 26, 0.15) 0px 2px 8px 0px'
+    );
+  }
+};
+
+/**
+ * Backpack's `WithOutlineVariant` args: a 1px border in its `mono-gray-300`.
+ * The box keeps the 480px the stylesheet gives it and draws the border inside
+ * that, here as in Backpack: Backpack loads Tailwind's preflight
+ * (`src/scss/base/_index.scss:1` is `@tailwind base`, and `tailwind.config.cjs`
+ * overrides neither `preflight` nor `corePlugins`), whose reset puts
+ * `box-sizing: border-box` on every element — so the border comes out of the
+ * declared width rather than being added to it. `backpack-video-styles.ts`
+ * declares the same on `.ef-video-player`, and the width below is what pins it:
+ * a content-box would measure 482.
+ */
+export const WithOutlineVariant: Story = {
+  args: { url: vimeoUrl, muted: true, variant: 'outline' },
+  parameters: pausedPlayer,
+  play: async ({ canvasElement }) => {
+    const player = playerBox(canvasElement);
+    await expect(player).toHaveClass('ef-video-variant-outline');
+    const styles = getComputedStyle(player);
+    await expect(styles.borderTopWidth).toBe('1px');
+    await expect(styles.borderTopColor).toBe('rgb(191, 191, 191)');
+    await expect(styles.boxSizing).toBe('border-box');
+    await expect(player.getBoundingClientRect().width).toBe(480);
+  }
+};
+
+/**
+ * Backpack's `WithXLSizePlayIcon` args. `xl` is a 4rem box against the default
+ * `m`'s 3rem, which `Default` pins — the sizes Backpack's `IconWrapper` gets
+ * from `size-16` and `size-12`.
+ */
+export const WithXLSizePlayIcon: Story = {
+  args: { url: vimeoUrl, muted: true, playIconSize: 'xl' },
+  parameters: pausedPlayer,
+  play: async ({ canvasElement }) => {
+    const icon = playIcon(canvasElement)!;
+    await expect(icon).toHaveAttribute('data-play-icon-size', 'xl');
+    const { height, width } = icon.getBoundingClientRect();
+    await expect(width).toBe(64);
+    await expect(height).toBe(64);
+  }
+};
+
+/**
+ * Backpack's `With themeConfig` args, with a story-local class name in place of
+ * its Tailwind: `border-4 border-pink-base bg-blue-dark` becomes the rule the
+ * decorator below mounts, at the values those two tokens resolve to.
+ *
+ * The override replaces the variant's own class rather than joining it, which
+ * is what Backpack's `deepMerge` plus `twMerge` amounts to — so the assertion
+ * is that `ef-video-variant-outline` is gone and the 1px border with it.
+ */
+export const WithThemeConfig: Story = {
+  name: 'With themeConfig',
+  args: {
+    url: vimeoUrl,
+    muted: true,
+    variant: 'outline',
+    themeConfig: {
+      variants: { variant: { outline: { root: 'story-video-theme-config' } } }
+    }
+  },
+  decorators: [
+    withCss(`
+.story-video-theme-config {
+  border: 4px solid rgb(218, 35, 129);
+  background: rgb(0, 52, 100);
+}
+`)
+  ],
+  parameters: pausedPlayer,
+  play: async ({ canvasElement }) => {
+    const player = playerBox(canvasElement);
+    await expect(player).toHaveClass('story-video-theme-config');
+    await expect(player).not.toHaveClass('ef-video-variant-outline');
+    const styles = getComputedStyle(player);
+    await expect(styles.borderTopWidth).toBe('4px');
+    await expect(styles.borderTopColor).toBe('rgb(218, 35, 129)');
+    await expect(styles.backgroundColor).toBe('rgb(0, 52, 100)');
+  }
+};
+
+/**
+ * Backpack's `DefaultThemeConfig`, which dumps its `videoStyles` object so a
+ * reader can see what a `themeConfig` may reach. This dumps the wrapper's own
+ * default style object, which is a much smaller thing: the wrapper approximates
+ * Backpack's styling in a stylesheet, so the only classes it resolves at
+ * runtime are the root's and the variants' — and those are the only ones the
+ * escape hatch overrides. Backpack renders the dump with `react-json-view-lite`;
+ * a `<pre>` stands in for it, since this repo adds no dependency for a story.
+ *
+ * `url` is required on the component, so the args carry one; the render below
+ * ignores them and mounts no player at all.
+ */
+export const DefaultThemeConfig: Story = {
+  args: { url: vimeoUrl },
+  render: () => <pre>{JSON.stringify(backpackVideoStyles, null, 2)}</pre>,
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelector('pre')).toHaveTextContent(
+      '"root": "ef-video-player"'
+    );
+    await expect(canvasElement.querySelector('pre')).toHaveTextContent(
+      '"root": "ef-video-variant-outline"'
+    );
   }
 };
 

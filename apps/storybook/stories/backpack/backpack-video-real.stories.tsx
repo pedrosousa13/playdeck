@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { withCss } from '../../.storybook/theme';
-import { backpackVideoCss } from './backpack-video-css';
+import { backpackVideoCss } from './backpack-video-styles';
 import { BackpackVideo } from './backpack-video';
 import { InPageLayout } from './in-page-layout';
 
@@ -140,8 +140,9 @@ export const WithRenderCustomImage: Story = {
 };
 
 /**
- * Backpack's `YouTubeShortsVideoAndCustomCoverImage` args minus
- * `aspectRatios: '9/16'`, which SIDEPRO-202 brings.
+ * Backpack's `YouTubeShortsVideoAndCustomCoverImage` args, verbatim — its
+ * `aspectRatios: '9/16'` included now that the wrapper takes it, so the real
+ * Shorts embed sits in a portrait box.
  */
 export const YouTubeShortsVideoAndCustomCoverImage: Story = {
   args: {
@@ -150,7 +151,8 @@ export const YouTubeShortsVideoAndCustomCoverImage: Story = {
     light: false,
     placeholderImageSrc: coverImageUrl,
     alt: 'custom cover image',
-    hoverEffect: true
+    hoverEffect: true,
+    aspectRatios: '9/16'
   }
 };
 
