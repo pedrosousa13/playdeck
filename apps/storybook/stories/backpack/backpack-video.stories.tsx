@@ -388,14 +388,17 @@ export const WistiaVideo: Story = {
  * `loadWistiaPlayer`, which only `@reely/provider-wistia` exports and this app
  * does not depend on, and calling Reely's own `loadProvider` means reaching into
  * `@reely/react`'s private modules, which
- * `backpack-video-player-config.contract.test.ts:26-43` turns down for the same
- * reason `external-control.contract.test.ts:28-37` does.
+ * `backpack-video-player-config.contract.test.ts:26-43`, from its
+ * `` `mergeWistiaPlayerConfig`/`translateWistiaPlayerConfig` above `` comment, turns
+ * down for the same
+ * reason `external-control.contract.test.ts:30-40`, from `Reaching a genuinely`, does.
  *
  * So the nearest boundary a story can honestly reach is the option bag the
  * wrapper builds out of these very args, which the second assertion pins. Each
  * layer past it is pinned where it can be: that `BackpackVideoInternal` hands
  * that bag to `Player.Root` in
- * `backpack-video-player-config.contract.test.ts:123-139`, that `Player.Root`
+ * `backpack-video-player-config.contract.test.ts:143-159`,
+ * `'hands Player.Root the caller’s playerConfig, merged and translated'`, that `Player.Root`
  * hands it to the loader in `packages/react/test/activation.test.tsx:738-753`
  * (`'forwards the provider option bag from Root to the loader'`), and that the
  * provider writes it as `player-color` and `swatch` in
@@ -1238,8 +1241,8 @@ const playExternally = (ref: ReturnType<typeof useMockPlayer>): void => {
 
 /**
  * Two buttons standing in for an external consumer that holds
- * `BackpackVideo`'s `PlayerHandle` ref (`backpack-video.tsx:90-94`, forwarded at
- * `:499`) and
+ * `BackpackVideo`'s `PlayerHandle` ref (`backpack-video.tsx:108-112`, its
+ * `readonly ref?: Ref<Player.PlayerHandle>`, forwarded at `:539`, `ref={ref}`) and
  * drives it directly, the way `WithEvents` below needs one to. "External
  * pause" is the one call {@link playExternally}'s pair has no dormant half
  * to worry about.
@@ -1271,7 +1274,7 @@ const ExternalEventsVideo = ({
  * `onPlayChange` has to report from: a transition the wrapper did not click
  * for itself, arriving as an ordinary player report the way an external
  * `activateFromInteraction` then `play`, or `pause` on its own, would
- * (`backpack-video.tsx:303-308`, the two `useOnChange` calls) — in both
+ * (`backpack-video.tsx:322-327`, the two `useOnChange` calls) — in both
  * directions, and without reporting
  * a transition nothing actually changed a second time.
  */

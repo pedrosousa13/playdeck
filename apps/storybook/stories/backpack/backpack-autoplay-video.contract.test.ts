@@ -36,7 +36,7 @@ import { createReportingProvider } from './reporting-provider';
  * `unsupportedError` branch), so viewport activation
  * errors instead of observing; an `http(s)` source observes, but intersecting
  * it would load a real provider and this suite forbids the network — the
- * constraint `external-control.contract.test.ts:28-36` writes up at length. So
+ * constraint `external-control.contract.test.ts:30-39`, from `Reaching a genuinely`, writes up at length. So
  * the playback tests stage a provider straight onto the controller over a
  * `mock://` source, exactly as that file and `off-screen-pause.contract.test.ts`
  * do, and the activation tests use an `http(s)` source and never report an
@@ -47,7 +47,7 @@ import { createReportingProvider } from './reporting-provider';
  * The observers Reely's own viewport activation made, told from the
  * off-screen-pause hook's by the options each side constructs with: activation
  * passes `{ rootMargin }` alone (`packages/react/src/use-activation.ts:458`),
- * the hook passes `{ root, threshold }` (`off-screen-pause.ts:228`).
+ * the hook passes `{ root, threshold }` (`off-screen-pause.ts:229`).
  */
 const activationObservers = (): ControlledIntersectionObserver[] =>
   ControlledIntersectionObserver.instances.filter(
@@ -200,7 +200,7 @@ describe('BackpackAutoplayVideo', () => {
     // The autoplay attempt, whole: mute then play. A third command follows it —
     // the wrapper folding the player's own report back in and issuing the play
     // again, which it documents as a deliberate idempotent no-op
-    // (`backpack-video.tsx:300-305`, the `useOnChange` that drives the player) —
+    // (`backpack-video.tsx:319-324`, the `useOnChange` that drives the player) —
     // and is left out of the assertion rather
     // than pinned here, so a future change to that echo fails its own test and
     // not this one.

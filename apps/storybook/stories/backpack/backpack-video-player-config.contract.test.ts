@@ -40,7 +40,7 @@ const { capturedProviderOptions } = vi.hoisted(() => ({
 // `http(s)` Wistia source, forbidden in this suite) or reaching into
 // `@reely/react`'s private `provider-loaders.ts` from outside the package it
 // belongs to, which this repository does not do elsewhere
-// (`external-control.contract.test.ts:28-38` turns down the same reach for
+// (`external-control.contract.test.ts:30-41`, from `Reaching a genuinely`, turns down the same reach for
 // the same reason). `packages/provider-wistia/test/index.test.ts` already
 // pins the attribute mapping past this point, and `packages/react/test/activation.test.tsx`
 // already pins `providerOptions` reaching `loadProvider` past this point too.

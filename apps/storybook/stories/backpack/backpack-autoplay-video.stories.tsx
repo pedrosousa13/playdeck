@@ -47,7 +47,8 @@ import { playerBox, playIcon } from './story-queries';
  * no URL in this file can reach the DOM — the same trick
  * `Backpack parity/Video`'s `PlaybackRequestedButNeverStarted` and
  * `CoverClickRequestsPlayback` use, and the one
- * `backpack-autoplay-video.contract.test.ts:33-42` writes up at length.
+ * `backpack-autoplay-video.contract.test.ts:33-43`, from
+ * `The two halves cannot be pinned in one rig`, writes up at length.
  * `Real playback/BackpackAutoplayVideo` carries Backpack's real URL.
  *
  * ## What the staged player can and cannot show
@@ -176,7 +177,7 @@ type Story = StoryObj<typeof meta>;
  * reports it: `aria-pressed` is on, the play overlay is gone, and the toggle
  * offers the pause. That it starts *muted* is not observable from the DOM, so it
  * is pinned where the autoplay mode is — on the command sequence the attempt
- * issues, in `backpack-autoplay-video.contract.test.ts:194-208`,
+ * issues, in `backpack-autoplay-video.contract.test.ts:195-209`,
  * `'plays muted with nothing clicked once the player is ready'`.
  *
  * Also where two consequences of the composed class name are pinned, since
@@ -292,8 +293,8 @@ export const HeldPaused: Story = {
  * Reely already owns, and `BackpackAutoplayVideo` gives its own — `Player.Root`
  * with `autoplay="muted"` and `loading="viewport"`, so the provider is attached
  * when the box scrolls into view and muted autoplay starts it as soon as that
- * provider reports ready (`backpack-video.tsx:488-492`, `const loading =`, and
- * `:517`, `autoplay={...}`). Backpack's own note
+ * provider reports ready (`backpack-video.tsx:493-497`, `const loading =`, and
+ * `:522`, `autoplay={startsPlaying ?`). Backpack's own note
  * says `autoPlay` "starts the video on init regardless of viewport", which is
  * the behaviour Reely's strategy exists to avoid, so this is a better answer to
  * the same question rather than a missing feature — recorded as a divergence in

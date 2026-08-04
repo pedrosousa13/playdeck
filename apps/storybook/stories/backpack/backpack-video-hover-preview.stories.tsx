@@ -24,7 +24,7 @@ import { playerBox, playIcon } from './story-queries';
  * URI where a story passes one, and otherwise leaves the cover off: there a
  * cover is `light`'s business and `light` defaults off. Here the composition
  * resolves one unconditionally, because a hover preview has a resting state to
- * draw (`backpack-video-hover-preview.tsx:182`, its unguarded
+ * draw (`backpack-video-hover-preview.tsx:183`, its unguarded
  * `useVideoThumbnail`) — and {@link useVideoThumbnail} fetches the source's
  * oEmbed endpoint when no `placeholderImageSrc` is given
  * (`video-thumbnail.ts:56-57,73-98`). So a bare `vimeo.com` URL here is a real
@@ -128,7 +128,7 @@ const coverImage = (canvasElement: HTMLElement): Element | null =>
  * Installs the workbench's mock provider into the `Player.Root` the composition
  * owns, exactly as the other two suites do — the composition forwards `ref`
  * through to it, alongside the handle it drives itself
- * (`backpack-video-hover-preview.tsx:189-196`).
+ * (`backpack-video-hover-preview.tsx:190-197`, its `const setHandle`).
  */
 const MockedHoverPreview = ({
   player,
@@ -196,7 +196,7 @@ const ReportedPositions = ({
  *
  * It is held from a button rather than from the args because the composition
  * acts on `isHovered` *changing*, never on the value it mounted with
- * (`backpack-video-hover-preview.tsx:230`, and part 1's reason: acting on the
+ * (`backpack-video-hover-preview.tsx:231`, its `useOnChange(previewing`, and part 1's reason: acting on the
  * opening value would drive a player nobody had touched).
  */
 const PreviewWithPositions = ({
@@ -275,7 +275,7 @@ type Story = StoryObj<typeof meta>;
  * dimensions, so the fallback applies; the play icon is Backpack's default `m`;
  * and the surface offers exactly one named control. The preview window's own
  * default of 5 seconds is not observable without moving the position, so it is
- * pinned in `backpack-video-hover-preview.contract.test.ts:317-335` instead,
+ * pinned in `backpack-video-hover-preview.contract.test.ts:321-339`, `'returns to the start once the preview window has elapsed'`, instead,
  * and `WithCustomDuration` below is where a story watches a window at all.
  */
 export const Default: Story = {
@@ -415,7 +415,7 @@ export const WithCustomDuration: Story = {
 /**
  * Backpack's `WithPlayIcon`: `showPlayIcon: true`, which is already the default
  * on both sides — Backpack's own destructuring (`VideoHoverPreview.tsx:57`) and
- * the wrapper's (`backpack-video.tsx:448`) — so the arg changes nothing and the
+ * the wrapper's (`backpack-video.tsx:470`, its `showPlayIcon = true`) — so the arg changes nothing and the
  * story exists to carry it. What it pins is the icon's whole life: over the
  * resting cover, gone while the preview plays, back with the cover afterwards.
  */
@@ -585,7 +585,7 @@ export const WithRenderCustomImage: Story = {
  * `object-fit: cover` the shared cover rules give it. The preview root shrinks to
  * that box instead of the width of its parent, which is what
  * `width: fit-content` on `.ef-video-hover-preview` is for
- * (`backpack-video-styles.ts:410,412` — the `.ef-video-hover-preview` rule and
+ * (`backpack-video-styles.ts:411,413` — the `.ef-video-hover-preview` rule and
  * its `width: fit-content`).
  */
 export const WithCustomAspectRatio: Story = {

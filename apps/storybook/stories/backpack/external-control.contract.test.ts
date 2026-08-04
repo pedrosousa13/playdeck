@@ -8,16 +8,16 @@ import { useReportingProvider } from './reporting-provider';
 /**
  * SIDEPRO-201: external play-state control for `BackpackVideo`, through the
  * mechanism already settled rather than a new prop — the `PlayerHandle` ref
- * the wrapper already forwards (`backpack-video.tsx:90-94`, forwarded at
- * `:499`), plus
+ * the wrapper already forwards (`backpack-video.tsx:108-112`, its
+ * `readonly ref?: Ref<Player.PlayerHandle>`, forwarded at `:539`, `ref={ref}`), plus
  * `activateFromInteraction`, which Task 1 put on that handle so a dormant
  * interaction-loading player can be started from outside
  * (`packages/react/src/use-activation.ts:324-356`, its
  * `const activateFromInteraction = useCallback`). External commands arrive
  * as ordinary player reports, so what every test below actually exercises is
- * the wrapper's existing three-deep playback fold (`backpack-video.tsx:281-298`,
+ * the wrapper's existing three-deep playback fold (`backpack-video.tsx:300-317`,
  * the three `requestPlayback` branches) and its `onPlayChange` reporting
- * (`:329-334`, the two `useOnChange` calls) — nothing here adds a fourth
+ * (`:322-327`, the two `useOnChange` calls) — nothing here adds a fourth
  * source of playback truth.
  *
  * Every player below is staged already `ready`, the way
@@ -40,9 +40,9 @@ import { useReportingProvider } from './reporting-provider';
  * pinned inside `packages/react/test/activation.test.tsx`, against the real
  * pipeline with `loadProvider` mocked at the package's own boundary:
  * `'interaction plays once when installation synchronously becomes ready'`
- * (`:472-508`), `'interaction queues its play behind load when attach
- * reports readiness'` (`:510-553`), and `'interaction plays exactly once
- * after asynchronous readiness'` (`:1159-1187`).
+ * (`:473-509`), `'interaction queues its play behind load when attach
+ * reports readiness'` (`:511-554`), and `'interaction plays exactly once
+ * after asynchronous readiness'` (`:1160-1188`).
  */
 
 /**
@@ -174,7 +174,7 @@ describe('BackpackVideo external play-state control', () => {
   // does not report twice — `usePlayerState`'s selector already returns the
   // same `playerPlaying` boolean for a second `play` against a provider that
   // was already playing, so the wrapper's `useChanged` fold
-  // (`backpack-video.tsx:258`, `playerReported`) never sees a change to fold in.
+  // (`backpack-video.tsx:277`, `const playerReported`) never sees a change to fold in.
   it('reports each externally caused transition once, in both directions', async () => {
     const { external, reported } = renderExternallyControlled();
 

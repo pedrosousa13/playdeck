@@ -33,7 +33,7 @@ import { useVideoThumbnail } from './video-thumbnail';
  *   while hovered, over a cover that this component removes on hover.
  * - `playing`, as Backpack omits it. Playback here is the hover's to decide, and
  *   on `BackpackVideo` the prop is read once at mount to choose a loading
- *   strategy (`backpack-video.tsx:458`), so a caller's value would change how the
+ *   strategy (`backpack-video.tsx:480`, `const [startsPlaying]`), so a caller's value would change how the
  *   provider loads rather than merely what plays.
  *
  * `autoplay` never existed on this wrapper's own API, so there is nothing to
@@ -99,7 +99,7 @@ export type BackpackVideoHoverPreviewProps = Omit<
  * `BackpackVideo` loads on the first interaction, and an external play is
  * therefore two calls — `activateFromInteraction()` to start a dormant player,
  * then `play()`, each a no-op in the case the other handles (SIDEPRO-201, and
- * `external-control.contract.test.ts:128-150`). Hover issues both. The
+ * `external-control.contract.test.ts:131-154`, `'starts the video with one external command'`). Hover issues both. The
  * composition deliberately does *not* switch to eager loading: a grid of these
  * would then attach a provider per card before anyone hovered anything, and
  * Backpack defers the mount here too, through the `light={!isPlaying}` it hands
@@ -108,7 +108,7 @@ export type BackpackVideoHoverPreviewProps = Omit<
  * ## The cover layer is this component's own
  * As it is Backpack's, whose `VideoCoverImage` sits outside its `VideoPlayer`
  * (`:144-155`). It cannot be `BackpackVideo`'s: that cover is gated on
- * `!startedPlaying` (`backpack-video.tsx:314`), so it never returns, and it
+ * `!startedPlaying` (`backpack-video.tsx:333`, `const showsCover`), so it never returns, and it
  * renders inside `Player.Poster`, which Reely hides on the first reported
  * playback and does not restore for the same source
  * (`packages/react/src/poster.tsx:75`, driven from `root.tsx:471-476`, the
@@ -139,7 +139,7 @@ export type BackpackVideoHoverPreviewProps = Omit<
  *
  * What this renders instead is one focusable control with a name: the
  * play/pause button `BackpackVideo` already puts on the surface, labelled "Play
- * video" or "Pause video" (`backpack-video.tsx:310,388-394`). The preview root
+ * video" or "Pause video" (`backpack-video.tsx:329,407-413`, its `const ariaLabel` and the `<button>` it labels). The preview root
  * itself takes no role and no `tabIndex`. So a keyboard or touch user gets
  * ordinary click-to-play rather than hold-to-preview, which is also the right
  * resting behaviour on a touch device — recorded as a divergence in
@@ -177,7 +177,7 @@ export const BackpackVideoHoverPreview = ({
   // come off a video that has not actually started, and must come back for a
   // playback this component did not stop — a viewer pausing through the play
   // control while still hovering. `onPlayChange` is `BackpackVideo`'s report of
-  // its own settled state (`backpack-video.tsx:308`), which is that answer
+  // its own settled state (`backpack-video.tsx:327`, `useOnChange(isPlaying, onPlayChange)`), which is that answer
   // already computed.
   const [isPlaying, setIsPlaying] = useState(false);
   // Always resolved, with no `light` gate: a hover preview has a resting state to
@@ -310,12 +310,12 @@ export const BackpackVideoHoverPreview = ({
         // carried into `BackpackVideo` by `...rest`. This is Backpack's own
         // ordering trick, the one its `AutoplayVideo` uses on `light` and `muted`
         // (`Video/AutoplayVideo.tsx:33-34`) and `BackpackVideo` uses on
-        // `autoplayOnViewportEntry` (`backpack-video.tsx:548-550`), which is what
+        // `autoplayOnViewportEntry` (`backpack-video.tsx:588-590`, `export const BackpackVideo`), which is what
         // makes "refused" a fact rather than a claim. `undefined` for `playing`
-        // because that is what `BackpackVideo` reads as "not set" (`backpack-video.tsx:458`,
+        // because that is what `BackpackVideo` reads as "not set" (`backpack-video.tsx:480`,
         // `playing ?? false`) — `false` would instead assert an explicit pause and
         // arm the controlled-pause branch of its off-screen hook
-        // (`backpack-video.tsx:267`).
+        // (`backpack-video.tsx:286`, `controlledPaused: playing === false`).
         hoverEffect={false}
         light={false}
         loop={loop}
