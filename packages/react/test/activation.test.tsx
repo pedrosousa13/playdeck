@@ -88,6 +88,7 @@ type ActivationProbeProps = {
   readonly onActivate?: (activate: () => void) => void;
   readonly onLayout?: () => void;
   readonly preload?: Player.PlayerPreload;
+  readonly providerOptions?: Player.PlayerProviderOptions;
   readonly showMedia?: boolean;
   readonly showViewport?: boolean;
   readonly source?: Player.RootProps['source'];
@@ -104,6 +105,7 @@ const ActivationProbe = ({
   onActivate,
   onLayout,
   preload = 'metadata',
+  providerOptions,
   showMedia = true,
   showViewport = true,
   source = '/tracer.mp4',
@@ -122,6 +124,7 @@ const ActivationProbe = ({
     nativeOptions,
     prepareMedia: () => undefined,
     preload,
+    providerOptions,
     source: detectSource(source)
   });
   useLayoutEffect(() => {
@@ -731,6 +734,93 @@ test.each([
     expect(previous.counts().destroyCount).toBe(1);
   }
 );
+
+test('forwards the provider option bag from Root to the loader', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(
+    fixture({
+      loading: 'eager',
+      providerOptions: { wistia: { playerColor: 'ff0000' } }
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  expect(mockedLoadProvider.mock.calls[0]?.[0].providerOptions).toEqual({
+    wistia: { playerColor: 'ff0000' }
+  });
+});
+
+test('keeps the installed adapter when an equal provider option bag is passed again', async () => {
+  const previous = createFakeProvider();
+  const replacement = createFakeProvider();
+  const controller = new PlayerController();
+  mockedLoadProvider
+    .mockResolvedValueOnce(previous.adapter)
+    .mockResolvedValueOnce(replacement.adapter);
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await vi.waitFor(() =>
+    expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+
+  // A fresh object literal with the same values, as an inline prop produces on
+  // every render.
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await act(async () => undefined);
+
+  expect(mockedLoadProvider).toHaveBeenCalledOnce();
+  expect(replacement.counts()).toMatchObject({ attachCount: 0, loadCount: 0 });
+  expect(previous.counts()).toMatchObject({
+    attachCount: 1,
+    destroyCount: 0,
+    loadCount: 1
+  });
+});
+
+test('replaces the installed adapter when a same-media provider option changes', async () => {
+  const previous = createFakeProvider();
+  const replacement = createFakeProvider();
+  const controller = new PlayerController();
+  mockedLoadProvider
+    .mockResolvedValueOnce(previous.adapter)
+    .mockResolvedValueOnce(replacement.adapter);
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await vi.waitFor(() =>
+    expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: true } }}
+    />
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledTimes(2));
+  expect(mockedLoadProvider.mock.calls[1]?.[0].providerOptions).toEqual({
+    wistia: { swatch: true }
+  });
+  await vi.waitFor(() =>
+    expect(replacement.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+  expect(previous.counts().destroyCount).toBe(1);
+});
 
 test('native option changes invalidate an older pending load', async () => {
   const firstLoad = deferred<ProviderAdapter>();

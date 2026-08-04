@@ -1,17 +1,36 @@
 import type { ProviderAdapter, ResolvedPlayerSource } from '@reely/core';
 import type { NativePlaybackOptions } from '@reely/provider-native';
+import type { WistiaProviderOptions } from '@reely/provider-wistia';
 
 export type PlayerMediaMount = HTMLVideoElement | HTMLDivElement;
+
+/**
+ * Options a single provider accepts that no Reely prop covers, keyed by
+ * provider. Wistia is the only entry: its embed carries presentation options
+ * -- a player colour, a swatch, a poster -- that only that provider has. The
+ * native, HLS, YouTube and Vimeo providers wait on their own issues, so a
+ * missing key here is a deliberate absence rather than an oversight.
+ *
+ * Where a Reely prop and a provider option overlap, the Reely prop wins:
+ * `loop` reaches every provider through `NativePlaybackOptions`, so a `loop`
+ * in the Wistia bag is redundant even though `WistiaProviderOptions` declares
+ * it.
+ */
+export type PlayerProviderOptions = {
+  readonly wistia?: WistiaProviderOptions;
+};
 
 export type ProviderLoaderRequest = {
   readonly source: ResolvedPlayerSource;
   readonly media: PlayerMediaMount | null;
   readonly nativeOptions: NativePlaybackOptions;
+  readonly providerOptions?: PlayerProviderOptions;
 };
 
 export const loadProvider = async ({
   media,
   nativeOptions,
+  providerOptions,
   source
 }: ProviderLoaderRequest): Promise<ProviderAdapter> => {
   if (source.type === 'hls') {
@@ -47,7 +66,7 @@ export const loadProvider = async ({
       throw new Error('The Wistia provider requires a media mount.');
     }
     const { createWistiaProvider } = await import('@reely/provider-wistia');
-    return createWistiaProvider(media, source);
+    return createWistiaProvider(media, source, providerOptions?.wistia);
   }
   // Every known source type is handled above, so `source` narrows to `never`
   // here; read the type defensively for a runtime-only unknown source.

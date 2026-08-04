@@ -15,7 +15,11 @@ import {
   PosterContext,
   type PlayerHandle
 } from './player-context.js';
-import { useActivation, type PlayerMediaMount } from './use-activation.js';
+import {
+  useActivation,
+  type PlayerMediaMount,
+  type PlayerProviderOptions
+} from './use-activation.js';
 import { sourceKey } from './viewport-media.js';
 import {
   useCallback,
@@ -60,6 +64,9 @@ export type RootProps = NativePlaybackOptions &
     readonly onPlaybackRateChange?: (playbackRate: number) => void;
     readonly onVolumeChange?: (volume: number) => void;
     readonly playbackRate?: number;
+    // Compared by value, not by reference, so an inline literal is safe to
+    // pass: see `providerOptionsEqual` in `use-activation.ts`.
+    readonly providerOptions?: PlayerProviderOptions;
     readonly ref?: Ref<PlayerHandle>;
     readonly source: PlayerSource;
     readonly volume?: number;
@@ -97,6 +104,7 @@ export const Root = ({
   onPlaybackRateChange,
   onVolumeChange,
   playbackRate,
+  providerOptions,
   ref,
   source,
   startTime,
@@ -431,6 +439,7 @@ export const Root = ({
     nativeOptions: { endTime, loop, startTime },
     prepareMedia,
     preload,
+    providerOptions,
     source: detectedSource
   });
 
