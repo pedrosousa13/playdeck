@@ -1,10 +1,16 @@
 import * as Player from '@reely/react';
 import {
+  useMemo,
   useState,
   type CSSProperties,
   type ElementType,
   type Ref
 } from 'react';
+import {
+  mergeWistiaPlayerConfig,
+  translateWistiaPlayerConfig,
+  type BackpackVideoPlayerConfig
+} from './backpack-video-player-config';
 import {
   backpackVideoStyles,
   resolveAspectRatios,
@@ -74,6 +80,17 @@ export type BackpackVideoProps = {
   readonly onPlayChange?: (isPlaying: boolean) => void;
   /** Whether to pause the video when it scrolls off screen. */
   readonly pauseOnOutOfViewport?: boolean;
+  /**
+   * Per-provider presentation options, in Backpack's own option names
+   * (`VideoPlayer.tsx:45-55`'s `playerConfig`). Only `wistia` is wired, and
+   * only its four keys documented on {@link BackpackVideoPlayerConfig} — a
+   * passthrough for every option a provider takes is out of scope. Merged
+   * over this wrapper's own Wistia defaults (`swatch: true`, caller wins on a
+   * shared key) and translated to Reely's own option names by
+   * `translateWistiaPlayerConfig`, whose doc comment carries the translation
+   * table.
+   */
+  readonly playerConfig?: BackpackVideoPlayerConfig;
   /**
    * Size of the play icon, defaulting to Backpack's own `'m'`
    * (`VideoPlayer.tsx:142,206`). Narrowed to the two sizes its stories use —
@@ -441,6 +458,7 @@ export const BackpackVideoInternal = ({
   onPlayChange,
   pauseOnOutOfViewport = true,
   placeholderImageSrc,
+  playerConfig,
   playIconSize = 'm',
   playing,
   ref,
@@ -479,6 +497,20 @@ export const BackpackVideoInternal = ({
     light && !startsPlaying ? url : undefined,
     placeholderImageSrc
   );
+  // Recomputed only when `playerConfig` itself changes identity, so a caller
+  // passing a stable `playerConfig` gets a stable `providerOptions` back.
+  // Not required for correctness — `Player.Root`'s own comparison is by value,
+  // per key, so an unmemoized bag that is merely value-equal would not
+  // re-attach the provider either (`use-activation.ts`'s `providerBagEqual`)
+  // — but it costs nothing to skip the rebuild on an unrelated re-render.
+  const providerOptions = useMemo<Player.PlayerProviderOptions>(
+    () => ({
+      wistia: translateWistiaPlayerConfig(
+        mergeWistiaPlayerConfig(playerConfig?.wistia)
+      )
+    }),
+    [playerConfig]
+  );
 
   return (
     <Player.Root
@@ -496,6 +528,7 @@ export const BackpackVideoInternal = ({
       loading={loading}
       loop={loop}
       muted={muted}
+      providerOptions={providerOptions}
       ref={ref}
       source={url}
     >
