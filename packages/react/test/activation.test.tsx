@@ -13,6 +13,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   detectSource,
   PlayerController,
+  type CommandResult,
   type ProviderAdapter,
   type ProviderStateListener
 } from '@reely/core';
@@ -1703,6 +1704,55 @@ test('a dormant interaction root activates and plays from a single ref call', as
   act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
 
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+});
+
+// The test above calls `activateFromInteraction` alone and lets the
+// auto-queued play do the rest; SIDEPRO-201's external "play" command is
+// the pair, in this order — `activateFromInteraction()` then `play()`
+// (`use-activation.ts:265-297`, `player-controller.ts:381-386`) — the way
+// `apps/storybook/stories/backpack/backpack-video.stories.tsx`'s
+// `ExternalEventsVideo`/`SocialCarouselIntegrationVideo` and
+// `external-control.contract.test.ts`'s file-level comment both describe
+// issuing it. Against a still-`dormant` player, the explicit `play()` has
+// no provider to reach yet and resolves `{ ok: false, reason: 'not-ready' }`
+// (`player-controller.ts:383-384`) rather than queuing anything — dropped,
+// not doubled — so the pair must not cost a second, real play once the
+// provider this same `activateFromInteraction` call set loading actually
+// attaches. Asserted on `fake.counts().playCount` directly, not on a spy
+// over `handle.current.play`/`activateFromInteraction` themselves: those
+// are expected to be called once each here regardless of whether the drop
+// is working, so only a count on the provider itself can tell a correct
+// drop from a bug that lets the early call double up the queued one.
+test('interaction issues exactly one play when activateFromInteraction is immediately followed by play', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'interaction', ref: handle }));
+  let immediateResult: CommandResult | undefined;
+
+  act(() => {
+    handle.current?.activateFromInteraction();
+    void handle.current?.play().then((result) => {
+      immediateResult = result;
+    });
+  });
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  // Read only once the microtask above has had a chance to run — `act` for a
+  // synchronous callback does not itself drain it, so a check placed
+  // straight off that `act` would see `undefined` regardless of what
+  // `play()` actually returned.
+  expect(immediateResult).toEqual({ ok: false, reason: 'not-ready' });
+
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+  // The regression this test exists to catch would land moments after the
+  // count first reaches one, not before, so a check placed only right after
+  // the assertion above would pass over it just as easily as no check at
+  // all.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(fake.counts().playCount).toBe(1);
 });
 
 test('usePlayerActions() reaches the same activateFromInteraction binding', async () => {
