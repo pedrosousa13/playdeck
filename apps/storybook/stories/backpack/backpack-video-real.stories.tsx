@@ -10,6 +10,10 @@ import { BackpackVideo } from './backpack-video';
 // what show that `BackpackVideo` attaches a provider rather than only working
 // against a mock; `Backpack parity/Video` covers the behaviour deterministically.
 
+/** Backpack's own cover photo, as its `Video.stories.tsx` stories pass it. */
+const coverImageUrl =
+  'https://a.storyblok.com/f/171771/4656x3492/bbf48d4721/wojciech-then-dija5f0vogq-unsplash.jpg';
+
 const meta = {
   title: 'Real playback/BackpackVideo',
   component: BackpackVideo,
@@ -19,7 +23,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "The `BackpackVideo` wrapper driving real providers. Click the player to load and start it: without `playing`, the wrapper loads on interaction and `Player.ActivationButton` is the click target until the provider attaches, after which the wrapper's own play/pause toggle takes over. `StartsPlaying` needs no click — `playing` makes the wrapper load eagerly and autoplay. Real network, so these are excluded from the deterministic story test suite (tagged `!test`)."
+          "The `BackpackVideo` wrapper driving real providers. Click the player to load and start it: without `playing`, the wrapper loads on interaction and `Player.ActivationButton` is the click target until the provider attaches, after which the wrapper's own play/pause toggle takes over. `StartsPlaying` needs no click — `playing` makes the wrapper load eagerly and autoplay. The `light` and cover-image stories fetch a real thumbnail or load a real cover image, which is why they live here rather than in the deterministic suite. Real network, so these are excluded from the deterministic story test suite (tagged `!test`)."
       }
     }
   }
@@ -51,4 +55,100 @@ export const StartsPlaying: Story = {
 /** `controls` with a real provider attached, alongside the real embed. */
 export const WithControls: Story = {
   args: { url: 'https://vimeo.com/336066147', muted: true, controls: true }
+};
+
+/**
+ * Backpack's `Light` args: fetches Vimeo's own oEmbed thumbnail and shows it
+ * as a cover until the player is activated.
+ */
+export const Light: Story = {
+  args: { url: 'https://vimeo.com/336066147', muted: true, light: true }
+};
+
+/** The same, with the cover's hover-zoom disabled. */
+export const WithoutHoverEffect: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    light: true,
+    hoverEffect: false
+  }
+};
+
+/**
+ * Backpack keeps `VimeoCoverImage` as its own story even though its args are
+ * identical to `Light`'s — this duplicates that here too, so the matrix row
+ * maps one-to-one to a Reely story of its own.
+ */
+export const VimeoCoverImage: Story = {
+  args: { url: 'https://vimeo.com/336066147', muted: true, light: true }
+};
+
+/**
+ * Backpack's `YouTubeCoverImage` args: the same fetched-thumbnail cover, over
+ * YouTube's oEmbed endpoint.
+ */
+export const YouTubeCoverImage: Story = {
+  args: {
+    url: 'https://www.youtube.com/watch?v=mhN3E_hlWmU',
+    muted: true,
+    light: true
+  }
+};
+
+/**
+ * Backpack's `CustomCoverImage` args, verbatim: its own image wins over the
+ * fetched Vimeo thumbnail.
+ */
+export const CustomCoverImage: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageUrl,
+    alt: 'custom cover image'
+  }
+};
+
+/** The same, over YouTube. */
+export const CustomCoverImageYouTube: Story = {
+  args: {
+    url: 'https://www.youtube.com/watch?v=mhN3E_hlWmU',
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageUrl,
+    alt: 'custom cover image'
+  }
+};
+
+/** Backpack's `WithRenderCustomImage` args, verbatim. */
+export const WithRenderCustomImage: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageUrl,
+    renderCustomImage: (props) => (
+      <img
+        id="custom-framework-image"
+        {...props}
+        alt="custom framework element"
+      />
+    )
+  }
+};
+
+/**
+ * Backpack's `YouTubeShortsVideoAndCustomCoverImage` args minus
+ * `aspectRatios: '9/16'`, which SIDEPRO-202 brings.
+ */
+export const YouTubeShortsVideoAndCustomCoverImage: Story = {
+  args: {
+    url: 'https://www.youtube.com/shorts/n3eC51ZaDlk',
+    muted: true,
+    light: false,
+    placeholderImageSrc: coverImageUrl,
+    alt: 'custom cover image',
+    hoverEffect: true
+  }
 };

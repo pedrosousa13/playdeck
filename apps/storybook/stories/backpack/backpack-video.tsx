@@ -1,5 +1,6 @@
 import * as Player from '@reely/react';
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { useEffect, useRef, useState, type ElementType, type Ref } from 'react';
+import { useVideoThumbnail } from './video-thumbnail';
 
 /**
  * The slice of EF Backpack's `VideoPlayer` prop API this wrapper reimplements
@@ -9,10 +10,27 @@ import { useEffect, useRef, useState, type Ref } from 'react';
  * Reference: `backpack/src/components/Video/VideoPlayer.tsx`.
  */
 export type BackpackVideoProps = {
+  /** Alternative text on the cover image. */
+  readonly alt?: string;
   /** Additional CSS classes to apply to the component. */
   readonly className?: string;
   /** Set to `true` or `false` to show or hide the player controls. */
   readonly controls?: boolean;
+  /** Zoom the cover image while hovered and not playing. */
+  readonly hoverEffect?: boolean;
+  /**
+   * Show the provider's own thumbnail as a cover instead of mounting the
+   * player until the viewer asks for playback. Backpack types this
+   * `boolean | string | ReactElement` and defaults it to `true`; this wrapper
+   * takes the boolean only — the string form is what `placeholderImageSrc`
+   * already expresses here — and defaults it to `false`. Backpack's default
+   * fetches a thumbnail from a third-party endpoint on every mount; this
+   * wrapper already defers mounting the player until activation (its loading
+   * strategy is `interaction`, not `light`'s doing), so `light: true` here
+   * only adds the thumbnail image on top of that, and turning it on by
+   * default would add a network request nothing asked for.
+   */
+  readonly light?: boolean;
   /** Set to `true` to loop the video once ended. */
   readonly loop?: boolean;
   /** Mutes the player on load. */
@@ -22,10 +40,20 @@ export type BackpackVideoProps = {
   /** Set to `true` to start playing on load. */
   readonly playing?: boolean;
   /**
+   * URL of a custom cover image, shown before the player mounts. Wins over
+   * any thumbnail `light` would otherwise fetch.
+   */
+  readonly placeholderImageSrc?: string;
+  /**
    * Backpack's `VideoPlayer` forwards a ref to its underlying player; this
    * wrapper forwards Reely's `PlayerHandle` in the same position.
    */
   readonly ref?: Ref<Player.PlayerHandle>;
+  /**
+   * Element type used to render the cover image, receiving `src`, `alt` and
+   * `className`.
+   */
+  readonly renderCustomImage?: ElementType;
   /** Whether to show the play icon when the video is not playing. */
   readonly showPlayIcon?: boolean;
   /** The url of a video to play. */
@@ -60,8 +88,17 @@ const useOnChange = <Value,>(
 
 type SurfaceProps = Pick<
   BackpackVideoProps,
-  'className' | 'controls' | 'onPlayChange' | 'playing' | 'showPlayIcon'
+  | 'alt'
+  | 'className'
+  | 'controls'
+  | 'hoverEffect'
+  | 'onPlayChange'
+  | 'playing'
+  | 'renderCustomImage'
+  | 'showPlayIcon'
 > & {
+  /** The resolved cover image source, or `undefined` when there is none. */
+  readonly coverSrc?: string;
   /** Whether `Player.Root` was given the interaction loading strategy. */
   readonly loadsOnInteraction: boolean;
 };
@@ -94,13 +131,24 @@ type SurfaceProps = Pick<
  * attaches simply reports not-ready. The play icon follows Backpack's own
  * condition (`VideoPlayer.tsx:349-351`), which keeps showing it under visible
  * controls until playback has started once.
+ *
+ * A cover image, when there is one, sits above `Player.Media` for as long as
+ * playback has never started — independent of every row in the table above,
+ * which is why it can cover an activation button, a toggle or visible
+ * controls alike. It changes nothing about which of those is the click
+ * target: `Player.Poster` is `pointer-events: none`, so the cover is purely a
+ * visual layer over whichever affordance the table already puts on top.
  */
 const BackpackVideoSurface = ({
+  alt,
   className,
   controls,
+  coverSrc,
+  hoverEffect,
   loadsOnInteraction,
   onPlayChange,
   playing,
+  renderCustomImage: CustomImage,
   showPlayIcon
 }: SurfaceProps) => {
   const actions = Player.usePlayerActions();
@@ -145,12 +193,45 @@ const BackpackVideoSurface = ({
 
   const ariaLabel = isPlaying ? 'Pause video' : 'Play video';
   const awaitingActivation = loadsOnInteraction && !ready;
+  // Independent of `light`: a caller-supplied `placeholderImageSrc` shows a
+  // cover even with `light: false` (Backpack's `hasCustomCoverImage`).
+  const showsCover = Boolean(coverSrc) && !startedPlaying;
 
   return (
     <Player.Viewport
       className={['ef-video-player', className].filter(Boolean).join(' ')}
       data-playing={isPlaying}
     >
+      {showsCover ? (
+        <Player.Poster
+          className="ef-video-cover"
+          data-hover-effect={hoverEffect}
+        >
+          {CustomImage ? (
+            <CustomImage
+              alt={alt}
+              className="ef-video-cover-image"
+              src={coverSrc}
+            />
+          ) : (
+            // The wrapper's own `<img>`, not `Player.PosterImage`: that
+            // primitive hard-codes `alt=""` after its prop spread
+            // (`packages/react/src/poster.tsx:157-159`), so an `alt` passed to
+            // it would be silently discarded — and `renderCustomImage` needs a
+            // consumer element type in this position anyway.
+            //
+            // What this keeps is the DOM attribute, not an accessible name:
+            // `Player.Poster` sets `aria-hidden="true"`
+            // (`packages/react/src/poster.tsx:65`), so nothing rendered inside
+            // it reaches the accessibility tree either way. Backpack does
+            // expose the text — `VideoCoverImage` puts `role="button"` and
+            // `aria-label={alt}` on the cover container itself
+            // (`VideoCoverImage.tsx:99-101`) — where here the labelled
+            // affordance is the real button underneath, reading "Play video".
+            <img alt={alt} className="ef-video-cover-image" src={coverSrc} />
+          )}
+        </Player.Poster>
+      ) : null}
       <Player.Media />
       {!isPlaying && (!startedPlaying || !controls) && showPlayIcon ? (
         <span aria-hidden="true" className="ef-video-play-icon" />
@@ -181,6 +262,18 @@ const BackpackVideoSurface = ({
       <Player.ActivationButton
         aria-label={ariaLabel}
         className="ef-video-controller"
+        // Backpack's `onClickPreview={start}`, which is optimistic: it flips
+        // Backpack's own playing state at click time rather than on the
+        // player's confirmation. Reely already starts playback from this
+        // click on its own — `activateFromInteraction` calls `activate(true)`
+        // (`packages/react/src/use-activation.ts:296`), which queues the play
+        // (`:235`) for the loader to replay once the provider's `load()`
+        // resolves (`:501-514`) — so what this handler adds is only the
+        // optimistic half: the cover comes off and `onPlayChange(true)` fires
+        // immediately instead of after the provider reports playing. Scoped
+        // to `showsCover` so the coverless stories keep reporting only what
+        // the player confirms.
+        onClick={showsCover ? () => requestPlayback(true) : undefined}
       >
         {''}
       </Player.ActivationButton>
@@ -189,13 +282,18 @@ const BackpackVideoSurface = ({
 };
 
 export const BackpackVideo = ({
+  alt = '',
   className,
   controls = false,
+  hoverEffect = true,
+  light = false,
   loop = false,
   muted = false,
   onPlayChange,
+  placeholderImageSrc,
   playing,
   ref,
+  renderCustomImage,
   showPlayIcon = true,
   url
 }: BackpackVideoProps) => {
@@ -208,6 +306,13 @@ export const BackpackVideo = ({
   // mount because it is a load-time decision: re-deciding it later tears down
   // the attached provider and reloads the source.
   const [startsPlaying] = useState(playing ?? false);
+  // Mirrors Backpack's `light={videoLight && !playing && !startedPlaying}`: a
+  // player asked to start on load has no pre-play surface to present, so it
+  // must not pay for a thumbnail lookup either.
+  const coverSrc = useVideoThumbnail(
+    light && !startsPlaying ? url : undefined,
+    placeholderImageSrc
+  );
 
   return (
     <Player.Root
@@ -219,11 +324,15 @@ export const BackpackVideo = ({
       source={url}
     >
       <BackpackVideoSurface
+        alt={alt}
         className={className}
         controls={controls}
+        coverSrc={coverSrc}
+        hoverEffect={hoverEffect}
         loadsOnInteraction={!startsPlaying}
         onPlayChange={onPlayChange}
         playing={playing}
+        renderCustomImage={renderCustomImage}
         showPlayIcon={showPlayIcon}
       />
     </Player.Root>

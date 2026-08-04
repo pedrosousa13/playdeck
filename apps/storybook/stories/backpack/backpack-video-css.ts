@@ -67,4 +67,25 @@ export const backpackVideoCss = (width: string): string => `
   padding: 0.5rem;
   z-index: 30;
 }
+
+/* Player.Poster already positions itself (inset: 0, z-index: 10); this only
+   clips the hover zoom below to the cover's own bounds. */
+.ef-video-cover {
+  overflow: hidden;
+}
+
+.ef-video-cover-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1);
+  transition: transform 200ms ease;
+}
+
+/* Short transition so a story can hover and assert the settled transform
+   under waitFor without a long wait. */
+.ef-video-player:hover .ef-video-cover[data-hover-effect='true'] .ef-video-cover-image {
+  transform: scale(1.05);
+}
 `;
