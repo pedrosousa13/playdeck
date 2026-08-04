@@ -1,0 +1,171 @@
+import { describe, expect, it } from 'vitest';
+import {
+  aspectRatioProperty,
+  backpackVideoCss,
+  backpackVideoStyles,
+  breakpointMinWidths,
+  naturalAspectRatio,
+  resolveAspectRatios,
+  resolveVariantClass,
+  type BackpackAspectRatio
+} from './backpack-video-styles';
+
+/**
+ * The value `'natural'` resolves to. Restated here rather than imported so a
+ * change to the published-property rule has to be made in two places on
+ * purpose — this is the one mapping the wrapper takes from ADR-0002 rather
+ * than from Backpack.
+ */
+const naturalValue = 'var(--reely-media-aspect-ratio, 16 / 9)';
+
+describe('resolveAspectRatios', () => {
+  it('resolves Backpack’s own default to the published-ratio rule at every breakpoint', () => {
+    expect(resolveAspectRatios(undefined)).toEqual({
+      '--ef-video-aspect-s': naturalValue,
+      '--ef-video-aspect-m': naturalValue,
+      '--ef-video-aspect-l': naturalValue,
+      '--ef-video-aspect-xl': naturalValue,
+      '--ef-video-aspect-xxl': naturalValue
+    });
+  });
+
+  it('applies a scalar value at every breakpoint', () => {
+    expect(resolveAspectRatios('9/16')).toEqual({
+      '--ef-video-aspect-s': '9 / 16',
+      '--ef-video-aspect-m': '9 / 16',
+      '--ef-video-aspect-l': '9 / 16',
+      '--ef-video-aspect-xl': '9 / 16',
+      '--ef-video-aspect-xxl': '9 / 16'
+    });
+  });
+
+  it('carries a breakpoint value forward to the wider breakpoints it does not name', () => {
+    expect(resolveAspectRatios({ s: '9/16', m: '16/9' })).toEqual({
+      '--ef-video-aspect-s': '9 / 16',
+      '--ef-video-aspect-m': '16 / 9',
+      '--ef-video-aspect-l': '16 / 9',
+      '--ef-video-aspect-xl': '16 / 9',
+      '--ef-video-aspect-xxl': '16 / 9'
+    });
+  });
+
+  it('leaves the breakpoints below the narrowest named one at the default', () => {
+    expect(resolveAspectRatios({ l: '1/1' })).toEqual({
+      '--ef-video-aspect-s': naturalValue,
+      '--ef-video-aspect-m': naturalValue,
+      '--ef-video-aspect-l': '1 / 1',
+      '--ef-video-aspect-xl': '1 / 1',
+      '--ef-video-aspect-xxl': '1 / 1'
+    });
+  });
+
+  it('treats an empty map as the default', () => {
+    expect(resolveAspectRatios({})).toEqual(resolveAspectRatios(undefined));
+  });
+
+  // Every member of Backpack's `AspectRatios` union
+  // (`src/additional-types.ts:193-211`), so a value added to the type without
+  // a mapping cannot pass unnoticed.
+  const expected: Record<BackpackAspectRatio, string> = {
+    unset: 'unset',
+    auto: 'auto',
+    natural: naturalValue,
+    '1/1': '1 / 1',
+    '2/1': '2 / 1',
+    '3/2': '3 / 2',
+    '16/9': '16 / 9',
+    '18/9': '18 / 9',
+    '2/3': '2 / 3',
+    '4/3': '4 / 3',
+    '3/4': '3 / 4',
+    '9/16': '9 / 16',
+    '9/18': '9 / 18',
+    '21/9': '21 / 9',
+    '5/4': '5 / 4',
+    '4/5': '4 / 5',
+    '3/1': '3 / 1',
+    '1/2': '1 / 2'
+  };
+
+  it.each(Object.entries(expected))('maps %s to %s', (ratio, css) => {
+    expect(resolveAspectRatios(ratio as BackpackAspectRatio)).toEqual(
+      expect.objectContaining({ '--ef-video-aspect-s': css })
+    );
+  });
+});
+
+describe('backpackVideoCss', () => {
+  const css = backpackVideoCss('480px');
+
+  it('reads the base breakpoint’s property outside any media query', () => {
+    const base = css.slice(0, css.indexOf('@media'));
+    expect(base).toContain(`aspect-ratio: var(${aspectRatioProperty('s')})`);
+  });
+
+  // The other end of the mechanism: `resolveAspectRatios` writes five
+  // properties and the stylesheet has to read all five, or a breakpoint a
+  // caller names would be silently inert.
+  it.each(Object.entries(breakpointMinWidths))(
+    'reads the %s property inside a min-width: %s query',
+    (breakpoint, minWidth) => {
+      expect(css).toContain(
+        `@media (min-width: ${minWidth}) {\n  .ef-video-player {\n    aspect-ratio: var(${aspectRatioProperty(breakpoint as 'm')});`
+      );
+    }
+  );
+
+  it('declares a rule for every variant class the default styles name', () => {
+    for (const { root } of Object.values(
+      backpackVideoStyles.variants.variant
+    )) {
+      expect(css).toContain(`.${root} {`);
+    }
+  });
+
+  it('does not hard-code an aspect ratio on the player box', () => {
+    expect(css).not.toContain('aspect-ratio: 16 / 9;');
+  });
+
+  it('exposes the natural value it falls back to', () => {
+    expect(naturalAspectRatio).toBe(naturalValue);
+  });
+});
+
+describe('resolveVariantClass', () => {
+  it('is nothing without a variant', () => {
+    expect(resolveVariantClass(undefined, undefined)).toBeUndefined();
+  });
+
+  it('resolves a variant to its own class', () => {
+    expect(resolveVariantClass('outline', undefined)).toBe(
+      'ef-video-variant-outline'
+    );
+    expect(resolveVariantClass('shadow-m', undefined)).toBe(
+      'ef-video-variant-shadow-m'
+    );
+  });
+
+  it('lets a theme config replace the active variant’s class', () => {
+    expect(
+      resolveVariantClass('outline', {
+        variants: { variant: { outline: { root: 'story-override' } } }
+      })
+    ).toBe('story-override');
+  });
+
+  it('ignores an override aimed at a variant that is not active', () => {
+    expect(
+      resolveVariantClass('outline', {
+        variants: { variant: { 'shadow-m': { root: 'story-override' } } }
+      })
+    ).toBe('ef-video-variant-outline');
+  });
+
+  it('has nothing to override when no variant is set', () => {
+    expect(
+      resolveVariantClass(undefined, {
+        variants: { variant: { outline: { root: 'story-override' } } }
+      })
+    ).toBeUndefined();
+  });
+});

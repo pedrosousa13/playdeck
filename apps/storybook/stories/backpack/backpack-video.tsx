@@ -1,5 +1,22 @@
 import * as Player from '@reely/react';
-import { useEffect, useRef, useState, type ElementType, type Ref } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ElementType,
+  type Ref
+} from 'react';
+import {
+  backpackVideoStyles,
+  resolveAspectRatios,
+  resolveVariantClass,
+  type BackpackAspectRatio,
+  type BackpackBreakpointProp,
+  type BackpackVideoPlayIconSize,
+  type BackpackVideoThemeConfig,
+  type BackpackVideoVariant
+} from './backpack-video-styles';
 import { useVideoThumbnail } from './video-thumbnail';
 import { useOffScreenPause } from './off-screen-pause';
 
@@ -13,6 +30,16 @@ import { useOffScreenPause } from './off-screen-pause';
 export type BackpackVideoProps = {
   /** Alternative text on the cover image. */
   readonly alt?: string;
+  /**
+   * Aspect ratio of the video player: one value for every width, or a map
+   * keyed by Backpack's breakpoints. Defaults to `{ s: 'natural' }`
+   * (`VideoPlayer.tsx:78,189`); `s` is the unprefixed base rather than a
+   * 480px breakpoint, and what `'natural'` resolves to is the one place this
+   * wrapper deliberately parts company with Backpack — see
+   * `naturalAspectRatio` in `backpack-video-styles.ts`.
+   */
+  readonly aspectRatios?:
+    BackpackAspectRatio | BackpackBreakpointProp<BackpackAspectRatio>;
   /** Additional CSS classes to apply to the component. */
   readonly className?: string;
   /** Set to `true` or `false` to show or hide the player controls. */
@@ -47,6 +74,12 @@ export type BackpackVideoProps = {
   readonly onPlayChange?: (isPlaying: boolean) => void;
   /** Whether to pause the video when it scrolls off screen. */
   readonly pauseOnOutOfViewport?: boolean;
+  /**
+   * Size of the play icon, defaulting to Backpack's own `'m'`
+   * (`VideoPlayer.tsx:142,206`). Narrowed to the two sizes its stories use —
+   * `BackpackVideoPlayIconSize` says why.
+   */
+  readonly playIconSize?: BackpackVideoPlayIconSize;
   /** Set to `true` to start playing on load. */
   readonly playing?: boolean;
   /**
@@ -66,10 +99,23 @@ export type BackpackVideoProps = {
   readonly renderCustomImage?: ElementType;
   /** Whether to show the play icon when the video is not playing. */
   readonly showPlayIcon?: boolean;
+  /**
+   * Replaces the class a `variant` puts on the player box. One overridable
+   * field rather than a theming system — `BackpackVideoThemeConfig` says why,
+   * and `backpackVideoStyles` is what it overrides.
+   */
+  readonly themeConfig?: BackpackVideoThemeConfig;
   /** `IntersectionObserver` threshold behind `pauseOnOutOfViewport`. */
   readonly threshold?: number;
   /** The url of a video to play. */
   readonly url: string;
+  /**
+   * Visual treatment of the player box — a border or a drop shadow. Backpack
+   * types this `BoxVariantValues` (`VideoPlayer.tsx:73`) and resolves it
+   * through `videoStyles.variants.variant`; the wrapper takes the two its
+   * stories use, approximated in story-local CSS.
+   */
+  readonly variant?: BackpackVideoVariant;
 };
 
 /**
@@ -101,15 +147,19 @@ const useOnChange = <Value,>(
 type SurfaceProps = Pick<
   BackpackVideoProps,
   | 'alt'
+  | 'aspectRatios'
   | 'className'
   | 'controls'
   | 'hoverEffect'
   | 'intersectionObserverRoot'
   | 'onPlayChange'
+  | 'playIconSize'
   | 'playing'
   | 'renderCustomImage'
   | 'showPlayIcon'
+  | 'themeConfig'
   | 'threshold'
+  | 'variant'
 > & {
   /** The resolved cover image source, or `undefined` when there is none. */
   readonly coverSrc?: string;
@@ -168,6 +218,7 @@ type SurfaceProps = Pick<
  */
 const BackpackVideoSurface = ({
   alt,
+  aspectRatios,
   className,
   controls,
   coverSrc,
@@ -176,10 +227,13 @@ const BackpackVideoSurface = ({
   loadsOnInteraction,
   onPlayChange,
   pauseOnOutOfViewport,
+  playIconSize,
   playing,
   renderCustomImage: CustomImage,
   showPlayIcon,
-  threshold
+  themeConfig,
+  threshold,
+  variant
 }: SurfaceProps) => {
   const actions = Player.usePlayerActions();
   const { playerPlaying, ready } = Player.usePlayerState((state) => ({
@@ -254,7 +308,13 @@ const BackpackVideoSurface = ({
 
   return (
     <Player.Viewport
-      className={['ef-video-player', className].filter(Boolean).join(' ')}
+      className={[
+        backpackVideoStyles.slots.root,
+        resolveVariantClass(variant, themeConfig),
+        className
+      ]
+        .filter(Boolean)
+        .join(' ')}
       data-playing={isPlaying}
       // The element the off-screen observer watches: the outer player box, since
       // that is the thing whose visibility the behaviour is about. The media
@@ -264,6 +324,14 @@ const BackpackVideoSurface = ({
       // `Player.Viewport` merges this with the ref it keeps for itself
       // (`packages/react/src/viewport-media.tsx:63-89`).
       ref={observeViewport}
+      // One custom property per breakpoint, which the min-width queries in
+      // `backpack-video-styles.ts` read. Custom properties rather than an inline
+      // `aspect-ratio`, because an inline declaration cannot be conditioned on
+      // a media query — the value has to reach a stylesheet for a breakpoint
+      // map to mean anything. `resolveAspectRatios` says why all five are
+      // always written. Cast because React's `CSSProperties` admits no
+      // custom-property keys.
+      style={resolveAspectRatios(aspectRatios) as CSSProperties}
     >
       {showsCover ? (
         <Player.Poster
@@ -297,7 +365,14 @@ const BackpackVideoSurface = ({
       ) : null}
       <Player.Media />
       {!isPlaying && (!startedPlaying || !controls) && showPlayIcon ? (
-        <span aria-hidden="true" className="ef-video-play-icon" />
+        <span
+          aria-hidden="true"
+          className="ef-video-play-icon"
+          // Always written, including for the default `m` whose size is the
+          // base rule: a story reads the attribute rather than inferring the
+          // size from a box measurement alone.
+          data-play-icon-size={playIconSize}
+        />
       ) : null}
       {!awaitingActivation && controls ? (
         <Player.Controls
@@ -346,6 +421,7 @@ const BackpackVideoSurface = ({
 
 export const BackpackVideo = ({
   alt = '',
+  aspectRatios,
   className,
   controls = false,
   hoverEffect = true,
@@ -356,12 +432,15 @@ export const BackpackVideo = ({
   onPlayChange,
   pauseOnOutOfViewport = true,
   placeholderImageSrc,
+  playIconSize = 'm',
   playing,
   ref,
   renderCustomImage,
   showPlayIcon = true,
+  themeConfig,
   threshold = 0,
-  url
+  url,
+  variant
 }: BackpackVideoProps) => {
   // Backpack's `playing` means "start playing on load", which on Reely is
   // autoplay — and Reely rejects `interaction` loading together with autoplay
@@ -391,6 +470,11 @@ export const BackpackVideo = ({
     >
       <BackpackVideoSurface
         alt={alt}
+        // Passed through undefaulted: the default is a breakpoint map rather
+        // than one value, and `resolveAspectRatios` needs it per breakpoint —
+        // an unnamed narrow breakpoint falls back to it too — so it lives
+        // there rather than being restated here.
+        aspectRatios={aspectRatios}
         className={className}
         controls={controls}
         coverSrc={coverSrc}
@@ -399,10 +483,13 @@ export const BackpackVideo = ({
         loadsOnInteraction={!startsPlaying}
         onPlayChange={onPlayChange}
         pauseOnOutOfViewport={pauseOnOutOfViewport}
+        playIconSize={playIconSize}
         playing={playing}
         renderCustomImage={renderCustomImage}
         showPlayIcon={showPlayIcon}
+        themeConfig={themeConfig}
         threshold={threshold}
+        variant={variant}
       />
     </Player.Root>
   );

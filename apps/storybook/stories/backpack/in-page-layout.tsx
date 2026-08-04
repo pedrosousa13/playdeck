@@ -17,14 +17,15 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
  * Backpack's Tailwind classes and its `Text` component are not reproduced —
  * behaviour is what the wrapper is for, so the styling is story-local.
  *
- * Inline `style`, where the neighbouring `backpack-video-css.ts` is a stylesheet
- * mounted by `withCss`: nothing here needs a selector, so nothing here needs a
- * stylesheet. That file exists because the rules it carries cannot be written
- * inline — a `:hover` state, a `::after` play triangle, and descendant matches
- * against class names the wrapper itself emits, which no caller of the wrapper
- * is in a position to set a `style` on. This layout renders its own elements
- * and every rule below applies unconditionally to one of them, so the styles
- * live on the elements they style and there is no second file to keep in step.
+ * Inline `style`, where the neighbouring `backpack-video-styles.ts` is a
+ * stylesheet mounted by `withCss`: nothing here needs a selector, so nothing
+ * here needs a stylesheet. That file exists because the rules it carries cannot
+ * be written inline — a `:hover` state, a `::after` play triangle, and
+ * descendant matches against class names the wrapper itself emits, which no
+ * caller of the wrapper is in a position to set a `style` on. This layout
+ * renders its own elements and every rule below applies unconditionally to one
+ * of them, so the styles live on the elements they style and there is no second
+ * file to keep in step.
  */
 
 /** What the layout hands the video it wraps. */
