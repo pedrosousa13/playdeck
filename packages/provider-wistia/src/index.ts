@@ -32,6 +32,10 @@ export type WistiaProviderOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
   readonly loop?: boolean;
+  readonly playerColor?: string;
+  readonly swatch?: boolean;
+  readonly poster?: string;
+  readonly transparentLetterbox?: boolean;
 };
 
 type WistiaCommand =
