@@ -1,6 +1,13 @@
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { useRef } from 'react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook
+} from '@testing-library/react';
+import { createElement, useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 import { useViewportPause, type ViewportPauseOptions } from './viewport-pause';
 
 /**
@@ -64,6 +71,12 @@ class ControlledIntersectionObserver implements IntersectionObserver {
 }
 
 const originalIntersectionObserver = globalThis.IntersectionObserver;
+
+/** The observer in use, whichever hook or component mounted it. */
+const latestObserver = (): ControlledIntersectionObserver => {
+  const { instances } = ControlledIntersectionObserver;
+  return instances[instances.length - 1]!;
+};
 
 /**
  * Mounts the hook with the wrapper's values for a video the viewer has just
@@ -294,5 +307,149 @@ describe('useViewportPause', () => {
     unmount();
 
     expect(observer().disconnect).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Mounts the real wrapper with a player that can never attach, so every
+ * transition below is the wrapper's own machine and nothing else.
+ *
+ * `playing: true` is what puts the wrapper's own play/pause toggle on the
+ * surface from the first render: it loads eagerly (`backpack-video.tsx:320`),
+ * so `awaitingActivation` is false and `Player.ActivationButton` renders
+ * nothing (`packages/react/src/loading-error.tsx:41`). The `mock://` scheme
+ * then fails Reely's source detection, so no provider ever attaches and
+ * nothing confirms playback — the trick the `PlaybackRequestedButNeverStarted`
+ * and `CoverClickRequestsPlayback` stories already use. Neither
+ * `pauseOnOutOfViewport` nor `threshold` nor `intersectionObserverRoot` is
+ * passed, so the defaults are under test too.
+ */
+const renderWrapper = (overrides: Partial<BackpackVideoProps> = {}) => {
+  const onPlayChange = vi.fn<(isPlaying: boolean) => void>();
+  let props: BackpackVideoProps = {
+    muted: true,
+    onPlayChange,
+    playing: true,
+    url: 'mock://reely/unresolvable.mp4',
+    ...overrides
+  };
+  const view = render(createElement(BackpackVideo, props));
+
+  return {
+    ...view,
+    observer: latestObserver,
+    /** Every `onPlayChange` the wrapper has reported, in order. */
+    reported: () => onPlayChange.mock.calls.map(([isPlaying]) => isPlaying),
+    /** Feeds the wrapper a new set of props, as a parent re-render would. */
+    setProps: (next: Partial<BackpackVideoProps>) => {
+      props = { ...props, ...next };
+      view.rerender(createElement(BackpackVideo, props));
+    },
+    /** Reports the player's viewport as on or off screen, as a scroll would. */
+    scrollTo: (visible: boolean) => {
+      act(() => {
+        latestObserver().emit(visible);
+      });
+    },
+    /** The viewer clicking the wrapper's own play/pause toggle. */
+    toggle: () => {
+      fireEvent.click(view.container.querySelector('.ef-video-controller')!);
+    }
+  };
+};
+
+/**
+ * The wiring the hook's own tests cannot see: that its intent reaches
+ * `requestPlayback`, so a scroll-driven pause is reported through
+ * `onPlayChange` like any other transition; that both click handlers cancel a
+ * pending resume; that `controlledPaused` is the wrapper's `playing === false`;
+ * and that the ref lands on `Player.Viewport`'s node with the three props'
+ * values. Kept here rather than in a story because `Backpack parity/Video`'s
+ * scroll stories belong to the same issue's next task.
+ */
+describe('BackpackVideo viewport pause', () => {
+  beforeEach(() => {
+    ControlledIntersectionObserver.instances = [];
+    globalThis.IntersectionObserver =
+      ControlledIntersectionObserver as unknown as typeof globalThis.IntersectionObserver;
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.IntersectionObserver = originalIntersectionObserver;
+  });
+
+  it('observes the player viewport with the props observer options', () => {
+    const root = document.createElement('div');
+    const { container, observer } = renderWrapper({
+      intersectionObserverRoot: root,
+      threshold: 0.5
+    });
+
+    expect(observer().init).toEqual({ root, threshold: 0.5 });
+    expect(observer().observe).toHaveBeenCalledWith(
+      container.querySelector('.ef-video-player')
+    );
+  });
+
+  it("observes with Backpack's default observer options", () => {
+    const { observer } = renderWrapper();
+
+    expect(observer().init).toEqual({ root: null, threshold: 0 });
+  });
+
+  it('reports a scroll-driven pause and resume through onPlayChange', () => {
+    const { reported, scrollTo, toggle } = renderWrapper();
+
+    toggle();
+    expect(reported()).toEqual([true]);
+
+    scrollTo(true);
+    scrollTo(false);
+    expect(reported()).toEqual([true, false]);
+
+    scrollTo(true);
+    expect(reported()).toEqual([true, false, true]);
+  });
+
+  it('leaves the video alone on scroll while pauseOnOutOfViewport is false', () => {
+    const { reported, scrollTo, toggle } = renderWrapper({
+      pauseOnOutOfViewport: false
+    });
+
+    toggle();
+    scrollTo(true);
+    scrollTo(false);
+
+    expect(reported()).toEqual([true]);
+  });
+
+  // The toggle is Backpack's `toggle`, which drops the pending auto-resume
+  // (`useVideoPlayerState.ts:174`).
+  it('keeps a video the viewer paused off screen paused when it scrolls back', () => {
+    const { reported, scrollTo, toggle } = renderWrapper();
+
+    toggle();
+    scrollTo(true);
+    scrollTo(false);
+    // The viewer plays the off-screen video and pauses it again by hand.
+    toggle();
+    toggle();
+    scrollTo(true);
+
+    expect(reported()).toEqual([true, false, true, false]);
+  });
+
+  // `controlledPaused`, which the wrapper answers with its own `playing` prop.
+  it('keeps the video paused on scroll-back while playing is false', () => {
+    const { reported, scrollTo, setProps, toggle } = renderWrapper();
+
+    toggle();
+    scrollTo(true);
+    scrollTo(false);
+    setProps({ playing: false });
+    scrollTo(true);
+
+    expect(reported()).toEqual([true, false]);
   });
 });
