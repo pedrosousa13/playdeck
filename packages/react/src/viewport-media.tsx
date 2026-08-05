@@ -14,12 +14,14 @@ export type ViewportProps = ComponentPropsWithRef<'div'>;
 // Standard <video> passthrough, minus the attributes the controller owns:
 // `src` (driven by the resolved source / <source> children), `muted` and
 // `autoPlay` (activation + autoplay policy live in the controller), `preload`
-// (derived from the loading strategy), `poster` (use `nativePoster`), and
+// (derived from the loading strategy), `poster` (use `nativePoster`),
+// `controls` (use `Root`'s own `controls` prop, threaded through
+// `PlayerContextValue` -- see the `usePlayer()` destructure below), and
 // `children` (Media renders its own <source> set). Passing those would
 // silently desync or bypass the player's state machine, so they're excluded.
 export type MediaProps = Omit<
   ComponentPropsWithRef<'video'>,
-  'children' | 'src' | 'muted' | 'autoPlay' | 'preload' | 'poster'
+  'children' | 'src' | 'muted' | 'autoPlay' | 'preload' | 'poster' | 'controls'
 > & {
   readonly nativePoster?: string;
   readonly textTracks?: ReadonlyArray<{

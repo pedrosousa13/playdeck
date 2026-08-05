@@ -106,7 +106,9 @@ const verifyMediaPropsExclusions = (): Player.MediaProps[] => [
   // @ts-expect-error use nativePoster instead of poster.
   { poster: '/poster.jpg' },
   // @ts-expect-error preload is derived from the loading strategy.
-  { preload: 'none' }
+  { preload: 'none' },
+  // @ts-expect-error use Root's own controls prop instead of Media's.
+  { controls: true }
 ];
 
 const confirmMetadataReady = (media: HTMLVideoElement): void => {
