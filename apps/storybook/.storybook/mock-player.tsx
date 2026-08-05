@@ -126,7 +126,7 @@ const createMockAdapter = (
     //
     // Reporting it is what lets a story put a position on the player at all —
     // nothing here decodes, so no position arrives by itself — which is what
-    // `Backpack parity/VideoHoverPreview` needs to watch a preview window
+    // `Backpack parity/Mock/VideoHoverPreview` needs to watch a preview window
     // enforced by position rather than by a clock.
     seekTo: reportsPlayback
       ? async (time: number) => {

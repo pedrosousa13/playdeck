@@ -47,6 +47,20 @@ type SourceTransition = {
 export type PlayerActivationProps = {
   readonly loading?: import('./use-activation.js').PlayerLoadingStrategy;
   readonly loadMargin?: string;
+  /**
+   * Under `loading: 'viewport'`, the fraction of the player's box that must be
+   * on screen before the provider attaches -- an `IntersectionObserver`
+   * threshold, `0` to `1`. Defaults to `0`, matching activation before this
+   * prop existed: any visible pixel attaches the provider, the same first-pixel
+   * behaviour `loadMargin`'s own default already grants everything else.
+   *
+   * A box taller or wider than the scroll container it moves through can never
+   * reach a threshold near `1` -- no amount of scrolling puts 100% of it on
+   * screen at once. Rather than leave that configuration dormant forever with no
+   * playback and no error, such a box activates at the first visible pixel
+   * instead, the same fallback the default already is for every other box.
+   */
+  readonly loadThreshold?: number;
   readonly preload?: import('./use-activation.js').PlayerPreload;
 };
 
@@ -96,6 +110,7 @@ export const Root = ({
   defaultVolume = 1,
   endTime,
   loadMargin = '200px 0px',
+  loadThreshold = 0,
   loading = 'viewport',
   loop,
   mediaMetadata,
@@ -435,6 +450,7 @@ export const Root = ({
     autoplay,
     controller,
     loadMargin,
+    loadThreshold,
     loading,
     nativeOptions: { endTime, loop, startTime },
     prepareMedia,

@@ -1,7 +1,9 @@
+import type { PlayerHandle } from '@reely/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useRef, useState } from 'react';
 import { withCss } from '../../.storybook/theme';
 import { backpackVideoCss } from './backpack-video-styles';
-import { BackpackVideo } from './backpack-video';
+import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 import { InPageLayout } from './in-page-layout';
 
 // The wrapper against real providers: real embeds, real network. Excluded from
@@ -9,7 +11,7 @@ import { InPageLayout } from './in-page-layout';
 // (`real-playback`), so each story below renders the wrapper's own
 // `Player.Root` with nothing staged into it — which is the point. These are
 // what show that `BackpackVideo` attaches a provider rather than only working
-// against a mock; `Backpack parity/Video` covers the behaviour deterministically.
+// against a mock; `Backpack parity/Mock/Video` covers the behaviour deterministically.
 
 /** Backpack's own cover photo, as its `Video.stories.tsx` stories pass it. */
 const coverImageUrl =
@@ -19,10 +21,10 @@ const coverImageUrl =
 const wistiaUrl = 'https://wesleyluyten.wistia.com/medias/oifkgmxnkb';
 
 const meta = {
-  title: 'Real playback/BackpackVideo',
+  title: 'Backpack parity/Real/Video',
   component: BackpackVideo,
   tags: ['real-playback', '!test'],
-  decorators: [withCss(backpackVideoCss('640px'))],
+  decorators: [withCss(backpackVideoCss('600px'))],
   parameters: {
     docs: {
       description: {
@@ -49,7 +51,7 @@ export const YouTube: Story = {
 
 /**
  * Backpack's `WistiaVideo` args, verbatim (`Video.stories.tsx:145-152`): the
- * same click-to-load surface over a real `<wistia-player>`. `Backpack parity/Video`
+ * same click-to-load surface over a real `<wistia-player>`. `Backpack parity/Mock/Video`
  * carries these args too, where the embed never mounts.
  */
 export const Wistia: Story = {
@@ -67,7 +69,7 @@ export const Wistia: Story = {
  *
  * This is the only place the two options can be seen at all: they become
  * `player-color` and `swatch` attributes on the element, and the deterministic
- * suite may not mount one — `Backpack parity/Video → WistiaWithPlayerConfig`
+ * suite may not mount one — `Backpack parity/Mock/Video → WistiaWithPlayerConfig`
  * says why at length and pins the option bag instead.
  */
 export const WistiaWithPlayerConfig: Story = {
@@ -92,6 +94,170 @@ export const StartsPlaying: Story = {
 /** `controls` with a real provider attached, alongside the real embed. */
 export const WithControls: Story = {
   args: { url: 'https://vimeo.com/336066147', muted: true, controls: true }
+};
+
+/**
+ * Backpack's `Loop` args, over a real embed: `loop` reaches `Player.Root` but
+ * is not forwarded to the Vimeo provider (SIDEPRO-210), so the clip finishes
+ * and stops rather than restarting.
+ */
+export const Loop: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    controls: true,
+    loop: true
+  }
+};
+
+/**
+ * Backpack's `WithShadowVariant` args, over a real embed: the shadow sits
+ * around the attached player the same way it does around the mock's box.
+ */
+export const WithShadowVariant: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    variant: 'shadow-m'
+  }
+};
+
+/**
+ * Backpack's `WithOutlineVariant` args, over a real embed: a 1px border drawn
+ * inside the player's own box.
+ */
+export const WithOutlineVariant: Story = {
+  args: { url: 'https://vimeo.com/336066147', muted: true, variant: 'outline' }
+};
+
+/**
+ * Backpack's `WithXLSizePlayIcon` args, over a real embed: a 4rem play icon
+ * over the attached player, against the default `m`'s 3rem.
+ */
+export const WithXLSizePlayIcon: Story = {
+  args: { url: 'https://vimeo.com/336066147', muted: true, playIconSize: 'xl' }
+};
+
+/**
+ * Backpack's `With themeConfig` args, over a real embed: the override
+ * replaces the outline variant's class rather than joining it, so the pink
+ * border and dark-blue background from the decorator below are what shows
+ * around the attached player.
+ */
+export const WithThemeConfig: Story = {
+  name: 'With themeConfig',
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    variant: 'outline',
+    themeConfig: {
+      variants: { variant: { outline: { root: 'story-video-theme-config' } } }
+    }
+  },
+  decorators: [
+    withCss(`
+.story-video-theme-config {
+  border: 4px solid rgb(218, 35, 129);
+  background: rgb(0, 52, 100);
+}
+`)
+  ]
+};
+
+/**
+ * Two buttons standing in for an external consumer that holds
+ * `BackpackVideo`'s `PlayerHandle` ref, driving it directly rather than
+ * through the surface. `WithEvents` below renders the events they cause.
+ */
+const ExternalEventsVideo = (props: BackpackVideoProps) => {
+  const ref = useRef<PlayerHandle>(null);
+  const [events, setEvents] = useState<string[]>([]);
+
+  return (
+    <>
+      <BackpackVideo
+        {...props}
+        ref={ref}
+        onPlayChange={(isPlaying) =>
+          setEvents((prior) => [...prior, `onPlayChange(${isPlaying})`])
+        }
+      />
+      <button
+        onClick={() => {
+          ref.current?.activateFromInteraction();
+          void ref.current?.play();
+        }}
+        type="button"
+      >
+        External play
+      </button>
+      <button onClick={() => void ref.current?.pause()} type="button">
+        External pause
+      </button>
+      <ul>
+        {events.map((event, index) => (
+          <li key={index}>{event}</li>
+        ))}
+      </ul>
+    </>
+  );
+};
+
+/**
+ * Backpack's `WithEvents` args, over a real embed: click "External play" and
+ * "External pause" to drive the attached player through its `PlayerHandle`
+ * ref, and watch the list below grow as `onPlayChange` reports each
+ * transition.
+ */
+export const WithEvents: Story = {
+  args: { url: 'https://vimeo.com/336066147', muted: true },
+  render: (args) => <ExternalEventsVideo {...args} />
+};
+
+/**
+ * Three buttons standing in for Backpack's carousel, driving one real player
+ * through its `PlayerHandle` ref instead of through Backpack's module-global
+ * atom — `Backpack parity/Mock/Video → Regression: SocialCarousel atom
+ * integration` says why the mechanism differs. "Reset" is wired to nothing,
+ * on purpose: Reely's ref retains nothing a reset could release.
+ */
+const SocialCarouselIntegrationVideo = (props: BackpackVideoProps) => {
+  const ref = useRef<PlayerHandle>(null);
+  return (
+    <>
+      <BackpackVideo {...props} ref={ref} />
+      <button
+        onClick={() => {
+          ref.current?.activateFromInteraction();
+          void ref.current?.play();
+        }}
+        type="button"
+      >
+        Simulate slide active (play)
+      </button>
+      <button onClick={() => void ref.current?.pause()} type="button">
+        Simulate slide change (pause)
+      </button>
+      {/* No `onClick`: Reely retains nothing for a reset to release. */}
+      <button type="button">Reset (no-op)</button>
+    </>
+  );
+};
+
+/**
+ * Backpack's `SocialCarouselAtomIntegration` args, over a real embed: click
+ * "Simulate slide active (play)" to start it, "Simulate slide change (pause)"
+ * to stop it, and "Reset (no-op)" to see that the third button changes
+ * nothing.
+ */
+export const SocialCarouselAtomIntegration: Story = {
+  name: 'Regression: SocialCarousel atom integration',
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    light: false
+  },
+  render: (args) => <SocialCarouselIntegrationVideo {...args} />
 };
 
 /**
@@ -192,6 +358,21 @@ export const YouTubeShortsVideoAndCustomCoverImage: Story = {
   }
 };
 
+/**
+ * Backpack's `YouTubeShortsVideo` args, over a real embed: a portrait Shorts
+ * video in a 9:16 box, without a cover image standing in for it — that's
+ * {@link YouTubeShortsVideoAndCustomCoverImage} above.
+ */
+export const YouTubeShortsVideo: Story = {
+  name: 'YouTube Shorts Video',
+  args: {
+    url: 'https://www.youtube.com/shorts/n3eC51ZaDlk',
+    muted: true,
+    light: false,
+    aspectRatios: '9/16'
+  }
+};
+
 /*
  * Backpack's three `InPageLayout` stories, with its args verbatim. Click the
  * video to start it, then scroll the panel: `pauseOnOutOfViewport` pauses it
@@ -202,7 +383,7 @@ export const YouTubeShortsVideoAndCustomCoverImage: Story = {
  * (`Video.stories.tsx:367-395`), reproduced rather than tidied, since these
  * stories exist to carry its args. Unmuted playback works here because it takes
  * a click to start: what a browser blocks is an *autoplay* with sound, which is
- * `playing` rather than anything on this page. `Backpack parity/Video` covers
+ * `playing` rather than anything on this page. `Backpack parity/Mock/Video` covers
  * the behaviour deterministically, and stays muted throughout.
  *
  * All three render the wrapper in that layout at Backpack's own `h-screen`, so

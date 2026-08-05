@@ -41,7 +41,7 @@ const wistiaUrl = 'https://wesleyluyten.wistia.com/medias/oifkgmxnkb';
  * A cover image small enough to inline, standing in for Backpack's own
  * `a.storyblok.com` cover photo: an external URL may never reach the DOM here
  * (README's "Story conventions"), and a `data:` URI is the guard's documented
- * escape hatch. `Real playback/BackpackVideo` uses Backpack's real image.
+ * escape hatch. `Backpack parity/Real/Video` uses Backpack's real image.
  */
 const coverImageDataUri =
   'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="4" height="3"%3E%3Crect width="4" height="3" fill="%23808080"/%3E%3C/svg%3E';
@@ -213,9 +213,9 @@ const PlayerReports = ({
 };
 
 const meta = {
-  title: 'Backpack parity/Video',
+  title: 'Backpack parity/Mock/Video',
   component: BackpackVideo,
-  decorators: [withCss(backpackVideoCss('480px'))],
+  decorators: [withCss(backpackVideoCss('600px'))],
   args: { onPlayChange: fn() },
   render: (args, { parameters }) => (
     <MockedBackpackVideo
@@ -281,7 +281,7 @@ export const Default: Story = {
  * Before a provider attaches there is nothing to toggle, so Reely's own
  * activation affordance is the click target — it is what loads the provider.
  * Clicking it here would load the real one, which is what
- * `Real playback/BackpackVideo` is for; this story only pins that the
+ * `Backpack parity/Real/Video` is for; this story only pins that the
  * affordance is present, is Reely's, and is alone on the surface.
  */
 export const AwaitingActivation: Story = {
@@ -356,7 +356,7 @@ export const YouTubeVideo: Story = {
  * last two assertions are what pin that rather than assume it — a `<wistia-player>`
  * that reached the document would upgrade and fetch its own media data from
  * Wistia, which is exactly what this suite forbids and what
- * `Real playback/BackpackVideo → Wistia` is for.
+ * `Backpack parity/Real/Video → Wistia` is for.
  */
 export const WistiaVideo: Story = {
   args: { url: wistiaUrl, muted: true, light: false },
@@ -403,7 +403,7 @@ export const WistiaVideo: Story = {
  * (`'forwards the provider option bag from Root to the loader'`), and that the
  * provider writes it as `player-color` and `swatch` in
  * `packages/provider-wistia/test/index.test.ts:241-249`. What a human checks is
- * `Real playback/BackpackVideo → WistiaWithPlayerConfig`: a red player with no
+ * `Backpack parity/Real/Video → WistiaWithPlayerConfig`: a red player with no
  * blurred placeholder behind it.
  */
 export const WistiaWithPlayerConfig: Story = {
@@ -546,7 +546,7 @@ export const WithClassName: Story = {
  * pristine player and this real, resolvable `url`, that click is exactly what
  * commits the source and starts loading the real Vimeo provider (an iframe
  * pointed at `player.vimeo.com` lands a moment later) — precisely what
- * `Real playback/BackpackVideo` is for, and what this suite's offline guard
+ * `Backpack parity/Real/Video` is for, and what this suite's offline guard
  * forbids. `CoverYieldsToPlayback` below pins "clicking removes the cover"
  * against a player that never needs to attach one for real.
  */
@@ -664,7 +664,7 @@ export const WithRenderCustomImage: Story = {
 /**
  * Backpack's `YouTube Shorts Video` args, verbatim, and its own narrower box
  * with them: Backpack wraps this story in `TestWrapper maxWidth='400px'` where
- * the 480px of every other story here comes from the meta's. The width lives on
+ * the 600px of every other story here comes from the meta's. The width lives on
  * the player box rather than a wrapper, so it arrives as a second stylesheet —
  * one rule, not a second copy of `backpackVideoCss`, which would re-emit some
  * 300 lines to change one declaration.
@@ -673,7 +673,7 @@ export const WithRenderCustomImage: Story = {
  * meta's, so this `<style>` comes later in the document and its
  * `.ef-video-player` rule wins the tie at equal specificity. The `width`
  * assertion below is what makes that load-bearing — reorder the decorators and
- * the story fails loudly rather than silently rendering at 480px.
+ * the story fails loudly rather than silently rendering at 600px.
  *
  * A portrait player, which is the point of the story: `aspectRatios: '9/16'`
  * applies at every width, so the 400px box is 711px tall and the play icon sits
@@ -904,14 +904,14 @@ export const WithShadowVariant: Story = {
 
 /**
  * Backpack's `WithOutlineVariant` args: a 1px border in its `mono-gray-300`.
- * The box keeps the 480px the stylesheet gives it and draws the border inside
+ * The box keeps the 600px the stylesheet gives it and draws the border inside
  * that, here as in Backpack: Backpack loads Tailwind's preflight
  * (`src/scss/base/_index.scss:1` is `@tailwind base`, and `tailwind.config.cjs`
  * overrides neither `preflight` nor `corePlugins`), whose reset puts
  * `box-sizing: border-box` on every element — so the border comes out of the
  * declared width rather than being added to it. `backpack-video-styles.ts`
  * declares the same on `.ef-video-player`, and the width below is what pins it:
- * a content-box would measure 482.
+ * a content-box would measure 602.
  */
 export const WithOutlineVariant: Story = {
   args: { url: vimeoUrl, muted: true, variant: 'outline' },
@@ -923,7 +923,7 @@ export const WithOutlineVariant: Story = {
     await expect(styles.borderTopWidth).toBe('1px');
     await expect(styles.borderTopColor).toBe('rgb(191, 191, 191)');
     await expect(styles.boxSizing).toBe('border-box');
-    await expect(player.getBoundingClientRect().width).toBe(480);
+    await expect(player.getBoundingClientRect().width).toBe(600);
   }
 };
 
@@ -1014,7 +1014,7 @@ export const DefaultThemeConfig: Story = {
  * click target, no provider attaches and the Vimeo URL stays inert — but the
  * `IntersectionObserver` doing the work is the browser's own: this suite runs
  * in Chromium, so the scrolls below are real scrolls observed for real, and
- * nothing here fakes the API. `Real playback/BackpackVideo` carries Backpack's
+ * nothing here fakes the API. `Backpack parity/Real/Video` carries Backpack's
  * exact args for the same three.
  *
  * Two properties of the wrapper are left to `off-screen-pause.contract.test.ts`,
@@ -1093,7 +1093,7 @@ export const InPage: Story = inPageStory(
 
 /**
  * Backpack's `WithoutPauseOnOutOfViewport` args (muted here, unmuted in
- * `Real playback/BackpackVideo`): a video scrolled clear of the container keeps
+ * `Backpack parity/Real/Video`): a video scrolled clear of the container keeps
  * playing.
  *
  * The story cannot assert that on the badge, which shows the same "Playing" it

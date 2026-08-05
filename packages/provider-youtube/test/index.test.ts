@@ -7,7 +7,8 @@ import {
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
   type YouTubeIframeApi,
   type YouTubePlayer,
-  type YouTubePlayerOptions
+  type YouTubePlayerOptions,
+  type YouTubeProviderOptions
 } from '../src/index';
 
 const playerStates = {
@@ -156,11 +157,15 @@ const createFakeYouTube = () => {
   };
 };
 
-const createAdapter = (videoId = 'dQw4w9WgXcQ') => {
+const createAdapter = (
+  videoId = 'dQw4w9WgXcQ',
+  options: YouTubeProviderOptions = {}
+) => {
   const fake = createFakeYouTube();
   const mount = document.createElement('div');
   document.body.appendChild(mount);
   const provider = createYouTubeProvider(mount, videoId, {
+    ...options,
     loadIframeApi: () => Promise.resolve(fake.api)
   });
   const patches: ProviderStatePatch[] = [];
@@ -228,6 +233,27 @@ test('creates the player against the privacy-enhanced host without autoplay', as
   });
   expect(mount.contains(harness.iframe)).toBe(true);
 });
+
+// Vimeo's own embed url sets `controls` the same way
+// (`provider-vimeo/src/attachment.ts:61`, `options.controls === true ? '1' :
+// '0'`): unset and `false` both mean chromeless. This pins YouTube to the
+// same polarity so the two cannot drift.
+test.each([
+  ['unset', undefined, 0],
+  ['false', false, 0],
+  ['true', true, 1]
+] as const)(
+  'sets playerVars.controls to the expected value when the controls option is %s',
+  async (_label, controls, expected) => {
+    const { fake, provider } = createAdapter('M7lc1UVf-VE', { controls });
+
+    await provider.attach();
+    await provider.load();
+
+    const harness = fake.players[0]!;
+    expect(harness.options.playerVars).toMatchObject({ controls: expected });
+  }
+);
 
 test('reports policy-restricted custom controls before the player is ready', async () => {
   const { patches, provider } = createAdapter();

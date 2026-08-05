@@ -17,8 +17,8 @@ the test origin.
 - Stories live in `stories/<part>.stories.tsx`, titled `Player/<Component>`. A
   composition with a component file of its own keeps both in a subdirectory —
   `stories/backpack/` holds the Backpack compat wrapper, its deterministic
-  stories under `Backpack parity/*` and its real-playback story under
-  `Real playback/*`.
+  stories under `Backpack parity/Mock/*` and its real-playback story under
+  `Backpack parity/Real/*`.
 - One story per meaningful component state, named after the state
   (`Dormant`, `Buffering`, ...). New visual states added by later issues get
   their story in the same change.
@@ -41,7 +41,8 @@ the test origin.
   `real-playback` and `!test` — which keeps it out of the automated run. The
   tag pairing is what matters and is enforced by
   `stories/real-playback.contract.test.ts`; the title is not, and such stories
-  sit under `Real playback/*` or their own section (`Fixtures/*`) as suits.
+  sit under `Real playback/*`, `Backpack parity/Real/*`, or their own section
+  (`Fixtures/*`) as suits.
 
 ## Fixture media
 

@@ -20,7 +20,7 @@ import { playerBox, playIcon } from './story-queries';
  * other two deterministic suites do not.
  *
  * ## Why every story here carries a cover image
- * `Backpack parity/Video` swaps Backpack's `a.storyblok.com` photo for a data
+ * `Backpack parity/Mock/Video` swaps Backpack's `a.storyblok.com` photo for a data
  * URI where a story passes one, and otherwise leaves the cover off: there a
  * cover is `light`'s business and `light` defaults off. Here the composition
  * resolves one unconditionally, because a hover preview has a resting state to
@@ -32,10 +32,10 @@ import { playerBox, playIcon } from './story-queries';
  * no-external-request guard would fail (`.storybook/vitest.setup.ts:47-70`).
  * Every story below therefore passes `coverImageDataUri`, and the six Backpack
  * stories that show a *fetched* thumbnail have that half in
- * `Real playback/BackpackVideoHoverPreview` instead.
+ * `Backpack parity/Real/VideoHoverPreview` instead.
  *
  * ## Why Backpack's own `url` is safe here anyway
- * For `Backpack parity/Video`'s reason, and one more. Each story stages a
+ * For `Backpack parity/Mock/Video`'s reason, and one more. Each story stages a
  * provider that already reports `activation: 'ready'`, so no source is ever
  * committed and `Player.Media` mounts no embed. Hover would ordinarily be the
  * thing that loads it — the composition issues `activateFromInteraction()`
@@ -47,7 +47,7 @@ import { playerBox, playIcon } from './story-queries';
  * nothing else.
  *
  * ## Hover, and why `userEvent` is enough for it here
- * `Backpack parity/Video` drives hover through Vitest's browser-mode locator
+ * `Backpack parity/Mock/Video` drives hover through Vitest's browser-mode locator
  * (its own `hover` helper), and has to: what it observes is a CSS `:hover` rule,
  * which a browser matches from its own hit-testing rather than from any event
  * reaching the element — so that helper reports whether a driver was available
@@ -86,7 +86,7 @@ import { playerBox, playIcon } from './story-queries';
  *   carries it when nothing loads.
  *
  * Both stories therefore pin what *is* here — the arg accepted, the preview
- * unchanged — and `Real playback/BackpackVideoHoverPreview` is where `muted`
+ * unchanged — and `Backpack parity/Real/VideoHoverPreview` is where `muted`
  * genuinely takes effect. `loop` is inert even there on a Vimeo or YouTube source
  * (SIDEPRO-210), which `WithoutLoop` says at its own call site.
  */
@@ -177,7 +177,7 @@ const ReportedPositions = ({
  * advances. That the composition cannot tell the two apart is the point — it
  * watches position rather than a clock, so a position arriving is a position
  * arriving. All four drive state from inside the rendered tree, as
- * `Backpack parity/Video`'s own external-control and `PlayerReports` stories do.
+ * `Backpack parity/Mock/Video`'s own external-control and `PlayerReports` stories do.
  *
  * ## Why the preview is held rather than hovered here
  * A click cannot coexist with a pointer-held preview: clicking a button below
@@ -238,7 +238,7 @@ const PreviewWithPositions = ({
 };
 
 const meta = {
-  // 600px, as `Backpack parity/AutoplayVideo` mounts: Backpack's
+  // 600px, as `Backpack parity/Mock/AutoplayVideo` mounts: Backpack's
   // `VideoHoverPreview` stories all sit in a `TestWrapper maxWidth='600px'`
   // (`VideoHoverPreview.stories.tsx:30-36`), and the width here lives on the
   // player box rather than on a wrapper element.
@@ -252,7 +252,7 @@ const meta = {
       player={parameters.player as MockPlayerParameters}
     />
   ),
-  title: 'Backpack parity/VideoHoverPreview'
+  title: 'Backpack parity/Mock/VideoHoverPreview'
 } satisfies Meta<typeof BackpackVideoHoverPreview>;
 
 export default meta;
@@ -266,7 +266,7 @@ type Story = StoryObj<typeof meta>;
  * The whole cycle, which is the component: a cover at rest with the play icon
  * over it, the pointer arriving takes both away and starts playback, the pointer
  * leaving brings both back. The cover coming *back* is what separates this from
- * `Backpack parity/Video`'s covers, and it is why the composition owns its own
+ * `Backpack parity/Mock/Video`'s covers, and it is why the composition owns its own
  * cover layer rather than using `Player.Poster`.
  *
  * Also where the defaults every other story here inherits are pinned:
@@ -328,7 +328,7 @@ export const Default: Story = {
  * escape hatch. What this dumps is the object the composition actually reads —
  * `backpackVideoStyles`, through the `themeConfig` it forwards to
  * `BackpackVideo` in `...rest` — which is the answer
- * `Backpack parity/Video → Default Theme Config` already settled on. Rendered as
+ * `Backpack parity/Mock/Video → Default Theme Config` already settled on. Rendered as
  * a `<pre>` of `JSON.stringify` where Backpack uses `react-json-view-lite`,
  * since the deterministic suite adds no dependency for a story.
  *
@@ -443,7 +443,7 @@ export const WithPlayIcon: Story = {
  * The sound is not observable *here*, and the assertion below is why rather than a
  * substitute for it: with no source committed there is neither a media element to
  * carry the property nor an adapter to issue `unmute` to. It does work where a
- * provider exists — `Real playback/BackpackVideoHoverPreview → WithSound` carries
+ * provider exists — `Backpack parity/Real/VideoHoverPreview → WithSound` carries
  * Backpack's arg over a real Vimeo embed, which implements `mute`/`unmute`
  * (`packages/provider-vimeo/src/index.ts:140-141`) and takes `muted` in its embed
  * URL (`provider-vimeo/src/attachment.ts:64`), with `Player.Root` reconciling the

@@ -12,8 +12,8 @@ import { InPageLayout } from './in-page-layout';
  *
  * A file of its own rather than more stories in `backpack-video-real.stories.tsx`
  * for the same reason the deterministic suites are two files: this is a
- * different component with a different props type, and it needs the 600px box
- * Backpack's `AutoplayVideo` stories use where those need 480px.
+ * different component with a different props type, and it needs the same
+ * 600px box every Backpack parity story uses.
  *
  * These carry Backpack's own args, the Vimeo URL and the `a.storyblok.com` image
  * included. They are also the only place the loading strategy can be watched
@@ -40,7 +40,7 @@ const transparentPosterDataUri =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 const meta = {
-  title: 'Real playback/BackpackAutoplayVideo',
+  title: 'Backpack parity/Real/AutoplayVideo',
   component: BackpackAutoplayVideo,
   tags: ['real-playback', '!test'],
   decorators: [withCss(backpackVideoCss('600px'))],
@@ -48,7 +48,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The `BackpackAutoplayVideo` composition driving real embeds — Vimeo, and Wistia in `WistiaVideo`. Nothing to click: the provider is loaded when the player box first scrolls into view, with no preload margin, and muted autoplay starts it as soon as that provider reports ready. `InPage` is where both halves are visible at once — scroll the panel and the video loads and starts on the way in, then pauses when it leaves and resumes when it comes back. Real network, so these are excluded from the deterministic story test suite (tagged `!test`); `Backpack parity/AutoplayVideo` covers the behaviour deterministically.'
+          'The `BackpackAutoplayVideo` composition driving real embeds — Vimeo, and Wistia in `WistiaVideo`. Nothing to click: the provider is loaded when the player box first scrolls into view, with no preload margin, and muted autoplay starts it as soon as that provider reports ready. `InPage` is where both halves are visible at once — scroll the panel and the video loads and starts on the way in, then pauses when it leaves and resumes when it comes back. Real network, so these are excluded from the deterministic story test suite (tagged `!test`); `Backpack parity/Mock/AutoplayVideo` covers the behaviour deterministically.'
       }
     }
   }
@@ -110,18 +110,26 @@ export const WistiaVideo: Story = {
 /**
  * Backpack's `InPage` args — `WithCustomPlaceholderImage`'s, in a scroll
  * container — at Backpack's own full-height panel, as
- * `Real playback/BackpackVideo`'s three in-page stories do.
+ * `Backpack parity/Real/Video`'s three in-page stories do.
  *
  * The one story where the whole mechanism is on screen at once: scroll down and
  * nothing has been requested yet, then the video loads and starts as its box
  * crosses into view, and the badge in the panel's top-right follows
  * `onPlayChange` from there as it leaves and comes back.
+ *
+ * `threshold: 1` is this story's own addition, not Backpack's: the panel below
+ * is a full `100vh`, taller than the 600px player box in every viewport this
+ * suite runs in, so the whole box fitting on screen at once is a position
+ * that exists, and this is what makes it the position loading waits for —
+ * without it, the load threshold falls back to `0` and starts on the first
+ * visible pixel, same as every other story in this file.
  */
 export const InPage: Story = {
   args: {
     url: vimeoUrl,
     placeholderImageSrc: coverImageUrl,
-    alt: 'Custom placeholder image'
+    alt: 'Custom placeholder image',
+    threshold: 1
   },
   parameters: { layout: 'fullscreen' },
   render: (args) => (

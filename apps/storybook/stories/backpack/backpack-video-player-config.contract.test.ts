@@ -156,7 +156,11 @@ describe('BackpackVideo playerConfig wiring', () => {
         poster: undefined,
         swatch: false,
         transparentLetterbox: undefined
-      }
+      },
+      // Unrelated to this test's own concern -- the `controls` prop's own
+      // forwarding is pinned by `backpack-video-controls.contract.test.ts` --
+      // but part of the exact bag `Player.Root` receives, so it belongs here.
+      youtube: { controls: false }
     });
   });
 
@@ -178,7 +182,11 @@ describe('BackpackVideo playerConfig wiring', () => {
         poster: undefined,
         swatch: undefined,
         transparentLetterbox: undefined
-      }
+      },
+      // Unrelated to this test's own concern -- the `controls` prop's own
+      // forwarding is pinned by `backpack-video-controls.contract.test.ts` --
+      // but part of the exact bag `Player.Root` receives, so it belongs here.
+      youtube: { controls: false }
     });
   });
 });

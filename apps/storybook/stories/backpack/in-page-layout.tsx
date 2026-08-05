@@ -8,8 +8,8 @@ import { playerBox } from './story-queries';
  * says, and a tall spacer either side of the video so it can be scrolled out of
  * the container and back.
  *
- * Shared by the deterministic `Backpack parity/Video` stories and the
- * `Real playback/BackpackVideo` ones, because the layout is the whole of what
+ * Shared by the deterministic `Backpack parity/Mock/Video` stories and the
+ * `Backpack parity/Real/Video` ones, because the layout is the whole of what
  * those two sets have in common and the video inside it is the whole of what
  * they differ on. Which video that is, is the `video` prop's business: the
  * deterministic stories put a mock-staged player there, the real-playback ones
@@ -35,7 +35,7 @@ import { playerBox } from './story-queries';
  * position. They live here rather than in a story file because they are this
  * layout's own driving surface — every one of them is written against the
  * geometry below — and because two story suites now scroll it
- * (`Backpack parity/Video` and `Backpack parity/AutoplayVideo`), so a second
+ * (`Backpack parity/Mock/Video` and `Backpack parity/Mock/AutoplayVideo`), so a second
  * copy would be a second set of numbers free to disagree with these.
  */
 

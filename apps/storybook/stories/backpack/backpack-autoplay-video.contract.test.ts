@@ -342,8 +342,14 @@ describe('BackpackAutoplayVideo viewport activation', () => {
     // activation is what starts playback
     // here, since the provider autoplays as soon as it is ready, so a margin
     // that loads early would also play early — off screen, which is the flaw
-    // this composition exists to avoid.
-    expect(activationObservers()[0]!.init).toEqual({ rootMargin: '0px' });
+    // this composition exists to avoid. `threshold: [0]` is this component's
+    // own `threshold` default, `0`, forwarded as `loadThreshold` and expanded
+    // to an array by `observerThresholds`
+    // (`packages/react/src/use-activation.ts:172-173`).
+    expect(activationObservers()[0]!.init).toEqual({
+      rootMargin: '0px',
+      threshold: [0]
+    });
     expect(activationObservers()[0]!.observe).toHaveBeenCalledWith(box);
     // Nothing to click, and nothing that would need clicking.
     expect(view.container.querySelector('[data-reely-part="activation"]')).toBe(

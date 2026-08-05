@@ -123,7 +123,15 @@ export type BackpackVideoProps = {
    * and `backpackVideoStyles` is what it overrides.
    */
   readonly themeConfig?: BackpackVideoThemeConfig;
-  /** `IntersectionObserver` threshold behind `pauseOnOutOfViewport`. */
+  /**
+   * `IntersectionObserver` threshold behind `pauseOnOutOfViewport`, and — for
+   * `BackpackAutoplayVideo`, whose player also loads under `loading: 'viewport'`
+   * — behind the start as well, forwarded as `Player.Root`'s own
+   * `loadThreshold`. On plain `BackpackVideo` the second half is inert: nothing
+   * reads `loadThreshold` outside that strategy
+   * (`packages/react/src/use-activation.ts:454`,
+   * `if (options.loading !== 'viewport'`).
+   */
   readonly threshold?: number;
   /** The url of a video to play. */
   readonly url: string;
@@ -502,9 +510,9 @@ export const BackpackVideoInternal = ({
     light && !startsPlaying ? url : undefined,
     placeholderImageSrc
   );
-  // Recomputed only when `playerConfig` itself changes identity, so a caller
-  // passing a stable `playerConfig` gets a stable `providerOptions` back.
-  // Not required for correctness — `Player.Root`'s own comparison is by value,
+  // Recomputed when `playerConfig` or `controls` changes identity/value, so a
+  // caller passing stable props gets a stable `providerOptions` back. Not
+  // required for correctness — `Player.Root`'s own comparison is by value,
   // per key, so an unmemoized bag that is merely value-equal would not
   // re-attach the provider either (`use-activation.ts`'s `providerBagEqual`)
   // — but it costs nothing to skip the rebuild on an unrelated re-render.
@@ -512,26 +520,42 @@ export const BackpackVideoInternal = ({
     () => ({
       wistia: translateWistiaPlayerConfig(
         mergeWistiaPlayerConfig(playerConfig?.wistia)
-      )
+      ),
+      // YouTube renders its own player chrome regardless of this wrapper's
+      // Reely-side control bar, so `controls` has to reach the embed itself
+      // (`provider-youtube/src/attachment.ts`'s `playerVars.controls`).
+      youtube: { controls }
     }),
-    [playerConfig]
+    [controls, playerConfig]
   );
 
   return (
     <Player.Root
       autoplay={startsPlaying ? (muted ? 'muted' : 'audible') : false}
       // Under the `viewport` strategy, activation is what starts playback: it
-      // does not queue a play of its own (`use-activation.ts:456`, its
+      // does not queue a play of its own (`use-activation.ts:525`, its
       // `activate(false)`), so the autoplay attempt that follows the provider
       // becoming ready is the whole of the start. Loading early would therefore
       // also play early — off screen, which is the thing the strategy was
       // chosen to avoid — so the preload margin `Player.Root` defaults to
       // (`packages/react/src/root.tsx:98`, `loadMargin = '200px 0px'`)
       // is dropped to nothing. `undefined` everywhere else, where no observer
-      // reads it at all (`use-activation.ts:388`,
+      // reads it at all (`use-activation.ts:454`,
       // `if (options.loading !== 'viewport'`), leaving Reely's own default
       // in place rather than restating a value nothing consults.
+      //
+      // Still needed now that `loadThreshold` also reaches this observer
+      // (below): `rootMargin` and `threshold` answer different questions.
+      // `rootMargin` grows or shrinks the box the observer treats as the root
+      // before it measures anything against it, and `intersectionRatio` is
+      // computed against *that* box, not the real one — so a margin left at
+      // Reely's default would let a `threshold` near `1` finish inside the
+      // 200px margin zone, on screen only by the enlarged root's math and not
+      // by the viewport's. Dropping the margin to nothing is what makes
+      // `threshold: 1` mean the whole player is actually visible, rather than
+      // merely within 200px of being so.
       loadMargin={autoplayOnViewportEntry ? '0px' : undefined}
+      loadThreshold={threshold}
       loading={loading}
       loop={loop}
       muted={muted}

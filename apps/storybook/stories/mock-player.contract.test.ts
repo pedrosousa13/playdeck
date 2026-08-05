@@ -45,7 +45,7 @@ describe('withMockPlayer tag gate', () => {
  * `seekTo`, the one command the mock adapter answers with a state report, and the
  * only one whose report is gated on a knob named for something else. It exists so
  * that a story can put a position on a player that decodes nothing — which is what
- * `Backpack parity/VideoHoverPreview` needs to watch a preview window enforced by
+ * `Backpack parity/Mock/VideoHoverPreview` needs to watch a preview window enforced by
  * position — and the gate exists so that a story asking for a non-reporting player
  * still gets one. Both halves are asserted here because the second has no story:
  * nothing in the workbench seeks a mock without `reportsPlayback`, so only a test
