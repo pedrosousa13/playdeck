@@ -1,10 +1,16 @@
 import * as Player from '@reely/react';
 import {
+  useMemo,
   useState,
   type CSSProperties,
   type ElementType,
   type Ref
 } from 'react';
+import {
+  mergeWistiaPlayerConfig,
+  translateWistiaPlayerConfig,
+  type BackpackVideoPlayerConfig
+} from './backpack-video-player-config';
 import {
   backpackVideoStyles,
   resolveAspectRatios,
@@ -74,6 +80,18 @@ export type BackpackVideoProps = {
   readonly onPlayChange?: (isPlaying: boolean) => void;
   /** Whether to pause the video when it scrolls off screen. */
   readonly pauseOnOutOfViewport?: boolean;
+  /**
+   * Per-provider presentation options, in Backpack's own option names
+   * (`VideoPlayer.tsx:45-55`'s `playerConfig`). Only `wistia` is wired, and
+   * only its four keys documented on {@link BackpackVideoPlayerConfig} — a
+   * passthrough for every option a provider takes is out of scope. Merged
+   * over this wrapper's own Wistia defaults — empty today, so an omitted key
+   * keeps `@wistia/wistia-player`'s own behavior rather than this wrapper's;
+   * a caller wins on any key it sets — and translated to Reely's own option
+   * names by `translateWistiaPlayerConfig`, whose doc comment carries the
+   * translation table.
+   */
+  readonly playerConfig?: BackpackVideoPlayerConfig;
   /**
    * Size of the play icon, defaulting to Backpack's own `'m'`
    * (`VideoPlayer.tsx:142,206`). Narrowed to the two sizes its stories use —
@@ -146,7 +164,8 @@ export type BackpackVideoInternalProps = BackpackVideoProps & {
    * chose for it. Read live rather than frozen at mount like `playing` below,
    * because the one caller passes a constant — a flip would tear down the
    * attached provider, as a change of strategy always does
-   * (`packages/react/src/use-activation.ts:191-209`).
+   * (`packages/react/src/use-activation.ts:237-256`, its
+   * `active.loading !== options.loading` branch).
    */
   readonly autoplayOnViewportEntry?: boolean;
 };
@@ -406,11 +425,13 @@ const BackpackVideoSurface = ({
         // Backpack's own playing state at click time rather than on the
         // player's confirmation. Reely already starts playback from this
         // click on its own — `activateFromInteraction` calls `activate(true)`
-        // (`packages/react/src/use-activation.ts:296`), which queues the play
-        // (`:235`) for the loader to replay once the provider's `load()`
-        // resolves (`:501-514`) — so what this handler adds is only the
-        // optimistic half: the cover comes off and `onPlayChange(true)` fires
-        // immediately instead of after the provider reports playing. Scoped
+        // (`packages/react/src/use-activation.ts:355`), which queues the play
+        // (`:294`, `active.queuedPlay = queuePlay`) for the loader to replay
+        // once the provider's `load()` resolves (`:564-577`, from
+        // `const queuePlay = session.current.queuedPlay`) — so what this
+        // handler adds is only the optimistic half: the cover comes off and
+        // `onPlayChange(true)` fires immediately instead of after the
+        // provider reports playing. Scoped
         // to `showsCover` so the coverless stories keep reporting only what
         // the player confirms.
         onClick={showsCover ? () => requestPlayback(true) : undefined}
@@ -441,6 +462,7 @@ export const BackpackVideoInternal = ({
   onPlayChange,
   pauseOnOutOfViewport = true,
   placeholderImageSrc,
+  playerConfig,
   playIconSize = 'm',
   playing,
   ref,
@@ -463,7 +485,8 @@ export const BackpackVideoInternal = ({
   // prop above decides it: start-on-load loads eagerly and autoplays,
   // everything else loads on the first interaction, which
   // `Player.ActivationButton` performs, because Reely rejects `interaction`
-  // loading together with autoplay (`packages/react/src/use-activation.ts:85`)
+  // loading together with autoplay (`packages/react/src/use-activation.ts:95`,
+  // `loading === 'interaction' && autoplay !== false`)
   // — a strategy that waits for a click cannot also start by itself. `viewport`
   // is reachable only through the internal prop, and is legal with autoplay
   // where `interaction` is not.
@@ -479,23 +502,40 @@ export const BackpackVideoInternal = ({
     light && !startsPlaying ? url : undefined,
     placeholderImageSrc
   );
+  // Recomputed only when `playerConfig` itself changes identity, so a caller
+  // passing a stable `playerConfig` gets a stable `providerOptions` back.
+  // Not required for correctness — `Player.Root`'s own comparison is by value,
+  // per key, so an unmemoized bag that is merely value-equal would not
+  // re-attach the provider either (`use-activation.ts`'s `providerBagEqual`)
+  // — but it costs nothing to skip the rebuild on an unrelated re-render.
+  const providerOptions = useMemo<Player.PlayerProviderOptions>(
+    () => ({
+      wistia: translateWistiaPlayerConfig(
+        mergeWistiaPlayerConfig(playerConfig?.wistia)
+      )
+    }),
+    [playerConfig]
+  );
 
   return (
     <Player.Root
       autoplay={startsPlaying ? (muted ? 'muted' : 'audible') : false}
       // Under the `viewport` strategy, activation is what starts playback: it
-      // does not queue a play of its own (`use-activation.ts:397`), so the
-      // autoplay attempt that follows the provider becoming ready is the whole
-      // of the start. Loading early would therefore also play early — off
-      // screen, which is the thing the strategy was chosen to avoid — so the
-      // preload margin `Player.Root` defaults to (`packages/react/src/root.tsx:91`)
+      // does not queue a play of its own (`use-activation.ts:456`, its
+      // `activate(false)`), so the autoplay attempt that follows the provider
+      // becoming ready is the whole of the start. Loading early would therefore
+      // also play early — off screen, which is the thing the strategy was
+      // chosen to avoid — so the preload margin `Player.Root` defaults to
+      // (`packages/react/src/root.tsx:98`, `loadMargin = '200px 0px'`)
       // is dropped to nothing. `undefined` everywhere else, where no observer
-      // reads it at all (`use-activation.ts:329`), leaving Reely's own default
+      // reads it at all (`use-activation.ts:388`,
+      // `if (options.loading !== 'viewport'`), leaving Reely's own default
       // in place rather than restating a value nothing consults.
       loadMargin={autoplayOnViewportEntry ? '0px' : undefined}
       loading={loading}
       loop={loop}
       muted={muted}
+      providerOptions={providerOptions}
       ref={ref}
       source={url}
     >

@@ -238,6 +238,39 @@ test('maps loop onto the end-of-video behavior', async () => {
   expect(element(result).getAttribute('end-video-behavior')).toBe('loop');
 });
 
+test('sets the player color as an attribute', async () => {
+  const result = await setup({ options: { playerColor: 'ff0000' } });
+  expect(element(result).getAttribute('player-color')).toBe('ff0000');
+});
+
+test('sets swatch as a boolean-string attribute', async () => {
+  const result = await setup({ options: { swatch: false } });
+  expect(element(result).getAttribute('swatch')).toBe('false');
+});
+
+test('sets the poster as an attribute', async () => {
+  const result = await setup({
+    options: { poster: 'https://example.test/poster.png' }
+  });
+  expect(element(result).getAttribute('poster')).toBe(
+    'https://example.test/poster.png'
+  );
+});
+
+test('sets transparent letterbox as a boolean-string attribute', async () => {
+  const result = await setup({ options: { transparentLetterbox: true } });
+  expect(element(result).getAttribute('transparent-letterbox')).toBe('true');
+});
+
+test('leaves the presentation attributes unset when the options are omitted', async () => {
+  const result = await setup();
+  const player = element(result);
+  expect(player.getAttribute('player-color')).toBeNull();
+  expect(player.getAttribute('swatch')).toBeNull();
+  expect(player.getAttribute('poster')).toBeNull();
+  expect(player.getAttribute('transparent-letterbox')).toBeNull();
+});
+
 test('seeds the embed muted state from the mount preference', async () => {
   const result = await setup({
     prepareMount: (mount) => {

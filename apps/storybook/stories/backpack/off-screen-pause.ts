@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 /**
  * What the wrapper knows and this hook deliberately does not own. Playback
  * state stays in `BackpackVideoSurface`'s machine
- * (`backpack-video.tsx:256-308`, from its `isPlaying` state to the `useOnChange`
+ * (`backpack-video.tsx:275-327`, from its `isPlaying` state to the `useOnChange`
  * that drives the player) — Backpack keeps both in one hook
  * (`useVideoPlayerState`), but here the machine already exists and folding a
  * second owner of `isPlaying` into it would give the same value two homes.
@@ -42,7 +42,7 @@ export type OffScreenPauseOptions = {
   readonly root?: Element | null;
   /**
    * Whether playback has started at least once
-   * (`backpack-video.tsx:257,278`, its `startedPlaying` state and the
+   * (`backpack-video.tsx:276,297`, its `startedPlaying` state and the
    * `requestPlayback` that sets it), Backpack's `startedPlaying`.
    */
   readonly startedPlaying: boolean;
@@ -54,7 +54,7 @@ export type OffScreenPauseOptions = {
  * A request for the wrapper's machine, not a state to render. Identity is the
  * signal: a new object is a new request, so the wrapper folds it in with the
  * `useChanged` it already uses for the player's own reports
- * (`backpack-video.tsx:258,274`, its two `useChanged` calls), and re-rendering the
+ * (`backpack-video.tsx:277,293`, its two `useChanged` calls), and re-rendering the
  * same object asks
  * for nothing. A plain boolean could not say that — it would keep asking for a
  * pause for as long as the video stayed off screen, and so would undo a play
@@ -112,7 +112,7 @@ const INITIAL_INTENT: OffScreenPlaybackIntent = { playing: false };
  *   `VideoPlayer.test.tsx:207-243`.
  * - `controlledPaused` as a dependency would re-run the effect the moment a
  *   parent lifts `playing={false}`. The wrapper applies that prop during the
- *   same render (`backpack-video.tsx:298`, its `propChanged` branch), so playback
+ *   same render (`backpack-video.tsx:317`, its `propChanged` branch), so playback
  *   is already live when
  *   the effect runs, and off screen the pause branch would pause the video the
  *   parent just asked to play — inverting the wrapper's own precedence, where
@@ -130,7 +130,8 @@ const INITIAL_INTENT: OffScreenPlaybackIntent = { playing: false };
  *   the wrapper has nothing to pass.
  * - The `window.IntersectionObserver` support check (`:36`). Reely's own
  *   activation path already requires the API
- *   (`packages/react/src/use-activation.ts:348-355`), so a branch here could
+ *   (`packages/react/src/use-activation.ts:407-414`, its
+ *   `'Viewport loading requires IntersectionObserver.'`), so a branch here could
  *   only guard an environment where the player itself does not run.
  */
 export const useOffScreenPause = ({

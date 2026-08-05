@@ -14,9 +14,16 @@ import {
   useRef,
   useState
 } from 'react';
-import { loadProvider, type PlayerMediaMount } from './provider-loaders.js';
+import {
+  loadProvider,
+  type PlayerMediaMount,
+  type PlayerProviderOptions
+} from './provider-loaders.js';
 
-export type { PlayerMediaMount } from './provider-loaders.js';
+export type {
+  PlayerMediaMount,
+  PlayerProviderOptions
+} from './provider-loaders.js';
 
 export type PlayerLoadingStrategy = 'eager' | 'viewport' | 'interaction';
 export type PlayerPreload = 'none' | 'metadata' | 'auto';
@@ -38,6 +45,7 @@ export type UseActivationOptions = {
   readonly nativeOptions: NativePlaybackOptions;
   readonly prepareMedia: (media: PlayerMediaMount) => void;
   readonly preload: PlayerPreload;
+  readonly providerOptions?: PlayerProviderOptions;
   readonly source: SourceDetectionResult;
 };
 
@@ -46,6 +54,7 @@ type Session = {
   configuration: ActivationConfiguration;
   loading: PlayerLoadingStrategy;
   nativeOptions: NativePlaybackOptions;
+  providerOptions: PlayerProviderOptions | undefined;
   sourceKey: string;
   started: boolean;
   queuedPlay: boolean;
@@ -67,6 +76,7 @@ type ActivationInputs = {
   readonly configuration: ActivationConfiguration;
   readonly loading: PlayerLoadingStrategy;
   readonly nativeOptions: NativePlaybackOptions;
+  readonly providerOptions: PlayerProviderOptions | undefined;
   readonly sourceKey: string;
 };
 
@@ -99,6 +109,38 @@ const nativeOptionsEqual = (
   Object.is(left.endTime, right.endTime) &&
   Object.is(left.loop, right.loop) &&
   Object.is(left.startTime, right.startTime);
+
+// One provider's own option bag, compared by value for the same reason
+// `nativeOptionsEqual` exists: `providerOptions={{ wistia: { swatch: false } }}`
+// is a new object on every render, and a reference compare would tear the embed
+// down and rebuild it each time. Own keys rather than each declared field, so
+// this stays correct as a provider's options grow, and shallow because every
+// option a provider bag declares is a primitive.
+//
+// Every key either side declares, compared as a value: a key set to `undefined`
+// therefore equals that key being absent, and an absent bag equals an empty one.
+// All three mean the same thing to a provider, which sets an attribute only for
+// an option that is not `undefined` (`provider-wistia/src/attachment.ts:215`,
+// `if (options.playerColor !== undefined)`). Counting keys instead would rebuild
+// a live embed for two bags that build the identical element -- which is what a
+// caller assembling its bag per render, one key at a time from its own props,
+// hands this function.
+const providerBagEqual = (
+  left: Readonly<Record<string, unknown>> | undefined,
+  right: Readonly<Record<string, unknown>> | undefined
+): boolean => {
+  const keys = new Set([
+    ...Object.keys(left ?? {}),
+    ...Object.keys(right ?? {})
+  ]);
+  return [...keys].every((key) => Object.is(left?.[key], right?.[key]));
+};
+
+// One line per provider key, as `nativeOptionsEqual` names its own three.
+const providerOptionsEqual = (
+  left: PlayerProviderOptions | undefined,
+  right: PlayerProviderOptions | undefined
+): boolean => providerBagEqual(left?.wistia, right?.wistia);
 
 const configurationError = (message: string) => ({
   category: 'configuration' as const,
@@ -151,12 +193,14 @@ export const useActivation = (
     currentConfiguration
   );
   const currentNativeOptions = options.nativeOptions;
+  const currentProviderOptions = options.providerOptions;
   const optionsRef = useRef(options);
   const session = useRef<Session>({
     generation: 0,
     configuration: currentConfiguration,
     loading: options.loading,
     nativeOptions: currentNativeOptions,
+    providerOptions: currentProviderOptions,
     sourceKey: currentKey,
     started: false,
     queuedPlay: false
@@ -165,6 +209,7 @@ export const useActivation = (
     configuration: currentConfiguration,
     loading: options.loading,
     nativeOptions: currentNativeOptions,
+    providerOptions: currentProviderOptions,
     sourceKey: currentKey
   });
   const mediaRef = useRef<PlayerMediaMount | null>(null);
@@ -184,6 +229,7 @@ export const useActivation = (
       configuration: currentConfiguration,
       loading: options.loading,
       nativeOptions: currentNativeOptions,
+      providerOptions: currentProviderOptions,
       sourceKey: currentKey
     };
 
@@ -198,6 +244,7 @@ export const useActivation = (
       active.loading = options.loading;
       active.configuration = currentConfiguration;
       active.nativeOptions = currentNativeOptions;
+      active.providerOptions = currentProviderOptions;
       active.started = false;
       active.queuedPlay = false;
       loadingGeneration.current = undefined;
@@ -209,13 +256,25 @@ export const useActivation = (
       return;
     }
 
-    if (nativeOptionsEqual(active.nativeOptions, currentNativeOptions)) return;
+    if (
+      nativeOptionsEqual(active.nativeOptions, currentNativeOptions) &&
+      providerOptionsEqual(active.providerOptions, currentProviderOptions)
+    ) {
+      return;
+    }
     active.nativeOptions = currentNativeOptions;
+    active.providerOptions = currentProviderOptions;
     if (!active.started) return;
     active.generation += 1;
     loadingGeneration.current = undefined;
     setMediaVersion((version) => version + 1);
-  }, [currentConfiguration, currentKey, currentNativeOptions, options]);
+  }, [
+    currentConfiguration,
+    currentKey,
+    currentNativeOptions,
+    currentProviderOptions,
+    options
+  ]);
 
   const activate = useCallback((queuePlay: boolean) => {
     const active = session.current;
@@ -458,6 +517,7 @@ export const useActivation = (
     const loading = active.loading;
     const configuration = active.configuration;
     const nativeOptions = active.nativeOptions;
+    const providerOptions = active.providerOptions;
     const loadOptions = optionsRef.current;
     const controller = loadOptions.controller;
     const replacingProvider = controller.getState().provider !== null;
@@ -470,10 +530,12 @@ export const useActivation = (
         current.loading === loading &&
         current.configuration === configuration &&
         nativeOptionsEqual(current.nativeOptions, nativeOptions) &&
+        providerOptionsEqual(current.providerOptions, providerOptions) &&
         inputs.sourceKey === key &&
         inputs.loading === loading &&
         inputs.configuration === configuration &&
         nativeOptionsEqual(inputs.nativeOptions, nativeOptions) &&
+        providerOptionsEqual(inputs.providerOptions, providerOptions) &&
         mediaRef.current === media
       );
     };
@@ -482,6 +544,7 @@ export const useActivation = (
     void loadProvider({
       media,
       nativeOptions,
+      providerOptions,
       source: source.source as ResolvedPlayerSource
     })
       .then((adapter) => {

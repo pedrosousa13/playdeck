@@ -15,6 +15,9 @@ import { InPageLayout } from './in-page-layout';
 const coverImageUrl =
   'https://a.storyblok.com/f/171771/4656x3492/bbf48d4721/wojciech-then-dija5f0vogq-unsplash.jpg';
 
+/** The media Backpack's two Wistia stories point at, as they pass it. */
+const wistiaUrl = 'https://wesleyluyten.wistia.com/medias/oifkgmxnkb';
+
 const meta = {
   title: 'Real playback/BackpackVideo',
   component: BackpackVideo,
@@ -42,6 +45,39 @@ export const Vimeo: Story = {
 /** The same, resolving to the YouTube provider from the URL alone. */
 export const YouTube: Story = {
   args: { url: 'https://www.youtube.com/watch?v=mhN3E_hlWmU', muted: true }
+};
+
+/**
+ * Backpack's `WistiaVideo` args, verbatim (`Video.stories.tsx:145-152`): the
+ * same click-to-load surface over a real `<wistia-player>`. `Backpack parity/Video`
+ * carries these args too, where the embed never mounts.
+ */
+export const Wistia: Story = {
+  args: { url: wistiaUrl, muted: true, light: false }
+};
+
+/**
+ * Backpack's `Wistia with playerConfig` args, verbatim
+ * (`Video.stories.tsx:162-176`), and the acceptance criterion for SIDEPRO-205
+ * that only a human can sign off: click the player, and the embed that attaches
+ * has red chrome (`playerColor: 'ff0000'`) and no blurred placeholder behind the
+ * first frame (`swatch: false`). Compare it with `Wistia` above, which keeps
+ * the swatch — the wrapper sets no `swatch` attribute by default, so the
+ * element falls back to its own behaviour, which shows one.
+ *
+ * This is the only place the two options can be seen at all: they become
+ * `player-color` and `swatch` attributes on the element, and the deterministic
+ * suite may not mount one — `Backpack parity/Video → WistiaWithPlayerConfig`
+ * says why at length and pins the option bag instead.
+ */
+export const WistiaWithPlayerConfig: Story = {
+  name: 'Wistia with playerConfig',
+  args: {
+    url: wistiaUrl,
+    muted: true,
+    light: false,
+    playerConfig: { wistia: { swatch: false, playerColor: 'ff0000' } }
+  }
 };
 
 /**

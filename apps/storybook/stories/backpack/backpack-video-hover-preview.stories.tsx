@@ -24,7 +24,7 @@ import { playerBox, playIcon } from './story-queries';
  * URI where a story passes one, and otherwise leaves the cover off: there a
  * cover is `light`'s business and `light` defaults off. Here the composition
  * resolves one unconditionally, because a hover preview has a resting state to
- * draw (`backpack-video-hover-preview.tsx:182`, its unguarded
+ * draw (`backpack-video-hover-preview.tsx:183`, its unguarded
  * `useVideoThumbnail`) — and {@link useVideoThumbnail} fetches the source's
  * oEmbed endpoint when no `placeholderImageSrc` is given
  * (`video-thumbnail.ts:56-57,73-98`). So a bare `vimeo.com` URL here is a real
@@ -40,8 +40,8 @@ import { playerBox, playIcon } from './story-queries';
  * committed and `Player.Media` mounts no embed. Hover would ordinarily be the
  * thing that loads it — the composition issues `activateFromInteraction()`
  * before `play()` — but that call returns early for any activation other than
- * `dormant` or a recoverable `error` (`packages/react/src/use-activation.ts:265`,
- * its `activateFromInteraction`, and `:295`, its
+ * `dormant` or a recoverable `error` (`packages/react/src/use-activation.ts:324`,
+ * its `activateFromInteraction`, and `:354`, its
  * `if (activation !== 'dormant') return`). A staged-ready player has
  * nothing to activate, so hovering it reaches the provider as a `play` and
  * nothing else.
@@ -71,8 +71,10 @@ import { playerBox, playIcon } from './story-queries';
  * could travel is a provider's:
  *
  * - `muted` is reconciled by issuing `mute`/`unmute` at the controller
- *   (`packages/react/src/root.tsx:170`, from the reconcile at `:242-257`) and, on
- *   the native path only, by setting the property on a media element (`:325`).
+ *   (`packages/react/src/root.tsx:178`, `value ? controller.mute() :
+ *   controller.unmute()`, from the reconcile at `:250-265`) and, on
+ *   the native path only, by setting the property on a media element (`:333`,
+ *   `media.muted = controlledMuted.current ?? desiredMuted.current`).
  *   With no source committed there is no element and no adapter to command
  *   (`packages/react/src/viewport-media.tsx:181-183,227-229`). The `mute` command
  *   `backpack-autoplay-video.contract.test.ts` watches for is not available
@@ -80,7 +82,8 @@ import { playerBox, playIcon } from './story-queries';
  *   (`packages/core/src/player-controller.ts:657-695`), and nothing here
  *   autoplays.
  * - `loop` travels in the `nativeOptions` handed to the provider loader
- *   (`root.tsx:431`), so nothing carries it when nothing loads.
+ *   (`root.tsx:439`, `nativeOptions: { endTime, loop, startTime }`), so nothing
+ *   carries it when nothing loads.
  *
  * Both stories therefore pin what *is* here — the arg accepted, the preview
  * unchanged — and `Real playback/BackpackVideoHoverPreview` is where `muted`
@@ -125,7 +128,7 @@ const coverImage = (canvasElement: HTMLElement): Element | null =>
  * Installs the workbench's mock provider into the `Player.Root` the composition
  * owns, exactly as the other two suites do — the composition forwards `ref`
  * through to it, alongside the handle it drives itself
- * (`backpack-video-hover-preview.tsx:189-196`).
+ * (`backpack-video-hover-preview.tsx:190-197`, its `const setHandle`).
  */
 const MockedHoverPreview = ({
   player,
@@ -193,7 +196,7 @@ const ReportedPositions = ({
  *
  * It is held from a button rather than from the args because the composition
  * acts on `isHovered` *changing*, never on the value it mounted with
- * (`backpack-video-hover-preview.tsx:230`, and part 1's reason: acting on the
+ * (`backpack-video-hover-preview.tsx:231`, its `useOnChange(previewing`, and part 1's reason: acting on the
  * opening value would drive a player nobody had touched).
  */
 const PreviewWithPositions = ({
@@ -272,7 +275,7 @@ type Story = StoryObj<typeof meta>;
  * dimensions, so the fallback applies; the play icon is Backpack's default `m`;
  * and the surface offers exactly one named control. The preview window's own
  * default of 5 seconds is not observable without moving the position, so it is
- * pinned in `backpack-video-hover-preview.contract.test.ts:317-335` instead,
+ * pinned in `backpack-video-hover-preview.contract.test.ts:321-339`, `'returns to the start once the preview window has elapsed'`, instead,
  * and `WithCustomDuration` below is where a story watches a window at all.
  */
 export const Default: Story = {
@@ -412,7 +415,7 @@ export const WithCustomDuration: Story = {
 /**
  * Backpack's `WithPlayIcon`: `showPlayIcon: true`, which is already the default
  * on both sides — Backpack's own destructuring (`VideoHoverPreview.tsx:57`) and
- * the wrapper's (`backpack-video.tsx:448`) — so the arg changes nothing and the
+ * the wrapper's (`backpack-video.tsx:470`, its `showPlayIcon = true`) — so the arg changes nothing and the
  * story exists to carry it. What it pins is the icon's whole life: over the
  * resting cover, gone while the preview plays, back with the cover afterwards.
  */
@@ -444,7 +447,8 @@ export const WithPlayIcon: Story = {
  * Backpack's arg over a real Vimeo embed, which implements `mute`/`unmute`
  * (`packages/provider-vimeo/src/index.ts:140-141`) and takes `muted` in its embed
  * URL (`provider-vimeo/src/attachment.ts:64`), with `Player.Root` reconciling the
- * controlled value through the controller (`packages/react/src/root.tsx:170`). So
+ * controlled value through the controller (`packages/react/src/root.tsx:178`,
+ * `value ? controller.mute() : controller.unmute()`). So
  * what this story pins is the arg being accepted and changing nothing else: the
  * preview still starts on hover and still stops on leave.
  */
@@ -581,7 +585,7 @@ export const WithRenderCustomImage: Story = {
  * `object-fit: cover` the shared cover rules give it. The preview root shrinks to
  * that box instead of the width of its parent, which is what
  * `width: fit-content` on `.ef-video-hover-preview` is for
- * (`backpack-video-styles.ts:410,412` — the `.ef-video-hover-preview` rule and
+ * (`backpack-video-styles.ts:411,413` — the `.ef-video-hover-preview` rule and
  * its `width: fit-content`).
  */
 export const WithCustomAspectRatio: Story = {

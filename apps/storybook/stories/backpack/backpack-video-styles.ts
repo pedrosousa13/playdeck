@@ -397,7 +397,8 @@ ${aspectRatioMediaQueries}
    to be, because
    Player.Poster cannot host a cover that comes back: Reely hides it on the first
    reported playback and never restores it for the same source
-   (packages/react/src/poster.tsx:75, driven from root.tsx:462-467).
+   (packages/react/src/poster.tsx:75, driven from root.tsx:471-476, the
+   unsubscribePoster subscription).
 
    Shrink-to-fit rather than the block default, because the cover below is
    positioned against this box: .ef-video-player is given a fixed width above, so

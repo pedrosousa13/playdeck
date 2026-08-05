@@ -76,11 +76,16 @@ const attributeName = (option: WistiaPlayerAttribute): string =>
   option.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 
 // The embed options this adapter expresses, read when the element is built
-// rather than snapshotted at construction.
+// rather than snapshotted at construction. Kept in step with
+// `WistiaProviderOptions` in `index.ts`.
 type WistiaEmbedOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
   readonly loop?: boolean;
+  readonly playerColor?: string;
+  readonly swatch?: boolean;
+  readonly poster?: string;
+  readonly transparentLetterbox?: boolean;
 };
 
 // Every piece of Wistia's own chrome. `controls-visible-on-load` alone only
@@ -203,6 +208,25 @@ export const createWistiaAttachment = (
     }
     if (options.loop === true) setOption('endVideoBehavior', 'loop');
     if (mount.muted) setOption('muted', 'true');
+
+    // These four are presentation-only and each has no Wistia-side default to
+    // preserve, so an omitted option sets no attribute at all rather than a
+    // computed 'false' or empty string.
+    if (options.playerColor !== undefined) {
+      setOption('playerColor', options.playerColor);
+    }
+    if (options.swatch !== undefined) {
+      setOption('swatch', options.swatch ? 'true' : 'false');
+    }
+    if (options.poster !== undefined) {
+      setOption('poster', options.poster);
+    }
+    if (options.transparentLetterbox !== undefined) {
+      setOption(
+        'transparentLetterbox',
+        options.transparentLetterbox ? 'true' : 'false'
+      );
+    }
 
     // The handshake is armed before the element joins the document: a player
     // whose media data is already cached can reach `api-ready` inside the

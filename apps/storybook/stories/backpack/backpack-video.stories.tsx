@@ -10,6 +10,10 @@ import { backpackVideoCss, backpackVideoStyles } from './backpack-video-styles';
 import { ready } from '../support';
 import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 import {
+  mergeWistiaPlayerConfig,
+  translateWistiaPlayerConfig
+} from './backpack-video-player-config';
+import {
   clearOfTheEdge,
   fullyVisible,
   InPageLayout,
@@ -31,6 +35,7 @@ import { playerBox, playIcon } from './story-queries';
 
 const vimeoUrl = 'https://vimeo.com/336066147';
 const youtubeUrl = 'https://www.youtube.com/watch?v=mhN3E_hlWmU';
+const wistiaUrl = 'https://wesleyluyten.wistia.com/medias/oifkgmxnkb';
 
 /**
  * A cover image small enough to inline, standing in for Backpack's own
@@ -338,6 +343,102 @@ export const YouTubeVideo: Story = {
       await canvas.findByRole('button', { name: 'Play video' })
     ).toHaveAttribute('aria-pressed', 'false');
     await expect(affordances(canvasElement)).toEqual(['BUTTON[Play video]']);
+  }
+};
+
+/**
+ * Backpack's `WistiaVideo` args, verbatim (`Video.stories.tsx:145-152`,
+ * `export const WistiaVideo`).
+ *
+ * A third provider's URL through the same surface, and offline the same way
+ * every story here is: `pausedPlayer` is staged, so `Player.ActivationButton` renders
+ * nothing, nothing commits the source, and `Player.Media` mounts no embed. The
+ * last two assertions are what pin that rather than assume it — a `<wistia-player>`
+ * that reached the document would upgrade and fetch its own media data from
+ * Wistia, which is exactly what this suite forbids and what
+ * `Real playback/BackpackVideo → Wistia` is for.
+ */
+export const WistiaVideo: Story = {
+  args: { url: wistiaUrl, muted: true, light: false },
+  parameters: pausedPlayer,
+  play: async ({ canvas, canvasElement }) => {
+    await expect(
+      await canvas.findByRole('button', { name: 'Play video' })
+    ).toHaveAttribute('aria-pressed', 'false');
+    await expect(affordances(canvasElement)).toEqual(['BUTTON[Play video]']);
+    await expect(
+      canvasElement.querySelector('[data-reely-part="media"]')
+    ).toBeNull();
+    await expect(canvasElement.querySelector('wistia-player')).toBeNull();
+  }
+};
+
+/**
+ * Backpack's `Wistia with playerConfig` args, verbatim
+ * (`Video.stories.tsx:162-176`, `export const WistiaWithPlayerConfig`): the
+ * Wistia swatch — its blurred placeholder — switched off, and the player colour
+ * set to red.
+ *
+ * ## Why this asserts the translated option bag and not the element's attributes
+ * `swatch` and `player-color` are attributes on a `<wistia-player>`, and this
+ * suite may not mount one: an element that upgrades fetches its own media data
+ * from Wistia, which the per-story no-external-request guard forbids
+ * (`apps/storybook/README.md`, "Story conventions"). The two ways to reach an
+ * element anyway are both closed to a story — stubbing Wistia's SDK needs
+ * `loadWistiaPlayer`, which only `@reely/provider-wistia` exports and this app
+ * does not depend on, and calling Reely's own `loadProvider` means reaching into
+ * `@reely/react`'s private modules, which
+ * `backpack-video-player-config.contract.test.ts:26-43`, from its
+ * `` `mergeWistiaPlayerConfig`/`translateWistiaPlayerConfig` above `` comment, turns
+ * down for the same
+ * reason `external-control.contract.test.ts:30-40`, from `Reaching a genuinely`, does.
+ *
+ * So the nearest boundary a story can honestly reach is the option bag the
+ * wrapper builds out of these very args, which the second assertion pins. Each
+ * layer past it is pinned where it can be: that `BackpackVideoInternal` hands
+ * that bag to `Player.Root` in
+ * `backpack-video-player-config.contract.test.ts:143-159`,
+ * `'hands Player.Root the caller’s playerConfig, merged and translated'`, that `Player.Root`
+ * hands it to the loader in `packages/react/test/activation.test.tsx:738-753`
+ * (`'forwards the provider option bag from Root to the loader'`), and that the
+ * provider writes it as `player-color` and `swatch` in
+ * `packages/provider-wistia/test/index.test.ts:241-249`. What a human checks is
+ * `Real playback/BackpackVideo → WistiaWithPlayerConfig`: a red player with no
+ * blurred placeholder behind it.
+ */
+export const WistiaWithPlayerConfig: Story = {
+  name: 'Wistia with playerConfig',
+  args: {
+    url: wistiaUrl,
+    muted: true,
+    light: false,
+    playerConfig: { wistia: { swatch: false, playerColor: 'ff0000' } }
+  },
+  parameters: pausedPlayer,
+  play: async ({ args, canvas, canvasElement }) => {
+    await canvas.findByRole('button', { name: 'Play video' });
+    // Backpack's own two option names, as this story renders them.
+    await expect(args.playerConfig?.wistia).toEqual({
+      playerColor: 'ff0000',
+      swatch: false
+    });
+    // What the wrapper makes of them: `playerColor` straight across, the
+    // caller's `swatch: false` explicit rather than defaulted, and the two
+    // keys these args leave out staying unset rather than becoming an
+    // attribute with a computed value.
+    await expect(
+      translateWistiaPlayerConfig(
+        mergeWistiaPlayerConfig(args.playerConfig?.wistia)
+      )
+    ).toEqual({
+      playerColor: 'ff0000',
+      poster: undefined,
+      swatch: false,
+      transparentLetterbox: undefined
+    });
+    await expect(
+      canvasElement.querySelector('[data-reely-part="media"]')
+    ).toBeNull();
   }
 };
 
@@ -1114,7 +1215,9 @@ export const WithThreshold: Story = inPageStory(
  * The external "play" command SIDEPRO-201 documents: `activateFromInteraction`
  * then `play`, in that order, against the same `PlayerHandle` ref
  * (`activateFromInteraction`'s dormant-or-error branches are
- * `use-activation.ts:265-297`; `play`'s not-ready short-circuit is
+ * `use-activation.ts:324-356`, its
+ * `const activateFromInteraction = useCallback`; `play`'s not-ready
+ * short-circuit is
  * `player-controller.ts:381-386`). One named function rather than one copy
  * of the pair per button, so the two calls have a single home to drift from
  * instead of two.
@@ -1138,8 +1241,8 @@ const playExternally = (ref: ReturnType<typeof useMockPlayer>): void => {
 
 /**
  * Two buttons standing in for an external consumer that holds
- * `BackpackVideo`'s `PlayerHandle` ref (`backpack-video.tsx:90-94`, forwarded at
- * `:499`) and
+ * `BackpackVideo`'s `PlayerHandle` ref (`backpack-video.tsx:108-112`, its
+ * `readonly ref?: Ref<Player.PlayerHandle>`, forwarded at `:539`, `ref={ref}`) and
  * drives it directly, the way `WithEvents` below needs one to. "External
  * pause" is the one call {@link playExternally}'s pair has no dormant half
  * to worry about.
@@ -1171,7 +1274,7 @@ const ExternalEventsVideo = ({
  * `onPlayChange` has to report from: a transition the wrapper did not click
  * for itself, arriving as an ordinary player report the way an external
  * `activateFromInteraction` then `play`, or `pause` on its own, would
- * (`backpack-video.tsx:303-308`, the two `useOnChange` calls) — in both
+ * (`backpack-video.tsx:322-327`, the two `useOnChange` calls) — in both
  * directions, and without reporting
  * a transition nothing actually changed a second time.
  */

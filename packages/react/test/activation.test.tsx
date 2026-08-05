@@ -88,6 +88,7 @@ type ActivationProbeProps = {
   readonly onActivate?: (activate: () => void) => void;
   readonly onLayout?: () => void;
   readonly preload?: Player.PlayerPreload;
+  readonly providerOptions?: Player.PlayerProviderOptions;
   readonly showMedia?: boolean;
   readonly showViewport?: boolean;
   readonly source?: Player.RootProps['source'];
@@ -104,6 +105,7 @@ const ActivationProbe = ({
   onActivate,
   onLayout,
   preload = 'metadata',
+  providerOptions,
   showMedia = true,
   showViewport = true,
   source = '/tracer.mp4',
@@ -122,6 +124,7 @@ const ActivationProbe = ({
     nativeOptions,
     prepareMedia: () => undefined,
     preload,
+    providerOptions,
     source: detectSource(source)
   });
   useLayoutEffect(() => {
@@ -731,6 +734,179 @@ test.each([
     expect(previous.counts().destroyCount).toBe(1);
   }
 );
+
+test('forwards the provider option bag from Root to the loader', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(
+    fixture({
+      loading: 'eager',
+      providerOptions: { wistia: { playerColor: 'ff0000' } }
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  expect(mockedLoadProvider.mock.calls[0]?.[0].providerOptions).toEqual({
+    wistia: { playerColor: 'ff0000' }
+  });
+});
+
+test('keeps the installed adapter when an equal provider option bag is passed again', async () => {
+  const previous = createFakeProvider();
+  const replacement = createFakeProvider();
+  const controller = new PlayerController();
+  mockedLoadProvider
+    .mockResolvedValueOnce(previous.adapter)
+    .mockResolvedValueOnce(replacement.adapter);
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await vi.waitFor(() =>
+    expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+
+  // A fresh object literal with the same values, as an inline prop produces on
+  // every render.
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await act(async () => undefined);
+
+  expect(mockedLoadProvider).toHaveBeenCalledOnce();
+  expect(replacement.counts()).toMatchObject({ attachCount: 0, loadCount: 0 });
+  expect(previous.counts()).toMatchObject({
+    attachCount: 1,
+    destroyCount: 0,
+    loadCount: 1
+  });
+});
+
+test('replaces the installed adapter when a same-media provider option changes', async () => {
+  const previous = createFakeProvider();
+  const replacement = createFakeProvider();
+  const controller = new PlayerController();
+  mockedLoadProvider
+    .mockResolvedValueOnce(previous.adapter)
+    .mockResolvedValueOnce(replacement.adapter);
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await vi.waitFor(() =>
+    expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: true } }}
+    />
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledTimes(2));
+  expect(mockedLoadProvider.mock.calls[1]?.[0].providerOptions).toEqual({
+    wistia: { swatch: true }
+  });
+  await vi.waitFor(() =>
+    expect(replacement.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+  expect(previous.counts().destroyCount).toBe(1);
+});
+
+// A caller that assembles its bag from its own props writes
+// `poster: props.poster`, so a key is present and `undefined` on one render and
+// absent on the next. Both build the identical element, so neither is a reason
+// to rebuild a live embed.
+test.each([
+  [
+    'a key present and undefined against that key absent',
+    { wistia: { swatch: false } } satisfies Player.PlayerProviderOptions,
+    {
+      wistia: { swatch: false, poster: undefined }
+    } satisfies Player.PlayerProviderOptions
+  ],
+  [
+    'no bag at all against an empty bag',
+    undefined,
+    { wistia: {} } satisfies Player.PlayerProviderOptions
+  ]
+])(
+  'keeps the installed adapter when the bag changes only by %s',
+  async (_case, initialOptions, nextOptions) => {
+    const previous = createFakeProvider();
+    const replacement = createFakeProvider();
+    const controller = new PlayerController();
+    mockedLoadProvider
+      .mockResolvedValueOnce(previous.adapter)
+      .mockResolvedValueOnce(replacement.adapter);
+    const { rerender } = render(
+      <ActivationProbe
+        controller={controller}
+        providerOptions={initialOptions}
+      />
+    );
+    await vi.waitFor(() =>
+      expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+    );
+
+    rerender(
+      <ActivationProbe controller={controller} providerOptions={nextOptions} />
+    );
+    await act(async () => undefined);
+
+    expect(mockedLoadProvider).toHaveBeenCalledOnce();
+    expect(replacement.counts()).toMatchObject({
+      attachCount: 0,
+      loadCount: 0
+    });
+    expect(previous.counts().destroyCount).toBe(0);
+  }
+);
+
+// The other direction of dropping the key-count check: a key added with a real
+// value is a change, and is only seen by comparing the keys of both bags.
+test('replaces the installed adapter when a provider option is added to the bag', async () => {
+  const previous = createFakeProvider();
+  const replacement = createFakeProvider();
+  const controller = new PlayerController();
+  mockedLoadProvider
+    .mockResolvedValueOnce(previous.adapter)
+    .mockResolvedValueOnce(replacement.adapter);
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await vi.waitFor(() =>
+    expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false, poster: '/still.png' } }}
+    />
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledTimes(2));
+  expect(mockedLoadProvider.mock.calls[1]?.[0].providerOptions).toEqual({
+    wistia: { swatch: false, poster: '/still.png' }
+  });
+  await vi.waitFor(() =>
+    expect(replacement.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+  expect(previous.counts().destroyCount).toBe(1);
+});
 
 test('native option changes invalidate an older pending load', async () => {
   const firstLoad = deferred<ProviderAdapter>();
@@ -1688,7 +1864,8 @@ test('retries an installed provider error with one queued user play', async () =
 // SIDEPRO-201: an external controller drives activation through the
 // forwarded ref alone -- no click, no `Player.ActivationButton` in the tree
 // at all. The single `activateFromInteraction()` call below has to queue the
-// same play `useActivation` queues for a click (use-activation.ts:234-235),
+// same play `useActivation` queues for a click (use-activation.ts:293-294,
+// `active.started = true; active.queuedPlay = queuePlay`),
 // and that queued play has to reach the provider exactly once.
 test('a dormant interaction root activates and plays from a single ref call', async () => {
   const fake = createFakeProvider();
@@ -1709,7 +1886,9 @@ test('a dormant interaction root activates and plays from a single ref call', as
 // The test above calls `activateFromInteraction` alone and lets the
 // auto-queued play do the rest; SIDEPRO-201's external "play" command is
 // the pair, in this order — `activateFromInteraction()` then `play()`
-// (`use-activation.ts:265-297`, `player-controller.ts:381-386`) — the way
+// (`use-activation.ts:324-356`, its
+// `const activateFromInteraction = useCallback`;
+// `player-controller.ts:381-386`) — the way
 // `apps/storybook/stories/backpack/backpack-video.stories.tsx`'s
 // `ExternalEventsVideo`/`SocialCarouselIntegrationVideo` and
 // `external-control.contract.test.ts`'s file-level comment both describe
@@ -1813,7 +1992,8 @@ test('the ref handle still exposes the provider-facing setProvider escape hatch'
 // An external controller calls `activateFromInteraction()` unconditionally
 // before `play()`, so a player that has already activated has to tolerate
 // the call rather than restart itself or throw
-// (use-activation.ts:275-296 only proceeds from `dormant` or `error`).
+// (use-activation.ts:334-355, from `const activation = state.activation`, only
+// proceeds from `dormant` or `error`).
 test('activateFromInteraction on an already-ready player is a no-op', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);

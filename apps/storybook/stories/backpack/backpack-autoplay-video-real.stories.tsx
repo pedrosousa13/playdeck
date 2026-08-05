@@ -29,6 +29,16 @@ const coverImageUrl =
 
 const vimeoUrl = 'https://vimeo.com/336066147';
 
+/** The media Backpack's own `WistiaVideo` points at, as it passes it. */
+const wistiaUrl = 'https://ef-language.wistia.com/medias/n2xniej387';
+
+/**
+ * Backpack's 1×1 transparent PNG, verbatim: the image it overrides Wistia's own
+ * poster with, so nothing flashes before the first frame.
+ */
+const transparentPosterDataUri =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
 const meta = {
   title: 'Real playback/BackpackAutoplayVideo',
   component: BackpackAutoplayVideo,
@@ -38,7 +48,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The `BackpackAutoplayVideo` composition driving a real Vimeo embed. Nothing to click: the provider is loaded when the player box first scrolls into view, with no preload margin, and muted autoplay starts it as soon as that provider reports ready. `InPage` is where both halves are visible at once — scroll the panel and the video loads and starts on the way in, then pauses when it leaves and resumes when it comes back. Real network, so these are excluded from the deterministic story test suite (tagged `!test`); `Backpack parity/AutoplayVideo` covers the behaviour deterministically.'
+          'The `BackpackAutoplayVideo` composition driving real embeds — Vimeo, and Wistia in `WistiaVideo`. Nothing to click: the provider is loaded when the player box first scrolls into view, with no preload margin, and muted autoplay starts it as soon as that provider reports ready. `InPage` is where both halves are visible at once — scroll the panel and the video loads and starts on the way in, then pauses when it leaves and resumes when it comes back. Real network, so these are excluded from the deterministic story test suite (tagged `!test`); `Backpack parity/AutoplayVideo` covers the behaviour deterministically.'
       }
     }
   }
@@ -62,6 +72,38 @@ export const WithCustomPlaceholderImage: Story = {
     url: vimeoUrl,
     placeholderImageSrc: coverImageUrl,
     alt: 'Custom placeholder image'
+  }
+};
+
+/**
+ * Backpack's `WistiaVideo` args (`AutoplayVideo.stories.tsx:67-85`,
+ * `export const WistiaVideo`), and the one story where its point is visible:
+ * muted autoplay with no poster flash. Backpack's own story is its `Default` in a
+ * 600px box, so the player is in view when the story opens and the embed loads
+ * and starts at once — with nothing showing before the first frame, which is
+ * what the two options below are for. `InPage` is where the loading strategy is
+ * watchable instead.
+ *
+ * ## What replaced what
+ * `stillUrl` and `wmode: 'transparent'` are carried across as Backpack passes
+ * them, and the wrapper translates them to the provider's `poster` and
+ * `transparentLetterbox` — `poster` and `transparent-letterbox` on the element.
+ *
+ * Backpack's other three keys are gone, and nothing is lost with them:
+ * `autoPlay: true`, `silentAutoPlay: 'allow'` and `preload: 'auto'` are refused
+ * by this wrapper's `playerConfig` type, because `BackpackAutoplayVideo` already
+ * answers all three through Reely's own activation — `loading="viewport"` for
+ * when to load and `autoplay="muted"` for the silent start. Backpack's own note
+ * warns that its `autoPlay` "starts the video on init regardless of viewport";
+ * here the viewport is what starts it, which is what this file's header
+ * describes and what makes the swap an improvement rather than a shortfall.
+ */
+export const WistiaVideo: Story = {
+  args: {
+    url: wistiaUrl,
+    playerConfig: {
+      wistia: { stillUrl: transparentPosterDataUri, wmode: 'transparent' }
+    }
   }
 };
 

@@ -10,6 +10,10 @@ import {
   BackpackAutoplayVideo,
   type BackpackAutoplayVideoProps
 } from './backpack-autoplay-video';
+import {
+  mergeWistiaPlayerConfig,
+  translateWistiaPlayerConfig
+} from './backpack-video-player-config';
 import { backpackVideoCss } from './backpack-video-styles';
 import {
   clearOfTheEdge,
@@ -38,11 +42,13 @@ import { playerBox, playIcon } from './story-queries';
  *
  * So the source here is unresolvable by construction. `mock://` is not
  * `http(s)`, so Reely's source detection fails it
- * (`packages/react/src/use-activation.ts:330-336`), nothing is ever loaded, and
+ * (`packages/react/src/use-activation.ts:389-395`, its `unsupportedError`
+ * branch), nothing is ever loaded, and
  * no URL in this file can reach the DOM — the same trick
  * `Backpack parity/Video`'s `PlaybackRequestedButNeverStarted` and
  * `CoverClickRequestsPlayback` use, and the one
- * `backpack-autoplay-video.contract.test.ts:33-42` writes up at length.
+ * `backpack-autoplay-video.contract.test.ts:33-43`, from
+ * `The two halves cannot be pinned in one rig`, writes up at length.
  * `Real playback/BackpackAutoplayVideo` carries Backpack's real URL.
  *
  * ## What the staged player can and cannot show
@@ -76,6 +82,16 @@ const unresolvableUrl = 'mock://reely/unresolvable.mp4';
  */
 const coverImageDataUri =
   'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="4" height="3"%3E%3Crect width="4" height="3" fill="%23808080"/%3E%3C/svg%3E';
+
+/**
+ * Backpack's 1×1 transparent PNG, verbatim
+ * (`AutoplayVideo.stories.tsx:67-85`, the `stillUrl` in its `WistiaVideo`): the
+ * image it overrides Wistia's own poster with, so nothing flashes before the
+ * first frame. Nothing about it is story fixture — it is the story's argument,
+ * and it is the same value `Real playback/BackpackAutoplayVideo` passes.
+ */
+const transparentPosterDataUri =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 /**
  * The staged player every story here runs against, and all three of its parts
@@ -161,7 +177,7 @@ type Story = StoryObj<typeof meta>;
  * reports it: `aria-pressed` is on, the play overlay is gone, and the toggle
  * offers the pause. That it starts *muted* is not observable from the DOM, so it
  * is pinned where the autoplay mode is — on the command sequence the attempt
- * issues, in `backpack-autoplay-video.contract.test.ts:194-208`,
+ * issues, in `backpack-autoplay-video.contract.test.ts:195-209`,
  * `'plays muted with nothing clicked once the player is ready'`.
  *
  * Also where two consequences of the composed class name are pinned, since
@@ -262,6 +278,86 @@ export const HeldPaused: Story = {
     await waitFor(() =>
       expect(canvas.queryByAltText('Custom placeholder image')).toBeNull()
     );
+  }
+};
+
+/**
+ * Backpack's `WistiaVideo` (`AutoplayVideo.stories.tsx:67-85`) — muted autoplay
+ * with no poster flash — with its `url` swapped for the unresolvable one this
+ * file has to use, for the reason the header gives.
+ *
+ * ## What replaced what
+ * Backpack's `playerConfig.wistia` carries five keys here. Three of them are not
+ * accepted by this wrapper's own type at all: `autoPlay: true`,
+ * `silentAutoPlay: 'allow'` and `preload: 'auto'` are answers to a question
+ * Reely already owns, and `BackpackAutoplayVideo` gives its own — `Player.Root`
+ * with `autoplay="muted"` and `loading="viewport"`, so the provider is attached
+ * when the box scrolls into view and muted autoplay starts it as soon as that
+ * provider reports ready (`backpack-video.tsx:493-497`, `const loading =`, and
+ * `:522`, `autoplay={startsPlaying ?`). Backpack's own note
+ * says `autoPlay` "starts the video on init regardless of viewport", which is
+ * the behaviour Reely's strategy exists to avoid, so this is a better answer to
+ * the same question rather than a missing feature — recorded as a divergence in
+ * `docs/backpack-parity.md` rather than worked around here.
+ *
+ * The two that remain are presentation, and they are translated rather than
+ * refused: `stillUrl` becomes the provider's `poster` and `wmode: 'transparent'`
+ * becomes `transparentLetterbox: true`, which reach `<wistia-player>` as
+ * `poster` and `transparent-letterbox`
+ * (`backpack-video-player-config.ts`'s `translateWistiaPlayerConfig`).
+ *
+ * ## What is asserted, and why the element is not
+ * The autoplay is real and is asserted as such — nothing below clicks anything.
+ * The two translated options are asserted as the bag the wrapper builds from
+ * these args: they are attributes on an embed no deterministic story may mount,
+ * and `Backpack parity/Video → WistiaWithPlayerConfig` carries the full argument
+ * for why that is the boundary.
+ *
+ * What *is* observable here, and worth pinning, is that neither option reaches
+ * Reely's own cover layer: the 1×1 PNG is the embed's poster, not a
+ * `placeholderImageSrc`, so `Player.Poster` is absent altogether and there is no
+ * Reely-side image to flash either.
+ */
+export const WistiaVideo: Story = {
+  args: {
+    url: unresolvableUrl,
+    playerConfig: {
+      wistia: { stillUrl: transparentPosterDataUri, wmode: 'transparent' }
+    }
+  },
+  play: async ({ args, canvas, canvasElement }) => {
+    const surface = await canvas.findByRole('button', { name: 'Pause video' });
+    await expect(surface).toHaveAttribute('aria-pressed', 'true');
+    await expect(playIcon(canvasElement)).toBeNull();
+    await waitFor(() => expect(args.onPlayChange).toHaveBeenCalledWith(true));
+    await expect(args.onPlayChange).toHaveBeenCalledTimes(1);
+
+    // Backpack's own two remaining option names, as this story renders them.
+    await expect(args.playerConfig?.wistia).toEqual({
+      stillUrl: transparentPosterDataUri,
+      wmode: 'transparent'
+    });
+    // What the wrapper makes of them: `playerColor` and `swatch` both left
+    // unset by the wrapper's own (empty) defaults, so neither becomes an
+    // attribute -- only `stillUrl`/`wmode` translate here, to
+    // `poster`/`transparentLetterbox`.
+    await expect(
+      translateWistiaPlayerConfig(
+        mergeWistiaPlayerConfig(args.playerConfig?.wistia)
+      )
+    ).toEqual({
+      playerColor: undefined,
+      poster: transparentPosterDataUri,
+      swatch: undefined,
+      transparentLetterbox: true
+    });
+
+    // The poster is the embed's own, so Reely's cover layer is not involved:
+    // no `Player.Poster`, and no image in the story at all.
+    await expect(
+      canvasElement.querySelector('[data-reely-part="poster"]')
+    ).toBeNull();
+    await expect(canvasElement.querySelector('img')).toBeNull();
   }
 };
 

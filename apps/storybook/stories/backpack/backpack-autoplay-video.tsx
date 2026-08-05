@@ -49,7 +49,8 @@ export type BackpackAutoplayVideoProps = Omit<
  * for the thing the component is actually about: the strategy named
  * `loading: 'viewport'` observes the player's own `Player.Viewport` box and
  * attaches the provider when it first scrolls into view
- * (`packages/react/src/use-activation.ts:328-447`), and muted autoplay then
+ * (`packages/react/src/use-activation.ts:387-506`,
+ * `if (options.loading !== 'viewport'`), and muted autoplay then
  * starts playback as soon as that provider reports ready — so playing on the way
  * in is the mechanism rather than a correction applied after the fact, and
  * nothing plays off screen. `autoplayOnViewportEntry` is the wrapper-internal
@@ -61,9 +62,9 @@ export type BackpackAutoplayVideoProps = Omit<
  * reaches the off-screen-pause observer alone. The two observers on an
  * autoplaying video are asymmetric and cannot currently be aligned — Reely's
  * activation observer is constructed with `{ rootMargin: options.loadMargin }`
- * and nothing else (`packages/react/src/use-activation.ts:399`), and
+ * and nothing else (`packages/react/src/use-activation.ts:458`), and
  * `Player.Root` exposes no threshold for it to carry
- * (`packages/react/src/root.tsx:44-45,91-92` offer `loading` and `loadMargin`
+ * (`packages/react/src/root.tsx:48-49,98-99` offer `loading` and `loadMargin`
  * only). So with `threshold` above `0` the start fires at the first visible
  * pixel while the pause hook still calls the video out of view, which pauses it
  * again at once: one spurious play/pause pair, both reported through

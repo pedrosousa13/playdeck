@@ -27,16 +27,19 @@ import { createReportingProvider } from './reporting-provider';
  * `mock://` source, the way `off-screen-pause.contract.test.ts` and
  * `backpack-autoplay-video.contract.test.ts` do: this suite forbids the
  * network, and a dormant interaction-loading player cannot reach a real
- * provider without it (`external-control.contract.test.ts:28-36` writes the
- * constraint up at length).
+ * provider without it (`external-control.contract.test.ts:30-39`, from
+ * `Reaching a genuinely` `dormant` player, writes the constraint up at length).
  *
  * Two of the composition's defaults are deliberately not pinned anywhere below,
  * because this rig cannot observe them: `muted` and `loop` both need a provider,
  * and no provider attaches to a source that fails detection. `muted` is
  * reconciled by issuing `mute`/`unmute` at the controller
- * (`packages/react/src/root.tsx:170`, from the reconcile at `:242-257`) and, on
- * the native path only, by setting the property on a media element (`:325`);
- * `loop` travels in the `nativeOptions` handed to the loader (`:431`); and
+ * (`packages/react/src/root.tsx:178`, `value ? controller.mute() :
+ * controller.unmute()`, from the reconcile at `:250-265`) and, on
+ * the native path only, by setting the property on a media element (`:333`,
+ * `media.muted = controlledMuted.current ?? desiredMuted.current`);
+ * `loop` travels in the `nativeOptions` handed to the loader (`:439`,
+ * `nativeOptions: { endTime, loop, startTime }`); and
  * `Player.Media` renders no element at all for a source that fails detection
  * (`packages/react/src/viewport-media.tsx:181-183,227-229`). The `mute` command
  * `backpack-autoplay-video.contract.test.ts` watches for is not available either:
@@ -55,14 +58,15 @@ type CommandLog = string[];
  * The play and pause commands are *not* asserted directly anywhere below, and
  * the reason is `BackpackVideo`'s echo: it folds the player's own report back
  * in and re-issues the command that produced it, a deliberate idempotent no-op
- * (`backpack-video.tsx:300-305`, the `useOnChange` that drives the player). So
+ * (`backpack-video.tsx:319-324`, the `useOnChange` that drives the player). So
  * one hover reaches the provider as two `play` calls, and — since the echo
  * arrives on the provider's confirmation rather than synchronously — a hover
  * that ends puts its `seekTo` *between* the pause and the pause's echo. Neither
  * the count nor the position of a repeat means anything here.
  *
  * `onPlayChange` is the playback narrative instead, and it is a better witness
- * than the log: the wrapper reports only transitions (`backpack-video.tsx:308`),
+ * than the log: the wrapper reports only transitions (`backpack-video.tsx:327`,
+ * `useOnChange(isPlaying, onPlayChange)`),
  * so the echo cannot appear in it, and a reported `false` is the *provider* having
  * confirmed the pause rather than merely the command having been issued.
  */
@@ -74,7 +78,7 @@ const seekedPositions = (commands: CommandLog): number[] =>
 /**
  * {@link createReportingProvider}'s adapter with its commands logged and a
  * `seekTo` added. Decorating the shared provider rather than writing a second
- * one, as `backpack-autoplay-video.contract.test.ts:79-96` does with its own
+ * one, as `backpack-autoplay-video.contract.test.ts:80-97` does with its own
  * `logCommands` — which is also why the delegations are asserted non-null:
  * `ProviderAdapter` leaves them optional and this one defines both
  * (`reporting-provider.ts:43-50`, its `play` and `pause`).
@@ -447,11 +451,11 @@ describe('BackpackVideoHoverPreview', () => {
 /**
  * The cover layer. This is the half of the component `BackpackVideo` cannot do
  * for it: the wrapper's own cover is gated on `!startedPlaying`
- * (`backpack-video.tsx:314`, its `showsCover`), so it can never come back — and
+ * (`backpack-video.tsx:333`, its `const showsCover`), so it can never come back — and
  * it could not even if that gate were relaxed, because it renders inside
  * `Player.Poster`, which Reely turns `visibility: hidden` on the first reported
  * playback and never restores for the same source
- * (`packages/react/src/poster.tsx:75`, against `root.tsx:462-467`, the
+ * (`packages/react/src/poster.tsx:75`, against `root.tsx:471-476`, the
  * `setHiddenTransition` on `playback === 'playing'`).
  *
  * So the layer is the composition's own, exactly as it is Backpack's own
@@ -528,7 +532,9 @@ describe('BackpackVideoHoverPreview cover image', () => {
   // The play icon is the other half of the resting surface, and this composition
   // adds none of its own — `BackpackVideo`'s already returns on a pause, because
   // with `controls` at its default `false` its condition reduces to
-  // `!isPlaying && showPlayIcon` (`backpack-video.tsx:369`). Backpack renders its
+  // `!isPlaying && showPlayIcon` (`backpack-video.tsx:388`, its
+  // `!isPlaying && (!startedPlaying || !controls) && showPlayIcon` gate).
+  // Backpack renders its
   // own icon unconditionally on `showPlayIcon` (`VideoHoverPreview.tsx:156-158`),
   // so a second one here would be the same duplication as a second cover.
   it('brings the play icon back with the cover', async () => {
@@ -574,7 +580,7 @@ describe('BackpackVideoHoverPreview cover image', () => {
   // Unlike `BackpackVideo`'s cover, which sits inside an `aria-hidden`
   // `Player.Poster` and so cannot expose its own text at all
   // (`packages/react/src/poster.tsx:66`, and the argument at
-  // `backpack-video.tsx:347-356`, and the whole of it in
+  // `backpack-video.tsx:366-375`, from ``Player.Poster` is the container`, and the whole of it in
   // `video-cover-image.tsx`'s own JSDoc). Here the cover is the resting representation
   // of the video rather than an overlay on a playing one, so `alt` is worth
   // reaching the accessibility tree — and Backpack's default `alt = ''`
@@ -814,7 +820,8 @@ describe('BackpackVideoHoverPreview off-screen pause', () => {
  * "a prop the component cannot honour is better absent" that only the compiler
  * can enforce. `tsc -b` covers this file, so a barrier removed fails the
  * typecheck here rather than going unnoticed — the shape
- * `backpack-autoplay-video.contract.test.ts:385-403` sets for
+ * `backpack-autoplay-video.contract.test.ts:388-406`,
+ * `'refuses the internal loading-strategy prop on the public component'`, sets for
  * `autoplayOnViewportEntry`.
  */
 describe('BackpackVideoHoverPreview refused props', () => {
@@ -826,7 +833,7 @@ describe('BackpackVideoHoverPreview refused props', () => {
 
   // The compile-time half is the content of this test. Its runtime half cannot be
   // observed here: `light` only ever adds a cover by way of a thumbnail lookup
-  // (`backpack-video.tsx:478-481`, its `useVideoThumbnail` call), which needs an
+  // (`backpack-video.tsx:501-504`, its `useVideoThumbnail` call), which needs an
   // oEmbed request this suite
   // forbids, and over a `mock://` source there is no endpoint to fetch from
   // (`video-thumbnail.ts:26-35`). What holds the runtime side up instead is the

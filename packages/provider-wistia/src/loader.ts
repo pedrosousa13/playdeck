@@ -64,7 +64,14 @@ export type WistiaPlayerApi = Pick<
 // rather than in `Attributes`, so it is named separately. Every other name
 // this adapter sets has to be a key Wistia declares, which is the point of
 // deriving the union rather than writing the kebab-case strings by hand.
-export type WistiaPlayerAttribute = keyof Attributes | 'mediaId';
+//
+// `swatch` is added by hand for the same reason `mediaId` is: `Attributes`
+// omits it, but the element declares it as a real property with a getter and
+// a setter (`WistiaPlayer.d.ts:877-888`, `get swatch()` / `set swatch()`) and
+// lists it in its own JSX attribute list (`WistiaPlayer.d.ts:1157`,
+// `WistiaPlayerHTMLAttributes`). That declaration marks it "Internal use
+// only", not absent, so this widens the type rather than casting around it.
+export type WistiaPlayerAttribute = keyof Attributes | 'mediaId' | 'swatch';
 
 // The element the adapter mounts. Typed structurally rather than as Wistia's
 // `WistiaPlayer` class: that class is declared but never exported as a value,
