@@ -163,19 +163,22 @@ to `backpack-autoplay-video.contract.test.ts` — which drives an activation
 observer directly against a source it never intersects — and to
 `Backpack parity/Real/AutoplayVideo`, where it happens for real.
 
-`threshold` reaches only half of an autoplaying video, and no story exercises it.
-Backpack drives both the start and the off-screen pause from one observer, so its
-`threshold` governs both. Here they are two observers with two owners, and only
-the pause hook's takes the prop: Reely's activation observer is constructed with
-`{ rootMargin: options.loadMargin }` and nothing else (`use-activation.ts:458`),
-and `Player.Root` exposes no threshold for it to carry (`root.tsx:48-49,98-99`
-offer `loading` and `loadMargin` only). So with `threshold` above `0` the start
-fires at the first visible pixel while the pause hook still calls the video out of
-view and pauses it again at once — one spurious play/pause pair, both reported
-through `onPlayChange`. Latent rather than live: no `AutoplayVideo` story passes
-`threshold`, and `BackpackAutoplayVideo`'s own JSDoc carries this where a caller
-will meet the prop. Closing it needs a threshold on Reely's viewport loading, not
-a correction in the wrapper.
+`threshold` now reaches both halves of an autoplaying video. Backpack drives the
+start and the off-screen pause from one observer, so its `threshold` governs
+both. Here they stay two observers with two owners, but each honours the same
+prop: `Player.Root` carries `loadThreshold` alongside `loadMargin`
+(`root.tsx:63`), and `BackpackVideoInternal` forwards `threshold` into it
+(`backpack-video.tsx:558`) as well as into the pause observer. Before that,
+Reely's activation observer took a `rootMargin` and no threshold, so a
+`threshold` above `0` fired the start at the first visible pixel while the pause
+hook called the video out of view and paused it again at once — one spurious
+play/pause pair, both reported through `onPlayChange`.
+`Backpack parity/Real/AutoplayVideo → InPage` is where the closed gap is
+visible: `threshold: 1` there means scrolling starts playback only once the
+whole player is on screen. One shape stays outside it by design — a box taller
+or wider than the scroll container it moves through can never reach a threshold
+near `1`, so it activates at the first visible pixel instead of staying dormant
+forever.
 
 One departure from SIDEPRO-203's brief rather than from Backpack, recorded here
 because the rest of this file records only the latter. The brief asked the

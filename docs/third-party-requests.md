@@ -43,13 +43,16 @@ Notes, per row:
   iframe_ itself points at (`packages/provider-youtube/src/index.ts:103`
   defaults it to `https://www.youtube-nocookie.com`; the value reaches the
   iframe via `packages/provider-youtube/src/attachment.ts:142`). A
-  `Player.Root` consumer cannot change `host` at all —
-  `packages/react/src/provider-loaders.ts` calls
-  `createYouTubeProvider(media, source.videoId)` with no options object — so
-  through `Player.Root` the embed is always `www.youtube-nocookie.com`, and
-  only a caller who constructs `createYouTubeProvider` directly could ever
-  point the embed at `www.youtube.com` instead. Either way, the API script
-  itself always comes from `www.youtube.com`.
+  `Player.Root` consumer **can** change `host`: `provider-loaders.ts` passes
+  `providerOptions?.youtube` straight to `createYouTubeProvider`, so every key
+  `YouTubeProviderOptions` declares — `host` and the `loadIframeApi` injection
+  hook among them — is reachable as
+  `providerOptions={{ youtube: { host: '…' } }}`. Unset, the embed stays
+  `www.youtube-nocookie.com`; a consumer that sets `host` points the iframe
+  wherever it likes, and nothing validates the value (SIDEPRO-216). Plan the
+  `frame-src` for the origins your own consumers may set, not only for the
+  default. The API script itself always comes from `www.youtube.com` — that
+  one `host` does not move.
 - **Vimeo**'s embed iframe is built from `player.vimeo.com`
   (`packages/provider-vimeo/src/attachment.ts:59`). The SDK
   (`@vimeo/player`, pinned `2.30.4`) is a bundled dependency, imported
@@ -64,10 +67,10 @@ Notes, per row:
   never fires through the React path. `dnt` (on by default unless set to
   `false`, `packages/provider-vimeo/src/attachment.ts:62`) asks Vimeo not to
   track the session; it is a separate switch and has no effect on whether the
-  oEmbed probe runs. Like `host` for YouTube, `dnt` and `controls` are also
-  only reachable by calling `createVimeoProvider` directly — `Player.Root`
-  has no prop for either, so through it the embed is always chromeless with
-  `dnt` on.
+  oEmbed probe runs. `dnt` and `controls` are reachable only by calling
+  `createVimeoProvider` directly — unlike YouTube's bag above, `Vimeo` has no
+  `PlayerProviderOptions` key yet, so through `Player.Root` the embed is always
+  chromeless with `dnt` on.
 - **Wistia** ships `@wistia/wistia-player` (pinned `0.7.12`) as a bundled
   dependency that registers the `<wistia-player>` custom element — "no
   `E-v1.js` script tag, no `window._wq`"

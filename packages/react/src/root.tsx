@@ -54,9 +54,9 @@ export type PlayerActivationProps = {
    * prop existed: any visible pixel attaches the provider, the same first-pixel
    * behaviour `loadMargin`'s own default already grants everything else.
    *
-   * A box taller or wider than the root it scrolls in can never reach a
-   * threshold near `1` -- no amount of scrolling puts 100% of it on screen at
-   * once. Rather than leave that configuration dormant forever with no
+   * A box taller or wider than the scroll container it moves through can never
+   * reach a threshold near `1` -- no amount of scrolling puts 100% of it on
+   * screen at once. Rather than leave that configuration dormant forever with no
    * playback and no error, such a box activates at the first visible pixel
    * instead, the same fallback the default already is for every other box.
    */

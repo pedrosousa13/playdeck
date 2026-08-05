@@ -9,8 +9,9 @@ screen before the provider attaches — an `IntersectionObserver` threshold from
 and always attached at the first visible pixel. Defaults to `0`, so every
 existing consumer keeps that behaviour unchanged.
 
-A box taller or wider than the root it scrolls in can never reach a threshold
-near `1`: no amount of scrolling puts 100% of it on screen at once. Rather than
+A box taller or wider than the scroll container it moves through can never reach
+a threshold near `1`: no amount of scrolling puts 100% of it on screen at once.
+Rather than
 leave that configuration dormant forever with no playback and no error, such a
 box activates at the first visible pixel instead, the same fallback the
 default already is for everything else.

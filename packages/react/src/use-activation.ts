@@ -153,39 +153,42 @@ const providerOptionsEqual = (
 // without treating a materially lower ratio as a match.
 const THRESHOLD_EPSILON = 0.0001;
 
-// Same idea for the size comparison `targetExceedsRoot` makes below: a target
-// sized to match its root can differ from it by a subpixel and still mean "the
-// same size" rather than "bigger".
+// Same idea for the size comparison `targetExceedsObserverRoot` makes below: a
+// target sized to match its root can differ from it by a subpixel and still
+// mean "the same size" rather than "bigger".
 const SIZE_EPSILON_PX = 0.5;
 
 // The observer is always given `0` alongside `loadThreshold`, so its callback
 // fires the moment the target starts intersecting at all -- not only when it
 // crosses `loadThreshold` itself. That first crossing is what
-// `targetExceedsRoot` needs to see the target's and the root's rects before
-// `loadThreshold` is anywhere close, and it is the *only* further callback a
-// target that can never reach `loadThreshold` will ever get: with a single
-// configured threshold above the ratio a target can reach, nothing after the
-// initial callback would ever cross it, and the observer would fall silent for
-// good. Deduplicated rather than always `[0, loadThreshold]`, so the default
+// `targetExceedsObserverRoot` needs to see the target's and the root's rects
+// before `loadThreshold` is anywhere close, and it is the *only* further
+// callback a target that can never reach `loadThreshold` will ever get: with a
+// single configured threshold above the ratio a target can reach, nothing after
+// the initial callback would ever cross it, and the observer would fall silent
+// for good. Deduplicated rather than always `[0, loadThreshold]`, so the default
 // `loadThreshold: 0` -- every consumer's activation today -- keeps asking the
 // browser for exactly what it asked for before this prop existed.
 const observerThresholds = (loadThreshold: number): number[] =>
   loadThreshold === 0 ? [0] : [0, loadThreshold];
 
-// Whether `entry`'s target is larger than the root it is observed against, in
-// either dimension -- the shape behind the brief's own example, a `9/16`
-// Shorts player on a window shorter than it is tall. A target that size can
-// never cover 100% of the root no matter how it scrolls, so a `loadThreshold`
-// near `1` would otherwise stay unsatisfied forever: not a misconfiguration
-// worth an error, since every other threshold works fine on every other
-// target, just a box that happened to overflow the one it loaded into. `null`
+// Whether `entry`'s target is larger than the observer root it is measured
+// against -- the scroll container, never `Player.Root` -- in either dimension:
+// the shape behind the brief's own example, a `9/16` Shorts player on a window
+// shorter than it is tall. A target that size can never cover 100% of that
+// container no matter how it scrolls, so a `loadThreshold` near `1` would
+// otherwise stay unsatisfied forever: not a misconfiguration worth an error,
+// since every other threshold works fine on every other target, just a box
+// that happened to overflow the one it loaded into. `null`
 // `rootBounds` -- the root not sharing this target's document, or not yet
 // having a size to report -- is treated as "not provably larger", the
 // conservative reading: the cost of a false negative here is the first-pixel
 // activation every consumer already gets under the default `loadThreshold: 0`,
 // where the cost of a false positive would be a threshold silently never
 // doing what it was set to do.
-const targetExceedsRoot = (entry: IntersectionObserverEntry): boolean => {
+const targetExceedsObserverRoot = (
+  entry: IntersectionObserverEntry
+): boolean => {
   const { rootBounds, boundingClientRect: target } = entry;
   return (
     rootBounds !== null &&
@@ -196,7 +199,7 @@ const targetExceedsRoot = (entry: IntersectionObserverEntry): boolean => {
 
 // The activation criterion for one delivered entry. A target that fits within
 // its root is held to `loadThreshold` itself; one that cannot -- see
-// `targetExceedsRoot` -- gets the same first-pixel activation the default
+// `targetExceedsObserverRoot` -- gets the same first-pixel activation the default
 // `loadThreshold: 0` already gives every other player, rather than an
 // unreachable threshold leaving it dormant with no playback and no error, the
 // worse failure the brief warns against.
@@ -206,7 +209,7 @@ const meetsLoadThreshold = (
 ): boolean =>
   entry.isIntersecting &&
   (entry.intersectionRatio >= loadThreshold - THRESHOLD_EPSILON ||
-    targetExceedsRoot(entry));
+    targetExceedsObserverRoot(entry));
 
 const configurationError = (message: string) => ({
   category: 'configuration' as const,
@@ -556,7 +559,7 @@ export const useActivation = (
         options.controller.setActivation({
           activation: 'error',
           error: configurationError(
-            'The viewport loadMargin configuration is invalid.'
+            'The viewport loadMargin or loadThreshold configuration is invalid.'
           )
         });
       }
