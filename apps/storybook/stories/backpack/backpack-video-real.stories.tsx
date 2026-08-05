@@ -1,7 +1,9 @@
+import type { PlayerHandle } from '@reely/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useRef, useState } from 'react';
 import { withCss } from '../../.storybook/theme';
 import { backpackVideoCss } from './backpack-video-styles';
-import { BackpackVideo } from './backpack-video';
+import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 import { InPageLayout } from './in-page-layout';
 
 // The wrapper against real providers: real embeds, real network. Excluded from
@@ -92,6 +94,170 @@ export const StartsPlaying: Story = {
 /** `controls` with a real provider attached, alongside the real embed. */
 export const WithControls: Story = {
   args: { url: 'https://vimeo.com/336066147', muted: true, controls: true }
+};
+
+/**
+ * Backpack's `Loop` args, over a real embed: `loop` reaches `Player.Root` but
+ * is not forwarded to the Vimeo provider (SIDEPRO-210), so the clip finishes
+ * and stops rather than restarting.
+ */
+export const Loop: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    controls: true,
+    loop: true
+  }
+};
+
+/**
+ * Backpack's `WithShadowVariant` args, over a real embed: the shadow sits
+ * around the attached player the same way it does around the mock's box.
+ */
+export const WithShadowVariant: Story = {
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    variant: 'shadow-m'
+  }
+};
+
+/**
+ * Backpack's `WithOutlineVariant` args, over a real embed: a 1px border drawn
+ * inside the player's own box.
+ */
+export const WithOutlineVariant: Story = {
+  args: { url: 'https://vimeo.com/336066147', muted: true, variant: 'outline' }
+};
+
+/**
+ * Backpack's `WithXLSizePlayIcon` args, over a real embed: a 4rem play icon
+ * over the attached player, against the default `m`'s 3rem.
+ */
+export const WithXLSizePlayIcon: Story = {
+  args: { url: 'https://vimeo.com/336066147', muted: true, playIconSize: 'xl' }
+};
+
+/**
+ * Backpack's `With themeConfig` args, over a real embed: the override
+ * replaces the outline variant's class rather than joining it, so the pink
+ * border and dark-blue background from the decorator below are what shows
+ * around the attached player.
+ */
+export const WithThemeConfig: Story = {
+  name: 'With themeConfig',
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    variant: 'outline',
+    themeConfig: {
+      variants: { variant: { outline: { root: 'story-video-theme-config' } } }
+    }
+  },
+  decorators: [
+    withCss(`
+.story-video-theme-config {
+  border: 4px solid rgb(218, 35, 129);
+  background: rgb(0, 52, 100);
+}
+`)
+  ]
+};
+
+/**
+ * Two buttons standing in for an external consumer that holds
+ * `BackpackVideo`'s `PlayerHandle` ref, driving it directly rather than
+ * through the surface. `WithEvents` below renders the events they cause.
+ */
+const ExternalEventsVideo = (props: BackpackVideoProps) => {
+  const ref = useRef<PlayerHandle>(null);
+  const [events, setEvents] = useState<string[]>([]);
+
+  return (
+    <>
+      <BackpackVideo
+        {...props}
+        ref={ref}
+        onPlayChange={(isPlaying) =>
+          setEvents((prior) => [...prior, `onPlayChange(${isPlaying})`])
+        }
+      />
+      <button
+        onClick={() => {
+          ref.current?.activateFromInteraction();
+          void ref.current?.play();
+        }}
+        type="button"
+      >
+        External play
+      </button>
+      <button onClick={() => void ref.current?.pause()} type="button">
+        External pause
+      </button>
+      <ul>
+        {events.map((event, index) => (
+          <li key={index}>{event}</li>
+        ))}
+      </ul>
+    </>
+  );
+};
+
+/**
+ * Backpack's `WithEvents` args, over a real embed: click "External play" and
+ * "External pause" to drive the attached player through its `PlayerHandle`
+ * ref, and watch the list below grow as `onPlayChange` reports each
+ * transition.
+ */
+export const WithEvents: Story = {
+  args: { url: 'https://vimeo.com/336066147', muted: true },
+  render: (args) => <ExternalEventsVideo {...args} />
+};
+
+/**
+ * Three buttons standing in for Backpack's carousel, driving one real player
+ * through its `PlayerHandle` ref instead of through Backpack's module-global
+ * atom — `Backpack parity/Video → Regression: SocialCarousel atom
+ * integration` says why the mechanism differs. "Reset" is wired to nothing,
+ * on purpose: Reely's ref retains nothing a reset could release.
+ */
+const SocialCarouselIntegrationVideo = (props: BackpackVideoProps) => {
+  const ref = useRef<PlayerHandle>(null);
+  return (
+    <>
+      <BackpackVideo {...props} ref={ref} />
+      <button
+        onClick={() => {
+          ref.current?.activateFromInteraction();
+          void ref.current?.play();
+        }}
+        type="button"
+      >
+        Simulate slide active (play)
+      </button>
+      <button onClick={() => void ref.current?.pause()} type="button">
+        Simulate slide change (pause)
+      </button>
+      {/* No `onClick`: Reely retains nothing for a reset to release. */}
+      <button type="button">Reset (no-op)</button>
+    </>
+  );
+};
+
+/**
+ * Backpack's `SocialCarouselAtomIntegration` args, over a real embed: click
+ * "Simulate slide active (play)" to start it, "Simulate slide change (pause)"
+ * to stop it, and "Reset (no-op)" to see that the third button changes
+ * nothing.
+ */
+export const SocialCarouselAtomIntegration: Story = {
+  name: 'Regression: SocialCarousel atom integration',
+  args: {
+    url: 'https://vimeo.com/336066147',
+    muted: true,
+    light: false
+  },
+  render: (args) => <SocialCarouselIntegrationVideo {...args} />
 };
 
 /**
@@ -188,6 +354,21 @@ export const YouTubeShortsVideoAndCustomCoverImage: Story = {
     placeholderImageSrc: coverImageUrl,
     alt: 'custom cover image',
     hoverEffect: true,
+    aspectRatios: '9/16'
+  }
+};
+
+/**
+ * Backpack's `YouTubeShortsVideo` args, over a real embed: a portrait Shorts
+ * video in a 9:16 box, without a cover image standing in for it — that's
+ * {@link YouTubeShortsVideoAndCustomCoverImage} above.
+ */
+export const YouTubeShortsVideo: Story = {
+  name: 'YouTube Shorts Video',
+  args: {
+    url: 'https://www.youtube.com/shorts/n3eC51ZaDlk',
+    muted: true,
+    light: false,
     aspectRatios: '9/16'
   }
 };
