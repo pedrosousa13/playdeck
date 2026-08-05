@@ -17,12 +17,13 @@ import {
 import {
   loadProvider,
   type PlayerMediaMount,
-  type PlayerProviderOptions
+  type ResolvedProviderOptions
 } from './provider-loaders.js';
 
 export type {
   PlayerMediaMount,
-  PlayerProviderOptions
+  PlayerProviderOptions,
+  ResolvedProviderOptions
 } from './provider-loaders.js';
 
 export type PlayerLoadingStrategy = 'eager' | 'viewport' | 'interaction';
@@ -46,7 +47,7 @@ export type UseActivationOptions = {
   readonly nativeOptions: NativePlaybackOptions;
   readonly prepareMedia: (media: PlayerMediaMount) => void;
   readonly preload: PlayerPreload;
-  readonly providerOptions?: PlayerProviderOptions;
+  readonly providerOptions?: ResolvedProviderOptions;
   readonly source: SourceDetectionResult;
 };
 
@@ -55,7 +56,7 @@ type Session = {
   configuration: ActivationConfiguration;
   loading: PlayerLoadingStrategy;
   nativeOptions: NativePlaybackOptions;
-  providerOptions: PlayerProviderOptions | undefined;
+  providerOptions: ResolvedProviderOptions | undefined;
   sourceKey: string;
   started: boolean;
   queuedPlay: boolean;
@@ -78,7 +79,7 @@ type ActivationInputs = {
   readonly configuration: ActivationConfiguration;
   readonly loading: PlayerLoadingStrategy;
   readonly nativeOptions: NativePlaybackOptions;
-  readonly providerOptions: PlayerProviderOptions | undefined;
+  readonly providerOptions: ResolvedProviderOptions | undefined;
   readonly sourceKey: string;
 };
 
@@ -140,11 +141,12 @@ const providerBagEqual = (
 
 // One line per provider key, as `nativeOptionsEqual` names its own three.
 const providerOptionsEqual = (
-  left: PlayerProviderOptions | undefined,
-  right: PlayerProviderOptions | undefined
+  left: ResolvedProviderOptions | undefined,
+  right: ResolvedProviderOptions | undefined
 ): boolean =>
   providerBagEqual(left?.wistia, right?.wistia) &&
-  providerBagEqual(left?.youtube, right?.youtube);
+  providerBagEqual(left?.youtube, right?.youtube) &&
+  providerBagEqual(left?.vimeo, right?.vimeo);
 
 // A browser can report an intersection ratio a hair under the geometrically
 // exact value it is crossing -- documented for `threshold: 1`, where subpixel

@@ -58,8 +58,8 @@ test('loads the YouTube adapter lazily against an embed mount', async () => {
 test('forwards the youtube provider option bag to createYouTubeProvider', async () => {
   render(
     <Player.Root
+      controls
       loading="eager"
-      providerOptions={{ youtube: { controls: true } }}
       source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
     >
       <Player.Viewport>
@@ -81,8 +81,8 @@ test('forwards the youtube provider option bag to createYouTubeProvider', async 
 test('re-attaches the YouTube adapter when the youtube option bag changes', async () => {
   const { rerender } = render(
     <Player.Root
+      controls={false}
       loading="eager"
-      providerOptions={{ youtube: { controls: false } }}
       source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
     >
       <Player.Viewport>
@@ -97,8 +97,8 @@ test('re-attaches the YouTube adapter when the youtube option bag changes', asyn
 
   rerender(
     <Player.Root
+      controls
       loading="eager"
-      providerOptions={{ youtube: { controls: true } }}
       source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
     >
       <Player.Viewport>
@@ -118,8 +118,8 @@ test('re-attaches the YouTube adapter when the youtube option bag changes', asyn
 test('keeps the installed adapter when a value-equal youtube option bag is passed again', async () => {
   const { rerender } = render(
     <Player.Root
+      controls
       loading="eager"
-      providerOptions={{ youtube: { controls: true } }}
       source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
     >
       <Player.Viewport>
@@ -132,12 +132,12 @@ test('keeps the installed adapter when a value-equal youtube option bag is passe
     expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
   );
 
-  // A fresh object literal with the same values, as an inline prop produces
-  // on every render.
+  // The same boolean value again, as a re-render with an unchanged prop
+  // produces.
   rerender(
     <Player.Root
+      controls
       loading="eager"
-      providerOptions={{ youtube: { controls: true } }}
       source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
     >
       <Player.Viewport>

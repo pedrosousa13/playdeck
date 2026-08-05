@@ -875,6 +875,9 @@ test('forwards the provider option bag from Root to the loader', async () => {
   );
 
   await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  // The fixture's source is native, so `Root`'s `resolvedProviderOptions`
+  // leaves the bag untouched -- `controls` only folds into whichever bag
+  // belongs to the detected source's own provider (`root.tsx`).
   expect(mockedLoadProvider.mock.calls[0]?.[0].providerOptions).toEqual({
     wistia: { playerColor: 'ff0000' }
   });

@@ -18,7 +18,8 @@ import {
 import {
   useActivation,
   type PlayerMediaMount,
-  type PlayerProviderOptions
+  type PlayerProviderOptions,
+  type ResolvedProviderOptions
 } from './use-activation.js';
 import { sourceKey } from './viewport-media.js';
 import {
@@ -69,6 +70,14 @@ export type RootProps = NativePlaybackOptions &
     readonly autoplay?: AutoplayMode;
     readonly captionRenderer?: 'custom' | 'native';
     readonly children: ReactNode;
+    /**
+     * Let the provider draw its own controls. Unset and `false` both mean a
+     * chromeless player, which is where Reely's own composed `Player.Controls`
+     * belongs; `true` hands the surface to the provider and Reely draws nothing
+     * over it. Reaches Vimeo and YouTube through their embeds and native/HLS
+     * through the video element's own `controls` attribute.
+     */
+    readonly controls?: boolean;
     readonly defaultMuted?: boolean;
     readonly mediaMetadata?: MediaMetadataInput | null;
     readonly defaultPlaybackRate?: number;
@@ -105,6 +114,7 @@ export const Root = ({
   autoplay = false,
   captionRenderer,
   children,
+  controls,
   defaultMuted = false,
   defaultPlaybackRate = 1,
   defaultVolume = 1,
@@ -446,6 +456,41 @@ export const Root = ({
     ]
   );
 
+  // `controls` folded into the active provider's own bag -- its one home on
+  // `Root` reaching that provider by looking, to `useActivation`, like an
+  // ordinary provider-option change. Injected only into the bag belonging to
+  // the detected source's own provider, deliberately not both unconditionally:
+  // `providerOptionsEqual` compares every bag it knows about, whatever source
+  // is actually playing, so folding `controls` into the youtube and vimeo bags
+  // regardless of source would make a `controls` change look like a bag
+  // change on a native or HLS source too -- re-attaching a video element that
+  // only needed a DOM attribute set, losing its playback position. A value of
+  // `undefined` lands as an explicit `controls: undefined` key on the active
+  // bag rather than an absent one, which is already safe: `providerBagEqual`
+  // compares own keys by value, so a key set to `undefined` equals that key
+  // being absent, and both providers read `options.controls === true`.
+  // Returning `providerOptions ?? {}` for every other source type is safe for
+  // the same reason -- an absent bag and an empty one compare equal.
+  const resolvedProviderOptions = useMemo<ResolvedProviderOptions>(() => {
+    const type =
+      detectedSource.status === 'success'
+        ? detectedSource.source.type
+        : undefined;
+    if (type === 'youtube') {
+      return {
+        ...providerOptions,
+        youtube: { ...providerOptions?.youtube, controls }
+      };
+    }
+    if (type === 'vimeo') {
+      return {
+        ...providerOptions,
+        vimeo: { ...providerOptions?.vimeo, controls }
+      };
+    }
+    return providerOptions ?? {};
+  }, [controls, detectedSource, providerOptions]);
+
   const activation = useActivation({
     autoplay,
     controller,
@@ -455,7 +500,7 @@ export const Root = ({
     nativeOptions: { endTime, loop, startTime },
     prepareMedia,
     preload,
-    providerOptions,
+    providerOptions: resolvedProviderOptions,
     source: detectedSource
   });
 
@@ -613,12 +658,13 @@ export const Root = ({
   const value = useMemo(
     () => ({
       controller,
+      controls,
       source: detectedSource,
       ...activation,
       lastSelectedTextTrackId,
       registerMedia
     }),
-    [activation, controller, detectedSource, registerMedia]
+    [activation, controller, controls, detectedSource, registerMedia]
   );
   const posterState =
     hiddenTransition === sourceTransition ? 'hidden' : 'visible';

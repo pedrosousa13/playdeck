@@ -1697,6 +1697,53 @@ test('forwards a ref, custom attributes, style, and aria-label to the native vid
   expect(video.getAttribute('data-reely-part')).toBe('media');
 });
 
+test('renders the controls attribute on the native video when controls is true', () => {
+  render(
+    <LegacyRoot controls source="/clip.mp4">
+      <Player.Media />
+    </LegacyRoot>
+  );
+
+  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  expect(video.controls).toBe(true);
+});
+
+test('omits the controls attribute on the native video when controls is unset', () => {
+  render(
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media />
+    </LegacyRoot>
+  );
+
+  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  expect(video.controls).toBe(false);
+});
+
+test('toggles the video controls attribute across a re-render without re-attaching the native provider', async () => {
+  const load = vi
+    .spyOn(HTMLMediaElement.prototype, 'load')
+    .mockImplementation(() => undefined);
+  const player = (controls: boolean) => (
+    <LegacyRoot controls={controls} source="/clip.mp4">
+      <Player.Media />
+    </LegacyRoot>
+  );
+  const { rerender } = render(player(true));
+  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  await waitFor(() => expect(load).toHaveBeenCalledOnce());
+  expect(video.controls).toBe(true);
+  load.mockClear();
+
+  rerender(player(false));
+
+  expect(video.controls).toBe(false);
+  // No re-attach: the native provider has no bag of its own -- `controls`
+  // reaches the element as a DOM attribute, not through the provider-options
+  // comparison that would tear it down and rebuild it.
+  await act(async () => undefined);
+  expect(load).not.toHaveBeenCalled();
+});
+
 test('sizes the native video to fill its viewport and letterbox by default', () => {
   // #150: stated inline, so a consumer who ships no stylesheet gets the same
   // frame the theme draws. `style-precedence.test.tsx` pins that each of these

@@ -520,11 +520,7 @@ export const BackpackVideoInternal = ({
     () => ({
       wistia: translateWistiaPlayerConfig(
         mergeWistiaPlayerConfig(playerConfig?.wistia)
-      ),
-      // YouTube renders its own player chrome regardless of this wrapper's
-      // Reely-side control bar, so `controls` has to reach the embed itself
-      // (`provider-youtube/src/attachment.ts`'s `playerVars.controls`).
-      youtube: { controls }
+      )
     }),
     [controls, playerConfig]
   );
