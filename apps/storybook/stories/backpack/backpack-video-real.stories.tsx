@@ -11,7 +11,7 @@ import { InPageLayout } from './in-page-layout';
 // (`real-playback`), so each story below renders the wrapper's own
 // `Player.Root` with nothing staged into it — which is the point. These are
 // what show that `BackpackVideo` attaches a provider rather than only working
-// against a mock; `Backpack parity/Video` covers the behaviour deterministically.
+// against a mock; `Backpack parity/Mock/Video` covers the behaviour deterministically.
 
 /** Backpack's own cover photo, as its `Video.stories.tsx` stories pass it. */
 const coverImageUrl =
@@ -21,10 +21,10 @@ const coverImageUrl =
 const wistiaUrl = 'https://wesleyluyten.wistia.com/medias/oifkgmxnkb';
 
 const meta = {
-  title: 'Real playback/BackpackVideo',
+  title: 'Backpack parity/Real/Video',
   component: BackpackVideo,
   tags: ['real-playback', '!test'],
-  decorators: [withCss(backpackVideoCss('640px'))],
+  decorators: [withCss(backpackVideoCss('600px'))],
   parameters: {
     docs: {
       description: {
@@ -51,7 +51,7 @@ export const YouTube: Story = {
 
 /**
  * Backpack's `WistiaVideo` args, verbatim (`Video.stories.tsx:145-152`): the
- * same click-to-load surface over a real `<wistia-player>`. `Backpack parity/Video`
+ * same click-to-load surface over a real `<wistia-player>`. `Backpack parity/Mock/Video`
  * carries these args too, where the embed never mounts.
  */
 export const Wistia: Story = {
@@ -69,7 +69,7 @@ export const Wistia: Story = {
  *
  * This is the only place the two options can be seen at all: they become
  * `player-color` and `swatch` attributes on the element, and the deterministic
- * suite may not mount one — `Backpack parity/Video → WistiaWithPlayerConfig`
+ * suite may not mount one — `Backpack parity/Mock/Video → WistiaWithPlayerConfig`
  * says why at length and pins the option bag instead.
  */
 export const WistiaWithPlayerConfig: Story = {
@@ -217,7 +217,7 @@ export const WithEvents: Story = {
 /**
  * Three buttons standing in for Backpack's carousel, driving one real player
  * through its `PlayerHandle` ref instead of through Backpack's module-global
- * atom — `Backpack parity/Video → Regression: SocialCarousel atom
+ * atom — `Backpack parity/Mock/Video → Regression: SocialCarousel atom
  * integration` says why the mechanism differs. "Reset" is wired to nothing,
  * on purpose: Reely's ref retains nothing a reset could release.
  */
@@ -383,7 +383,7 @@ export const YouTubeShortsVideo: Story = {
  * (`Video.stories.tsx:367-395`), reproduced rather than tidied, since these
  * stories exist to carry its args. Unmuted playback works here because it takes
  * a click to start: what a browser blocks is an *autoplay* with sound, which is
- * `playing` rather than anything on this page. `Backpack parity/Video` covers
+ * `playing` rather than anything on this page. `Backpack parity/Mock/Video` covers
  * the behaviour deterministically, and stays muted throughout.
  *
  * All three render the wrapper in that layout at Backpack's own `h-screen`, so

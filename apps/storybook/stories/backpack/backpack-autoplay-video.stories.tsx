@@ -45,11 +45,11 @@ import { playerBox, playIcon } from './story-queries';
  * (`packages/react/src/use-activation.ts:389-395`, its `unsupportedError`
  * branch), nothing is ever loaded, and
  * no URL in this file can reach the DOM — the same trick
- * `Backpack parity/Video`'s `PlaybackRequestedButNeverStarted` and
+ * `Backpack parity/Mock/Video`'s `PlaybackRequestedButNeverStarted` and
  * `CoverClickRequestsPlayback` use, and the one
  * `backpack-autoplay-video.contract.test.ts:33-43`, from
  * `The two halves cannot be pinned in one rig`, writes up at length.
- * `Real playback/BackpackAutoplayVideo` carries Backpack's real URL.
+ * `Backpack parity/Real/AutoplayVideo` carries Backpack's real URL.
  *
  * ## What the staged player can and cannot show
  * Playback is staged: each story hands the wrapper's own controller a mock
@@ -65,7 +65,7 @@ import { playerBox, playIcon } from './story-queries';
  * `backpack-autoplay-video.contract.test.ts`'s
  * `'BackpackAutoplayVideo viewport activation'` block, which can drive an
  * observer directly against an `http(s)` source it never intersects, and are
- * visible for real under `Real playback/BackpackAutoplayVideo`.
+ * visible for real under `Backpack parity/Real/AutoplayVideo`.
  *
  * `InPage` below is where that matters most, and its own comment says what it
  * therefore does and does not assert.
@@ -77,7 +77,7 @@ const unresolvableUrl = 'mock://reely/unresolvable.mp4';
  * Backpack's `a.storyblok.com` cover photo as something that can load offline —
  * the same 4×3 grey SVG `backpack-video.stories.tsx` uses, restated rather than
  * imported because a fixture is not an export a story file should be reaching
- * into another story file for. `Real playback/BackpackAutoplayVideo` carries
+ * into another story file for. `Backpack parity/Real/AutoplayVideo` carries
  * Backpack's real image.
  */
 const coverImageDataUri =
@@ -88,7 +88,7 @@ const coverImageDataUri =
  * (`AutoplayVideo.stories.tsx:67-85`, the `stillUrl` in its `WistiaVideo`): the
  * image it overrides Wistia's own poster with, so nothing flashes before the
  * first frame. Nothing about it is story fixture — it is the story's argument,
- * and it is the same value `Real playback/BackpackAutoplayVideo` passes.
+ * and it is the same value `Backpack parity/Real/AutoplayVideo` passes.
  */
 const transparentPosterDataUri =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -148,9 +148,9 @@ const MockedInPageAutoplayVideo = ({
 );
 
 const meta = {
-  title: 'Backpack parity/AutoplayVideo',
+  title: 'Backpack parity/Mock/AutoplayVideo',
   component: BackpackAutoplayVideo,
-  // 600px, where `Backpack parity/Video` mounts 480px: Backpack's
+  // 600px, same as every other Backpack parity story: Backpack's
   // `AutoplayVideo` stories all sit in a `TestWrapper maxWidth='600px'`
   // (`AutoplayVideo.stories.tsx:34-40`), and the width here lives on the player
   // box rather than on a wrapper element.
@@ -243,7 +243,7 @@ export const WithCustomPlaceholderImage: Story = {
 /**
  * `playing: false`, which Backpack documents as this component's own escape
  * hatch (`AutoplayVideo.tsx:10-14`) without giving it a story — the same
- * position `WithThreshold` is in over in `Backpack parity/Video`.
+ * position `WithThreshold` is in over in `Backpack parity/Mock/Video`.
  *
  * It earns one here because it is the only state in which the placeholder image
  * is on screen to look at, this component's cover otherwise lasting exactly as
@@ -310,7 +310,7 @@ export const HeldPaused: Story = {
  * The autoplay is real and is asserted as such — nothing below clicks anything.
  * The two translated options are asserted as the bag the wrapper builds from
  * these args: they are attributes on an embed no deterministic story may mount,
- * and `Backpack parity/Video → WistiaWithPlayerConfig` carries the full argument
+ * and `Backpack parity/Mock/Video → WistiaWithPlayerConfig` carries the full argument
  * for why that is the boundary.
  *
  * What *is* observable here, and worth pinning, is that neither option reaches
@@ -378,7 +378,7 @@ export const WistiaVideo: Story = {
  * (`AutoplayVideo.tsx:30`, `Video/useVideoPlayerState.ts:144-154`). What it is
  * *not* is evidence about when Reely loads — this composition would not have
  * loaded a real provider there at all, and only
- * `Real playback/BackpackAutoplayVideo → InPage` and the contract test can show
+ * `Backpack parity/Real/AutoplayVideo → InPage` and the contract test can show
  * that.
  *
  * From there the cycle is the one Backpack's note describes: scrolled into view

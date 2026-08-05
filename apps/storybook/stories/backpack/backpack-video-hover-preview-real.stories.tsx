@@ -19,7 +19,7 @@ import { backpackVideoCss } from './backpack-video-styles';
  *
  * - **The fetched cover.** Six of Backpack's nine stories pass no image and show
  *   the thumbnail the source's oEmbed endpoint returns. That is a real request,
- *   so `Backpack parity/VideoHoverPreview` substitutes a data URI in every story
+ *   so `Backpack parity/Mock/VideoHoverPreview` substitutes a data URI in every story
  *   and only here does a cover arrive the way Backpack's does.
  * - **Sound and looping.** `muted` is applied to a media element and `loop`
  *   travels to the provider loader, so neither exists without a provider. See
@@ -48,12 +48,12 @@ const meta = {
     docs: {
       description: {
         component:
-          'The `BackpackVideoHoverPreview` composition driving a real Vimeo embed. Hover the video: the provider loads on that first hover, muted playback starts, and the cover comes off once the player reports it. Move the pointer away and the cover returns with the video paused and rewound. The preview returns to the start every 5 seconds — `WithCustomDuration` shortens that to 3 — and, unlike Backpack, it does so when the video reaches that position rather than that many seconds after playback was requested. The cover image is the source’s own oEmbed thumbnail wherever no `placeholderImageSrc` is given, which is why these stories cannot be part of the deterministic suite. Real network, so they are excluded from the story test suite (tagged `!test`); `Backpack parity/VideoHoverPreview` covers the behaviour deterministically.'
+          'The `BackpackVideoHoverPreview` composition driving a real Vimeo embed. Hover the video: the provider loads on that first hover, muted playback starts, and the cover comes off once the player reports it. Move the pointer away and the cover returns with the video paused and rewound. The preview returns to the start every 5 seconds — `WithCustomDuration` shortens that to 3 — and, unlike Backpack, it does so when the video reaches that position rather than that many seconds after playback was requested. The cover image is the source’s own oEmbed thumbnail wherever no `placeholderImageSrc` is given, which is why these stories cannot be part of the deterministic suite. Real network, so they are excluded from the story test suite (tagged `!test`); `Backpack parity/Mock/VideoHoverPreview` covers the behaviour deterministically.'
       }
     }
   },
   tags: ['real-playback', '!test'],
-  title: 'Real playback/BackpackVideoHoverPreview'
+  title: 'Backpack parity/Real/VideoHoverPreview'
 } satisfies Meta<typeof BackpackVideoHoverPreview>;
 
 export default meta;
