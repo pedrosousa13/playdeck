@@ -44,6 +44,34 @@ describe('thumbnailEndpoint', () => {
     );
   });
 
+  it('carries the path hash from a player.vimeo.com URL into the canonical oEmbed URL', () => {
+    expect(
+      thumbnailEndpoint('https://player.vimeo.com/video/76979871/a1b2c3d4')
+    ).toBe(
+      'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871%2Fa1b2c3d4&width=1280'
+    );
+  });
+
+  it('carries the query hash from a vimeo.com URL into the canonical oEmbed URL', () => {
+    expect(thumbnailEndpoint('https://vimeo.com/336066147?h=abc123')).toBe(
+      'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F336066147%2Fabc123&width=1280'
+    );
+  });
+
+  it('maps a player.vimeo.com URL with no hash to its oEmbed endpoint', () => {
+    expect(thumbnailEndpoint('https://player.vimeo.com/video/76979871')).toBe(
+      'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871&width=1280'
+    );
+  });
+
+  it('maps a music.youtube.com URL to the same canonical oEmbed endpoint as www.youtube.com', () => {
+    expect(
+      thumbnailEndpoint('https://music.youtube.com/watch?v=mhN3E_hlWmU')
+    ).toBe(
+      'https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DmhN3E_hlWmU&format=json'
+    );
+  });
+
   it('returns undefined for a URL that only has "vimeo.com" as a path segment on another host', () => {
     // Regression: the old unanchored substring matcher fired Vimeo's oEmbed
     // for this, even though `detectSource` rejects it outright.
@@ -204,6 +232,23 @@ describe('useVideoThumbnail', () => {
     const { result } = renderHook(() =>
       useVideoThumbnail('https://reely.wistia.com/medias/oifkgmxnkb')
     );
+
+    expect(result.current).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['https://example.com/vimeo.com/1'],
+    ['https://attacker.example/?ref=vimeo.com/x']
+  ])('never calls fetch for a URL detectSource rejects: %s', (url) => {
+    // These are the two shapes the old unanchored substring matcher fired
+    // Vimeo's oEmbed for, even though `detectSource` rejects them outright.
+    // Pinned at the hook, not just at `thumbnailEndpoint`, since the brief's
+    // criterion is about a thumbnail request never firing.
+    const fetch = vi.fn();
+    globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useVideoThumbnail(url));
 
     expect(result.current).toBeUndefined();
     expect(fetch).not.toHaveBeenCalled();
