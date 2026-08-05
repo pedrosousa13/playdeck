@@ -491,6 +491,21 @@ const BackpackVideoSurface = ({
         `z-index: 40` (`loading-error.tsx:249`), above the activation button's
         `30` (`:25`) — without it the message layer would swallow the click
         the retry needs.
+
+        The render prop below takes `error` and discards the `retry` it
+        comes paired with, on purpose. For a configuration error
+        `Player.ActivationButton` is `aria-disabled` and its own `onClick`
+        short-circuits before reaching `activateFromInteraction`
+        (`loading-error.tsx:44`, `:49`, `:53-57`) — the primitive's judgment
+        that retrying an unsupported configuration only fails the same way
+        again, so its message is deliberately the only feedback there.
+        `ErrorDisplay` disagrees with that judgment on its own terms:
+        `configurationError()` stamps `recoverable: true`
+        (`packages/react/src/use-activation.ts:216-221`), so its own `retry`
+        would resolve to a working `controller.retry()` rather than `null`
+        for the same error. This wrapper follows `ActivationButton`, not
+        `ErrorDisplay` — reconciling the two is a change to Reely's error
+        primitives, out of scope here.
       */}
       <Player.ErrorDisplay style={{ pointerEvents: 'none' }}>
         {({ error }) => (

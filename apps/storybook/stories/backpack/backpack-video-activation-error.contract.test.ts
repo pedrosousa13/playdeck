@@ -14,11 +14,13 @@ import { BackpackVideo } from './backpack-video';
  * `packages/react/src/loading-error.tsx:45,62`, the fallbacks that only take
  * over when a caller passes nothing).
  *
- * Same interception as `external-control.contract.test.ts` and
- * `backpack-video-controls.contract.test.ts`: `@reely/react`'s own
- * `ActivationButton` is intercepted to record the props it receives, then the
- * genuine component renders underneath so `BackpackVideoSurface`'s hooks
- * still run against a real `PlayerContext.Provider`.
+ * Same interception as `backpack-video-controls.contract.test.ts`:
+ * `@reely/react`'s own `ActivationButton` is intercepted to record the props
+ * it receives, then the genuine component renders underneath so
+ * `BackpackVideoSurface`'s hooks still run against a real
+ * `PlayerContext.Provider`. `external-control.contract.test.ts` reaches its
+ * own assertions a different way — a real controller staged through
+ * `useReportingProvider`, per its own header — not a `vi.mock`.
  *
  * `reporting-provider.ts`'s fake stages an already-`ready` player and cannot
  * reach `'error'` from there: `PlayerController.setActivation` refuses to

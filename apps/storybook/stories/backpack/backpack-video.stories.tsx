@@ -63,6 +63,21 @@ const activationError: PlayerError = {
   message: 'Unable to load the player provider.'
 };
 
+/**
+ * The one category `Player.ActivationButton` treats as not retryable
+ * (`loading-error.tsx:43-44`, its `isConfigurationError`/`isDisabled`), even
+ * though `configurationError()` stamps it `recoverable: true`
+ * (`packages/react/src/use-activation.ts:216-221`) — `ErrorDisplay`'s own
+ * signal for "offer a retry". `ConfigurationActivationError` below pins which
+ * of the two this wrapper follows.
+ */
+const configurationActivationError: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: true,
+  message: 'Interaction loading cannot be used with autoplay.'
+};
+
 /** Every clickable thing in the story, as `TAG[accessible name]`. */
 const affordances = (canvasElement: HTMLElement): string[] =>
   [...canvasElement.querySelectorAll('button, [role="button"]')].map(
@@ -900,6 +915,48 @@ export const ActivationError: Story = {
 
     // Nothing ever confirmed playback, so nothing the wrapper reports ever
     // reaches `true` — the phantom report SIDEPRO-212 found.
+    await expect(args.onPlayChange).not.toHaveBeenCalledWith(true);
+    await expect(playIcon(canvasElement)).toBeNull();
+  }
+};
+
+/**
+ * The one error category with no working retry anywhere on the surface.
+ * `ActivationError` above stages a recoverable failure; this stages
+ * `category: 'configuration'`, which `Player.ActivationButton` disables on
+ * its own judgment (`loading-error.tsx:43-44`) even though
+ * `error.recoverable` is `true` — `ErrorDisplay`'s own signal for offering a
+ * retry, which this wrapper declines to read (`backpack-video.tsx`'s comment
+ * beside its `Player.ErrorDisplay` render prop says why). Pins the decision
+ * rather than leaving it an accident: the message is on screen, the
+ * activation button is `aria-disabled`, and nothing anywhere is a retry.
+ */
+export const ActivationErrorConfiguration: Story = {
+  name: 'Activation Error (configuration)',
+  args: { url: vimeoUrl, muted: true },
+  parameters: {
+    player: {
+      state: {
+        lifecycle: 'error',
+        activation: 'error',
+        error: configurationActivationError
+      }
+    }
+  },
+  play: async ({ args, canvas, canvasElement }) => {
+    const retry = await canvas.findByRole('button', {
+      name: 'Retry loading video'
+    });
+    await expect(retry).toHaveAttribute('aria-disabled', 'true');
+    await expect(canvas.queryByRole('button', { name: 'Pause video' })).toBeNull();
+
+    await canvas.findByText(configurationActivationError.message);
+
+    // The disabled button is the only affordance on the surface — no second,
+    // working retry anywhere, unlike `ActivationError`'s recoverable case.
+    await expect(affordances(canvasElement)).toEqual([
+      'BUTTON[Retry loading video]'
+    ]);
     await expect(args.onPlayChange).not.toHaveBeenCalledWith(true);
     await expect(playIcon(canvasElement)).toBeNull();
   }
