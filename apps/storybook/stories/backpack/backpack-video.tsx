@@ -242,6 +242,17 @@ type SurfaceProps = Pick<
  * is the target from the start, and a command issued before the provider
  * attaches simply reports not-ready.
  *
+ * An activation error (SIDEPRO-212) is a further split of the two
+ * `awaitingActivation: yes` rows above, not a fifth row: `ready` reads
+ * `state.activation === 'ready'`, and `'error'` is a different value, so
+ * `awaitingActivation` stays true and `Player.ActivationButton` stays the
+ * click target — `aria-disabled` itself when the failure is a configuration
+ * error (`packages/react/src/loading-error.tsx:44`), which is exactly the
+ * case where `Player.ErrorDisplay` below is the only feedback left to give.
+ * The play icon column stops applying in this split regardless of
+ * `controls`: a play icon over a failed load is a misleading affordance, and
+ * it would duplicate the "Retry" text underneath it.
+ *
  * The play icon is Reely's own affordance, so it is drawn only where Reely owns
  * the surface. Under `controls: true` the provider draws its own chrome, its own
  * large play affordance while paused included, and a Reely icon on top of that
@@ -282,10 +293,13 @@ const BackpackVideoSurface = ({
   variant
 }: SurfaceProps) => {
   const actions = Player.usePlayerActions();
-  const { playerPlaying, ready } = Player.usePlayerState((state) => ({
-    playerPlaying: state.playback === 'playing',
-    ready: state.activation === 'ready'
-  }));
+  const { isActivationError, playerPlaying, ready } = Player.usePlayerState(
+    (state) => ({
+      isActivationError: state.activation === 'error',
+      playerPlaying: state.playback === 'playing',
+      ready: state.activation === 'ready'
+    })
+  );
   // Both start false even when `playing` is set. `playing` is a request, and
   // only the player can say it was granted: it is served by autoplay on the
   // root, not by this state, so seeding from it bought nothing and could lie —
@@ -405,7 +419,7 @@ const BackpackVideoSurface = ({
         </Player.Poster>
       ) : null}
       <Player.Media />
-      {!isPlaying && !controls && showPlayIcon ? (
+      {!isPlaying && !controls && showPlayIcon && !isActivationError ? (
         <span
           aria-hidden="true"
           className="ef-video-play-icon"
@@ -421,6 +435,13 @@ const BackpackVideoSurface = ({
         wrapper adds no layer over it.
       */}
       {!awaitingActivation && !controls ? (
+        // No `isActivationError` branch on this `aria-label`: an activation
+        // error keeps `ready` false, which keeps `awaitingActivation` true
+        // under the interaction strategy, which is exactly what keeps this
+        // button off the surface while one is in force — so it never renders
+        // with anything left for an error branch to correct (SIDEPRO-212's
+        // triage comment reports two `aria-label` bindings on this component;
+        // this is the one that needs nothing).
         <button
           aria-label={ariaLabel}
           aria-pressed={isPlaying}
@@ -431,30 +452,48 @@ const BackpackVideoSurface = ({
       ) : null}
       {/*
         Renders itself away once the provider is ready (`loading-error.tsx:40`),
-        handing the surface to the toggle above. An empty string rather than no
-        children: the primitive falls back to its own "Play" text for a nullish
-        child, and the play icon above is already the visual affordance.
+        handing the surface to the toggle above. No `onClick` of its own
+        (SIDEPRO-212): Backpack's `onClickPreview={start}` flips its playing
+        state at click time, optimistically, but `activateFromInteraction`
+        (the primitive's own `onClick`) already queues the play
+        (`packages/react/src/use-activation.ts:355`, `active.queuedPlay =
+        queuePlay`, replayed once the provider's `load()` resolves at
+        `:564-577`), so this wrapper needs nothing more to start playback from
+        the same click — it reports only what the player goes on to confirm.
+        `aria-label` and the child are passed only outside an activation
+        error, so the primitive's own "Retry loading video" and "Retry"
+        (`loading-error.tsx:45,62`) take over instead of this wrapper's
+        "Play video" and empty string — overriding either would leave the one
+        state where `Player.ActivationButton` can be `aria-disabled`
+        (`loading-error.tsx:44`, a configuration error) with no
+        feedback at all besides `Player.ErrorDisplay` below.
       */}
       <Player.ActivationButton
-        aria-label={ariaLabel}
+        aria-label={isActivationError ? undefined : ariaLabel}
         className="ef-video-controller"
-        // Backpack's `onClickPreview={start}`, which is optimistic: it flips
-        // Backpack's own playing state at click time rather than on the
-        // player's confirmation. Reely already starts playback from this
-        // click on its own — `activateFromInteraction` calls `activate(true)`
-        // (`packages/react/src/use-activation.ts:355`), which queues the play
-        // (`:294`, `active.queuedPlay = queuePlay`) for the loader to replay
-        // once the provider's `load()` resolves (`:564-577`, from
-        // `const queuePlay = session.current.queuedPlay`) — so what this
-        // handler adds is only the optimistic half: the cover comes off and
-        // `onPlayChange(true)` fires immediately instead of after the
-        // provider reports playing. Scoped
-        // to `showsCover` so the coverless stories keep reporting only what
-        // the player confirms.
-        onClick={showsCover ? () => requestPlayback(true) : undefined}
       >
-        {''}
+        {isActivationError ? undefined : ''}
       </Player.ActivationButton>
+      {/*
+        Message only, no retry button of its own: `Player.ActivationButton`
+        above is already the retry affordance, and a second one is the double
+        affordance SIDEPRO-222 rejected on YouTube's own chrome.
+        `pointerEvents: 'none'` because `ErrorDisplay`'s overlay sits at
+        `z-index: 40` (`loading-error.tsx:249`), above the activation button's
+        `30` (`:25`) — without it the message layer would swallow the click
+        the retry needs.
+      */}
+      <Player.ErrorDisplay style={{ pointerEvents: 'none' }}>
+        {({ error }) => (
+          // Explicit white: `[data-reely-part='error']`'s own color/background
+          // pairing lives in the optional `theme.css`, which
+          // `.storybook/theme.tsx`'s decorator mounts only behind the
+          // workbench's Theme toggle — off by default, same as every other
+          // story in this file. Left to inherit, this text would be the
+          // browser default black over `.ef-video-player`'s dark background.
+          <p style={{ color: '#fff' }}>{error.message}</p>
+        )}
+      </Player.ErrorDisplay>
     </Player.Viewport>
   );
 };
