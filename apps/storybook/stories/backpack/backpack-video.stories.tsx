@@ -1,3 +1,4 @@
+import type { PlayerError } from '@reely/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, fn, waitFor } from 'storybook/test';
@@ -48,6 +49,19 @@ const coverImageDataUri =
 
 const pausedPlayer = ready({}, { playback: 'paused' });
 const playingPlayer = ready({}, { playback: 'playing' });
+
+/**
+ * A provider that failed to load (SIDEPRO-212), staged the same way
+ * `activation.stories.tsx`'s own `ErrorState` does: `lifecycle` and
+ * `activation` both `'error'`, alongside the `PlayerError` that put them
+ * there.
+ */
+const activationError: PlayerError = {
+  category: 'provider',
+  fatal: false,
+  recoverable: true,
+  message: 'Unable to load the player provider.'
+};
 
 /** Every clickable thing in the story, as `TAG[accessible name]`. */
 const affordances = (canvasElement: HTMLElement): string[] =>
@@ -299,12 +313,20 @@ export const AwaitingActivation: Story = {
 
 /**
  * `playing` asks for playback on load, but only the player can say it started.
- * Here it never does: the source resolves to nothing, so no provider attaches
- * and nothing ever reports playing. A real page reaches the same state when the
- * browser blocks an audible autoplay — `playing` with `muted` off asks for one.
- * (An unresolvable source is what makes this deterministic; a resolvable one
- * would load a real provider, which this suite forbids.) The label, the icon
- * and `aria-pressed` must report what the player is doing, not what was asked.
+ * Here it never does: the source resolves to nothing, and under eager loading
+ * that is a genuine activation error (`use-activation.ts`'s `if
+ * (options.source.status !== 'success')` branch, taken because `loading` is
+ * `'eager'` here), not merely a video that never got around to starting. A
+ * real page reaches only the paused half of this state when the browser
+ * blocks an audible autoplay attempt against a provider that did attach —
+ * `playing` with `muted` off is what asks for one — so the error half below
+ * is this story's own addition on top of that resemblance, not something a
+ * blocked autoplay would show. (An unresolvable source is what makes this
+ * deterministic; a resolvable one would load a real provider, which this
+ * suite forbids.) The label and `aria-pressed` report what the player is
+ * doing rather than what was asked either way; since SIDEPRO-212 the icon and
+ * `Player.ErrorDisplay` follow the same activation this component actually
+ * reached.
  */
 export const PlaybackRequestedButNeverStarted: Story = {
   args: { url: 'mock://reely/unresolvable.mp4', muted: false, playing: true },
@@ -312,7 +334,10 @@ export const PlaybackRequestedButNeverStarted: Story = {
   play: async ({ canvas, canvasElement }) => {
     const surface = await canvas.findByRole('button', { name: 'Play video' });
     await expect(surface).toHaveAttribute('aria-pressed', 'false');
-    await expect(playIcon(canvasElement)).not.toBeNull();
+    // Suppressed rather than present: this staged source is a genuine
+    // activation error, and the message below is what explains it.
+    await expect(playIcon(canvasElement)).toBeNull();
+    await canvas.findByText('The player source is not supported.');
     await expect(affordances(canvasElement)).toEqual(['BUTTON[Play video]']);
   }
 };
@@ -800,12 +825,14 @@ export const CoverYieldsToPlayback: Story = {
 
 /**
  * The other click target, pinned on its own: while the cover is up and no
- * provider has attached, `Player.ActivationButton` is what the viewer clicks,
- * and the wrapper hangs its own `onClick` on it (Backpack's
- * `onClickPreview={start}`). That handler is the optimistic half — it removes
- * the cover and reports `onPlayChange(true)` at click time, without waiting
- * for the player to confirm anything — so this story pins exactly that, with
- * neither a staged player nor a real one to confirm it.
+ * provider has attached, `Player.ActivationButton` is what the viewer
+ * clicks. SIDEPRO-212 removed the wrapper's own `onClick` from it — Backpack's
+ * `onClickPreview={start}` stays optimistic, flipping its playing state at
+ * click time, but this wrapper does not — so this story pins the corrected
+ * behavior: the primitive's own `onClick` still queues a play through
+ * `activateFromInteraction`, and this source cannot resolve one, so the click
+ * changes nothing the wrapper reports. `CoverSurvivesFailedActivation` below
+ * carries the click one step further, into an activation error.
  *
  * `mock://reely/unresolvable.mp4` is what keeps it deterministic and offline:
  * the scheme is not `http(s)`, so Reely's source detection fails it, no
@@ -829,12 +856,129 @@ export const CoverClickRequestsPlayback: Story = {
     await expect(activate).toHaveAttribute('data-reely-part', 'activation');
 
     await userEvent.click(activate);
-    await waitFor(() =>
-      expect(canvas.queryByAltText('custom cover image')).toBeNull()
+    // No provider can ever attach to this source, and nothing else can
+    // report playing on its behalf, so the click leaves everything exactly
+    // where it found it: no cover removal, and no click-time report.
+    await expect(canvas.queryByAltText('custom cover image')).not.toBeNull();
+    await expect(args.onPlayChange).not.toHaveBeenCalled();
+    await expect(
+      canvasElement.querySelector('[data-reely-part="media"]')
+    ).toBeNull();
+  }
+};
+
+/**
+ * SIDEPRO-212: a provider that failed to load, staged from mount rather than
+ * reached through a click — `AwaitingActivation` above already pins the
+ * pristine surface, so this pins the other end `Player.ActivationButton`
+ * itself switches on. The primitive's own "Retry loading video" and "Retry"
+ * apply because the wrapper hands it no `aria-label` and no children in this
+ * state (`backpack-video.tsx`'s `isActivationError` branches); no button
+ * anywhere on the surface is named "Pause video", because nothing ever
+ * reported playing.
+ */
+export const ActivationError: Story = {
+  args: { url: vimeoUrl, muted: true },
+  parameters: {
+    player: {
+      state: {
+        lifecycle: 'error',
+        activation: 'error',
+        error: activationError
+      }
+    }
+  },
+  play: async ({ args, canvas, canvasElement }) => {
+    const retry = await canvas.findByRole('button', {
+      name: 'Retry loading video'
+    });
+    await expect(retry).toHaveAttribute('data-reely-part', 'activation');
+    await expect(retry).toHaveAttribute('data-state', 'error');
+    await expect(canvas.queryByRole('button', { name: 'Pause video' })).toBeNull();
+
+    await canvas.findByText(activationError.message);
+
+    // Nothing ever confirmed playback, so nothing the wrapper reports ever
+    // reaches `true` — the phantom report SIDEPRO-212 found.
+    await expect(args.onPlayChange).not.toHaveBeenCalledWith(true);
+    await expect(playIcon(canvasElement)).toBeNull();
+  }
+};
+
+/**
+ * The wrapper with its player state staged in two steps rather than one: the
+ * mock stages a fresh report once per parameters object
+ * (`mock-player.tsx`'s `useEffect`, keyed on `state`), so a second report —
+ * here, the load failure — needs a second object, the same trick
+ * `PlayerReports` above uses for a playing/paused pair. `staged` starts as
+ * the pristine player the caller passed in, and the "Fail load" button moves
+ * it to `activationError`.
+ */
+const CoverThenActivationErrorVideo = ({
+  player,
+  ...props
+}: BackpackVideoProps & { readonly player: MockPlayerParameters }) => {
+  const [staged, setStaged] = useState(player);
+  return (
+    <>
+      <BackpackVideo {...props} ref={useMockPlayer(staged)} />
+      <button
+        onClick={() =>
+          setStaged({
+            state: {
+              lifecycle: 'error',
+              activation: 'error',
+              error: activationError
+            }
+          })
+        }
+        type="button"
+      >
+        Fail load
+      </button>
+    </>
+  );
+};
+
+/**
+ * The latch half of SIDEPRO-212: a viewer clicks the cover, and only then
+ * does the load fail. `CoverClickRequestsPlayback` above already pins that
+ * the click alone changes nothing; this carries it one step further, into
+ * the error, to pin that a failure arriving after the click has nothing to
+ * take away either — the optimistic handler that used to remove the cover
+ * at click time is what would have made that untrue.
+ */
+export const CoverSurvivesFailedActivation: Story = {
+  args: {
+    url: 'mock://reely/unresolvable.mp4',
+    muted: true,
+    light: true,
+    placeholderImageSrc: coverImageDataUri,
+    alt: 'custom cover image'
+  },
+  parameters: { player: {} },
+  render: (args, { parameters }) => (
+    <CoverThenActivationErrorVideo
+      {...args}
+      player={parameters.player as MockPlayerParameters}
+    />
+  ),
+  play: async ({ args, canvas, canvasElement, userEvent }) => {
+    await canvas.findByAltText('custom cover image');
+    const activate = await canvas.findByRole('button', { name: 'Play video' });
+    await userEvent.click(activate);
+    await expect(canvas.queryByAltText('custom cover image')).not.toBeNull();
+
+    await userEvent.click(
+      await canvas.findByRole('button', { name: 'Fail load' })
     );
-    await expect(args.onPlayChange).toHaveBeenLastCalledWith(true);
-    // Nothing confirmed playback — no provider can attach to this source — so
-    // the removal and the report came from the wrapper's own `onClick`.
+    await canvas.findByRole('button', { name: 'Retry loading video' });
+
+    // The cover is exactly where the click left it: the latch SIDEPRO-212
+    // removed never engaged, so the failure that followed has nothing to
+    // give back.
+    await expect(canvas.queryByAltText('custom cover image')).not.toBeNull();
+    await expect(args.onPlayChange).not.toHaveBeenCalledWith(true);
     await expect(
       canvasElement.querySelector('[data-reely-part="media"]')
     ).toBeNull();
