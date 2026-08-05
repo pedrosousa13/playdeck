@@ -78,7 +78,13 @@ export type VimeoChromelessAvailabilityDeps = {
   readonly source: Pick<VimeoSource, 'videoId' | 'hash'>;
   // The host's options, read when the probe starts rather than snapshotted at
   // construction: an embed that draws Vimeo's own controls is never chromeless.
-  readonly options: { readonly controls?: boolean };
+  readonly options: {
+    readonly controls?: boolean;
+    // Opt-in: without it, the probe never asks Vimeo's oEmbed endpoint about
+    // the account tier, so no request discloses the viewer before anyone has
+    // asked for the capability.
+    readonly customControls?: boolean;
+  };
 };
 
 // The chromeless-availability seam: whether this embed will hand its controls
@@ -104,17 +110,30 @@ export const createVimeoChromelessAvailability = ({
   let customControlsAvailability: Availability = providerCheck;
 
   return {
-    probe: () =>
-      options.controls === true
-        ? Promise.resolve<Availability>({
-            status: 'unavailable',
-            reason: 'provider'
-          })
-        : settleWithFallback(
-            chromelessAvailability(source),
-            providerCheck,
-            CHROMELESS_PROBE_TIMEOUT_MS
-          ),
+    // This narrows what probe() does, not when it is called: the eager call
+    // site in attachment.ts still fires on every attach, unconditionally, so
+    // the generation guard and the 4s race against the embed's own load both
+    // keep applying to whichever branch below actually runs.
+    probe: () => {
+      // An embed showing Vimeo's own chrome is never chromeless whatever
+      // else was asked for.
+      if (options.controls === true) {
+        return Promise.resolve<Availability>({
+          status: 'unavailable',
+          reason: 'provider'
+        });
+      }
+      // Opt-in: without it, no request discloses the viewer to Vimeo before
+      // anyone has asked for the capability.
+      if (options.customControls !== true) {
+        return Promise.resolve<Availability>(providerCheck);
+      }
+      return settleWithFallback(
+        chromelessAvailability(source),
+        providerCheck,
+        CHROMELESS_PROBE_TIMEOUT_MS
+      );
+    },
     adopt: (verdict) => {
       customControlsAvailability = verdict;
     },

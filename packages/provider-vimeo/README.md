@@ -54,17 +54,22 @@ are the only ones on screen, and `dnt` is on unless you turn it off.
 | Export                 | What it is                                                   |
 | ---------------------- | ------------------------------------------------------------ |
 | `createVimeoProvider`  | Builds the adapter over a mount element and a `VimeoSource`. |
-| `VimeoProviderOptions` | `controls`, `dnt`.                                           |
+| `VimeoProviderOptions` | `controls`, `dnt`, `customControls`.                         |
 | `VimeoMountElement`    | What the adapter can mount into.                             |
 | `VimeoProviderAdapter` | The adapter's own type.                                      |
 
 ## What it reports honestly
 
-- **Chromeless playback needs a paid plan.** `customControls` resolves from the
-  account tier behind the video, via Vimeo's public oEmbed endpoint: free and
-  basic accounts report `unavailable` / `provider-plan`, paid tiers report
-  `available`, and a tier we do not recognise stays unresolved rather than being
-  guessed at.
+- **Chromeless playback needs a paid plan, and checking for one is opt-in.**
+  Pass `customControls: true` and `customControls` resolves from the account
+  tier behind the video, via a request to Vimeo's public oEmbed endpoint: free
+  and basic accounts report `unavailable` / `provider-plan`, paid tiers report
+  `available`, and a tier we do not recognise stays unresolved rather than
+  being guessed at. Without `customControls: true`, no request is made — the
+  capability stays `unknown` / `provider-check` — so no viewer is disclosed to
+  Vimeo before anyone has asked for the capability. A `Player.Root` consumer
+  cannot reach this option yet, so the probe never fires from the React path
+  at all.
 - **`selectQuality` is `available` with a ladder** from the SDK's
   `getQualities()`. The rung's `height` is Vimeo's own name for it, not a
   measurement — the rung it labels `240p` renders at 480×270 — and `width` and
