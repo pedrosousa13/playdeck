@@ -242,16 +242,25 @@ type SurfaceProps = Pick<
  * is the target from the start, and a command issued before the provider
  * attaches simply reports not-ready.
  *
- * An activation error (SIDEPRO-212) is a further split of the two
- * `awaitingActivation: yes` rows above, not a fifth row: `ready` reads
- * `state.activation === 'ready'`, and `'error'` is a different value, so
- * `awaitingActivation` stays true and `Player.ActivationButton` stays the
- * click target — `aria-disabled` itself when the failure is a configuration
- * error (`packages/react/src/loading-error.tsx:44`), which is exactly the
- * case where `Player.ErrorDisplay` below is the only feedback left to give.
- * The play icon column stops applying in this split regardless of
- * `controls`: a play icon over a failed load is a misleading affordance, and
- * it would duplicate the "Retry" text underneath it.
+ * An activation error (SIDEPRO-212) does not add a fifth row, but it is not
+ * confined to the two `awaitingActivation: yes` rows either — it splits the
+ * click-target column and the play-icon column differently. The click target
+ * only moves for the two `yes` rows: `ready` reads `state.activation ===
+ * 'ready'`, and `'error'` is a different value, so `awaitingActivation` stays
+ * true and `Player.ActivationButton` stays the click target there —
+ * `aria-disabled` itself when the failure is a configuration error
+ * (`packages/react/src/loading-error.tsx:44`), which is exactly the case
+ * where `Player.ErrorDisplay` below is the only feedback left to give. The
+ * play icon column, by contrast, stops applying in every row that has one:
+ * `isActivationError` carries no `awaitingActivation` or loading-strategy
+ * qualifier of its own, so row 3's toggle-button icon is suppressed by an
+ * error exactly as row 1's is — reachable there because `awaitingActivation`
+ * is only ever false under eager or viewport loading, and either can still
+ * end in an error (an eagerly-loaded, unresolvable source is exactly this —
+ * see the effect at `use-activation.ts`'s `if (options.loading !== 'eager')
+ * return;`). A play icon over a failed load is a misleading affordance under
+ * either click target, and it would duplicate the "Retry" text underneath it
+ * wherever `Player.ActivationButton` is the one showing.
  *
  * The play icon is Reely's own affordance, so it is drawn only where Reely owns
  * the surface. Under `controls: true` the provider draws its own chrome, its own
