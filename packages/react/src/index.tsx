@@ -31,6 +31,10 @@ export type {
 // of a value it builds without depending on `@reely/provider-wistia` directly.
 export type { WistiaProviderOptions } from '@reely/provider-wistia';
 
+// The bag `PlayerProviderOptions.youtube` holds, so a caller can name the type
+// of a value it builds without depending on `@reely/provider-youtube` directly.
+export type { YouTubeProviderOptions } from '@reely/provider-youtube';
+
 export { Root } from './root.js';
 
 export type { PlayerActivationProps, RootProps } from './root.js';

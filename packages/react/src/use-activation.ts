@@ -140,7 +140,9 @@ const providerBagEqual = (
 const providerOptionsEqual = (
   left: PlayerProviderOptions | undefined,
   right: PlayerProviderOptions | undefined
-): boolean => providerBagEqual(left?.wistia, right?.wistia);
+): boolean =>
+  providerBagEqual(left?.wistia, right?.wistia) &&
+  providerBagEqual(left?.youtube, right?.youtube);
 
 const configurationError = (message: string) => ({
   category: 'configuration' as const,

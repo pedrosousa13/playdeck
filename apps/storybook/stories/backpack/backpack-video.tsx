@@ -502,9 +502,9 @@ export const BackpackVideoInternal = ({
     light && !startsPlaying ? url : undefined,
     placeholderImageSrc
   );
-  // Recomputed only when `playerConfig` itself changes identity, so a caller
-  // passing a stable `playerConfig` gets a stable `providerOptions` back.
-  // Not required for correctness — `Player.Root`'s own comparison is by value,
+  // Recomputed when `playerConfig` or `controls` changes identity/value, so a
+  // caller passing stable props gets a stable `providerOptions` back. Not
+  // required for correctness — `Player.Root`'s own comparison is by value,
   // per key, so an unmemoized bag that is merely value-equal would not
   // re-attach the provider either (`use-activation.ts`'s `providerBagEqual`)
   // — but it costs nothing to skip the rebuild on an unrelated re-render.
@@ -512,9 +512,13 @@ export const BackpackVideoInternal = ({
     () => ({
       wistia: translateWistiaPlayerConfig(
         mergeWistiaPlayerConfig(playerConfig?.wistia)
-      )
+      ),
+      // YouTube renders its own player chrome regardless of this wrapper's
+      // Reely-side control bar, so `controls` has to reach the embed itself
+      // (`provider-youtube/src/attachment.ts`'s `playerVars.controls`).
+      youtube: { controls }
     }),
-    [playerConfig]
+    [controls, playerConfig]
   );
 
   return (

@@ -1,15 +1,18 @@
 import type { ProviderAdapter, ResolvedPlayerSource } from '@reely/core';
 import type { NativePlaybackOptions } from '@reely/provider-native';
 import type { WistiaProviderOptions } from '@reely/provider-wistia';
+import type { YouTubeProviderOptions } from '@reely/provider-youtube';
 
 export type PlayerMediaMount = HTMLVideoElement | HTMLDivElement;
 
 /**
  * Options a single provider accepts that no Reely prop covers, keyed by
- * provider. Wistia is the only entry: its embed carries presentation options
- * -- a player colour, a swatch, a poster -- that only that provider has. The
- * native, HLS, YouTube and Vimeo providers wait on their own issues, so a
- * missing key here is a deliberate absence rather than an oversight.
+ * provider. Wistia's embed carries presentation options -- a player colour, a
+ * swatch, a poster -- that only that provider has, and YouTube's `controls`
+ * toggles its own player chrome, which `Root`'s own `controls` prop does not
+ * reach (`provider-youtube/src/attachment.ts`). The native, HLS and Vimeo
+ * providers wait on their own issues, so a missing key here is a deliberate
+ * absence rather than an oversight.
  *
  * Where a Reely prop and a provider option share a name, the overlap is only
  * nominal. `Root`'s `loop` travels in `NativePlaybackOptions`, which
@@ -21,6 +24,7 @@ export type PlayerMediaMount = HTMLVideoElement | HTMLDivElement;
  */
 export type PlayerProviderOptions = {
   readonly wistia?: WistiaProviderOptions;
+  readonly youtube?: YouTubeProviderOptions;
 };
 
 export type ProviderLoaderRequest = {
@@ -55,7 +59,11 @@ export const loadProvider = async ({
       throw new Error('The YouTube provider requires a media mount.');
     }
     const { createYouTubeProvider } = await import('@reely/provider-youtube');
-    return createYouTubeProvider(media, source.videoId);
+    return createYouTubeProvider(
+      media,
+      source.videoId,
+      providerOptions?.youtube
+    );
   }
   if (source.type === 'vimeo') {
     if (!media) {
