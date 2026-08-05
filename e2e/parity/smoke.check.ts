@@ -1,0 +1,26 @@
+import { expect, test } from '@playwright/test';
+import { fetchStoryIndex } from './story-index';
+
+// The one test that makes a broken prerequisite obvious: if either dev
+// server did not come up (most often the Backpack one, missing its
+// checkout or its `predev` build), this fails here rather than as an
+// unresolved story id somewhere downstream.
+test('both Storybooks answer /index.json and carry the video stories this issue cares about', async () => {
+  const [reely, backpack] = await Promise.all([
+    fetchStoryIndex('http://127.0.0.1:4173'),
+    fetchStoryIndex('http://127.0.0.1:6007')
+  ]);
+
+  expect(reely).toContainEqual(
+    expect.objectContaining({
+      title: 'Backpack parity/Mock/Video',
+      name: 'Default'
+    })
+  );
+  expect(backpack).toContainEqual(
+    expect.objectContaining({
+      title: 'Components/Video/Video',
+      name: 'Default'
+    })
+  );
+});
