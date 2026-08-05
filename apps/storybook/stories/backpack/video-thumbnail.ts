@@ -98,7 +98,9 @@ export const clearThumbnailCache = (): void => {
   thumbnailCache.clear();
 };
 
-const fetchThumbnail = (source: ThumbnailSource): Promise<string | undefined> => {
+const fetchThumbnail = (
+  source: ThumbnailSource
+): Promise<string | undefined> => {
   const cached = thumbnailCache.get(source.endpoint);
   if (cached) return cached;
 

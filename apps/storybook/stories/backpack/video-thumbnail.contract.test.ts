@@ -33,9 +33,7 @@ describe('thumbnailEndpoint', () => {
     // Regression for the divergence with `detectSource`: the old substring
     // matcher never recognised `/embed/` and returned no endpoint at all, so
     // an embedded video played with no cover under `light: true`.
-    expect(
-      thumbnailEndpoint('https://www.youtube.com/embed/dQw4w9WgXcQ')
-    ).toBe(
+    expect(thumbnailEndpoint('https://www.youtube.com/embed/dQw4w9WgXcQ')).toBe(
       'https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DdQw4w9WgXcQ&format=json'
     );
   });
