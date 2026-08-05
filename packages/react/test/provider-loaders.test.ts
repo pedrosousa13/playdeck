@@ -30,7 +30,9 @@ test('dispatches vimeo sources to the vimeo adapter with the mount and source', 
   await expect(
     loadProvider({ media, nativeOptions, source })
   ).resolves.toMatchObject({ provider: 'vimeo' });
-  expect(createVimeoProvider).toHaveBeenCalledWith(media, source);
+  // The third argument is always passed, so an absent bag arrives as
+  // `undefined` and `createVimeoProvider`'s own `{}` default applies.
+  expect(createVimeoProvider).toHaveBeenCalledWith(media, source, undefined);
 });
 
 test('rejects vimeo sources without a media mount', async () => {

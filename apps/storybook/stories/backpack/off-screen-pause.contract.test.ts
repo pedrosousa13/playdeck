@@ -5,7 +5,15 @@ import {
   render,
   renderHook
 } from '@testing-library/react';
-import { createElement, useRef, useState } from 'react';
+import type { PlayerHandle } from '@reely/react';
+import {
+  createElement,
+  createRef,
+  useCallback,
+  useRef,
+  useState,
+  type Ref
+} from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 import {
@@ -397,8 +405,8 @@ describe('BackpackVideo off-screen pause', () => {
   });
 
   // The acceptance criterion on the wrapper's own toggle. The same sequence
-  // through `Player.Controls` is at the bottom of this file, which is the path
-  // that has no click handler on it at all.
+  // under provider-drawn controls is at the bottom of this file, which is the
+  // path that has no click handler on it at all.
   it('keeps a video the viewer paused off screen paused when it scrolls back', () => {
     const { reported, scrollTo, toggle } = renderWrapper();
 
@@ -444,22 +452,57 @@ describe('BackpackVideo off-screen pause', () => {
   });
 });
 
-const StagedVideo = (props: BackpackVideoProps) =>
-  // Returned straight from the hook rather than held in a local, which is what
-  // `react-hooks/refs` asks for: a ref that never becomes a value in this
-  // scope cannot be read during render. `MockedBackpackVideo` does the same
-  // with `useMockPlayer` (`backpack-video.stories.tsx:164`, its
-  // `const MockedBackpackVideo`).
-  createElement(BackpackVideo, { ...props, ref: useReportingProvider() });
+/**
+ * The wrapper with {@link useReportingProvider}'s staged provider, and — for the
+ * one test below that drives the player rather than clicking it — a second ref
+ * handing the same handle to the test body. The wrapper forwards a single `ref`
+ * position, so the two have to land on it together, which is the merge
+ * `external-control.contract.test.ts` documents at length (`:48-81`, its
+ * `const assignHandle` and `const ExternallyControlledVideo`). Reproduced here
+ * rather than shared: it is six lines, and the two files' harnesses are
+ * otherwise nothing alike.
+ */
+const assignHandle = (
+  ref: Ref<PlayerHandle> | undefined,
+  handle: PlayerHandle | null
+): void => {
+  if (typeof ref === 'function') ref(handle);
+  else if (ref) ref.current = handle;
+};
+
+const StagedVideo = ({
+  external,
+  ...props
+}: BackpackVideoProps & { readonly external?: Ref<PlayerHandle> }) => {
+  const stagedRef = useReportingProvider();
+  const mergedRef = useCallback(
+    (handle: PlayerHandle | null) => {
+      assignHandle(stagedRef, handle);
+      assignHandle(external, handle);
+    },
+    [external, stagedRef]
+  );
+  return createElement(BackpackVideo, { ...props, ref: mergedRef });
+};
 
 /**
  * The acceptance criterion end to end, on the path that has no click handler on
- * it: under visible controls every play and pause the viewer makes reaches the
- * wrapper as a player report, so nothing along the way can announce "the viewer
- * did this" — only the hook's own record of what it asked for can tell the two
- * apart.
+ * it: under provider-drawn controls every play and pause the viewer makes
+ * reaches the wrapper as a player report, so nothing along the way can announce
+ * "the viewer did this" — only the hook's own record of what it asked for can
+ * tell the two apart.
+ *
+ * The viewer's clicks land on the provider's own chrome here, which no test can
+ * reach: `controls: true` puts nothing of the wrapper's on the surface at all
+ * (`backpack-video.tsx`'s affordance table), and the embed that would draw the
+ * chrome is a real one this suite may not mount. Driving the staged provider
+ * through the handle is the same path minus the click — a play the wrapper did
+ * not request, arriving as a report — which is the only property these
+ * assertions rest on. What a viewer's real click adds is pinned by
+ * `packages/react/test/vimeo.test.tsx` and `packages/react/test/youtube.test.tsx`,
+ * where the `controls` this wrapper forwards is what puts that chrome on screen.
  */
-describe('BackpackVideo off-screen pause under visible controls', () => {
+describe('BackpackVideo off-screen pause under provider-drawn controls', () => {
   beforeEach(installObserver);
 
   afterEach(() => {
@@ -467,23 +510,22 @@ describe('BackpackVideo off-screen pause under visible controls', () => {
     restoreObserver();
   });
 
-  it('keeps a video the viewer paused off screen through the controls paused when it scrolls back', () => {
+  it('keeps a video the viewer paused off screen through the controls paused when it scrolls back', async () => {
     const onPlayChange = vi.fn<(isPlaying: boolean) => void>();
-    const view = render(
+    const external = createRef<PlayerHandle>();
+    render(
       createElement(StagedVideo, {
         controls: true,
+        external,
         muted: true,
         onPlayChange,
         url: 'mock://reely/unresolvable.mp4'
       })
     );
     const reported = () => onPlayChange.mock.calls.map(([playing]) => playing);
-    const playButton = view.container.querySelector(
-      '[data-reely-part="play-button"]'
-    )!;
-    const press = () => {
-      act(() => {
-        fireEvent.click(playButton);
+    const press = async (playing: boolean) => {
+      await act(async () => {
+        await (playing ? external.current!.play() : external.current!.pause());
       });
     };
     const scrollTo = (visible: boolean) => {
@@ -492,7 +534,7 @@ describe('BackpackVideo off-screen pause under visible controls', () => {
       });
     };
 
-    press();
+    await press(true);
     expect(reported()).toEqual([true]);
 
     scrollTo(true);
@@ -501,8 +543,8 @@ describe('BackpackVideo off-screen pause under visible controls', () => {
 
     // The viewer plays the off-screen video and pauses it again, both through
     // the player's own controls.
-    press();
-    press();
+    await press(true);
+    await press(false);
     expect(reported()).toEqual([true, false, true, false]);
 
     scrollTo(true);

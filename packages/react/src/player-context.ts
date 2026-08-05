@@ -17,6 +17,11 @@ import type { ActivationBindings } from './use-activation.js';
 
 export type PlayerContextValue = ActivationBindings & {
   controller: PlayerController;
+  // `Root`'s own `controls` prop, threaded through so `Media`
+  // (`viewport-media.tsx`) can set it as a DOM attribute on the native
+  // `<video>` element -- the same channel `preload` already uses to reach
+  // that component, rather than a second configuration path.
+  controls: boolean | undefined;
   source: ReturnType<typeof detectSource>;
   // The last non-null caption selection, remembered so toggling captions back
   // on restores it. Player-scoped rather than per-control: CaptionsButton and

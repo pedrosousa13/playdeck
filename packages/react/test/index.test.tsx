@@ -106,7 +106,9 @@ const verifyMediaPropsExclusions = (): Player.MediaProps[] => [
   // @ts-expect-error use nativePoster instead of poster.
   { poster: '/poster.jpg' },
   // @ts-expect-error preload is derived from the loading strategy.
-  { preload: 'none' }
+  { preload: 'none' },
+  // @ts-expect-error use Root's own controls prop instead of Media's.
+  { controls: true }
 ];
 
 const confirmMetadataReady = (media: HTMLVideoElement): void => {
@@ -1695,6 +1697,53 @@ test('forwards a ref, custom attributes, style, and aria-label to the native vid
   expect(video.style.opacity).toBe('0.5');
   // Library-owned attributes remain intact alongside the passthrough.
   expect(video.getAttribute('data-reely-part')).toBe('media');
+});
+
+test('renders the controls attribute on the native video when controls is true', () => {
+  render(
+    <LegacyRoot controls source="/clip.mp4">
+      <Player.Media />
+    </LegacyRoot>
+  );
+
+  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  expect(video.controls).toBe(true);
+});
+
+test('omits the controls attribute on the native video when controls is unset', () => {
+  render(
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media />
+    </LegacyRoot>
+  );
+
+  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  expect(video.controls).toBe(false);
+});
+
+test('toggles the video controls attribute across a re-render without re-attaching the native provider', async () => {
+  const load = vi
+    .spyOn(HTMLMediaElement.prototype, 'load')
+    .mockImplementation(() => undefined);
+  const player = (controls: boolean) => (
+    <LegacyRoot controls={controls} source="/clip.mp4">
+      <Player.Media />
+    </LegacyRoot>
+  );
+  const { rerender } = render(player(true));
+  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  await waitFor(() => expect(load).toHaveBeenCalledOnce());
+  expect(video.controls).toBe(true);
+  load.mockClear();
+
+  rerender(player(false));
+
+  expect(video.controls).toBe(false);
+  // No re-attach: the native provider has no bag of its own -- `controls`
+  // reaches the element as a DOM attribute, not through the provider-options
+  // comparison that would tear it down and rebuild it.
+  await act(async () => undefined);
+  expect(load).not.toHaveBeenCalled();
 });
 
 test('sizes the native video to fill its viewport and letterbox by default', () => {
