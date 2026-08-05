@@ -261,13 +261,13 @@ plus one adapter's optional signal that nothing downstream reads.
 `SeekSlider` attaches no `onKeyDown`. `transport-controls.tsx:167-240` has no
 keyboard handler in its body. Everything a keyboard user can do comes from
 one of two other layers: the native `<input type="range">`'s own behavior, or
-`Player.Controls`' region-scoped shortcut handler (`controls.tsx:97-191`),
-which owns Space, `k`, arrow keys, `j`/`l`, volume arrows, `m`, `f`, and `c`,
-but only when focus sits outside the slider.
+`Player.Controls`' region-scoped shortcut handler (`controls.tsx:97-191`).
+That handler owns Space, `k`, arrow keys, `j`/`l`, volume arrows, `m`, `f`,
+and `c`. It acts only when focus sits outside the slider.
 
 | Key(s)                                   | Effect                                      | Owner                                             |
 | ---------------------------------------- | ------------------------------------------- | ------------------------------------------------- |
-| `ArrowRight`/`ArrowLeft`, off the slider | ±5s seek                                    | `Controls` shortcut (`controls.tsx:118-122`)      |
+| `ArrowRight`/`ArrowLeft`, off the slider | ±5s seek                                    | `Controls` shortcut (`controls.tsx:113-122`)      |
 | `j`/`l`                                  | ∓10s / +10s seek                            | `Controls` shortcut (`controls.tsx:123-134`)      |
 | `ArrowRight`/`ArrowLeft`, on the slider  | ±1s (the input's `step`)                    | native range input (`transport-controls.tsx:218`) |
 | `Home`/`End`                             | jump to min/max of the seek window          | native range input, no Reely code                 |
@@ -284,9 +284,9 @@ event target is editable (`:99-102`). This is deliberate and tested:
 while a slider has focus.
 
 **Arrow-key seek granularity changes with focus, unannounced.** Off the
-slider, arrows seek 5 seconds (`controls.tsx:118-122`). On the slider, the
+slider, arrows seek 5 seconds (`controls.tsx:113-122`). On the slider, the
 same keys seek 1 second (`transport-controls.tsx:218`). Nothing announces the
-change in meaning when focus moves onto the slider. The same seam is
+change in meaning when focus moves onto the slider. The same discontinuity is
 invisible for volume, because both steps happen to equal `0.05`.
 
 **What SIDEPRO-225 still needs to add, per this audit:**
@@ -298,14 +298,15 @@ invisible for volume, because both steps happen to equal `0.05`.
   independent defaults.
 - A resolution to the `global` option's WCAG 2.1.4 risk. In its default
   mode, `Player.Controls`' shortcut listener is scoped to the named,
-  focusable region (`controls.tsx:244-257`), which satisfies SC 2.1.4's
-  "only active when the component has focus" exception, confirmed by
-  `controls.test.tsx:773-782` and used by the reference player
-  (`reference-player.tsx:409-413`, no `global` prop). Opting into `global`
-  (`controls.tsx:42-49,192-198`, exercised by `controls.test.tsx:784-791`)
-  attaches the same single-character shortcuts to `document`, active
-  regardless of focus anywhere on the page. That satisfies none of 2.1.4's
-  three exceptions, and Reely ships no remap or turn-off alongside it.
+  focusable region (`controls.tsx:244-257`). This satisfies SC 2.1.4's
+  "only active when the component has focus" exception.
+  `controls.test.tsx:773-782` confirms the scoping. The reference player
+  uses this default mode (`reference-player.tsx:409-413`, no `global` prop).
+  Opting into `global` (`controls.tsx:42-49,192-198`, exercised by
+  `controls.test.tsx:784-791`) attaches the same single-character shortcuts
+  to `document`, active regardless of focus anywhere on the page. That
+  satisfies none of 2.1.4's three exceptions, and Reely ships no remap or
+  turn-off alongside it.
 
 ## 6. Why the Backpack wrapper ignored them
 
@@ -339,10 +340,11 @@ the reference composition proved it working. A search of every commit
 touching that `Player.PlayButton` line finds exactly one: `3b46acd` itself.
 The single-button bar has never been revisited since.
 
-`SeekSlider` was not unavailable. It was not shown to be unsuitable either:
-Backpack's own `VideoPlayer` forwards `controls` straight to `react-player`,
-which hands the underlying element the provider's native chrome, so the
-parity target has no competing bar design to match. `SeekSlider` gates on
+`SeekSlider` was not unavailable. It was not shown to be unsuitable either.
+Backpack's own `VideoPlayer` forwards `controls` straight to `react-player`.
+`react-player` hands the underlying element the provider's native chrome.
+The parity target therefore has no competing bar design to match.
+`SeekSlider` gates on
 `capabilities.seek.status`, which is `available` on both Vimeo and YouTube,
 demonstrated directly in the reference composition's `RealSources` story
 (`reference-player.tsx:521-551`). No capability, layout, or provider
@@ -356,9 +358,9 @@ list names light mode, cover images, hover effect, viewport pause, and
 several other exclusions, never the shape of the control bar.
 
 `docs/backpack-parity.md:125` marks the affected `WithControls` row
-`partial`, with no tracked issue number, unlike every other acknowledged
-shortfall in the same document's "Where Reely is worse" table (`:60-68`),
-which carries SIDEPRO tickets for SIDEPRO-210, SIDEPRO-212, and SIDEPRO-214.
+`partial`, with no tracked issue number. Every other acknowledged shortfall
+in the same document's "Where Reely is worse" table (`:60-68`) carries a
+SIDEPRO ticket. That table lists SIDEPRO-210, SIDEPRO-212, and SIDEPRO-214.
 The gap is recorded as descriptive fact, not as a reasoned, tracked
 divergence.
 
@@ -474,21 +476,22 @@ defect, or reads `new issue` where nothing does.
 
 | Defect                                                                                                                                         | Anchor                                                                                        | Disposition |
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------- |
-| `SeekSlider` seeks continuously with no preview/commit-on-release mode and no throttle                                                         | `packages/react/src/transport-controls.tsx:228-232`                                           | new issue   |
-| `PlayerState.seeking` and the `seeking`/`seeked` events cannot distinguish a user drag from a programmatic seek                                | `packages/core/src/types.ts:112`, `packages/react/src/transport-controls.tsx:230`             | new issue   |
+| `SeekSlider` seeks continuously with no preview/commit-on-release mode and no throttle                                                         | `packages/react/src/transport-controls.tsx:228-232`                                           | SIDEPRO-229 |
+| `PlayerState.seeking` and the `seeking`/`seeked` events cannot distinguish a user drag from a programmatic seek                                | `packages/core/src/types.ts:112`, `packages/react/src/transport-controls.tsx:230`             | SIDEPRO-230 |
 | `Time` renders a literal `"0:00"` for `type="duration"` and `type="remaining"` when `duration` is `null`                                       | `packages/react/src/transport-controls.tsx:254-262`                                           | SIDEPRO-224 |
 | `SeekSlider` never reads `PlayerState.live` and exposes no live-edge affordance                                                                | `packages/react/src/transport-controls.tsx:173-181`                                           | SIDEPRO-224 |
 | `SeekSlider` disappears entirely when the live seekable window is judged too short to scrub                                                    | `packages/provider-hls/src/index.ts:211-213`, `packages/react/src/transport-controls.tsx:184` | SIDEPRO-224 |
-| Only the HLS adapter populates `PlayerState.live`. Native, YouTube, Vimeo, and Wistia never do                                                 | `packages/core/src/player-controller.ts:62`                                                   | new issue   |
-| Idle/no-window `SeekSlider` reports a misleading `"0:00"` value with no `disabled`/`aria-disabled` state                                       | `packages/react/src/transport-controls.tsx:187-190,222-223`                                   | new issue   |
-| Buffered-range information has zero non-visual exposure to assistive technology                                                                | `packages/react/src/transport-controls.tsx:201`                                               | new issue   |
-| Default seek-slider unfilled-track color fails WCAG 1.4.11 non-text contrast (roughly 2.49:1)                                                  | `packages/react/theme.css:230`                                                                | new issue   |
-| Arrow-key seek granularity silently changes with focus location (5s off slider, 1s on it), unannounced                                         | `packages/react/src/controls.tsx:118-122`, `packages/react/src/transport-controls.tsx:218`    | SIDEPRO-225 |
+| Only the HLS adapter populates `PlayerState.live`. Native, YouTube, Vimeo, and Wistia never do                                                 | `packages/core/src/player-controller.ts:62`                                                   | SIDEPRO-231 |
+| Idle/no-window `SeekSlider` reports a misleading `"0:00"` value with no `disabled`/`aria-disabled` state                                       | `packages/react/src/transport-controls.tsx:187-190,222-223`                                   | SIDEPRO-232 |
+| Buffered-range information has zero non-visual exposure to assistive technology                                                                | `packages/react/src/transport-controls.tsx:201`                                               | SIDEPRO-233 |
+| Default seek-slider unfilled-track color fails WCAG 1.4.11 non-text contrast (roughly 2.49:1)                                                  | `packages/react/theme.css:230`                                                                | SIDEPRO-234 |
+| Arrow-key seek granularity silently changes with focus location (5s off slider, 1s on it), unannounced                                         | `packages/react/src/controls.tsx:113-122`, `packages/react/src/transport-controls.tsx:218`    | SIDEPRO-225 |
 | `Player.Controls`' `global` option is a live WCAG 2.1.4 risk with no remap or turn-off offered                                                 | `packages/react/src/controls.tsx:192-198`                                                     | SIDEPRO-225 |
 | No large-jump key is defined for the seek slider. `PageUp`/`PageDown` are unspecified browser defaults                                         | `packages/react/src/transport-controls.tsx:167-240` (no handler)                              | SIDEPRO-225 |
-| The buffered-progress indicator renders nothing in the reference composition, for lack of a CSS rule                                           | `apps/storybook/stories/reference/reference-player.tsx:20-210`                                | new issue   |
-| Both sliders in the reference bar render as unstyled native range inputs                                                                       | `apps/storybook/stories/reference/reference-player.tsx:20-210`                                | new issue   |
-| `SettingsMenuContent` ships a `scrollable-region-focusable` axe violation by default. The fix is an undocumented consumer prop                 | `packages/react/src/settings-menu.tsx:135-184`                                                | new issue   |
-| Responsive control folding is hand-rolled, duplicates markup, and already hit a CSS specificity trap                                           | `apps/storybook/stories/reference/reference-player.tsx:196-209`                               | new issue   |
+| The buffered-progress indicator renders nothing in the reference composition, for lack of a CSS rule                                           | `apps/storybook/stories/reference/reference-player.tsx:20-210`                                | SIDEPRO-235 |
+| Both sliders in the reference bar render as unstyled native range inputs                                                                       | `apps/storybook/stories/reference/reference-player.tsx:20-210`                                | SIDEPRO-236 |
+| `SettingsMenuContent` ships a `scrollable-region-focusable` axe violation by default. The fix is an undocumented consumer prop                 | `packages/react/src/settings-menu.tsx:135-184`                                                | SIDEPRO-237 |
+| Responsive control folding is hand-rolled, duplicates markup, and already hit a CSS specificity trap                                           | `apps/storybook/stories/reference/reference-player.tsx:196-209`                               | SIDEPRO-238 |
+| The volume slider is dropped, not folded, below 420px, unlike `PipButton` and `AirPlayButton`, which get a menu fallback                       | `apps/storybook/stories/reference/reference-player.tsx:189-191`                               | SIDEPRO-240 |
 | Backpack wrapper's `controls={true}` on a YouTube source likely renders two overlapping control bars, untested                                 | `apps/storybook/stories/backpack/backpack-video.tsx:406-413,519-530`                          | SIDEPRO-223 |
-| Backpack wrapper's control bar omits `SeekSlider`, `Time`, `MuteButton`, `VolumeSlider`, and `FullscreenButton` with no recorded design reason | `apps/storybook/stories/backpack/backpack-video.tsx:406-413`                                  | new issue   |
+| Backpack wrapper's control bar omits `SeekSlider`, `Time`, `MuteButton`, `VolumeSlider`, and `FullscreenButton` with no recorded design reason | `apps/storybook/stories/backpack/backpack-video.tsx:406-413`                                  | SIDEPRO-239 |
