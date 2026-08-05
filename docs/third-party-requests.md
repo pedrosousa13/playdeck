@@ -3,8 +3,8 @@
 What a page talks to when it mounts a Reely player: which origins each
 provider reaches, when each request leaves the page relative to `Player.Root`'s
 `loading` prop, and what a Content-Security-Policy for that page has to allow.
-This is the honest accounting the [`Honesty about
-providers`](../README.md#honesty-about-providers) section in the root README
+This is the honest accounting the [Honesty about
+providers](../README.md#honesty-about-providers) section in the root README
 points to — read against the loaders and attachment builders themselves, not
 against provider documentation.
 
@@ -20,7 +20,7 @@ than guessing.
 | **HLS** (`@reely/provider-hls`)                              | —                                    | —                                                                      | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                     | Your own manifest/segment host, when the native engine plays it directly. |
 | **YouTube** (`@reely/provider-youtube`)                      | `www.youtube.com`                    | `www.youtube-nocookie.com` (always, via `Player.Root`; see note below) | —                                                                                                           | —                                                                                                           | —                                                                         |
 | **Vimeo** (`@reely/provider-vimeo`)                          | —                                    | `player.vimeo.com`                                                     | —                                                                                                           | `vimeo.com` — opt-in only, and unreachable via `Player.Root` today; see note below.                         | —                                                                         |
-| **Wistia** (`@reely/provider-wistia`)                        | `fast.wistia.net`, `fast.wistia.com` | —                                                                      | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | Same five hosts as `img-src`.                                             |
+| **Wistia** (`@reely/provider-wistia`)                        | `fast.wistia.net`, `fast.wistia.com` | `fast.wistia.net` (legacy-embed fallback; see note below)              | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | Same five hosts as `img-src`.                                             |
 | **Storybook Backpack wrapper** — not shipped, see note below | —                                    | —                                                                      | `img.youtube.com`, `ytimg.com` (+ subdomains), `vimeocdn.com` (+ subdomains)                                | `www.youtube.com`, `vimeo.com`                                                                              | —                                                                         |
 
 Notes, per row:
@@ -56,7 +56,7 @@ Notes, per row:
   dynamically — nothing is fetched from a Vimeo CDN
   (`packages/provider-vimeo/README.md`). The oEmbed probe at
   `packages/provider-vimeo/src/chromeless-availability.ts` that would reach
-  `vimeo.com/api/oembed.json` is opt-in as of `c0ff5a5`: it only fires when
+  `vimeo.com/api/oembed.json` is opt-in as of SIDEPRO-217: it only fires when
   `VimeoProviderOptions.customControls === true`
   (`chromeless-availability.ts:128`), and `packages/react/src/provider-loaders.ts`
   calls `createVimeoProvider(media, source)` with no options at all — so a
@@ -76,24 +76,37 @@ Notes, per row:
   runtime, confirmed by reading the shipped bundle's hardcoded hostnames
   (`fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`,
   `embed-ssl.wistia.com`, `embed-fastly.wistia.com`) rather than assumed from
-  the npm dependency alone. Aurora renders no iframe of its own — a
-  legacy-iframe fallback exists in Wistia's media configuration, but this
-  adapter's `api-ready` handshake times out on that path rather than
-  rendering it (`API_READY_TIMEOUT_MS`, `packages/provider-wistia/README.md`)
-  — so no `frame-src` entry is needed. The element also dynamically loads a
-  Mux Data analytics module (`assets/external/wistia-mux.js`, from the same
-  `fast.*` host) unless the page sets `window.wistiaDisableMux = true`; that
-  global is a Wistia SDK switch, not something `WistiaProviderOptions`
-  exposes, and the audit could not confirm from the shipped bundle which
-  origin that module reports metrics to, since it is fetched at runtime
-  rather than bundled — treat that as an open question if you need to pin it
-  down, rather than as a origin this table has verified. `dnt` (on by
-  default, `packages/provider-wistia/src/attachment.ts:201`) asks Wistia not
-  to track the session; it is a separate switch from the Mux module.
-  Wistia's provider options (`controls`, `dnt`, `loop`, `playerColor`,
-  `swatch`, `poster`, `transparentLetterbox`) are, unlike YouTube's and
-  Vimeo's, reachable from `Player.Root` via `providerOptions={{ wistia: {...}
-}}` (`packages/react/src/provider-loaders.ts`).
+  the npm dependency alone. Aurora does render an iframe on one path: when
+  the media-data response asks for the legacy embed, the element writes
+  `<iframe src="https://fast.wistia.net/embed/iframe/{mediaId}">` straight
+  into its shadow root and returns without ever initialising a public API
+  — confirmed against the shipped bundle
+  (`dist/wistia-player.js:18517-18535`, building the URL from
+  `eV1HostWithPort()`) and against
+  `packages/provider-wistia/src/attachment.ts:37-39`, which already
+  describes exactly this path. That render happens in the browser regardless
+  of what this adapter does next: `API_READY_TIMEOUT_MS`
+  (`packages/provider-wistia/README.md`) only decides how long Reely waits
+  for the `api-ready` handshake before reporting a recoverable error — the
+  handshake never arrives on this path, but the timeout does not stop the
+  iframe from loading. So a page that can reach a media id serving the
+  legacy embed needs `fast.wistia.net` in `frame-src` too, even though
+  Reely's adapter never treats that path as a successful attach either way.
+  The element also dynamically loads a Mux Data analytics module
+  (`assets/external/wistia-mux.js`, from the same `fast.*` host) unless the
+  page sets `window.wistiaDisableMux = true`; that global is an Aurora
+  switch, not something `WistiaProviderOptions` exposes, and the audit could
+  not confirm from the shipped bundle which origin that module reports
+  metrics to, since it is fetched at runtime rather than bundled — treat
+  that as an open question if you need to pin it down, rather than an origin
+  this table has verified. `dnt` (on by default,
+  `packages/provider-wistia/src/attachment.ts:201`) asks Wistia not to track
+  the session; it is a separate switch from the Mux module. Wistia's
+  provider options (`controls`, `dnt`, `loop`, `playerColor`, `swatch`,
+  `poster`, `transparentLetterbox`) are, unlike YouTube's and Vimeo's,
+  reachable from `Player.Root` via
+  `providerOptions={{ wistia: {...} }}`
+  (`packages/react/src/provider-loaders.ts`).
 - **The storybook Backpack wrapper**
   (`apps/storybook/stories/backpack/video-thumbnail.ts`) is not in any
   published package — `apps/storybook`'s `package.json` marks it
@@ -118,7 +131,7 @@ this table says, for any provider:
   default — so the request can leave up to 200px of scroll before the box is
   actually on screen, but not before.
 - **`interaction`**: nothing attaches until the viewer activates the
-  play/retry affordance `Player.LoadingError` renders
+  play/retry affordance `Player.ActivationButton` renders
   (`packages/react/src/loading-error.tsx:56`, `activateFromInteraction()`).
   No request in this document leaves the page before that click. Cannot be
   combined with autoplay — `Root` reports a configuration error if it is
@@ -147,6 +160,12 @@ Mapped onto the origins above:
   entirely: `useVideoThumbnail` fires its `fetch` once at mount, whenever it is
   given a URL and no `placeholderImageSrc` — the cover has to be ready before
   any player attaches, so it cannot wait on the same gate the player does.
+  But the call site only ever passes a URL when the wrapper's own `light` prop
+  is true and playback has not started
+  (`apps/storybook/stories/backpack/backpack-video.tsx:501-502`,
+  `light && !startsPlaying ? url : undefined`), and `light` defaults to
+  `false` (`:459`) — so by default this wrapper makes no oEmbed request at
+  all, and the request only exists for a caller who opts into `light`.
 
 ## The SRI bargain
 
@@ -163,19 +182,41 @@ first-party script on the page has. `crossOrigin` is absent for the same
 reason `integrity` is — there is nothing to check the response against. That is
 the bargain a YouTube source makes on your page's behalf, not a gap to close.
 
+## A note on `style-src`
+
+Everything above is about `script-src`, `frame-src`, `img-src`,
+`connect-src` and `media-src`. Reely's primitives also carry a `style-src`
+consideration, for a different reason: they set structural geometry —
+positioning, stacking, the media element filling its box — with inline
+`style={{...}}` rather than a stylesheet, by design
+([ADR-0001](adr/0001-structural-css-ships-inline.md)), so that a consumer who
+imports no stylesheet still gets a correctly stacked player. Client-side, React
+applies that geometry through the CSSOM, which `style-src`/`style-src-attr` do
+not govern. Server-rendered markup is the case that does need a
+`style-src` entry: `tests/integrations/next-image/test.mjs:110` asserts
+`position: 'absolute'` on the poster _before hydration_, which is only
+observable if the server emitted it as a literal `style="..."` attribute in
+the HTML — and a `style-src`/`style-src-attr` policy governs an attribute like
+that. An SSR consumer under a strict policy needs `style-src 'unsafe-inline'`
+(or per-request nonces or hashes covering that markup) for Reely's
+pre-hydration output to render with its structural geometry intact. This
+audit did not verify whether Reely's build offers a nonce- or hash-friendly
+path as an alternative to `'unsafe-inline'` — treat that as open. Nothing
+here generalises beyond what `script-src` and `style-src` specifically cover;
+the other directives in this document behave as documented above.
+
 ## What the audit found in good order
 
 Two things this sweep found are not integrity gaps and should not be read as
 omissions:
 
-- **Vimeo and Wistia ship their SDKs as npm dependencies, not remote script
-  tags.** `@vimeo/player` and `@wistia/wistia-player` are both imported
-  dynamically from the package's own bundle
+- **Vimeo ships its SDK, and Wistia ships Aurora, as npm dependencies, not
+  remote script tags.** `@vimeo/player` and `@wistia/wistia-player` are both
+  imported dynamically from the package's own bundle
   (`packages/provider-vimeo/README.md`, `packages/provider-wistia/README.md`)
-  — nothing is fetched from a CDN to load the SDK itself. (Wistia's
-  `<wistia-player>` element does then reach Wistia's own CDN for its engine
-  and media data at runtime, which the origins table above covers
-  separately.)
+  — nothing is fetched from a CDN to load either one. (Aurora does then reach
+  Wistia's own CDN for its engine and media data at runtime, which the
+  origins table above covers separately.)
 - **Every runtime dependency of every published package is pinned to an
   exact version**, not a caret range: `@wistia/wistia-player` at `0.7.12`
   (`packages/provider-wistia/package.json`), `@vimeo/player` at `2.30.4`
@@ -195,18 +236,24 @@ Content-Security-Policy:
   frame-src https://www.youtube-nocookie.com;
   img-src 'self';
   connect-src 'self';
-  media-src 'self'
+  media-src 'self';
+  style-src 'self'
 ```
+
+`style-src 'self'` is enough for a client-only mount. Add `'unsafe-inline'` (or
+nonces/hashes covering the pre-hydration markup) only if this page's HTML is
+server-rendered — see the `style-src` note above.
 
 Adding another provider is additive, not multiplicative: union the origins
 from the table above for every provider a page can render, rather than
 building a separate policy per source. A page that can show YouTube, Vimeo and
 Wistia sources needs `script-src` to carry `www.youtube.com` and
 `fast.wistia.net`/`fast.wistia.com`; `frame-src` to carry
-`www.youtube-nocookie.com` and `player.vimeo.com`; and `connect-src`/`img-src`
-to carry Wistia's five hosts — whether or not any single page load actually
-renders all three. Add `vimeo.com` to `connect-src` only if some caller in your
-app constructs `createVimeoProvider` directly with `customControls: true`; it
-is not needed for a `Player.Root`-only page. None of this needs `'unsafe-inline'`
-or `'unsafe-eval'` — every provider here is a script or iframe load, not
-inline code.
+`www.youtube-nocookie.com`, `player.vimeo.com` and `fast.wistia.net` (the last
+only matters if a media id can hit Wistia's legacy-embed fallback); and
+`connect-src`/`img-src` to carry Wistia's five hosts — whether or not any
+single page load actually renders all three. Add `vimeo.com` to `connect-src`
+only if some caller in your app constructs `createVimeoProvider` directly with
+`customControls: true`; it is not needed for a `Player.Root`-only page. None
+of this needs `'unsafe-inline'` or `'unsafe-eval'` in `script-src` — every
+provider here is a script or iframe load, not inline code.
