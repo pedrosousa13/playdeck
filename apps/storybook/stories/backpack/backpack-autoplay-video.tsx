@@ -49,7 +49,7 @@ export type BackpackAutoplayVideoProps = Omit<
  * for the thing the component is actually about: the strategy named
  * `loading: 'viewport'` observes the player's own `Player.Viewport` box and
  * attaches the provider when it first scrolls into view
- * (`packages/react/src/use-activation.ts:387-506`,
+ * (`packages/react/src/use-activation.ts:453-580`,
  * `if (options.loading !== 'viewport'`), and muted autoplay then
  * starts playback as soon as that provider reports ready — so playing on the way
  * in is the mechanism rather than a correction applied after the fact, and
@@ -57,21 +57,18 @@ export type BackpackAutoplayVideoProps = Omit<
  * prop that selects it, reached through `BackpackVideoInternal` because the
  * public `BackpackVideo` name deliberately does not offer it.
  *
- * ## `threshold` does not reach the start, only the pause
- * Inherited from `BackpackVideoProps` and worth knowing before it is used: it
- * reaches the off-screen-pause observer alone. The two observers on an
- * autoplaying video are asymmetric and cannot currently be aligned — Reely's
- * activation observer is constructed with `{ rootMargin: options.loadMargin }`
- * and nothing else (`packages/react/src/use-activation.ts:458`), and
- * `Player.Root` exposes no threshold for it to carry
- * (`packages/react/src/root.tsx:48-49,98-99` offer `loading` and `loadMargin`
- * only). So with `threshold` above `0` the start fires at the first visible
- * pixel while the pause hook still calls the video out of view, which pauses it
- * again at once: one spurious play/pause pair, both reported through
- * `onPlayChange`. No story passes `threshold` to this component, so nothing
- * exercises it today; closing it needs a threshold on Reely's viewport loading,
- * and it is recorded in `docs/backpack-parity.md` rather than worked around
- * here.
+ * ## `threshold` reaches the start too, as `loadThreshold`
+ * Inherited from `BackpackVideoProps`, and — on this composition, where
+ * `autoplayOnViewportEntry` is always on — no longer the pause observer's
+ * alone: `BackpackVideoInternal` forwards it to `Player.Root` as
+ * `loadThreshold` (`backpack-video.tsx:558`), which is what the activation
+ * observer itself now reads (`packages/react/src/use-activation.ts:528-529`,
+ * its `threshold: observerThresholds(options.loadThreshold)`). The two
+ * observers stay two observers with two owners — see "One departure from
+ * SIDEPRO-203's brief" in `docs/backpack-parity.md` for why a shared one is
+ * not the fix — but both now honour the same `threshold`, so a caller no
+ * longer gets one spurious play/pause pair from a start that fired earlier
+ * than the pause hook's own agreement to hold it visible.
  *
  * ## What is forced, and where the forcing lives
  * `muted` is `true` and `light` is `false`, as in Backpack, for the reason

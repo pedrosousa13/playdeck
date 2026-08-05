@@ -41,6 +41,7 @@ export type UseActivationOptions = {
   readonly autoplay: AutoplayMode;
   readonly controller: PlayerController;
   readonly loadMargin: string;
+  readonly loadThreshold: number;
   readonly loading: PlayerLoadingStrategy;
   readonly nativeOptions: NativePlaybackOptions;
   readonly prepareMedia: (media: PlayerMediaMount) => void;
@@ -70,6 +71,7 @@ type ObserverRegistration = {
   readonly observer: IntersectionObserver;
   readonly sourceKey: string;
   readonly target: HTMLDivElement;
+  readonly threshold: number;
 };
 
 type ActivationInputs = {
@@ -143,6 +145,68 @@ const providerOptionsEqual = (
 ): boolean =>
   providerBagEqual(left?.wistia, right?.wistia) &&
   providerBagEqual(left?.youtube, right?.youtube);
+
+// A browser can report an intersection ratio a hair under the geometrically
+// exact value it is crossing -- documented for `threshold: 1`, where subpixel
+// layout rounding can leave the ratio at e.g. `0.9998` and the callback never
+// fires again to say the target reached it. The tolerance absorbs that noise
+// without treating a materially lower ratio as a match.
+const THRESHOLD_EPSILON = 0.0001;
+
+// Same idea for the size comparison `targetExceedsRoot` makes below: a target
+// sized to match its root can differ from it by a subpixel and still mean "the
+// same size" rather than "bigger".
+const SIZE_EPSILON_PX = 0.5;
+
+// The observer is always given `0` alongside `loadThreshold`, so its callback
+// fires the moment the target starts intersecting at all -- not only when it
+// crosses `loadThreshold` itself. That first crossing is what
+// `targetExceedsRoot` needs to see the target's and the root's rects before
+// `loadThreshold` is anywhere close, and it is the *only* further callback a
+// target that can never reach `loadThreshold` will ever get: with a single
+// configured threshold above the ratio a target can reach, nothing after the
+// initial callback would ever cross it, and the observer would fall silent for
+// good. Deduplicated rather than always `[0, loadThreshold]`, so the default
+// `loadThreshold: 0` -- every consumer's activation today -- keeps asking the
+// browser for exactly what it asked for before this prop existed.
+const observerThresholds = (loadThreshold: number): number[] =>
+  loadThreshold === 0 ? [0] : [0, loadThreshold];
+
+// Whether `entry`'s target is larger than the root it is observed against, in
+// either dimension -- the shape behind the brief's own example, a `9/16`
+// Shorts player on a window shorter than it is tall. A target that size can
+// never cover 100% of the root no matter how it scrolls, so a `loadThreshold`
+// near `1` would otherwise stay unsatisfied forever: not a misconfiguration
+// worth an error, since every other threshold works fine on every other
+// target, just a box that happened to overflow the one it loaded into. `null`
+// `rootBounds` -- the root not sharing this target's document, or not yet
+// having a size to report -- is treated as "not provably larger", the
+// conservative reading: the cost of a false negative here is the first-pixel
+// activation every consumer already gets under the default `loadThreshold: 0`,
+// where the cost of a false positive would be a threshold silently never
+// doing what it was set to do.
+const targetExceedsRoot = (entry: IntersectionObserverEntry): boolean => {
+  const { rootBounds, boundingClientRect: target } = entry;
+  return (
+    rootBounds !== null &&
+    (target.width > rootBounds.width + SIZE_EPSILON_PX ||
+      target.height > rootBounds.height + SIZE_EPSILON_PX)
+  );
+};
+
+// The activation criterion for one delivered entry. A target that fits within
+// its root is held to `loadThreshold` itself; one that cannot -- see
+// `targetExceedsRoot` -- gets the same first-pixel activation the default
+// `loadThreshold: 0` already gives every other player, rather than an
+// unreachable threshold leaving it dormant with no playback and no error, the
+// worse failure the brief warns against.
+const meetsLoadThreshold = (
+  entry: IntersectionObserverEntry,
+  loadThreshold: number
+): boolean =>
+  entry.isIntersecting &&
+  (entry.intersectionRatio >= loadThreshold - THRESHOLD_EPSILON ||
+    targetExceedsRoot(entry));
 
 const configurationError = (message: string) => ({
   category: 'configuration' as const,
@@ -419,7 +483,8 @@ export const useActivation = (
     const currentObserver = observerRef.current;
     if (
       currentObserver?.target === viewport &&
-      currentObserver.margin === options.loadMargin
+      currentObserver.margin === options.loadMargin &&
+      currentObserver.threshold === options.loadThreshold
     )
       return;
     disconnectObserver(currentObserver);
@@ -448,7 +513,9 @@ export const useActivation = (
       const observer = new Observer(
         (entries) => {
           if (
-            !entries.some((entry) => entry.isIntersecting) ||
+            !entries.some((entry) =>
+              meetsLoadThreshold(entry, options.loadThreshold)
+            ) ||
             !isCurrentObservation()
           ) {
             return;
@@ -457,7 +524,10 @@ export const useActivation = (
           observerRef.current = undefined;
           activate(false);
         },
-        { rootMargin: options.loadMargin }
+        {
+          rootMargin: options.loadMargin,
+          threshold: observerThresholds(options.loadThreshold)
+        }
       );
       registration = {
         configuration,
@@ -466,7 +536,8 @@ export const useActivation = (
         margin: options.loadMargin,
         observer,
         sourceKey: key,
-        target: viewport
+        target: viewport,
+        threshold: options.loadThreshold
       };
       observerRef.current = registration;
       observer.observe(viewport);
@@ -502,6 +573,7 @@ export const useActivation = (
     currentKey,
     options.controller,
     options.loadMargin,
+    options.loadThreshold,
     options.loading,
     options.source.status,
     viewportVersion

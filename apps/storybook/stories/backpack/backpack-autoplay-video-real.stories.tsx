@@ -116,12 +116,20 @@ export const WistiaVideo: Story = {
  * nothing has been requested yet, then the video loads and starts as its box
  * crosses into view, and the badge in the panel's top-right follows
  * `onPlayChange` from there as it leaves and comes back.
+ *
+ * `threshold: 1` is this story's own addition, not Backpack's: the panel below
+ * is a full `100vh`, taller than the 600px player box in every viewport this
+ * suite runs in, so the whole box fitting on screen at once is a position
+ * that exists, and this is what makes it the position loading waits for —
+ * without it, the load threshold falls back to `0` and starts on the first
+ * visible pixel, same as every other story in this file.
  */
 export const InPage: Story = {
   args: {
     url: vimeoUrl,
     placeholderImageSrc: coverImageUrl,
-    alt: 'Custom placeholder image'
+    alt: 'Custom placeholder image',
+    threshold: 1
   },
   parameters: { layout: 'fullscreen' },
   render: (args) => (

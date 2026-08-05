@@ -30,7 +30,7 @@ vi.mock('../src/provider-loaders', () => ({
 class ControlledIntersectionObserver implements IntersectionObserver {
   static instances: ControlledIntersectionObserver[] = [];
   readonly root = null;
-  readonly thresholds = [0];
+  readonly thresholds: number[];
   readonly rootMargin: string;
   readonly scrollMargin = '0px';
   private readonly callback: IntersectionObserverCallback;
@@ -42,6 +42,9 @@ class ControlledIntersectionObserver implements IntersectionObserver {
   ) {
     this.callback = callback;
     this.rootMargin = options.rootMargin ?? '0px';
+    this.thresholds = Array.isArray(options.threshold)
+      ? options.threshold
+      : [options.threshold ?? 0];
     ControlledIntersectionObserver.instances.push(this);
   }
 
@@ -52,18 +55,26 @@ class ControlledIntersectionObserver implements IntersectionObserver {
   takeRecords = () => [];
   unobserve = vi.fn();
 
-  intersect() {
+  /**
+   * Reports an entry for the observed target, as a scroll would. Defaults to
+   * a full, unobstructed intersection; a test pinning `loadThreshold`
+   * behaviour overrides `intersectionRatio`, `rootBounds` and
+   * `boundingClientRect` to describe a partial or an oversized one instead.
+   */
+  intersect(entry: Partial<IntersectionObserverEntry> = {}) {
     const target = this.target!;
+    const rect = target.getBoundingClientRect();
     this.callback(
       [
         {
-          boundingClientRect: target.getBoundingClientRect(),
+          boundingClientRect: rect,
           intersectionRatio: 1,
-          intersectionRect: target.getBoundingClientRect(),
+          intersectionRect: rect,
           isIntersecting: true,
           rootBounds: null,
           target,
-          time: 0
+          time: 0,
+          ...entry
         }
       ],
       this
@@ -83,6 +94,7 @@ type ActivationProbeProps = {
   readonly controller: PlayerController;
   readonly loading?: Player.PlayerLoadingStrategy;
   readonly loadMargin?: string;
+  readonly loadThreshold?: number;
   readonly mediaKey?: string;
   readonly nativeOptions?: NativePlaybackOptions;
   readonly onActivate?: (activate: () => void) => void;
@@ -100,6 +112,7 @@ const ActivationProbe = ({
   controller,
   loading = 'eager',
   loadMargin = '200px 0px',
+  loadThreshold = 0,
   mediaKey = 'media',
   nativeOptions = {},
   onActivate,
@@ -120,6 +133,7 @@ const ActivationProbe = ({
     autoplay,
     controller,
     loadMargin,
+    loadThreshold,
     loading,
     nativeOptions,
     prepareMedia: () => undefined,
@@ -237,6 +251,120 @@ test('viewport uses a custom margin', () => {
   expect(ControlledIntersectionObserver.instances[0]?.rootMargin).toBe(
     '500px 20px'
   );
+});
+
+test('the default load threshold activates at the first visible pixel', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture());
+
+  const observer = ControlledIntersectionObserver.instances[0]!;
+  expect(observer.thresholds).toEqual([0]);
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: new DOMRectReadOnly(0, 0, 400, 800),
+      intersectionRatio: 0.01,
+      rootBounds: new DOMRectReadOnly(0, 0, 400, 800)
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+});
+
+test('viewport uses a custom load threshold', () => {
+  render(fixture({ loadThreshold: 0.75 }));
+
+  expect(ControlledIntersectionObserver.instances[0]?.thresholds).toEqual([
+    0, 0.75
+  ]);
+});
+
+test('viewport activation waits for the configured load threshold', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture({ loadThreshold: 1 }));
+  const observer = ControlledIntersectionObserver.instances[0]!;
+  const rootBounds = new DOMRectReadOnly(0, 0, 400, 800);
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: new DOMRectReadOnly(0, 0, 400, 800),
+      intersectionRatio: 0.5,
+      rootBounds
+    })
+  );
+  await Promise.resolve();
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: new DOMRectReadOnly(0, 0, 400, 800),
+      intersectionRatio: 1,
+      rootBounds
+    })
+  );
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+});
+
+// The brief's own example: a `9/16` Shorts player on a window shorter than it
+// is tall can never reach `intersectionRatio: 1` -- the target is taller than
+// the root at every scroll position -- so an unreachable `loadThreshold` must
+// not leave it dormant forever.
+test('an oversized target activates despite an unreachable load threshold', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture({ loadThreshold: 1 }));
+  const observer = ControlledIntersectionObserver.instances[0]!;
+
+  act(() =>
+    observer.intersect({
+      // Taller than the 800px root: 100% coverage is not a position that
+      // exists, at any scroll offset.
+      boundingClientRect: new DOMRectReadOnly(0, 0, 400, 2000),
+      intersectionRatio: 0.4,
+      rootBounds: new DOMRectReadOnly(0, 0, 400, 800)
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+});
+
+test('viewport observer rebuilds when loadThreshold changes', async () => {
+  const controller = new PlayerController();
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      loading="viewport"
+      loadThreshold={0}
+      showMedia={false}
+    />
+  );
+  expect(ControlledIntersectionObserver.instances).toHaveLength(1);
+  const firstObserver = ControlledIntersectionObserver.instances[0]!;
+
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      loading="viewport"
+      loadThreshold={1}
+      showMedia={false}
+    />
+  );
+
+  await vi.waitFor(() =>
+    expect(ControlledIntersectionObserver.instances).toHaveLength(2)
+  );
+  expect(firstObserver.disconnect).toHaveBeenCalled();
+  expect(
+    ControlledIntersectionObserver.instances[1]?.observe
+  ).toHaveBeenCalledWith(screen.getByTestId('activation-viewport'));
+  expect(ControlledIntersectionObserver.instances[1]?.thresholds).toEqual([
+    0, 1
+  ]);
 });
 
 test('dormant viewport activation uses native options changed before intersection', async () => {
