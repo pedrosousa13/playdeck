@@ -60,6 +60,9 @@ SDK rather than inferred from its documentation. YouTube will not honour a
 quality choice, Vimeo needs a paid plan for chromeless playback, YouTube's
 buffered range cannot see buffer loaded before you arrived, Wistia reports no
 buffered range at all: each package README says so, and so does the workbench.
+The same honesty applies to the network: see
+[Third-party requests and CSP](docs/third-party-requests.md) for every origin a
+provider reaches and what a page's Content-Security-Policy has to allow for it.
 
 ## Docs
 
@@ -73,6 +76,9 @@ pnpm --filter @reely/storybook dev
 **Overview/Introduction**, **Overview/Contract** (the data-attribute and `style`
 contract), **Overview/Capabilities matrix** (what each provider reports),
 **Overview/Captions** and **Overview/Theme**.
+
+[Third-party requests and CSP](docs/third-party-requests.md) names every
+origin a provider reaches and when each request happens.
 
 ## Development
 

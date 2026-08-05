@@ -47,7 +47,9 @@ export const reset = (): void => resetVimeoSdkLoader();
 <!-- /example -->
 
 The embed is chromeless by default (`controls: false`) so Reely's own controls
-are the only ones on screen, and `dnt` is on unless you turn it off.
+are the only ones on screen, and `dnt` is on unless you turn it off. See
+[Third-party requests and CSP](../../docs/third-party-requests.md) for the full
+origins list and what a page's CSP has to allow.
 
 ## Exports
 
