@@ -909,7 +909,9 @@ export const ActivationError: Story = {
     });
     await expect(retry).toHaveAttribute('data-reely-part', 'activation');
     await expect(retry).toHaveAttribute('data-state', 'error');
-    await expect(canvas.queryByRole('button', { name: 'Pause video' })).toBeNull();
+    await expect(
+      canvas.queryByRole('button', { name: 'Pause video' })
+    ).toBeNull();
 
     await canvas.findByText(activationError.message);
 
@@ -948,7 +950,9 @@ export const ActivationErrorConfiguration: Story = {
       name: 'Retry loading video'
     });
     await expect(retry).toHaveAttribute('aria-disabled', 'true');
-    await expect(canvas.queryByRole('button', { name: 'Pause video' })).toBeNull();
+    await expect(
+      canvas.queryByRole('button', { name: 'Pause video' })
+    ).toBeNull();
 
     await canvas.findByText(configurationActivationError.message);
 
