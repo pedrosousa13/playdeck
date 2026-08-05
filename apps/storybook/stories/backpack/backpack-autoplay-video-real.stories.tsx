@@ -48,7 +48,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The `BackpackAutoplayVideo` composition driving a real Vimeo embed. Nothing to click: the provider is loaded when the player box first scrolls into view, with no preload margin, and muted autoplay starts it as soon as that provider reports ready. `InPage` is where both halves are visible at once — scroll the panel and the video loads and starts on the way in, then pauses when it leaves and resumes when it comes back. Real network, so these are excluded from the deterministic story test suite (tagged `!test`); `Backpack parity/AutoplayVideo` covers the behaviour deterministically.'
+          'The `BackpackAutoplayVideo` composition driving real embeds — Vimeo, and Wistia in `WistiaVideo`. Nothing to click: the provider is loaded when the player box first scrolls into view, with no preload margin, and muted autoplay starts it as soon as that provider reports ready. `InPage` is where both halves are visible at once — scroll the panel and the video loads and starts on the way in, then pauses when it leaves and resumes when it comes back. Real network, so these are excluded from the deterministic story test suite (tagged `!test`); `Backpack parity/AutoplayVideo` covers the behaviour deterministically.'
       }
     }
   }
