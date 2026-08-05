@@ -223,30 +223,42 @@ type SurfaceProps = Pick<
  * Which affordance is on screen, in every state. `awaitingActivation` below is
  * exactly the condition `Player.ActivationButton` renders itself under
  * (`packages/react/src/loading-error.tsx:40`), so the two are complements and
- * precisely one click target is on the surface at any moment:
+ * precisely one thing on the surface is the click target at any moment — one of
+ * the wrapper's own, or, once a provider has attached under `controls: true`,
+ * the provider's:
  *
- * | `awaitingActivation` | `controls` | click target                     | play icon             |
- * | -------------------- | ---------- | -------------------------------- | --------------------- |
- * | yes                  | either     | `Player.ActivationButton`        | while paused          |
- * | no                   | `false`    | this component's toggle `button` | while paused          |
- * | no                   | `true`     | `Player.Controls`                | until playback starts |
+ * | `awaitingActivation` | `controls` | click target                     | play icon    |
+ * | -------------------- | ---------- | -------------------------------- | ------------ |
+ * | yes                  | `false`    | `Player.ActivationButton`        | while paused |
+ * | yes                  | `true`     | `Player.ActivationButton`        | never        |
+ * | no                   | `false`    | this component's toggle `button` | while paused |
+ * | no                   | `true`     | the provider's own chrome        | never        |
  *
  * The activation button is what loads the provider, so it has to be the target
- * until one has attached — there is nothing to toggle before that. It renders
+ * until one has attached — there is nothing to hand a click to before that,
+ * which is why it is the target under either value of `controls`. It renders
  * only under the interaction strategy, which is why `awaitingActivation` is
  * false for the whole of an eagerly-loaded (`playing`) player: there the toggle
  * is the target from the start, and a command issued before the provider
- * attaches simply reports not-ready. The play icon stays up under visible
- * controls until playback has started once, because until then it is the only
- * thing on the surface that says this box is a video worth clicking; afterwards
- * the controls' own button carries the state and a second icon would just
- * contradict it. Backpack's condition is the same
- * (`VideoPlayer.tsx:349-351`).
+ * attaches simply reports not-ready.
+ *
+ * The play icon is Reely's own affordance, so it is drawn only where Reely owns
+ * the surface. Under `controls: true` the provider draws its own chrome, its own
+ * large play affordance while paused included, and a Reely icon on top of that
+ * is the same double affordance as a Reely control bar on top of it — the defect
+ * SIDEPRO-222 found on YouTube. The icon therefore goes where the toggle goes:
+ * both belong to `controls: false`, and `controls: true` draws neither at any
+ * point, including before a provider has attached and there is nothing yet to
+ * duplicate. Backpack keeps its own icon over the provider's chrome until
+ * playback has started once (`VideoPlayer.tsx`'s
+ * `!isPlaying && (!startedPlaying || !controls) && showPlayIcon`), which is the
+ * one thing in the table this component deliberately does not reproduce —
+ * recorded in `docs/backpack-parity.md`.
  *
  * A cover image, when there is one, sits above `Player.Media` for as long as
  * playback has never started — independent of every row in the table above,
- * which is why it can cover an activation button, a toggle or visible
- * controls alike. It changes nothing about which of those is the click
+ * which is why it can cover an activation button, a toggle or the provider's own
+ * chrome alike. It changes nothing about which of those is the click
  * target: `Player.Poster` is `pointer-events: none`, so the cover is purely a
  * visual layer over whichever affordance the table already puts on top.
  */
@@ -393,7 +405,7 @@ const BackpackVideoSurface = ({
         </Player.Poster>
       ) : null}
       <Player.Media />
-      {!isPlaying && (!startedPlaying || !controls) && showPlayIcon ? (
+      {!isPlaying && !controls && showPlayIcon ? (
         <span
           aria-hidden="true"
           className="ef-video-play-icon"
@@ -403,14 +415,11 @@ const BackpackVideoSurface = ({
           data-play-icon-size={playIconSize}
         />
       ) : null}
-      {!awaitingActivation && controls ? (
-        <Player.Controls
-          aria-label="Video player controls"
-          className="ef-video-controls"
-        >
-          <Player.PlayButton />
-        </Player.Controls>
-      ) : null}
+      {/*
+        Nothing for `controls: true`: `Player.Root` has told the provider to draw
+        its own chrome, so the surface below this point is the provider's and the
+        wrapper adds no layer over it.
+      */}
       {!awaitingActivation && !controls ? (
         <button
           aria-label={ariaLabel}
@@ -510,24 +519,35 @@ export const BackpackVideoInternal = ({
     light && !startsPlaying ? url : undefined,
     placeholderImageSrc
   );
-  // Recomputed when `playerConfig` or `controls` changes identity/value, so a
-  // caller passing stable props gets a stable `providerOptions` back. Not
-  // required for correctness — `Player.Root`'s own comparison is by value,
-  // per key, so an unmemoized bag that is merely value-equal would not
-  // re-attach the provider either (`use-activation.ts`'s `providerBagEqual`)
-  // — but it costs nothing to skip the rebuild on an unrelated re-render.
+  // Recomputed when `playerConfig` changes identity, so a caller passing stable
+  // props gets a stable `providerOptions` back. Not required for correctness —
+  // `Player.Root`'s own comparison is by value, per key, so an unmemoized bag
+  // that is merely value-equal would not re-attach the provider either
+  // (`use-activation.ts`'s `providerBagEqual`) — but it costs nothing to skip
+  // the rebuild on an unrelated re-render. `controls` is no dependency of this
+  // bag: it is a cross-provider setting with `Player.Root`'s own prop as its one
+  // home (ADR-0004), and `Player.Root` is what folds it into the bag belonging
+  // to the detected source's provider.
   const providerOptions = useMemo<Player.PlayerProviderOptions>(
     () => ({
       wistia: translateWistiaPlayerConfig(
         mergeWistiaPlayerConfig(playerConfig?.wistia)
       )
     }),
-    [controls, playerConfig]
+    [playerConfig]
   );
 
   return (
     <Player.Root
       autoplay={startsPlaying ? (muted ? 'muted' : 'audible') : false}
+      // Backpack's own meaning of the prop — "show or hide the player
+      // controls" — is the provider's chrome, which is exactly what this prop
+      // asks for. Reely fans it out from here to whichever provider the source
+      // resolves to (`packages/react/src/root.tsx`'s
+      // `resolvedProviderOptions`, and `Player.Media`'s `controls` attribute
+      // for a native or HLS source), so the wrapper states it once instead of
+      // once per provider (ADR-0004).
+      controls={controls}
       // Under the `viewport` strategy, activation is what starts playback: it
       // does not queue a play of its own (`use-activation.ts:525`, its
       // `activate(false)`), so the autoplay attempt that follows the provider

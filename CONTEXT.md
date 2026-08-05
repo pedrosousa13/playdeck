@@ -59,6 +59,9 @@ _Avoid_: eligible media
 
 ### Adapters
 
+See [ADR-0004](docs/adr/0004-cross-provider-options-live-on-root.md) for what
+makes a setting Reely's own prop rather than a key in one provider's option bag.
+
 **Seam**:
 A part of a provider adapter that exclusively owns one slice of the adapter's
 state and the commands over it — playback, presentation, tracks and captions,

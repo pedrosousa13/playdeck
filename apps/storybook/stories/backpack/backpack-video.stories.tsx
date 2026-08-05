@@ -445,42 +445,59 @@ export const WistiaWithPlayerConfig: Story = {
 /**
  * Backpack's `WithControls` args (its `light: false` is out of this slice and
  * is left off rather than half-implemented). Backpack forwards `controls` to
- * react-player, which shows the provider's own chrome; the wrapper shows
- * Reely's `Player.Controls` instead, because Reely renders its controls itself.
- * What matches is that the controls replace the click-to-toggle surface —
- * Backpack's `VideoHiddenControls` returns `null` for exactly this case — and
- * that the play icon stays up until playback has started.
+ * react-player, which hands the underlying element the provider's own chrome;
+ * the wrapper forwards it to `Player.Root`, which does the same through the
+ * provider's embed or the `<video controls>` attribute — so the chrome now
+ * matches, where an earlier revision drew Reely's own `Player.Controls` over it
+ * (SIDEPRO-222 found the two bars that made on YouTube).
+ *
+ * With a provider attached, that leaves the wrapper drawing nothing at all:
+ * no control bar, no click-to-toggle surface — Backpack's `VideoHiddenControls`
+ * returns `null` for exactly this case — and no play icon, which is the one
+ * place this diverges from Backpack (`docs/backpack-parity.md` records it).
+ * An empty affordance list is the whole assertion, and it is also the settle
+ * point: the activation button is on the surface until the mock reports
+ * `activation: 'ready'`, so a list that has gone empty is a provider that has
+ * attached.
  */
 export const WithControls: Story = {
   args: { url: vimeoUrl, muted: true, controls: true },
   parameters: pausedPlayer,
-  play: async ({ canvas, canvasElement }) => {
-    await canvas.findByRole('button', { name: 'Play' });
-    await expect(affordances(canvasElement)).toEqual(['BUTTON[Play]']);
-    await expect(playIcon(canvasElement)).not.toBeNull();
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(affordances(canvasElement)).toEqual([]));
+    await expect(playIcon(canvasElement)).toBeNull();
   }
 };
 
 /**
  * Backpack's `Loop` args. `loop` reaches `Player.Root`, but Reely forwards its
  * native playback options to the HLS and native providers only, so a Vimeo or
- * YouTube source never receives it (SIDEPRO-210). Nothing for a story to
- * observe, so this one holds the args and the render.
+ * YouTube source never receives it (SIDEPRO-210). Nothing of `loop` for a story
+ * to observe, so what this one holds is Backpack's args and the render; its
+ * `controls: true` half is `WithControls` above.
  */
 export const Loop: Story = {
   args: { url: vimeoUrl, muted: true, controls: true, loop: true },
   parameters: pausedPlayer,
-  play: async ({ canvas }) => {
-    await canvas.findByRole('button', { name: 'Play' });
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(affordances(canvasElement)).toEqual([]));
   }
 };
 
 /**
- * Once playback has started and the controls are shown, the play icon does not
- * come back on pause — the controls are the affordance from then on. This is
- * the `startedPlaying` half of Backpack's overlay condition.
+ * The play icon never comes back under `controls: true`, on any report: not
+ * before playback, not while playing, and not on the pause afterwards. Reely's
+ * icon and the provider's own chrome are two play affordances over one video,
+ * which is the defect SIDEPRO-222 found in the control bar this story used to
+ * watch the icon yield to.
+ *
+ * The not-started half is `WithControls` above. What this adds is the pause
+ * after playback — the state where the icon *does* come back under
+ * `controls: false`, because there it is the resting affordance over the
+ * wrapper's own toggle. Together the two stories say the icon's gate reads
+ * `controls` and nothing else.
  */
-export const PlayIconYieldsToControls: Story = {
+export const NoPlayIconUnderProviderControls: Story = {
   args: { url: vimeoUrl, muted: true, controls: true },
   parameters: pausedPlayer,
   render: (args, { parameters }) => (
@@ -490,7 +507,7 @@ export const PlayIconYieldsToControls: Story = {
     />
   ),
   play: async ({ canvas, canvasElement, userEvent }) => {
-    await expect(playIcon(canvasElement)).not.toBeNull();
+    await expect(playIcon(canvasElement)).toBeNull();
 
     await userEvent.click(
       await canvas.findByRole('button', { name: 'Report playing' })

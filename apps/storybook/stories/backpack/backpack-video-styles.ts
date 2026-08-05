@@ -358,17 +358,6 @@ ${aspectRatioMediaQueries}
   z-index: 30;
 }
 
-.ef-video-controls {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  z-index: 30;
-}
-
 /* Player.Poster already positions itself (inset: 0, z-index: 10); this only
    clips the hover zoom below to the cover's own bounds. */
 .ef-video-cover {

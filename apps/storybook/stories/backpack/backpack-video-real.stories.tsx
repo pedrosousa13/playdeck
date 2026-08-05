@@ -97,6 +97,23 @@ export const WithControls: Story = {
 };
 
 /**
+ * The same over YouTube, which is where SIDEPRO-222 found the double chrome:
+ * every `controls: true` story was Vimeo, whose embed the wrapper's own control
+ * bar overlapped less visibly, so two bars at once went unseen until the audit
+ * read the code. What a human checks here is that there is exactly one bar —
+ * YouTube's — and one play affordance in the middle of the paused player, also
+ * YouTube's. Click the surface to load the provider first; the wrapper draws no
+ * icon of its own under `controls: true`, so an unactivated box shows nothing.
+ */
+export const WithControlsYouTube: Story = {
+  args: {
+    url: 'https://www.youtube.com/watch?v=mhN3E_hlWmU',
+    muted: true,
+    controls: true
+  }
+};
+
+/**
  * Backpack's `Loop` args, over a real embed: `loop` reaches `Player.Root` but
  * is not forwarded to the Vimeo provider (SIDEPRO-210), so the clip finishes
  * and stops rather than restarting.

@@ -532,8 +532,8 @@ describe('BackpackVideoHoverPreview cover image', () => {
   // The play icon is the other half of the resting surface, and this composition
   // adds none of its own — `BackpackVideo`'s already returns on a pause, because
   // with `controls` at its default `false` its condition reduces to
-  // `!isPlaying && showPlayIcon` (`backpack-video.tsx:388`, its
-  // `!isPlaying && (!startedPlaying || !controls) && showPlayIcon` gate).
+  // `!isPlaying && showPlayIcon` (`backpack-video.tsx`'s
+  // `!isPlaying && !controls && showPlayIcon` gate).
   // Backpack renders its
   // own icon unconditionally on `showPlayIcon` (`VideoHoverPreview.tsx:156-158`),
   // so a second one here would be the same duplication as a second cover.

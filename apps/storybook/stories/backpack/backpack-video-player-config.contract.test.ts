@@ -150,17 +150,18 @@ describe('BackpackVideo playerConfig wiring', () => {
       })
     );
 
+    // `toEqual` on the whole bag rather than `toMatchObject` on its `wistia`
+    // key: the bag `Player.Root` receives carries this wrapper's Wistia options
+    // and nothing else. `controls` is not in it -- it travels as
+    // `Player.Root`'s own prop (ADR-0004), which
+    // `backpack-video-controls.contract.test.ts` pins.
     expect(capturedProviderOptions.at(-1)).toEqual({
       wistia: {
         playerColor: 'ff0000',
         poster: undefined,
         swatch: false,
         transparentLetterbox: undefined
-      },
-      // Unrelated to this test's own concern -- the `controls` prop's own
-      // forwarding is pinned by `backpack-video-controls.contract.test.ts` --
-      // but part of the exact bag `Player.Root` receives, so it belongs here.
-      youtube: { controls: false }
+      }
     });
   });
 
@@ -182,11 +183,7 @@ describe('BackpackVideo playerConfig wiring', () => {
         poster: undefined,
         swatch: undefined,
         transparentLetterbox: undefined
-      },
-      // Unrelated to this test's own concern -- the `controls` prop's own
-      // forwarding is pinned by `backpack-video-controls.contract.test.ts` --
-      // but part of the exact bag `Player.Root` receives, so it belongs here.
-      youtube: { controls: false }
+      }
     });
   });
 });
