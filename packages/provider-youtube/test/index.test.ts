@@ -331,6 +331,40 @@ test.each([
   }
 );
 
+// SIDEPRO-210. `loop: 1` on its own is a documented no-op for a single-video
+// embed -- YouTube loops a *playlist*, so the one video has to be named as its
+// own single-entry playlist for the loop var to mean anything. Setting one
+// without the other is the same silent no-op the issue is about, so both vars
+// are pinned together here.
+test.each([
+  ['unset', undefined],
+  ['false', false]
+] as const)(
+  'leaves the embed un-looped when the loop option is %s',
+  async (_label, loop) => {
+    const { fake, provider } = createAdapter('M7lc1UVf-VE', { loop });
+
+    await provider.attach();
+    await provider.load();
+
+    const { playerVars } = fake.players[0]!.options;
+    expect(playerVars).toMatchObject({ loop: 0 });
+    expect(playerVars).not.toHaveProperty('playlist');
+  }
+);
+
+test('loops a single video by naming it as its own playlist', async () => {
+  const { fake, provider } = createAdapter('M7lc1UVf-VE', { loop: true });
+
+  await provider.attach();
+  await provider.load();
+
+  expect(fake.players[0]!.options.playerVars).toMatchObject({
+    loop: 1,
+    playlist: 'M7lc1UVf-VE'
+  });
+});
+
 test('reports policy-restricted custom controls before the player is ready', async () => {
   const { patches, provider } = createAdapter();
 

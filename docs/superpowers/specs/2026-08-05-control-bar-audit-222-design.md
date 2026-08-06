@@ -376,7 +376,7 @@ original scope was itself a deliberate, narrow slice.
 YouTube source with `controls={true}` likely renders two control bars at
 once: YouTube's own native chrome (`backpack-video.tsx:519-530` forwards
 `controls` into `playerVars.controls`,
-`packages/provider-youtube/src/attachment.ts:154`) and Reely's
+`packages/provider-youtube/src/attachment.ts:157`) and Reely's
 `Player.Controls`. No story exercises this. Every `WithControls`/`Loop`
 story uses a Vimeo URL (`backpack-video.stories.tsx:454-462`,
 `backpack-video-real.stories.tsx:95-97`).
