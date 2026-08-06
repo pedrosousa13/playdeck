@@ -431,7 +431,7 @@ const BackpackVideoSurface = ({
         // folded it into `ariaLabel` above, so it reaches the accessibility tree
         // on the real button underneath instead, which is the affordance a viewer
         // presses. Backpack puts it on the cover itself, `role="button"` and
-        // `aria-label={alt}` on its cover container (`VideoCoverImage.tsx:99-100`),
+        // `aria-label={alt}` on its cover container (`VideoCoverImage.tsx:101-102`),
         // where here the cover stays decoration over a named control. Whether
         // `Player.Poster` should hide its subtree at all is a primitives question,
         // tracked separately. {@link VideoCoverImage} carries the rest of the

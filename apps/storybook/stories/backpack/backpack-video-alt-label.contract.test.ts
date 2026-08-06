@@ -1,3 +1,5 @@
+import type { PlayerController, PreProviderActivation } from '@reely/core';
+import type * as Player from '@reely/react';
 import {
   act,
   cleanup,
@@ -5,8 +7,8 @@ import {
   render,
   screen
 } from '@testing-library/react';
-import { createElement } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { createElement, createRef } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BackpackVideo, type BackpackVideoProps } from './backpack-video';
 import { useReportingProvider } from './reporting-provider';
 
@@ -17,7 +19,7 @@ import { useReportingProvider } from './reporting-provider';
  * dead weight: nothing in a hidden subtree reaches the accessibility tree, and
  * the one named affordance on the surface said "Play video" and nothing about
  * which video. Backpack does expose the text, from its cover container's own
- * `aria-label={alt}` (`VideoCoverImage.tsx:99-100`).
+ * `aria-label={alt}` (`VideoCoverImage.tsx:101-102`).
  *
  * What this pins is the answer the wrapper gives instead: the text goes onto
  * the affordance that is actually named, as `${action}: ${alt}`. The action
@@ -46,11 +48,60 @@ import { useReportingProvider } from './reporting-provider';
  * play/pause flip reachable offline: the provider's `play` emits
  * `playback: 'playing'` back, which is what moves the label.
  *
- * The other `aria-label` this format reaches, `Player.ActivationButton`'s, is
- * pinned in `backpack-video-activation-error.contract.test.ts` — including the
- * one state it must not reach, an activation error, where the wrapper hands the
- * primitive nothing and the primitive's own "Retry loading video" applies.
+ * The format reaches one more `aria-label`, `Player.ActivationButton`'s, and
+ * the ready staging cannot see it: that is the affordance for a player which
+ * has not activated yet, so it is exactly what the report of `ready` renders
+ * away. The second describe below stages the other end — no provider at all —
+ * and pins both halves of that label: the composed name while activation is
+ * still pending, and the absence that replaces it once activation errors, `alt`
+ * or no `alt`. `backpack-video-activation-error.contract.test.ts` pins the same
+ * handover for SIDEPRO-212, but with no `alt` in play, so nothing there says
+ * what a described video does to it.
  */
+
+/**
+ * `Player.ActivationButton`'s props as the primitive receives them. The same
+ * interception `backpack-video-activation-error.contract.test.ts` and
+ * `backpack-video-controls.contract.test.ts` use: the genuine component renders
+ * underneath, so the surface below is the real one and the staged tests above
+ * are unaffected by the mock. Read rather than queried by role, because the
+ * primitive renders nothing at all in some of these states and an accessible
+ * name that reaches no element is still the wrapper's contribution.
+ */
+const { capturedActivationButtonProps } = vi.hoisted(() => ({
+  capturedActivationButtonProps: [] as Player.ActivationButtonProps[]
+}));
+
+vi.mock('@reely/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@reely/react')>();
+  return {
+    ...actual,
+    ActivationButton: (props: Player.ActivationButtonProps) => {
+      capturedActivationButtonProps.push(props);
+      return createElement(actual.ActivationButton, props);
+    }
+  };
+});
+
+/** The last `Player.ActivationButton` render's props. */
+const activationButtonProps = (): Player.ActivationButtonProps =>
+  capturedActivationButtonProps.at(-1)!;
+
+/**
+ * A failed provider load, set straight onto the controller. Same reasoning as
+ * `backpack-video-activation-error.contract.test.ts`'s: `setActivation` is
+ * refused once a provider has attached, and a real failed load never attaches
+ * one, so this is the state's own entry point rather than a shortcut.
+ */
+const activationError: PreProviderActivation = {
+  activation: 'error',
+  error: {
+    category: 'provider',
+    fatal: false,
+    recoverable: true,
+    message: 'Unable to load the player provider.'
+  }
+};
 
 /**
  * `BackpackVideo` with the staged provider on its forwarded ref.
@@ -135,5 +186,64 @@ describe('BackpackVideo cover alt in the play affordance’s name', () => {
       name: 'Play video: EF campus tour, Brighton'
     });
     expect(play.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+/**
+ * No provider staged, so the player never reaches `ready`, `awaitingActivation`
+ * stays true and the wrapper's own toggle is off the surface —
+ * `Player.ActivationButton` is the affordance a viewer would press, and the
+ * `aria-label` the wrapper hands it is the one that matters.
+ */
+describe('BackpackVideo cover alt on the activation affordance', () => {
+  afterEach(() => {
+    cleanup();
+    capturedActivationButtonProps.length = 0;
+  });
+
+  const renderUnactivated = (overrides: Partial<BackpackVideoProps> = {}) => {
+    const ref = createRef<Player.PlayerHandle>();
+    render(
+      createElement(BackpackVideo, {
+        muted: true,
+        pauseOnOutOfViewport: false,
+        ref,
+        url: 'mock://reely/unresolvable.mp4',
+        ...overrides
+      })
+    );
+    return ref;
+  };
+
+  it('names the activation affordance for the action and then the alt', () => {
+    renderUnactivated({ alt: 'EF campus tour, Brighton' });
+
+    expect(activationButtonProps()['aria-label']).toBe(
+      'Play video: EF campus tour, Brighton'
+    );
+  });
+
+  it('leaves the activation affordance’s name alone with no alt', () => {
+    renderUnactivated();
+
+    expect(activationButtonProps()['aria-label']).toBe('Play video');
+  });
+
+  // SIDEPRO-212's handover, restated with an `alt` in play: folding the text in
+  // must not give the wrapper something to say over a failed load. A described
+  // video is exactly the case where it would be tempting — there is a name to
+  // hand over — and it is still the primitive's own "Retry loading video" that
+  // has to win (`packages/react/src/loading-error.tsx:45`).
+  it('still hands the label back on an activation error, alt and all', () => {
+    const ref = renderUnactivated({ alt: 'EF campus tour, Brighton' });
+
+    act(() => {
+      (ref.current as unknown as PlayerController).setActivation(
+        activationError
+      );
+    });
+
+    expect(activationButtonProps()['aria-label']).toBeUndefined();
+    expect(activationButtonProps().children).toBeUndefined();
   });
 });

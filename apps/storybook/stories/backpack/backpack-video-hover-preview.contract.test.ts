@@ -598,6 +598,23 @@ describe('BackpackVideoHoverPreview cover image', () => {
       container.querySelector('.ef-video-cover-image')!.getAttribute('alt')
     ).toBe('A city at night');
   });
+
+  // And exposes it once. The `alt` is deliberately not forwarded to the
+  // `BackpackVideo` underneath, which since SIDEPRO-214 folds the text into its
+  // button's name — so a viewer at rest would otherwise meet the same
+  // description as the image and again as "Play video: A city at night". The
+  // image is the resting representation and keeps the description; the button
+  // keeps the action alone.
+  it('keeps the cover’s alt out of the play button’s name', () => {
+    const { getByRole } = renderPreview({
+      alt: 'A city at night',
+      placeholderImageSrc: 'https://reely.dev/cover.jpg'
+    });
+
+    expect(getByRole('button', { name: 'Play video' }).className).toBe(
+      'ef-video-controller'
+    );
+  });
 });
 
 /**

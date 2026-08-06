@@ -138,13 +138,15 @@ export type BackpackVideoHoverPreviewProps = Omit<
  * parity one.
  *
  * What this renders instead is one focusable control with a name: the
- * play/pause button `BackpackVideo` already puts on the surface, labelled "Play
- * video" or "Pause video" — with the cover's `alt` behind it where there is one
- * (SIDEPRO-214) — (`backpack-video.tsx:329,407-413`, its `const ariaLabel` and the `<button>` it labels). The preview root
- * itself takes no role and no `tabIndex`. So a keyboard or touch user gets
- * ordinary click-to-play rather than hold-to-preview, which is also the right
- * resting behaviour on a touch device — recorded as a divergence in
- * `docs/backpack-parity.md`.
+ * play/pause button `BackpackVideo` already puts on the surface
+ * (`backpack-video.tsx:388-390,475-476`, its `const ariaLabel` and the
+ * `<button>` it labels). Here it reads "Play video" or "Pause video" and
+ * nothing more, because this composition withholds `alt` from the player it
+ * wraps and keeps the description on its own cover image instead — the call
+ * below says why. The preview root itself takes no role and no `tabIndex`, so a
+ * keyboard or touch user gets ordinary click-to-play rather than
+ * hold-to-preview, which is also the right resting behaviour on a touch device
+ * — recorded as a divergence in `docs/backpack-parity.md`.
  *
  * Playback started that way outlives no hover, because there was none: the pause
  * and rewind below run on a hover *ending*, so a video played from the control
@@ -305,7 +307,18 @@ export const BackpackVideoHoverPreview = ({
       ) : null}
       <BackpackVideo
         {...rest}
-        alt={alt}
+        // No `alt`, though the composition takes one: the text describes the
+        // cover above, and that cover is the only one on the surface. This
+        // player is handed `light={false}` and no `placeholderImageSrc`, so its
+        // own `coverSrc` never resolves (`backpack-video.tsx:603-606`) and its
+        // `Player.Poster` never renders — an `alt` passed down here would
+        // describe a picture `BackpackVideo` does not draw. Since SIDEPRO-214
+        // it would not merely be inert, either: `BackpackVideo` folds the text
+        // into its button's name, so a screen-reader user at rest would meet
+        // the same description twice, once as the image and again inside "Play
+        // video: …". Withheld, so the image keeps the description and the
+        // button keeps the bare action.
+        //
         // The three refused props, forced after the spread. `Omit` bars them from
         // the props type, but a caller who gets round the compiler — an `any`, an
         // untyped spread of unknown props — would otherwise still have them
