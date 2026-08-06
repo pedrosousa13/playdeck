@@ -12,6 +12,8 @@
     { "path": "./packages/provider-youtube/tsconfig.test.json" },
     { "path": "./packages/provider-vimeo" },
     { "path": "./packages/provider-vimeo/tsconfig.test.json" },
+    { "path": "./packages/provider-wistia" },
+    { "path": "./packages/provider-wistia/tsconfig.test.json" },
     { "path": "./packages/react" },
     { "path": "./packages/react/tsconfig.test.json" },
     { "path": "./apps/storybook" },

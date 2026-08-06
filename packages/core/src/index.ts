@@ -40,6 +40,7 @@ export type {
   TimeRange,
   VideoFileSource,
   VimeoSource,
+  WistiaSource,
   YouTubeSource
 } from './types.js';
 

@@ -59,6 +59,16 @@ const preview: Preview = {
           'Player',
           'Reference',
           'Theme',
+          // The compat wrapper: it reads as a case study over the parts
+          // above, so it sits after them and before the network stories.
+          'Backpack parity',
+          [
+            // Real is the suite a person opens to see parity in action —
+            // a real embed playing. Mock is the deterministic test surface
+            // behind it, mounting no embed by design, so Real sorts first.
+            'Real',
+            'Mock'
+          ],
           // Both hit the network or exist to be driven by e2e, so they sit
           // below everything a visitor reads.
           'Real playback',

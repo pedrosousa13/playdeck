@@ -1,0 +1,256 @@
+import type { StoryIndexEntry } from './story-index';
+
+export type ParityStatus = 'full' | 'partial' | 'gap';
+
+export interface ReelyStoryRef {
+  title: string;
+  name: string;
+}
+
+export interface ParityRow {
+  // The `## *.stories.tsx` heading a row sits under — also what
+  // `backpackTitle` is derived from, since the matrix's own Backpack column
+  // carries no title, only an export name.
+  section: string;
+  backpackTitle: string;
+  backpackStoryName: string;
+  reelyStories: ReelyStoryRef[];
+  status: ParityStatus;
+}
+
+const HEADER_CELLS = ['Backpack story', 'Reely story', 'Status', 'Notes'];
+const SEPARATOR_ROW = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const SECTION_HEADING = /^##\s+(.+\.stories\.tsx)\s*$/;
+const COUNTS_LINE =
+  /Counts:\s*(\d+)\s*rows\s*—\s*(\d+)\s*`full`,\s*(\d+)\s*`partial`,\s*(\d+)\s*`gap`\.?/;
+const BACKTICK_SPAN = /`([^`]+)`/g;
+
+const splitRow = (line: string): string[] =>
+  line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+
+const firstBacktickSpan = (cell: string, context: string): string => {
+  const match = BACKTICK_SPAN.exec(cell);
+  BACKTICK_SPAN.lastIndex = 0;
+  if (match === null) {
+    throw new Error(
+      `Expected a backtick-quoted value in ${context}: "${cell}"`
+    );
+  }
+  return match[1];
+};
+
+const parseReelyStories = (cell: string, context: string): ReelyStoryRef[] => {
+  const spans = [...cell.matchAll(BACKTICK_SPAN)].map((match) => match[1]);
+  if (spans.length === 0) {
+    throw new Error(
+      `Expected at least one backtick-quoted Reely story in ${context}: "${cell}"`
+    );
+  }
+  return spans.map((span) => {
+    const [title, name] = span.split(' → ').map((part) => part.trim());
+    if (title === undefined || name === undefined) {
+      throw new Error(
+        `Expected "<title> → <name>" in ${context}'s Reely story cell, got "${span}"`
+      );
+    }
+    return { title, name };
+  });
+};
+
+const parseStatus = (cell: string, context: string): ParityStatus => {
+  const value = firstBacktickSpan(cell, `${context}'s status cell`);
+  if (value !== 'full' && value !== 'partial' && value !== 'gap') {
+    throw new Error(`Unknown status "${value}" in ${context}`);
+  }
+  return value;
+};
+
+/**
+ * Parses `docs/backpack-parity.md` into rows. The file holds more than one
+ * table — this repo's own note on the parity matrix and the "Deliberate
+ * divergences" tables both use pipe-delimited rows too — so parsing anchors
+ * on the story matrix's own header row (`Backpack story | Reely story |
+ * Status | Notes`) rather than on "the first table".
+ *
+ * Also validates the parsed count and status tally against the file's own
+ * "Counts:" line, so a row added to one of the three tables without updating
+ * that line fails here rather than silently drifting.
+ */
+export function parseParityMatrix(markdown: string): ParityRow[] {
+  const lines = markdown.split('\n');
+  const rows: ParityRow[] = [];
+  let section = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const sectionMatch = SECTION_HEADING.exec(line);
+    if (sectionMatch) {
+      section = sectionMatch[1];
+      continue;
+    }
+
+    if (!line.trim().startsWith('|')) continue;
+    const headerCells = splitRow(line);
+    if (
+      headerCells.length !== HEADER_CELLS.length ||
+      !headerCells.every((cell, index) => cell === HEADER_CELLS[index])
+    ) {
+      continue;
+    }
+    // Found the matrix's own header row. The next line must be the markdown
+    // separator row, then data rows follow until a line that is not a table
+    // row (blank, or the next heading).
+    const separatorLine = lines[i + 1] ?? '';
+    if (!SEPARATOR_ROW.test(separatorLine)) continue;
+
+    let cursor = i + 2;
+    while (cursor < lines.length && lines[cursor].trim().startsWith('|')) {
+      const cells = splitRow(lines[cursor]);
+      if (cells.length === 4) {
+        const context = `${section || '(unknown section)'}, row ${rows.length + 1}`;
+        const backpackStoryName = firstBacktickSpan(
+          cells[0],
+          `${context}'s Backpack story cell`
+        );
+        const reelyStories = parseReelyStories(cells[1], context);
+        const status = parseStatus(cells[2], context);
+        rows.push({
+          section,
+          backpackTitle: `Components/Video/${section.replace(/\.stories\.tsx$/, '')}`,
+          backpackStoryName,
+          reelyStories,
+          status
+        });
+      }
+      cursor++;
+    }
+    i = cursor - 1;
+  }
+
+  const countsMatch = COUNTS_LINE.exec(markdown);
+  if (countsMatch === null) {
+    throw new Error(
+      'Could not find the matrix\'s "Counts:" line to validate against.'
+    );
+  }
+  const [, declaredTotal, declaredFull, declaredPartial, declaredGap] =
+    countsMatch;
+  const actual = {
+    total: rows.length,
+    full: rows.filter((row) => row.status === 'full').length,
+    partial: rows.filter((row) => row.status === 'partial').length,
+    gap: rows.filter((row) => row.status === 'gap').length
+  };
+  const declared = {
+    total: Number(declaredTotal),
+    full: Number(declaredFull),
+    partial: Number(declaredPartial),
+    gap: Number(declaredGap)
+  };
+  if (
+    actual.total !== declared.total ||
+    actual.full !== declared.full ||
+    actual.partial !== declared.partial ||
+    actual.gap !== declared.gap
+  ) {
+    throw new Error(
+      `Parsed ${actual.total} rows (${actual.full} full, ${actual.partial} partial, ${actual.gap} gap), ` +
+        `but the counts line declares ${declared.total} rows (${declared.full} full, ${declared.partial} partial, ${declared.gap} gap). ` +
+        'A row was added or removed without updating that line.'
+    );
+  }
+
+  return rows;
+}
+
+export interface ResolvedPair {
+  row: ParityRow;
+  backpackId: string;
+  reelyIds: string[];
+}
+
+export interface ResolveResult {
+  resolved: ResolvedPair[];
+  unresolved: string[];
+}
+
+// Storybook's own auto-generated `name` splits camelCase export identifiers
+// into title-cased words (`WithShadowVariant` → "With Shadow Variant"), and a
+// story can also override that with an arbitrary string of its own. The
+// matrix records export identifiers on the Backpack side and a mix of both on
+// the Reely side, so comparing names verbatim would report nearly every row
+// as unresolved. Stripping everything but letters and digits, then
+// lowercasing, matches either spelling without needing to reimplement
+// Storybook's exact transform.
+const normalizeName = (name: string): string =>
+  name.replace(/[^a-z0-9]/gi, '').toLowerCase();
+
+// A control character, not a printable one, so the composite key can never
+// collide with a title or name that happens to contain the separator itself
+// - both are free-form strings (Storybook display names). Written as an
+// escape rather than a literal byte: a raw NUL in the source makes the whole
+// file binary to git (`Bin N -> M bytes` in `git diff`), which is unreviewable.
+const KEY_SEPARATOR = '\x00';
+
+const indexKey = (title: string, name: string): string =>
+  `${title}${KEY_SEPARATOR}${normalizeName(name)}`;
+
+/**
+ * Resolves a parsed matrix row's Backpack and Reely story names to the story
+ * ids each side's `/index.json` actually publishes, matching on title plus
+ * story name per the plan's decision. An unresolved name is matrix drift —
+ * the matrix names a story that is no longer where it says — and is reported
+ * for every row at once rather than one at a time, so a maintainer fixing
+ * drift sees the whole list.
+ */
+export function resolveParityPairs(
+  rows: ParityRow[],
+  backpackIndex: StoryIndexEntry[],
+  reelyIndex: StoryIndexEntry[]
+): ResolveResult {
+  const backpackByKey = new Map(
+    backpackIndex.map((entry) => [indexKey(entry.title, entry.name), entry.id])
+  );
+  const reelyByKey = new Map(
+    reelyIndex.map((entry) => [indexKey(entry.title, entry.name), entry.id])
+  );
+
+  const resolved: ResolvedPair[] = [];
+  const unresolved: string[] = [];
+
+  for (const row of rows) {
+    const backpackId = backpackByKey.get(
+      indexKey(row.backpackTitle, row.backpackStoryName)
+    );
+    if (backpackId === undefined) {
+      unresolved.push(
+        `Backpack: "${row.backpackTitle}" → "${row.backpackStoryName}"`
+      );
+    }
+
+    const reelyIds: string[] = [];
+    let allReelyResolved = true;
+    for (const reelyStory of row.reelyStories) {
+      const reelyId = reelyByKey.get(
+        indexKey(reelyStory.title, reelyStory.name)
+      );
+      if (reelyId === undefined) {
+        unresolved.push(`Reely: "${reelyStory.title}" → "${reelyStory.name}"`);
+        allReelyResolved = false;
+      } else {
+        reelyIds.push(reelyId);
+      }
+    }
+
+    if (backpackId !== undefined && allReelyResolved) {
+      resolved.push({ row, backpackId, reelyIds });
+    }
+  }
+
+  return { resolved, unresolved };
+}

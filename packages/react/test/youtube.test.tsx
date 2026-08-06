@@ -55,6 +55,101 @@ test('loads the YouTube adapter lazily against an embed mount', async () => {
   expect(document.querySelector('video')).toBeNull();
 });
 
+test('forwards the youtube provider option bag to createYouTubeProvider', async () => {
+  render(
+    <Player.Root
+      controls
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateYouTubeProvider.mock.calls[0]!;
+  expect(options).toEqual({ controls: true });
+});
+
+// SIDEPRO's regression: `providerOptionsEqual` in `use-activation.ts` must
+// compare `youtube` bags by value, or a changed bag looks unchanged and the
+// embed never re-attaches to pick it up.
+test('re-attaches the YouTube adapter when the youtube option bag changes', async () => {
+  const { rerender } = render(
+    <Player.Root
+      controls={false}
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+
+  rerender(
+    <Player.Root
+      controls
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(2)
+  );
+  const [, , options] = mockedCreateYouTubeProvider.mock.calls[1]!;
+  expect(options).toEqual({ controls: true });
+  expect(harness.fakes[0]!.counts().destroyCount).toBe(1);
+});
+
+test('keeps the installed adapter when a value-equal youtube option bag is passed again', async () => {
+  const { rerender } = render(
+    <Player.Root
+      controls
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+
+  // The same boolean value again, as a re-render with an unchanged prop
+  // produces.
+  rerender(
+    <Player.Root
+      controls
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+  await act(async () => undefined);
+
+  expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1);
+});
+
 test('sizes the YouTube embed mount to fill its viewport by default', async () => {
   // #150: the mount states its geometry inline, so it fills the viewport for a
   // consumer who ships no stylesheet. `style-precedence.test.tsx` pins that

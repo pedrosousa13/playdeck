@@ -180,7 +180,7 @@ Unit tests, `packages/react/test/activation.test.tsx`, with `vi.useFakeTimers()`
 
 The 500 ms values are hardcoded in the tests rather than imported from the source, deliberately: that pins the policy, so changing the constant breaks the test instead of silently moving with it.
 
-Storybook stories cover the rendered states, not the timing (timing is not drivable through `parameters.player.state`, which the decorator emits once at mount — `apps/storybook/.storybook/mock-player.tsx:104`).
+Storybook stories cover the rendered states, not the timing (timing is not drivable through `parameters.player.state`, which the decorator emits once at mount — `apps/storybook/.storybook/mock-player.tsx:186` (its `if (state) mock.emit(state)`)).
 
 ## Existing tests this change breaks, and why that is correct
 

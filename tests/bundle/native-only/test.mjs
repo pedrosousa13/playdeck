@@ -42,8 +42,12 @@ const staticKeys = staticClosure(entryKey);
 const isProviderEntry = (key) => {
   const name = manifest[key]?.name ?? '';
   return (
-    /(?:packages|@reely)\/provider-(?:native|hls|youtube|vimeo)/.test(key) ||
-    /(?:packages|@reely)\/provider-(?:native|hls|youtube|vimeo)/.test(name)
+    /(?:packages|@reely)\/provider-(?:native|hls|youtube|vimeo|wistia)/.test(
+      key
+    ) ||
+    /(?:packages|@reely)\/provider-(?:native|hls|youtube|vimeo|wistia)/.test(
+      name
+    )
   );
 };
 const providerKeys = Object.keys(manifest).filter(isProviderEntry);
@@ -173,6 +177,12 @@ const isVimeoHost = (hostname) =>
   vimeoDomains.some(
     (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
   );
+const wistiaDomains = ['wistia.com', 'wistia.net', 'fast.wistia.com'];
+/** @param {string} hostname */
+const isWistiaHost = (hostname) =>
+  wistiaDomains.some(
+    (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
+  );
 /** @type {string[]} */
 const requestedScripts = [];
 /** @type {URL[]} */
@@ -259,6 +269,12 @@ try {
   if (vimeoRequest) {
     throw new Error(
       `The native fixture contacted a Vimeo domain: ${vimeoRequest.href}`
+    );
+  }
+  const wistiaRequest = requestedUrls.find((url) => isWistiaHost(url.hostname));
+  if (wistiaRequest) {
+    throw new Error(
+      `The native fixture contacted a Wistia domain: ${wistiaRequest.href}`
     );
   }
 } finally {

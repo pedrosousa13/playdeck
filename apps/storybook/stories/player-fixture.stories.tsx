@@ -513,3 +513,14 @@ export const VimeoFreePlan: Story = {
 export const VimeoPaidPlan: Story = {
   args: { source: 'https://vimeo.com/1123898957', loading: 'interaction' }
 };
+
+// Reaches the Wistia provider through the plain `https://` branch above, so no
+// source key of its own. Muted by default because `wistia-smoke.spec.ts` needs
+// confirmed playback from one click, which an audible embed cannot promise.
+export const WistiaInteractionMuted: Story = {
+  args: {
+    source: 'https://wesleyluyten.wistia.com/medias/oifkgmxnkb',
+    loading: 'interaction',
+    defaultMuted: true
+  }
+};

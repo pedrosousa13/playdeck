@@ -16,7 +16,8 @@
       "@reely/provider-youtube": [
         "../packages/provider-youtube/dist/index.d.ts"
       ],
-      "@reely/provider-vimeo": ["../packages/provider-vimeo/dist/index.d.ts"]
+      "@reely/provider-vimeo": ["../packages/provider-vimeo/dist/index.d.ts"],
+      "@reely/provider-wistia": ["../packages/provider-wistia/dist/index.d.ts"]
     },
     "tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo/examples.tsbuildinfo"
   },
@@ -26,7 +27,8 @@
     { "path": "../packages/provider-native" },
     { "path": "../packages/provider-hls" },
     { "path": "../packages/provider-youtube" },
-    { "path": "../packages/provider-vimeo" }
+    { "path": "../packages/provider-vimeo" },
+    { "path": "../packages/provider-wistia" }
   ],
   "include": ["*.ts", "*.tsx"]
 }

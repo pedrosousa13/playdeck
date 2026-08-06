@@ -9,6 +9,7 @@ import {
   type ProviderStateListener,
   type VideoFileSource,
   type VimeoSource,
+  type WistiaSource,
   type YouTubeSource
 } from '../src/index';
 
@@ -86,6 +87,53 @@ test('uses the query Vimeo privacy hash when both supported hash forms are prese
   ).toEqual({ type: 'vimeo', videoId: '123456789', hash: 'queryhash' });
 });
 
+test.each([
+  ['account media page', 'https://wesleyluyten.wistia.com/medias/oifkgmxnkb'],
+  ['account embed', 'https://wesleyluyten.wistia.com/embed/medias/oifkgmxnkb'],
+  ['embed iframe', 'https://fast.wistia.net/embed/iframe/oifkgmxnkb'],
+  ['embed iframe, alt host', 'https://fast.wistia.com/embed/iframe/oifkgmxnkb']
+])('detects Wistia %s URLs', (_form, input) => {
+  expect(expectDetected(input).source).toEqual({
+    type: 'wistia',
+    mediaId: 'oifkgmxnkb'
+  });
+});
+
+test('resolves a bare Wistia host the same as its subdomains', () => {
+  expect(expectDetected('https://wistia.com/medias/oifkgmxnkb').source).toEqual(
+    { type: 'wistia', mediaId: 'oifkgmxnkb' }
+  );
+});
+
+// Wistia is the one recognised host that also serves plain media files -- its
+// HLS manifests and direct deliveries are the documented way to play without
+// its player. Detecting the embed shapes must not take that away (#198).
+test.each([
+  [
+    'HLS manifest',
+    'https://fast.wistia.net/embed/medias/oifkgmxnkb.m3u8',
+    { type: 'hls', src: 'https://fast.wistia.net/embed/medias/oifkgmxnkb.m3u8' }
+  ],
+  [
+    'direct delivery',
+    'https://embed-ssl.wistia.com/deliveries/oifkgmxnkb.mp4',
+    {
+      type: 'video',
+      sources: [
+        {
+          src: 'https://embed-ssl.wistia.com/deliveries/oifkgmxnkb.mp4',
+          mimeType: 'video/mp4'
+        }
+      ]
+    }
+  ]
+])(
+  'still resolves a Wistia-hosted %s by file extension',
+  (_form, input, source) => {
+    expect(expectDetected(input).source).toEqual(source);
+  }
+);
+
 test('accepts and preserves every explicit source object', () => {
   const video: VideoFileSource = {
     type: 'video',
@@ -101,8 +149,9 @@ test('accepts and preserves every explicit source object', () => {
     videoId: '123456789',
     hash: 'a1b2c3'
   };
+  const wistia: WistiaSource = { type: 'wistia', mediaId: 'oifkgmxnkb' };
 
-  for (const input of [video, hls, youtube, vimeo]) {
+  for (const input of [video, hls, youtube, vimeo, wistia]) {
     const result = expectDetected(input);
     expect(result.input).toBe(input);
     expect(result.source).toEqual(input);
@@ -116,7 +165,9 @@ test.each([
   'mailto:clip.mp4',
   'ftp://host/clip.mp4',
   'https://notyoutube.com/watch?v=dQw4w9WgXcQ',
-  'https://vimeo.com.evil/123456789'
+  'https://vimeo.com.evil/123456789',
+  'https://notwistia.com/medias/oifkgmxnkb',
+  'https://wistia.com.evil.test/medias/oifkgmxnkb'
 ])('rejects unsupported strings with explicit-object guidance: %s', (input) => {
   const result = detectSource(input);
   expect(result).toMatchObject({
@@ -151,7 +202,16 @@ test.each([
   // into -- the path form is already constrained by the path pattern itself.
   'https://vimeo.com/123456789?h=not-a-hash',
   'https://vimeo.com/123456789?h=',
-  'https://vimeo.com/123456789?h=a1b2c3&h=d4e5f6'
+  'https://vimeo.com/123456789?h=a1b2c3&h=d4e5f6',
+  // A recognised Wistia host with a path that matches none of the known
+  // shapes fails outright rather than falling through to another provider.
+  'https://fast.wistia.net/embed/iframe',
+  'https://wesleyluyten.wistia.com/oifkgmxnkb',
+  // A disallowed character in the id breaks the path pattern itself.
+  'https://fast.wistia.net/embed/iframe/oif-gmxnkb',
+  // The media-file fall-through above is not a way in for junk: an extension
+  // Reely does not play leaves the recognised-host rule to fail it.
+  'https://fast.wistia.net/embed/medias/oifkgmxnkb.avi'
 ])('rejects malformed provider strings: %s', (input) => {
   expect(detectSource(input)).toMatchObject({
     status: 'failure',
@@ -175,7 +235,10 @@ test.each([
   { type: 'vimeo', videoId: '123', hash: '' },
   { type: 'vimeo', videoId: '123', hash: '../x' },
   { type: 'vimeo', videoId: '123', hash: ' privatehash ' },
-  { type: 'vimeo', videoId: '123', hash: '   ' }
+  { type: 'vimeo', videoId: '123', hash: '   ' },
+  { type: 'wistia', mediaId: '' },
+  { type: 'wistia', mediaId: ' oifkgmxnkb ' },
+  { type: 'wistia', mediaId: 'oif-gmxnkb' }
 ])('rejects invalid explicit source objects: %o', (input) => {
   const result = detectSource(input);
   expect(result).toMatchObject({
