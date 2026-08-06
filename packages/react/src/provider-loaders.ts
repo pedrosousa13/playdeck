@@ -23,7 +23,7 @@ export type PlayerMediaMount = HTMLVideoElement | HTMLDivElement;
  * never reaches a Wistia embed; `packages/core` has no notion of looping at
  * all. `loop` in this bag is therefore not redundant -- it is the only way to
  * make a Wistia embed loop, by setting `endVideoBehavior`
- * (`provider-wistia/src/attachment.ts:209`, `if (options.loop === true)`).
+ * (`provider-wistia/src/attachment.ts:243`, `if (options.loop === true)`).
  */
 export type PlayerProviderOptions = {
   readonly wistia?: WistiaProviderOptions;
