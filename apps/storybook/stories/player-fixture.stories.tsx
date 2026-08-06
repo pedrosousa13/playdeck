@@ -22,6 +22,10 @@ type PlayerFixtureProps = {
   readonly airplay?: 'demo';
   readonly sourceChange?: 'external';
   readonly captionRenderer?: Player.RootProps['captionRenderer'];
+  // Opts a Vimeo-sourced fixture into the chromeless-controls probe (#162):
+  // without it, `customControlsAvailability` never resolves, since the probe
+  // is opt-in precisely so it never fires uninvited on attach.
+  readonly vimeoCustomControls?: boolean;
 };
 
 const PresentationControls = ({
@@ -229,7 +233,8 @@ const PlayerFixture = ({
   defaultMuted: defaultMutedInput,
   airplay,
   sourceChange: sourceChangeInput,
-  captionRenderer
+  captionRenderer,
+  vimeoCustomControls
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -290,6 +295,9 @@ const PlayerFixture = ({
           ]
         }}
         preload={preload}
+        providerOptions={
+          vimeoCustomControls ? { vimeo: { customControls: true } } : undefined
+        }
         ref={(handle) => {
           window.reelyHandle = handle ?? undefined;
         }}
@@ -491,7 +499,10 @@ export const InteractionYoutube: Story = {
 };
 
 export const VimeoInteraction: Story = {
-  args: { source: 'vimeo', loading: 'interaction' }
+  // customControls: e2e/vimeo.spec.ts asserts on the chromeless probe (the
+  // embed src, and customControlsAvailability resolving), which since #162
+  // only runs when opted in.
+  args: { source: 'vimeo', loading: 'interaction', vimeoCustomControls: true }
 };
 
 export const VimeoViewport: Story = {
@@ -499,7 +510,13 @@ export const VimeoViewport: Story = {
 };
 
 export const VimeoUnlistedInteraction: Story = {
-  args: { source: 'vimeo-unlisted', loading: 'interaction' }
+  // customControls: e2e/vimeo.spec.ts asserts the oEmbed request carries the
+  // privacy hash, which since #162 only fires when the probe is opted in.
+  args: {
+    source: 'vimeo-unlisted',
+    loading: 'interaction',
+    vimeoCustomControls: true
+  }
 };
 
 export const VimeoInteractionMuted: Story = {
