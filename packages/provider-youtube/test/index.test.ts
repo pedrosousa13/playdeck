@@ -246,7 +246,14 @@ test.each([
   await provider.attach();
   await provider.load();
 
-  expect(fake.players[0]!.options.host).toBe(host);
+  const harness = fake.players[0]!;
+  expect(harness.options.host).toBe(host);
+  // The `origin` player var is the embedding page's own origin for an accepted
+  // `host` as much as for a rejected one: it is the origin YouTube validates
+  // postMessage against, and it never tracks `host` in either direction.
+  expect(harness.options.playerVars).toMatchObject({
+    origin: window.location.origin
+  });
 });
 
 // The comparison is on the parsed origin, so the spellings a browser resolves
@@ -266,7 +273,11 @@ test.each([
     await provider.attach();
     await provider.load();
 
-    expect(fake.players[0]!.options.host).toBe(expected);
+    const harness = fake.players[0]!;
+    expect(harness.options.host).toBe(expected);
+    expect(harness.options.playerVars).toMatchObject({
+      origin: window.location.origin
+    });
   }
 );
 

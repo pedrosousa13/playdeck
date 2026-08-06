@@ -41,9 +41,10 @@ Notes, per row:
   (`packages/provider-youtube/src/loader.ts:67`, appended to `document.head`
   at `:127-130`), with no `integrity` and no `crossOrigin` set. This does not
   change with the `host` option: `host` only decides which origin the _embed
-  iframe_ itself points at (`packages/provider-youtube/src/index.ts:145`
-  resolves it to `https://www.youtube-nocookie.com`; the value reaches the
-  iframe via `packages/provider-youtube/src/attachment.ts:146`). A
+  iframe_ itself points at (it defaults to `https://www.youtube-nocookie.com`,
+  `packages/provider-youtube/src/index.ts:48`, and is resolved at `:149`; the
+  value reaches the iframe via
+  `packages/provider-youtube/src/attachment.ts:146`). A
   `Player.Root` consumer **can** change `host`: `provider-loaders.ts` passes
   `providerOptions?.youtube` straight to `createYouTubeProvider`, so every key
   `YouTubeProviderOptions` declares — `host` and the `loadIframeApi` injection
