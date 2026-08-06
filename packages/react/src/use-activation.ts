@@ -14,9 +14,17 @@ import {
   useRef,
   useState
 } from 'react';
-import { loadProvider, type PlayerMediaMount } from './provider-loaders.js';
+import {
+  loadProvider,
+  type PlayerMediaMount,
+  type ResolvedProviderOptions
+} from './provider-loaders.js';
 
-export type { PlayerMediaMount } from './provider-loaders.js';
+export type {
+  PlayerMediaMount,
+  PlayerProviderOptions,
+  ResolvedProviderOptions
+} from './provider-loaders.js';
 
 export type PlayerLoadingStrategy = 'eager' | 'viewport' | 'interaction';
 export type PlayerPreload = 'none' | 'metadata' | 'auto';
@@ -34,10 +42,12 @@ export type UseActivationOptions = {
   readonly autoplay: AutoplayMode;
   readonly controller: PlayerController;
   readonly loadMargin: string;
+  readonly loadThreshold: number;
   readonly loading: PlayerLoadingStrategy;
   readonly nativeOptions: NativePlaybackOptions;
   readonly prepareMedia: (media: PlayerMediaMount) => void;
   readonly preload: PlayerPreload;
+  readonly providerOptions?: ResolvedProviderOptions;
   readonly source: SourceDetectionResult;
 };
 
@@ -46,6 +56,7 @@ type Session = {
   configuration: ActivationConfiguration;
   loading: PlayerLoadingStrategy;
   nativeOptions: NativePlaybackOptions;
+  providerOptions: ResolvedProviderOptions | undefined;
   sourceKey: string;
   started: boolean;
   queuedPlay: boolean;
@@ -61,12 +72,14 @@ type ObserverRegistration = {
   readonly observer: IntersectionObserver;
   readonly sourceKey: string;
   readonly target: HTMLDivElement;
+  readonly threshold: number;
 };
 
 type ActivationInputs = {
   readonly configuration: ActivationConfiguration;
   readonly loading: PlayerLoadingStrategy;
   readonly nativeOptions: NativePlaybackOptions;
+  readonly providerOptions: ResolvedProviderOptions | undefined;
   readonly sourceKey: string;
 };
 
@@ -99,6 +112,106 @@ const nativeOptionsEqual = (
   Object.is(left.endTime, right.endTime) &&
   Object.is(left.loop, right.loop) &&
   Object.is(left.startTime, right.startTime);
+
+// One provider's own option bag, compared by value for the same reason
+// `nativeOptionsEqual` exists: `providerOptions={{ wistia: { swatch: false } }}`
+// is a new object on every render, and a reference compare would tear the embed
+// down and rebuild it each time. Own keys rather than each declared field, so
+// this stays correct as a provider's options grow, and shallow because every
+// option a provider bag declares is a primitive.
+//
+// Every key either side declares, compared as a value: a key set to `undefined`
+// therefore equals that key being absent, and an absent bag equals an empty one.
+// All three mean the same thing to a provider, which sets an attribute only for
+// an option that is not `undefined` (`provider-wistia/src/attachment.ts:215`,
+// `if (options.playerColor !== undefined)`). Counting keys instead would rebuild
+// a live embed for two bags that build the identical element -- which is what a
+// caller assembling its bag per render, one key at a time from its own props,
+// hands this function.
+const providerBagEqual = (
+  left: Readonly<Record<string, unknown>> | undefined,
+  right: Readonly<Record<string, unknown>> | undefined
+): boolean => {
+  const keys = new Set([
+    ...Object.keys(left ?? {}),
+    ...Object.keys(right ?? {})
+  ]);
+  return [...keys].every((key) => Object.is(left?.[key], right?.[key]));
+};
+
+// One line per provider key, as `nativeOptionsEqual` names its own three.
+const providerOptionsEqual = (
+  left: ResolvedProviderOptions | undefined,
+  right: ResolvedProviderOptions | undefined
+): boolean =>
+  providerBagEqual(left?.wistia, right?.wistia) &&
+  providerBagEqual(left?.youtube, right?.youtube) &&
+  providerBagEqual(left?.vimeo, right?.vimeo);
+
+// A browser can report an intersection ratio a hair under the geometrically
+// exact value it is crossing -- documented for `threshold: 1`, where subpixel
+// layout rounding can leave the ratio at e.g. `0.9998` and the callback never
+// fires again to say the target reached it. The tolerance absorbs that noise
+// without treating a materially lower ratio as a match.
+const THRESHOLD_EPSILON = 0.0001;
+
+// Same idea for the size comparison `targetExceedsObserverRoot` makes below: a
+// target sized to match its root can differ from it by a subpixel and still
+// mean "the same size" rather than "bigger".
+const SIZE_EPSILON_PX = 0.5;
+
+// The observer is always given `0` alongside `loadThreshold`, so its callback
+// fires the moment the target starts intersecting at all -- not only when it
+// crosses `loadThreshold` itself. That first crossing is what
+// `targetExceedsObserverRoot` needs to see the target's and the root's rects
+// before `loadThreshold` is anywhere close, and it is the *only* further
+// callback a target that can never reach `loadThreshold` will ever get: with a
+// single configured threshold above the ratio a target can reach, nothing after
+// the initial callback would ever cross it, and the observer would fall silent
+// for good. Deduplicated rather than always `[0, loadThreshold]`, so the default
+// `loadThreshold: 0` -- every consumer's activation today -- keeps asking the
+// browser for exactly what it asked for before this prop existed.
+const observerThresholds = (loadThreshold: number): number[] =>
+  loadThreshold === 0 ? [0] : [0, loadThreshold];
+
+// Whether `entry`'s target is larger than the observer root it is measured
+// against -- the scroll container, never `Player.Root` -- in either dimension:
+// the shape behind the brief's own example, a `9/16` Shorts player on a window
+// shorter than it is tall. A target that size can never cover 100% of that
+// container no matter how it scrolls, so a `loadThreshold` near `1` would
+// otherwise stay unsatisfied forever: not a misconfiguration worth an error,
+// since every other threshold works fine on every other target, just a box
+// that happened to overflow the one it loaded into. `null`
+// `rootBounds` -- the root not sharing this target's document, or not yet
+// having a size to report -- is treated as "not provably larger", the
+// conservative reading: the cost of a false negative here is the first-pixel
+// activation every consumer already gets under the default `loadThreshold: 0`,
+// where the cost of a false positive would be a threshold silently never
+// doing what it was set to do.
+const targetExceedsObserverRoot = (
+  entry: IntersectionObserverEntry
+): boolean => {
+  const { rootBounds, boundingClientRect: target } = entry;
+  return (
+    rootBounds !== null &&
+    (target.width > rootBounds.width + SIZE_EPSILON_PX ||
+      target.height > rootBounds.height + SIZE_EPSILON_PX)
+  );
+};
+
+// The activation criterion for one delivered entry. A target that fits within
+// its root is held to `loadThreshold` itself; one that cannot -- see
+// `targetExceedsObserverRoot` -- gets the same first-pixel activation the default
+// `loadThreshold: 0` already gives every other player, rather than an
+// unreachable threshold leaving it dormant with no playback and no error, the
+// worse failure the brief warns against.
+const meetsLoadThreshold = (
+  entry: IntersectionObserverEntry,
+  loadThreshold: number
+): boolean =>
+  entry.isIntersecting &&
+  (entry.intersectionRatio >= loadThreshold - THRESHOLD_EPSILON ||
+    targetExceedsObserverRoot(entry));
 
 const configurationError = (message: string) => ({
   category: 'configuration' as const,
@@ -151,12 +264,14 @@ export const useActivation = (
     currentConfiguration
   );
   const currentNativeOptions = options.nativeOptions;
+  const currentProviderOptions = options.providerOptions;
   const optionsRef = useRef(options);
   const session = useRef<Session>({
     generation: 0,
     configuration: currentConfiguration,
     loading: options.loading,
     nativeOptions: currentNativeOptions,
+    providerOptions: currentProviderOptions,
     sourceKey: currentKey,
     started: false,
     queuedPlay: false
@@ -165,6 +280,7 @@ export const useActivation = (
     configuration: currentConfiguration,
     loading: options.loading,
     nativeOptions: currentNativeOptions,
+    providerOptions: currentProviderOptions,
     sourceKey: currentKey
   });
   const mediaRef = useRef<PlayerMediaMount | null>(null);
@@ -184,6 +300,7 @@ export const useActivation = (
       configuration: currentConfiguration,
       loading: options.loading,
       nativeOptions: currentNativeOptions,
+      providerOptions: currentProviderOptions,
       sourceKey: currentKey
     };
 
@@ -198,6 +315,7 @@ export const useActivation = (
       active.loading = options.loading;
       active.configuration = currentConfiguration;
       active.nativeOptions = currentNativeOptions;
+      active.providerOptions = currentProviderOptions;
       active.started = false;
       active.queuedPlay = false;
       loadingGeneration.current = undefined;
@@ -209,13 +327,25 @@ export const useActivation = (
       return;
     }
 
-    if (nativeOptionsEqual(active.nativeOptions, currentNativeOptions)) return;
+    if (
+      nativeOptionsEqual(active.nativeOptions, currentNativeOptions) &&
+      providerOptionsEqual(active.providerOptions, currentProviderOptions)
+    ) {
+      return;
+    }
     active.nativeOptions = currentNativeOptions;
+    active.providerOptions = currentProviderOptions;
     if (!active.started) return;
     active.generation += 1;
     loadingGeneration.current = undefined;
     setMediaVersion((version) => version + 1);
-  }, [currentConfiguration, currentKey, currentNativeOptions, options]);
+  }, [
+    currentConfiguration,
+    currentKey,
+    currentNativeOptions,
+    currentProviderOptions,
+    options
+  ]);
 
   const activate = useCallback((queuePlay: boolean) => {
     const active = session.current;
@@ -358,7 +488,8 @@ export const useActivation = (
     const currentObserver = observerRef.current;
     if (
       currentObserver?.target === viewport &&
-      currentObserver.margin === options.loadMargin
+      currentObserver.margin === options.loadMargin &&
+      currentObserver.threshold === options.loadThreshold
     )
       return;
     disconnectObserver(currentObserver);
@@ -387,7 +518,9 @@ export const useActivation = (
       const observer = new Observer(
         (entries) => {
           if (
-            !entries.some((entry) => entry.isIntersecting) ||
+            !entries.some((entry) =>
+              meetsLoadThreshold(entry, options.loadThreshold)
+            ) ||
             !isCurrentObservation()
           ) {
             return;
@@ -396,7 +529,10 @@ export const useActivation = (
           observerRef.current = undefined;
           activate(false);
         },
-        { rootMargin: options.loadMargin }
+        {
+          rootMargin: options.loadMargin,
+          threshold: observerThresholds(options.loadThreshold)
+        }
       );
       registration = {
         configuration,
@@ -405,7 +541,8 @@ export const useActivation = (
         margin: options.loadMargin,
         observer,
         sourceKey: key,
-        target: viewport
+        target: viewport,
+        threshold: options.loadThreshold
       };
       observerRef.current = registration;
       observer.observe(viewport);
@@ -424,7 +561,7 @@ export const useActivation = (
         options.controller.setActivation({
           activation: 'error',
           error: configurationError(
-            'The viewport loadMargin configuration is invalid.'
+            'The viewport loadMargin or loadThreshold configuration is invalid.'
           )
         });
       }
@@ -441,6 +578,7 @@ export const useActivation = (
     currentKey,
     options.controller,
     options.loadMargin,
+    options.loadThreshold,
     options.loading,
     options.source.status,
     viewportVersion
@@ -458,6 +596,7 @@ export const useActivation = (
     const loading = active.loading;
     const configuration = active.configuration;
     const nativeOptions = active.nativeOptions;
+    const providerOptions = active.providerOptions;
     const loadOptions = optionsRef.current;
     const controller = loadOptions.controller;
     const replacingProvider = controller.getState().provider !== null;
@@ -470,10 +609,12 @@ export const useActivation = (
         current.loading === loading &&
         current.configuration === configuration &&
         nativeOptionsEqual(current.nativeOptions, nativeOptions) &&
+        providerOptionsEqual(current.providerOptions, providerOptions) &&
         inputs.sourceKey === key &&
         inputs.loading === loading &&
         inputs.configuration === configuration &&
         nativeOptionsEqual(inputs.nativeOptions, nativeOptions) &&
+        providerOptionsEqual(inputs.providerOptions, providerOptions) &&
         mediaRef.current === media
       );
     };
@@ -482,6 +623,7 @@ export const useActivation = (
     void loadProvider({
       media,
       nativeOptions,
+      providerOptions,
       source: source.source as ResolvedPlayerSource
     })
       .then((adapter) => {

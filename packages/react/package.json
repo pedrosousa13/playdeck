@@ -54,6 +54,7 @@
     "@reely/provider-hls": "workspace:^",
     "@reely/provider-native": "workspace:^",
     "@reely/provider-vimeo": "workspace:^",
+    "@reely/provider-wistia": "workspace:^",
     "@reely/provider-youtube": "workspace:^"
   },
   "peerDependencies": {

@@ -13,6 +13,9 @@ import type { YouTubeTimeUpdates } from './time-updates.js';
 
 export type YouTubeAttachmentDeps = {
   readonly emit: EmitProviderState;
+  // Unset and `false` both mean chromeless; see `YouTubeProviderOptions`'s own
+  // doc comment for why this mirrors Vimeo's polarity.
+  readonly controls: boolean | undefined;
   readonly host: string;
   readonly loadIframeApi: () => Promise<YouTubeIframeApi>;
   // The host's ready capabilities snapshot, for the state published on ready.
@@ -55,6 +58,7 @@ export const createYouTubeAttachment = (
   videoId: string,
   {
     emit,
+    controls,
     host,
     loadIframeApi,
     getCapabilities,
@@ -145,6 +149,9 @@ export const createYouTubeAttachment = (
       height: '100%',
       playerVars: {
         autoplay: 0,
+        // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:61`):
+        // unset and `false` both mean chromeless.
+        controls: controls === true ? 1 : 0,
         playsinline: 1,
         rel: 0,
         ...(embedOrigin ? { origin: embedOrigin } : {})

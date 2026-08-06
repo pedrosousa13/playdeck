@@ -13,6 +13,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   detectSource,
   PlayerController,
+  type CommandResult,
   type ProviderAdapter,
   type ProviderStateListener
 } from '@reely/core';
@@ -29,7 +30,7 @@ vi.mock('../src/provider-loaders', () => ({
 class ControlledIntersectionObserver implements IntersectionObserver {
   static instances: ControlledIntersectionObserver[] = [];
   readonly root = null;
-  readonly thresholds = [0];
+  readonly thresholds: number[];
   readonly rootMargin: string;
   readonly scrollMargin = '0px';
   private readonly callback: IntersectionObserverCallback;
@@ -41,6 +42,9 @@ class ControlledIntersectionObserver implements IntersectionObserver {
   ) {
     this.callback = callback;
     this.rootMargin = options.rootMargin ?? '0px';
+    this.thresholds = Array.isArray(options.threshold)
+      ? options.threshold
+      : [options.threshold ?? 0];
     ControlledIntersectionObserver.instances.push(this);
   }
 
@@ -51,18 +55,26 @@ class ControlledIntersectionObserver implements IntersectionObserver {
   takeRecords = () => [];
   unobserve = vi.fn();
 
-  intersect() {
+  /**
+   * Reports an entry for the observed target, as a scroll would. Defaults to
+   * a full, unobstructed intersection; a test pinning `loadThreshold`
+   * behaviour overrides `intersectionRatio`, `rootBounds` and
+   * `boundingClientRect` to describe a partial or an oversized one instead.
+   */
+  intersect(entry: Partial<IntersectionObserverEntry> = {}) {
     const target = this.target!;
+    const rect = target.getBoundingClientRect();
     this.callback(
       [
         {
-          boundingClientRect: target.getBoundingClientRect(),
+          boundingClientRect: rect,
           intersectionRatio: 1,
-          intersectionRect: target.getBoundingClientRect(),
+          intersectionRect: rect,
           isIntersecting: true,
           rootBounds: null,
           target,
-          time: 0
+          time: 0,
+          ...entry
         }
       ],
       this
@@ -82,11 +94,13 @@ type ActivationProbeProps = {
   readonly controller: PlayerController;
   readonly loading?: Player.PlayerLoadingStrategy;
   readonly loadMargin?: string;
+  readonly loadThreshold?: number;
   readonly mediaKey?: string;
   readonly nativeOptions?: NativePlaybackOptions;
   readonly onActivate?: (activate: () => void) => void;
   readonly onLayout?: () => void;
   readonly preload?: Player.PlayerPreload;
+  readonly providerOptions?: Player.PlayerProviderOptions;
   readonly showMedia?: boolean;
   readonly showViewport?: boolean;
   readonly source?: Player.RootProps['source'];
@@ -98,11 +112,13 @@ const ActivationProbe = ({
   controller,
   loading = 'eager',
   loadMargin = '200px 0px',
+  loadThreshold = 0,
   mediaKey = 'media',
   nativeOptions = {},
   onActivate,
   onLayout,
   preload = 'metadata',
+  providerOptions,
   showMedia = true,
   showViewport = true,
   source = '/tracer.mp4',
@@ -117,10 +133,12 @@ const ActivationProbe = ({
     autoplay,
     controller,
     loadMargin,
+    loadThreshold,
     loading,
     nativeOptions,
     prepareMedia: () => undefined,
     preload,
+    providerOptions,
     source: detectSource(source)
   });
   useLayoutEffect(() => {
@@ -233,6 +251,120 @@ test('viewport uses a custom margin', () => {
   expect(ControlledIntersectionObserver.instances[0]?.rootMargin).toBe(
     '500px 20px'
   );
+});
+
+test('the default load threshold activates at the first visible pixel', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture());
+
+  const observer = ControlledIntersectionObserver.instances[0]!;
+  expect(observer.thresholds).toEqual([0]);
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: new DOMRectReadOnly(0, 0, 400, 800),
+      intersectionRatio: 0.01,
+      rootBounds: new DOMRectReadOnly(0, 0, 400, 800)
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+});
+
+test('viewport uses a custom load threshold', () => {
+  render(fixture({ loadThreshold: 0.75 }));
+
+  expect(ControlledIntersectionObserver.instances[0]?.thresholds).toEqual([
+    0, 0.75
+  ]);
+});
+
+test('viewport activation waits for the configured load threshold', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture({ loadThreshold: 1 }));
+  const observer = ControlledIntersectionObserver.instances[0]!;
+  const rootBounds = new DOMRectReadOnly(0, 0, 400, 800);
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: new DOMRectReadOnly(0, 0, 400, 800),
+      intersectionRatio: 0.5,
+      rootBounds
+    })
+  );
+  await Promise.resolve();
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: new DOMRectReadOnly(0, 0, 400, 800),
+      intersectionRatio: 1,
+      rootBounds
+    })
+  );
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+});
+
+// The brief's own example: a `9/16` Shorts player on a window shorter than it
+// is tall can never reach `intersectionRatio: 1` -- the target is taller than
+// the root at every scroll position -- so an unreachable `loadThreshold` must
+// not leave it dormant forever.
+test('an oversized target activates despite an unreachable load threshold', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture({ loadThreshold: 1 }));
+  const observer = ControlledIntersectionObserver.instances[0]!;
+
+  act(() =>
+    observer.intersect({
+      // Taller than the 800px root: 100% coverage is not a position that
+      // exists, at any scroll offset.
+      boundingClientRect: new DOMRectReadOnly(0, 0, 400, 2000),
+      intersectionRatio: 0.4,
+      rootBounds: new DOMRectReadOnly(0, 0, 400, 800)
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+});
+
+test('viewport observer rebuilds when loadThreshold changes', async () => {
+  const controller = new PlayerController();
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      loading="viewport"
+      loadThreshold={0}
+      showMedia={false}
+    />
+  );
+  expect(ControlledIntersectionObserver.instances).toHaveLength(1);
+  const firstObserver = ControlledIntersectionObserver.instances[0]!;
+
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      loading="viewport"
+      loadThreshold={1}
+      showMedia={false}
+    />
+  );
+
+  await vi.waitFor(() =>
+    expect(ControlledIntersectionObserver.instances).toHaveLength(2)
+  );
+  expect(firstObserver.disconnect).toHaveBeenCalled();
+  expect(
+    ControlledIntersectionObserver.instances[1]?.observe
+  ).toHaveBeenCalledWith(screen.getByTestId('activation-viewport'));
+  expect(ControlledIntersectionObserver.instances[1]?.thresholds).toEqual([
+    0, 1
+  ]);
 });
 
 test('dormant viewport activation uses native options changed before intersection', async () => {
@@ -730,6 +862,182 @@ test.each([
     expect(previous.counts().destroyCount).toBe(1);
   }
 );
+
+test('forwards the provider option bag from Root to the loader', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(
+    fixture({
+      loading: 'eager',
+      providerOptions: { wistia: { playerColor: 'ff0000' } }
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  // The fixture's source is native, so `Root`'s `resolvedProviderOptions`
+  // leaves the bag untouched -- `controls` only folds into whichever bag
+  // belongs to the detected source's own provider (`root.tsx`).
+  expect(mockedLoadProvider.mock.calls[0]?.[0].providerOptions).toEqual({
+    wistia: { playerColor: 'ff0000' }
+  });
+});
+
+test('keeps the installed adapter when an equal provider option bag is passed again', async () => {
+  const previous = createFakeProvider();
+  const replacement = createFakeProvider();
+  const controller = new PlayerController();
+  mockedLoadProvider
+    .mockResolvedValueOnce(previous.adapter)
+    .mockResolvedValueOnce(replacement.adapter);
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await vi.waitFor(() =>
+    expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+
+  // A fresh object literal with the same values, as an inline prop produces on
+  // every render.
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await act(async () => undefined);
+
+  expect(mockedLoadProvider).toHaveBeenCalledOnce();
+  expect(replacement.counts()).toMatchObject({ attachCount: 0, loadCount: 0 });
+  expect(previous.counts()).toMatchObject({
+    attachCount: 1,
+    destroyCount: 0,
+    loadCount: 1
+  });
+});
+
+test('replaces the installed adapter when a same-media provider option changes', async () => {
+  const previous = createFakeProvider();
+  const replacement = createFakeProvider();
+  const controller = new PlayerController();
+  mockedLoadProvider
+    .mockResolvedValueOnce(previous.adapter)
+    .mockResolvedValueOnce(replacement.adapter);
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await vi.waitFor(() =>
+    expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: true } }}
+    />
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledTimes(2));
+  expect(mockedLoadProvider.mock.calls[1]?.[0].providerOptions).toEqual({
+    wistia: { swatch: true }
+  });
+  await vi.waitFor(() =>
+    expect(replacement.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+  expect(previous.counts().destroyCount).toBe(1);
+});
+
+// A caller that assembles its bag from its own props writes
+// `poster: props.poster`, so a key is present and `undefined` on one render and
+// absent on the next. Both build the identical element, so neither is a reason
+// to rebuild a live embed.
+test.each([
+  [
+    'a key present and undefined against that key absent',
+    { wistia: { swatch: false } } satisfies Player.PlayerProviderOptions,
+    {
+      wistia: { swatch: false, poster: undefined }
+    } satisfies Player.PlayerProviderOptions
+  ],
+  [
+    'no bag at all against an empty bag',
+    undefined,
+    { wistia: {} } satisfies Player.PlayerProviderOptions
+  ]
+])(
+  'keeps the installed adapter when the bag changes only by %s',
+  async (_case, initialOptions, nextOptions) => {
+    const previous = createFakeProvider();
+    const replacement = createFakeProvider();
+    const controller = new PlayerController();
+    mockedLoadProvider
+      .mockResolvedValueOnce(previous.adapter)
+      .mockResolvedValueOnce(replacement.adapter);
+    const { rerender } = render(
+      <ActivationProbe
+        controller={controller}
+        providerOptions={initialOptions}
+      />
+    );
+    await vi.waitFor(() =>
+      expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+    );
+
+    rerender(
+      <ActivationProbe controller={controller} providerOptions={nextOptions} />
+    );
+    await act(async () => undefined);
+
+    expect(mockedLoadProvider).toHaveBeenCalledOnce();
+    expect(replacement.counts()).toMatchObject({
+      attachCount: 0,
+      loadCount: 0
+    });
+    expect(previous.counts().destroyCount).toBe(0);
+  }
+);
+
+// The other direction of dropping the key-count check: a key added with a real
+// value is a change, and is only seen by comparing the keys of both bags.
+test('replaces the installed adapter when a provider option is added to the bag', async () => {
+  const previous = createFakeProvider();
+  const replacement = createFakeProvider();
+  const controller = new PlayerController();
+  mockedLoadProvider
+    .mockResolvedValueOnce(previous.adapter)
+    .mockResolvedValueOnce(replacement.adapter);
+  const { rerender } = render(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false } }}
+    />
+  );
+  await vi.waitFor(() =>
+    expect(previous.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+
+  rerender(
+    <ActivationProbe
+      controller={controller}
+      providerOptions={{ wistia: { swatch: false, poster: '/still.png' } }}
+    />
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledTimes(2));
+  expect(mockedLoadProvider.mock.calls[1]?.[0].providerOptions).toEqual({
+    wistia: { swatch: false, poster: '/still.png' }
+  });
+  await vi.waitFor(() =>
+    expect(replacement.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+  expect(previous.counts().destroyCount).toBe(1);
+});
 
 test('native option changes invalidate an older pending load', async () => {
   const firstLoad = deferred<ProviderAdapter>();
@@ -1657,7 +1965,7 @@ test('retries an installed provider error with one queued user play', async () =
   render(interactionFixture({ ref: handle }));
 
   const button = screen.getByRole('button', { name: 'Play video' });
-  const controller = handle.current as PlayerController;
+  const controller = handle.current as unknown as PlayerController;
   const playWithOrigin = vi.spyOn(controller, 'playWithOrigin');
   button.focus();
   fireEvent.click(button);
@@ -1682,4 +1990,154 @@ test('retries an installed provider error with one queued user play', async () =
   await vi.waitFor(() =>
     expect(playWithOrigin).toHaveBeenCalledExactlyOnceWith('user')
   );
+});
+
+// SIDEPRO-201: an external controller drives activation through the
+// forwarded ref alone -- no click, no `Player.ActivationButton` in the tree
+// at all. The single `activateFromInteraction()` call below has to queue the
+// same play `useActivation` queues for a click (use-activation.ts:293-294,
+// `active.started = true; active.queuedPlay = queuePlay`),
+// and that queued play has to reach the provider exactly once.
+test('a dormant interaction root activates and plays from a single ref call', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'interaction', ref: handle }));
+
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+
+  act(() => handle.current?.activateFromInteraction());
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+});
+
+// The test above calls `activateFromInteraction` alone and lets the
+// auto-queued play do the rest; SIDEPRO-201's external "play" command is
+// the pair, in this order — `activateFromInteraction()` then `play()`
+// (`use-activation.ts:324-356`, its
+// `const activateFromInteraction = useCallback`;
+// `player-controller.ts:381-386`) — the way the `backpack-parity` branch's
+// `ExternalEventsVideo`/`SocialCarouselIntegrationVideo` stories and its
+// external-control contract test both describe issuing it. Against a
+// still-`dormant` player, the explicit `play()` has
+// no provider to reach yet and resolves `{ ok: false, reason: 'not-ready' }`
+// (`player-controller.ts:383-384`) rather than queuing anything — dropped,
+// not doubled — so the pair must not cost a second, real play once the
+// provider this same `activateFromInteraction` call set loading actually
+// attaches. Asserted on `fake.counts().playCount` directly, not on a spy
+// over `handle.current.play`/`activateFromInteraction` themselves: those
+// are expected to be called once each here regardless of whether the drop
+// is working, so only a count on the provider itself can tell a correct
+// drop from a bug that lets the early call double up the queued one.
+test('interaction issues exactly one play when activateFromInteraction is immediately followed by play', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'interaction', ref: handle }));
+  let immediateResult: CommandResult | undefined;
+
+  act(() => {
+    handle.current?.activateFromInteraction();
+    void handle.current?.play().then((result) => {
+      immediateResult = result;
+    });
+  });
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  // Read only once the microtask above has had a chance to run — `act` for a
+  // synchronous callback does not itself drain it, so a check placed
+  // straight off that `act` would see `undefined` regardless of what
+  // `play()` actually returned.
+  expect(immediateResult).toEqual({ ok: false, reason: 'not-ready' });
+
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+  // The regression this test exists to catch would land moments after the
+  // count first reaches one, not before, so a check placed only right after
+  // the assertion above would pass over it just as easily as no check at
+  // all.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(fake.counts().playCount).toBe(1);
+});
+
+test('usePlayerActions() reaches the same activateFromInteraction binding', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  let activateFromInteraction!: () => void;
+  const Probe = () => {
+    const actions = Player.usePlayerActions();
+    useLayoutEffect(() => {
+      activateFromInteraction = actions.activateFromInteraction;
+    }, [actions]);
+    return null;
+  };
+  render(
+    <Player.Root loading="interaction" source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+      <Probe />
+    </Player.Root>
+  );
+
+  act(() => activateFromInteraction());
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+});
+
+// Two places cast this same handle back to `PlayerController` to reach
+// `setProvider` directly: the mock-player decorator
+// (apps/storybook/.storybook/mock-player.tsx:178, its
+// `as PlayerController` cast, reaching `:184`'s `controller.setProvider`) and
+// the `backpack-parity` branch's `useReportingProvider`, which every wrapper
+// contract test there staged its provider through, via the same cast.
+// Composing the handle from the controller plus `activateFromInteraction`
+// must not lose that escape hatch.
+test('the ref handle still exposes the provider-facing setProvider escape hatch', () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ ref: handle }));
+
+  const controller = handle.current as unknown as PlayerController;
+  expect(controller.setProvider).toBeTypeOf('function');
+  const adapter: ProviderAdapter = {
+    provider: 'native',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: () => () => undefined
+  };
+
+  act(() => controller.setProvider(adapter));
+
+  expect(controller.getState().activation).toBe('loading-provider');
+});
+
+// An external controller calls `activateFromInteraction()` unconditionally
+// before `play()`, so a player that has already activated has to tolerate
+// the call rather than restart itself or throw
+// (use-activation.ts:334-355, from `const activation = state.activation`, only
+// proceeds from `dormant` or `error`).
+test('activateFromInteraction on an already-ready player is a no-op', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'interaction', ref: handle }));
+
+  act(() => handle.current?.activateFromInteraction());
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+
+  expect(() =>
+    act(() => handle.current?.activateFromInteraction())
+  ).not.toThrow();
+  expect(mockedLoadProvider).toHaveBeenCalledOnce();
+  expect(fake.counts().playCount).toBe(1);
 });

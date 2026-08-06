@@ -22,6 +22,9 @@ export default defineConfig({
       ),
       '@reely/provider-vimeo': fileURLToPath(
         new URL('./packages/provider-vimeo/src/index.ts', import.meta.url)
+      ),
+      '@reely/provider-wistia': fileURLToPath(
+        new URL('./packages/provider-wistia/src/index.ts', import.meta.url)
       )
     }
   },

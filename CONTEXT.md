@@ -1,11 +1,11 @@
 # Reely
 
 A headless video player: React primitives over a framework-agnostic core, with
-provider adapters for native media, HLS, YouTube and Vimeo. The project's
-language separates what a consumer composes (primitives), what they can target
-(parts), what they may restyle (structural geometry, appearance, tokens), what
-they can read but not set (outputs), and how a player gets from mounted to
-playing (activation, then lifecycle).
+provider adapters for native media, HLS, YouTube, Vimeo and Wistia. The
+project's language separates what a consumer composes (primitives), what they
+can target (parts), what they may restyle (structural geometry, appearance,
+tokens), what they can read but not set (outputs), and how a player gets from
+mounted to playing (activation, then lifecycle).
 
 ## Language
 
@@ -28,7 +28,7 @@ overlay positions against. Not the browser viewport.
 
 **Provider**:
 The integration that drives playback for one kind of source — native, HLS,
-YouTube or Vimeo. The object implementing one is a provider adapter.
+YouTube, Vimeo or Wistia. The object implementing one is a provider adapter.
 _Avoid_: engine, backend, player
 
 **Source**:
@@ -59,6 +59,9 @@ _Avoid_: eligible media
 
 ### Adapters
 
+See [ADR-0004](docs/adr/0004-cross-provider-options-live-on-root.md) for what
+makes a setting Reely's own prop rather than a key in one provider's option bag.
+
 **Seam**:
 A part of a provider adapter that exclusively owns one slice of the adapter's
 state and the commands over it — playback, presentation, tracks and captions,
@@ -71,6 +74,14 @@ _Avoid_: layer, subsystem
 An adapter's binding to its media element — attach, load, listener wiring and
 teardown. Not Lifecycle, which is what the player state reports.
 _Avoid_: adapter lifecycle, setup
+
+**Aurora**:
+Wistia's current player generation — the `<wistia-player>` custom element the
+Wistia provider targets, and the only one it supports. Named here because the
+distinction is load-bearing: Wistia's legacy player (the `E-v1.js` script tag
+and `window._wq`) has a different API and a different embed, and the provider
+deliberately drives neither.
+_Avoid_: the Wistia SDK, the Wistia embed
 
 ### Styling
 

@@ -1,17 +1,17 @@
 # @reely/react
 
 Headless, composable React 19 media-player primitives with one API across
-native MP4/WebM, HLS, YouTube and Vimeo. No CSS is imported by the primitives,
-and every control is capability-gated: a control whose command the active
-provider cannot honour renders nothing rather than rendering disabled.
+native MP4/WebM, HLS, YouTube, Vimeo and Wistia. No CSS is imported by the
+primitives, and every control is capability-gated: a control whose command the
+active provider cannot honour renders nothing rather than rendering disabled.
 
 ```sh
 pnpm add @reely/react
 ```
 
 React 19 is a peer dependency. Provider packages are pulled in as dependencies
-but loaded lazily — a consumer playing only MP4 ships no YouTube, Vimeo or
-hls.js code in its initial graph, and makes no provider network requests.
+but loaded lazily — a consumer playing only MP4 ships no YouTube, Vimeo, Wistia
+or hls.js code in its initial graph, and makes no provider network requests.
 
 ## Usage
 
@@ -49,7 +49,7 @@ export const Clip = () => (
 <!-- /example -->
 
 `source` takes the same input as `detectSource` — a URL string, or an explicit
-`{ type: 'hls' | 'video' | 'youtube' | 'vimeo', ... }` object.
+`{ type: 'hls' | 'video' | 'youtube' | 'vimeo' | 'wistia', ... }` object.
 
 Optional stylesheet with the default look:
 

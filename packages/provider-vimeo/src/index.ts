@@ -27,6 +27,7 @@ export type {
 export type VimeoProviderOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
+  readonly customControls?: boolean;
 };
 
 type VimeoCommand =

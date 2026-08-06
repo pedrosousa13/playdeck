@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -11,12 +11,20 @@ import { describe, expect, it } from 'vitest';
 // past this check by being forgotten here.
 const storiesDir = dirname(fileURLToPath(import.meta.url));
 
-const read = (name: string): string =>
-  readFileSync(join(storiesDir, name), 'utf8');
+// Recursive, matching the `stories/**/*.stories.tsx` glob Storybook itself
+// loads. A flat scan would quietly exempt every story in a subdirectory from
+// the tag rule below, which is the opposite of what a guard is for.
+const storyFiles = (directory: string): string[] =>
+  readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return storyFiles(path);
+    return entry.name.endsWith('.stories.tsx') ? [path] : [];
+  });
 
-const realPlaybackStoryFiles = readdirSync(storiesDir)
-  .filter((name) => name.endsWith('.stories.tsx'))
-  .filter((name) => read(name).includes("'real-playback'"));
+const allStoryFiles = storyFiles(storiesDir);
+const realPlaybackStoryFiles = allStoryFiles.filter((path) =>
+  readFileSync(path, 'utf8').includes("'real-playback'")
+);
 
 describe('real-playback stories opt out of the deterministic suite', () => {
   it('discovers at least one real-playback story file', () => {
@@ -24,11 +32,18 @@ describe('real-playback stories opt out of the deterministic suite', () => {
     expect(realPlaybackStoryFiles.length).toBeGreaterThan(0);
   });
 
+  it('scans story subdirectories, not just the top level', () => {
+    // The tag rule is only as good as this file list.
+    expect(
+      allStoryFiles.filter((path) => relative(storiesDir, path).includes(sep))
+    ).not.toEqual([]);
+  });
+
   it('every real-playback story file also declares the !test tag', () => {
-    for (const name of realPlaybackStoryFiles) {
+    for (const path of realPlaybackStoryFiles) {
       expect(
-        read(name).includes("'!test'"),
-        `${name} tags 'real-playback' but is missing '!test'`
+        readFileSync(path, 'utf8').includes("'!test'"),
+        `${relative(storiesDir, path)} tags 'real-playback' but is missing '!test'`
       ).toBe(true);
     }
   });
