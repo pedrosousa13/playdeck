@@ -17,6 +17,11 @@ import type { ActivationBindings } from './use-activation.js';
 
 export type PlayerContextValue = ActivationBindings & {
   controller: PlayerController;
+  // `Root`'s own `controls` prop, threaded through so `Media`
+  // (`viewport-media.tsx`) can set it as a DOM attribute on the native
+  // `<video>` element -- the same channel `preload` already uses to reach
+  // that component, rather than a second configuration path.
+  controls: boolean | undefined;
   source: ReturnType<typeof detectSource>;
   // The last non-null caption selection, remembered so toggling captions back
   // on restores it. Player-scoped rather than per-control: CaptionsButton and
@@ -53,7 +58,14 @@ export type PlayerHandle = Pick<
   | 'showAirPlayPicker'
   | 'retry'
   | 'whenReady'
->;
+> &
+  // Not a controller method: `activateFromInteraction` starts a dormant
+  // interaction-loading player, which `PlayerController` itself has no
+  // concept of -- only `useActivation` does. It joins the handle here so an
+  // external controller can drive activation through the same ref it already
+  // holds, without `PlayerController`'s own surface growing an activation
+  // concern.
+  Pick<ActivationBindings, 'activateFromInteraction'>;
 
 export type PlayerActions = Omit<PlayerHandle, 'getState' | 'subscribe' | 'on'>;
 
@@ -163,9 +175,10 @@ export const useActiveCues = (): readonly TextCue[] => {
 };
 
 export const usePlayerActions = (): PlayerActions => {
-  const { controller } = usePlayer();
+  const { activateFromInteraction, controller } = usePlayer();
   return useMemo(
     () => ({
+      activateFromInteraction,
       play: controller.play,
       pause: controller.pause,
       togglePlayback: controller.togglePlayback,
@@ -187,6 +200,6 @@ export const usePlayerActions = (): PlayerActions => {
       retry: controller.retry,
       whenReady: controller.whenReady
     }),
-    [controller]
+    [activateFromInteraction, controller]
   );
 };

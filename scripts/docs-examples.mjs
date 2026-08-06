@@ -231,6 +231,10 @@ const packages = [
   {
     name: '@reely/provider-vimeo',
     entry: 'packages/provider-vimeo/src/index.ts'
+  },
+  {
+    name: '@reely/provider-wistia',
+    entry: 'packages/provider-wistia/src/index.ts'
   }
 ];
 
@@ -289,6 +293,8 @@ const docs = [
   'packages/provider-hls/README.md',
   'packages/provider-youtube/README.md',
   'packages/provider-vimeo/README.md',
+  'packages/provider-wistia/README.md',
+  'docs/third-party-requests.md',
   'apps/storybook/stories/CapabilitiesMatrix.mdx',
   'apps/storybook/stories/Contract.mdx',
   'apps/storybook/stories/Theme.mdx'

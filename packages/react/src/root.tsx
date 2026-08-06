@@ -15,7 +15,12 @@ import {
   PosterContext,
   type PlayerHandle
 } from './player-context.js';
-import { useActivation, type PlayerMediaMount } from './use-activation.js';
+import {
+  useActivation,
+  type PlayerMediaMount,
+  type PlayerProviderOptions,
+  type ResolvedProviderOptions
+} from './use-activation.js';
 import { sourceKey } from './viewport-media.js';
 import {
   useCallback,
@@ -43,6 +48,20 @@ type SourceTransition = {
 export type PlayerActivationProps = {
   readonly loading?: import('./use-activation.js').PlayerLoadingStrategy;
   readonly loadMargin?: string;
+  /**
+   * Under `loading: 'viewport'`, the fraction of the player's box that must be
+   * on screen before the provider attaches -- an `IntersectionObserver`
+   * threshold, `0` to `1`. Defaults to `0`, matching activation before this
+   * prop existed: any visible pixel attaches the provider, the same first-pixel
+   * behaviour `loadMargin`'s own default already grants everything else.
+   *
+   * A box taller or wider than the scroll container it moves through can never
+   * reach a threshold near `1` -- no amount of scrolling puts 100% of it on
+   * screen at once. Rather than leave that configuration dormant forever with no
+   * playback and no error, such a box activates at the first visible pixel
+   * instead, the same fallback the default already is for every other box.
+   */
+  readonly loadThreshold?: number;
   readonly preload?: import('./use-activation.js').PlayerPreload;
 };
 
@@ -51,6 +70,14 @@ export type RootProps = NativePlaybackOptions &
     readonly autoplay?: AutoplayMode;
     readonly captionRenderer?: 'custom' | 'native';
     readonly children: ReactNode;
+    /**
+     * Let the provider draw its own controls. Unset and `false` both mean a
+     * chromeless player, which is where Reely's own composed `Player.Controls`
+     * belongs; `true` hands the surface to the provider and Reely draws nothing
+     * over it. Reaches Vimeo and YouTube through their embeds and native/HLS
+     * through the video element's own `controls` attribute.
+     */
+    readonly controls?: boolean;
     readonly defaultMuted?: boolean;
     readonly mediaMetadata?: MediaMetadataInput | null;
     readonly defaultPlaybackRate?: number;
@@ -60,6 +87,9 @@ export type RootProps = NativePlaybackOptions &
     readonly onPlaybackRateChange?: (playbackRate: number) => void;
     readonly onVolumeChange?: (volume: number) => void;
     readonly playbackRate?: number;
+    // Compared by value, not by reference, so an inline literal is safe to
+    // pass: see `providerOptionsEqual` in `use-activation.ts`.
+    readonly providerOptions?: PlayerProviderOptions;
     readonly ref?: Ref<PlayerHandle>;
     readonly source: PlayerSource;
     readonly volume?: number;
@@ -84,11 +114,13 @@ export const Root = ({
   autoplay = false,
   captionRenderer,
   children,
+  controls,
   defaultMuted = false,
   defaultPlaybackRate = 1,
   defaultVolume = 1,
   endTime,
   loadMargin = '200px 0px',
+  loadThreshold = 0,
   loading = 'viewport',
   loop,
   mediaMetadata,
@@ -97,6 +129,7 @@ export const Root = ({
   onPlaybackRateChange,
   onVolumeChange,
   playbackRate,
+  providerOptions,
   ref,
   source,
   startTime,
@@ -161,8 +194,6 @@ export const Root = ({
   autoplayConfiguration.current = { autoplay, muted };
   mediaMetadataSeed.current = mediaMetadata;
   /* eslint-enable react-hooks/refs */
-
-  useImperativeHandle(ref, () => controller, [controller]);
 
   const reconcileMuted = useCallback(
     (value: boolean) => {
@@ -425,16 +456,70 @@ export const Root = ({
     ]
   );
 
+  // `controls` folded into the active provider's own bag -- its one home on
+  // `Root` reaching that provider by looking, to `useActivation`, like an
+  // ordinary provider-option change. Injected only into the bag belonging to
+  // the detected source's own provider, deliberately not both unconditionally:
+  // `providerOptionsEqual` compares every bag it knows about, whatever source
+  // is actually playing, so folding `controls` into the youtube and vimeo bags
+  // regardless of source would make a `controls` change look like a bag
+  // change on a native or HLS source too -- re-attaching a video element that
+  // only needed a DOM attribute set, losing its playback position. A value of
+  // `undefined` lands as an explicit `controls: undefined` key on the active
+  // bag rather than an absent one, which is already safe: `providerBagEqual`
+  // compares own keys by value, so a key set to `undefined` equals that key
+  // being absent, and both providers read `options.controls === true`.
+  // Returning `providerOptions ?? {}` for every other source type is safe for
+  // the same reason -- an absent bag and an empty one compare equal.
+  const resolvedProviderOptions = useMemo<ResolvedProviderOptions>(() => {
+    const type =
+      detectedSource.status === 'success'
+        ? detectedSource.source.type
+        : undefined;
+    if (type === 'youtube') {
+      return {
+        ...providerOptions,
+        youtube: { ...providerOptions?.youtube, controls }
+      };
+    }
+    if (type === 'vimeo') {
+      return {
+        ...providerOptions,
+        vimeo: { ...providerOptions?.vimeo, controls }
+      };
+    }
+    return providerOptions ?? {};
+  }, [controls, detectedSource, providerOptions]);
+
   const activation = useActivation({
     autoplay,
     controller,
     loadMargin,
+    loadThreshold,
     loading,
     nativeOptions: { endTime, loop, startTime },
     prepareMedia,
     preload,
+    providerOptions: resolvedProviderOptions,
     source: detectedSource
   });
+
+  // The handle is still the controller instance -- `Object.assign` mutates
+  // and returns it rather than spreading into a copy -- so the Storybook
+  // mock-player decorator and the off-screen-pause contract test, which both
+  // cast this same ref back to `PlayerController` to reach `setProvider`/
+  // `configureAutoplay` directly, keep resolving against the real controller.
+  // `activateFromInteraction` is an activation concern `useActivation` owns,
+  // not a controller method, so it joins the instance here rather than
+  // widening `PlayerController`'s own surface.
+  useImperativeHandle(
+    ref,
+    () =>
+      Object.assign(controller, {
+        activateFromInteraction: activation.activateFromInteraction
+      }),
+    [activation.activateFromInteraction, controller]
+  );
   const registerActivationMedia = activation.registerMedia;
   const registerMedia = useCallback(
     (media: PlayerMediaMount | null) => {
@@ -573,12 +658,13 @@ export const Root = ({
   const value = useMemo(
     () => ({
       controller,
+      controls,
       source: detectedSource,
       ...activation,
       lastSelectedTextTrackId,
       registerMedia
     }),
-    [activation, controller, detectedSource, registerMedia]
+    [activation, controller, controls, detectedSource, registerMedia]
   );
   const posterState =
     hiddenTransition === sourceTransition ? 'hidden' : 'visible';

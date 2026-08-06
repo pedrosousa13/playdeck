@@ -257,7 +257,8 @@ test('emits confirmed ready state from the embedded player', async () => {
       volume: 0.5,
       playbackRate: 1.25,
       textTracks: tracks
-    }
+    },
+    options: { customControls: true }
   });
   const ready = readyPatch(patches);
   expect(ready).toMatchObject({
@@ -296,7 +297,7 @@ test('reports text-track selection unavailable when the video has no tracks', as
 
 test('reports provider-plan when chromeless controls require an unavailable plan', async () => {
   fetchMock.mockResolvedValue(oembedResponse('basic'));
-  const { patches } = await setup();
+  const { patches } = await setup({ options: { customControls: true } });
   expect(readyPatch(patches).capabilities).toMatchObject({
     customControls: { status: 'unavailable', reason: 'provider-plan' }
   });
@@ -308,7 +309,8 @@ test('reports provider-plan when chromeless controls require an unavailable plan
 test('resolves the plan for unlisted videos through the hashed watch URL', async () => {
   fetchMock.mockResolvedValue(oembedResponse('free'));
   const { patches } = await setup({
-    source: { type: 'vimeo', videoId: '76979871', hash: 'abc123' }
+    source: { type: 'vimeo', videoId: '76979871', hash: 'abc123' },
+    options: { customControls: true }
   });
   expect(readyPatch(patches).capabilities).toMatchObject({
     customControls: { status: 'unavailable', reason: 'provider-plan' }
@@ -320,7 +322,7 @@ test('resolves the plan for unlisted videos through the hashed watch URL', async
 
 test('keeps chromeless capability unknown when the plan cannot be resolved', async () => {
   fetchMock.mockRejectedValue(new Error('offline'));
-  const { patches } = await setup();
+  const { patches } = await setup({ options: { customControls: true } });
   expect(readyPatch(patches).capabilities).toMatchObject({
     customControls: { status: 'unknown', reason: 'provider-check' }
   });
@@ -328,9 +330,28 @@ test('keeps chromeless capability unknown when the plan cannot be resolved', asy
 
 test('keeps chromeless capability unknown for unrecognized account tiers', async () => {
   fetchMock.mockResolvedValue(oembedResponse('future_tier'));
+  const { patches } = await setup({ options: { customControls: true } });
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    customControls: { status: 'unknown', reason: 'provider-check' }
+  });
+});
+
+test('sends no oEmbed request when custom controls were not requested', async () => {
+  fetchMock.mockImplementation(() => {
+    throw new Error('fetch should not have been called');
+  });
   const { patches } = await setup();
   expect(readyPatch(patches).capabilities).toMatchObject({
     customControls: { status: 'unknown', reason: 'provider-check' }
+  });
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('resolves a correct verdict for a paid tier only once custom controls are requested', async () => {
+  fetchMock.mockResolvedValue(oembedResponse('pro'));
+  const { patches } = await setup({ options: { customControls: true } });
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    customControls: { status: 'available' }
   });
 });
 
@@ -1480,6 +1501,55 @@ test('retry rebuilds the embed and ignores stale events from the old player', as
   expect(patches).toHaveLength(beforeStale);
   sdk.instances[1]!.emit('play', { duration: 60, percent: 0, seconds: 0 });
   expect(patches.at(-1)).toMatchObject({ playback: 'playing' });
+});
+
+test('a chromeless verdict from a superseded attach cannot overwrite the live one', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+
+  // The first attach's probe is left hanging so it settles only after a
+  // retry has superseded it; the retry's own probe resolves normally.
+  let resolveStaleProbe!: (response: Response) => void;
+  fetchMock.mockImplementationOnce(
+    () => new Promise<Response>((resolve) => (resolveStaleProbe = resolve))
+  );
+  fetchMock.mockResolvedValueOnce(oembedResponse('basic'));
+
+  const provider = createVimeoProvider(mount, publicSource, {
+    customControls: true
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  const loading = provider.load();
+  await flushMicrotasks();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+
+  await provider.retry();
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    customControls: { status: 'unavailable', reason: 'provider-plan' }
+  });
+  const patchCountAfterRetry = patches.length;
+
+  // The superseded attach's probe finally settles, with a verdict that would
+  // overwrite the live one — and emit a second ready patch of its own — if
+  // the generation guard did not hold. Asserting against the first ready
+  // patch would miss that second emit entirely, since it would never
+  // replace the first one in the array; the guard is only proven by looking
+  // at what is newest after the stale probe settles.
+  resolveStaleProbe(oembedResponse('pro'));
+  await loading;
+  await flushMicrotasks();
+
+  expect(patches).toHaveLength(patchCountAfterRetry);
+  const latestCapabilities = [...patches]
+    .reverse()
+    .find((patch) => patch.capabilities)?.capabilities;
+  expect(latestCapabilities).toMatchObject({
+    customControls: { status: 'unavailable', reason: 'provider-plan' }
+  });
 });
 
 test('destroy tears down the SDK player, removes the iframe, and silences events', async () => {

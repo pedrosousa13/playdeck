@@ -87,8 +87,8 @@ Events: `PlayerEvent`, `PlayerEventType`, `PlayerEventDetailMap`,
 `PlayerEventFor`, `PlayerEventOrigin`.
 
 Sources: `PlayerSource`, `ResolvedPlayerSource`, `VideoFileSource`, `HlsSource`,
-`HlsEngine`, `YouTubeSource`, `VimeoSource`, `SourceDetectionResult`,
-`SourceDetectionSuccess`, `SourceDetectionFailure`,
+`HlsEngine`, `YouTubeSource`, `VimeoSource`, `WistiaSource`,
+`SourceDetectionResult`, `SourceDetectionSuccess`, `SourceDetectionFailure`,
 `SourceDetectionFailureReason`.
 
 Providers: `ProviderAdapter`, `ProviderStatePatch`, `ProviderStateListener`,
@@ -104,10 +104,13 @@ Media Session: `MediaSessionLike`, `MediaSessionCoordinator`,
 ## Source detection
 
 `detectSource` accepts a URL string or an explicit source object, and validates
-both. A YouTube or Vimeo URL only resolves if the host, path shape and id are
-all recognised; anything else fails with `malformed-string`,
+both. A YouTube, Vimeo or Wistia URL only resolves if the host, path shape and
+id are all recognised; anything else fails with `malformed-string`,
 `unsupported-string` or `invalid-source` rather than being passed on to a
-provider to fail later.
+provider to fail later. Wistia is the one exception, because it also serves
+plain media files on its own hosts: a Wistia URL that is not an embed shape is
+still read by file extension, so its HLS manifests and direct deliveries resolve
+as `hls` and `video`.
 
 <!-- example:core-source-detection -->
 

@@ -14,12 +14,14 @@ export type ViewportProps = ComponentPropsWithRef<'div'>;
 // Standard <video> passthrough, minus the attributes the controller owns:
 // `src` (driven by the resolved source / <source> children), `muted` and
 // `autoPlay` (activation + autoplay policy live in the controller), `preload`
-// (derived from the loading strategy), `poster` (use `nativePoster`), and
+// (derived from the loading strategy), `poster` (use `nativePoster`),
+// `controls` (use `Root`'s own `controls` prop, threaded through
+// `PlayerContextValue` -- see the `usePlayer()` destructure below), and
 // `children` (Media renders its own <source> set). Passing those would
 // silently desync or bypass the player's state machine, so they're excluded.
 export type MediaProps = Omit<
   ComponentPropsWithRef<'video'>,
-  'children' | 'src' | 'muted' | 'autoPlay' | 'preload' | 'poster'
+  'children' | 'src' | 'muted' | 'autoPlay' | 'preload' | 'poster' | 'controls'
 > & {
   readonly nativePoster?: string;
   readonly textTracks?: ReadonlyArray<{
@@ -123,8 +125,8 @@ export const sourceKey = (source: ReturnType<typeof detectSource>): string =>
     ? JSON.stringify(source.source)
     : 'unsupported-source';
 
-// #150: the native <video> and the two iframe mounts are one layer wearing
-// three shapes, so all three state one geometry — filling the viewport they
+// #150: the native <video> and the three embed mounts are one layer wearing
+// four shapes, so all four state one geometry — filling the viewport they
 // are laid into.
 const mediaStyle: CSSProperties = {
   position: 'relative',
@@ -133,7 +135,7 @@ const mediaStyle: CSSProperties = {
   height: '100%'
 };
 
-// The two mounts are <div>s and need nothing more, but the native <video> is
+// The three mounts are <div>s and need nothing more, but the native <video> is
 // inline-level, so without `display: block` it sits on a text baseline and
 // hangs a descender gap below the frame. And the frame is content, so a box
 // that does not match its aspect ratio must letterbox rather than crop away
@@ -154,7 +156,8 @@ export const Media = ({
   'aria-label': ariaLabel,
   ...rest
 }: MediaProps) => {
-  const { preload, registerMedia, source, sourceCommitted } = usePlayer();
+  const { controls, preload, registerMedia, source, sourceCommitted } =
+    usePlayer();
   // Merge the consumer ref onto the internal registration inside one callback
   // ref (rather than Viewport's stable-callback + separate `[ref]` effect):
   // Media is committed-source-gated and mounts its <video> late, so a `[ref]`
@@ -209,6 +212,21 @@ export const Media = ({
     );
   }
 
+  if (source.source.type === 'wistia') {
+    // A mount for the `<wistia-player>` custom element the provider appends
+    // into it. Unlike YouTube and Vimeo, the embed is chromeless by default —
+    // the provider switches every Wistia control off by name — so Reely's own
+    // controls are the layer, which is what `customControls: available` says.
+    return (
+      <div
+        data-reely-part="media"
+        key={sourceKey(source)}
+        ref={registerMedia}
+        style={{ ...mediaStyle, ...style }}
+      />
+    );
+  }
+
   if (source.source.type !== 'video' && source.source.type !== 'hls') {
     return null;
   }
@@ -218,6 +236,11 @@ export const Media = ({
       playsInline
       {...rest}
       aria-label={ariaLabel ?? 'Reely media'}
+      // `Root`'s own `controls` prop, read as a DOM attribute rather than
+      // through the provider-options bag YouTube and Vimeo use: a native
+      // `<video>` already has its own chrome toggle, so the value needs no
+      // re-attach to change it, only this attribute.
+      controls={controls === true}
       data-reely-part="media"
       key={sourceKey(source)}
       poster={nativePoster}
