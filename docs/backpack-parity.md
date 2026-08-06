@@ -45,10 +45,17 @@ nine minutes, which is what `PARITY_PAIR_RANGE` (`0-6`, say) is for. Nothing
 runs it in CI, deliberately: that checkout is a prerequisite CI has none of.
 
 It fails today, and a first run should read that as the harness working rather
-than as a broken setup — the sweep found 97 undeclared divergences across the 26
-pairs it can measure, and the measurement check asserts there are none. Only a
-divergence declared in `e2e/parity/declared-divergences.ts`, against a sentence
-in this file or an ADR, goes through quietly. Two limits are worth knowing
+than as a broken setup, for two reasons at once. The sweep found 97 undeclared
+divergences across the 26 pairs it can measure, and the measurement check
+asserts there are none: only a divergence declared in
+`e2e/parity/declared-divergences.ts`, against a sentence in this file or an ADR,
+goes through quietly. The same check also fails on two rows below whose story
+names no longer resolve to anything in Backpack's `/index.json` —
+`CustomCoverImage` and `SocialCarouselAtomIntegration` — because a name this
+file records that no Storybook serves is drift in this file, and the harness
+reports it rather than quietly measuring 36 rows and calling it 38. Both are
+reported together at the end of a run, after every pair that could be measured
+has been. Two limits are worth knowing
 before reading a result. It compares measurements and not pixels, for the reason
 this file opens with — the wrapper reproduces Backpack's behavior, not its
 styling stack, so a pixel diff would be red on every row and would say nothing —

@@ -15,6 +15,7 @@ import {
   type HoverMeasurement,
   type Measurement
 } from './measure';
+import { BACKPACK_ORIGIN, REELY_ORIGIN } from './origins';
 import {
   parseParityMatrix,
   resolveParityPairs,
@@ -25,20 +26,73 @@ import { fetchStoryIndex } from './story-index';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = join(__dirname, '../../docs/backpack-parity.md');
 
-const BACKPACK_ORIGIN = 'http://127.0.0.1:6007';
-const REELY_ORIGIN = 'http://127.0.0.1:4173';
-
 // Generous on purpose: up to 36 resolvable pairs, each driving two page loads
 // plus a hover and a click, several of them against Backpack's own real
 // network (Vimeo/YouTube/Wistia/oEmbed) rather than a mock. The plan warns to
 // expect slowness there rather than tighten this — a flaky per-story timeout
 // would fail pairs that are fine, just slow.
 const SUITE_TIMEOUT_MS = 25 * 60 * 1000;
+
+// One navigation's budget. Above the config's `actionTimeout` because a
+// navigation does strictly more than an action does on these servers: both
+// Storybooks are `storybook dev`, which compiles a story module on first
+// request (`playwright.config.ts`'s own comment on its 30s test timeout says
+// the same thing about the same server). Bounded at all so a story that can
+// never load costs this pair and no more — the alternative is Playwright's
+// own default, which is the config's `navigationTimeout`, unset here and
+// therefore 30s, doubling the worst case for the same information.
+const NAVIGATION_TIMEOUT_MS = 15_000;
+
+// How long a side gets to put a laid-out `.ef-video-player` on screen before
+// the pair is reported unmeasurable. It has to clear the same cold on-demand
+// compile as the navigation above, and it is paid in full by every pair that
+// legitimately never shows one: 10 of the 36 resolved pairs today (8
+// `VideoHoverPreview` rows whose Backpack root sits at `display: none` until
+// the preview runs, plus 2 `DefaultThemeConfig` rows that render JSON on both
+// sides), which the two sequential waits below turn into roughly two minutes
+// of the sweep's nine. 10s is the balance struck between those two:
+// comfortably past a compiled story's mount, short enough that ten rows with
+// nothing to show do not dominate the run.
 const ROOT_WAIT_MS = 10_000;
+
+// A flat wait, not a condition, and that is the point: the thing being waited
+// for is a cover image whose *absence* is itself one of the measurements (see
+// `cover.present` below), so there is no state to wait for that would not
+// prejudge the reading. What it has to outlast is one oEmbed round trip on
+// each side (`useVideoThumbnail` on Reely's, react-player's own light-mode
+// fetch on Backpack's, both third-party over the open internet). 3s is the
+// budget: an order of magnitude over a warm same-continent HTTP round trip,
+// while costing the sweep 2 x 26 x 3s ≈ 2.6 minutes at most, which a ~9-minute
+// hand-run sweep can pay. Under-waiting is the expensive error here — it
+// invents a cover divergence out of timing — and over-waiting only costs time.
 const COVER_SETTLE_MS = 3_000;
+
+// The same trade as `COVER_SETTLE_MS`, after activation instead of before it:
+// "no provider attached" is a legitimate post-activation reading (the Mock
+// suite never commits a source at all), so there is nothing to wait *for*, and
+// a side that does attach one needs a provider fetch and a mount to land.
 const POST_CLICK_WAIT_MS = 3_000;
+
+// 0.02 on a ratio, i.e. about 1.1% at 16/9. Sized from both ends. Below: the
+// real difference this has to stay able to see is one of Backpack's own
+// aspect-ratio tokens rendered where another was asked for, and the tightest
+// distinct pair in that map (`useAspectRatio.tsx:13-36`) is `3-4` at 0.75
+// against `4-5` at 0.8 — 0.05 apart, more than twice this. Above: a box
+// measured in fractional CSS pixels moves its ratio by roughly
+// `ratio / height` per pixel of rounding, which at these stories' ~340px-tall
+// players is ~0.005, so this absorbs about four pixels of layout rounding and
+// nothing a viewer could see.
 const ASPECT_RATIO_TOLERANCE = 0.02;
+
+// The effect under measurement is `scale(1.05)` against `scale(1)` — a
+// difference of 0.05 — so a tolerance of 0.02 is under half of it and can
+// never report a missing hover zoom as a match, which is the failure mode that
+// would matter. What it does absorb is the tail of an easing curve: the read
+// happens one transition-duration plus 100ms after the pointer lands, and the
+// two stylesheets do not share an easing function, so the last percent of the
+// animation is not guaranteed to have resolved identically on both sides.
 const SCALE_TOLERANCE = 0.02;
+
 // Both sides target the same 200ms/`duration-system-medium` transition, but
 // neither guarantees sub-frame precision, so a generous absolute tolerance
 // beats a relative one at small values.
@@ -59,6 +113,31 @@ interface PairOutcome {
 }
 
 /**
+ * One pair's identity, carried as a unit because every comparison below needs
+ * all four of these and none of them changes within a pair: where a finding
+ * goes, what to call the pair when it does, which matrix row to ask
+ * `declared-divergences.ts` about, and which Reely suite is on the other side.
+ * They travelled as four positional parameters through three functions before,
+ * one of which took eight.
+ */
+interface PairContext {
+  findings: Finding[];
+  label: string;
+  row: ParityRow;
+  /** Whether the Reely story chosen for this row is from the `Mock` suite —
+   * read off {@link pickReelyStory}'s own answer rather than sniffed out of
+   * {@link PairContext.label}, which is a display string a reword would
+   * silently change the meaning of. `mounted` is the measurement that turns
+   * on it; see {@link compareMeasurements}. */
+  reelyIsMock: boolean;
+}
+
+/** The `Mock` suite's own title segment, and the one place this string is
+ * written: `pickReelyStory` selects on it and `PairContext.reelyIsMock`
+ * records the outcome. */
+const MOCK_SUITE_SEGMENT = '/Mock/';
+
+/**
  * Picks which Reely story stands in for a matrix row's Backpack story. The
  * `Mock` suite is preferred wherever the row has one: it needs no network to
  * reach a stable pre-activation state, so it is the more reliable geometry
@@ -71,12 +150,16 @@ interface PairOutcome {
 function pickReelyStory(
   row: ParityRow,
   reelyIds: string[]
-): { id: string; title: string; name: string } {
+): { id: string; title: string; name: string; isMock: boolean } {
   const mockIndex = row.reelyStories.findIndex((s) =>
-    s.title.includes('/Mock/')
+    s.title.includes(MOCK_SUITE_SEGMENT)
   );
   const index = mockIndex === -1 ? 0 : mockIndex;
-  return { id: reelyIds[index], ...row.reelyStories[index] };
+  return {
+    id: reelyIds[index],
+    ...row.reelyStories[index],
+    isMock: mockIndex !== -1
+  };
 }
 
 const fmt = (value: unknown): string => JSON.stringify(value);
@@ -87,9 +170,7 @@ const fmt = (value: unknown): string => JSON.stringify(value);
  * rather than a fresh one; omitted for measurements the plan gives no
  * mechanism to declare (a numeric geometry mismatch always has to be real). */
 function compare(
-  findings: Finding[],
-  pairLabel: string,
-  row: ParityRow,
+  pair: PairContext,
   measurementName: string,
   backpackValue: unknown,
   reelyValue: unknown,
@@ -102,7 +183,9 @@ function compare(
     );
     return;
   }
-  const reason = declarable ? declaredDivergence(row, declarable) : undefined;
+  const reason = declarable
+    ? declaredDivergence(pair.row, declarable)
+    : undefined;
   if (reason !== undefined) {
     console.log(
       `    ${measurementName}: DECLARED backpack=${fmt(backpackValue)} reely=${fmt(reelyValue)} — ${reason}`
@@ -112,12 +195,12 @@ function compare(
   console.log(
     `    ${measurementName}: FINDING backpack=${fmt(backpackValue)} reely=${fmt(reelyValue)}`
   );
-  findings.push({
-    pair: pairLabel,
+  pair.findings.push({
+    pair: pair.label,
     measurement: measurementName,
     backpack: backpackValue,
     reely: reelyValue,
-    detail: `${pairLabel} — ${measurementName} differs and is not a declared divergence: backpack=${fmt(backpackValue)} reely=${fmt(reelyValue)}`
+    detail: `${pair.label} — ${measurementName} differs and is not a declared divergence: backpack=${fmt(backpackValue)} reely=${fmt(reelyValue)}`
   });
 }
 
@@ -137,9 +220,7 @@ async function describeRoot(page: Page): Promise<string> {
 }
 
 function compareMeasurements(
-  findings: Finding[],
-  pairLabel: string,
-  row: ParityRow,
+  pair: PairContext,
   phase: 'pre' | 'post',
   backpack: Measurement,
   reely: Measurement
@@ -149,21 +230,19 @@ function compareMeasurements(
       `    root[${phase}]: backpack=${backpack.root === null ? 'absent' : 'present'} reely=${reely.root === null ? 'absent' : 'present'}`
     );
     if ((backpack.root === null) !== (reely.root === null)) {
-      findings.push({
-        pair: pairLabel,
+      pair.findings.push({
+        pair: pair.label,
         measurement: `root.present[${phase}]`,
         backpack: backpack.root !== null,
         reely: reely.root !== null,
-        detail: `${pairLabel} — one side has no .ef-video-player at all in the ${phase}-activation state while the other does`
+        detail: `${pair.label} — one side has no ${ROOT_SELECTOR} at all in the ${phase}-activation state while the other does`
       });
     }
     return;
   }
 
   compare(
-    findings,
-    pairLabel,
-    row,
+    pair,
     `root.aspectRatio[${phase}]`,
     backpack.root.aspectRatio,
     reely.root.aspectRatio,
@@ -188,9 +267,7 @@ function compareMeasurements(
   );
 
   compare(
-    findings,
-    pairLabel,
-    row,
+    pair,
     `cover.present[${phase}]`,
     backpack.cover !== null,
     reely.cover !== null,
@@ -198,9 +275,7 @@ function compareMeasurements(
   );
   if (backpack.cover !== null && reely.cover !== null) {
     compare(
-      findings,
-      pairLabel,
-      row,
+      pair,
       `cover.objectFit[${phase}]`,
       backpack.cover.objectFit,
       reely.cover.objectFit,
@@ -209,9 +284,7 @@ function compareMeasurements(
   }
 
   compare(
-    findings,
-    pairLabel,
-    row,
+    pair,
     `playIcon.present[${phase}]`,
     backpack.playIcon !== null,
     reely.playIcon !== null,
@@ -220,9 +293,7 @@ function compareMeasurements(
   );
   if (backpack.playIcon !== null && reely.playIcon !== null) {
     compare(
-      findings,
-      pairLabel,
-      row,
+      pair,
       `playIcon.centered[${phase}]`,
       backpack.playIcon.centered,
       reely.playIcon.centered,
@@ -236,16 +307,15 @@ function compareMeasurements(
   // `Player.Media` renders nothing at any point — not a real geometry
   // finding, just what "deterministic and offline" means. Logged either way,
   // asserted only when the Reely side is the `Real` suite, where a real
-  // provider is expected to attach the same way Backpack's does.
-  const reelyIsMock = pairLabel.includes('Backpack parity/Mock/');
+  // provider is expected to attach the same way Backpack's does. Which suite
+  // it is comes from the resolved story (`pickReelyStory`), not from reading
+  // the pair's display label back.
   console.log(
-    `    mounted[${phase}]: backpack=${backpack.mounted} reely=${reely.mounted}${reelyIsMock ? ' (reely: Mock suite never commits a source — informational only)' : ''}`
+    `    mounted[${phase}]: backpack=${backpack.mounted} reely=${reely.mounted}${pair.reelyIsMock ? ' (reely: Mock suite never commits a source — informational only)' : ''}`
   );
-  if (!reelyIsMock) {
+  if (!pair.reelyIsMock) {
     compare(
-      findings,
-      pairLabel,
-      row,
+      pair,
       `mounted[${phase}]`,
       backpack.mounted,
       reely.mounted,
@@ -254,9 +324,7 @@ function compareMeasurements(
   }
 
   compare(
-    findings,
-    pairLabel,
-    row,
+    pair,
     `accessibleTargets[${phase}]`,
     backpack.accessibleTargets,
     reely.accessibleTargets,
@@ -267,9 +335,7 @@ function compareMeasurements(
 }
 
 function compareHover(
-  findings: Finding[],
-  pairLabel: string,
-  row: ParityRow,
+  pair: PairContext,
   backpack: HoverMeasurement,
   reely: HoverMeasurement
 ): void {
@@ -285,29 +351,25 @@ function compareHover(
       // media wrapper, only `.ef-video-cover-image`. Not declared in
       // `docs/backpack-parity.md` today, so it is reported as a finding
       // rather than silently allowed — see the report's own note on it.
-      findings.push({
-        pair: pairLabel,
+      pair.findings.push({
+        pair: pair.label,
         measurement: `hover.${slot}.present`,
         backpack: b !== null,
         reely: r !== null,
-        detail: `${pairLabel} — hover.${slot}: one side has a hoverable element, the other has none (backpack=${fmt(b)} reely=${fmt(r)})`
+        detail: `${pair.label} — hover.${slot}: one side has a hoverable element, the other has none (backpack=${fmt(b)} reely=${fmt(r)})`
       });
       continue;
     }
     if (b === null || r === null) continue;
     compare(
-      findings,
-      pairLabel,
-      row,
+      pair,
       `hover.${slot}.scale`,
       b.scale,
       r.scale,
       nearly(b.scale, r.scale, SCALE_TOLERANCE)
     );
     compare(
-      findings,
-      pairLabel,
-      row,
+      pair,
       `hover.${slot}.transitionDurationMs`,
       b.transitionDurationMs,
       r.transitionDurationMs,
@@ -349,9 +411,7 @@ test('every resolvable parity pair is measured through one function, and every d
     `\n=== Parity matrix: ${rows.length} rows, ${resolved.length} resolved, ${unresolved.length} unresolved ===`
   );
   if (unresolved.length > 0) {
-    console.log(
-      "Unresolved (matrix drift, not this task's to fix — see task-1-report.md):"
-    );
+    console.log('Unresolved (matrix drift — this run FAILS on it, see below):');
     for (const name of unresolved) console.log(`  - ${name}`);
   }
 
@@ -383,18 +443,24 @@ test('every resolvable parity pair is measured through one function, and every d
   const findings: Finding[] = [];
   const outcomes: PairOutcome[] = [];
 
-  for (const pair of batch) {
-    const { row, backpackId } = pair;
-    const reelyStory = pickReelyStory(row, pair.reelyIds);
+  for (const resolvedPair of batch) {
+    const { row, backpackId } = resolvedPair;
+    const reelyStory = pickReelyStory(row, resolvedPair.reelyIds);
     const label = `${row.section} / \`${row.backpackStoryName}\` ↔ ${reelyStory.title} → ${reelyStory.name}`;
+    const pair: PairContext = {
+      findings,
+      label,
+      row,
+      reelyIsMock: reelyStory.isMock
+    };
     console.log(`\n--- ${label} [${row.status}] ---`);
 
     try {
       await backpackPage.goto(`${BACKPACK_ORIGIN}${story(backpackId)}`, {
-        timeout: 15_000
+        timeout: NAVIGATION_TIMEOUT_MS
       });
       await reelyPage.goto(`${REELY_ORIGIN}${story(reelyStory.id)}`, {
-        timeout: 15_000
+        timeout: NAVIGATION_TIMEOUT_MS
       });
     } catch (error) {
       console.log(
@@ -409,13 +475,13 @@ test('every resolvable parity pair is measured through one function, and every d
     }
 
     const backpackRootVisible = await backpackPage
-      .locator('.ef-video-player')
+      .locator(ROOT_SELECTOR)
       .first()
       .waitFor({ state: 'visible', timeout: ROOT_WAIT_MS })
       .then(() => true)
       .catch(() => false);
     const reelyRootVisible = await reelyPage
-      .locator('.ef-video-player')
+      .locator(ROOT_SELECTOR)
       .first()
       .waitFor({ state: 'visible', timeout: ROOT_WAIT_MS })
       .then(() => true)
@@ -426,12 +492,12 @@ test('every resolvable parity pair is measured through one function, and every d
       // `DefaultThemeConfig` shape, a JSON dump rather than a player. Not a
       // finding: there is nothing to measure on either side.
       console.log(
-        '    UNMEASURABLE: neither side renders .ef-video-player (a JSON-dump story, not a player)'
+        `    UNMEASURABLE: neither side renders ${ROOT_SELECTOR} (a JSON-dump story, not a player)`
       );
       outcomes.push({
         label,
         status: 'unmeasurable',
-        reason: 'neither side renders .ef-video-player'
+        reason: `neither side renders ${ROOT_SELECTOR}`
       });
       continue;
     }
@@ -449,14 +515,9 @@ test('every resolvable parity pair is measured through one function, and every d
       const detail = await describeRoot(
         backpackRootVisible ? reelyPage : backpackPage
       );
-      console.log(
-        `    UNMEASURABLE: ${which}'s .ef-video-player was not visible within ${ROOT_WAIT_MS}ms — ${detail}`
-      );
-      outcomes.push({
-        label,
-        status: 'unmeasurable',
-        reason: `${which}'s .ef-video-player was not visible within ${ROOT_WAIT_MS}ms — ${detail}`
-      });
+      const reason = `${which}'s ${ROOT_SELECTOR} was not visible within ${ROOT_WAIT_MS}ms — ${detail}`;
+      console.log(`    UNMEASURABLE: ${reason}`);
+      outcomes.push({ label, status: 'unmeasurable', reason });
       continue;
     }
 
@@ -475,12 +536,12 @@ test('every resolvable parity pair is measured through one function, and every d
     // media load on either side, which is why the plan prefers it.
     const backpackPre = await measure(backpackPage);
     const reelyPre = await measure(reelyPage);
-    compareMeasurements(findings, label, row, 'pre', backpackPre, reelyPre);
+    compareMeasurements(pair, 'pre', backpackPre, reelyPre);
 
     // 4: hover zoom and transition duration, both the cover and the root.
     const backpackHover = await measureHoverZoom(backpackPage);
     const reelyHover = await measureHoverZoom(reelyPage);
-    compareHover(findings, label, row, backpackHover, reelyHover);
+    compareHover(pair, backpackHover, reelyHover);
 
     // 5 continued: whether a player region mounts once the surface is
     // activated. Best-effort — a click that never leads anywhere within the
@@ -497,7 +558,7 @@ test('every resolvable parity pair is measured through one function, and every d
 
     const backpackPost = await measure(backpackPage);
     const reelyPost = await measure(reelyPage);
-    compareMeasurements(findings, label, row, 'post', backpackPost, reelyPost);
+    compareMeasurements(pair, 'post', backpackPost, reelyPost);
 
     outcomes.push({ label, status: 'measured' });
   }
@@ -516,9 +577,33 @@ test('every resolvable parity pair is measured through one function, and every d
   for (const outcome of outcomes.filter((o) => o.status === 'unmeasurable')) {
     console.log(`  UNMEASURABLE: ${outcome.label} — ${outcome.reason}`);
   }
+  for (const name of unresolved) {
+    console.log(`  UNRESOLVED: ${name}`);
+  }
   for (const finding of findings) {
     console.log(`  FINDING: ${finding.detail}`);
   }
+
+  // An unresolvable matrix name fails the run — the plan's own decision under
+  // "Resolve story ids from `index.json`, never hand-write them": "An
+  // unresolvable name fails the run — that is matrix drift, and catching it is
+  // half the point of deriving the pair list from the matrix at all."
+  //
+  // `expect.soft` and placed here, after the sweep rather than before it, for
+  // two reasons. A run that aborts before measuring anything tells a
+  // maintainer about drift and nothing else, where the same run finished tells
+  // them about drift *and* every divergence — and the drift is not a
+  // prerequisite for measuring the 36 rows that do resolve. And soft means
+  // this and the hard assertion below both report: a hard `expect` here would
+  // end the test on the first drifted name and hide the findings entirely.
+  // `parity-matrix.check.ts` covers the resolver's own behaviour against
+  // fixtures; this is the one place the REAL matrix is held to it.
+  expect
+    .soft(
+      unresolved,
+      `${unresolved.length} matrix name(s) resolve to no story in either Storybook's /index.json. This is matrix drift in docs/backpack-parity.md:\n${unresolved.map((name) => `  - ${name}`).join('\n')}`
+    )
+    .toEqual([]);
 
   expect(findings, findings.map((f) => f.detail).join('\n')).toEqual([]);
 });

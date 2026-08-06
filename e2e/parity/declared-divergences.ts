@@ -20,10 +20,15 @@ interface DeclaredDivergence {
 
 // One entry per (row, measurement) the matrix or its own "Deliberate
 // divergences" tables already record — never one invented to make a result
-// pass. Per the plan: "Declared entries are only for what the matrix already
-// records as `partial`, or for styling differences the plan calls
-// deliberate." Both citations below are direct quotes from
-// `docs/backpack-parity.md`.
+// pass. The plan's decision "Known divergences live in one declared list,
+// keyed by pair and measurement" puts the standard this way, verbatim: "Each
+// entry carries the reason, and the reason cites the matrix row or the ADR.
+// An unexplained divergence fails."
+//
+// Each `reason` below is this file's own summary of a `docs/backpack-parity.md`
+// entry, not a quotation of one — the section it names in quotes is a real
+// heading in that file, and the prose after the colon is a paraphrase to read
+// alongside the row, not instead of it.
 
 const ACCESSIBLE_NAME_REASON =
   '"Where Reely is better" (docs/backpack-parity.md): ' +

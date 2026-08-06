@@ -1,5 +1,12 @@
 import { defineConfig } from '@playwright/test';
 import { resolveBackpackDir } from './e2e/parity/backpack-dir';
+import {
+  BACKPACK_ORIGIN,
+  BACKPACK_PORT,
+  HOST,
+  REELY_ORIGIN,
+  REELY_PORT
+} from './e2e/parity/origins';
 
 // Thrown here, at config load, rather than left to surface as an opaque
 // webServer spawn failure once Playwright is already mid-startup.
@@ -22,8 +29,10 @@ export default defineConfig({
   // baseline set, produced and compared on the same machine.
   snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}',
   expect: { toHaveScreenshot: { threshold: 0.1 } },
+  // No `baseURL`: this config drives two origins, so a relative URL could not
+  // say which side it meant. Every test here navigates absolutely, through
+  // `e2e/parity/origins.ts`.
   use: {
-    baseURL: 'http://127.0.0.1:4173',
     // Playwright's own default here is 0, meaning an action retries its
     // actionability check forever. That is not survivable in a sweep whose
     // single test drives 36 pairs: one element that can never satisfy a check
@@ -38,9 +47,8 @@ export default defineConfig({
     // it — same command, same port — so a story id that resolves there
     // resolves the same way for both suites.
     {
-      command:
-        'pnpm --filter @reely/storybook exec storybook dev --ci --no-open -p 4173 --host 127.0.0.1',
-      url: 'http://127.0.0.1:4173/index.json',
+      command: `pnpm --filter @reely/storybook exec storybook dev --ci --no-open -p ${REELY_PORT} --host ${HOST}`,
+      url: `${REELY_ORIGIN}/index.json`,
       gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000
@@ -54,9 +62,9 @@ export default defineConfig({
     // a first run timing out there is a configuration bug, not a broken
     // prerequisite.
     {
-      command: 'npm run build:css && npx storybook dev --ci --no-open -p 6007',
+      command: `npm run build:css && npx storybook dev --ci --no-open -p ${BACKPACK_PORT}`,
       cwd: backpackDir,
-      url: 'http://127.0.0.1:6007/index.json',
+      url: `${BACKPACK_ORIGIN}/index.json`,
       gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
       reuseExistingServer: !process.env.CI,
       timeout: 180_000

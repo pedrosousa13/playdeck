@@ -285,12 +285,19 @@ export async function measureHoverZoom(page: Page): Promise<HoverMeasurement> {
  * a dormant one. Clicking the box hits whichever element either side put on
  * top of it, through one identical gesture — which is the condition this whole
  * module exists to hold.
+ *
+ * No `timeout` of its own: this inherits `playwright.parity.config.ts`'s
+ * `actionTimeout`, whose comment argues the value from the sweep's own budget.
+ * An override here would be a second, quieter answer to that same question,
+ * and the shorter number this once carried (5s) silently halved the one the
+ * config reasons about. Nothing about a click on the player box makes it a
+ * different question from the other actions the sweep takes.
  */
 export async function activate(page: Page): Promise<boolean> {
   const root = page.locator(ROOT_SELECTOR).first();
   if ((await root.count()) === 0) return false;
   try {
-    await root.click({ timeout: 5_000 });
+    await root.click();
     return true;
   } catch {
     return false;

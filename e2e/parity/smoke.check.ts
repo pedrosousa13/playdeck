@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { BACKPACK_ORIGIN, REELY_ORIGIN } from './origins';
 import { fetchStoryIndex } from './story-index';
 
 // The one test that makes a broken prerequisite obvious: if either dev
@@ -7,8 +8,8 @@ import { fetchStoryIndex } from './story-index';
 // unresolved story id somewhere downstream.
 test('both Storybooks answer /index.json and carry the video stories this issue cares about', async () => {
   const [reely, backpack] = await Promise.all([
-    fetchStoryIndex('http://127.0.0.1:4173'),
-    fetchStoryIndex('http://127.0.0.1:6007')
+    fetchStoryIndex(REELY_ORIGIN),
+    fetchStoryIndex(BACKPACK_ORIGIN)
   ]);
 
   expect(reely).toContainEqual(

@@ -1,12 +1,11 @@
-// The shape Storybook's own `/index.json` carries per entry (facts verified
-// before this plan was written). `type`/`tags` are optional here because this
-// module only ever reads `id`, `title` and `name`.
+// The part of Storybook's own `/index.json` entry shape this harness reads.
+// An entry carries `type` and `tags` too (facts verified before this plan was
+// written), and they are left out rather than declared-and-unread: the type
+// says what a caller may rely on, and nothing here resolves a story by either.
 export interface StoryIndexEntry {
   id: string;
   title: string;
   name: string;
-  type?: string;
-  tags?: string[];
 }
 
 interface StoryIndexDocument {

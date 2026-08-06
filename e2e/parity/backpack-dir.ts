@@ -3,7 +3,13 @@ import { existsSync } from 'node:fs';
 // Fact verified by hand before this harness was written (see the plan's
 // "Facts verified before this plan was written"): a v4 beta checkout here
 // builds and serves. Not re-derived — just the default a caller can override.
-const DEFAULT_BACKPACK_DIR = '/Users/pedrosousa/Documents/apps/backpack/beta';
+// Exported so `backpack-dir.check.ts` asserts the fallback against this
+// declaration rather than against a second copy of the path — two copies of a
+// machine-specific literal drift, and the one in the test would keep passing
+// while the harness pointed somewhere else. The path itself is recorded for
+// humans in `docs/backpack-parity.md`'s "Running the harness".
+export const DEFAULT_BACKPACK_DIR =
+  '/Users/pedrosousa/Documents/apps/backpack/beta';
 const ENV_VAR = 'REELY_BACKPACK_DIR';
 
 /**

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { activationButton, media } from '../locators';
 import { ROOT_SELECTOR, story } from './measure';
+import { REELY_ORIGIN } from './origins';
 import { fetchStoryIndex } from './story-index';
 
 /**
@@ -24,8 +25,6 @@ import { fetchStoryIndex } from './story-index';
  * open internet; it does not need Backpack's server, but the parity config
  * spawns both.
  */
-
-const REELY_ORIGIN = 'http://127.0.0.1:4173';
 
 /**
  * Wistia, and not Vimeo or YouTube, for three reasons.
@@ -71,6 +70,15 @@ const PLAYBACK_TIMEOUT_MS = 90_000;
  * the reading: frames were decoded and presented. `e2e/wistia-smoke.spec.ts`
  * draws the same line at the same value. */
 const PLAYHEAD_THRESHOLD_S = 3;
+/** The floor the engine's own `duration()` has to clear for the reading to be
+ * this media rather than a stub. `MEDIA_ID` is 115.434s long, measured off the
+ * handle in Task 4's probe and logged again by every run of this test, so 60
+ * sits roughly half way: far above the 0, `NaN` or few-second value a
+ * not-yet-loaded handle or an ad/preroll would report, and far enough below
+ * 115.434 that a re-encode or a trimmed re-upload of the same clip does not
+ * turn this into a false failure. It is a sanity floor on the number, not a
+ * pin on the media's length — `media-id` above is what pins the media. */
+const MIN_DURATION_S = 60;
 
 interface EngineReading {
   /** Seconds, as the engine reports them; `null` when it has none yet. */
@@ -172,7 +180,7 @@ test('the wrapper attaches a real provider from one click and its playhead advan
   console.log(
     `    wistia engine: time=${reading?.time}s duration=${reading?.duration}s`
   );
-  expect(reading?.duration ?? 0).toBeGreaterThan(60);
+  expect(reading?.duration ?? 0).toBeGreaterThan(MIN_DURATION_S);
 
   // And the wrapper knows. `data-playing` is Backpack's own root attribute
   // (`Video/VideoPlayer.tsx`), which this wrapper reproduces from the player's
@@ -182,6 +190,18 @@ test('the wrapper attaches a real provider from one click and its playhead advan
   // `onClick` of its own (SIDEPRO-212). So `true` here can only have come from
   // the attached provider, and the label the surface offers moved with it.
   await expect(root).toHaveAttribute('data-playing', 'true');
+  // Not `activationButton(page)`, and not the same element as the one clicked
+  // above: `Player.ActivationButton` returns `null` the moment activation
+  // reaches `ready` (`packages/react/src/loading-error.tsx:40`), and the
+  // wrapper's own play/pause toggle — a plain `<button class=
+  // "ef-video-controller">`, no `data-reely-part` — takes the surface in its
+  // place (`backpack-video.tsx:446-461`, gated on `!awaitingActivation &&
+  // !controls`). `e2e/locators.ts` has no entry for it because it is the
+  // wrapper's element rather than a Reely part, and the class is the contract
+  // the wrapper publishes for it (`backpack-video-styles.ts:348`), the same
+  // one the contract tests query. Exactly one element carries the class at
+  // this point, which is what makes the strict-mode locator safe: the toggle
+  // has replaced the activation button rather than joining it.
   await expect(page.locator('.ef-video-controller')).toHaveAttribute(
     'aria-label',
     'Pause video'
