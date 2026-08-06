@@ -36,7 +36,14 @@ export default defineConfig({
     css: { include: [/theme\.css/] },
     include: [
       'packages/**/*.test.{ts,tsx}',
-      'apps/storybook/stories/**/*.contract.test.ts'
+      'apps/storybook/stories/**/*.contract.test.ts',
+      // Enforces e2e/parity/README.md's naming rule inside the default
+      // `pnpm test` run, not just `pnpm test:parity` — see naming.guard.ts's
+      // own comment for why that has to be here. Named `.guard.ts`, not
+      // `.test.ts`: Playwright's own default testMatch is
+      // `**/*.@(spec|test).ts`, so a `.test.ts` file under `e2e/` would hit
+      // the exact problem this guard exists to catch.
+      'e2e/parity/*.guard.ts'
     ],
     // Measured with `pnpm test --coverage`, not gated on. A threshold here
     // would say a number is the goal; the goal is that every load-bearing

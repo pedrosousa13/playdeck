@@ -28,6 +28,40 @@ below, which also names where Reely is currently the worse of the two. Line
 references point into the Backpack v4 beta checkout
 (`apps/backpack/beta`); v3 is stale for this work.
 
+## Running the harness
+
+`pnpm test:parity` checks the two sides against each other for real, through
+`playwright.parity.config.ts`. The tables below are its input rather than a
+description of it: it parses them into a pair list, resolves every story name
+through both Storybooks' `/index.json`, and measures the two sides with one
+function, so a difference cannot come from two ways of measuring. It serves both
+Storybooks itself — Reely's on 4173, Backpack's on 6007 — and reuses either that
+is already up, which leaves one local prerequisite: a Backpack v4 beta checkout
+(`@ef-global/backpack` `4.5.0-beta.19`) for the second of them.
+`REELY_BACKPACK_DIR` names it, defaulting to
+`/Users/pedrosousa/Documents/apps/backpack/beta`, and a missing directory fails
+at config load rather than half way through a sweep. A full sweep takes about
+nine minutes, which is what `PARITY_PAIR_RANGE` (`0-6`, say) is for. Nothing
+runs it in CI, deliberately: that checkout is a prerequisite CI has none of.
+
+It fails today, and a first run should read that as the harness working rather
+than as a broken setup, for two reasons at once. The sweep found 97 undeclared
+divergences across the 26 pairs it can measure, and the measurement check
+asserts there are none: only a divergence declared in
+`e2e/parity/declared-divergences.ts`, against a sentence in this file or an ADR,
+goes through quietly. The same check also fails on two rows below whose story
+names no longer resolve to anything in Backpack's `/index.json` —
+`CustomCoverImage` and `SocialCarouselAtomIntegration` — because a name this
+file records that no Storybook serves is drift in this file, and the harness
+reports it rather than quietly measuring 36 rows and calling it 38. Both are
+reported together at the end of a run, after every pair that could be measured
+has been. Two limits are worth knowing
+before reading a result. It compares measurements and not pixels, for the reason
+this file opens with — the wrapper reproduces Backpack's behavior, not its
+styling stack, so a pixel diff would be red on every row and would say nothing —
+and the single masked screenshot it takes is on the real-playback side, Reely
+against itself, with no Backpack image in it at all.
+
 ## Deliberate divergences
 
 Every entry below was read against the source rather than inferred. Three claims
