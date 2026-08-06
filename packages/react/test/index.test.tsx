@@ -111,6 +111,22 @@ const verifyMediaPropsExclusions = (): Player.MediaProps[] => [
   { controls: true }
 ];
 
+// Compile-time guard: a cross-provider concept has one home, `Root`'s own prop
+// (ADR-0004), so no per-provider bag may spell it a second time. `loop` joined
+// `controls` here in SIDEPRO-210.
+const verifyProviderOptionExclusions = (): Player.PlayerProviderOptions[] => [
+  // @ts-expect-error use Root's own controls prop instead of the youtube bag.
+  { youtube: { controls: true } },
+  // @ts-expect-error use Root's own controls prop instead of the vimeo bag.
+  { vimeo: { controls: true } },
+  // @ts-expect-error use Root's own loop prop instead of the youtube bag.
+  { youtube: { loop: true } },
+  // @ts-expect-error use Root's own loop prop instead of the vimeo bag.
+  { vimeo: { loop: true } },
+  // @ts-expect-error use Root's own loop prop instead of the wistia bag.
+  { wistia: { loop: true } }
+];
+
 const confirmMetadataReady = (media: HTMLVideoElement): void => {
   Object.defineProperty(media, 'readyState', {
     configurable: true,
@@ -937,6 +953,7 @@ test('exposes stable actions and a ref handle backed by the Root controller', ()
   });
   expect(verifyReadonlyStateTypes).toBeTypeOf('function');
   expect(verifyMediaPropsExclusions).toBeTypeOf('function');
+  expect(verifyProviderOptionExclusions).toBeTypeOf('function');
 });
 
 test('keeps the imperative handle backed by the full PlayerController', () => {

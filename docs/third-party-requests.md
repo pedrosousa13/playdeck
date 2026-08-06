@@ -109,11 +109,12 @@ Notes, per row:
   this table has verified. `dnt` (on by default,
   `packages/provider-wistia/src/attachment.ts:201`) asks Wistia not to track
   the session; it is a separate switch from the Mux module. Wistia's
-  provider options (`controls`, `dnt`, `loop`, `playerColor`, `swatch`,
-  `poster`, `transparentLetterbox`) are, unlike YouTube's and Vimeo's,
-  reachable from `Player.Root` via
-  `providerOptions={{ wistia: {...} }}`
-  (`packages/react/src/provider-loaders.ts`).
+  provider options (`controls`, `dnt`, `playerColor`, `swatch`, `poster`,
+  `transparentLetterbox`) are, unlike YouTube's and Vimeo's, reachable from
+  `Player.Root` via `providerOptions={{ wistia: {...} }}`
+  (`packages/react/src/provider-loaders.ts`). `loop` is the one exception:
+  SIDEPRO-210 omitted it from that bag, because `Root`'s own `loop` prop now
+  writes it (ADR-0004).
 - **The `backpack-parity` branch's storybook Backpack wrapper** is not in any
   published package there — `apps/storybook`'s `package.json` marks it
   `"private": true` on that branch. It fetches YouTube's oEmbed endpoint

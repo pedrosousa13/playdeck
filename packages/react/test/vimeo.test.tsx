@@ -85,6 +85,48 @@ test('sizes the Vimeo embed mount to fill its viewport by default', async () => 
   expect(mount.style.height).toBe('100%');
 });
 
+// SIDEPRO-210: `loop` is a `Root` prop, and reaches this provider the same way
+// `controls` does -- folded into the vimeo bag, not carried in `nativeOptions`,
+// which `loadProvider` hands to the native and HLS providers only.
+test("folds Root's loop into the vimeo provider option bag", async () => {
+  render(
+    <Player.Root
+      loading="eager"
+      loop
+      source={{ type: 'vimeo', videoId: '76979871' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
+  expect(options).toMatchObject({ loop: true });
+});
+
+test('leaves the vimeo bag un-looped when Root omits the prop', async () => {
+  render(
+    <Player.Root
+      loading="eager"
+      source={{ type: 'vimeo', videoId: '76979871' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
+  expect(options?.loop).toBeUndefined();
+});
+
 test('the loader rejects a Vimeo source without an embed mount', async () => {
   await expect(
     loadProvider({

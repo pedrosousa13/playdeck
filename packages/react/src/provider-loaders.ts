@@ -13,27 +13,31 @@ export type PlayerMediaMount = HTMLVideoElement | HTMLDivElement;
  * providers wait on their own issues, so a missing key here is a deliberate
  * absence rather than an oversight.
  *
- * `controls` is deliberately absent from every bag: it is a cross-provider
- * concept and lives on `Root` as its own prop (ADR-0004), so omitting it here
- * makes the double home unrepresentable rather than merely discouraged.
+ * `controls` and `loop` are deliberately absent from every bag that has a
+ * notion of them: both are cross-provider concepts and live on `Root` as its
+ * own props (ADR-0004), so omitting them here makes the double home
+ * unrepresentable rather than merely discouraged.
  *
- * Where a Reely prop and a provider option share a name, the overlap is only
- * nominal. `Root`'s `loop` travels in `NativePlaybackOptions`, which
- * `loadProvider` hands to the native and HLS providers and to no others, so it
- * never reaches a Wistia embed; `packages/core` has no notion of looping at
- * all. `loop` in this bag is therefore not redundant -- it is the only way to
- * make a Wistia embed loop, by setting `endVideoBehavior`
- * (`provider-wistia/src/attachment.ts:243`, `if (options.loop === true)`).
+ * `loop` was the exception until SIDEPRO-210. It reached the native and HLS
+ * providers inside `NativePlaybackOptions` and no further, so the `wistia` bag
+ * key was the only way to loop an embed. `Root` now folds `loop` into the
+ * active provider's own bag (`root.tsx`'s `resolvedProviderOptions`) exactly as
+ * it folds `controls`, and every provider answers it: Wistia by setting
+ * `endVideoBehavior` (`provider-wistia/src/attachment.ts:243`,
+ * `if (options.loop === true)`), Vimeo and YouTube by an embed parameter, and
+ * native and HLS by the `<video>` element's own attribute. The bag keys remain
+ * as the provider-level channel that fold writes to; what is gone is the
+ * consumer-facing second spelling.
  */
 export type PlayerProviderOptions = {
-  readonly wistia?: WistiaProviderOptions;
-  readonly youtube?: Omit<YouTubeProviderOptions, 'controls'>;
-  readonly vimeo?: Omit<VimeoProviderOptions, 'controls'>;
+  readonly wistia?: Omit<WistiaProviderOptions, 'loop'>;
+  readonly youtube?: Omit<YouTubeProviderOptions, 'controls' | 'loop'>;
+  readonly vimeo?: Omit<VimeoProviderOptions, 'controls' | 'loop'>;
 };
 
 /**
  * What `Root` actually hands the loader: the public bags with `Root`'s own
- * `controls` folded into each provider that has an answer to it.
+ * `controls` and `loop` folded into each provider that has an answer to them.
  */
 export type ResolvedProviderOptions = {
   readonly wistia?: WistiaProviderOptions;

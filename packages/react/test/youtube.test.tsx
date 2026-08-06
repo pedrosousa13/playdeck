@@ -75,6 +75,49 @@ test('forwards the youtube provider option bag to createYouTubeProvider', async 
   expect(options).toEqual({ controls: true });
 });
 
+// SIDEPRO-210: `loop` is a `Root` prop, and reaches this provider the same way
+// `controls` does -- folded into the youtube bag, not carried in
+// `nativeOptions`, which `loadProvider` hands to the native and HLS providers
+// only.
+test("folds Root's loop into the youtube provider option bag", async () => {
+  render(
+    <Player.Root
+      loading="eager"
+      loop
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateYouTubeProvider.mock.calls[0]!;
+  expect(options).toMatchObject({ loop: true });
+});
+
+test('leaves the youtube bag un-looped when Root omits the prop', async () => {
+  render(
+    <Player.Root
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateYouTubeProvider.mock.calls[0]!;
+  expect(options?.loop).toBeUndefined();
+});
+
 // SIDEPRO's regression: `providerOptionsEqual` in `use-activation.ts` must
 // compare `youtube` bags by value, or a changed bag looks unchanged and the
 // embed never re-attaches to pick it up.

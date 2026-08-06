@@ -56,7 +56,7 @@ origins list and what a page's CSP has to allow.
 | Export                 | What it is                                                   |
 | ---------------------- | ------------------------------------------------------------ |
 | `createVimeoProvider`  | Builds the adapter over a mount element and a `VimeoSource`. |
-| `VimeoProviderOptions` | `controls`, `dnt`, `customControls`.                         |
+| `VimeoProviderOptions` | `controls`, `dnt`, `loop`, `customControls`.                 |
 | `VimeoMountElement`    | What the adapter can mount into.                             |
 | `VimeoProviderAdapter` | The adapter's own type.                                      |
 

@@ -456,21 +456,31 @@ export const Root = ({
     ]
   );
 
-  // `controls` folded into the active provider's own bag -- its one home on
-  // `Root` reaching that provider by looking, to `useActivation`, like an
-  // ordinary provider-option change. Injected only into the bag belonging to
-  // the detected source's own provider, deliberately not both unconditionally:
-  // `providerOptionsEqual` compares every bag it knows about, whatever source
-  // is actually playing, so folding `controls` into the youtube and vimeo bags
-  // regardless of source would make a `controls` change look like a bag
-  // change on a native or HLS source too -- re-attaching a video element that
-  // only needed a DOM attribute set, losing its playback position. A value of
-  // `undefined` lands as an explicit `controls: undefined` key on the active
+  // `controls` and `loop` folded into the active provider's own bag -- their
+  // one home on `Root` reaching that provider by looking, to `useActivation`,
+  // like an ordinary provider-option change. Injected only into the bag
+  // belonging to the detected source's own provider, deliberately not all of
+  // them unconditionally: `providerOptionsEqual` compares every bag it knows
+  // about, whatever source is actually playing, so folding into the youtube and
+  // vimeo bags regardless of source would make a `controls` change look like a
+  // bag change on a native or HLS source too -- re-attaching a video element
+  // that only needed a DOM attribute set, losing its playback position. A value
+  // of `undefined` lands as an explicit `controls: undefined` key on the active
   // bag rather than an absent one, which is already safe: `providerBagEqual`
   // compares own keys by value, so a key set to `undefined` equals that key
   // being absent, and both providers read `options.controls === true`.
   // Returning `providerOptions ?? {}` for every other source type is safe for
   // the same reason -- an absent bag and an empty one compare equal.
+  //
+  // The cost of folding `loop` here, rather than carrying it in
+  // `nativeOptions`: these three providers bake looping into the embed, so a
+  // `loop` change on a YouTube, Vimeo or Wistia source re-attaches the embed
+  // and loses its playback position. A native or HLS source keeps carrying
+  // `loop` in `nativeOptions`, where it is only an element attribute and
+  // changing it costs nothing (SIDEPRO-210).
+  //
+  // Wistia takes `loop` alone: its `controls` fan-out is still unbuilt, so the
+  // `wistia` bag keeps `controls` un-omitted and there is nothing to fold.
   const resolvedProviderOptions = useMemo<ResolvedProviderOptions>(() => {
     const type =
       detectedSource.status === 'success'
@@ -479,17 +489,23 @@ export const Root = ({
     if (type === 'youtube') {
       return {
         ...providerOptions,
-        youtube: { ...providerOptions?.youtube, controls }
+        youtube: { ...providerOptions?.youtube, controls, loop }
       };
     }
     if (type === 'vimeo') {
       return {
         ...providerOptions,
-        vimeo: { ...providerOptions?.vimeo, controls }
+        vimeo: { ...providerOptions?.vimeo, controls, loop }
+      };
+    }
+    if (type === 'wistia') {
+      return {
+        ...providerOptions,
+        wistia: { ...providerOptions?.wistia, loop }
       };
     }
     return providerOptions ?? {};
-  }, [controls, detectedSource, providerOptions]);
+  }, [controls, detectedSource, loop, providerOptions]);
 
   const activation = useActivation({
     autoplay,
