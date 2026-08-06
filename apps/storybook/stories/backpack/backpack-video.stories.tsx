@@ -829,7 +829,12 @@ export const CoverYieldsToPlayback: Story = {
       canvasElement.querySelector('[data-reely-part="activation"]')
     ).toBeNull();
 
-    const toggle = await canvas.findByRole('button', { name: 'Play video' });
+    // Named for the action and then this story's `alt`, which is SIDEPRO-214's
+    // format: the cover sits in an `aria-hidden` `Player.Poster`, so the button
+    // is the only place that text can be heard.
+    const toggle = await canvas.findByRole('button', {
+      name: 'Play video: custom cover image'
+    });
     await userEvent.click(toggle);
     await waitFor(() =>
       expect(canvas.queryByAltText('custom cover image')).toBeNull()
@@ -867,7 +872,9 @@ export const CoverClickRequestsPlayback: Story = {
   parameters: { player: {} },
   play: async ({ args, canvas, canvasElement, userEvent }) => {
     await canvas.findByAltText('custom cover image');
-    const activate = await canvas.findByRole('button', { name: 'Play video' });
+    const activate = await canvas.findByRole('button', {
+      name: 'Play video: custom cover image'
+    });
     await expect(activate).toHaveAttribute('data-reely-part', 'activation');
 
     await userEvent.click(activate);
@@ -1026,7 +1033,9 @@ export const CoverSurvivesFailedActivation: Story = {
   ),
   play: async ({ args, canvas, canvasElement, userEvent }) => {
     await canvas.findByAltText('custom cover image');
-    const activate = await canvas.findByRole('button', { name: 'Play video' });
+    const activate = await canvas.findByRole('button', {
+      name: 'Play video: custom cover image'
+    });
     await userEvent.click(activate);
     await expect(canvas.queryByAltText('custom cover image')).not.toBeNull();
 

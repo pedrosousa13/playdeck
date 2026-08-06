@@ -41,8 +41,10 @@ export type VideoCoverImageProps = {
  * - `BackpackVideo` wraps it in `Player.Poster`, which sets `aria-hidden="true"`
  *   (`packages/react/src/poster.tsx:66`). So there the `alt` below is a DOM
  *   attribute and nothing more: nothing inside a hidden subtree reaches the
- *   accessibility tree, and the labelled affordance is the play button underneath,
- *   reading "Play video". That is tracked as SIDEPRO-214.
+ *   accessibility tree. The text still reaches it, from the other end —
+ *   SIDEPRO-214 folded the same `alt` into the play button underneath, which
+ *   reads "Play video: <alt>" — so the cover here is decoration over a control
+ *   that carries the description.
  * - `BackpackVideoHoverPreview` wraps it in a plain `div` of its own, because
  *   `Player.Poster` cannot host a cover that comes back (`docs/backpack-parity.md`
  *   records why). There the `alt` is a real accessible name for the resting

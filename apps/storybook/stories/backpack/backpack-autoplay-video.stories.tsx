@@ -268,7 +268,11 @@ export const HeldPaused: Story = {
     // Nothing was configured to autoplay, so nothing has been reported.
     await expect(args.onPlayChange).not.toHaveBeenCalled();
 
-    const toggle = await canvas.findByRole('button', { name: 'Play video' });
+    // The action, then this story's `alt` — SIDEPRO-214's format, and the one
+    // story in this file where the cover is on screen for it to describe.
+    const toggle = await canvas.findByRole('button', {
+      name: 'Play video: Custom placeholder image'
+    });
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(toggle);
 

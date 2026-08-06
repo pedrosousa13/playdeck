@@ -31,15 +31,22 @@ interface DeclaredDivergence {
 // alongside the row, not instead of it.
 
 const ACCESSIBLE_NAME_REASON =
-  '"Where Reely is better" (docs/backpack-parity.md): ' +
-  '`VideoCoverImage` puts `role="button"` + `aria-label={alt}` on the cover ' +
-  "container; Reely's cover sits inside `Player.Poster`, which is " +
-  '`aria-hidden`, so the labelled affordance there is the play button ' +
-  'underneath instead ("Play video"/"Pause video"), not the cover. Tracked ' +
-  'as SIDEPRO-214. Declared only for the rows where the sweep actually ' +
-  'observes it — a Backpack cover container carrying `role="button"` on ' +
-  'screen at the same moment — never for a row that merely mentions a ' +
-  'placeholder image in its note.';
+  '"Where Reely is better" (docs/backpack-parity.md): both sides expose the ' +
+  "caller's `alt` to assistive technology since SIDEPRO-214, on different " +
+  'elements and composed differently, which is the narrower divergence that ' +
+  'remains. Backpack names the cover container itself — `VideoCoverImage` ' +
+  'puts `role="button"` + `aria-label={alt}` on it, so the name is the ' +
+  'picture alone, and an absent `alt` leaves that container an unnamed ' +
+  "button (the axe `button-name` half of the same doc entry). Reely's cover " +
+  'sits inside `Player.Poster`, which is `aria-hidden`, so the name is on ' +
+  'the real button underneath and leads with the action: "Play video" / ' +
+  '"Pause video", with the `alt` appended after a colon wherever there is ' +
+  'one (`backpack-video.tsx:388-390`, its `const ariaLabel`). So the sweep ' +
+  'compares a `DIV` named after the still against a `BUTTON` named after ' +
+  'the action, and no `alt` makes those two strings agree. Declared only ' +
+  'for the rows where the sweep actually observes it — a Backpack cover ' +
+  'container carrying `role="button"` on screen at the same moment — never ' +
+  'for a row that merely mentions a placeholder image in its note.';
 
 const PLAY_ICON_REASON =
   '"Deliberate divergences" (docs/backpack-parity.md): under `controls: ' +
@@ -72,12 +79,21 @@ const PLAY_ICON_REASON =
 
 const DECLARED: readonly DeclaredDivergence[] = [
   // Video.stories.tsx: the rows where the sweep observes Backpack's cover
-  // container on screen as a `role="button"` while Reely's labelled affordance
-  // is the play button underneath. Measured values, in order below:
+  // container on screen as a `role="button"` while Reely's named affordance is
+  // the play button underneath. Backpack's measured values, in order below:
   // `["DIV[custom cover image]"]`, `["DIV[]"]` (the `renderCustomImage` path
   // leaves the container unnamed, the axe `button-name` half of the same doc
-  // entry) and `["DIV[custom cover image]"]`, each against Reely's
-  // `["BUTTON[Play video]"]`.
+  // entry) and `["DIV[custom cover image]"]`. Reely measured
+  // `["BUTTON[Play video]"]` on all three when those were taken, before
+  // SIDEPRO-214 folded the `alt` into that button's name. The first and third
+  // rows pass an `alt` (`custom cover image`, on both the Mock and Real
+  // stories), so what the sweep reads there now is a `BUTTON` whose name
+  // carries that text after the action rather than the action alone.
+  // `WithRenderCustomImage` passes no `alt` to the component on either side —
+  // its `alt` is set inside the consumer's own `<img>` — so that row is
+  // unchanged by SIDEPRO-214 and still reads `["BUTTON[Play video]"]`. None
+  // of the three stops diverging for it: a `DIV` against a `BUTTON` differs
+  // whatever the names turn out to be.
   {
     section: 'Video.stories.tsx',
     backpackStoryName: 'CustomCoverImageYouTube',

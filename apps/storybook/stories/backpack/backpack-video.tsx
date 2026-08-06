@@ -34,7 +34,12 @@ import { useOffScreenPause } from './off-screen-pause';
  * Reference: `backpack/src/components/Video/VideoPlayer.tsx`.
  */
 export type BackpackVideoProps = {
-  /** Alternative text on the cover image. */
+  /**
+   * Alternative text on the cover image, and — since SIDEPRO-214 — the
+   * description folded into the play/pause control's accessible name, which
+   * reads `Play video: <alt>`. The cover itself is inside an `aria-hidden`
+   * `Player.Poster`, so the control is the only place the text can be heard.
+   */
   readonly alt?: string;
   /**
    * Aspect ratio of the video player: one value for every width, or a map
@@ -369,7 +374,20 @@ const BackpackVideoSurface = ({
   // `onPlayChange(false)` on mount (Backpack's `prevIsPlayingRef`).
   useOnChange(isPlaying, onPlayChange);
 
-  const ariaLabel = isPlaying ? 'Pause video' : 'Play video';
+  // SIDEPRO-214: the cover's `alt` is folded in behind the action rather than
+  // left on an `aria-hidden` image, so a consumer who described the video gets
+  // "Play video: EF campus tour, Brighton" instead of a page of buttons all
+  // reading "Play video". Behind the action, never in front of it: this is a
+  // play/pause toggle before it is a description, and a name opening with a
+  // place says nothing about what pressing it does. Unconditional on `alt`
+  // rather than gated on `showsCover` below, because the text describes the
+  // video and the affordance acts on the video — a name that came and went
+  // with the poster would be describing the image instead. Trimmed, so a
+  // caller's stray whitespace is the absence it looks like rather than a
+  // separator with nothing after it.
+  const action = isPlaying ? 'Pause video' : 'Play video';
+  const description = alt?.trim();
+  const ariaLabel = description ? `${action}: ${description}` : action;
   const awaitingActivation = loadsOnInteraction && !ready;
   // Independent of `light`: a caller-supplied `placeholderImageSrc` shows a
   // cover even with `light: false` (Backpack's `hasCustomCoverImage`).
@@ -407,15 +425,18 @@ const BackpackVideoSurface = ({
           optional one for the compiler. */}
       {showsCover && coverSrc ? (
         // `Player.Poster` is the container, and it is what makes the `alt` inside
-        // a DOM attribute rather than an accessible name: it sets
-        // `aria-hidden="true"` (`packages/react/src/poster.tsx:66`), so nothing
-        // rendered in it reaches the accessibility tree. Backpack does expose the
-        // text — `VideoCoverImage` puts `role="button"` and `aria-label={alt}` on
-        // its cover container (`VideoCoverImage.tsx:99-100`) — where here the
-        // labelled affordance is the real button underneath, reading "Play video"
-        // (SIDEPRO-214). {@link VideoCoverImage} carries the rest of the argument,
-        // and `BackpackVideoHoverPreview` gives the same image a container that is
-        // not hidden.
+        // a DOM attribute and nothing more: it sets `aria-hidden="true"`
+        // (`packages/react/src/poster.tsx:66`), so nothing rendered in it reaches
+        // the accessibility tree. The text is not lost for that — SIDEPRO-214
+        // folded it into `ariaLabel` above, so it reaches the accessibility tree
+        // on the real button underneath instead, which is the affordance a viewer
+        // presses. Backpack puts it on the cover itself, `role="button"` and
+        // `aria-label={alt}` on its cover container (`VideoCoverImage.tsx:99-100`),
+        // where here the cover stays decoration over a named control. Whether
+        // `Player.Poster` should hide its subtree at all is a primitives question,
+        // tracked separately. {@link VideoCoverImage} carries the rest of the
+        // argument, and `BackpackVideoHoverPreview` gives the same image a
+        // container that is not hidden.
         <Player.Poster
           className="ef-video-cover"
           data-hover-effect={hoverEffect}
@@ -472,7 +493,8 @@ const BackpackVideoSurface = ({
         `aria-label` and the child are passed only outside an activation
         error, so the primitive's own "Retry loading video" and "Retry"
         (`loading-error.tsx:45,62`) take over instead of this wrapper's
-        "Play video" and empty string — overriding either would leave the one
+        `ariaLabel` — the cover's `alt` and all (SIDEPRO-214) — and empty
+        string. Overriding either would leave the one
         state where `Player.ActivationButton` can be `aria-disabled`
         (`loading-error.tsx:44`, a configuration error) with no
         feedback at all besides `Player.ErrorDisplay` below.

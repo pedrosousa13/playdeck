@@ -139,7 +139,8 @@ export type BackpackVideoHoverPreviewProps = Omit<
  *
  * What this renders instead is one focusable control with a name: the
  * play/pause button `BackpackVideo` already puts on the surface, labelled "Play
- * video" or "Pause video" (`backpack-video.tsx:329,407-413`, its `const ariaLabel` and the `<button>` it labels). The preview root
+ * video" or "Pause video" — with the cover's `alt` behind it where there is one
+ * (SIDEPRO-214) — (`backpack-video.tsx:329,407-413`, its `const ariaLabel` and the `<button>` it labels). The preview root
  * itself takes no role and no `tabIndex`. So a keyboard or touch user gets
  * ordinary click-to-play rather than hold-to-preview, which is also the right
  * resting behaviour on a touch device — recorded as a divergence in
@@ -286,8 +287,9 @@ export const BackpackVideoHoverPreview = ({
       {coverSrc && !isPlaying ? (
         // Not `aria-hidden`, unlike `BackpackVideo`'s cover inside
         // `Player.Poster` (`packages/react/src/poster.tsx:66`): there the cover
-        // overlays a player whose own button carries the name, where here it is
-        // the resting representation of the video and its `alt` is worth having.
+        // overlays a player whose own button carries the name — the same `alt`
+        // among it since SIDEPRO-214 — where here it is the resting
+        // representation of the video and its `alt` is worth having in place.
         // Backpack's default `alt = ''` (`:56`) leaves an unlabelled one
         // decorative, which is what an empty `alt` already means.
         //
