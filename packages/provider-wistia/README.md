@@ -62,21 +62,21 @@ origins list and what a page's CSP has to allow.
 
 ## Exports
 
-| Export                                           | What it is                                                                                                               |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `createWistiaProvider`                           | Builds the adapter over a mount element and a `WistiaSource`.                                                            |
-| `loadWistiaPlayer`                               | Loads the player bundle and resolves the `<wistia-player>` registration. Cached across players; takes your own importer. |
-| `resetWistiaPlayerLoader`                        | Drops the cached registration — for tests that need a clean load.                                                        |
-| `API_READY_TIMEOUT_MS`                           | How long the `api-ready` handshake is given before the attach reports an error.                                          |
-| `WistiaProviderOptions`                          | `controls`, `dnt`, `loop`.                                                                                               |
-| `WistiaProviderAdapter`                          | The adapter's own type.                                                                                                  |
-| `WistiaMountElement`                             | What the adapter can mount into.                                                                                         |
-| `WistiaPlayerElement`                            | The `<wistia-player>` element as this adapter types it.                                                                  |
-| `WistiaPlayerApi`                                | The slice of Wistia's `PublicApi` this adapter drives.                                                                   |
-| `WistiaPlayerState`                              | Wistia's own `beforeplay` / `playing` / `paused` / `ended` vocabulary.                                                   |
-| `WistiaPlayerAttribute`                          | Every embed-option name the element accepts, from Wistia's `Attributes`.                                                 |
-| `PublicApi`                                      | Wistia's own handle declaration, re-exported rather than restated.                                                       |
-| `WistiaApiReadyDetail`, `WistiaMuteChangeDetail` | The payloads of the two declared events this adapter reads, for a listener you add to the same element.                  |
+| Export                                           | What it is                                                                                                                                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createWistiaProvider`                           | Builds the adapter over a mount element and a `WistiaSource`.                                                                                                                  |
+| `loadWistiaPlayer`                               | Loads the player bundle and resolves the `<wistia-player>` registration. Cached across players; takes your own importer.                                                       |
+| `resetWistiaPlayerLoader`                        | Drops the cached registration — for tests that need a clean load.                                                                                                              |
+| `API_READY_TIMEOUT_MS`                           | How long the `api-ready` handshake is given before the attach reports an error.                                                                                                |
+| `WistiaProviderOptions`                          | `controls`, `dnt`, `loop`. Through `Player.Root`, `loop` is its own prop (ADR-0004), not a bag key; `controls` is still a bag key here, because no fan-out reaches Wistia yet. |
+| `WistiaProviderAdapter`                          | The adapter's own type.                                                                                                                                                        |
+| `WistiaMountElement`                             | What the adapter can mount into.                                                                                                                                               |
+| `WistiaPlayerElement`                            | The `<wistia-player>` element as this adapter types it.                                                                                                                        |
+| `WistiaPlayerApi`                                | The slice of Wistia's `PublicApi` this adapter drives.                                                                                                                         |
+| `WistiaPlayerState`                              | Wistia's own `beforeplay` / `playing` / `paused` / `ended` vocabulary.                                                                                                         |
+| `WistiaPlayerAttribute`                          | Every embed-option name the element accepts, from Wistia's `Attributes`.                                                                                                       |
+| `PublicApi`                                      | Wistia's own handle declaration, re-exported rather than restated.                                                                                                             |
+| `WistiaApiReadyDetail`, `WistiaMuteChangeDetail` | The payloads of the two declared events this adapter reads, for a listener you add to the same element.                                                                        |
 
 ## What it reports honestly
 

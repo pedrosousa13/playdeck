@@ -31,6 +31,17 @@ export type {
 export type WistiaProviderOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
+  /**
+   * Restart the video when it ends, by setting `endVideoBehavior`
+   * (`attachment.ts:243`, `if (options.loop === true)`). This is where the
+   * setting is implemented, not where a `Player.Root` consumer writes it:
+   * `Root`'s `loop` prop is folded into this bag by
+   * `packages/react/src/root.tsx`'s `resolvedProviderOptions`, and
+   * `PlayerProviderOptions` omits the key so the two cannot both be written
+   * (ADR-0004). SIDEPRO-210 made that so; before it, this key was the only
+   * way to loop a Wistia embed. It remains reachable by calling
+   * `createWistiaProvider` directly.
+   */
   readonly loop?: boolean;
   readonly playerColor?: string;
   readonly swatch?: boolean;

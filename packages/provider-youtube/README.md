@@ -50,12 +50,12 @@ origins list and what a page's CSP has to allow.
 
 ## Exports
 
-| Export                             | What it is                                                          |
-| ---------------------------------- | ------------------------------------------------------------------- |
-| `createYouTubeProvider`            | Builds the adapter over a mount element and a video id.             |
-| `YouTubeProviderOptions`           | `host`, and `loadIframeApi` to supply the API yourself.             |
-| `YouTubeProviderAdapter`           | The adapter's own type.                                             |
-| `PLAYBACK_CONFIRMATION_TIMEOUT_MS` | How long a `play()` waits for the player to confirm it (3 seconds). |
+| Export                             | What it is                                                                                                                                                           |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createYouTubeProvider`            | Builds the adapter over a mount element and a video id.                                                                                                              |
+| `YouTubeProviderOptions`           | `controls`, `loop`, `host`, and `loadIframeApi` to supply the API yourself. Through `Player.Root`, `controls` and `loop` are its own props (ADR-0004), not bag keys. |
+| `YouTubeProviderAdapter`           | The adapter's own type.                                                                                                                                              |
+| `PLAYBACK_CONFIRMATION_TIMEOUT_MS` | How long a `play()` waits for the player to confirm it (3 seconds).                                                                                                  |
 
 ## What it reports honestly
 

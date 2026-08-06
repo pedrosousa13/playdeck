@@ -16,6 +16,8 @@ export type YouTubeAttachmentDeps = {
   // Unset and `false` both mean chromeless; see `YouTubeProviderOptions`'s own
   // doc comment for why this mirrors Vimeo's polarity.
   readonly controls: boolean | undefined;
+  // Unset and `false` both mean play once; see `YouTubeProviderOptions`.
+  readonly loop: boolean | undefined;
   readonly host: string;
   readonly loadIframeApi: () => Promise<YouTubeIframeApi>;
   // The host's ready capabilities snapshot, for the state published on ready.
@@ -59,6 +61,7 @@ export const createYouTubeAttachment = (
   {
     emit,
     controls,
+    loop,
     host,
     loadIframeApi,
     getCapabilities,
@@ -149,9 +152,15 @@ export const createYouTubeAttachment = (
       height: '100%',
       playerVars: {
         autoplay: 0,
-        // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:61`):
+        // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:62`):
         // unset and `false` both mean chromeless.
         controls: controls === true ? 1 : 0,
+        // `loop` alone is a documented no-op on a single-video embed: YouTube
+        // loops a playlist, so the one video has to name itself as its own
+        // single-entry playlist for the loop var to mean anything. The two
+        // vars are set together or not at all.
+        loop: loop === true ? 1 : 0,
+        ...(loop === true ? { playlist: videoId } : {}),
         playsinline: 1,
         rel: 0,
         ...(embedOrigin ? { origin: embedOrigin } : {})

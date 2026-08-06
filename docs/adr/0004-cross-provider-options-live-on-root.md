@@ -53,19 +53,22 @@ code is written rather than at the point the video renders wrong.
   option the rest have no notion of is still per-provider, and it belongs in both
   bags.
 
-**`loop` is Reely-level by this boundary, and does not yet behave as though it
-is.** It is already a `Root` prop, and every provider has an answer to it:
-Wistia's implements it by setting `endVideoBehavior`
+**`loop` is Reely-level by this boundary, and SIDEPRO-210 made it behave as
+though it is.** It was already a `Root` prop, and every provider has an answer
+to it: Wistia's implements it by setting `endVideoBehavior`
 (`provider-wistia/src/attachment.ts`'s `if (options.loop === true)`), Vimeo's
 embed takes a `loop` URL parameter and YouTube's takes a `loop` player parameter
 (with a `playlist` companion, for a single video), and a `<video>` element has
-the attribute. But it reaches native and HLS only, because it travels inside
-`NativePlaybackOptions`, which `loadProvider` hands to those two providers and to
-no others — so `loop: true` on a Vimeo or YouTube source is the same silent
-no-op this decision exists to prevent, arrived at from the opposite direction: a
-Reely-level prop that fans out to some providers instead of a per-provider key
-that a consumer forgets. That is SIDEPRO-210. This ADR is the home its fix was
-missing, not the fix: nothing here changes `loop`.
+the attribute. But it used to reach native and HLS only, because it travelled
+inside `NativePlaybackOptions`, which `loadProvider` hands to those two
+providers and to no others — so `loop: true` on a Vimeo or YouTube source was
+the same silent no-op this decision exists to prevent, arrived at from the
+opposite direction: a Reely-level prop that fans out to some providers instead
+of a per-provider key that a consumer forgets. It now takes the `controls`
+route as well: `resolvedProviderOptions` folds it into the active provider's own
+bag, and `PlayerProviderOptions` omits it from all three, so
+`providerOptions={{ wistia: { loop: true } }}` — the one spelling that used to
+work — no longer compiles.
 
 ## Consequences
 
@@ -86,7 +89,12 @@ missing, not the fix: nothing here changes `loop`.
   re-attaches a Vimeo or YouTube embed — it must, the value being baked into the
   embed URL — where a native or HLS element only has an attribute set and keeps
   its playback position. Toggling `controls` mid-playback is therefore cheap on
-  one source and a reload on another.
+  one source and a reload on another. `loop` is not a second instance of this
+  cost. It rides in `NativePlaybackOptions`, which the activation identity
+  compares on every source type rather than only the two that read it, so a
+  change to it already rebuilt the provider before SIDEPRO-210 folded it into
+  the bags. The fold changed what that rebuild produces, not whether it
+  happens.
 - Where a composition used to write the bag key, it now writes the prop once.
   The `backpack-parity` branch's Backpack wrapper is the worked example: it
   wrote `youtube: { controls }` for one provider, drew its own

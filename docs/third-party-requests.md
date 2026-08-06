@@ -42,9 +42,9 @@ Notes, per row:
   at `:127-130`), with no `integrity` and no `crossOrigin` set. This does not
   change with the `host` option: `host` only decides which origin the _embed
   iframe_ itself points at (it defaults to `https://www.youtube-nocookie.com`,
-  `packages/provider-youtube/src/index.ts:48`, and is resolved at `:149`; the
+  `packages/provider-youtube/src/index.ts:55`, and is resolved at `:157`; the
   value reaches the iframe via
-  `packages/provider-youtube/src/attachment.ts:146`). A
+  `packages/provider-youtube/src/attachment.ts:149`). A
   `Player.Root` consumer **can** change `host`: `provider-loaders.ts` passes
   `providerOptions?.youtube` straight to `createYouTubeProvider`, so every key
   `YouTubeProviderOptions` declares — `host` and the `loadIframeApi` injection
@@ -58,7 +58,7 @@ Notes, per row:
   API script itself always comes from `www.youtube.com` — that one `host` does
   not move.
 - **Vimeo**'s embed iframe is built from `player.vimeo.com`
-  (`packages/provider-vimeo/src/attachment.ts:59`). The SDK
+  (`packages/provider-vimeo/src/attachment.ts:60`). The SDK
   (`@vimeo/player`, pinned `2.30.4`) is a bundled dependency, imported
   dynamically — nothing is fetched from a Vimeo CDN
   (`packages/provider-vimeo/README.md`). The oEmbed probe at
@@ -69,7 +69,7 @@ Notes, per row:
   calls `createVimeoProvider(media, source)` with no options at all — so a
   `Player.Root` consumer cannot set `customControls` today, and the probe
   never fires through the React path. `dnt` (on by default unless set to
-  `false`, `packages/provider-vimeo/src/attachment.ts:62`) asks Vimeo not to
+  `false`, `packages/provider-vimeo/src/attachment.ts:63`) asks Vimeo not to
   track the session; it is a separate switch and has no effect on whether the
   oEmbed probe runs. `dnt` and `controls` are reachable only by calling
   `createVimeoProvider` directly — unlike YouTube's bag above, `Vimeo` has no
@@ -107,13 +107,14 @@ Notes, per row:
   metrics to, since it is fetched at runtime rather than bundled — treat
   that as an open question if you need to pin it down, rather than an origin
   this table has verified. `dnt` (on by default,
-  `packages/provider-wistia/src/attachment.ts:201`) asks Wistia not to track
+  `packages/provider-wistia/src/attachment.ts:235`) asks Wistia not to track
   the session; it is a separate switch from the Mux module. Wistia's
-  provider options (`controls`, `dnt`, `loop`, `playerColor`, `swatch`,
-  `poster`, `transparentLetterbox`) are, unlike YouTube's and Vimeo's,
-  reachable from `Player.Root` via
-  `providerOptions={{ wistia: {...} }}`
-  (`packages/react/src/provider-loaders.ts`).
+  provider options (`controls`, `dnt`, `playerColor`, `swatch`, `poster`,
+  `transparentLetterbox`) are, unlike YouTube's and Vimeo's, reachable from
+  `Player.Root` via `providerOptions={{ wistia: {...} }}`
+  (`packages/react/src/provider-loaders.ts`). `loop` is the one exception:
+  SIDEPRO-210 omitted it from that bag, because `Root`'s own `loop` prop now
+  writes it (ADR-0004).
 - **The `backpack-parity` branch's storybook Backpack wrapper** is not in any
   published package there — `apps/storybook`'s `package.json` marks it
   `"private": true` on that branch. It fetches YouTube's oEmbed endpoint
