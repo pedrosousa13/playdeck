@@ -75,6 +75,40 @@ const withDeadline = <Value>(
 const attributeName = (option: WistiaPlayerAttribute): string =>
   option.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 
+// `playerColor` and `poster` are documented as a hex colour and an image URL
+// but reach the provider as bare strings, so each is checked here — the one
+// place an option becomes an attribute, which covers every consumer of the
+// package rather than only those coming through `Player.Root`. A value that
+// fails its check sets no attribute, the same element state as omitting the
+// option, and the drop is silent: one bad presentation option must not fail
+// playback.
+//
+// Every hex form CSS Color 4 spells: three, four, six, or eight digits, with
+// or without the hash — the four- and eight-digit forms carry an alpha channel.
+// The hash is optional because Wistia's own examples write `playerColor` bare,
+// and the attribute is handed to the player as given.
+const isHexColor = (value: string): boolean =>
+  /^#?(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value);
+
+// `https:` only. `http:` would downgrade the page, `data:` carries the image
+// itself into an attribute Reely writes, and a relative or malformed value
+// does not parse without a base — none of which this provider passes on.
+//
+// The prefix test is what the parse alone does not give: `new URL()` resolves
+// `https:poster.png` to `https://poster.png/` and trims surrounding
+// whitespace, so a scheme-prefixed relative or padded value parses as `https:`
+// while the string written to the attribute is neither. Requiring the value
+// itself to start `https://` keeps the two in step, and the caller's own
+// string still reaches the element unaltered.
+const isHttpsUrl = (value: string): boolean => {
+  if (!/^https:\/\//i.test(value)) return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 // The embed options this adapter expresses, read when the element is built
 // rather than snapshotted at construction. Kept in step with
 // `WistiaProviderOptions` in `index.ts`.
@@ -211,14 +245,15 @@ export const createWistiaAttachment = (
 
     // These four are presentation-only and each has no Wistia-side default to
     // preserve, so an omitted option sets no attribute at all rather than a
-    // computed 'false' or empty string.
-    if (options.playerColor !== undefined) {
+    // computed 'false' or empty string. A `playerColor` or `poster` that fails
+    // its check is dropped onto that same path.
+    if (options.playerColor !== undefined && isHexColor(options.playerColor)) {
       setOption('playerColor', options.playerColor);
     }
     if (options.swatch !== undefined) {
       setOption('swatch', options.swatch ? 'true' : 'false');
     }
-    if (options.poster !== undefined) {
+    if (options.poster !== undefined && isHttpsUrl(options.poster)) {
       setOption('poster', options.poster);
     }
     if (options.transparentLetterbox !== undefined) {
