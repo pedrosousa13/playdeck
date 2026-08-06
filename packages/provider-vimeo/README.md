@@ -53,12 +53,12 @@ origins list and what a page's CSP has to allow.
 
 ## Exports
 
-| Export                 | What it is                                                   |
-| ---------------------- | ------------------------------------------------------------ |
-| `createVimeoProvider`  | Builds the adapter over a mount element and a `VimeoSource`. |
-| `VimeoProviderOptions` | `controls`, `dnt`, `customControls`.                         |
-| `VimeoMountElement`    | What the adapter can mount into.                             |
-| `VimeoProviderAdapter` | The adapter's own type.                                      |
+| Export                 | What it is                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `createVimeoProvider`  | Builds the adapter over a mount element and a `VimeoSource`.                                                                          |
+| `VimeoProviderOptions` | `controls`, `dnt`, `loop`, `customControls`. Through `Player.Root`, `controls` and `loop` are its own props (ADR-0004), not bag keys. |
+| `VimeoMountElement`    | What the adapter can mount into.                                                                                                      |
+| `VimeoProviderAdapter` | The adapter's own type.                                                                                                               |
 
 ## What it reports honestly
 

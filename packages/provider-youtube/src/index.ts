@@ -26,11 +26,18 @@ export { PLAYBACK_CONFIRMATION_TIMEOUT_MS } from './playback.js';
 export type YouTubeProviderOptions = {
   /**
    * Show YouTube's own player chrome. Unset and `false` both mean chromeless
-   * -- deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:61`,
+   * -- deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:62`,
    * `options.controls === true ? '1' : '0'`), so the two providers cannot
    * drift.
    */
   readonly controls?: boolean;
+  /**
+   * Restart the video when it ends. `Root`'s `loop` prop is folded into this
+   * bag by `packages/react/src/root.tsx`'s `resolvedProviderOptions`, so
+   * `PlayerProviderOptions` omits the key and this is not a second home for
+   * the setting (ADR-0004).
+   */
+  readonly loop?: boolean;
   /**
    * Embed host; defaults to the privacy-enhanced youtube-nocookie.com. Only
    * the two origins YouTube serves the embed from are honoured — anything
@@ -146,6 +153,7 @@ export const createYouTubeProvider = (
   const attachment = createYouTubeAttachment(mount, videoId, {
     emit,
     controls: options.controls,
+    loop: options.loop,
     host: resolveHost(options.host),
     loadIframeApi: options.loadIframeApi ?? loadYouTubeIframeApi,
     getCapabilities: playerCapabilities,
