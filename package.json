@@ -13,7 +13,6 @@
     "typecheck": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "test:e2e": "playwright test",
-    "test:parity": "playwright test --config=playwright.parity.config.ts",
     "test:storybook": "pnpm --filter @reely/storybook test",
     "test:integrations": "turbo run build --filter=@reely/integration-next-image && pnpm --filter @reely/integration-next-image test:integration",
     "test:packages": "node scripts/verify-packaging.mjs",
