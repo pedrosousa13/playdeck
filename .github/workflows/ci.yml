@@ -30,6 +30,14 @@ jobs:
       # the examples project resolves through its `paths`. test:docs proves the
       # checker itself works before docs:check trusts it.
       - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:docs && pnpm docs:check
+      # Its own step so the report stands alone in the log. `pnpm audit` prints
+      # every advisory it found; the second, silent run is the gate and fails
+      # only on high and critical, so a moderate one is visible here without
+      # turning the build red — a gate that fired on every transitive dev
+      # advisory would just get ignored, and one that hid what it tolerated
+      # would be worse than none. Not a separate job: `main`'s required checks
+      # are a fixed list, so a new job would gate nothing.
+      - run: pnpm test:audit
 
   unit:
     runs-on: ubuntu-latest
