@@ -7,9 +7,10 @@ import {
   type DeclarableMeasurement
 } from './declared-divergences';
 import {
-  AFFORDANCE_SELECTOR,
+  activate,
   measure,
   measureHoverZoom,
+  ROOT_SELECTOR,
   story,
   type HoverMeasurement,
   type Measurement
@@ -123,15 +124,16 @@ function compare(
 const nearly = (a: number, b: number, tolerance: number): boolean =>
   Math.abs(a - b) <= tolerance;
 
-async function clickFirstAffordance(page: Page): Promise<boolean> {
-  const target = page.locator(AFFORDANCE_SELECTOR).first();
-  if ((await target.count()) === 0) return false;
-  try {
-    await target.click({ timeout: 5_000 });
-    return true;
-  } catch {
-    return false;
-  }
+/** Why one side's player root did not become visible, in that side's own
+ * terms — absent from the document, or present and hidden, and by what. */
+async function describeRoot(page: Page): Promise<string> {
+  return page.evaluate((selector) => {
+    const el = document.querySelector(selector);
+    if (el === null) return 'no .ef-video-player in the document';
+    const { width, height } = el.getBoundingClientRect();
+    const { display, visibility, opacity } = getComputedStyle(el);
+    return `.ef-video-player is in the document but not visible: display=${display}, visibility=${visibility}, opacity=${opacity}, box=${width}×${height}`;
+  }, ROOT_SELECTOR);
 }
 
 function compareMeasurements(
@@ -435,13 +437,25 @@ test('every resolvable parity pair is measured through one function, and every d
     }
     if (!backpackRootVisible || !reelyRootVisible) {
       const which = backpackRootVisible ? 'reely' : 'backpack';
+      // "Not visible within the wait" and "not in the document" are different
+      // facts, and saying the first when the second is false misreports the
+      // component. Backpack's `VideoHoverPreview` is the case that forced this
+      // apart: it renders `.ef-video-player` at rest and hides it with
+      // `display: none` until the preview runs, so the first wording of this
+      // message ("never rendered") was untrue of all nine of its rows. The
+      // pair stays unmeasurable either way — a `display: none` box has no
+      // geometry to compare against a laid-out one — but the report now names
+      // what was on the page.
+      const detail = await describeRoot(
+        backpackRootVisible ? reelyPage : backpackPage
+      );
       console.log(
-        `    UNMEASURABLE: ${which} never rendered .ef-video-player within ${ROOT_WAIT_MS}ms`
+        `    UNMEASURABLE: ${which}'s .ef-video-player was not visible within ${ROOT_WAIT_MS}ms — ${detail}`
       );
       outcomes.push({
         label,
         status: 'unmeasurable',
-        reason: `${which} never rendered .ef-video-player within ${ROOT_WAIT_MS}ms`
+        reason: `${which}'s .ef-video-player was not visible within ${ROOT_WAIT_MS}ms — ${detail}`
       });
       continue;
     }
@@ -473,8 +487,8 @@ test('every resolvable parity pair is measured through one function, and every d
     // wait is reported through the `post` measurement rather than failing
     // the pair outright, since Backpack's own click may depend on real
     // network the plan already warns is slow.
-    const backpackClicked = await clickFirstAffordance(backpackPage);
-    const reelyClicked = await clickFirstAffordance(reelyPage);
+    const backpackClicked = await activate(backpackPage);
+    const reelyClicked = await activate(reelyPage);
     await backpackPage.waitForTimeout(POST_CLICK_WAIT_MS);
     await reelyPage.waitForTimeout(POST_CLICK_WAIT_MS);
     console.log(

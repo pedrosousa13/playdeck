@@ -22,7 +22,17 @@ export default defineConfig({
   // baseline set, produced and compared on the same machine.
   snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}',
   expect: { toHaveScreenshot: { threshold: 0.1 } },
-  use: { baseURL: 'http://127.0.0.1:4173' },
+  use: {
+    baseURL: 'http://127.0.0.1:4173',
+    // Playwright's own default here is 0, meaning an action retries its
+    // actionability check forever. That is not survivable in a sweep whose
+    // single test drives 36 pairs: one element that can never satisfy a check
+    // burns the whole run's budget and every pair after it is lost. The first
+    // attempt at the measurement sweep hung exactly this way — see
+    // `measure.ts`'s `measureHoverZoom` comment. A bounded action fails one
+    // reading and the sweep carries on reporting the other 35 pairs.
+    actionTimeout: 10_000
+  },
   webServer: [
     // Reely's own Storybook, spawned exactly as playwright.config.ts spawns
     // it — same command, same port — so a story id that resolves there

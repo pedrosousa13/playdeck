@@ -181,24 +181,26 @@ export interface HoverMeasurement {
   root: HoverReading | null;
 }
 
-const readHover = async (locator: Locator): Promise<HoverReading | null> => {
+/** The element's own `transition-duration`, in milliseconds, or `null` when
+ * the element is not on the page. `getComputedStyle` reports seconds
+ * (`"0.2s"`), and only the first entry of a comma-separated list is read —
+ * both stylesheets declare a single transition on these elements. */
+const readTransitionDurationMs = async (
+  locator: Locator
+): Promise<number | null> => {
   if ((await locator.count()) === 0) return null;
-  await locator.hover();
-  // The transition needs its own duration to settle before the scale is
-  // meaningful to read — the same idiom
-  // `apps/storybook/stories/backpack/backpack-video.stories.tsx`'s own
-  // `afterTransition` helper uses, reading the duration from the element
-  // rather than hard-coding it so this tracks either stylesheet.
-  const transitionDurationMs = await locator.evaluate((el) => {
+  return locator.evaluate((el) => {
     const { transitionDuration } = getComputedStyle(el);
     return Number.parseFloat(transitionDuration) * 1000;
   });
-  await locator.page().waitForTimeout(transitionDurationMs + 100);
-  const scale = await locator.evaluate((el) => {
+};
+
+const readScale = async (locator: Locator): Promise<number | null> => {
+  if ((await locator.count()) === 0) return null;
+  return locator.evaluate((el) => {
     const { transform } = getComputedStyle(el);
     return transform === 'none' ? 1 : new DOMMatrix(transform).a;
   });
-  return { scale, transitionDurationMs };
 };
 
 /**
@@ -206,18 +208,93 @@ const readHover = async (locator: Locator): Promise<HoverReading | null> => {
  * and the root player box, read as computed style rather than inferred from
  * a class name — Reely's story-local CSS reaches `scale(1.05)` a different
  * way than Backpack's tailwind-variants compound variant does, so only the
- * resolved value is comparable. `locator.hover()` dispatches a real pointer
- * move so the browser's own `:hover` matches, unlike a synthetic event
- * (`backpack-video.stories.tsx`'s own `hover` helper makes the same point
- * about why it drives a real browser pointer rather than
- * `userEvent.hover`). The mouse is parked away from the player afterwards so
- * a later measurement in the same pair does not inherit a stale `:hover`.
+ * resolved value is comparable.
+ *
+ * The pointer is moved to the middle of the player box and left there while
+ * both elements are read, rather than each element being hovered in turn.
+ * That is the gesture both stylesheets are actually written against —
+ * Backpack zooms its cover through `group-hover:scale-105` on the root's
+ * `group`, and the wrapper through
+ * `.ef-video-player:hover .ef-video-cover[data-hover-effect='true'] .ef-video-cover-image`
+ * (`backpack-video-styles.ts:378`) — so one pointer position settles both.
+ *
+ * It also has to be a raw `mouse.move` rather than `locator.hover()` on the
+ * cover. `hover()` waits for its target to pass an actionability check that
+ * includes receiving pointer events, and Reely's cover deliberately never
+ * does: `button.ef-video-controller` covers the whole box above it, so a
+ * hit test at the cover's centre returns the button. Playwright's default
+ * action timeout is 0, meaning no timeout, so that check retries until the
+ * whole test times out — which is what the first attempt at this sweep hung
+ * on, for 7 minutes on the first pair whose Reely side had a cover at all.
+ *
+ * The mouse is parked away from the player afterwards so a later measurement
+ * in the same pair does not inherit a stale `:hover`.
  */
 export async function measureHoverZoom(page: Page): Promise<HoverMeasurement> {
-  const cover = await readHover(page.locator(COVER_SELECTOR).first());
-  const root = await readHover(page.locator(ROOT_SELECTOR).first());
+  const rootLocator = page.locator(ROOT_SELECTOR).first();
+  const coverLocator = page.locator(COVER_SELECTOR).first();
+
+  const box =
+    (await rootLocator.count()) === 0 ? null : await rootLocator.boundingBox();
+  if (box === null) return { cover: null, root: null };
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  const coverDuration = await readTransitionDurationMs(coverLocator);
+  const rootDuration = await readTransitionDurationMs(rootLocator);
+  // Read the durations from the elements rather than hard-coding a wait, the
+  // same idiom `backpack-video.stories.tsx`'s own `afterTransition` helper
+  // uses, so this tracks either stylesheet. The longer of the two settles
+  // both.
+  await page.waitForTimeout(
+    Math.max(coverDuration ?? 0, rootDuration ?? 0) + 100
+  );
+
+  const coverScale = await readScale(coverLocator);
+  const rootScale = await readScale(rootLocator);
   await page.mouse.move(0, 0);
-  return { cover, root };
+
+  return {
+    cover:
+      coverDuration === null || coverScale === null
+        ? null
+        : { scale: coverScale, transitionDurationMs: coverDuration },
+    root:
+      rootDuration === null || rootScale === null
+        ? null
+        : { scale: rootScale, transitionDurationMs: rootDuration }
+  };
+}
+
+/**
+ * Activates the player the way a viewer does — one click in the middle of
+ * `.ef-video-player` — and reports whether the click landed.
+ *
+ * Deliberately a click on the root box rather than on a queried affordance,
+ * for two reasons found by running the sweep. First, both Storybook iframes
+ * carry three zero-sized `<button>Set string</button>` elements of their own
+ * outside the player, so any page-wide affordance query reaches one of those
+ * before it reaches the player and the click times out against a 0×0 box.
+ * Second, and the reason scoping alone is not enough: the two sides do not
+ * agree on what the click target *is*. Reely's is a real
+ * `button.ef-video-controller`; Backpack's, whenever `light` resolves no
+ * cover image, is react-player's own `div.react-player__preview` carrying
+ * `tabindex="0"` and neither a role nor a name — precisely the accessibility
+ * divergence `docs/backpack-parity.md`'s "Where Reely is better" table
+ * records. Selecting by role would therefore activate Reely and not Backpack,
+ * and every post-activation reading would compare an activated player against
+ * a dormant one. Clicking the box hits whichever element either side put on
+ * top of it, through one identical gesture — which is the condition this whole
+ * module exists to hold.
+ */
+export async function activate(page: Page): Promise<boolean> {
+  const root = page.locator(ROOT_SELECTOR).first();
+  if ((await root.count()) === 0) return false;
+  try {
+    await root.click({ timeout: 5_000 });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export const story = (id: string): string =>

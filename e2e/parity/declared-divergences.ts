@@ -31,26 +31,48 @@ const ACCESSIBLE_NAME_REASON =
   "container; Reely's cover sits inside `Player.Poster`, which is " +
   '`aria-hidden`, so the labelled affordance there is the play button ' +
   'underneath instead ("Play video"/"Pause video"), not the cover. Tracked ' +
-  'as SIDEPRO-214. Applies to every row with a custom placeholder cover — ' +
-  'the row-level note repeats this same sentence.';
+  'as SIDEPRO-214. Declared only for the rows where the sweep actually ' +
+  'observes it — a Backpack cover container carrying `role="button"` on ' +
+  'screen at the same moment — never for a row that merely mentions a ' +
+  'placeholder image in its note.';
 
 const PLAY_ICON_REASON =
   '"Deliberate divergences" (docs/backpack-parity.md): under `controls: ' +
   "true`, Backpack still draws its own play icon over the provider's chrome " +
   'until playback has started once; Reely draws the icon only where it owns ' +
   'the surface, so `controls: true` gets neither the icon nor the toggle, ' +
-  'at any point. The `WithControls` and `Loop` rows are both `partial` for ' +
-  'exactly this.';
+  'at any point. Both declared rows set `controls: true`. `WithControls` is ' +
+  '`partial` for exactly this; `Loop` is `partial` for SIDEPRO-210 instead ' +
+  '(its `loop` never reaches a Vimeo or YouTube provider) and carries this ' +
+  'divergence on top of that, through the same `controls: true`.';
+
+// Two entries that were on this list before any sweep had run were removed
+// once one had, because neither survived the evidence:
+//
+// - `Video.stories.tsx` → `CustomCoverImage`. That row does not resolve at
+//   all — the matrix's shorthand omits a qualifier Backpack's real story name
+//   carries ("Custom Cover Image (Vimeo)"), so it is one of the two unresolved
+//   rows the resolver reports. The sweep has never measured it, so nothing has
+//   ever shown this divergence to be real there.
+// - `AutoplayVideo.stories.tsx` → `WithCustomPlaceholderImage`. The sweep
+//   measures `cover.present` as `false` on BOTH sides of that row:
+//   `AutoplayVideo` forces `light={false}` and starts muted playback, so no
+//   Backpack cover container renders and there is no labelled cover to
+//   diverge about. What the entry actually silenced was
+//   `backpack=[] reely=["BUTTON[Pause video]"]` — Backpack exposing no
+//   affordance at all under the player — which is a different divergence, and
+//   one the sibling `AutoplayVideo` → `Default` row reports as an undeclared
+//   finding on identical values. An entry that turns the same observation
+//   green on one row and red on the next is not describing anything.
 
 const DECLARED: readonly DeclaredDivergence[] = [
-  // Video.stories.tsx: rows with a custom placeholder cover image, whose own
-  // notes read "alt reaches the DOM but not the accessibility tree".
-  {
-    section: 'Video.stories.tsx',
-    backpackStoryName: 'CustomCoverImage',
-    measurement: 'accessibleName',
-    reason: ACCESSIBLE_NAME_REASON
-  },
+  // Video.stories.tsx: the rows where the sweep observes Backpack's cover
+  // container on screen as a `role="button"` while Reely's labelled affordance
+  // is the play button underneath. Measured values, in order below:
+  // `["DIV[custom cover image]"]`, `["DIV[]"]` (the `renderCustomImage` path
+  // leaves the container unnamed, the axe `button-name` half of the same doc
+  // entry) and `["DIV[custom cover image]"]`, each against Reely's
+  // `["BUTTON[Play video]"]`.
   {
     section: 'Video.stories.tsx',
     backpackStoryName: 'CustomCoverImageYouTube',
@@ -69,14 +91,8 @@ const DECLARED: readonly DeclaredDivergence[] = [
     measurement: 'accessibleName',
     reason: ACCESSIBLE_NAME_REASON
   },
-  // AutoplayVideo.stories.tsx's own custom-cover row carries the same note.
-  {
-    section: 'AutoplayVideo.stories.tsx',
-    backpackStoryName: 'WithCustomPlaceholderImage',
-    measurement: 'accessibleName',
-    reason: ACCESSIBLE_NAME_REASON
-  },
-  // The two `partial` controls:true rows.
+  // The two `controls: true` rows. The sweep observes `backpack=true
+  // reely=false` on both, in both the pre- and post-activation states.
   {
     section: 'Video.stories.tsx',
     backpackStoryName: 'WithControls',
