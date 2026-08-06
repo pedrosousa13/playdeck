@@ -123,11 +123,17 @@ const nativeOptionsEqual = (
 // Every key either side declares, compared as a value: a key set to `undefined`
 // therefore equals that key being absent, and an absent bag equals an empty one.
 // All three mean the same thing to a provider, which sets an attribute only for
-// an option that is not `undefined` (`provider-wistia/src/attachment.ts:215`,
-// `if (options.playerColor !== undefined)`). Counting keys instead would rebuild
-// a live embed for two bags that build the identical element -- which is what a
-// caller assembling its bag per render, one key at a time from its own props,
-// hands this function.
+// an option that is not `undefined` -- and, where it format-checks the value,
+// only for one that passes (`provider-wistia/src/attachment.ts:250`,
+// `if (options.playerColor !== undefined && isHexColor(options.playerColor))`).
+// That check makes equality here stricter than the element it stands in for: a
+// rejected `playerColor` sets no attribute, so `{ playerColor: 'red' }` builds
+// the identical element to `{}` yet compares unequal, and a caller that keeps
+// supplying it rebuilds the embed every render. Equal bags still mean an
+// identical element, which is the direction this guards. Counting keys instead
+// would rebuild a live embed for two bags that build the identical element --
+// which is what a caller assembling its bag per render, one key at a time from
+// its own props, hands this function.
 const providerBagEqual = (
   left: Readonly<Record<string, unknown>> | undefined,
   right: Readonly<Record<string, unknown>> | undefined

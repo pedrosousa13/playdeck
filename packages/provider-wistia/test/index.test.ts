@@ -249,6 +249,16 @@ test('keeps a hashed hex player color', async () => {
 });
 
 test.each([
+  ['four digits', 'f00f'],
+  ['four hashed digits', '#f00f'],
+  ['eight digits', 'ff0000ff'],
+  ['eight hashed digits', '#ff0000ff']
+])('keeps an alpha hex player color of %s', async (_form, playerColor) => {
+  const result = await setup({ options: { playerColor } });
+  expect(element(result).getAttribute('player-color')).toBe(playerColor);
+});
+
+test.each([
   ['a color keyword', 'red'],
   ['an rgb() function', 'rgb(255, 0, 0)'],
   ['a non-hex digit', 'gg0000'],
@@ -281,7 +291,10 @@ test.each([
   ['a root-relative path', '/poster.png'],
   ['a protocol-relative URL', '//example.test/poster.png'],
   ['an unparseable string', 'not a url'],
-  ['an empty string', '']
+  ['an empty string', ''],
+  ['a scheme-prefixed relative path', 'https:poster.png'],
+  ['a scheme-prefixed single-slash path', 'https:/example.test/poster.png'],
+  ['an https: URL padded with whitespace', ' https://example.test/poster.png ']
 ])('drops a poster that is %s', async (_form, poster) => {
   const result = await setup({ options: { poster } });
   expect(element(result).getAttribute('poster')).toBeNull();

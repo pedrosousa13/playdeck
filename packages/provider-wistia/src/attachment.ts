@@ -83,15 +83,25 @@ const attributeName = (option: WistiaPlayerAttribute): string =>
 // option, and the drop is silent: one bad presentation option must not fail
 // playback.
 //
-// Three or six digits, with or without the hash: Wistia's own examples write
-// `playerColor` bare, and the attribute is handed to the player as given.
+// Every hex form CSS Color 4 spells: three, four, six, or eight digits, with
+// or without the hash — the four- and eight-digit forms carry an alpha channel.
+// The hash is optional because Wistia's own examples write `playerColor` bare,
+// and the attribute is handed to the player as given.
 const isHexColor = (value: string): boolean =>
-  /^#?(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value);
+  /^#?(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value);
 
 // `https:` only. `http:` would downgrade the page, `data:` carries the image
 // itself into an attribute Reely writes, and a relative or malformed value
 // does not parse without a base — none of which this provider passes on.
+//
+// The prefix test is what the parse alone does not give: `new URL()` resolves
+// `https:poster.png` to `https://poster.png/` and trims surrounding
+// whitespace, so a scheme-prefixed relative or padded value parses as `https:`
+// while the string written to the attribute is neither. Requiring the value
+// itself to start `https://` keeps the two in step, and the caller's own
+// string still reaches the element unaltered.
 const isHttpsUrl = (value: string): boolean => {
+  if (!/^https:\/\//i.test(value)) return false;
   try {
     return new URL(value).protocol === 'https:';
   } catch {
