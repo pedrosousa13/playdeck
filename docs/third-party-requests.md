@@ -110,17 +110,15 @@ Notes, per row:
   reachable from `Player.Root` via
   `providerOptions={{ wistia: {...} }}`
   (`packages/react/src/provider-loaders.ts`).
-- **The storybook Backpack wrapper**
-  (`apps/storybook/stories/backpack/video-thumbnail.ts`) is not in any
-  published package — `apps/storybook`'s `package.json` marks it
-  `"private": true`. It fetches YouTube's oEmbed endpoint
+- **The storybook Backpack wrapper** is not in any published package —
+  `apps/storybook`'s `package.json` marks it `"private": true`. It fetches
+  YouTube's oEmbed endpoint
   (`https://www.youtube.com/oembed?url=...&format=json`) and Vimeo's
   (`https://vimeo.com/api/oembed.json?url=...`), then only renders the
   `thumbnail_url` field back if it is `https:` and its hostname is
   `img.youtube.com`, `ytimg.com` or a subdomain of it, or `vimeocdn.com` or a
-  subdomain of it (`video-thumbnail.ts`'s `isYouTubeImageHost` /
-  `isVimeoImageHost`). Do not add these origins to a CSP for code you do not
-  ship — this wrapper exists to prove a migration path, not to publish.
+  subdomain of it. Do not add these origins to a CSP for code you do not ship
+  — this wrapper exists to prove a migration path, not to publish.
 
 ## When each request happens
 
@@ -164,11 +162,10 @@ Mapped onto the origins above:
   given a URL and no `placeholderImageSrc` — the cover has to be ready before
   any player attaches, so it cannot wait on the same gate the player does.
   But the call site only ever passes a URL when the wrapper's own `light` prop
-  is true and playback has not started
-  (`apps/storybook/stories/backpack/backpack-video.tsx:501-502`,
-  `light && !startsPlaying ? url : undefined`), and `light` defaults to
-  `false` (`:459`) — so by default this wrapper makes no oEmbed request at
-  all, and the request only exists for a caller who opts into `light`.
+  is true and playback has not started (`light && !startsPlaying ? url :
+  undefined`), and `light` defaults to `false` — so by default this wrapper
+  makes no oEmbed request at all, and the request only exists for a caller who
+  opts into `light`.
 
 ## The SRI bargain
 

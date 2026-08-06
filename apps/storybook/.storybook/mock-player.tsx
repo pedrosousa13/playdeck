@@ -25,9 +25,9 @@ import { useEffect, useRef, type ReactNode } from 'react';
  *   confirming `playback` patch instead of doing nothing, so a story can
  *   drive playback through the `PlayerHandle` ref it already gets back —
  *   `activateFromInteraction` then `play`, or `pause` on its own — and see
- *   `onPlayChange` and the surface follow, the same way
- *   `createReportingProvider` lets a contract test do it
- *   (`stories/backpack/reporting-provider.ts`). `playResult` still decides
+ *   `onPlayChange` and the surface follow, the same way the `backpack-parity`
+ *   branch's `createReportingProvider` let a contract test do it.
+ *   `playResult` still decides
  *   what `play()` resolves to, and a failing one still emits nothing: a
  *   command that did not succeed has nothing to confirm. `seekTo` is reported
  *   under the same knob — it emits the new `currentTime` when set and is a
@@ -125,9 +125,9 @@ const createMockAdapter = (
     // never staged.
     //
     // Reporting it is what lets a story put a position on the player at all —
-    // nothing here decodes, so no position arrives by itself — which is what
-    // `Backpack parity/Mock/VideoHoverPreview` needs to watch a preview window
-    // enforced by position rather than by a clock.
+    // nothing here decodes, so no position arrives by itself, which matters
+    // for a story that enforces a preview window by position rather than by
+    // a clock.
     seekTo: reportsPlayback
       ? async (time: number) => {
           emit({ currentTime: time });

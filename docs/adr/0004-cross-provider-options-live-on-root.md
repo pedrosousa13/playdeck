@@ -91,7 +91,7 @@ missing, not the fix: nothing here changes `loop`.
   `apps/storybook`'s Backpack wrapper is the worked example: it wrote
   `youtube: { controls }` for one provider, drew its own `Player.Controls` over
   whatever chrome that produced, and SIDEPRO-222 found the two bars that made on
-  YouTube. `docs/backpack-parity.md`'s `WithControls` row records what is left.
+  YouTube. Wistia's fan-out is what is left undone.
 - An option that starts per-provider and turns out to be cross-provider cannot
   move quietly: the bag key is public API, so relocating it to a prop is a
   breaking change for anyone who wrote it. The boundary is worth applying when

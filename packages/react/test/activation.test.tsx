@@ -2019,11 +2019,10 @@ test('a dormant interaction root activates and plays from a single ref call', as
 // the pair, in this order — `activateFromInteraction()` then `play()`
 // (`use-activation.ts:324-356`, its
 // `const activateFromInteraction = useCallback`;
-// `player-controller.ts:381-386`) — the way
-// `apps/storybook/stories/backpack/backpack-video.stories.tsx`'s
-// `ExternalEventsVideo`/`SocialCarouselIntegrationVideo` and
-// `external-control.contract.test.ts`'s file-level comment both describe
-// issuing it. Against a still-`dormant` player, the explicit `play()` has
+// `player-controller.ts:381-386`) — the way the `backpack-parity` branch's
+// `ExternalEventsVideo`/`SocialCarouselIntegrationVideo` stories and its
+// external-control contract test both describe issuing it. Against a
+// still-`dormant` player, the explicit `play()` has
 // no provider to reach yet and resolves `{ ok: false, reason: 'not-ready' }`
 // (`player-controller.ts:383-384`) rather than queuing anything — dropped,
 // not doubled — so the pair must not cost a second, real play once the
@@ -2093,14 +2092,14 @@ test('usePlayerActions() reaches the same activateFromInteraction binding', asyn
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
 });
 
-// Two places in the Storybook workspace cast this same handle back to
-// `PlayerController` to reach `setProvider` directly: the mock-player decorator
+// Two places cast this same handle back to `PlayerController` to reach
+// `setProvider` directly: the mock-player decorator
 // (apps/storybook/.storybook/mock-player.tsx:178, its
 // `as PlayerController` cast, reaching `:184`'s `controller.setProvider`) and
-// `useReportingProvider`, which every wrapper contract test stages its provider
-// through (apps/storybook/stories/backpack/reporting-provider.ts:72, the same
-// cast, reaching `:75`'s `controller.setProvider`). Composing the handle from the
-// controller plus `activateFromInteraction` must not lose that escape hatch.
+// the `backpack-parity` branch's `useReportingProvider`, which every wrapper
+// contract test there staged its provider through, via the same cast.
+// Composing the handle from the controller plus `activateFromInteraction`
+// must not lose that escape hatch.
 test('the ref handle still exposes the provider-facing setProvider escape hatch', () => {
   const handle = createRef<Player.PlayerHandle>();
   render(fixture({ ref: handle }));

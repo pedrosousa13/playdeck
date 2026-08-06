@@ -1,10 +1,10 @@
 # Backpack and react-player are scenario sources, not a specification
 
-The `BackpackVideo` wrapper in `apps/storybook/stories/backpack/` reimplements a
-slice of EF Backpack's `VideoPlayer` prop API on Reely primitives, and
-`docs/backpack-parity.md` tracks Backpack story against Reely story. The shape
-of that work invites a reading it should not have: that Backpack's behaviour is
-the specification and a difference is a defect.
+The `backpack-parity` branch's `BackpackVideo` wrapper reimplements a slice of
+EF Backpack's `VideoPlayer` prop API on Reely primitives, tracking Backpack
+story against Reely story in a parity matrix. The shape of that work invites a
+reading it should not have: that Backpack's behaviour is the specification and
+a difference is a defect.
 
 It is the other way round. Backpack's stories are valuable because they are a
 **catalogue of scenarios** a real consumer already depends on — a cover image
@@ -43,11 +43,11 @@ deferred to. Deference invites that error, because it stops the reader checking.
 
 ## What follows from it
 
-- **Divergences are documented, not hidden.** `docs/backpack-parity.md` carries a
-  "Deliberate divergences" section: what they do, why it is wrong, what Reely
-  does instead. It also lists the places Reely is currently _worse_, which is the
-  same discipline pointed inward — a section that only ever flattered Reely would
-  not be worth reading.
+- **Divergences are documented, not hidden.** The `backpack-parity` branch's
+  parity matrix carries a "Deliberate divergences" section: what they do, why
+  it is wrong, what Reely does instead. It also lists the places Reely is
+  currently _worse_, which is the same discipline pointed inward — a section
+  that only ever flattered Reely would not be worth reading.
 - **Citations stay, as provenance.** A `file:line` into the Backpack checkout is
   how a reader finds the source scenario or the origin of a prop name. It is not
   an argument. Comments that used it as one were rewritten.

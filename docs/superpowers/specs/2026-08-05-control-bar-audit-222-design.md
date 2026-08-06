@@ -310,7 +310,7 @@ invisible for volume, because both steps happen to equal `0.05`.
 
 ## 6. Why the Backpack wrapper ignored them
 
-`apps/storybook/stories/backpack/backpack-video.tsx:406-413` renders exactly
+The `backpack-parity` branch's `backpack-video.tsx:406-413` renders exactly
 one control inside `Player.Controls`:
 
 ```tsx
@@ -333,7 +333,7 @@ primitives + accessible semantics"), dated 2026-07-23. The full reference
 composition, using both primitives side by side with every other control
 against real Vimeo, YouTube, HLS, and MP4 sources, landed in commit
 `bfeede9` ("One composed reference example, exercised in CI"), dated
-2026-07-26, three days later. `apps/storybook/stories/backpack/backpack-video.tsx`
+2026-07-26, three days later. The `backpack-parity` branch's `backpack-video.tsx`
 was created in commit `3b46acd` ("Add a BackpackVideo compat wrapper..."),
 dated 2026-08-03, eleven days after `SeekSlider` shipped and eight days after
 the reference composition proved it working. A search of every commit
@@ -357,10 +357,10 @@ no criterion mentioning a seek bar or time display. Its own out-of-scope
 list names light mode, cover images, hover effect, viewport pause, and
 several other exclusions, never the shape of the control bar.
 
-`docs/backpack-parity.md:125` marks the affected `WithControls` row
-`partial`, with no tracked issue number. Every other acknowledged shortfall
-in the same document's "Where Reely is worse" table (`:60-68`) carries a
-SIDEPRO ticket. That table lists SIDEPRO-210, SIDEPRO-212, and SIDEPRO-214.
+The `backpack-parity` branch's parity matrix marks the affected `WithControls`
+row `partial`, with no tracked issue number. Every other acknowledged shortfall
+in the same document's "Where Reely is worse" table carries a SIDEPRO ticket.
+That table lists SIDEPRO-210, SIDEPRO-212, and SIDEPRO-214.
 The gap is recorded as descriptive fact, not as a reasoned, tracked
 divergence.
 
@@ -493,5 +493,5 @@ defect, or reads `new issue` where nothing does.
 | `SettingsMenuContent` ships a `scrollable-region-focusable` axe violation by default. The fix is an undocumented consumer prop                 | `packages/react/src/settings-menu.tsx:135-184`                                                | SIDEPRO-237 |
 | Responsive control folding is hand-rolled, duplicates markup, and already hit a CSS specificity trap                                           | `apps/storybook/stories/reference/reference-player.tsx:196-209`                               | SIDEPRO-238 |
 | The volume slider is dropped, not folded, below 420px, unlike `PipButton` and `AirPlayButton`, which get a menu fallback                       | `apps/storybook/stories/reference/reference-player.tsx:189-191`                               | SIDEPRO-240 |
-| Backpack wrapper's `controls={true}` on a YouTube source likely renders two overlapping control bars, untested                                 | `apps/storybook/stories/backpack/backpack-video.tsx:406-413,519-530`                          | SIDEPRO-223 |
-| Backpack wrapper's control bar omits `SeekSlider`, `Time`, `MuteButton`, `VolumeSlider`, and `FullscreenButton` with no recorded design reason | `apps/storybook/stories/backpack/backpack-video.tsx:406-413`                                  | SIDEPRO-239 |
+| Backpack wrapper's `controls={true}` on a YouTube source likely renders two overlapping control bars, untested                                 | `backpack-video.tsx:406-413,519-530` (`backpack-parity` branch)                               | SIDEPRO-223 |
+| Backpack wrapper's control bar omits `SeekSlider`, `Time`, `MuteButton`, `VolumeSlider`, and `FullscreenButton` with no recorded design reason | `backpack-video.tsx:406-413` (`backpack-parity` branch)                                       | SIDEPRO-239 |
