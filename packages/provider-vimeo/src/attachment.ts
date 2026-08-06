@@ -247,12 +247,10 @@ export const createVimeoAttachment = (
       if (isStale(thisGeneration)) return { ok: true };
       const iframe = mount.ownerDocument.createElement('iframe');
       iframe.src = vimeoEmbedUrl(source, options, mount.muted);
-      iframe.setAttribute(
-        'allow',
-        'autoplay; fullscreen; picture-in-picture; encrypted-media'
-      );
+      iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
       iframe.setAttribute('allowfullscreen', '');
       iframe.setAttribute('title', 'Vimeo video player');
+      iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
       iframe.style.position = 'absolute';
       iframe.style.inset = '0';
       iframe.style.width = '100%';
