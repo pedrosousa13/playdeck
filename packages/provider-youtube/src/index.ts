@@ -31,10 +31,44 @@ export type YouTubeProviderOptions = {
    * drift.
    */
   readonly controls?: boolean;
-  /** Embed host; defaults to the privacy-enhanced youtube-nocookie.com. */
+  /**
+   * Embed host; defaults to the privacy-enhanced youtube-nocookie.com. Only
+   * the two origins YouTube serves the embed from are honoured — anything
+   * else falls back to that default.
+   */
   readonly host?: string;
   /** Overridable iframe API loader so tests can inject a fake API object. */
   readonly loadIframeApi?: () => Promise<YouTubeIframeApi>;
+};
+
+// The privacy-enhanced embed host, and the only other origin YouTube serves
+// the iframe API's embed from.
+const DEFAULT_HOST = 'https://www.youtube-nocookie.com';
+const EMBED_HOSTS: readonly string[] = [
+  'https://www.youtube.com',
+  DEFAULT_HOST
+];
+
+// `host` reaches the iframe API as the origin the embed is built from
+// (`attachment.ts:146`, `host,` passed to `new api.Player`), so an origin
+// unrelated to YouTube would both relocate the iframe and receive the page's
+// own origin in the `origin` player var. It is checked here, where the default
+// is applied, so the default and the override flow through one decision.
+//
+// Compared on the parsed origin rather than the string: that resolves a
+// trailing slash and letter case to the spelling the allowlist holds, instead
+// of reading either as a third host. An unrecognised origin falls back rather
+// than throwing — a misconfigured `host` must degrade to the safe embed, not
+// break the page — and `new URL()` rejecting a malformed or empty value is the
+// same answer.
+const resolveHost = (host: string | undefined): string => {
+  if (host === undefined) return DEFAULT_HOST;
+  try {
+    const { origin } = new URL(host);
+    return EMBED_HOSTS.includes(origin) ? origin : DEFAULT_HOST;
+  } catch {
+    return DEFAULT_HOST;
+  }
 };
 
 type YouTubeCommand =
@@ -108,7 +142,7 @@ export const createYouTubeProvider = (
   const attachment = createYouTubeAttachment(mount, videoId, {
     emit,
     controls: options.controls,
-    host: options.host ?? 'https://www.youtube-nocookie.com',
+    host: resolveHost(options.host),
     loadIframeApi: options.loadIframeApi ?? loadYouTubeIframeApi,
     getCapabilities: playerCapabilities,
     playback,

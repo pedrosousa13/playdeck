@@ -15,14 +15,14 @@ something from the shipped code, it says so rather than guessing.
 
 ## Per-provider origins
 
-| Provider                                                                                | `script-src`                         | `frame-src`                                                            | `img-src`                                                                                                   | `connect-src`                                                                                               | `media-src`                                                               |
-| --------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **Native** (`@reely/provider-native`)                                                   | —                                    | —                                                                      | —                                                                                                           | —                                                                                                           | Your own media host — nothing Reely adds.                                 |
-| **HLS** (`@reely/provider-hls`)                                                         | —                                    | —                                                                      | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                     | Your own manifest/segment host, when the native engine plays it directly. |
-| **YouTube** (`@reely/provider-youtube`)                                                 | `www.youtube.com`                    | `www.youtube-nocookie.com` (always, via `Player.Root`; see note below) | —                                                                                                           | —                                                                                                           | —                                                                         |
-| **Vimeo** (`@reely/provider-vimeo`)                                                     | —                                    | `player.vimeo.com`                                                     | —                                                                                                           | `vimeo.com` — opt-in only, and unreachable via `Player.Root` today; see note below.                         | —                                                                         |
-| **Wistia** (`@reely/provider-wistia`)                                                   | `fast.wistia.net`, `fast.wistia.com` | `fast.wistia.net` (legacy-embed fallback; see note below)              | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | Same five hosts as `img-src`.                                             |
-| **Storybook Backpack wrapper** (`backpack-parity` branch) — not shipped, see note below | —                                    | —                                                                      | `img.youtube.com`, `ytimg.com` (+ subdomains), `vimeocdn.com` (+ subdomains)                                | `www.youtube.com`, `vimeo.com`                                                                              | —                                                                         |
+| Provider                                                                                | `script-src`                         | `frame-src`                                                                                     | `img-src`                                                                                                   | `connect-src`                                                                                               | `media-src`                                                               |
+| --------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Native** (`@reely/provider-native`)                                                   | —                                    | —                                                                                               | —                                                                                                           | —                                                                                                           | Your own media host — nothing Reely adds.                                 |
+| **HLS** (`@reely/provider-hls`)                                                         | —                                    | —                                                                                               | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                     | Your own manifest/segment host, when the native engine plays it directly. |
+| **YouTube** (`@reely/provider-youtube`)                                                 | `www.youtube.com`                    | `www.youtube-nocookie.com` (the default) or `www.youtube.com`, and nothing else; see note below | —                                                                                                           | —                                                                                                           | —                                                                         |
+| **Vimeo** (`@reely/provider-vimeo`)                                                     | —                                    | `player.vimeo.com`                                                                              | —                                                                                                           | `vimeo.com` — opt-in only, and unreachable via `Player.Root` today; see note below.                         | —                                                                         |
+| **Wistia** (`@reely/provider-wistia`)                                                   | `fast.wistia.net`, `fast.wistia.com` | `fast.wistia.net` (legacy-embed fallback; see note below)                                       | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | Same five hosts as `img-src`.                                             |
+| **Storybook Backpack wrapper** (`backpack-parity` branch) — not shipped, see note below | —                                    | —                                                                                               | `img.youtube.com`, `ytimg.com` (+ subdomains), `vimeocdn.com` (+ subdomains)                                | `www.youtube.com`, `vimeo.com`                                                                              | —                                                                         |
 
 Notes, per row:
 
@@ -41,19 +41,21 @@ Notes, per row:
   (`packages/provider-youtube/src/loader.ts:67`, appended to `document.head`
   at `:127-130`), with no `integrity` and no `crossOrigin` set. This does not
   change with the `host` option: `host` only decides which origin the _embed
-  iframe_ itself points at (`packages/provider-youtube/src/index.ts:103`
-  defaults it to `https://www.youtube-nocookie.com`; the value reaches the
-  iframe via `packages/provider-youtube/src/attachment.ts:142`). A
+  iframe_ itself points at (`packages/provider-youtube/src/index.ts:145`
+  resolves it to `https://www.youtube-nocookie.com`; the value reaches the
+  iframe via `packages/provider-youtube/src/attachment.ts:146`). A
   `Player.Root` consumer **can** change `host`: `provider-loaders.ts` passes
   `providerOptions?.youtube` straight to `createYouTubeProvider`, so every key
   `YouTubeProviderOptions` declares — `host` and the `loadIframeApi` injection
   hook among them — is reachable as
-  `providerOptions={{ youtube: { host: '…' } }}`. Unset, the embed stays
-  `www.youtube-nocookie.com`; a consumer that sets `host` points the iframe
-  wherever it likes, and nothing validates the value (SIDEPRO-216). Plan the
-  `frame-src` for the origins your own consumers may set, not only for the
-  default. The API script itself always comes from `www.youtube.com` — that
-  one `host` does not move.
+  `providerOptions={{ youtube: { host: '…' } }}`. What that consumer can reach
+  is bounded, as of SIDEPRO-216: `host` is matched on its parsed origin against
+  `https://www.youtube.com` and `https://www.youtube-nocookie.com`, and any
+  other origin — malformed and empty values with it — falls back to the
+  privacy-enhanced default rather than throwing. So the `frame-src` this table
+  gives is the whole set: the embed is either origin, never a third one. The
+  API script itself always comes from `www.youtube.com` — that one `host` does
+  not move.
 - **Vimeo**'s embed iframe is built from `player.vimeo.com`
   (`packages/provider-vimeo/src/attachment.ts:59`). The SDK
   (`@vimeo/player`, pinned `2.30.4`) is a bundled dependency, imported
