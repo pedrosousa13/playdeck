@@ -243,6 +243,23 @@ test('sets the player color as an attribute', async () => {
   expect(element(result).getAttribute('player-color')).toBe('ff0000');
 });
 
+test('keeps a hashed hex player color', async () => {
+  const result = await setup({ options: { playerColor: '#ff0000' } });
+  expect(element(result).getAttribute('player-color')).toBe('#ff0000');
+});
+
+test.each([
+  ['a color keyword', 'red'],
+  ['an rgb() function', 'rgb(255, 0, 0)'],
+  ['a non-hex digit', 'gg0000'],
+  ['too many digits', 'ff00001'],
+  ['an empty string', ''],
+  ['a javascript: URL', 'javascript:alert(1)']
+])('drops a player color that is %s', async (_form, playerColor) => {
+  const result = await setup({ options: { playerColor } });
+  expect(element(result).getAttribute('player-color')).toBeNull();
+});
+
 test('sets swatch as a boolean-string attribute', async () => {
   const result = await setup({ options: { swatch: false } });
   expect(element(result).getAttribute('swatch')).toBe('false');
@@ -255,6 +272,31 @@ test('sets the poster as an attribute', async () => {
   expect(element(result).getAttribute('poster')).toBe(
     'https://example.test/poster.png'
   );
+});
+
+test.each([
+  ['an http: URL', 'http://example.test/poster.png'],
+  ['a data: URL', 'data:image/png;base64,iVBORw0KGgo='],
+  ['a javascript: URL', 'javascript:alert(1)'],
+  ['a root-relative path', '/poster.png'],
+  ['a protocol-relative URL', '//example.test/poster.png'],
+  ['an unparseable string', 'not a url'],
+  ['an empty string', '']
+])('drops a poster that is %s', async (_form, poster) => {
+  const result = await setup({ options: { poster } });
+  expect(element(result).getAttribute('poster')).toBeNull();
+});
+
+// One bad presentation option must not fail playback: the drop is silent and
+// the rest of the attach runs, so the player still reaches ready.
+test('reaches ready with the dropped presentation options unset', async () => {
+  const result = await setup({
+    options: { playerColor: 'red', poster: 'http://example.test/poster.png' }
+  });
+  const player = element(result);
+  expect(player.getAttribute('player-color')).toBeNull();
+  expect(player.getAttribute('poster')).toBeNull();
+  expect(readyPatch(result.patches)).toMatchObject({ lifecycle: 'ready' });
 });
 
 test('sets transparent letterbox as a boolean-string attribute', async () => {
