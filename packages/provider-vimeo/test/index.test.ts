@@ -195,6 +195,10 @@ test('embeds a chromeless, Do-Not-Track, inline player by default', async () => 
   expect(iframe.getAttribute('allow')).toContain('autoplay');
   expect(iframe.getAttribute('allow')).toContain('fullscreen');
   expect(iframe.getAttribute('allow')).toContain('picture-in-picture');
+  expect(iframe.getAttribute('allow')).not.toContain('encrypted-media');
+  expect(iframe.getAttribute('referrerpolicy')).toBe(
+    'strict-origin-when-cross-origin'
+  );
 });
 
 test('preserves the privacy hash from the player URL form into the embed', async () => {
