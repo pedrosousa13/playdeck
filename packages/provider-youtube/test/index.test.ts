@@ -234,6 +234,82 @@ test('creates the player against the privacy-enhanced host without autoplay', as
   expect(mount.contains(harness.iframe)).toBe(true);
 });
 
+// `host` decides the origin the embed iframe is built from, so only the two
+// origins YouTube serves that embed from are honoured. These two are handed to
+// the iframe API unchanged.
+test.each([
+  ['https://www.youtube.com'],
+  ['https://www.youtube-nocookie.com']
+] as const)('uses the %s host option as given', async (host) => {
+  const { fake, provider } = createAdapter('M7lc1UVf-VE', { host });
+
+  await provider.attach();
+  await provider.load();
+
+  const harness = fake.players[0]!;
+  expect(harness.options.host).toBe(host);
+  // The `origin` player var is the embedding page's own origin for an accepted
+  // `host` as much as for a rejected one: it is the origin YouTube validates
+  // postMessage against, and it never tracks `host` in either direction.
+  expect(harness.options.playerVars).toMatchObject({
+    origin: window.location.origin
+  });
+});
+
+// The comparison is on the parsed origin, so the spellings a browser resolves
+// to the same origin are recognised rather than read as a third host.
+test.each([
+  ['a trailing slash', 'https://www.youtube.com/', 'https://www.youtube.com'],
+  [
+    'upper-case letters',
+    'HTTPS://WWW.YOUTUBE-NOCOOKIE.COM',
+    'https://www.youtube-nocookie.com'
+  ]
+] as const)(
+  'accepts a recognised host option written with %s',
+  async (_label, host, expected) => {
+    const { fake, provider } = createAdapter('M7lc1UVf-VE', { host });
+
+    await provider.attach();
+    await provider.load();
+
+    const harness = fake.players[0]!;
+    expect(harness.options.host).toBe(expected);
+    expect(harness.options.playerVars).toMatchObject({
+      origin: window.location.origin
+    });
+  }
+);
+
+// An unrecognised `host` falls back rather than throwing: a misconfigured
+// option must degrade to the safe embed, not break the page. The lookalike is
+// on the list because an origin that merely ends in a YouTube name is a
+// different origin, and the malformed and empty values because `new URL()`
+// rejects both — all four are the same answer.
+test.each([
+  ['an unrelated origin', 'https://videos.example.com'],
+  ['a lookalike origin', 'https://www.youtube.com.example.com'],
+  ['a malformed url', 'www.youtube.com'],
+  ['an empty string', '']
+] as const)(
+  'falls back to the privacy-enhanced host when the host option is %s',
+  async (_label, host) => {
+    const { fake, provider } = createAdapter('M7lc1UVf-VE', { host });
+
+    await provider.attach();
+    await provider.load();
+
+    const harness = fake.players[0]!;
+    expect(harness.options.host).toBe('https://www.youtube-nocookie.com');
+    // The `origin` player var is the embedding page's own origin, not the
+    // host — it is what a wrong `host` would have disclosed the page to. It
+    // never carries the rejected value.
+    expect(harness.options.playerVars).toMatchObject({
+      origin: window.location.origin
+    });
+  }
+);
+
 // Vimeo's own embed url sets `controls` the same way
 // (`provider-vimeo/src/attachment.ts:61`, `options.controls === true ? '1' :
 // '0'`): unset and `false` both mean chromeless. This pins YouTube to the

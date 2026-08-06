@@ -39,6 +39,10 @@ export const confirmationTimeout = PLAYBACK_CONFIRMATION_TIMEOUT_MS; // 3000
 
 The embed host defaults to `https://www.youtube-nocookie.com`, and the API
 script is loaded from `https://www.youtube.com/iframe_api` once per document.
+`host` is honoured only for the two origins YouTube serves the embed from —
+`https://www.youtube.com` and `https://www.youtube-nocookie.com`, matched on
+the parsed origin. Any other value falls back to the default rather than
+throwing, so a misconfigured host still plays.
 The embedding origin is declared to the player so it can validate the
 `postMessage` traffic it exchanges with the iframe. See
 [Third-party requests and CSP](../../docs/third-party-requests.md) for the full
