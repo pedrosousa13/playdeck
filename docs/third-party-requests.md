@@ -8,20 +8,21 @@ providers](../README.md#honesty-about-providers) section in the root README
 points to — read against the loaders and attachment builders themselves, not
 against provider documentation.
 
-Every origin below was confirmed by reading the source cited next to it. Where
-the audit could not confirm something from the shipped code, it says so rather
-than guessing.
+Every origin below was confirmed by reading the source cited next to it, except
+the storybook Backpack wrapper row: that source lives on the `backpack-parity`
+branch, not this tree, and is cited as such. Where the audit could not confirm
+something from the shipped code, it says so rather than guessing.
 
 ## Per-provider origins
 
-| Provider                                                     | `script-src`                         | `frame-src`                                                            | `img-src`                                                                                                   | `connect-src`                                                                                               | `media-src`                                                               |
-| ------------------------------------------------------------ | ------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **Native** (`@reely/provider-native`)                        | —                                    | —                                                                      | —                                                                                                           | —                                                                                                           | Your own media host — nothing Reely adds.                                 |
-| **HLS** (`@reely/provider-hls`)                              | —                                    | —                                                                      | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                     | Your own manifest/segment host, when the native engine plays it directly. |
-| **YouTube** (`@reely/provider-youtube`)                      | `www.youtube.com`                    | `www.youtube-nocookie.com` (always, via `Player.Root`; see note below) | —                                                                                                           | —                                                                                                           | —                                                                         |
-| **Vimeo** (`@reely/provider-vimeo`)                          | —                                    | `player.vimeo.com`                                                     | —                                                                                                           | `vimeo.com` — opt-in only, and unreachable via `Player.Root` today; see note below.                         | —                                                                         |
-| **Wistia** (`@reely/provider-wistia`)                        | `fast.wistia.net`, `fast.wistia.com` | `fast.wistia.net` (legacy-embed fallback; see note below)              | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | Same five hosts as `img-src`.                                             |
-| **Storybook Backpack wrapper** — not shipped, see note below | —                                    | —                                                                      | `img.youtube.com`, `ytimg.com` (+ subdomains), `vimeocdn.com` (+ subdomains)                                | `www.youtube.com`, `vimeo.com`                                                                              | —                                                                         |
+| Provider                                                                                | `script-src`                         | `frame-src`                                                            | `img-src`                                                                                                   | `connect-src`                                                                                               | `media-src`                                                               |
+| --------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Native** (`@reely/provider-native`)                                                   | —                                    | —                                                                      | —                                                                                                           | —                                                                                                           | Your own media host — nothing Reely adds.                                 |
+| **HLS** (`@reely/provider-hls`)                                                         | —                                    | —                                                                      | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                     | Your own manifest/segment host, when the native engine plays it directly. |
+| **YouTube** (`@reely/provider-youtube`)                                                 | `www.youtube.com`                    | `www.youtube-nocookie.com` (always, via `Player.Root`; see note below) | —                                                                                                           | —                                                                                                           | —                                                                         |
+| **Vimeo** (`@reely/provider-vimeo`)                                                     | —                                    | `player.vimeo.com`                                                     | —                                                                                                           | `vimeo.com` — opt-in only, and unreachable via `Player.Root` today; see note below.                         | —                                                                         |
+| **Wistia** (`@reely/provider-wistia`)                                                   | `fast.wistia.net`, `fast.wistia.com` | `fast.wistia.net` (legacy-embed fallback; see note below)              | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | Same five hosts as `img-src`.                                             |
+| **Storybook Backpack wrapper** (`backpack-parity` branch) — not shipped, see note below | —                                    | —                                                                      | `img.youtube.com`, `ytimg.com` (+ subdomains), `vimeocdn.com` (+ subdomains)                                | `www.youtube.com`, `vimeo.com`                                                                              | —                                                                         |
 
 Notes, per row:
 
@@ -110,15 +111,15 @@ Notes, per row:
   reachable from `Player.Root` via
   `providerOptions={{ wistia: {...} }}`
   (`packages/react/src/provider-loaders.ts`).
-- **The storybook Backpack wrapper** is not in any published package —
-  `apps/storybook`'s `package.json` marks it `"private": true`. It fetches
-  YouTube's oEmbed endpoint
+- **The `backpack-parity` branch's storybook Backpack wrapper** is not in any
+  published package there — `apps/storybook`'s `package.json` marks it
+  `"private": true` on that branch. It fetches YouTube's oEmbed endpoint
   (`https://www.youtube.com/oembed?url=...&format=json`) and Vimeo's
   (`https://vimeo.com/api/oembed.json?url=...`), then only renders the
   `thumbnail_url` field back if it is `https:` and its hostname is
   `img.youtube.com`, `ytimg.com` or a subdomain of it, or `vimeocdn.com` or a
   subdomain of it. Do not add these origins to a CSP for code you do not ship
-  — this wrapper exists to prove a migration path, not to publish.
+  — this wrapper exists there to prove a migration path, not to publish.
 
 ## When each request happens
 

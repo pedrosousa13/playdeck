@@ -88,10 +88,10 @@ missing, not the fix: nothing here changes `loop`.
   its playback position. Toggling `controls` mid-playback is therefore cheap on
   one source and a reload on another.
 - Where a composition used to write the bag key, it now writes the prop once.
-  `apps/storybook`'s Backpack wrapper is the worked example: it wrote
-  `youtube: { controls }` for one provider, drew its own `Player.Controls` over
-  whatever chrome that produced, and SIDEPRO-222 found the two bars that made on
-  YouTube. Wistia's fan-out is what is left undone.
+  The `backpack-parity` branch's Backpack wrapper is the worked example: it
+  wrote `youtube: { controls }` for one provider, drew its own
+  `Player.Controls` over whatever chrome that produced, and SIDEPRO-222 found
+  the two bars that made on YouTube. Wistia's fan-out is what is left undone.
 - An option that starts per-provider and turns out to be cross-provider cannot
   move quietly: the bag key is public API, so relocating it to a prop is a
   breaking change for anyone who wrote it. The boundary is worth applying when
