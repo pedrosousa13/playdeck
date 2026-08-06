@@ -8,9 +8,14 @@ packages:
 # `postcss`/`sharp` under the Next.js build in tests/integrations. They are
 # pinned forward here rather than left for `pnpm audit` to keep reporting --
 # the alternative is re-triaging the same four findings on every run.
+# The two floors SIDEPRO-221 raised name the advisory behind them, so a later
+# reader can tell when an entry has outlived its reason. `sharp` predates that
+# and carries no such record:
+#   brace-expansion >=5.0.9  GHSA-rgw5-rvv9-x895 (high, DoS)
+#   postcss         >=8.5.23 GHSA-fxqj-rqcc-2cmp (moderate, sourceMappingURL)
 overrides:
-  brace-expansion@<5.0.8: '>=5.0.8'
-  postcss@<8.5.18: '>=8.5.18'
+  brace-expansion@<5.0.9: '>=5.0.9'
+  postcss@<8.5.23: '>=8.5.23'
   sharp@<0.35.0: '>=0.35.0'
 allowBuilds:
   esbuild@0.28.1: true
