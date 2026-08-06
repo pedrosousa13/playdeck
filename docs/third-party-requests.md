@@ -163,7 +163,7 @@ Mapped onto the origins above:
   any player attaches, so it cannot wait on the same gate the player does.
   But the call site only ever passes a URL when the wrapper's own `light` prop
   is true and playback has not started (`light && !startsPlaying ? url :
-  undefined`), and `light` defaults to `false` — so by default this wrapper
+undefined`), and `light` defaults to `false` — so by default this wrapper
   makes no oEmbed request at all, and the request only exists for a caller who
   opts into `light`.
 
