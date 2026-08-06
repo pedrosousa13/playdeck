@@ -152,7 +152,7 @@ export const createYouTubeAttachment = (
       height: '100%',
       playerVars: {
         autoplay: 0,
-        // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:61`):
+        // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:62`):
         // unset and `false` both mean chromeless.
         controls: controls === true ? 1 : 0,
         // `loop` alone is a documented no-op on a single-video embed: YouTube

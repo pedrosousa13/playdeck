@@ -26,7 +26,7 @@ export { PLAYBACK_CONFIRMATION_TIMEOUT_MS } from './playback.js';
 export type YouTubeProviderOptions = {
   /**
    * Show YouTube's own player chrome. Unset and `false` both mean chromeless
-   * -- deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:61`,
+   * -- deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:62`,
    * `options.controls === true ? '1' : '0'`), so the two providers cannot
    * drift.
    */

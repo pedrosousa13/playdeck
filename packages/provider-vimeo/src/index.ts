@@ -27,6 +27,13 @@ export type {
 export type VimeoProviderOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
+  /**
+   * Restart the video when it ends. `Root`'s `loop` prop is folded into this
+   * bag by `packages/react/src/root.tsx`'s `resolvedProviderOptions`, so
+   * `PlayerProviderOptions` omits the key and this is not a second home for
+   * the setting (ADR-0004).
+   */
+  readonly loop?: boolean;
   readonly customControls?: boolean;
 };
 

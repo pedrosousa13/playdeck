@@ -58,7 +58,7 @@ Notes, per row:
   API script itself always comes from `www.youtube.com` — that one `host` does
   not move.
 - **Vimeo**'s embed iframe is built from `player.vimeo.com`
-  (`packages/provider-vimeo/src/attachment.ts:59`). The SDK
+  (`packages/provider-vimeo/src/attachment.ts:60`). The SDK
   (`@vimeo/player`, pinned `2.30.4`) is a bundled dependency, imported
   dynamically — nothing is fetched from a Vimeo CDN
   (`packages/provider-vimeo/README.md`). The oEmbed probe at
@@ -69,7 +69,7 @@ Notes, per row:
   calls `createVimeoProvider(media, source)` with no options at all — so a
   `Player.Root` consumer cannot set `customControls` today, and the probe
   never fires through the React path. `dnt` (on by default unless set to
-  `false`, `packages/provider-vimeo/src/attachment.ts:62`) asks Vimeo not to
+  `false`, `packages/provider-vimeo/src/attachment.ts:63`) asks Vimeo not to
   track the session; it is a separate switch and has no effect on whether the
   oEmbed probe runs. `dnt` and `controls` are reachable only by calling
   `createVimeoProvider` directly — unlike YouTube's bag above, `Vimeo` has no

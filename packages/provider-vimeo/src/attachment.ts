@@ -49,6 +49,7 @@ const loadFailure = (cause: unknown): PlayerError => {
 type VimeoEmbedOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
+  readonly loop?: boolean;
 };
 
 const vimeoEmbedUrl = (
@@ -60,6 +61,7 @@ const vimeoEmbedUrl = (
   if (source.hash) url.searchParams.set('h', source.hash);
   url.searchParams.set('controls', options.controls === true ? '1' : '0');
   url.searchParams.set('dnt', options.dnt === false ? '0' : '1');
+  url.searchParams.set('loop', options.loop === true ? '1' : '0');
   url.searchParams.set('playsinline', '1');
   if (muted) url.searchParams.set('muted', '1');
   return url.href;

@@ -187,6 +187,7 @@ test('embeds a chromeless, Do-Not-Track, inline player by default', async () => 
   expect(url.pathname).toBe('/video/76979871');
   expect(url.searchParams.get('controls')).toBe('0');
   expect(url.searchParams.get('dnt')).toBe('1');
+  expect(url.searchParams.get('loop')).toBe('0');
   expect(url.searchParams.get('playsinline')).toBe('1');
   expect(url.searchParams.get('h')).toBeNull();
   const iframe = result.sdk.instances[0]!.element;
@@ -368,6 +369,21 @@ test('honors an explicit Do-Not-Track opt-out', async () => {
   const result = await setup({ options: { dnt: false } });
   expect(embedUrl(result).searchParams.get('dnt')).toBe('0');
 });
+
+// SIDEPRO-210. Same polarity as `controls`: unset and `false` both mean play
+// once, and the parameter is always written so the embed never inherits a
+// Vimeo-side default this adapter did not choose.
+test.each([
+  ['unset', undefined, '0'],
+  ['false', false, '0'],
+  ['true', true, '1']
+] as const)(
+  'sets the loop embed parameter to the expected value when the loop option is %s',
+  async (_label, loop, expected) => {
+    const result = await setup({ options: { loop } });
+    expect(embedUrl(result).searchParams.get('loop')).toBe(expected);
+  }
+);
 
 // --- commands ---
 

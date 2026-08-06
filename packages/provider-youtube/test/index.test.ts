@@ -311,7 +311,7 @@ test.each([
 );
 
 // Vimeo's own embed url sets `controls` the same way
-// (`provider-vimeo/src/attachment.ts:61`, `options.controls === true ? '1' :
+// (`provider-vimeo/src/attachment.ts:62`, `options.controls === true ? '1' :
 // '0'`): unset and `false` both mean chromeless. This pins YouTube to the
 // same polarity so the two cannot drift.
 test.each([
