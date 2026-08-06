@@ -89,8 +89,12 @@ work — no longer compiles.
   re-attaches a Vimeo or YouTube embed — it must, the value being baked into the
   embed URL — where a native or HLS element only has an attribute set and keeps
   its playback position. Toggling `controls` mid-playback is therefore cheap on
-  one source and a reload on another. `loop` pays the same price on the same
-  terms, plus Wistia, whose embed bakes it into `endVideoBehavior`.
+  one source and a reload on another. `loop` is not a second instance of this
+  cost. It rides in `NativePlaybackOptions`, which the activation identity
+  compares on every source type rather than only the two that read it, so a
+  change to it already rebuilt the provider before SIDEPRO-210 folded it into
+  the bags. The fold changed what that rebuild produces, not whether it
+  happens.
 - Where a composition used to write the bag key, it now writes the prop once.
   The `backpack-parity` branch's Backpack wrapper is the worked example: it
   wrote `youtube: { controls }` for one provider, drew its own

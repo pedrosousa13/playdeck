@@ -1,7 +1,7 @@
 ---
-'@reely/provider-youtube': patch
-'@reely/provider-vimeo': patch
-'@reely/react': patch
+'@reely/provider-youtube': minor
+'@reely/provider-vimeo': minor
+'@reely/react': minor
 ---
 
 `Player.Root`'s `loop` prop now loops a YouTube, Vimeo or Wistia source. It
@@ -22,6 +22,7 @@ was the only spelling that worked before, and it is now omitted from
 `<Player.Root loop />` instead. `WistiaProviderOptions.loop` itself stays, for
 callers building the adapter with `createWistiaProvider` directly.
 
-One consequence to know about: these three providers bake looping into the
-embed, so changing `loop` mid-playback re-attaches the embed and loses its
-position — where a native or HLS source only has an attribute set.
+No new re-attach cost comes with this. `loop` already took part in the
+activation identity on every source type, so changing it mid-playback already
+rebuilt the provider. Before this change the rebuild produced an identical
+embed, the value having reached nothing; now it produces a looping one.

@@ -13,10 +13,16 @@ export type PlayerMediaMount = HTMLVideoElement | HTMLDivElement;
  * providers wait on their own issues, so a missing key here is a deliberate
  * absence rather than an oversight.
  *
- * `controls` and `loop` are deliberately absent from every bag that has a
- * notion of them: both are cross-provider concepts and live on `Root` as its
- * own props (ADR-0004), so omitting them here makes the double home
- * unrepresentable rather than merely discouraged.
+ * `controls` and `loop` are cross-provider concepts and live on `Root` as its
+ * own props (ADR-0004). Each is omitted here from the bags `Root`'s fan-out
+ * actually reaches, which makes the double home unrepresentable rather than
+ * merely discouraged -- and the two do not reach the same set. `loop` is
+ * omitted from all three. `controls` is omitted from `youtube` and `vimeo`
+ * only: Wistia has the concept
+ * (`provider-wistia/src/attachment.ts:240`, `if (options.controls !== true)`)
+ * but no fold in `resolvedProviderOptions` writes it, so the bag key is still
+ * the only way to reach it and stays. That asymmetry is ADR-0004's own
+ * Consequences section, not an oversight here.
  *
  * `loop` was the exception until SIDEPRO-210. It reached the native and HLS
  * providers inside `NativePlaybackOptions` and no further, so the `wistia` bag

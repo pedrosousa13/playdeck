@@ -107,7 +107,7 @@ Notes, per row:
   metrics to, since it is fetched at runtime rather than bundled — treat
   that as an open question if you need to pin it down, rather than an origin
   this table has verified. `dnt` (on by default,
-  `packages/provider-wistia/src/attachment.ts:201`) asks Wistia not to track
+  `packages/provider-wistia/src/attachment.ts:235`) asks Wistia not to track
   the session; it is a separate switch from the Mux module. Wistia's
   provider options (`controls`, `dnt`, `playerColor`, `swatch`, `poster`,
   `transparentLetterbox`) are, unlike YouTube's and Vimeo's, reachable from

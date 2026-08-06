@@ -472,12 +472,14 @@ export const Root = ({
   // Returning `providerOptions ?? {}` for every other source type is safe for
   // the same reason -- an absent bag and an empty one compare equal.
   //
-  // The cost of folding `loop` here, rather than carrying it in
-  // `nativeOptions`: these three providers bake looping into the embed, so a
-  // `loop` change on a YouTube, Vimeo or Wistia source re-attaches the embed
-  // and loses its playback position. A native or HLS source keeps carrying
-  // `loop` in `nativeOptions`, where it is only an element attribute and
-  // changing it costs nothing (SIDEPRO-210).
+  // Folding `loop` costs no re-attach it was not already paying. It rides in
+  // `nativeOptions` for every source type, not only the two that read it, and
+  // `nativeOptionsEqual` (`use-activation.ts:113`,
+  // `Object.is(left.loop, right.loop)`) is compared whatever the source is --
+  // so a `loop` change already retired an embed's activation identity and
+  // rebuilt the provider before SIDEPRO-210. What it rebuilt was an identical
+  // embed, the value having reached nothing. The fold is what makes the
+  // rebuild produce a looping one.
   //
   // Wistia takes `loop` alone: its `controls` fan-out is still unbuilt, so the
   // `wistia` bag keeps `controls` un-omitted and there is nothing to fold.
