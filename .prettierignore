@@ -5,4 +5,5 @@ test-results/
 pnpm-lock.yaml
 .superpowers/
 docs/superpowers/plans/
+docs/archive/
 apps/storybook/public/hls/
