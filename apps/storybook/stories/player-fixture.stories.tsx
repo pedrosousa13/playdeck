@@ -524,8 +524,9 @@ export const VimeoInteractionMuted: Story = {
 };
 
 export const VimeoFreePlan: Story = {
-  // customControls: e2e/vimeo-smoke.spec.ts asserts customControls resolves to
-  // the provider-plan refusal, which since #162 only runs when opted in.
+  // customControls: e2e/vimeo-smoke.spec.ts asserts the chromeless probe
+  // resolves to the provider-plan refusal, which since #162 only runs when
+  // opted in.
   args: {
     source: 'https://vimeo.com/22439234',
     loading: 'interaction',
@@ -534,8 +535,8 @@ export const VimeoFreePlan: Story = {
 };
 
 export const VimeoPaidPlan: Story = {
-  // customControls: e2e/vimeo-smoke.spec.ts asserts customControls resolves to
-  // available, which since #162 only runs when opted in.
+  // customControls: e2e/vimeo-smoke.spec.ts asserts the chromeless probe
+  // resolves to available, which since #162 only runs when opted in.
   args: {
     source: 'https://vimeo.com/1123898957',
     loading: 'interaction',
