@@ -75,6 +75,7 @@ export const Loading: Story = {
   }
 };
 
+/** A data-URI poster resolves without any request leaving the page. */
 export const Loaded: Story = {
   render: () => (
     <Frame>
