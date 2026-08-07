@@ -10,7 +10,20 @@ import {
 
 export type NativePlaybackOptions = {
   readonly loop?: boolean;
+  /**
+   * Start playback at this offset in seconds. `Root`'s `startTime` prop reaches
+   * every provider since #214 -- the three embeds declare the key on their own
+   * options bags and enforce the boundary themselves, and `Root` folds the prop
+   * into whichever bag the detected source belongs to. This declaration is the
+   * native and HLS route to the same prop, and the semantics below are the
+   * contract all five providers implement.
+   */
   readonly startTime?: number;
+  /**
+   * End playback at this offset in seconds. Reaches every provider since #214,
+   * on the same terms as `startTime` above: adapter-enforced everywhere, never
+   * handed to a platform's own end mechanism.
+   */
   readonly endTime?: number;
 };
 
