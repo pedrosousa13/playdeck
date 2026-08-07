@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { playButton } from './locators';
+import { cssBackgroundImageViolations } from './background-image-scan';
 import { readdirSync, readFileSync, type Dirent } from 'node:fs';
 import { extname, join } from 'node:path';
 
@@ -23,7 +24,12 @@ const poster = (page: Page) =>
 const posterImage = (page: Page) =>
   page.locator('[data-reely-part="poster-image"]');
 
-const visualSourceExtensions = new Set(['.css', '.js', '.jsx', '.ts', '.tsx']);
+// JS/JSX/TS/TSX are policed by the AST-based no-restricted-syntax rule in
+// eslint.config.js instead: ESLint operates on nodes, and comments are not
+// nodes, so a comment describing a background-image cannot trip that half.
+// CSS has no AST tooling in this repo, so it keeps this comment-stripped text
+// scan.
+const visualSourceExtensions = new Set(['.css']);
 const ignoredSourceDirectories = new Set([
   '.next',
   'coverage',
@@ -155,18 +161,10 @@ test('hides the poster after the first frame without changing its geometry', asy
 });
 
 test('visual source files do not declare background images', () => {
-  const forbiddenPattern = /background-image|backgroundImage/g;
   const violations = ['apps', 'packages']
     .flatMap(visualSourceFiles)
     .flatMap((file) =>
-      readFileSync(file, 'utf8')
-        .split(/\r?\n/)
-        .flatMap((line, index) =>
-          Array.from(
-            line.matchAll(forbiddenPattern),
-            (match) => `${file}:${index + 1}: ${match[0]}`
-          )
-        )
+      cssBackgroundImageViolations(readFileSync(file, 'utf8'), file)
     );
 
   expect(violations, violations.join('\n')).toEqual([]);

@@ -41,19 +41,24 @@ export default defineConfig({
     // `visual` runs chromium only, so a visual test is +1 to the suite, not
     // +3. The three engine projects ignore it explicitly rather than relying
     // on a grep, so `pnpm test:e2e --project=chromium` keeps its exact count.
+    //
+    // `*.contract.test.ts` files are vitest unit tests for a seam extracted
+    // out of a spec in this directory (e.g. background-image-scan.ts), run by
+    // `pnpm test` instead — Playwright's default testMatch would otherwise
+    // also collect them, since it matches any `*.test.ts`.
     {
       name: 'chromium',
-      testIgnore: /visual\.spec\.ts/,
+      testIgnore: [/visual\.spec\.ts/, /\.contract\.test\.ts$/],
       use: { ...devices['Desktop Chrome'] }
     },
     {
       name: 'firefox',
-      testIgnore: /visual\.spec\.ts/,
+      testIgnore: [/visual\.spec\.ts/, /\.contract\.test\.ts$/],
       use: { ...devices['Desktop Firefox'] }
     },
     {
       name: 'webkit',
-      testIgnore: /visual\.spec\.ts/,
+      testIgnore: [/visual\.spec\.ts/, /\.contract\.test\.ts$/],
       use: { ...devices['Desktop Safari'] }
     },
     {

@@ -36,7 +36,12 @@ export default defineConfig({
     css: { include: [/theme\.css/] },
     include: [
       'packages/**/*.test.{ts,tsx}',
-      'apps/storybook/stories/**/*.contract.test.ts'
+      'apps/storybook/stories/**/*.contract.test.ts',
+      // Lives beside the module it tests (e2e/background-image-scan.ts) so
+      // both stay in the `e2e` TypeScript project, which is deliberately
+      // `noEmit` and unreferenced (see playwright.config.ts's `testIgnore`
+      // for how this stays out of Playwright's own collection).
+      'e2e/*.contract.test.ts'
     ],
     // Measured with `pnpm test --coverage`, not gated on. A threshold here
     // would say a number is the goal; the goal is that every load-bearing
