@@ -524,11 +524,24 @@ export const VimeoInteractionMuted: Story = {
 };
 
 export const VimeoFreePlan: Story = {
-  args: { source: 'https://vimeo.com/22439234', loading: 'interaction' }
+  // customControls: e2e/vimeo-smoke.spec.ts asserts the chromeless probe
+  // resolves to the provider-plan refusal, which since #162 only runs when
+  // opted in.
+  args: {
+    source: 'https://vimeo.com/22439234',
+    loading: 'interaction',
+    vimeoCustomControls: true
+  }
 };
 
 export const VimeoPaidPlan: Story = {
-  args: { source: 'https://vimeo.com/1123898957', loading: 'interaction' }
+  // customControls: e2e/vimeo-smoke.spec.ts asserts the chromeless probe
+  // resolves to available, which since #162 only runs when opted in.
+  args: {
+    source: 'https://vimeo.com/1123898957',
+    loading: 'interaction',
+    vimeoCustomControls: true
+  }
 };
 
 // Reaches the Wistia provider through the plain `https://` branch above, so no
