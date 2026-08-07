@@ -286,7 +286,11 @@ export const createVimeoPlayback = (
         );
       },
       onEnded: (data) => {
-        if (boundary.loop) {
+        // Only a looping window with a start boundary needs correcting; with
+        // no start, `loop=1` already restarts where the window begins and the
+        // embed's own end stays the end it has always published (the same gate
+        // the YouTube and Wistia ports apply).
+        if (boundary.restartsOnEnded()) {
           restartFromBoundary();
           return;
         }
@@ -326,7 +330,7 @@ export const createVimeoPlayback = (
           return;
         }
         // Vimeo's own `loop=1` wraps to zero, not to the start boundary.
-        if (boundary.wrapped(seconds)) {
+        if (boundary.wrapped(duration, seconds)) {
           restartFromBoundary();
           return;
         }

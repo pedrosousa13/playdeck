@@ -1,5 +1,6 @@
 import {
   atBoundaryEnd,
+  atBoundaryWrap,
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,
@@ -20,6 +21,13 @@ import {
 // which reads a playhead below the start boundary as a restart to correct: a
 // player that has not been positioned yet is simply loading, and correcting
 // that would fight the initial seek.
+//
+// Two differences from the YouTube and Vimeo ports are deliberate. There is no
+// restart token here: `api.time()` is synchronous, so a restart leaves nothing
+// deferred for a superseded player to run, and the attachment's own generation
+// (`attachment.ts:195`) already makes a replaced player's events inert. And a
+// *natural* `ended` — the media's own end, not this window's — leaves `ended`
+// clear, because the pause Wistia fires with it is the platform's to report.
 
 // What one time report means once the window is applied.
 export type WistiaBoundaryVerdict =
@@ -75,21 +83,21 @@ export type WistiaBoundary = {
 export const createWistiaBoundary = (
   options: WistiaBoundaryOptions = {}
 ): WistiaBoundary => {
-  const window: TimeBoundary = resolveTimeBoundary(options);
+  const bounds: TimeBoundary = resolveTimeBoundary(options);
   const loop = options.loop === true;
   let ended = false;
   let positioned = false;
 
   const startAt = (duration: number | null): number =>
-    boundaryStart(window, duration);
+    boundaryStart(bounds, duration);
 
   const isAtEnd = (duration: number | null, time: number): boolean =>
-    atBoundaryEnd(window, duration, time);
+    atBoundaryEnd(bounds, duration, time);
 
   return {
     startAt,
     isAtEnd,
-    clamp: (duration, time) => withinBoundary(window, duration, time),
+    clamp: (duration, time) => withinBoundary(bounds, duration, time),
     hasEnded: () => ended,
     clearEnded: () => {
       ended = false;
@@ -107,25 +115,18 @@ export const createWistiaBoundary = (
         ended = true;
         // `isAtEnd` is only ever true with an effective end, so the fallback
         // does not run; it is what keeps the verdict's time a plain number.
-        return { kind: 'end', time: boundaryEnd(window, duration) ?? time };
+        return { kind: 'end', time: boundaryEnd(bounds, duration) ?? time };
       }
-      // The wrap guard. With no end boundary Wistia loops at its own end and
-      // restarts at zero, which no time report can be told apart from a seek —
-      // so a playhead below the start of a positioned looping player is read
-      // as that wrap and corrected.
-      if (
-        loop &&
-        positioned &&
-        window.startTime > 0 &&
-        time < window.startTime
-      ) {
+      // The wrap guard, shared with the YouTube and Vimeo ports so the three
+      // cannot drift apart on which start they compare against.
+      if (atBoundaryWrap(bounds, duration, time, { loop, positioned })) {
         return { kind: 'restart', time: startAt(duration) };
       }
       ended = false;
       return { kind: 'report', time };
     },
     reviewEnded: (duration) =>
-      loop && window.startTime > 0 ? startAt(duration) : undefined,
+      loop && bounds.startTime > 0 ? startAt(duration) : undefined,
     resumeFrom: (duration, time) =>
       ended || isAtEnd(duration, time) ? startAt(duration) : undefined
   };

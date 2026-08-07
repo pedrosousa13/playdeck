@@ -27,8 +27,15 @@ The sanitisation rules are the native provider's, unchanged and now identical on
 all five: a start that is absent, non-positive or non-finite is no start; an end
 that is absent, non-finite, or not above the start is no end; an end past the
 duration is clamped to it. `@reely/core` gains the shared helper that states
-them — `resolveTimeBoundary`, `boundaryStart`, `boundaryEnd`, `atBoundaryEnd`
-and `withinBoundary`, plus the `TimeBoundary` type.
+them — `resolveTimeBoundary`, `boundaryStart`, `boundaryEnd`, `atBoundaryEnd`,
+`atBoundaryWrap` and `withinBoundary`, plus the `TimeBoundary` type.
+
+One pre-existing YouTube behaviour changes with it: `seekTo` and `seekBy` now
+clamp to the window's effective end — the `endTime`, or the duration when there
+is no `endTime` or the media is shorter — instead of only flooring at zero. A
+seek past the end of the media used to be forwarded to the player and published
+as a `currentTime` past the media's end, which the next poll then contradicted.
+Vimeo, Wistia and the native provider have always clamped this way.
 
 `PlayerProviderOptions` omits `startTime` and `endTime` from all three bags, so
 the setting has one home (ADR-0004). Nothing that compiled before stops

@@ -1282,6 +1282,29 @@ test('publishes one ended patch at the end boundary and pauses the player', asyn
   expect(provider.provider).toBe('youtube');
 });
 
+// With `controls: true` the viewer can press YouTube's own play button, which
+// reaches the adapter as a bare PLAYING state change. It has to release the
+// ended latch the same way Vimeo's `play` and Wistia's `play` do, or the
+// boundary never fires again and the video runs on to its natural end.
+test('a resume from the provider chrome re-enforces the end boundary', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    controls: true,
+    endTime: 20
+  });
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 20.2);
+  harness.fireStateChange(playerStates.PAUSED);
+  expect(endedPatches(patches)).toHaveLength(1);
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 21);
+
+  expect(endedPatches(patches)).toHaveLength(2);
+  expect(harness.player.pauseVideo).toHaveBeenCalledTimes(2);
+});
+
 test('the pause the end boundary causes publishes no paused patch', async () => {
   vi.useFakeTimers();
   const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
@@ -1453,11 +1476,32 @@ test('a seek past the end boundary clamps rather than ending playback', async ()
   expect(harness.player.seekTo).toHaveBeenLastCalledWith(5, true);
 });
 
-// Without an end boundary the clamp must leave the seek unbounded above, which
-// is what it was before the boundary existed: YouTube's own duration is the
-// only ceiling, and it is not consulted here.
-test('an unbounded window leaves a seek past the duration alone', async () => {
+// The window's ceiling is the effective end -- the end boundary capped by the
+// duration -- so an `endTime` past the media clamps onto the media, exactly as
+// it does on Vimeo and Wistia. One prop, one meaning (#214).
+test('clamps a seek to the duration when the end boundary is past it', async () => {
+  const { harness, provider } = await readyAdapter('M7lc1UVf-VE', {
+    endTime: 1_000
+  });
+  harness.duration = 60;
+
+  await expect(provider.seekTo?.(900)).resolves.toEqual({ ok: true });
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(60, true);
+});
+
+test('clamps a seek to the duration with no window configured', async () => {
   const { harness, provider } = await readyAdapter();
+
+  await expect(provider.seekTo?.(5_000)).resolves.toEqual({ ok: true });
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(120, true);
+});
+
+// Before metadata lands `getDuration()` answers 0, which is no ceiling to
+// clamp against; the seek keeps the unbounded-above behaviour it has always
+// had until the player knows a duration.
+test('leaves a seek unbounded above while the duration is unknown', async () => {
+  const { harness, provider } = await readyAdapter();
+  harness.duration = 0;
 
   await expect(provider.seekTo?.(5_000)).resolves.toEqual({ ok: true });
   expect(harness.player.seekTo).toHaveBeenLastCalledWith(5_000, true);

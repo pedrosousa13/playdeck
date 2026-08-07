@@ -3,6 +3,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   atBoundaryEnd,
+  atBoundaryWrap,
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,
@@ -112,6 +113,46 @@ describe('atBoundaryEnd', () => {
     const boundary = resolveTimeBoundary({ startTime: 5, endTime: 40 });
     expect(atBoundaryEnd(boundary, 30, 30)).toBe(true);
     expect(atBoundaryEnd(boundary, 30, 29)).toBe(false);
+  });
+});
+
+describe('atBoundaryWrap', () => {
+  const looping = { loop: true, positioned: true };
+
+  test.each<[string, { loop: boolean; positioned: boolean }]>([
+    ['not looping', { loop: false, positioned: true }],
+    ['not positioned yet', { loop: true, positioned: false }]
+  ])('is false while %s', (_label, state) => {
+    const boundary = resolveTimeBoundary({ startTime: 10 });
+    expect(atBoundaryWrap(boundary, 60, 1, state)).toBe(false);
+  });
+
+  test.each<[string, number, boolean]>([
+    ['behind the start', 1, true],
+    ['at the start', 10, false],
+    ['inside the window', 30, false]
+  ])('is %s for a playhead %s', (_label, time, expected) => {
+    const boundary = resolveTimeBoundary({ startTime: 10 });
+    expect(atBoundaryWrap(boundary, 60, time, looping)).toBe(expected);
+  });
+
+  test('is false with no start boundary, which is where a wrap already lands', () => {
+    const boundary = resolveTimeBoundary({ endTime: 20 });
+    expect(atBoundaryWrap(boundary, 60, 0, looping)).toBe(false);
+  });
+
+  // The guard compares against the duration-clamped start, not the raw one. A
+  // start past the duration collapses onto it, so the position the restart
+  // seeks to is not itself read as another wrap — which would restart forever.
+  test('compares against the duration-clamped start', () => {
+    const boundary = resolveTimeBoundary({ startTime: 90 });
+    expect(atBoundaryWrap(boundary, 60, 60, looping)).toBe(false);
+    expect(atBoundaryWrap(boundary, 60, 59, looping)).toBe(true);
+  });
+
+  test('is false when the clamped start collapses onto zero', () => {
+    const boundary = resolveTimeBoundary({ startTime: 90 });
+    expect(atBoundaryWrap(boundary, 0, 0, looping)).toBe(false);
   });
 });
 

@@ -1,5 +1,6 @@
 import {
   atBoundaryEnd,
+  atBoundaryWrap,
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,
@@ -78,7 +79,12 @@ export type YouTubeBoundary = {
   // Clamps a requested seek into the window, and releases the ended latch when
   // the target lands back inside it.
   readonly seekTarget: (time: number) => number;
-  // Releases the latch without moving the playhead; the error path uses it.
+  // Releases the latch alone, for a resume the adapter did not ask for: with
+  // `controls: true` the viewer can press YouTube's own play button, and a
+  // latch left set would keep the boundary from ever firing again.
+  readonly clearEnded: () => void;
+  // Releases the latch and invalidates a pending loop resume without moving
+  // the playhead; the error path uses it.
   readonly clear: () => void;
   // Forgets the attachment's positioning and latch, and invalidates a pending
   // resume; the teardown path uses it.
@@ -197,14 +203,14 @@ export const createYouTubeBoundary = (
         );
         return false;
       }
-      // The wrap guard. It cannot run before the attachment has positioned the
-      // playhead, or the pre-roll reads would each look like a wrap.
-      if (loop && bounds.startTime > 0 && positioned && current) {
-        const start = startOf(current);
-        if (time < start) {
-          restartFromBoundary(current);
-          return false;
-        }
+      // The wrap guard, shared with the Vimeo and Wistia ports so the three
+      // cannot drift apart on which start they compare against.
+      if (
+        current &&
+        atBoundaryWrap(bounds, duration, time, { loop, positioned })
+      ) {
+        restartFromBoundary(current);
+        return false;
       }
       boundaryEnded = false;
       return true;
@@ -231,12 +237,19 @@ export const createYouTubeBoundary = (
       moveTo(current, start, { currentTime: start });
     },
     seekTarget: (time) => {
-      // `undefined` rather than the player's duration: without an `endTime`
-      // the seek keeps the unbounded-above behaviour it has always had.
-      const target = withinBoundary(bounds, undefined, Math.max(0, time));
-      const end = boundaryEnd(bounds, undefined);
+      // The player's own duration, as Vimeo and Wistia pass theirs: the seek
+      // ceiling is the effective end, the same value the end boundary fires
+      // at, so a seek cannot land past the boundary this seam enforces. Before
+      // metadata `getDuration()` answers 0, which `durationOf` reads as no
+      // duration, so an early seek stays unbounded above as it always was.
+      const duration = durationOf(getPlayer());
+      const target = withinBoundary(bounds, duration, Math.max(0, time));
+      const end = boundaryEnd(bounds, duration);
       if (end === undefined || target < end) boundaryEnded = false;
       return target;
+    },
+    clearEnded: () => {
+      boundaryEnded = false;
     },
     clear: () => {
       ++resumeGeneration;

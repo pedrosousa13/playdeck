@@ -1,5 +1,6 @@
 import {
   atBoundaryEnd,
+  atBoundaryWrap,
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,
@@ -41,7 +42,12 @@ export type VimeoBoundary = {
   // True when Vimeo's own `loop=1` wrapped the playhead behind the start
   // boundary. Gated on the attachment being positioned, so the time reports a
   // load emits before the initial seek do not read as a wrap.
-  readonly wrapped: (time: number) => boolean;
+  readonly wrapped: (duration: number | null, time: number) => boolean;
+  // Whether the player's own `ended` is one this seam has to correct rather
+  // than publish. Only a looping embed with a start boundary has anything to
+  // correct: `loop=1` restarts it at zero, which is where an unset start
+  // boundary already is.
+  readonly restartsOnEnded: () => boolean;
   // Whether the adapter has published `ended` at the end boundary — the flag
   // the pause handler suppresses on.
   readonly hasEnded: () => boolean;
@@ -58,7 +64,7 @@ export type VimeoBoundary = {
 export const createVimeoBoundary = (
   options: VimeoBoundaryOptions
 ): VimeoBoundary => {
-  const window = resolveTimeBoundary(options);
+  const bounds = resolveTimeBoundary(options);
   const loop = options.loop ?? false;
   let boundaryEnded = false;
   let positioned = false;
@@ -66,12 +72,13 @@ export const createVimeoBoundary = (
 
   return {
     loop,
-    start: (duration) => boundaryStart(window, duration),
-    clamp: (duration, time) => withinBoundary(window, duration, time),
-    end: (duration) => boundaryEnd(window, duration),
-    atEnd: (duration, time) => atBoundaryEnd(window, duration, time),
-    wrapped: (time) =>
-      loop && positioned && window.startTime > 0 && time < window.startTime,
+    start: (duration) => boundaryStart(bounds, duration),
+    clamp: (duration, time) => withinBoundary(bounds, duration, time),
+    end: (duration) => boundaryEnd(bounds, duration),
+    atEnd: (duration, time) => atBoundaryEnd(bounds, duration, time),
+    wrapped: (duration, time) =>
+      atBoundaryWrap(bounds, duration, time, { loop, positioned }),
+    restartsOnEnded: () => loop && bounds.startTime > 0,
     hasEnded: () => boundaryEnded,
     setEnded: (ended) => {
       boundaryEnded = ended;

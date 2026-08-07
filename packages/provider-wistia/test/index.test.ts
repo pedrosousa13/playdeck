@@ -971,6 +971,28 @@ test('restarts at the end boundary when looping, without publishing ended', asyn
   expect(player.handle.pause).not.toHaveBeenCalled();
 });
 
+// The wrap guard compares against the duration-clamped start. Against the raw
+// one, the position the restart seeks to reads as another wrap and the player
+// restarts on every single time report, forever.
+test('does not restart-loop when the start boundary is past the duration', async () => {
+  const result = await setup({
+    options: { loop: true, startTime: 90 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  expect(seekTargets(player)).toEqual([60]);
+
+  player.handle.currentTime = 60;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(result.patches).toContainEqual({ currentTime: 60 });
+  expect(result.patches).not.toContainEqual({
+    currentTime: 60,
+    buffering: false
+  });
+  expect(seekTargets(player)).toEqual([60]);
+});
+
 test.each([
   ['omitted', undefined],
   ['not a number', Number.NaN],

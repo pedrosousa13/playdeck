@@ -2176,6 +2176,48 @@ test('restarts rather than ending when a looping embed reaches the end boundary'
   expect(events.some((event) => event.type === 'ended')).toBe(false);
 });
 
+// Nothing to correct: `loop=1` already restarts the embed at zero, which is
+// where an unset start boundary is. So the platform's own end stays the end it
+// has always published, as it does on YouTube and Wistia.
+test('keeps publishing ended for a looping embed with no start boundary', async () => {
+  const { events, patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { loop: true }
+  });
+  const player = sdk.instances[0]!;
+
+  player.emit('ended', { duration: 60, percent: 1, seconds: 60 });
+  await flushMicrotasks();
+
+  expect(patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 60
+  });
+  expect(events.at(-1)).toMatchObject({ type: 'ended' });
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+});
+
+// The wrap guard compares against the duration-clamped start. Against the raw
+// one, the position the restart seeks to reads as another wrap and the embed
+// restarts on every single time report, forever.
+test('does not restart-loop when the start boundary is past the duration', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { loop: true, startTime: 90 }
+  });
+  const player = sdk.instances[0]!;
+  expect(player.setCurrentTime).toHaveBeenCalledWith(60);
+  player.setCurrentTime.mockClear();
+
+  player.emit('timeupdate', { duration: 60, percent: 1, seconds: 60 });
+  await flushMicrotasks();
+
+  expect(patches.at(-1)).toEqual({ currentTime: 60, duration: 60 });
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+  expect(player.play).not.toHaveBeenCalled();
+});
+
 // The sanitisation table of `@reely/core`'s helper, asserted through what the
 // adapter does rather than what it computed.
 test.each([

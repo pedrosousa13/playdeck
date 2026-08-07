@@ -72,7 +72,12 @@ export type YouTubePlaybackDeps = {
   // branches which of their events it caused itself.
   readonly boundary: Pick<
     YouTubeBoundary,
-    'applyPlayPosition' | 'clear' | 'isEnded' | 'onProviderEnded' | 'seekTarget'
+    | 'applyPlayPosition'
+    | 'clear'
+    | 'clearEnded'
+    | 'isEnded'
+    | 'onProviderEnded'
+    | 'seekTarget'
   >;
 };
 
@@ -137,8 +142,9 @@ export const createYouTubePlayback = ({
     if (!Number.isFinite(time)) {
       return Promise.resolve({ ok: false, reason: 'provider-error' });
     }
-    // Clamped into the configured window, which with no `endTime` set is the
-    // same `Math.max(0, …)` floor this has always applied.
+    // Clamped into the configured window: the floor is the start boundary (0
+    // when none is set) and the ceiling the effective end, which is the same
+    // place the boundary itself stops playback.
     const target = boundary.seekTarget(time);
     return runCommand((current) => {
       current.seekTo(target, true);
@@ -249,6 +255,11 @@ export const createYouTubePlayback = ({
         const current = getPlayer();
         if (isDestroyed() || !current) return;
         if (data === playerStates.PLAYING) {
+          // Playback resumed, whether this adapter asked for it or the viewer
+          // pressed YouTube's own play button. Either way the window is open
+          // again, so the end boundary has to be able to fire a second time
+          // (`provider-native`, `:129-131`; Vimeo `onPlay`; Wistia `onPlay`).
+          boundary.clearEnded();
           settlePendingPlays({ ok: true });
           const duration = current.getDuration();
           emit(

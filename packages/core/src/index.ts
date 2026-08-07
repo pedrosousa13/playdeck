@@ -50,6 +50,7 @@ export { textTrackLabel } from './text-tracks.js';
 
 export {
   atBoundaryEnd,
+  atBoundaryWrap,
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,

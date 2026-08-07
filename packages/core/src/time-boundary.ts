@@ -78,6 +78,28 @@ export const atBoundaryEnd = (
   return end !== undefined && time >= end;
 };
 
+// The loop wrap guard. Every embed keeps its own platform loop switched on
+// (`loop=1`, `end-video-behavior="loop"`, the single-entry playlist), and every
+// one of them wraps to zero rather than to the start boundary — a restart no
+// time report can be told apart from a seek. So a playhead behind the start of
+// a looping, already-positioned player is read as that wrap and corrected.
+//
+// `positioned` is what keeps the reports a load emits before the initial seek
+// from each looking like a wrap. The comparison is against the *duration-
+// clamped* start: a raw start past the duration would make the position the
+// restart itself seeks to look like yet another wrap, and the player would
+// restart on every report for as long as it played.
+export const atBoundaryWrap = (
+  boundary: TimeBoundary,
+  duration: number | null | undefined,
+  time: number,
+  state: { readonly loop: boolean; readonly positioned: boolean }
+): boolean => {
+  if (!state.loop || !state.positioned) return false;
+  const start = boundaryStart(boundary, duration);
+  return start > 0 && time < start;
+};
+
 // Clamps a requested time into the window. Providers use it for `seekTo` and
 // `seekBy`; passing `undefined` as the duration leaves the seek unbounded
 // above when no `endTime` is set.
