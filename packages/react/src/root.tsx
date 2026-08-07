@@ -431,7 +431,47 @@ export const Root = ({
         return;
       }
       const attachedSourceTransition = sourceTransition;
+      // A decoded first frame hides the poster on its own, deliberately: the
+      // frame is what the poster stood in for, and a preload that reaches it
+      // without ever playing gives the `playing` subscription below nothing to
+      // fire on. That only holds while autoplay is not trying to play. An
+      // attempt the browser refused, or that broke, leaves the media paused on
+      // exactly that frame, so uncovering it hands the viewport a still image
+      // with no cover over it and no gesture that put it there (#242) --
+      // Safari rejecting an audible attempt is the common way to see it.
+      //
+      // So the gate reads autoplay rather than playback, and reads it as an
+      // allow-list: where autoplay is configured, `'started'` is the one state
+      // saying the frame is uncovered because playback reached it, and every
+      // other state defers. Deny-listing the refusals instead would let a state
+      // added to the union later fall through and uncover the frame again -- and
+      // an unsettled attempt has to defer regardless, a promise in flight being
+      // a refusal not yet told: hide on the decode and the rejection that
+      // follows has no way to put the cover back, the same defect arriving as a
+      // race. Gating on `playback === 'playing'` errs the other way, leaving
+      // this writer nothing to do that the subscription does not already do and
+      // giving up the preload case it exists for. Nothing is lost when the
+      // attempt succeeds -- `playing` lands and the subscription hides the
+      // poster the moment it does.
+      //
+      // The mode, not the state, is what says an attempt is still to come:
+      // `'idle'` is where every source with no autoplay sits too, and those must
+      // keep hiding on the first frame. The attempt provably cannot have begun
+      // this early -- `useActivation` prepares the media
+      // (`use-activation.ts:627`) before `setProvider` (`:652`), and
+      // `#synchronizeAutoplay` (`player-controller.ts:631-651`) declines to
+      // apply `'attempting'` until there is a provider and a ready activation.
+      // So the immediate call below for media that attaches already decodable
+      // reads `'idle'` whatever the mode is, as does a `loadeddata` arriving
+      // before the provider's `load()`.
       const onLoadedData = () => {
+        const autoplayState = controller.getState().autoplay;
+        if (
+          autoplayConfiguration.current.autoplay !== false &&
+          autoplayState !== 'started'
+        ) {
+          return;
+        }
         if (
           currentMedia.current === media &&
           providerSourceTransition.current === attachedSourceTransition
