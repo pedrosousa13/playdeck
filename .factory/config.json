@@ -1,7 +1,7 @@
 {
   "stampVersion": "2.0.0",
   "tracker": {
-    "kind": "linear"
+    "kind": "github"
   },
   "merge": {
     "policy": "squash"
