@@ -1625,6 +1625,98 @@ test('hides the poster when attached media already has current data', () => {
   ).toBe('hidden');
 });
 
+test('keeps the poster visible when a frame decodes after refused autoplay', async () => {
+  const { Poster } = posterPrimitives;
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(
+    new DOMException('Playback blocked.', 'NotAllowedError')
+  );
+  render(
+    <LegacyRoot autoplay="audible" source="/blocked.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Blocked autoplay poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+
+  confirmMetadataReady(media);
+  await waitFor(() =>
+    expect(screen.getByRole('button').dataset.autoplayState).toBe('blocked')
+  );
+  fireEvent.loadedData(media);
+
+  expect(
+    screen
+      .getByText('Blocked autoplay poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+});
+
+test('keeps the poster visible when cached media attaches under refused autoplay', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(2);
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(
+    new DOMException('Playback blocked.', 'NotAllowedError')
+  );
+  const { Poster } = posterPrimitives;
+  render(
+    <LegacyRoot autoplay="audible" source="/cached-blocked.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Cached blocked poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+
+  fireEvent.loadedMetadata(screen.getByLabelText('Reely media'));
+  await waitFor(() =>
+    expect(screen.getByRole('button').dataset.autoplayState).toBe('blocked')
+  );
+
+  expect(
+    screen
+      .getByText('Cached blocked poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+});
+
+test('hides the poster when autoplay confirms playback', async () => {
+  const { Poster } = posterPrimitives;
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+    this: HTMLMediaElement
+  ) {
+    this.dispatchEvent(new Event('play'));
+    return Promise.resolve();
+  });
+  render(
+    <LegacyRoot autoplay="audible" source="/autoplay.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Autoplay poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+
+  confirmMetadataReady(screen.getByLabelText<HTMLVideoElement>('Reely media'));
+
+  await waitFor(() =>
+    expect(
+      screen
+        .getByText('Autoplay poster')
+        .parentElement?.getAttribute('data-state')
+    ).toBe('hidden')
+  );
+});
+
 test('keeps poster lifecycle listeners correct through StrictMode replay', () => {
   const { Poster } = posterPrimitives;
   render(
