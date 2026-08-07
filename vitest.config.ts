@@ -37,10 +37,17 @@ export default defineConfig({
     include: [
       'packages/**/*.test.{ts,tsx}',
       'apps/storybook/stories/**/*.contract.test.ts',
-      // Lives beside the module it tests (e2e/background-image-scan.ts) so
-      // both stay in the `e2e` TypeScript project, which is deliberately
-      // `noEmit` and unreferenced (see playwright.config.ts's `testIgnore`
-      // for how this stays out of Playwright's own collection).
+      // Lives beside the module it tests (e2e/background-image-scan.ts): a
+      // project that *imports* from another project needs that project to
+      // emit declarations, and the `e2e` project deliberately does not
+      // (`noEmit`, like `scripts` and `tests` — none of them are a type
+      // source for anything else). Importing e2e/background-image-scan.ts
+      // from apps/storybook instead errors with TS6310 ("Referenced project
+      // may not disable emit"); the root tsconfig.json's own reference to
+      // `./e2e` is build-order aggregation for `tsc -b`, not a type-consuming
+      // import, so that one reference is unaffected. See
+      // playwright.config.ts's `testIgnore` for how this file stays out of
+      // Playwright's own collection.
       'e2e/*.contract.test.ts'
     ],
     // Measured with `pnpm test --coverage`, not gated on. A threshold here

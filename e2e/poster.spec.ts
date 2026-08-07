@@ -29,7 +29,7 @@ const posterImage = (page: Page) =>
 // nodes, so a comment describing a background-image cannot trip that half.
 // CSS has no AST tooling in this repo, so it keeps this comment-stripped text
 // scan.
-const visualSourceExtensions = new Set(['.css']);
+const cssSourceExtensions = new Set(['.css']);
 const ignoredSourceDirectories = new Set([
   '.next',
   'coverage',
@@ -49,7 +49,7 @@ const visualSourceFiles = (directory: string): string[] =>
     if (isIgnoredSourceEntry(entry)) return [];
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return visualSourceFiles(path);
-    return visualSourceExtensions.has(extname(entry.name)) ? [path] : [];
+    return cssSourceExtensions.has(extname(entry.name)) ? [path] : [];
   });
 
 const expectMatchingRectangles = async (page: Page) => {
@@ -160,7 +160,7 @@ test('hides the poster after the first frame without changing its geometry', asy
   await expectMatchingRectangles(page);
 });
 
-test('visual source files do not declare background images', () => {
+test('CSS source files do not declare background images', () => {
   const violations = ['apps', 'packages']
     .flatMap(visualSourceFiles)
     .flatMap((file) =>

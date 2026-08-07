@@ -112,15 +112,19 @@ export default tseslint.config(
     // repo, so its half stays a comment-stripped text scan in
     // e2e/poster.spec.ts.
     //
-    // Scoped to the product source this gate polices, excluding test files
-    // and the e2e suite: `packages/react/test/index.test.tsx` asserts the
-    // poster element carries no `background-image` inline style, and
-    // `e2e/background-image-scan.ts` holds this same gate's CSS half as a
-    // regex literal — both legitimate and must keep passing. Verified
+    // Scoped to the product source this gate polices. Two legitimate
+    // occurrences must keep passing, carved out by two different mechanisms:
+    // `packages/react/test/index.test.tsx` asserts the poster element
+    // carries no `background-image` inline style, and is carved out by
+    // `ignores` below (it is both a `.test.` file and inside a `test/`
+    // directory); `e2e/background-image-scan.ts` holds this same gate's CSS
+    // half as a regex literal, and needs no carve-out at all — `e2e/` was
+    // never in the `files` glob this block matches against, so it is out of
+    // this rule's reach regardless of what it contains. Verified
     // red-then-green by
     // apps/storybook/stories/no-background-image.contract.test.ts.
     files: ['apps/**/*.{js,jsx,ts,tsx}', 'packages/**/*.{js,jsx,ts,tsx}'],
-    ignores: ['**/*.test.*', '**/test/**'],
+    ignores: ['**/*.test.*', '**/*.spec.*', '**/test/**'],
     rules: {
       'no-restricted-syntax': [
         'error',

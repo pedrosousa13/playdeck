@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { cssBackgroundImageViolations } from './background-image-scan';
 
 // The CSS half of the split described in eslint.config.js and
-// poster.spec.ts's "visual source files do not declare background images":
+// poster.spec.ts's "CSS source files do not declare background images":
 // a comment-stripped text scan, because no CSS linter exists in this repo.
 // This is a vitest unit test rather than a Playwright spec so it runs under
 // `pnpm test` without a Storybook build — it needs no browser, only the pure

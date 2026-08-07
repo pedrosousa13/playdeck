@@ -1,4 +1,4 @@
-// The CSS half of the background-image gate (see poster.spec.ts's "visual
+// The CSS half of the background-image gate (see poster.spec.ts's "CSS
 // source files do not declare background images"). CSS has exactly one
 // comment form and no string-escaping hazard, so a regex strip is correct
 // here in a way it would not be for TypeScript (which gets an AST-based
@@ -15,7 +15,7 @@ const stripCssComments = (source: string): string =>
     comment.replace(/[^\n]/g, ' ')
   );
 
-const forbiddenPattern = /background-image/g;
+const backgroundImagePattern = /background-image/g;
 
 export const cssBackgroundImageViolations = (
   source: string,
@@ -25,7 +25,7 @@ export const cssBackgroundImageViolations = (
     .split(/\r?\n/)
     .flatMap((line, index) =>
       Array.from(
-        line.matchAll(forbiddenPattern),
+        line.matchAll(backgroundImagePattern),
         (match) => `${file}:${index + 1}: ${match[0]}`
       )
     );

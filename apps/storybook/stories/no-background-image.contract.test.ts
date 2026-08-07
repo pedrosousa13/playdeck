@@ -12,8 +12,14 @@ import { beforeAll, describe, expect, it } from 'vitest';
 // AST-based no-restricted-syntax rule where a comment cannot trip it, because
 // comments are not nodes. The CSS half's own contract test is
 // e2e/background-image-scan.contract.test.ts — its module cannot be imported
-// from here without crossing into the `e2e` TypeScript project, which is
-// deliberately `noEmit` and unreferenced (like `scripts` and `tests`).
+// from here: the `e2e` TypeScript project is deliberately `noEmit` (like
+// `scripts` and `tests`, it is never a type source for another project), and
+// a project that imports from another project requires that project to
+// emit declarations. Importing e2e/background-image-scan.ts from here errors
+// with TS6310 ("Referenced project may not disable emit"). The root
+// tsconfig.json does list `{ "path": "./e2e" }`, but that is build-order
+// aggregation for `tsc -b`, not a type-consuming import, so it hits no such
+// rule.
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
 // The exact message text per selector, from eslint.config.js — asserted
@@ -152,7 +158,7 @@ describe('the background-image AST rule (JS/JSX/TS/TSX)', () => {
     );
   });
 
-  it("does not flag the guard's own forbiddenPattern regex literal in e2e/background-image-scan.ts", async () => {
+  it("does not widen its scope into e2e/, where background-image-scan.ts's backgroundImagePattern regex lives", async () => {
     expect(await lintRealFile('e2e/background-image-scan.ts')).toEqual([]);
   });
 });
