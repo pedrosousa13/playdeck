@@ -1100,6 +1100,105 @@ test('clamps a seek to the window rather than ending at it', async () => {
   );
 });
 
+// --- liveness ---
+
+// Every published liveness value, in order. A patch without the key is a
+// deliberate silence, so the filter is what the no-redundant-patch rule is
+// asserted against.
+const livePatches = (
+  patches: ProviderStatePatch[]
+): ReadonlyArray<ProviderStatePatch['live']> =>
+  patches.filter((patch) => 'live' in patch).map((patch) => patch.live);
+
+test("publishes live state for Wistia's LiveStream media type", async () => {
+  const result = await setup({
+    fake: { mediaData: { mediaType: 'LiveStream' }, duration: 5 }
+  });
+
+  expect(readyPatch(result.patches)).toMatchObject({
+    live: { isLive: true, atLiveEdge: true }
+  });
+});
+
+test('reports no liveness for an ordinary Video media type', async () => {
+  const result = await setup({
+    fake: { mediaData: { mediaType: 'Video' }, duration: 60 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 30;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(livePatches(result.patches)).toEqual([]);
+});
+
+test('reports no liveness for media data that names no type', async () => {
+  // `MediaData.mediaType` is optional in Wistia's own declaration, and an
+  // absent one is an unanswered question — never a live stream.
+  const result = await setup({ fake: { mediaData: {}, duration: 60 } });
+  const player = element(result);
+  player.handle.currentTime = 30;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(livePatches(result.patches)).toEqual([]);
+});
+
+test('recomputes the at-edge flag as the playhead moves', async () => {
+  const result = await setup({
+    fake: { mediaData: { mediaType: 'LiveStream' }, duration: 100 }
+  });
+  const player = element(result);
+  // Wistia exposes no seekable window, so `duration()` is the live edge and
+  // the playhead's distance behind it is the whole measurement. At zero the
+  // player is 100 seconds behind, which is past the shared tolerance.
+  expect(readyPatch(result.patches)).toMatchObject({
+    live: { isLive: true, atLiveEdge: false }
+  });
+
+  player.handle.currentTime = 95;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+  expect(livePatches(result.patches).at(-1)).toEqual({
+    isLive: true,
+    atLiveEdge: true
+  });
+
+  player.handle.currentTime = 80;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+  expect(livePatches(result.patches).at(-1)).toEqual({
+    isLive: true,
+    atLiveEdge: false
+  });
+});
+
+test('publishes nothing for a live value equal to the last one', async () => {
+  const result = await setup({
+    fake: { mediaData: { mediaType: 'LiveStream' }, duration: 100 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 95;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+  const published = livePatches(result.patches).length;
+
+  // Both still inside the tolerance, so the value is the one already published.
+  player.handle.currentTime = 96;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+  player.handle.currentTime = 97;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(livePatches(result.patches)).toHaveLength(published);
+});
+
+test('republishes liveness for the player a retry puts in place', async () => {
+  const result = await setup({
+    fake: { mediaData: { mediaType: 'LiveStream' }, duration: 5 }
+  });
+  expect(livePatches(result.patches)).toHaveLength(1);
+
+  // The held value is per-source state: carrying it across the replacement
+  // would suppress the new player's first answer.
+  await expect(result.provider.retry()).resolves.toEqual({ ok: true });
+  expect(livePatches(result.patches)).toHaveLength(2);
+});
+
 // --- teardown, retry and staleness ---
 
 test('destroy removes the player and stops publishing', async () => {

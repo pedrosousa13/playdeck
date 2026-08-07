@@ -22,6 +22,7 @@ export { loadWistiaPlayer, resetWistiaPlayerLoader } from './loader.js';
 export type {
   PublicApi,
   WistiaApiReadyDetail,
+  WistiaLoadedMediaDataDetail,
   WistiaMuteChangeDetail,
   WistiaPlayerApi,
   WistiaPlayerAttribute,

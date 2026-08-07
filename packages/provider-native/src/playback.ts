@@ -32,6 +32,9 @@ export type NativePlaybackDeps = {
   // Lifecycle guard: a deferred loop replay must not touch the element after
   // the provider has been destroyed.
   readonly isDestroyed: () => boolean;
+  // Drops the last published liveness, alongside this seam's own per-source
+  // state, so the reloaded source publishes its first `live` patch again.
+  readonly resetLiveState: () => void;
 };
 
 // The playback seam: transport commands plus the [startTime, endTime] boundary
@@ -69,7 +72,7 @@ export type NativePlayback = {
 export const createNativePlayback = (
   media: HTMLVideoElement,
   options: NativePlaybackOptions,
-  { emit, isDestroyed }: NativePlaybackDeps
+  { emit, isDestroyed, resetLiveState }: NativePlaybackDeps
 ): NativePlayback => {
   const startTime =
     Number.isFinite(options.startTime) && (options.startTime ?? 0) > 0
@@ -289,6 +292,7 @@ export const createNativePlayback = (
       return runCommand(() => {
         positioned = false;
         boundaryEnded = false;
+        resetLiveState();
         media.load();
       });
     },

@@ -73,12 +73,12 @@ export const provider = createHlsProvider(videoElement, {
 
 ## Exports
 
-| Export                 | What it is                                                                 |
-| ---------------------- | -------------------------------------------------------------------------- |
-| `createHlsProvider`    | Builds the adapter over a `<video>` element and an `HlsSource`.            |
-| `selectHlsEngine`      | The engine decision, given a requested engine and a detected environment.  |
-| `detectHlsEnvironment` | What the browser offers: native HLS, MSE, or neither.                      |
-| `deriveLiveState`      | The `isLive` / `atLiveEdge` derivation, from a duration and a seek window. |
+| Export                 | What it is                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `createHlsProvider`    | Builds the adapter over a `<video>` element and an `HlsSource`.                |
+| `selectHlsEngine`      | The engine decision, given a requested engine and a detected environment.      |
+| `detectHlsEnvironment` | What the browser offers: native HLS, MSE, or neither.                          |
+| `deriveLiveState`      | The shared `isLive` / `atLiveEdge` derivation, re-exported from `@reely/core`. |
 
 Types: `HlsProviderOptions`, `HlsEnvironment`, `HlsEngineSelection`,
 `LiveDerivationInput`, `HlsModuleLoader`, and the structural shapes this adapter
@@ -123,7 +123,9 @@ exist.
   sidecar `<track>` children discovered by the native subsystem are dropped so
   the two cannot both claim the state.
 
-`deriveLiveState` is that derivation, exported so a custom adapter can reuse it:
+`deriveLiveState` is that derivation. It lives in
+[`@reely/core`](../core#live-state), where every adapter shares one copy, and is
+re-exported here so a custom HLS adapter can reuse it:
 
 <!-- example:provider-hls-live -->
 

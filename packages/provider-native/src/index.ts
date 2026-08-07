@@ -52,7 +52,8 @@ export const createNativeProvider = (
 
   const playback = createNativePlayback(media, options, {
     emit,
-    isDestroyed: () => attachment.isDestroyed()
+    isDestroyed: () => attachment.isDestroyed(),
+    resetLiveState: () => attachment.resetLiveState()
   });
 
   const presentation = createNativePresentation(media, {

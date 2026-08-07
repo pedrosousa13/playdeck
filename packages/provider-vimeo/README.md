@@ -89,6 +89,17 @@ origins list and what a page's CSP has to allow.
 - **Cue timings are not reported.** The payload carries no start or end, so a
   cue reports the position it became active at for both bounds.
 - **`buffered` is every range**, including the gaps a seek leaves behind.
+- **`live` is never reported.** `@vimeo/player@2.30.4` publishes no liveness
+  signal at all: its typings (`types/player.d.ts`, `types/events.ts`) carry no
+  liveness member on the player and no `live` entry in `PlayerEventMap`, and
+  neither does the subset this adapter declares for itself (`src/loader.ts`).
+  What the SDK does offer — `getDuration()`, `getSeekable()`, `getBuffered()`
+  and the `durationchange` event — describes a live event and a video on demand
+  identically: a duration that grows as playback runs on is also what a VOD
+  reports while its metadata settles. So the adapter publishes no `live` key at
+  all rather than a guess — the field is absent from every patch, not present
+  holding `null`. Pinned by "pins the liveness gap" in `test/index.test.ts`
+  (#187).
 - **The `[startTime, endTime]` window is this adapter's to enforce.** Vimeo
   carries a start as a `#t=` fragment on the embed url, which only keeps the
   embed from loading at zero — the seek this adapter issues when the player is

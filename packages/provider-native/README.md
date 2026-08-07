@@ -58,6 +58,10 @@ export const play = (): Promise<unknown> => controller.play();
   API". It goes back to `unavailable` when the route disappears.
 - **Captions** are Reely's to draw by default (`captionRendering: 'custom'`);
   `setCaptionRenderer('native')` hands them back to the browser's own renderer.
+- **`live`** comes from the element's own signals: an endless `duration` and the
+  moving `seekable` window, measured against the playhead. Never from the source
+  URL. A file with a finite duration reports `null`, and the value is published
+  again only when it changes.
 - **`commandsReady`** is declared after `media.load()`, because `load()` resets
   `playbackRate` and anything applied earlier would be silently undone.
 

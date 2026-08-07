@@ -77,6 +77,18 @@ origins list and what a page's CSP has to allow.
   undocumented `captions` module, so it follows community-observed conventions
   rather than a published contract.
 - **`pictureInPicture` is `unavailable`**: the embed owns its own video element.
+- **`live` is never reported.** The IFrame Player API surface this adapter
+  declares (`src/loader.ts`) carries no liveness member, and nothing else the
+  API offers separates a broadcast from a video on demand: on a live stream
+  `getDuration()` returns the time elapsed since the broadcast began, which is
+  the same shape as a VOD duration and grows the same way one does while
+  metadata is still settling. So the adapter publishes no `live` key at all
+  rather than a guess — the field is absent from every patch, not present
+  holding `null`. The undocumented `getVideoData().isLive` was considered and
+  rejected: it is not part of the declared surface, Google does not support it,
+  and there is no live-stream fixture in this repo to verify it against, so
+  taking it would trade an honest gap for a claim nobody here can check. Pinned
+  by "pins the liveness gap" in `test/index.test.ts` (#187).
 - **`startTime` and `endTime` are enforced by this adapter, not by YouTube.**
   The `start` player var is written as a load hint so the embed does not load
   from zero, but it is whole-second only, so the adapter seeks to the exact

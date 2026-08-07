@@ -1532,3 +1532,48 @@ test('leaves a seek unbounded above while the duration is unknown', async () => 
   await expect(provider.seekTo?.(5_000)).resolves.toEqual({ ok: true });
   expect(harness.player.seekTo).toHaveBeenLastCalledWith(5_000, true);
 });
+
+// --- liveness is a documented gap (#187) ---
+//
+// This adapter cannot tell a live broadcast from a VOD, so it publishes no
+// `live` at all rather than guessing one. The test pins that: the key is
+// absent from every patch, not present holding `null`. See the README's
+// "What it reports honestly" for the surface that was checked and why the
+// undocumented `getVideoData().isLive` was left alone.
+//
+// DELETE THIS TEST, and the README section it pins, if this adapter is ever
+// made live-capable.
+test('pins the liveness gap: no patch ever carries a live key (#187)', async () => {
+  vi.useFakeTimers();
+  const { harness, patches, provider } = await readyAdapter();
+
+  const playing = provider.play();
+  harness.fireStateChange(playerStates.PLAYING);
+  await expect(playing).resolves.toEqual({ ok: true });
+
+  // A duration that arrives late, then grows -- the shape a broadcast's
+  // elapsed time has, and the one a VOD has while metadata settles.
+  harness.duration = 300;
+  harness.currentTime = 12;
+  harness.loadedFraction = 0.4;
+  await vi.advanceTimersByTimeAsync(300);
+  harness.duration = 600;
+  harness.currentTime = 24;
+  await vi.advanceTimersByTimeAsync(300);
+
+  await expect(provider.seekTo?.(30)).resolves.toEqual({ ok: true });
+  harness.fireStateChange(playerStates.BUFFERING);
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+  harness.fireStateChange(playerStates.PAUSED);
+  harness.fireStateChange(playerStates.ENDED);
+
+  // The lifecycle really ran, so the absence below is not a vacuous pass.
+  expect(patches).toContainEqual(
+    expect.objectContaining({ lifecycle: 'ready' })
+  );
+  expect(patches).toContainEqual(
+    expect.objectContaining({ playback: 'playing' })
+  );
+  expect(patches.filter((patch) => 'live' in patch)).toEqual([]);
+});

@@ -62,21 +62,21 @@ origins list and what a page's CSP has to allow.
 
 ## Exports
 
-| Export                                           | What it is                                                                                                                                                                                                                               |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createWistiaProvider`                           | Builds the adapter over a mount element and a `WistiaSource`.                                                                                                                                                                            |
-| `loadWistiaPlayer`                               | Loads the player bundle and resolves the `<wistia-player>` registration. Cached across players; takes your own importer.                                                                                                                 |
-| `resetWistiaPlayerLoader`                        | Drops the cached registration — for tests that need a clean load.                                                                                                                                                                        |
-| `API_READY_TIMEOUT_MS`                           | How long the `api-ready` handshake is given before the attach reports an error.                                                                                                                                                          |
-| `WistiaProviderOptions`                          | `controls`, `dnt`, `loop`, `startTime`, `endTime`. Through `Player.Root`, `loop`, `startTime` and `endTime` are each their own prop (ADR-0004), not bag keys; `controls` is still a bag key here, because no fan-out reaches Wistia yet. |
-| `WistiaProviderAdapter`                          | The adapter's own type.                                                                                                                                                                                                                  |
-| `WistiaMountElement`                             | What the adapter can mount into.                                                                                                                                                                                                         |
-| `WistiaPlayerElement`                            | The `<wistia-player>` element as this adapter types it.                                                                                                                                                                                  |
-| `WistiaPlayerApi`                                | The slice of Wistia's `PublicApi` this adapter drives.                                                                                                                                                                                   |
-| `WistiaPlayerState`                              | Wistia's own `beforeplay` / `playing` / `paused` / `ended` vocabulary.                                                                                                                                                                   |
-| `WistiaPlayerAttribute`                          | Every embed-option name the element accepts, from Wistia's `Attributes`.                                                                                                                                                                 |
-| `PublicApi`                                      | Wistia's own handle declaration, re-exported rather than restated.                                                                                                                                                                       |
-| `WistiaApiReadyDetail`, `WistiaMuteChangeDetail` | The payloads of the two declared events this adapter reads, for a listener you add to the same element.                                                                                                                                  |
+| Export                                                                          | What it is                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createWistiaProvider`                                                          | Builds the adapter over a mount element and a `WistiaSource`.                                                                                                                                                                            |
+| `loadWistiaPlayer`                                                              | Loads the player bundle and resolves the `<wistia-player>` registration. Cached across players; takes your own importer.                                                                                                                 |
+| `resetWistiaPlayerLoader`                                                       | Drops the cached registration — for tests that need a clean load.                                                                                                                                                                        |
+| `API_READY_TIMEOUT_MS`                                                          | How long the `api-ready` handshake is given before the attach reports an error.                                                                                                                                                          |
+| `WistiaProviderOptions`                                                         | `controls`, `dnt`, `loop`, `startTime`, `endTime`. Through `Player.Root`, `loop`, `startTime` and `endTime` are each their own prop (ADR-0004), not bag keys; `controls` is still a bag key here, because no fan-out reaches Wistia yet. |
+| `WistiaProviderAdapter`                                                         | The adapter's own type.                                                                                                                                                                                                                  |
+| `WistiaMountElement`                                                            | What the adapter can mount into.                                                                                                                                                                                                         |
+| `WistiaPlayerElement`                                                           | The `<wistia-player>` element as this adapter types it.                                                                                                                                                                                  |
+| `WistiaPlayerApi`                                                               | The slice of Wistia's `PublicApi` this adapter drives.                                                                                                                                                                                   |
+| `WistiaPlayerState`                                                             | Wistia's own `beforeplay` / `playing` / `paused` / `ended` vocabulary.                                                                                                                                                                   |
+| `WistiaPlayerAttribute`                                                         | Every embed-option name the element accepts, from Wistia's `Attributes`.                                                                                                                                                                 |
+| `PublicApi`                                                                     | Wistia's own handle declaration, re-exported rather than restated.                                                                                                                                                                       |
+| `WistiaApiReadyDetail`, `WistiaMuteChangeDetail`, `WistiaLoadedMediaDataDetail` | The payloads of the three declared events this adapter reads, for a listener you add to the same element.                                                                                                                                |
 
 ## What it reports honestly
 
@@ -120,6 +120,18 @@ origins list and what a page's CSP has to allow.
   is pre-existing player behaviour, deliberately left alone by #214 — that
   change fanned `startTime` and `endTime` out to the embeds and did not revise
   how `loop` fans out. A `startTime` is what makes this adapter step in.
+- **Liveness is reported, from Wistia's media type and nothing else.** The
+  element dispatches `loaded-media-data` with the media data it fetched, and
+  `MediaData.mediaType` is `'LiveStream'` for a live broadcast. That is the only
+  signal the adapter reads: never the source URL, the media id or a filename.
+  Media data that names no type, and a load that reports no media data at all,
+  both read as not live. Wistia exposes no seekable window, so the at-edge flag
+  measures the playhead against `duration()` and is recomputed on every
+  `time-update`; a duration that is not a finite number leaves the edge unknown,
+  which reports as at the edge. The published `live` value changes or nothing is
+  published — an unchanged one produces no patch. `duration` is left as Wistia
+  reports it while live, which is where this adapter differs from
+  `@reely/provider-hls`.
 - **`fullscreen` is `available`.** `PublicApi.requestFullscreen()` and
   `cancelFullscreen()` drive the player's own fullscreen element, and its
   `enter-fullscreen` / `cancel-fullscreen` events confirm the change.
