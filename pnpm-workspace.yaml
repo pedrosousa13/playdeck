@@ -13,10 +13,17 @@ packages:
 # and carries no such record:
 #   brace-expansion >=5.0.9  GHSA-rgw5-rvv9-x895 (high, DoS)
 #   postcss         >=8.5.23 GHSA-fxqj-rqcc-2cmp (moderate, sourceMappingURL)
+#   js-yaml         >=3.15.1 GHSA-5p4m-2wfm-xmqj (high, quadratic CPU in !!omap)
+#   js-yaml         >=4.3.1  GHSA-5p4m-2wfm-xmqj (same advisory, 4.x range)
+# js-yaml needs one entry per major: the advisory covers 3.x and 4.x with
+# separate patched versions, and a single `<4.3.1` selector would drag 3.x
+# across a major boundary. It reaches us only under @changesets/cli.
 overrides:
   brace-expansion@<5.0.9: '>=5.0.9'
   postcss@<8.5.23: '>=8.5.23'
   sharp@<0.35.0: '>=0.35.0'
+  js-yaml@3: '>=3.15.1 <4'
+  js-yaml@4: '>=4.3.1 <5'
 allowBuilds:
   esbuild@0.28.1: true
 minimumReleaseAgeExclude:
