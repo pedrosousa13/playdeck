@@ -44,11 +44,11 @@ const isIgnoredSourceEntry = (entry: Dirent): boolean =>
   entry.name.includes('.test.') ||
   entry.isSymbolicLink() ||
   (entry.isDirectory() && ignoredSourceDirectories.has(entry.name));
-const visualSourceFiles = (directory: string): string[] =>
+const cssSourceFiles = (directory: string): string[] =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     if (isIgnoredSourceEntry(entry)) return [];
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) return visualSourceFiles(path);
+    if (entry.isDirectory()) return cssSourceFiles(path);
     return cssSourceExtensions.has(extname(entry.name)) ? [path] : [];
   });
 
@@ -162,7 +162,7 @@ test('hides the poster after the first frame without changing its geometry', asy
 
 test('CSS source files do not declare background images', () => {
   const violations = ['apps', 'packages']
-    .flatMap(visualSourceFiles)
+    .flatMap(cssSourceFiles)
     .flatMap((file) =>
       cssBackgroundImageViolations(readFileSync(file, 'utf8'), file)
     );
