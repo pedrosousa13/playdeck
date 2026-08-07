@@ -26,9 +26,11 @@ is trusted.
 The sanitisation rules are the native provider's, unchanged and now identical on
 all five: a start that is absent, non-positive or non-finite is no start; an end
 that is absent, non-finite, or not above the start is no end; an end past the
-duration is clamped to it. `@reely/core` gains the shared helper that states
-them — `resolveTimeBoundary`, `boundaryStart`, `boundaryEnd`, `atBoundaryEnd`,
-`atBoundaryWrap` and `withinBoundary`, plus the `TimeBoundary` type.
+duration is clamped to it. `@reely/core` gains one export that states them:
+`createTimeBoundary(options)` resolves the window once and returns a
+`TimeBoundary` carrying every question the ports ask of it — `start`, `end`,
+`atEnd`, `atWrap`, `restartsAtStart` and `clamp`, alongside the sanitised
+`startTime` and `endTime` the embeds write as load hints.
 
 One pre-existing YouTube behaviour changes with it: `seekTo` and `seekBy` now
 clamp to the window's effective end — the `endTime`, or the duration when there

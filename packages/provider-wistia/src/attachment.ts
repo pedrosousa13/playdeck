@@ -1,6 +1,5 @@
 import {
-  boundaryStart,
-  resolveTimeBoundary,
+  createTimeBoundary,
   type CommandResult,
   type MediaDimensions,
   type PlayerCapabilities,
@@ -255,7 +254,7 @@ export const createWistiaAttachment = (
     // which is why the boundary is resolved against `null` here and again
     // against the real duration at ready. There is no end counterpart to
     // write: Aurora has none, so the end boundary is adapter-enforced.
-    const start = boundaryStart(resolveTimeBoundary(options), null);
+    const start = createTimeBoundary(options).start(null);
     if (start > 0) setOption('currentTime', String(start));
 
     // These four are presentation-only and each has no Wistia-side default to

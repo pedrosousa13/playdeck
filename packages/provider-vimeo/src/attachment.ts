@@ -1,5 +1,5 @@
 import {
-  resolveTimeBoundary,
+  createTimeBoundary,
   type CommandResult,
   type MediaDimensions,
   type PlayerCapabilities,
@@ -70,7 +70,7 @@ const vimeoEmbedUrl = (
   // A load hint only: it saves the embed from starting at zero and seeking
   // away, but the playback seam's own seek at ready is the authority. Vimeo has
   // no end equivalent at all, so `endTime` never reaches the url (#214).
-  const { startTime } = resolveTimeBoundary(options);
+  const { startTime } = createTimeBoundary(options);
   if (startTime > 0) url.hash = `t=${startTime}s`;
   return url.href;
 };

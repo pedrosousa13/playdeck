@@ -1,12 +1,4 @@
-import {
-  atBoundaryEnd,
-  atBoundaryWrap,
-  boundaryEnd,
-  boundaryStart,
-  resolveTimeBoundary,
-  restartsAtBoundaryStart,
-  withinBoundary
-} from '@reely/core';
+import { createTimeBoundary } from '@reely/core';
 import {
   playerStates,
   providerEvent,
@@ -100,7 +92,7 @@ export const createYouTubeBoundary = (
   options: YouTubeBoundaryOptions,
   { emit, isDestroyed, getPlayer, timeUpdates }: YouTubeBoundaryDeps
 ): YouTubeBoundary => {
-  const bounds = resolveTimeBoundary(options);
+  const bounds = createTimeBoundary(options);
   const loop = options.loop === true;
   let positioned = false;
   let boundaryEnded = false;
@@ -121,7 +113,7 @@ export const createYouTubeBoundary = (
   };
 
   const startOf = (current: YouTubeBoundaryPlayer | undefined): number =>
-    boundaryStart(bounds, durationOf(current));
+    bounds.start(durationOf(current));
 
   // Seeks and reports the intended position: a read-back would still return
   // the pre-seek time, and the poll does not run while the player is paused.
@@ -186,7 +178,7 @@ export const createYouTubeBoundary = (
     onTimeReport: (time) => {
       const current = getPlayer();
       const duration = durationOf(current);
-      if (atBoundaryEnd(bounds, duration, time)) {
+      if (bounds.atEnd(duration, time)) {
         if (loop) {
           if (current) restartFromBoundary(current);
           return false;
@@ -195,7 +187,7 @@ export const createYouTubeBoundary = (
         boundaryEnded = true;
         // Polling stops here; the PLAYING branch starts it again on a resume.
         timeUpdates.stop();
-        const end = boundaryEnd(bounds, duration) ?? time;
+        const end = bounds.end(duration) ?? time;
         try {
           current?.pauseVideo();
         } catch {
@@ -210,10 +202,7 @@ export const createYouTubeBoundary = (
       }
       // The wrap guard, shared with the Vimeo and Wistia ports so the three
       // cannot drift apart on which start they compare against.
-      if (
-        current &&
-        atBoundaryWrap(bounds, duration, time, { loop, positioned })
-      ) {
+      if (current && bounds.atWrap(duration, time, { loop, positioned })) {
         restartFromBoundary(current);
         return false;
       }
@@ -225,7 +214,7 @@ export const createYouTubeBoundary = (
       const current = getPlayer();
       // Only a start boundary needs correcting: YouTube's own playlist loop
       // already restarts at zero, which is where an unset start boundary is.
-      if (current && restartsAtBoundaryStart(bounds, loop)) {
+      if (current && bounds.restartsAtStart(loop)) {
         restartFromBoundary(current);
         return true;
       }
@@ -241,7 +230,7 @@ export const createYouTubeBoundary = (
       // The media's own end is covered by the latch, set from the ENDED state
       // change; this second test is only for the window's end, which the poll
       // can miss when playback is paused across it.
-      const end = boundaryEnd(bounds, durationOf(current));
+      const end = bounds.end(durationOf(current));
       const atEnd =
         bounds.endTime !== undefined &&
         end !== undefined &&
@@ -258,8 +247,8 @@ export const createYouTubeBoundary = (
       // metadata `getDuration()` answers 0, which `durationOf` reads as no
       // duration, so an early seek stays unbounded above as it always was.
       const duration = durationOf(getPlayer());
-      const target = withinBoundary(bounds, duration, Math.max(0, time));
-      const end = boundaryEnd(bounds, duration);
+      const target = bounds.clamp(duration, Math.max(0, time));
+      const end = bounds.end(duration);
       if (end === undefined || target < end) boundaryEnded = false;
       return target;
     },

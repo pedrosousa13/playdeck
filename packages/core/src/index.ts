@@ -48,15 +48,7 @@ export { detectSource } from './source-detection.js';
 
 export { textTrackLabel } from './text-tracks.js';
 
-export {
-  atBoundaryEnd,
-  atBoundaryWrap,
-  boundaryEnd,
-  boundaryStart,
-  resolveTimeBoundary,
-  restartsAtBoundaryStart,
-  withinBoundary
-} from './time-boundary.js';
+export { createTimeBoundary } from './time-boundary.js';
 
 export type { TimeBoundary } from './time-boundary.js';
 

@@ -11,9 +11,69 @@
 // duplication is deliberate, and the two sanitisation tables must stay
 // identical — change one, change the other.
 
+// The resolved window, and every question the ports ask of it. One object
+// rather than a family of free functions: the ports only ever consult a window
+// they have already resolved, so the boundary travels with its own behaviour.
 export type TimeBoundary = {
+  // The sanitised values themselves, for the load hints the embeds write into
+  // their own urls and attributes.
   readonly startTime: number;
   readonly endTime: number | undefined;
+  // Where the window actually ends, once the duration is known. With no
+  // `endTime` this is the duration itself, so a clamp still keeps a seek inside
+  // the media; with one, the duration caps it.
+  readonly end: (duration: number | null | undefined) => number | undefined;
+  // Where playback starts, and where a loop restart returns to. A start past
+  // the effective end collapses onto it rather than seeking out of the media.
+  readonly start: (duration: number | null | undefined) => number;
+  // False whenever no `endTime` was configured: reaching the natural end of the
+  // media stays the platform's own event to report, not something the adapter
+  // synthesises.
+  readonly atEnd: (
+    duration: number | null | undefined,
+    time: number
+  ) => boolean;
+  // The loop wrap guard. Every embed keeps its own platform loop switched on
+  // (`loop=1`, `end-video-behavior="loop"`, the single-entry playlist), and
+  // every one of them wraps to zero rather than to the start boundary — a
+  // restart no time report can be told apart from a seek. So a playhead behind
+  // the start of a looping, already-positioned player is read as that wrap and
+  // corrected.
+  //
+  // `positioned` is what keeps the reports a load emits before the initial seek
+  // from each looking like a wrap. The comparison is against the *duration-
+  // clamped* start: a raw start past the duration would make the position the
+  // restart itself seeks to look like yet another wrap, and the player would
+  // restart on every report for as long as it played.
+  readonly atWrap: (
+    duration: number | null | undefined,
+    time: number,
+    state: { readonly loop: boolean; readonly positioned: boolean }
+  ) => boolean;
+  // The other half of the loop story: what a platform's *own* end-of-media
+  // event means. Every embed keeps its own loop mechanism switched on and every
+  // one of them restarts at zero, so only a window that begins somewhere else
+  // has anything to correct — with no `startTime`, the platform already
+  // restarts where the window begins. Written out once here because the three
+  // ports have to answer it identically; it was triplicated before, and
+  // drifted.
+  //
+  // DECLARED DIVERGENCE FROM NATIVE, left as it was by #214. Native gates its
+  // `ended` handler on `loop` alone (`provider-native/src/playback.ts:149-153`)
+  // and never sets `media.loop`, so a looping native video with no `startTime`
+  // publishes *no* `ended` — it silently restarts. All three embeds do publish
+  // `ended` on every loop iteration in that configuration, because this
+  // predicate is false there and the platform's own end passes straight
+  // through. That is pre-existing embed behaviour: #214 fanned `startTime` and
+  // `endTime` out to the embeds and deliberately did not revise how `loop` fans
+  // out, and suppressing `ended` would change what shipped `loop` users already
+  // receive. `startTime` is the only thing that makes an embed port intervene
+  // at all.
+  readonly restartsAtStart: (loop: boolean) => boolean;
+  // Clamps a requested time into the window. Providers use it for `seekTo` and
+  // `seekBy`; passing `undefined` as the duration leaves the seek unbounded
+  // above when no `endTime` is set.
+  readonly clamp: (duration: number | null | undefined, time: number) => number;
 };
 
 const finiteOrUndefined = (
@@ -24,7 +84,7 @@ const finiteOrUndefined = (
 // A start is honoured only when it is finite and positive; an end only when it
 // is finite and above the *sanitised* start. Anything else is dropped rather
 // than reported, matching native: a nonsense window plays the whole video.
-export const resolveTimeBoundary = (options: {
+export const createTimeBoundary = (options: {
   readonly startTime?: number;
   readonly endTime?: number;
 }): TimeBoundary => {
@@ -36,103 +96,49 @@ export const resolveTimeBoundary = (options: {
     Number.isFinite(options.endTime) && (options.endTime ?? 0) > startTime
       ? options.endTime
       : undefined;
-  return { startTime, endTime };
-};
 
-// Where the window actually ends, once the duration is known. With no
-// `endTime` this is the duration itself, so a clamp still keeps a seek inside
-// the media; with one, the duration caps it.
-export const boundaryEnd = (
-  boundary: TimeBoundary,
-  duration: number | null | undefined
-): number | undefined => {
-  const finiteDuration = finiteOrUndefined(duration);
-  if (boundary.endTime === undefined) return finiteDuration;
-  return finiteDuration === undefined
-    ? boundary.endTime
-    : Math.min(boundary.endTime, finiteDuration);
-};
+  const end = (duration: number | null | undefined): number | undefined => {
+    const finiteDuration = finiteOrUndefined(duration);
+    if (endTime === undefined) return finiteDuration;
+    return finiteDuration === undefined
+      ? endTime
+      : Math.min(endTime, finiteDuration);
+  };
 
-// Where playback starts, and where a loop restart returns to. A start past the
-// effective end collapses onto it rather than seeking out of the media.
-export const boundaryStart = (
-  boundary: TimeBoundary,
-  duration: number | null | undefined
-): number => {
-  const end = boundaryEnd(boundary, duration);
-  return end === undefined
-    ? boundary.startTime
-    : Math.min(boundary.startTime, end);
-};
+  const start = (duration: number | null | undefined): number => {
+    const effectiveEnd = end(duration);
+    return effectiveEnd === undefined
+      ? startTime
+      : Math.min(startTime, effectiveEnd);
+  };
 
-// False whenever no `endTime` was configured: reaching the natural end of the
-// media stays the platform's own event to report, not something the adapter
-// synthesises.
-export const atBoundaryEnd = (
-  boundary: TimeBoundary,
-  duration: number | null | undefined,
-  time: number
-): boolean => {
-  if (boundary.endTime === undefined) return false;
-  const end = boundaryEnd(boundary, duration);
-  return end !== undefined && time >= end;
-};
+  const atEnd = (
+    duration: number | null | undefined,
+    time: number
+  ): boolean => {
+    if (endTime === undefined) return false;
+    const effectiveEnd = end(duration);
+    return effectiveEnd !== undefined && time >= effectiveEnd;
+  };
 
-// The loop wrap guard. Every embed keeps its own platform loop switched on
-// (`loop=1`, `end-video-behavior="loop"`, the single-entry playlist), and every
-// one of them wraps to zero rather than to the start boundary — a restart no
-// time report can be told apart from a seek. So a playhead behind the start of
-// a looping, already-positioned player is read as that wrap and corrected.
-//
-// `positioned` is what keeps the reports a load emits before the initial seek
-// from each looking like a wrap. The comparison is against the *duration-
-// clamped* start: a raw start past the duration would make the position the
-// restart itself seeks to look like yet another wrap, and the player would
-// restart on every report for as long as it played.
-export const atBoundaryWrap = (
-  boundary: TimeBoundary,
-  duration: number | null | undefined,
-  time: number,
-  state: { readonly loop: boolean; readonly positioned: boolean }
-): boolean => {
-  if (!state.loop || !state.positioned) return false;
-  const start = boundaryStart(boundary, duration);
-  return start > 0 && time < start;
-};
-
-// The other half of the loop story: what a platform's *own* end-of-media event
-// means. Every embed keeps its own loop mechanism switched on and every one of
-// them restarts at zero, so only a window that begins somewhere else has
-// anything to correct — with no `startTime`, the platform already restarts
-// where the window begins. Written out once here because the three ports have
-// to answer it identically; it was triplicated before, and drifted.
-//
-// DECLARED DIVERGENCE FROM NATIVE, left as it was by #214. Native gates its
-// `ended` handler on `loop` alone (`provider-native/src/playback.ts:149-153`)
-// and never sets `media.loop`, so a looping native video with no `startTime`
-// publishes *no* `ended` — it silently restarts. All three embeds do publish
-// `ended` on every loop iteration in that configuration, because this predicate
-// is false there and the platform's own end passes straight through. That is
-// pre-existing embed behaviour: #214 fanned `startTime` and `endTime` out to
-// the embeds and deliberately did not revise how `loop` fans out, and
-// suppressing `ended` would change what shipped `loop` users already receive.
-// `startTime` is the only thing that makes an embed port intervene at all.
-export const restartsAtBoundaryStart = (
-  boundary: TimeBoundary,
-  loop: boolean
-): boolean => loop && boundary.startTime > 0;
-
-// Clamps a requested time into the window. Providers use it for `seekTo` and
-// `seekBy`; passing `undefined` as the duration leaves the seek unbounded
-// above when no `endTime` is set.
-export const withinBoundary = (
-  boundary: TimeBoundary,
-  duration: number | null | undefined,
-  time: number
-): number => {
-  const end = boundaryEnd(boundary, duration);
-  return Math.max(
-    boundaryStart(boundary, duration),
-    end === undefined ? time : Math.min(time, end)
-  );
+  return {
+    startTime,
+    endTime,
+    end,
+    start,
+    atEnd,
+    atWrap: (duration, time, state) => {
+      if (!state.loop || !state.positioned) return false;
+      const effectiveStart = start(duration);
+      return effectiveStart > 0 && time < effectiveStart;
+    },
+    restartsAtStart: (loop) => loop && startTime > 0,
+    clamp: (duration, time) => {
+      const effectiveEnd = end(duration);
+      return Math.max(
+        start(duration),
+        effectiveEnd === undefined ? time : Math.min(time, effectiveEnd)
+      );
+    }
+  };
 };

@@ -1,13 +1,4 @@
-import {
-  atBoundaryEnd,
-  atBoundaryWrap,
-  boundaryEnd,
-  boundaryStart,
-  resolveTimeBoundary,
-  restartsAtBoundaryStart,
-  withinBoundary,
-  type TimeBoundary
-} from '@reely/core';
+import { createTimeBoundary, type TimeBoundary } from '@reely/core';
 
 // The `[startTime, endTime]` window seam. Aurora expresses a start as the
 // `current-time` attribute and nothing at all as an end, so the end boundary is
@@ -90,21 +81,20 @@ export type WistiaBoundary = {
 export const createWistiaBoundary = (
   options: WistiaBoundaryOptions = {}
 ): WistiaBoundary => {
-  const bounds: TimeBoundary = resolveTimeBoundary(options);
+  const bounds: TimeBoundary = createTimeBoundary(options);
   const loop = options.loop === true;
   let ended = false;
   let positioned = false;
 
-  const startAt = (duration: number | null): number =>
-    boundaryStart(bounds, duration);
+  const startAt = (duration: number | null): number => bounds.start(duration);
 
   const isAtEnd = (duration: number | null, time: number): boolean =>
-    atBoundaryEnd(bounds, duration, time);
+    bounds.atEnd(duration, time);
 
   return {
     startAt,
     isAtEnd,
-    clamp: (duration, time) => withinBoundary(bounds, duration, time),
+    clamp: (duration, time) => bounds.clamp(duration, time),
     hasEnded: () => ended,
     clearEnded: () => {
       ended = false;
@@ -122,18 +112,18 @@ export const createWistiaBoundary = (
         ended = true;
         // `isAtEnd` is only ever true with an effective end, so the fallback
         // does not run; it is what keeps the verdict's time a plain number.
-        return { kind: 'end', time: boundaryEnd(bounds, duration) ?? time };
+        return { kind: 'end', time: bounds.end(duration) ?? time };
       }
       // The wrap guard, shared with the YouTube and Vimeo ports so the three
       // cannot drift apart on which start they compare against.
-      if (atBoundaryWrap(bounds, duration, time, { loop, positioned })) {
+      if (bounds.atWrap(duration, time, { loop, positioned })) {
         return { kind: 'restart', time: startAt(duration) };
       }
       ended = false;
       return { kind: 'report', time };
     },
     reviewEnded: (duration) => {
-      if (restartsAtBoundaryStart(bounds, loop)) return startAt(duration);
+      if (bounds.restartsAtStart(loop)) return startAt(duration);
       ended = true;
       return undefined;
     },

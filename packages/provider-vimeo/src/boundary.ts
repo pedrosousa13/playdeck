@@ -1,12 +1,4 @@
-import {
-  atBoundaryEnd,
-  atBoundaryWrap,
-  boundaryEnd,
-  boundaryStart,
-  resolveTimeBoundary,
-  restartsAtBoundaryStart,
-  withinBoundary
-} from '@reely/core';
+import { createTimeBoundary } from '@reely/core';
 
 // The fields of the host's options the boundary is resolved from. `loop` is
 // here because the two settings only mean something together: the same end
@@ -66,7 +58,7 @@ export type VimeoBoundary = {
 export const createVimeoBoundary = (
   options: VimeoBoundaryOptions
 ): VimeoBoundary => {
-  const bounds = resolveTimeBoundary(options);
+  const bounds = createTimeBoundary(options);
   const loop = options.loop ?? false;
   let boundaryEnded = false;
   let positioned = false;
@@ -74,13 +66,13 @@ export const createVimeoBoundary = (
 
   return {
     loop,
-    start: (duration) => boundaryStart(bounds, duration),
-    clamp: (duration, time) => withinBoundary(bounds, duration, time),
-    end: (duration) => boundaryEnd(bounds, duration),
-    atEnd: (duration, time) => atBoundaryEnd(bounds, duration, time),
+    start: (duration) => bounds.start(duration),
+    clamp: (duration, time) => bounds.clamp(duration, time),
+    end: (duration) => bounds.end(duration),
+    atEnd: (duration, time) => bounds.atEnd(duration, time),
     wrapped: (duration, time) =>
-      atBoundaryWrap(bounds, duration, time, { loop, positioned }),
-    restartsOnEnded: () => restartsAtBoundaryStart(bounds, loop),
+      bounds.atWrap(duration, time, { loop, positioned }),
+    restartsOnEnded: () => bounds.restartsAtStart(loop),
     hasEnded: () => boundaryEnded,
     setEnded: (ended) => {
       boundaryEnded = ended;
