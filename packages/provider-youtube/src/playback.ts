@@ -73,8 +73,8 @@ export type YouTubePlaybackDeps = {
   readonly boundary: Pick<
     YouTubeBoundary,
     | 'applyPlayPosition'
-    | 'clear'
     | 'clearEnded'
+    | 'clearEndedAndPendingResume'
     | 'isEnded'
     | 'onProviderEnded'
     | 'seekTarget'
@@ -164,8 +164,9 @@ export const createYouTubePlayback = ({
       if (current.getPlayerState() === playerStates.PLAYING) {
         return Promise.resolve({ ok: true });
       }
-      // A play at the end of the window replays it from the start boundary,
-      // matching native (`provider-native/src/playback.ts:216-226`).
+      // A play at an end — this window's, or the media's own — replays the
+      // window from the start boundary, matching native
+      // (`provider-native/src/playback.ts:229-239`).
       boundary.applyPlayPosition(current);
       return new Promise<CommandResult>((resolve) => {
         const pending: PendingPlay = {
@@ -276,9 +277,10 @@ export const createYouTubePlayback = ({
           return;
         }
         if (data === playerStates.PAUSED) {
-          // The boundary paused the player itself to stop at the end of the
-          // window, and already published that as an end; reporting it again
-          // as a pause would contradict it (`provider-native`, `:129-135`).
+          // The boundary paused the player itself to stop at an end — this
+          // window's, or the media's own — and already published that as an
+          // end; reporting it again as a pause would contradict it
+          // (`provider-native`, `:142-148`).
           if (boundary.isEnded()) return;
           timeUpdates.stop();
           emit(
@@ -292,7 +294,9 @@ export const createYouTubePlayback = ({
         }
         if (data === playerStates.ENDED) {
           // A looping embed with a start boundary restarts from that boundary
-          // rather than from wherever YouTube's playlist loop lands.
+          // rather than from wherever YouTube's playlist loop lands. Every
+          // other end is published as it always was, and latches the boundary
+          // so the next `play()` replays the window from its start.
           if (boundary.onProviderEnded()) return;
           timeUpdates.stop();
           emit(
@@ -320,7 +324,7 @@ export const createYouTubePlayback = ({
       onPlayerError: (code) => {
         if (isDestroyed()) return;
         timeUpdates.stop();
-        boundary.clear();
+        boundary.clearEndedAndPendingResume();
         const error = playbackError(code);
         settlePendingPlays({ ok: false, reason: 'provider-error', error });
         emit(

@@ -7,6 +7,7 @@ import {
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,
+  restartsAtBoundaryStart,
   withinBoundary
 } from '../src/index';
 
@@ -153,6 +154,47 @@ describe('atBoundaryWrap', () => {
   test('is false when the clamped start collapses onto zero', () => {
     const boundary = resolveTimeBoundary({ startTime: 90 });
     expect(atBoundaryWrap(boundary, 0, 0, looping)).toBe(false);
+  });
+});
+
+// The gate all three embed ports apply to the platform's own end-of-media
+// event. It was written out three times before, which is how it drifted once.
+describe('restartsAtBoundaryStart', () => {
+  test.each<[string, boolean, number | undefined, boolean]>([
+    ['is true while looping with a start boundary', true, 10, true],
+    ['is true while looping with a fractional start boundary', true, 0.5, true],
+    ['is false while looping with no start boundary', true, undefined, false],
+    ['is false while looping with a zero start boundary', true, 0, false],
+    [
+      'is false while looping with a start that sanitises away',
+      true,
+      -5,
+      false
+    ],
+    ['is false when not looping, with a start boundary', false, 10, false],
+    [
+      'is false when not looping, with no start boundary',
+      false,
+      undefined,
+      false
+    ]
+  ])('%s', (_label, loop, startTime, expected) => {
+    const boundary = resolveTimeBoundary({ startTime });
+    expect(restartsAtBoundaryStart(boundary, loop)).toBe(expected);
+  });
+
+  // The gate reads the raw start, not the duration-clamped one: it decides
+  // whether there is anything to correct at all, and the correction itself is
+  // what clamps.
+  test('is true for a start past the duration, which the restart clamps', () => {
+    const boundary = resolveTimeBoundary({ startTime: 90 });
+    expect(restartsAtBoundaryStart(boundary, true)).toBe(true);
+    expect(boundaryStart(boundary, 60)).toBe(60);
+  });
+
+  test('ignores endTime, which has its own gate in atBoundaryEnd', () => {
+    const boundary = resolveTimeBoundary({ endTime: 20 });
+    expect(restartsAtBoundaryStart(boundary, true)).toBe(false);
   });
 });
 

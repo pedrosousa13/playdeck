@@ -4,6 +4,7 @@ import {
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,
+  restartsAtBoundaryStart,
   withinBoundary,
   type TimeBoundary
 } from '@reely/core';
@@ -22,12 +23,17 @@ import {
 // player that has not been positioned yet is simply loading, and correcting
 // that would fight the initial seek.
 //
-// Two differences from the YouTube and Vimeo ports are deliberate. There is no
-// restart token here: `api.time()` is synchronous, so a restart leaves nothing
+// One difference from the YouTube and Vimeo ports is deliberate: there is no
+// restart token here. `api.time()` is synchronous, so a restart leaves nothing
 // deferred for a superseded player to run, and the attachment's own generation
-// (`attachment.ts:195`) already makes a replaced player's events inert. And a
-// *natural* `ended` — the media's own end, not this window's — leaves `ended`
-// clear, because the pause Wistia fires with it is the platform's to report.
+// (`attachment.ts:195`) already makes a replaced player's events inert.
+//
+// A *natural* `ended` — the media's own end, not this window's — latches
+// `ended` just as a boundary end does. Native does the same
+// (`provider-native/src/playback.ts:149-159`), and it is what makes `play()`
+// after it replay from the start boundary rather than resume at the media's
+// end (`:229-239`). The YouTube and Vimeo ports latch it there too, so one
+// `startTime` prop means one thing on all four.
 
 // What one time report means once the window is applied.
 export type WistiaBoundaryVerdict =
@@ -55,8 +61,8 @@ export type WistiaBoundary = {
   // Clamps a requested seek into the window, replacing the adapter's own
   // 0-to-duration clamp.
   readonly clamp: (duration: number | null, time: number) => number;
-  // True between an end this seam published and the next play, restart, or
-  // seek back inside the window.
+  // True between an end — this window's, or the media's own — and the next
+  // play, restart, or seek back inside the window.
   readonly hasEnded: () => boolean;
   readonly clearEnded: () => void;
   // Called once per attached player, at the point the duration is first known.
@@ -69,9 +75,10 @@ export type WistiaBoundary = {
     time: number
   ) => WistiaBoundaryVerdict;
   // What the player's own `ended` means. Answers the position to correct to,
-  // or `undefined` to publish the end as before. Only a looping player with a
-  // start boundary has anything to correct: Wistia's `end-video-behavior`
-  // restarts it at zero.
+  // or `undefined` to publish the end as before — in which case it latches
+  // `hasEnded`, so the next `play()` replays the window. Whether there is
+  // anything to correct is `@reely/core`'s shared gate, where the reasoning
+  // and the declared divergence from native both live.
   readonly reviewEnded: (duration: number | null) => number | undefined;
   // Where `play()` has to seek before resuming, or `undefined` to just resume.
   readonly resumeFrom: (
@@ -125,8 +132,11 @@ export const createWistiaBoundary = (
       ended = false;
       return { kind: 'report', time };
     },
-    reviewEnded: (duration) =>
-      loop && bounds.startTime > 0 ? startAt(duration) : undefined,
+    reviewEnded: (duration) => {
+      if (restartsAtBoundaryStart(bounds, loop)) return startAt(duration);
+      ended = true;
+      return undefined;
+    },
     resumeFrom: (duration, time) =>
       ended || isAtEnd(duration, time) ? startAt(duration) : undefined
   };

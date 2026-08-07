@@ -102,6 +102,15 @@ origins list and what a page's CSP has to allow.
   Sanitisation matches every other provider: a non-finite or non-positive start
   is no start, an end that is not finite or not above the start is no end, and
   an end past the duration is clamped to it.
+- **A plain looping embed publishes `ended` on every iteration, where the
+  native provider publishes none.** With `loop` and no `startTime`, `loop=1`
+  restarts the embed at zero, which is where the window already begins, so this
+  adapter has nothing to correct and passes Vimeo's own `ended` through as it
+  always has. The native provider is the one that differs: it swallows `ended`
+  for a looping video and just restarts. That is pre-existing embed behaviour,
+  deliberately left alone by #214 — that change fanned `startTime` and `endTime`
+  out to the embeds and did not revise how `loop` fans out. A `startTime` is
+  what makes this adapter step in.
 
 ## License
 

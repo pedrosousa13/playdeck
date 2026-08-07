@@ -87,6 +87,15 @@ origins list and what a page's CSP has to allow.
   so it can overshoot by up to that much before `ended` is published — the
   published `currentTime` is pinned to the boundary, and the playhead is left
   where the player stopped rather than seeking backwards onto it.
+- **A plain looping embed publishes `ended` on every iteration, where the
+  native provider publishes none.** With `loop` and no `startTime`, YouTube's
+  playlist loop restarts at zero, which is where the window already begins, so
+  this adapter has nothing to correct and passes the ENDED state change through
+  as it always has. The native provider is the one that differs: it swallows
+  `ended` for a looping video and just restarts. That is pre-existing embed
+  behaviour, deliberately left alone by #214 — that change fanned `startTime`
+  and `endTime` out to the embeds and did not revise how `loop` fans out.
+  A `startTime` is what makes this adapter step in.
 
 ## License
 

@@ -4,6 +4,7 @@ import {
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,
+  restartsAtBoundaryStart,
   withinBoundary
 } from '@reely/core';
 import {
@@ -68,13 +69,17 @@ export type YouTubeBoundary = {
   // Called by the poll for every position it reads. False means the boundary
   // consumed the report and the poll must publish nothing for it.
   readonly onTimeReport: (time: number) => boolean;
-  // True while playback sits at the end boundary, so the pause that put it
-  // there is not published as a pause of its own.
+  // True while playback sits at an end — this window's, or the media's own —
+  // so the pause that put it there is not published as a pause of its own.
   readonly isEnded: () => boolean;
-  // True when a looping restart consumed the player's own ended state.
+  // What the player's own ENDED state change means. True when a looping restart
+  // consumed it and the caller must publish nothing; false when the caller
+  // publishes the end as before, in which case this latches the ended flag so
+  // the next `play()` replays the window from its start.
   readonly onProviderEnded: () => boolean;
-  // Moves back to the start boundary when a play command arrives at the end of
-  // the window, so the next play replays it rather than doing nothing.
+  // Moves back to the start boundary when a play command arrives at an end —
+  // this window's or the media's own — so the next play replays the window
+  // rather than doing nothing.
   readonly applyPlayPosition: (current: YouTubeBoundaryPlayer) => void;
   // Clamps a requested seek into the window, and releases the ended latch when
   // the target lands back inside it.
@@ -85,7 +90,7 @@ export type YouTubeBoundary = {
   readonly clearEnded: () => void;
   // Releases the latch and invalidates a pending loop resume without moving
   // the playhead; the error path uses it.
-  readonly clear: () => void;
+  readonly clearEndedAndPendingResume: () => void;
   // Forgets the attachment's positioning and latch, and invalidates a pending
   // resume; the teardown path uses it.
   readonly reset: () => void;
@@ -217,15 +222,25 @@ export const createYouTubeBoundary = (
     },
     isEnded: () => boundaryEnded,
     onProviderEnded: () => {
+      const current = getPlayer();
       // Only a start boundary needs correcting: YouTube's own playlist loop
       // already restarts at zero, which is where an unset start boundary is.
-      if (!loop || bounds.startTime <= 0) return false;
-      const current = getPlayer();
-      if (!current) return false;
-      restartFromBoundary(current);
-      return true;
+      if (current && restartsAtBoundaryStart(bounds, loop)) {
+        restartFromBoundary(current);
+        return true;
+      }
+      // The media's own end latches the same flag this window's end does, so
+      // the next `play()` replays from the start boundary rather than from
+      // wherever YouTube left the playhead. Native does this
+      // (`provider-native/src/playback.ts:149-159` then `:229-239`), and so do
+      // the Vimeo and Wistia ports.
+      boundaryEnded = true;
+      return false;
     },
     applyPlayPosition: (current) => {
+      // The media's own end is covered by the latch, set from the ENDED state
+      // change; this second test is only for the window's end, which the poll
+      // can miss when playback is paused across it.
       const end = boundaryEnd(bounds, durationOf(current));
       const atEnd =
         bounds.endTime !== undefined &&
@@ -251,7 +266,7 @@ export const createYouTubeBoundary = (
     clearEnded: () => {
       boundaryEnded = false;
     },
-    clear: () => {
+    clearEndedAndPendingResume: () => {
       ++resumeGeneration;
       boundaryEnded = false;
     },

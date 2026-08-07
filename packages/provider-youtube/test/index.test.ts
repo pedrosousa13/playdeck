@@ -1462,6 +1462,32 @@ test('play after a boundary end resumes from the start boundary', async () => {
   expect(patches).toContainEqual(expect.objectContaining({ currentTime: 7 }));
 });
 
+// The platform's own end, not the window's: with a `startTime` and no
+// `endTime` the video runs to the media's end and YouTube reports ENDED. A
+// `play()` after that is a replay of the window, so it goes back to the start
+// boundary rather than to zero -- the native contract
+// (`provider-native/src/playback.ts:229-235`), which Vimeo and Wistia keep too.
+test('play after the media ends naturally resumes from the start boundary', async () => {
+  vi.useFakeTimers();
+  const { harness, patches, provider } = await readyAdapter('M7lc1UVf-VE', {
+    startTime: 30
+  });
+
+  harness.fireStateChange(playerStates.PLAYING);
+  harness.currentTime = 120;
+  harness.fireStateChange(playerStates.ENDED);
+  expect(endedPatches(patches)).toHaveLength(1);
+
+  const resumed = provider.play?.();
+  // Twice: the initial positioning at ready, and this replay.
+  expect(harness.player.seekTo).toHaveBeenCalledTimes(2);
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(30, true);
+  expect(harness.player.playVideo).toHaveBeenCalledTimes(1);
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await expect(resumed).resolves.toEqual({ ok: true });
+});
+
 test('a seek past the end boundary clamps rather than ending playback', async () => {
   const { harness, patches, provider } = await readyAdapter('M7lc1UVf-VE', {
     startTime: 5,

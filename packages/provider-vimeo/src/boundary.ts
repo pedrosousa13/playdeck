@@ -4,6 +4,7 @@ import {
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,
+  restartsAtBoundaryStart,
   withinBoundary
 } from '@reely/core';
 
@@ -44,12 +45,13 @@ export type VimeoBoundary = {
   // load emits before the initial seek do not read as a wrap.
   readonly wrapped: (duration: number | null, time: number) => boolean;
   // Whether the player's own `ended` is one this seam has to correct rather
-  // than publish. Only a looping embed with a start boundary has anything to
-  // correct: `loop=1` restarts it at zero, which is where an unset start
-  // boundary already is.
+  // than publish. `@reely/core`'s shared gate, where the reasoning and the
+  // declared divergence from native both live; the YouTube and Wistia ports
+  // ask it the same question.
   readonly restartsOnEnded: () => boolean;
-  // Whether the adapter has published `ended` at the end boundary — the flag
-  // the pause handler suppresses on.
+  // Whether an end has been published and not yet retired — this window's, or
+  // the embed's own. It suppresses the pause that follows, and it is what makes
+  // the next `play()` replay from the start boundary.
   readonly hasEnded: () => boolean;
   readonly setEnded: (ended: boolean) => void;
   // Arms the boundary for a freshly adopted player, discarding the state (and
@@ -78,7 +80,7 @@ export const createVimeoBoundary = (
     atEnd: (duration, time) => atBoundaryEnd(bounds, duration, time),
     wrapped: (duration, time) =>
       atBoundaryWrap(bounds, duration, time, { loop, positioned }),
-    restartsOnEnded: () => loop && bounds.startTime > 0,
+    restartsOnEnded: () => restartsAtBoundaryStart(bounds, loop),
     hasEnded: () => boundaryEnded,
     setEnded: (ended) => {
       boundaryEnded = ended;

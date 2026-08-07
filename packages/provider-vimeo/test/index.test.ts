@@ -2297,6 +2297,25 @@ test('resumes from the start boundary after a boundary end', async () => {
   expect(player.play).toHaveBeenCalled();
 });
 
+// The third leg of the parity claim above: the embed's own end, not the
+// window's. This port already behaved this way; the assertion is here so the
+// three ports and native cannot drift apart on it again.
+test('resumes from the start boundary after the embed ends naturally', async () => {
+  const { provider, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 10 }
+  });
+  const player = sdk.instances[0]!;
+  player.emit('ended', { duration: 60, percent: 1, seconds: 60 });
+  await flushMicrotasks();
+  player.setCurrentTime.mockClear();
+
+  await provider.play();
+
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(10);
+  expect(player.play).toHaveBeenCalled();
+});
+
 test('clamps a seek to the window instead of crossing the end boundary', async () => {
   const { patches, provider, sdk } = await setup({
     fake: { duration: 60 },

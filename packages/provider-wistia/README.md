@@ -111,6 +111,15 @@ origins list and what a page's CSP has to allow.
   restarts from the start of the window instead of ending. A seek is clamped
   into the window, and `play()` after a boundary end resumes from the start of
   it.
+- **A plain looping player publishes `ended` on every iteration, where the
+  native provider publishes none.** With `loop` and no `startTime`,
+  `end-video-behavior="loop"` restarts the player at zero, which is where the
+  window already begins, so this adapter has nothing to correct and passes
+  Wistia's own `ended` through as it always has. The native provider is the one
+  that differs: it swallows `ended` for a looping video and just restarts. That
+  is pre-existing player behaviour, deliberately left alone by #214 — that
+  change fanned `startTime` and `endTime` out to the embeds and did not revise
+  how `loop` fans out. A `startTime` is what makes this adapter step in.
 - **`fullscreen` is `available`.** `PublicApi.requestFullscreen()` and
   `cancelFullscreen()` drive the player's own fullscreen element, and its
   `enter-fullscreen` / `cancel-fullscreen` events confirm the change.

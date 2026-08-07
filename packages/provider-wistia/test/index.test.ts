@@ -1056,6 +1056,32 @@ test('resumes from the start boundary after a boundary end', async () => {
   expect(player.handle.play).toHaveBeenCalled();
 });
 
+// The media's own end, not the window's. A `play()` after it is a replay of
+// the window, so it returns to the start boundary rather than resuming at the
+// end of the media -- the native contract
+// (`provider-native/src/playback.ts:229-235`), which Vimeo and YouTube keep too.
+test('resumes from the start boundary after the media ends naturally', async () => {
+  const result = await setup({
+    options: { startTime: 8 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 60;
+  player.emit(WISTIA_EVENTS.ended);
+  expect(result.patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 60
+  });
+
+  await result.provider.play();
+
+  // The seek at adopt, then this replay: the last call proves nothing on its
+  // own, because the adopt seek already targets the same offset.
+  expect(seekTargets(player)).toEqual([8, 8]);
+  expect(player.handle.play).toHaveBeenCalled();
+});
+
 test('clamps a seek to the window rather than ending at it', async () => {
   const result = await setup({
     options: { startTime: 5, endTime: 20 },

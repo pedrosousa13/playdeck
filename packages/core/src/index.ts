@@ -54,6 +54,7 @@ export {
   boundaryEnd,
   boundaryStart,
   resolveTimeBoundary,
+  restartsAtBoundaryStart,
   withinBoundary
 } from './time-boundary.js';
 

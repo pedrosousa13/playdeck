@@ -100,6 +100,28 @@ export const atBoundaryWrap = (
   return start > 0 && time < start;
 };
 
+// The other half of the loop story: what a platform's *own* end-of-media event
+// means. Every embed keeps its own loop mechanism switched on and every one of
+// them restarts at zero, so only a window that begins somewhere else has
+// anything to correct — with no `startTime`, the platform already restarts
+// where the window begins. Written out once here because the three ports have
+// to answer it identically; it was triplicated before, and drifted.
+//
+// DECLARED DIVERGENCE FROM NATIVE, left as it was by #214. Native gates its
+// `ended` handler on `loop` alone (`provider-native/src/playback.ts:149-153`)
+// and never sets `media.loop`, so a looping native video with no `startTime`
+// publishes *no* `ended` — it silently restarts. All three embeds do publish
+// `ended` on every loop iteration in that configuration, because this predicate
+// is false there and the platform's own end passes straight through. That is
+// pre-existing embed behaviour: #214 fanned `startTime` and `endTime` out to
+// the embeds and deliberately did not revise how `loop` fans out, and
+// suppressing `ended` would change what shipped `loop` users already receive.
+// `startTime` is the only thing that makes an embed port intervene at all.
+export const restartsAtBoundaryStart = (
+  boundary: TimeBoundary,
+  loop: boolean
+): boolean => loop && boundary.startTime > 0;
+
 // Clamps a requested time into the window. Providers use it for `seekTo` and
 // `seekBy`; passing `undefined` as the duration leaves the seek unbounded
 // above when no `endTime` is set.
