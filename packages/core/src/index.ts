@@ -49,6 +49,16 @@ export { detectSource } from './source-detection.js';
 export { textTrackLabel } from './text-tracks.js';
 
 export {
+  atBoundaryEnd,
+  boundaryEnd,
+  boundaryStart,
+  resolveTimeBoundary,
+  withinBoundary
+} from './time-boundary.js';
+
+export type { TimeBoundary } from './time-boundary.js';
+
+export {
   createInitialPlayerState,
   PlayerController
 } from './player-controller.js';
