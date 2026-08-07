@@ -54,76 +54,11 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** No source configured: the image idles without requesting anything. */
-export const Idle: Story = {
-  render: () => (
-    <Frame>
-      <Player.Poster>
-        <Player.PosterImage />
-      </Player.Poster>
-    </Frame>
-  ),
-  play: async ({ canvasElement }) => {
-    await expect(posterImage(canvasElement)).toHaveAttribute(
-      'data-state',
-      'idle'
-    );
-  }
-};
-
-/**
- * The dev server holds `/__reely__/pending.png` open forever, so the image
- * stays in `loading` deterministically. In a static Storybook build the URL
- * 404s and this story falls through to the error state instead.
- */
-export const Loading: Story = {
-  render: () => (
-    <Frame>
-      <Player.Poster>
-        <Player.PosterImage src="/__reely__/pending.png" />
-      </Player.Poster>
-    </Frame>
-  ),
-  play: async ({ canvasElement }) => {
-    await expect(posterImage(canvasElement)).toHaveAttribute(
-      'data-state',
-      'loading'
-    );
-  }
-};
-
-/** A data-URI poster resolves without any request leaving the page. */
-export const Loaded: Story = {
-  render: () => (
-    <Frame>
-      <Player.Poster>
-        <Player.PosterImage src={loadedPosterSrc} />
-      </Player.Poster>
-    </Frame>
-  ),
-  play: async ({ canvasElement }) => {
-    await waitFor(() =>
-      expect(posterImage(canvasElement)).toHaveAttribute('data-state', 'loaded')
-    );
-  }
-};
-
-/** An unparsable data URI fails to decode without touching the network. */
-export const ErrorState: Story = {
-  name: 'Error',
-  render: () => (
-    <Frame>
-      <Player.Poster>
-        <Player.PosterImage src="data:image/png;base64,AAAA" />
-      </Player.Poster>
-    </Frame>
-  ),
-  play: async ({ canvasElement }) => {
-    await waitFor(() =>
-      expect(posterImage(canvasElement)).toHaveAttribute('data-state', 'error')
-    );
-  }
-};
+// The poster image's own load lifecycle — idle, loading, loaded, error — is
+// `Player/PosterImage`'s to document. Staging it again here proved nothing
+// about `Player.Poster`: the same tree, the same assertions against
+// `[data-reely-part="poster-image"]`, and pixel-identical output. What is left
+// below is what `Player.Poster` alone owns.
 
 /**
  * The same poster with the CSS from this page's **Styling** section applied.
