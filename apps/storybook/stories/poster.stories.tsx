@@ -40,6 +40,8 @@ const meta = {
           '',
           '**Note** — children replace the default image.',
           '',
+          "**Poster image states** — the bitmap's own load lifecycle (`idle`, `loading`, `loaded`, `error`) belongs to `Player.PosterImage` and is staged under `Player/PosterImage`.",
+          '',
           '**Styling** — plain CSS against the parts; the primitive keeps its own geometry and `visibility`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
           '```css',
           partCss.trim(),
@@ -53,12 +55,6 @@ const meta = {
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-
-// The poster image's own load lifecycle — idle, loading, loaded, error — is
-// `Player/PosterImage`'s to document. Staging it again here proved nothing
-// about `Player.Poster`: the same tree, the same assertions against
-// `[data-reely-part="poster-image"]`, and pixel-identical output. What is left
-// below is what `Player.Poster` alone owns.
 
 /**
  * The same poster with the CSS from this page's **Styling** section applied.
