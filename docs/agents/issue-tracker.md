@@ -119,8 +119,6 @@ completed` for landed work, which reads back as `state=CLOSED`,
   returns. Each candidate therefore needs its own dependency call — check
   them one at a time, in Queue order, and stop at the first unblocked one.
 
-  Currently wired: **#177** and **#178** are each blocked by **#176**.
-
 - **Milestone**: a GitHub **milestone** on the issue, not a label. Create
   one with `gh api repos/pedrosousa13/reely/milestones -f title=... -f
 description=...`; list a repo's milestones with `gh api --paginate
@@ -272,8 +270,15 @@ state still behave the same.
 ## Deviation from the Factory template
 
 This document is generated from the Factory plugin's GitHub tracker
-template. **One bullet deviates: "Blocking", under "Factory loop
-operations".**
+template. **Five bullets deviate**, all of them consequences of one
+decision — how blocking is expressed:
+
+- "Blocking", under "Factory loop operations" — the decision itself.
+- "Open issues", under "Factory loop operations" — drops
+  `subIssuesSummary` from its `--json` field list and re-sources
+  `blockedBy`, because that field no longer carries blocking meaning here.
+- "Child tickets", "Blocking between tickets", and "Frontier", under
+  "Wayfinding operations" — they follow from the same decision.
 
 The template prescribes GitHub **sub-issues** — `gh issue edit <parent>
 --add-sub-issue <child>`, read back through the `subIssues` /

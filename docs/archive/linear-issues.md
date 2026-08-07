@@ -15,11 +15,16 @@ whose id is the issue identifier in lower case, so any closed issue is
 addressable by fragment — for example
 `docs/archive/linear-issues.md#sidepro-135`.
 
-**Reading the cross-references.** Every `SIDEPRO-nnn` reference in this file is
-resolved. One that points at another closed issue links to its anchor here. One
-that points at an issue still **open** at capture time links to the GitHub issue
-it was recreated as, under `pedrosousa13/reely`. References inside code blocks, inside
-existing links, and inside the per-issue Linear URLs are left verbatim.
+**Reading the cross-references.** Every `SIDEPRO-nnn` reference to an issue in
+this project is resolved. One that points at another closed issue links to its
+anchor here. One that points at an issue still **open** at capture time links to
+the GitHub issue it was recreated as, under `pedrosousa13/reely`. References
+inside code blocks, inside existing links, and inside the per-issue Linear URLs
+are left verbatim.
+
+One reference resolves to nothing and is left bare: `SIDEPRO-56`, a stale
+relation pointing into a different Linear project, which was never part of this
+export and has no counterpart to link to.
 
 Issue count: **55** — 52 Done,
 3 Canceled. Ordered by issue number.
