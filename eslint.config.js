@@ -115,8 +115,8 @@ export default tseslint.config(
     // Scoped to the product source this gate polices, excluding test files
     // and the e2e suite: `packages/react/test/index.test.tsx` asserts the
     // poster element carries no `background-image` inline style, and
-    // `e2e/poster.spec.ts` holds this same gate's CSS half as a regex
-    // literal — both legitimate and must keep passing. Verified
+    // `e2e/background-image-scan.ts` holds this same gate's CSS half as a
+    // regex literal — both legitimate and must keep passing. Verified
     // red-then-green by
     // apps/storybook/stories/no-background-image.contract.test.ts.
     files: ['apps/**/*.{js,jsx,ts,tsx}', 'packages/**/*.{js,jsx,ts,tsx}'],
@@ -128,19 +128,19 @@ export default tseslint.config(
           selector:
             "Property[key.name='backgroundImage'], Property[key.value='backgroundImage']",
           message:
-            'A poster must be a real <img>/<picture> element, never a CSS background-image. See e2e/poster.spec.ts.'
+            'A poster must be a real <img>/<picture> element, never a CSS background-image: this object property sets one. If this is prose about the property rather than a live style, move it into a comment. See e2e/poster.spec.ts.'
         },
         {
           selector:
-            "AssignmentExpression[left.property.name='backgroundImage']",
+            "AssignmentExpression[left.property.name='backgroundImage'], AssignmentExpression[left.property.value='backgroundImage']",
           message:
-            'A poster must be a real <img>/<picture> element, never a CSS background-image. See e2e/poster.spec.ts.'
+            'A poster must be a real <img>/<picture> element, never a CSS background-image: this assignment sets one. If this is prose about the property rather than a live style, move it into a comment. See e2e/poster.spec.ts.'
         },
         {
           selector:
             'Literal[value=/background-image/], TemplateElement[value.raw=/background-image/]',
           message:
-            'A poster must be a real <img>/<picture> element, never a CSS background-image. See e2e/poster.spec.ts.'
+            'A poster must be a real <img>/<picture> element, never a CSS background-image: this string/template text contains one. If this is prose about the property rather than CSS text, move it into a comment. See e2e/poster.spec.ts.'
         }
       ]
     }
