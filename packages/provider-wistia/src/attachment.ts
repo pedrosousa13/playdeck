@@ -1,9 +1,11 @@
-import type {
-  CommandResult,
-  MediaDimensions,
-  PlayerCapabilities,
-  PlayerError,
-  WistiaSource
+import {
+  boundaryStart,
+  resolveTimeBoundary,
+  type CommandResult,
+  type MediaDimensions,
+  type PlayerCapabilities,
+  type PlayerError,
+  type WistiaSource
 } from '@reely/core';
 import {
   errorString,
@@ -115,10 +117,12 @@ const isHttpsUrl = (value: string): boolean => {
 type WistiaEmbedOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
+  readonly endTime?: number;
   readonly loop?: boolean;
   readonly playerColor?: string;
   readonly swatch?: boolean;
   readonly poster?: string;
+  readonly startTime?: number;
   readonly transparentLetterbox?: boolean;
 };
 
@@ -242,6 +246,17 @@ export const createWistiaAttachment = (
     }
     if (options.loop === true) setOption('endVideoBehavior', 'loop');
     if (mount.muted) setOption('muted', 'true');
+
+    // A load hint and nothing more. `Attributes` declares `currentTime` — and
+    // no `time` — but whether a fresh element treats it as a load offset is
+    // not documented, so the playback seam's `api.time()` seek at ready stays
+    // the authority. Writing it costs nothing and spares the viewer a visible
+    // jump on the players that do honour it. The duration is not known yet,
+    // which is why the boundary is resolved against `null` here and again
+    // against the real duration at ready. There is no end counterpart to
+    // write: Aurora has none, so the end boundary is adapter-enforced.
+    const start = boundaryStart(resolveTimeBoundary(options), null);
+    if (start > 0) setOption('currentTime', String(start));
 
     // These four are presentation-only and each has no Wistia-side default to
     // preserve, so an omitted option sets no attribute at all rather than a

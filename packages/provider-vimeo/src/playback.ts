@@ -14,6 +14,7 @@ import {
   type IsStalePlayer,
   type VimeoMountElement
 } from './adapter-values.js';
+import type { VimeoBoundary } from './boundary.js';
 import type { VimeoSdkPlayer } from './loader.js';
 
 // The SDK hands back `[start, end]` pairs. Anything else is not a range we can
@@ -70,6 +71,8 @@ export type VimeoPlaybackDeps = {
   // The host's capabilities snapshot, republished when a command proves a
   // capability this embed does not have.
   readonly getCapabilities: () => PlayerCapabilities;
+  // The `[startTime, endTime]` window this seam enforces (#214).
+  readonly boundary: VimeoBoundary;
 };
 
 // The playback-command seam: the transport commands and the playhead, duration
@@ -86,7 +89,10 @@ export type VimeoPlayback = Required<
   // overrides back into it, returning the patch fragment the attachment seam
   // folds into its ready state.
   readonly adopt: (
-    player: Pick<VimeoPlaybackPlayer, 'setVolume' | 'setPlaybackRate'>,
+    player: Pick<
+      VimeoPlaybackPlayer,
+      'setVolume' | 'setPlaybackRate' | 'setCurrentTime'
+    >,
     values: VimeoPlaybackValues
   ) => ProviderStatePatch;
   readonly handlers: {
@@ -117,7 +123,7 @@ export type VimeoPlayback = Required<
 
 export const createVimeoPlayback = (
   mount: Pick<VimeoMountElement, 'volume' | 'playbackRate'>,
-  { emit, isStale, getPlayer, getCapabilities }: VimeoPlaybackDeps
+  { emit, isStale, getPlayer, getCapabilities, boundary }: VimeoPlaybackDeps
 ): VimeoPlayback => {
   let currentTime = 0;
   let duration: number | null = null;
@@ -127,11 +133,41 @@ export const createVimeoPlayback = (
   const clampVolume = (volume: number): number =>
     Math.min(1, Math.max(0, volume));
 
-  const seekTarget = (time: number): number =>
-    Math.max(0, duration === null ? time : Math.min(duration, time));
+  const seekTarget = (time: number): number => boundary.clamp(duration, time);
+
+  // Puts the playhead back at the start boundary and picks playback up again.
+  // Vimeo's own `loop=1` stays on the embed, so this only corrects the
+  // position — the `play()` is for the case where the platform did stop.
+  const restartFromBoundary = (): void => {
+    boundary.setEnded(false);
+    const target = boundary.start(duration);
+    const token = boundary.openRestart();
+    currentTime = target;
+    emit({ currentTime: target, buffering: false });
+    const player = getPlayer();
+    if (!player) return;
+    void Promise.resolve(player.setCurrentTime(target)).then(
+      () => {
+        if (!boundary.isRestartCurrent(token) || isStale(player)) return;
+        void Promise.resolve(player.play()).catch(() => undefined);
+      },
+      () => undefined
+    );
+  };
 
   return {
-    play: () => runVimeoCommand(getPlayer(), (player) => player.play()),
+    play: () =>
+      runVimeoCommand(getPlayer(), async (player) => {
+        // A play from the end boundary is a replay, not a resume: the playhead
+        // is still sitting on the boundary the adapter ended at.
+        if (boundary.hasEnded() || boundary.atEnd(duration, currentTime)) {
+          boundary.setEnded(false);
+          const target = boundary.start(duration);
+          currentTime = target;
+          await player.setCurrentTime(target);
+        }
+        return player.play();
+      }),
     pause: () => runVimeoCommand(getPlayer(), (player) => player.pause()),
     seekTo: (time) => {
       if (!Number.isFinite(time))
@@ -182,6 +218,16 @@ export const createVimeoPlayback = (
     getCurrentTime: () => currentTime,
     adopt: (player, values) => {
       duration = values.duration;
+      // The embed url's `#t=` fragment is a load hint; this is the authority,
+      // and it also re-arms the boundary for the player a retry just built.
+      boundary.adopt();
+      const initialPosition = boundary.start(duration);
+      if (initialPosition > 0) {
+        currentTime = initialPosition;
+        void Promise.resolve(player.setCurrentTime(initialPosition)).catch(
+          () => undefined
+        );
+      }
       if (
         mount.volume !== undefined &&
         Number.isFinite(mount.volume) &&
@@ -210,6 +256,7 @@ export const createVimeoPlayback = (
     },
     handlers: {
       onPlay: (data) => {
+        boundary.setEnded(false);
         const seconds = numberField(data, 'seconds');
         if (seconds !== undefined) currentTime = seconds;
         emit(
@@ -223,6 +270,10 @@ export const createVimeoPlayback = (
       },
       onPlaying: () => emit({ playback: 'playing', buffering: false }),
       onPause: (data) => {
+        // The pause the end boundary itself asked for, and the synthetic one
+        // Vimeo fires just before `ended`, are both bookkeeping — neither is a
+        // viewer pausing.
+        if (boundary.hasEnded()) return;
         if (numberField(data, 'percent') === 1) return;
         const seconds = numberField(data, 'seconds');
         if (seconds !== undefined) currentTime = seconds;
@@ -235,8 +286,13 @@ export const createVimeoPlayback = (
         );
       },
       onEnded: (data) => {
+        if (boundary.loop) {
+          restartFromBoundary();
+          return;
+        }
         const seconds = numberField(data, 'seconds') ?? duration ?? currentTime;
         currentTime = seconds;
+        boundary.setEnded(true);
         emit(
           { playback: 'ended', buffering: false, currentTime: seconds },
           providerEvent('ended', undefined, data)
@@ -246,8 +302,36 @@ export const createVimeoPlayback = (
         const seconds = numberField(data, 'seconds');
         const nextDuration = numberField(data, 'duration');
         if (seconds === undefined) return;
-        currentTime = seconds;
         if (nextDuration !== undefined) duration = nextDuration;
+        if (boundary.atEnd(duration, seconds)) {
+          if (boundary.loop) {
+            restartFromBoundary();
+            return;
+          }
+          // Every report past the boundary is out of the window, so nothing is
+          // published until playback is back inside it. The playhead is pinned
+          // to the boundary rather than seeked back: Vimeo reports time on its
+          // own cadence, and a corrective seek would be a visible jump.
+          if (boundary.hasEnded()) return;
+          boundary.setEnded(true);
+          const end = boundary.end(duration) ?? seconds;
+          currentTime = end;
+          const player = getPlayer();
+          if (player)
+            void Promise.resolve(player.pause()).catch(() => undefined);
+          emit(
+            { playback: 'ended', buffering: false, currentTime: end },
+            providerEvent('ended', undefined, data)
+          );
+          return;
+        }
+        // Vimeo's own `loop=1` wraps to zero, not to the start boundary.
+        if (boundary.wrapped(seconds)) {
+          restartFromBoundary();
+          return;
+        }
+        currentTime = seconds;
+        boundary.setEnded(false);
         emit({
           currentTime: seconds,
           ...(nextDuration === undefined ? {} : { duration: nextDuration })
@@ -278,6 +362,9 @@ export const createVimeoPlayback = (
       onSeeked: (data) => {
         const seconds = numberField(data, 'seconds') ?? currentTime;
         currentTime = seconds;
+        // A seek back inside the window retires the boundary end it landed
+        // from, so the next pause is reported normally again.
+        if (!boundary.atEnd(duration, seconds)) boundary.setEnded(false);
         emit(
           { seeking: false, currentTime: seconds },
           providerEvent('seeked', { currentTime: seconds }, data)

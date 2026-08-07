@@ -7,6 +7,7 @@ import type {
 } from '@reely/core';
 import { available, type VimeoMountElement } from './adapter-values.js';
 import { createVimeoAttachment } from './attachment.js';
+import { createVimeoBoundary } from './boundary.js';
 import { createVimeoChromelessAvailability } from './chromeless-availability.js';
 import { createVimeoPlayback } from './playback.js';
 import { createVimeoPresentation } from './presentation.js';
@@ -34,6 +35,27 @@ export type VimeoProviderOptions = {
    * the setting (ADR-0004).
    */
   readonly loop?: boolean;
+  /**
+   * Where playback begins, in seconds. Written to the embed url as a `#t=`
+   * load hint and then seeked to once the player is ready, which is what
+   * actually holds. A non-finite or non-positive value is no start.
+   *
+   * Like `loop`, `Root`'s `startTime` prop is folded into this bag by
+   * `packages/react/src/root.tsx`, so `PlayerProviderOptions` omits the key
+   * and this is not a second home for the setting (ADR-0004).
+   */
+  readonly startTime?: number;
+  /**
+   * Where playback ends, in seconds. Vimeo has no end mechanism of its own, so
+   * this adapter enforces it: reaching the boundary publishes `ended`, or
+   * restarts from `startTime` when `loop` is on. An end that is not finite, or
+   * not above the sanitised start, is no end; one past the duration is clamped
+   * to it.
+   *
+   * Folded in from `Root`'s `endTime` prop and omitted from
+   * `PlayerProviderOptions` the same way `loop` and `startTime` are (ADR-0004).
+   */
+  readonly endTime?: number;
   readonly customControls?: boolean;
 };
 
@@ -73,11 +95,14 @@ export const createVimeoProvider = (
 
   const chromeless = createVimeoChromelessAvailability({ source, options });
 
+  const boundary = createVimeoBoundary(options);
+
   const playback = createVimeoPlayback(mount, {
     emit,
     isStale: (player) => attachment.isStale(player),
     getPlayer: () => attachment.getPlayer(),
-    getCapabilities: playerCapabilities
+    getCapabilities: playerCapabilities,
+    boundary
   });
 
   const qualityLevels = createVimeoQualityLevels({

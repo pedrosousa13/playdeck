@@ -177,8 +177,11 @@ const createAdapter = (
   return { events, fake, mount, patches, provider };
 };
 
-const readyAdapter = async (videoId?: string) => {
-  const adapter = createAdapter(videoId);
+const readyAdapter = async (
+  videoId?: string,
+  options: YouTubeProviderOptions = {}
+) => {
+  const adapter = createAdapter(videoId, options);
   await adapter.provider.attach();
   await adapter.provider.load();
   const harness = adapter.fake.players[0]!;
@@ -1208,4 +1211,254 @@ test('youtube declares no dimension channel', async () => {
 
   expect(adapter.provider.subscribeDimensions).toBeUndefined();
   expect('subscribeDimensions' in adapter.provider).toBe(false);
+});
+
+// --- the [startTime, endTime] boundary (#214) ---
+//
+// The end boundary is adapter-enforced: YouTube's `end` player var is whole-
+// second only, its interaction with the loop + single-entry-playlist trick is
+// undocumented, and it is not known to publish the ENDED state change the
+// adapter needs. So only the `start` var is written, purely as a load hint,
+// and everything observable comes from the 250 ms poll.
+
+// Drives the poll one tick with a position the player now reports.
+const pollAt = async (harness: FakePlayerHarness, time: number) => {
+  harness.currentTime = time;
+  await vi.advanceTimersByTimeAsync(300);
+};
+
+const endedPatches = (patches: readonly ProviderStatePatch[]) =>
+  patches.filter((patch) => patch.playback === 'ended');
+
+test('starts playback at the start boundary rather than at zero', async () => {
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    startTime: 12.5
+  });
+
+  expect(harness.player.seekTo).toHaveBeenCalledWith(12.5, true);
+  expect(patches).toContainEqual(
+    expect.objectContaining({ lifecycle: 'ready', currentTime: 12.5 })
+  );
+});
+
+// The var is a load hint only -- whole-second, so a fractional start still
+// needs the adapter seek above. The `end` var is deliberately never written.
+test('writes the whole-second start player var as a load hint', async () => {
+  const { fake, provider } = createAdapter('M7lc1UVf-VE', {
+    startTime: 12.5,
+    endTime: 20
+  });
+
+  await provider.attach();
+  await provider.load();
+
+  const { playerVars } = fake.players[0]!.options;
+  expect(playerVars).toMatchObject({ start: 12 });
+  expect(playerVars).not.toHaveProperty('end');
+});
+
+test('publishes one ended patch at the end boundary and pauses the player', async () => {
+  vi.useFakeTimers();
+  const { events, harness, patches, provider } = await readyAdapter(
+    'M7lc1UVf-VE',
+    { endTime: 20 }
+  );
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 20.2);
+
+  expect(patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 20
+  });
+  expect(events).toContainEqual(expect.objectContaining({ type: 'ended' }));
+  expect(harness.player.pauseVideo).toHaveBeenCalledTimes(1);
+
+  // The poll is stopped at the boundary, but a stray report must not publish a
+  // second end either.
+  await pollAt(harness, 21);
+  expect(endedPatches(patches)).toHaveLength(1);
+  expect(provider.provider).toBe('youtube');
+});
+
+test('the pause the end boundary causes publishes no paused patch', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    endTime: 20
+  });
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 20.2);
+  harness.fireStateChange(playerStates.PAUSED);
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ playback: 'paused' })
+  );
+});
+
+test('startTime and endTime together bound the window', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    startTime: 5,
+    endTime: 20
+  });
+
+  expect(harness.player.seekTo).toHaveBeenCalledWith(5, true);
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 12);
+  expect(patches).toContainEqual(expect.objectContaining({ currentTime: 12 }));
+
+  await pollAt(harness, 20.1);
+  expect(patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 20
+  });
+});
+
+// YouTube loops a playlist from zero, and it is undocumented whether the
+// `start` var applies to the second pass. The wrap guard does not depend on
+// it: a report from before the start boundary is what triggers the restart.
+test('loop with a start boundary wraps back to the start, not to zero', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    loop: true,
+    startTime: 5
+  });
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 30);
+  await pollAt(harness, 0.4);
+
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(5, true);
+  expect(patches).toContainEqual({ currentTime: 5, buffering: false });
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ currentTime: 0.4 })
+  );
+});
+
+test('loop with an end boundary restarts instead of ending', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    loop: true,
+    endTime: 20
+  });
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 20.2);
+
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(0, true);
+  expect(patches).toContainEqual({ currentTime: 0, buffering: false });
+  expect(endedPatches(patches)).toHaveLength(0);
+  expect(harness.player.pauseVideo).not.toHaveBeenCalled();
+});
+
+// Same table as the core helper's, asserted through what the adapter does:
+// a start that sanitises away issues no seek and writes no player var.
+test.each([
+  ['unset', undefined],
+  ['zero', 0],
+  ['negative', -1],
+  ['not a number', Number.NaN],
+  ['infinite', Number.POSITIVE_INFINITY]
+] as const)(
+  'ignores a %s start boundary entirely',
+  async (_label, startTime) => {
+    const { harness } = await readyAdapter('M7lc1UVf-VE', { startTime });
+
+    expect(harness.player.seekTo).not.toHaveBeenCalled();
+    expect(harness.options.playerVars).not.toHaveProperty('start');
+  }
+);
+
+// An end that is absent, non-finite, or not above the sanitised start is no
+// end: the video runs on and YouTube's own ENDED stays the only end there is.
+test.each([
+  ['unset', undefined],
+  ['not a number', Number.NaN],
+  ['infinite', Number.POSITIVE_INFINITY],
+  ['equal to the start', 5],
+  ['below the start', 3]
+] as const)('ignores an end boundary that is %s', async (_label, endTime) => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    startTime: 5,
+    endTime
+  });
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 30);
+
+  expect(endedPatches(patches)).toHaveLength(0);
+  expect(patches).toContainEqual(expect.objectContaining({ currentTime: 30 }));
+});
+
+test('clamps an end boundary past the duration onto the duration', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    endTime: 500
+  });
+
+  harness.duration = 120;
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 120.3);
+
+  expect(patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 120
+  });
+});
+
+test('play after a boundary end resumes from the start boundary', async () => {
+  vi.useFakeTimers();
+  const { harness, patches, provider } = await readyAdapter('M7lc1UVf-VE', {
+    startTime: 5,
+    endTime: 20
+  });
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 20.2);
+  // The player reports the pause the boundary asked it for.
+  harness.fireStateChange(playerStates.PAUSED);
+
+  const resumed = provider.play?.();
+  // Twice: the initial positioning at ready, and this restart.
+  expect(harness.player.seekTo).toHaveBeenCalledTimes(2);
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(5, true);
+  expect(patches).toContainEqual({ currentTime: 5 });
+  expect(harness.player.playVideo).toHaveBeenCalledTimes(1);
+
+  harness.fireStateChange(playerStates.PLAYING);
+  await expect(resumed).resolves.toEqual({ ok: true });
+
+  // Stopping the poll at the boundary must not have stopped the world: the
+  // PLAYING branch starts it again, and time flows from the restart.
+  await pollAt(harness, 7);
+  expect(patches).toContainEqual(expect.objectContaining({ currentTime: 7 }));
+});
+
+test('a seek past the end boundary clamps rather than ending playback', async () => {
+  const { harness, patches, provider } = await readyAdapter('M7lc1UVf-VE', {
+    startTime: 5,
+    endTime: 20
+  });
+
+  await expect(provider.seekTo?.(50)).resolves.toEqual({ ok: true });
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(20, true);
+  expect(endedPatches(patches)).toHaveLength(0);
+
+  await expect(provider.seekTo?.(1)).resolves.toEqual({ ok: true });
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(5, true);
+});
+
+// Without an end boundary the clamp must leave the seek unbounded above, which
+// is what it was before the boundary existed: YouTube's own duration is the
+// only ceiling, and it is not consulted here.
+test('an unbounded window leaves a seek past the duration alone', async () => {
+  const { harness, provider } = await readyAdapter();
+
+  await expect(provider.seekTo?.(5_000)).resolves.toEqual({ ok: true });
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(5_000, true);
 });

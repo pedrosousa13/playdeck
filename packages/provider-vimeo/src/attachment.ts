@@ -1,9 +1,10 @@
-import type {
-  CommandResult,
-  MediaDimensions,
-  PlayerCapabilities,
-  PlayerError,
-  VimeoSource
+import {
+  resolveTimeBoundary,
+  type CommandResult,
+  type MediaDimensions,
+  type PlayerCapabilities,
+  type PlayerError,
+  type VimeoSource
 } from '@reely/core';
 import {
   asRecord,
@@ -50,6 +51,8 @@ type VimeoEmbedOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
   readonly loop?: boolean;
+  readonly startTime?: number;
+  readonly endTime?: number;
 };
 
 const vimeoEmbedUrl = (
@@ -64,6 +67,11 @@ const vimeoEmbedUrl = (
   url.searchParams.set('loop', options.loop === true ? '1' : '0');
   url.searchParams.set('playsinline', '1');
   if (muted) url.searchParams.set('muted', '1');
+  // A load hint only: it saves the embed from starting at zero and seeking
+  // away, but the playback seam's own seek at ready is the authority. Vimeo has
+  // no end equivalent at all, so `endTime` never reaches the url (#214).
+  const { startTime } = resolveTimeBoundary(options);
+  if (startTime > 0) url.hash = `t=${startTime}s`;
   return url.href;
 };
 

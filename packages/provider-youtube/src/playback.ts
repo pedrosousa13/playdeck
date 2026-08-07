@@ -9,6 +9,7 @@ import {
   runYouTubeCommand,
   type EmitProviderState
 } from './adapter-values.js';
+import type { YouTubeBoundary } from './boundary.js';
 import type { YouTubePlayer } from './loader.js';
 import type { YouTubeTimeUpdates } from './time-updates.js';
 
@@ -66,6 +67,13 @@ export type YouTubePlaybackDeps = {
     YouTubeTimeUpdates,
     'start' | 'stop' | 'adoptCurrentTime' | 'setCurrentTime' | 'getCurrentTime'
   >;
+  // The [startTime, endTime] window: it clamps the seeks, repositions a play
+  // that arrives at the end of the window, and tells the pause and ended
+  // branches which of their events it caused itself.
+  readonly boundary: Pick<
+    YouTubeBoundary,
+    'applyPlayPosition' | 'clear' | 'isEnded' | 'onProviderEnded' | 'seekTarget'
+  >;
 };
 
 // The playback-command seam: the transport commands, the volume mirrors they
@@ -96,7 +104,8 @@ export const createYouTubePlayback = ({
   isDestroyed,
   getPlayer,
   getReadyPlayer,
-  timeUpdates
+  timeUpdates,
+  boundary
 }: YouTubePlaybackDeps): YouTubePlayback => {
   let pendingPlays: PendingPlay[] = [];
   // The iframe API proxies commands over postMessage, so getters read stale
@@ -128,7 +137,9 @@ export const createYouTubePlayback = ({
     if (!Number.isFinite(time)) {
       return Promise.resolve({ ok: false, reason: 'provider-error' });
     }
-    const target = Math.max(0, time);
+    // Clamped into the configured window, which with no `endTime` set is the
+    // same `Math.max(0, …)` floor this has always applied.
+    const target = boundary.seekTarget(time);
     return runCommand((current) => {
       current.seekTo(target, true);
       // Emit the intended position: a read-back here would still return the
@@ -147,6 +158,9 @@ export const createYouTubePlayback = ({
       if (current.getPlayerState() === playerStates.PLAYING) {
         return Promise.resolve({ ok: true });
       }
+      // A play at the end of the window replays it from the start boundary,
+      // matching native (`provider-native/src/playback.ts:216-226`).
+      boundary.applyPlayPosition(current);
       return new Promise<CommandResult>((resolve) => {
         const pending: PendingPlay = {
           resolve,
@@ -251,6 +265,10 @@ export const createYouTubePlayback = ({
           return;
         }
         if (data === playerStates.PAUSED) {
+          // The boundary paused the player itself to stop at the end of the
+          // window, and already published that as an end; reporting it again
+          // as a pause would contradict it (`provider-native`, `:129-135`).
+          if (boundary.isEnded()) return;
           timeUpdates.stop();
           emit(
             {
@@ -262,6 +280,9 @@ export const createYouTubePlayback = ({
           return;
         }
         if (data === playerStates.ENDED) {
+          // A looping embed with a start boundary restarts from that boundary
+          // rather than from wherever YouTube's playlist loop lands.
+          if (boundary.onProviderEnded()) return;
           timeUpdates.stop();
           emit(
             {
@@ -288,6 +309,7 @@ export const createYouTubePlayback = ({
       onPlayerError: (code) => {
         if (isDestroyed()) return;
         timeUpdates.stop();
+        boundary.clear();
         const error = playbackError(code);
         settlePendingPlays({ ok: false, reason: 'provider-error', error });
         emit(

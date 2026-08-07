@@ -50,12 +50,12 @@ origins list and what a page's CSP has to allow.
 
 ## Exports
 
-| Export                             | What it is                                                                                                                                                           |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createYouTubeProvider`            | Builds the adapter over a mount element and a video id.                                                                                                              |
-| `YouTubeProviderOptions`           | `controls`, `loop`, `host`, and `loadIframeApi` to supply the API yourself. Through `Player.Root`, `controls` and `loop` are its own props (ADR-0004), not bag keys. |
-| `YouTubeProviderAdapter`           | The adapter's own type.                                                                                                                                              |
-| `PLAYBACK_CONFIRMATION_TIMEOUT_MS` | How long a `play()` waits for the player to confirm it (3 seconds).                                                                                                  |
+| Export                             | What it is                                                                                                                                                                                                           |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createYouTubeProvider`            | Builds the adapter over a mount element and a video id.                                                                                                                                                              |
+| `YouTubeProviderOptions`           | `controls`, `loop`, `startTime`, `endTime`, `host`, and `loadIframeApi` to supply the API yourself. Through `Player.Root`, `controls`, `loop`, `startTime` and `endTime` are its own props (ADR-0004), not bag keys. |
+| `YouTubeProviderAdapter`           | The adapter's own type.                                                                                                                                                                                              |
+| `PLAYBACK_CONFIRMATION_TIMEOUT_MS` | How long a `play()` waits for the player to confirm it (3 seconds).                                                                                                                                                  |
 
 ## What it reports honestly
 
@@ -77,6 +77,16 @@ origins list and what a page's CSP has to allow.
   undocumented `captions` module, so it follows community-observed conventions
   rather than a published contract.
 - **`pictureInPicture` is `unavailable`**: the embed owns its own video element.
+- **`startTime` and `endTime` are enforced by this adapter, not by YouTube.**
+  The `start` player var is written as a load hint so the embed does not load
+  from zero, but it is whole-second only, so the adapter seeks to the exact
+  start once the player is ready. The `end` var is not written at all: it is
+  whole-second too, its interaction with the `loop` plus single-entry-playlist
+  pair is undocumented, and it is not known to publish the state change the
+  adapter needs. The end boundary comes from the 250 ms position poll instead,
+  so it can overshoot by up to that much before `ended` is published — the
+  published `currentTime` is pinned to the boundary, and the playhead is left
+  where the player stopped rather than seeking backwards onto it.
 
 ## License
 

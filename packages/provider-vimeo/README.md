@@ -53,12 +53,12 @@ origins list and what a page's CSP has to allow.
 
 ## Exports
 
-| Export                 | What it is                                                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `createVimeoProvider`  | Builds the adapter over a mount element and a `VimeoSource`.                                                                          |
-| `VimeoProviderOptions` | `controls`, `dnt`, `loop`, `customControls`. Through `Player.Root`, `controls` and `loop` are its own props (ADR-0004), not bag keys. |
-| `VimeoMountElement`    | What the adapter can mount into.                                                                                                      |
-| `VimeoProviderAdapter` | The adapter's own type.                                                                                                               |
+| Export                 | What it is                                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createVimeoProvider`  | Builds the adapter over a mount element and a `VimeoSource`.                                                                                                                          |
+| `VimeoProviderOptions` | `controls`, `dnt`, `loop`, `startTime`, `endTime`, `customControls`. Through `Player.Root`, `controls`, `loop`, `startTime` and `endTime` are its own props (ADR-0004), not bag keys. |
+| `VimeoMountElement`    | What the adapter can mount into.                                                                                                                                                      |
+| `VimeoProviderAdapter` | The adapter's own type.                                                                                                                                                               |
 
 ## What it reports honestly
 
@@ -89,6 +89,19 @@ origins list and what a page's CSP has to allow.
 - **Cue timings are not reported.** The payload carries no start or end, so a
   cue reports the position it became active at for both bounds.
 - **`buffered` is every range**, including the gaps a seek leaves behind.
+- **The `[startTime, endTime]` window is this adapter's to enforce.** Vimeo
+  carries a start as a `#t=` fragment on the embed url, which only keeps the
+  embed from loading at zero — the seek this adapter issues when the player is
+  ready is what the start rests on. There is no end mechanism at all, so the
+  adapter watches `timeupdate`: crossing `endTime` pauses the embed and
+  publishes `ended` with the playhead pinned to the boundary, and the pause it
+  caused is not reported as one. `loop` composes with both — `loop=1` stays on
+  the embed and wraps to zero, and the adapter puts the playhead back at
+  `startTime` afterwards, which also covers the embeds where Vimeo never fires
+  `ended`. Reaching the boundary while looping restarts instead of ending.
+  Sanitisation matches every other provider: a non-finite or non-positive start
+  is no start, an end that is not finite or not above the start is no end, and
+  an end past the duration is clamped to it.
 
 ## License
 

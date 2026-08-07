@@ -6,6 +6,7 @@ import type {
 } from '@reely/core';
 import { readyCapabilities } from './adapter-values.js';
 import { createYouTubeAttachment } from './attachment.js';
+import { createYouTubeBoundary } from './boundary.js';
 import { loadYouTubeIframeApi, type YouTubeIframeApi } from './loader.js';
 import { createYouTubePlayback } from './playback.js';
 import { createYouTubePresentation } from './presentation.js';
@@ -38,6 +39,26 @@ export type YouTubeProviderOptions = {
    * the setting (ADR-0004).
    */
   readonly loop?: boolean;
+  /**
+   * Start playback at this offset in seconds. A non-finite or non-positive
+   * value is no start at all. `Root`'s `startTime` prop is folded into this
+   * bag by `packages/react/src/root.tsx`, so `PlayerProviderOptions` omits the
+   * key and this is not a second home for the setting (ADR-0004).
+   */
+  readonly startTime?: number;
+  /**
+   * End playback at this offset in seconds, publishing `ended` there rather
+   * than at the end of the video. A value that is non-finite, or not above the
+   * sanitised `startTime`, is no end at all; one past the video's duration is
+   * clamped to it. Folded in from `Root`'s `endTime` prop exactly as
+   * `startTime` is (ADR-0004).
+   *
+   * YouTube has no end mechanism this adapter can trust, so the boundary is
+   * enforced from the 250 ms position poll. It can therefore overshoot by up
+   * to that much before the end is published; the published `currentTime` is
+   * the boundary itself.
+   */
+  readonly endTime?: number;
   /**
    * Embed host; defaults to the privacy-enhanced youtube-nocookie.com. Only
    * the two origins YouTube serves the embed from are honoured — anything
@@ -113,10 +134,21 @@ export const createYouTubeProvider = (
     event?: ProviderEvent
   ): void => listeners.forEach((listener) => listener(patch, event));
 
+  // The poll is where the window is enforced and the window drives the poll,
+  // so one of the two has to reach the other lazily; the seams below reach
+  // `attachment` the same way.
   const timeUpdates = createYouTubeTimeUpdates({
     emit,
     isDestroyed: () => attachment.isDestroyed(),
-    getPlayer: () => attachment.getPlayer()
+    getPlayer: () => attachment.getPlayer(),
+    boundary: { onTimeReport: (time) => boundary.onTimeReport(time) }
+  });
+
+  const boundary = createYouTubeBoundary(options, {
+    emit,
+    isDestroyed: () => attachment.isDestroyed(),
+    getPlayer: () => attachment.getPlayer(),
+    timeUpdates
   });
 
   const playback = createYouTubePlayback({
@@ -124,7 +156,8 @@ export const createYouTubeProvider = (
     isDestroyed: () => attachment.isDestroyed(),
     getPlayer: () => attachment.getPlayer(),
     getReadyPlayer: () => attachment.getReadyPlayer(),
-    timeUpdates
+    timeUpdates,
+    boundary
   });
 
   const presentation = createYouTubePresentation(mount, {
@@ -155,6 +188,7 @@ export const createYouTubeProvider = (
     controls: options.controls,
     loop: options.loop,
     host: resolveHost(options.host),
+    boundary,
     loadIframeApi: options.loadIframeApi ?? loadYouTubeIframeApi,
     getCapabilities: playerCapabilities,
     playback,
