@@ -127,6 +127,51 @@ test('leaves the vimeo bag un-looped when Root omits the prop', async () => {
   expect(options?.loop).toBeUndefined();
 });
 
+// #214: `startTime` and `endTime` are `Root` props too, and reach this provider
+// by the same fold `loop` takes. They used to travel only in `nativeOptions`,
+// which `loadProvider` hands to the native and HLS providers alone, so both were
+// silently inert on a Vimeo source.
+test("folds Root's startTime and endTime into the vimeo provider option bag", async () => {
+  render(
+    <Player.Root
+      endTime={20}
+      loading="eager"
+      source={{ type: 'vimeo', videoId: '76979871' }}
+      startTime={12}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
+  expect(options).toMatchObject({ endTime: 20, startTime: 12 });
+});
+
+test('leaves the vimeo bag unbounded when Root omits the time props', async () => {
+  render(
+    <Player.Root
+      loading="eager"
+      source={{ type: 'vimeo', videoId: '76979871' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
+  expect(options?.startTime).toBeUndefined();
+  expect(options?.endTime).toBeUndefined();
+});
+
 test('the loader rejects a Vimeo source without an embed mount', async () => {
   await expect(
     loadProvider({

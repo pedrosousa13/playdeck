@@ -521,8 +521,16 @@ export const Root = ({
   // embed, the value having reached nothing. The fold is what makes the
   // rebuild produce a looping one.
   //
-  // Wistia takes `loop` alone: its `controls` fan-out is still unbuilt, so the
-  // `wistia` bag keeps `controls` un-omitted and there is nothing to fold.
+  // `startTime` and `endTime` join the fold on the same terms (#214), and for
+  // the same reason `loop` did: they rode in `nativeOptions` and reached the
+  // native and HLS providers alone, so both were silently inert on the three
+  // embeds. The raw prop values are folded -- each provider sanitises its own
+  // bag, as native does (`provider-native/src/playback.ts`'s boundary
+  // resolution), so no rule is applied twice or spelled two ways here.
+  //
+  // Wistia takes `loop` and the two boundaries: its `controls` fan-out is still
+  // unbuilt, so the `wistia` bag keeps `controls` un-omitted and there is
+  // nothing to fold.
   const resolvedProviderOptions = useMemo<ResolvedProviderOptions>(() => {
     const type =
       detectedSource.status === 'success'
@@ -531,23 +539,29 @@ export const Root = ({
     if (type === 'youtube') {
       return {
         ...providerOptions,
-        youtube: { ...providerOptions?.youtube, controls, loop }
+        youtube: {
+          ...providerOptions?.youtube,
+          controls,
+          endTime,
+          loop,
+          startTime
+        }
       };
     }
     if (type === 'vimeo') {
       return {
         ...providerOptions,
-        vimeo: { ...providerOptions?.vimeo, controls, loop }
+        vimeo: { ...providerOptions?.vimeo, controls, endTime, loop, startTime }
       };
     }
     if (type === 'wistia') {
       return {
         ...providerOptions,
-        wistia: { ...providerOptions?.wistia, loop }
+        wistia: { ...providerOptions?.wistia, endTime, loop, startTime }
       };
     }
     return providerOptions ?? {};
-  }, [controls, detectedSource, loop, providerOptions]);
+  }, [controls, detectedSource, endTime, loop, providerOptions, startTime]);
 
   const activation = useActivation({
     autoplay,

@@ -2041,3 +2041,292 @@ test('vimeo clears the dimensions on destroy', async () => {
 
   expect(dimensions.at(-1)).toBeUndefined();
 });
+
+// --- the [startTime, endTime] boundary (#214) ---
+// Vimeo expresses a start as a `#t=` fragment and has no end equivalent at all,
+// so the adapter is the authority for both bounds: it seeks to the start itself
+// and watches `timeupdate` to decide when the end is reached. The contract is
+// the native provider's, resolved through `@reely/core`'s shared helper.
+
+test('seeks to the start boundary once the player is ready', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 12 }
+  });
+
+  expect(sdk.instances[0]!.setCurrentTime).toHaveBeenCalledWith(12);
+  expect(readyPatch(patches)).toMatchObject({ currentTime: 12 });
+});
+
+// The fragment only saves the embed from loading at zero; the seek above is
+// what the boundary actually rests on, so a sanitised-away start writes no
+// hint rather than a `t=0s` one.
+test.each([
+  ['a positive start', 12, '#t=12s'],
+  ['a fractional start', 12.5, '#t=12.5s'],
+  ['no start', undefined, ''],
+  ['a zero start', 0, ''],
+  ['a negative start', -5, ''],
+  ['a non-finite start', Number.NaN, '']
+] as const)(
+  'writes the embed-url time fragment for %s',
+  async (_label, startTime, expected) => {
+    const result = await setup({ options: { startTime } });
+    expect(embedUrl(result).hash).toBe(expected);
+  }
+);
+
+test('publishes ended at the end boundary, once, and pauses the embed', async () => {
+  const { events, patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { endTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.emit('play', { duration: 60, percent: 0, seconds: 0 });
+  const before = patches.length;
+
+  player.emit('timeupdate', { duration: 60, percent: 0.34, seconds: 20.4 });
+
+  expect(patches.slice(before)).toEqual([
+    { playback: 'ended', buffering: false, currentTime: 20 }
+  ]);
+  expect(events.at(-1)).toMatchObject({ type: 'ended' });
+  expect(player.pause).toHaveBeenCalled();
+
+  // Vimeo keeps reporting time past the boundary until the pause lands; those
+  // reports are out of the window and publish nothing at all.
+  player.emit('timeupdate', { duration: 60, percent: 0.35, seconds: 21 });
+  expect(patches.slice(before)).toHaveLength(1);
+});
+
+test('suppresses the pause the end boundary itself caused', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { endTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.emit('play', { duration: 60, percent: 0, seconds: 0 });
+  player.emit('timeupdate', { duration: 60, percent: 0.34, seconds: 20.4 });
+  const afterEnd = patches.length;
+
+  player.emit('pause', { duration: 60, percent: 0.34, seconds: 20.4 });
+
+  expect(patches).toHaveLength(afterEnd);
+});
+
+test('bounds playback to the window when both ends are set', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 10, endTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  expect(player.setCurrentTime).toHaveBeenCalledWith(10);
+
+  player.emit('timeupdate', { duration: 60, percent: 0.25, seconds: 15 });
+  expect(patches.at(-1)).toMatchObject({ currentTime: 15 });
+
+  player.emit('timeupdate', { duration: 60, percent: 0.34, seconds: 20.2 });
+  expect(patches.at(-1)).toMatchObject({
+    playback: 'ended',
+    currentTime: 20
+  });
+});
+
+// `loop=1` stays on the embed url, so Vimeo wraps on its own — to zero, and
+// often without an `ended` event at all. The wrap guard is what puts the
+// playhead back at the start boundary.
+test('returns a looping embed to the start boundary after it wraps to zero', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { loop: true, startTime: 10 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('timeupdate', { duration: 60, percent: 0.006, seconds: 0.4 });
+  await flushMicrotasks();
+
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(10);
+  expect(patches.at(-1)).toMatchObject({ currentTime: 10, buffering: false });
+  expect(player.play).toHaveBeenCalled();
+});
+
+test('restarts rather than ending when a looping embed reaches the end boundary', async () => {
+  const { events, patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { loop: true, startTime: 5, endTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('timeupdate', { duration: 60, percent: 0.34, seconds: 20.5 });
+  await flushMicrotasks();
+
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(5);
+  expect(patches.at(-1)).toMatchObject({ currentTime: 5, buffering: false });
+  expect(player.play).toHaveBeenCalled();
+
+  // And the platform's own end, if it ever arrives, restarts too.
+  player.setCurrentTime.mockClear();
+  player.emit('ended', { duration: 60, percent: 1, seconds: 60 });
+  await flushMicrotasks();
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(5);
+
+  expect(patches.some((patch) => patch.playback === 'ended')).toBe(false);
+  expect(events.some((event) => event.type === 'ended')).toBe(false);
+});
+
+// Nothing to correct: `loop=1` already restarts the embed at zero, which is
+// where an unset start boundary is. So the platform's own end stays the end it
+// has always published, as it does on YouTube and Wistia.
+test('keeps publishing ended for a looping embed with no start boundary', async () => {
+  const { events, patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { loop: true }
+  });
+  const player = sdk.instances[0]!;
+
+  player.emit('ended', { duration: 60, percent: 1, seconds: 60 });
+  await flushMicrotasks();
+
+  expect(patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 60
+  });
+  expect(events.at(-1)).toMatchObject({ type: 'ended' });
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+});
+
+// The wrap guard compares against the duration-clamped start. Against the raw
+// one, the position the restart seeks to reads as another wrap and the embed
+// restarts on every single time report, forever.
+test('does not restart-loop when the start boundary is past the duration', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { loop: true, startTime: 90 }
+  });
+  const player = sdk.instances[0]!;
+  expect(player.setCurrentTime).toHaveBeenCalledWith(60);
+  player.setCurrentTime.mockClear();
+
+  player.emit('timeupdate', { duration: 60, percent: 1, seconds: 60 });
+  await flushMicrotasks();
+
+  expect(patches.at(-1)).toEqual({ currentTime: 60, duration: 60 });
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+  expect(player.play).not.toHaveBeenCalled();
+});
+
+// The sanitisation table of `@reely/core`'s helper, asserted through what the
+// adapter does rather than what it computed.
+test.each([
+  ['an absent start', undefined],
+  ['a zero start', 0],
+  ['a negative start', -5],
+  ['a NaN start', Number.NaN],
+  ['an infinite start', Number.POSITIVE_INFINITY]
+] as const)('issues no initial seek for %s', async (_label, startTime) => {
+  const { sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime }
+  });
+  expect(sdk.instances[0]!.setCurrentTime).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['an absent end', undefined],
+  ['a NaN end', Number.NaN],
+  ['an infinite end', Number.POSITIVE_INFINITY],
+  ['an end equal to the start', 10],
+  ['an end below the start', 5]
+] as const)('applies no end boundary for %s', async (_label, endTime) => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 10, endTime }
+  });
+
+  sdk.instances[0]!.emit('timeupdate', {
+    duration: 60,
+    percent: 0.5,
+    seconds: 30
+  });
+
+  expect(patches.at(-1)).toEqual({ currentTime: 30, duration: 60 });
+});
+
+test('clamps an end boundary past the duration to the duration', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { endTime: 90 }
+  });
+
+  sdk.instances[0]!.emit('timeupdate', {
+    duration: 60,
+    percent: 1,
+    seconds: 60
+  });
+
+  expect(patches.at(-1)).toMatchObject({
+    playback: 'ended',
+    currentTime: 60
+  });
+});
+
+test('collapses a start boundary past the effective end onto it', async () => {
+  const { sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 90 }
+  });
+
+  expect(sdk.instances[0]!.setCurrentTime).toHaveBeenCalledWith(60);
+});
+
+test('resumes from the start boundary after a boundary end', async () => {
+  const { provider, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 10, endTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.emit('timeupdate', { duration: 60, percent: 0.34, seconds: 20.5 });
+  player.setCurrentTime.mockClear();
+
+  await provider.play();
+
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(10);
+  expect(player.play).toHaveBeenCalled();
+});
+
+// The third leg of the parity claim above: the embed's own end, not the
+// window's. This port already behaved this way; the assertion is here so the
+// three ports and native cannot drift apart on it again.
+test('resumes from the start boundary after the embed ends naturally', async () => {
+  const { provider, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 10 }
+  });
+  const player = sdk.instances[0]!;
+  player.emit('ended', { duration: 60, percent: 1, seconds: 60 });
+  await flushMicrotasks();
+  player.setCurrentTime.mockClear();
+
+  await provider.play();
+
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(10);
+  expect(player.play).toHaveBeenCalled();
+});
+
+test('clamps a seek to the window instead of crossing the end boundary', async () => {
+  const { patches, provider, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 10, endTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+
+  await provider.seekTo(45);
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(20);
+  await provider.seekTo(0);
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(10);
+
+  expect(patches.some((patch) => patch.playback === 'ended')).toBe(false);
+});

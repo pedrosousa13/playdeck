@@ -74,6 +74,7 @@ out when a command will land; `activation` is not a substitute for either.
 | `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership. |
 | `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.         |
 | `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                  |
+| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.     |
 
 ### Types
 
@@ -92,7 +93,7 @@ Sources: `PlayerSource`, `ResolvedPlayerSource`, `VideoFileSource`, `HlsSource`,
 `SourceDetectionFailureReason`.
 
 Providers: `ProviderAdapter`, `ProviderStatePatch`, `ProviderStateListener`,
-`ProviderEvent`, `ProviderEventFor`.
+`ProviderEvent`, `ProviderEventFor`, `TimeBoundary`.
 
 Autoplay: `AutoplayMode`, `AutoplayConfigurationOptions`.
 
@@ -169,6 +170,46 @@ export const seekIsUndecided = initial.capabilities.seek.status === 'unknown';
 // and its language. Falls back to the language's own name, then to 'Unknown'.
 export const labelled = textTrackLabel('', 'pt-BR'); // 'português (Brasil)'
 export const named = textTrackLabel('Commentary', 'en'); // 'Commentary'
+```
+
+<!-- /example -->
+
+## Time boundary
+
+`createTimeBoundary()` resolves a `[startTime, endTime]` window once and then
+answers every question a provider asks of it. The embed providers (YouTube,
+Vimeo, Wistia) have no trustworthy native end mechanism, so each one enforces
+the window from its own adapter — and this is what makes all three enforce it
+the same way.
+
+<!-- example:core-time-boundary -->
+
+```ts
+import { createTimeBoundary } from '@reely/core';
+
+// The `[startTime, endTime]` window a provider plays inside, sanitised once.
+// A start that is absent, non-positive or non-finite is no start; an end that
+// is absent, non-finite, or not above the start is no end.
+const bounds = createTimeBoundary({ startTime: 30, endTime: 90 });
+
+console.log(bounds.startTime, bounds.endTime); // 30 90 — the load hints
+
+// Every question is asked against the duration, which caps the window: pass
+// `null` or `undefined` before the media reports one.
+export const startsAt = bounds.start(120); // 30 — where playback begins
+export const endsAt = bounds.end(60); // 60 — the duration caps the end
+export const reachedEnd = bounds.atEnd(120, 91); // true — publish `ended` here
+export const seekTarget = bounds.clamp(120, 999); // 90 — seeks stay inside
+
+// The two loop questions. A platform loop wraps to zero rather than to the
+// start boundary, so a playhead behind the start of a positioned player is that
+// wrap; and the platform's own end is only worth correcting when the window
+// begins somewhere other than zero.
+export const wrapped = bounds.atWrap(120, 5, { loop: true, positioned: true });
+export const restarts = bounds.restartsAtStart(true); // true
+
+// A nonsense window is dropped rather than reported: this plays the whole video.
+export const unbounded = createTimeBoundary({ startTime: -1, endTime: 0 });
 ```
 
 <!-- /example -->

@@ -32,7 +32,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const renderWistia = (props: { loop?: boolean } = {}) =>
+const renderWistia = (
+  props: { endTime?: number; loop?: boolean; startTime?: number } = {}
+) =>
   render(
     <Player.Root
       loading="eager"
@@ -68,6 +70,31 @@ test('leaves the wistia bag un-looped when Root omits the prop', async () => {
   );
   const [, , options] = mockedCreateWistiaProvider.mock.calls[0]!;
   expect(options?.loop).toBeUndefined();
+});
+
+// #214: `startTime` and `endTime` are `Root` props too, and reach this provider
+// by the same fold `loop` takes. They used to travel only in `nativeOptions`,
+// which `loadProvider` hands to the native and HLS providers alone, so both were
+// silently inert on a Wistia source.
+test("folds Root's startTime and endTime into the wistia provider option bag", async () => {
+  renderWistia({ endTime: 20, startTime: 12 });
+
+  await waitFor(() =>
+    expect(mockedCreateWistiaProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateWistiaProvider.mock.calls[0]!;
+  expect(options).toMatchObject({ endTime: 20, startTime: 12 });
+});
+
+test('leaves the wistia bag unbounded when Root omits the time props', async () => {
+  renderWistia();
+
+  await waitFor(() =>
+    expect(mockedCreateWistiaProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateWistiaProvider.mock.calls[0]!;
+  expect(options?.startTime).toBeUndefined();
+  expect(options?.endTime).toBeUndefined();
 });
 
 test('keeps a consumer-supplied wistia bag alongside the folded loop', async () => {

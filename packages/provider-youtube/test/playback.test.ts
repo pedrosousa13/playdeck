@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ProviderStatePatch } from '@reely/core';
 import { playerStates } from '../src/adapter-values';
+import { createYouTubeBoundary } from '../src/boundary';
 import {
   createYouTubePlayback,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
@@ -33,23 +34,38 @@ const createHarness = () => {
     getVolume: () => 100
   };
 
+  const timeUpdates = {
+    start: () => timePolling.push('start'),
+    stop: () => timePolling.push('stop'),
+    adoptCurrentTime: (
+      current: Pick<YouTubeCommandPlayer, 'getCurrentTime'>
+    ) => {
+      currentTime = current.getCurrentTime();
+      return currentTime;
+    },
+    setCurrentTime: (time: number) => {
+      currentTime = time;
+    },
+    getCurrentTime: () => currentTime
+  };
+
   const playback = createYouTubePlayback({
     emit: (patch) => patches.push(patch),
     isDestroyed: () => false,
     getPlayer: () => player,
     getReadyPlayer: () => (ready ? player : undefined),
-    timeUpdates: {
-      start: () => timePolling.push('start'),
-      stop: () => timePolling.push('stop'),
-      adoptCurrentTime: (current) => {
-        currentTime = current.getCurrentTime();
-        return currentTime;
-      },
-      setCurrentTime: (time) => {
-        currentTime = time;
-      },
-      getCurrentTime: () => currentTime
-    }
+    timeUpdates,
+    // The unbounded window: no start, no end, so every command behaves as it
+    // did before the boundary seam existed.
+    boundary: createYouTubeBoundary(
+      {},
+      {
+        emit: (patch) => patches.push(patch),
+        isDestroyed: () => false,
+        getPlayer: () => player,
+        timeUpdates
+      }
+    )
   });
 
   return {

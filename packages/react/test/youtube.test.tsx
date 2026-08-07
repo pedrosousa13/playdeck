@@ -118,6 +118,51 @@ test('leaves the youtube bag un-looped when Root omits the prop', async () => {
   expect(options?.loop).toBeUndefined();
 });
 
+// #214: `startTime` and `endTime` are `Root` props too, and reach this provider
+// by the same fold `loop` takes. They used to travel only in `nativeOptions`,
+// which `loadProvider` hands to the native and HLS providers alone, so both were
+// silently inert on a YouTube source.
+test("folds Root's startTime and endTime into the youtube provider option bag", async () => {
+  render(
+    <Player.Root
+      endTime={20}
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+      startTime={12}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateYouTubeProvider.mock.calls[0]!;
+  expect(options).toMatchObject({ endTime: 20, startTime: 12 });
+});
+
+test('leaves the youtube bag unbounded when Root omits the time props', async () => {
+  render(
+    <Player.Root
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateYouTubeProvider.mock.calls[0]!;
+  expect(options?.startTime).toBeUndefined();
+  expect(options?.endTime).toBeUndefined();
+});
+
 // SIDEPRO's regression: `providerOptionsEqual` in `use-activation.ts` must
 // compare `youtube` bags by value, or a changed bag looks unchanged and the
 // embed never re-attaches to pick it up.

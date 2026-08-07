@@ -70,6 +70,11 @@ bag, and `PlayerProviderOptions` omits it from all three, so
 `providerOptions={{ wistia: { loop: true } }}` — the one spelling that used to
 work — no longer compiles.
 
+**`startTime` and `endTime` joined `loop` on this route in #214**: both are now
+declared and enforced by all three embed providers, folded into the active
+provider's bag by `resolvedProviderOptions`, and omitted from all three bags in
+`PlayerProviderOptions`.
+
 ## Consequences
 
 - A new Reely-level option is work in every provider rather than in one. Ship the

@@ -8,6 +8,7 @@ import type {
 } from '@reely/core';
 import { available, type WistiaMountElement } from './adapter-values.js';
 import { createWistiaAttachment } from './attachment.js';
+import { createWistiaBoundary } from './boundary.js';
 import { createWistiaPlayback } from './playback.js';
 import { createWistiaPresentation } from './presentation.js';
 
@@ -32,6 +33,17 @@ export type WistiaProviderOptions = {
   readonly controls?: boolean;
   readonly dnt?: boolean;
   /**
+   * Stop playback at this offset and publish `ended` there, rather than at the
+   * media's own end. Aurora has no end mechanism to hand this to, so the
+   * adapter enforces it from Wistia's `time-update` reports — the same posture
+   * the native provider takes. An end that is not finite, or not above the
+   * sanitised `startTime`, is no end; one past the duration is clamped to it.
+   * Documented like `loop` below: this is where the setting is implemented,
+   * `Root` folds its own prop in, and `PlayerProviderOptions` omits the key so
+   * the two cannot both be written (ADR-0004).
+   */
+  readonly endTime?: number;
+  /**
    * Restart the video when it ends, by setting `endVideoBehavior`
    * (`attachment.ts:243`, `if (options.loop === true)`). This is where the
    * setting is implemented, not where a `Player.Root` consumer writes it:
@@ -46,6 +58,15 @@ export type WistiaProviderOptions = {
   readonly playerColor?: string;
   readonly swatch?: boolean;
   readonly poster?: string;
+  /**
+   * Begin playback at this offset. Written onto the element as the
+   * `current-time` attribute for the load, and seeked to on the handle once
+   * the player is ready — the attribute is a hint, the seek is the authority.
+   * A start that is not finite, or not above zero, is no start. With `loop`,
+   * the restart returns here rather than to zero. Same ADR-0004 posture as
+   * `endTime` above.
+   */
+  readonly startTime?: number;
   readonly transparentLetterbox?: boolean;
 };
 
@@ -86,11 +107,16 @@ export const createWistiaProvider = (
     event?: ProviderEvent
   ): void => listeners.forEach((listener) => listener(patch, event));
 
+  // Resolved once, from the raw options, and consulted by the playback seam on
+  // every time report, seek and restart.
+  const boundary = createWistiaBoundary(options);
+
   const playback = createWistiaPlayback(mount, {
     emit,
     isStale: (player) => attachment.isStale(player),
     getPlayer: () => attachment.getPlayer(),
-    getCapabilities: playerCapabilities
+    getCapabilities: playerCapabilities,
+    boundary
   });
 
   const presentation = createWistiaPresentation({
