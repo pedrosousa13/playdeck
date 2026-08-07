@@ -15,6 +15,7 @@ import {
   type IsStalePlayer,
   type WistiaMountElement
 } from './adapter-values.js';
+import type { WistiaBoundary } from './boundary.js';
 import type {
   WistiaMuteChangeDetail,
   WistiaPlayerApi,
@@ -65,6 +66,9 @@ export type WistiaPlaybackDeps = {
   // The host's capabilities snapshot, republished when a command proves a
   // capability this player does not have.
   readonly getCapabilities: () => PlayerCapabilities;
+  // The `[startTime, endTime]` window. Aurora has no end mechanism to hand the
+  // boundary to, so this seam enforces it from the time reports.
+  readonly boundary: WistiaBoundary;
 };
 
 // The playback-command seam: the transport commands and the playhead, duration
@@ -79,7 +83,7 @@ export type WistiaPlayback = Required<
   // overrides back into it, returning the patch fragment the attachment seam
   // folds into its ready state.
   readonly adopt: (
-    player: Pick<WistiaPlaybackPlayer, 'volume' | 'playbackRate'>,
+    player: Pick<WistiaPlaybackPlayer, 'volume' | 'playbackRate' | 'time'>,
     values: WistiaPlaybackValues
   ) => ProviderStatePatch;
   readonly handlers: {
@@ -89,7 +93,11 @@ export type WistiaPlayback = Required<
       player: Pick<WistiaPlaybackPlayer, 'time'>,
       detail?: unknown
     ) => void;
-    readonly onTimeUpdate: (player: Pick<WistiaPlaybackPlayer, 'time'>) => void;
+    // Takes `pause` as well as `time`: the end boundary is the adapter's to
+    // enforce, so reaching it has to stop the player as well as report it.
+    readonly onTimeUpdate: (
+      player: Pick<WistiaPlaybackPlayer, 'time' | 'pause'>
+    ) => void;
     // No `onSeeking` counterpart: the attachment seam does not bind Wistia's
     // `seeking`, because the live player dispatches it after its own `seeked`.
     readonly onSeeked: (
@@ -113,7 +121,7 @@ export type WistiaPlayback = Required<
 
 export const createWistiaPlayback = (
   mount: Pick<WistiaMountElement, 'volume' | 'playbackRate'>,
-  { emit, isStale, getPlayer, getCapabilities }: WistiaPlaybackDeps
+  { emit, isStale, getPlayer, getCapabilities, boundary }: WistiaPlaybackDeps
 ): WistiaPlayback => {
   let currentTime = 0;
   let duration: number | null = null;
@@ -125,8 +133,10 @@ export const createWistiaPlayback = (
   const clampVolume = (level: number): number =>
     Math.min(1, Math.max(0, level));
 
-  const seekTarget = (time: number): number =>
-    Math.max(0, duration === null ? time : Math.min(duration, time));
+  // The window's clamp, not a bare 0-to-duration one: without it a seek past
+  // `endTime` would land beyond the boundary and the next time report would
+  // publish `ended`.
+  const seekTarget = (time: number): number => boundary.clamp(duration, time);
 
   const readTime = (player: Pick<WistiaPlaybackPlayer, 'time'>): number => {
     const time = player.time();
@@ -154,7 +164,18 @@ export const createWistiaPlayback = (
   };
 
   return {
-    play: () => runWistiaCommand(getPlayer(), (player) => player.play()),
+    play: () =>
+      runWistiaCommand(getPlayer(), (player) => {
+        // Resuming from a boundary end would otherwise play the sliver of media
+        // between the boundary and the media's own end.
+        const resume = boundary.resumeFrom(duration, currentTime);
+        if (resume !== undefined) {
+          boundary.clearEnded();
+          currentTime = resume;
+          player.time(resume);
+        }
+        return player.play();
+      }),
     pause: () => runWistiaCommand(getPlayer(), (player) => player.pause()),
     seekTo: (time) => {
       if (!Number.isFinite(time))
@@ -217,6 +238,15 @@ export const createWistiaPlayback = (
     adopt: (player, values) => {
       duration = values.duration;
       muted = values.muted;
+      // The first moment the duration is known, which is what the start
+      // boundary has to be clamped against. The `current-time` attribute is a
+      // load hint the element may or may not honour; this seek is the
+      // authority, and the ready patch below carries where it landed.
+      const start = boundary.adopt(duration);
+      if (start !== undefined) {
+        currentTime = start;
+        player.time(start);
+      }
       // The overrides are pushed into the player, so the ready patch has to
       // carry what is in effect after them rather than what the player reported
       // before. Wistia confirms a volume override with its own `volume-change`
@@ -255,14 +285,30 @@ export const createWistiaPlayback = (
       };
     },
     handlers: {
-      onPlay: (detail) =>
+      onPlay: (detail) => {
+        boundary.clearEnded();
         emit(
           { playback: 'playing', buffering: false },
           providerEvent('play', undefined, detail)
-        ),
-      onPause: (detail) =>
-        emit({ playback: 'paused' }, providerEvent('pause', undefined, detail)),
+        );
+      },
+      // The pause the end boundary issued is the one that published `ended`;
+      // republishing it as `paused` would walk that state back.
+      onPause: (detail) => {
+        if (boundary.hasEnded()) return;
+        emit({ playback: 'paused' }, providerEvent('pause', undefined, detail));
+      },
       onEnded: (player, detail) => {
+        const restart = boundary.reviewEnded(duration);
+        if (restart !== undefined) {
+          // `end-video-behavior="loop"` has already restarted the player at
+          // zero. Only the position is wrong, so nothing is published as an
+          // end — the loop never left playback.
+          currentTime = restart;
+          player.time(restart);
+          emit({ currentTime, buffering: false });
+          return;
+        }
         currentTime = readTime(player);
         emit(
           { playback: 'ended', buffering: false, currentTime },
@@ -270,13 +316,35 @@ export const createWistiaPlayback = (
         );
       },
       // `time-update` carries no payload, so the playhead is read back off the
-      // handle rather than taken from the event.
+      // handle rather than taken from the event. It is also where the end
+      // boundary is enforced: Aurora has no end mechanism of its own.
       onTimeUpdate: (player) => {
-        currentTime = readTime(player);
+        const verdict = boundary.reviewTime(duration, readTime(player));
+        if (verdict.kind === 'suppress') return;
+        currentTime = verdict.time;
+        if (verdict.kind === 'restart') {
+          player.time(currentTime);
+          emit({ currentTime, buffering: false });
+          return;
+        }
+        if (verdict.kind === 'end') {
+          // The playhead is pinned to the boundary rather than seeked back to
+          // it: the overshoot is at most one report, and a corrective seek
+          // would be a visible backward jump.
+          player.pause();
+          emit(
+            { playback: 'ended', buffering: false, currentTime },
+            providerEvent('ended', undefined)
+          );
+          return;
+        }
         emit({ currentTime });
       },
       onSeeked: (player, detail) => {
         currentTime = readTime(player);
+        // A seek back inside the window reopens it, so the next report is an
+        // ordinary one rather than a suppressed post-boundary one.
+        if (!boundary.isAtEnd(duration, currentTime)) boundary.clearEnded();
         emit(
           { seeking: false, currentTime },
           providerEvent('seeked', { currentTime }, detail)

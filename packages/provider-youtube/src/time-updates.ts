@@ -1,5 +1,6 @@
 import type { TimeRange } from '@reely/core';
 import { clamp01, type EmitProviderState } from './adapter-values.js';
+import type { YouTubeBoundary } from './boundary.js';
 import type { YouTubePlayer } from './loader.js';
 
 const TIME_UPDATE_INTERVAL_MS = 250;
@@ -39,6 +40,9 @@ export type YouTubeTimeUpdatesDeps = {
   readonly emit: EmitProviderState;
   readonly isDestroyed: () => boolean;
   readonly getPlayer: () => YouTubeTimedPlayer | undefined;
+  // The poll is the only time report YouTube gives, so it is where the
+  // [startTime, endTime] window is enforced — before anything is published.
+  readonly boundary: Pick<YouTubeBoundary, 'onTimeReport'>;
 };
 
 // The polling seam: the iframe API pushes no time updates, so position and
@@ -63,7 +67,8 @@ export type YouTubeTimeUpdates = {
 export const createYouTubeTimeUpdates = ({
   emit,
   isDestroyed,
-  getPlayer
+  getPlayer,
+  boundary
 }: YouTubeTimeUpdatesDeps): YouTubeTimeUpdates => {
   let timeInterval: ReturnType<typeof setInterval> | undefined;
   // The iframe API proxies commands over postMessage, so getters read stale
@@ -101,6 +106,9 @@ export const createYouTubeTimeUpdates = ({
         if (isDestroyed() || !current) return;
         try {
           knownCurrentTime = current.getCurrentTime();
+          // The boundary may pin the mirror and stop the poll from in here; a
+          // report it consumed is one this poll must not publish.
+          if (!boundary.onTimeReport(knownCurrentTime)) return;
           emit({
             currentTime: knownCurrentTime,
             buffered: bufferedRanges(current, knownCurrentTime)

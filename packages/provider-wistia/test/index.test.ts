@@ -799,6 +799,307 @@ test('reports a blocked command as policy rather than a provider fault', async (
   });
 });
 
+// --- start and end boundaries ---
+
+// The handle's getter and setter share one name, so a seek is proved by a call
+// that carries a value and the absence of one proves no seek was issued.
+const seekTargets = (
+  player: FakeWistiaPlayerElement
+): Array<number | undefined> =>
+  player.handle.time.mock.calls
+    .filter((call) => call.length > 0)
+    .map((call) => call[0]);
+
+test('starts playback at the start boundary', async () => {
+  const result = await setup({
+    options: { startTime: 12 },
+    fake: { duration: 60 }
+  });
+  // The attribute is a load hint; the seek at ready is the authority, so both
+  // are asserted rather than either standing in for the other.
+  expect(seekTargets(element(result))).toEqual([12]);
+  expect(readyPatch(result.patches)).toMatchObject({ currentTime: 12 });
+});
+
+test('writes the start boundary as the element load hint', async () => {
+  const result = await setup({ options: { startTime: 12.5 } });
+  expect(element(result).getAttribute('current-time')).toBe('12.5');
+});
+
+test.each([
+  ['omitted', undefined],
+  ['zero', 0],
+  ['negative', -5],
+  ['not a number', Number.NaN],
+  ['infinite', Number.POSITIVE_INFINITY]
+])(
+  'writes no start hint and issues no seek for a start that is %s',
+  async (_form, startTime) => {
+    const result = await setup({
+      options: { startTime },
+      fake: { duration: 60 }
+    });
+    const player = element(result);
+    expect(player.getAttribute('current-time')).toBeNull();
+    expect(seekTargets(player)).toEqual([]);
+  }
+);
+
+test('publishes ended once at the end boundary and pauses the player', async () => {
+  const result = await setup({
+    options: { endTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  // Wistia reports on its own cadence, so the boundary is crossed rather than
+  // landed on; the published playhead is pinned to the boundary all the same.
+  player.handle.currentTime = 20.4;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(result.patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 20
+  });
+  expect(lastEvent(result.events)).toMatchObject({
+    type: 'ended',
+    origin: 'provider'
+  });
+  expect(player.handle.pause).toHaveBeenCalledTimes(1);
+
+  const patchCount = result.patches.length;
+  player.handle.currentTime = 21;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+  expect(result.patches).toHaveLength(patchCount);
+});
+
+test('publishes no paused state for the pause the end boundary caused', async () => {
+  const result = await setup({
+    options: { endTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 20;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  const patchCount = result.patches.length;
+  player.emit(WISTIA_EVENTS.pause);
+  expect(result.patches).toHaveLength(patchCount);
+});
+
+test('bounds playback to the window when both ends are set', async () => {
+  const result = await setup({
+    options: { startTime: 5, endTime: 10 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  expect(readyPatch(result.patches)).toMatchObject({ currentTime: 5 });
+
+  player.handle.currentTime = 7;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+  expect(result.patches).toContainEqual({ currentTime: 7 });
+
+  player.handle.currentTime = 11;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+  expect(result.patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 10
+  });
+});
+
+test('returns a looping player to the start boundary rather than to zero', async () => {
+  const result = await setup({
+    options: { loop: true, startTime: 8 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  // `end-video-behavior` stays: Wistia still owns the restart, and the adapter
+  // only corrects where that restart lands.
+  expect(player.getAttribute('end-video-behavior')).toBe('loop');
+
+  player.handle.currentTime = 0;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+  expect(player.handle.time).toHaveBeenLastCalledWith(8);
+  expect(result.patches).toContainEqual({ currentTime: 8, buffering: false });
+  expect(result.patches).not.toContainEqual({ currentTime: 0 });
+});
+
+test('corrects the position on the loop the player reports as ended', async () => {
+  const result = await setup({
+    options: { loop: true, startTime: 8 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 60;
+  player.emit(WISTIA_EVENTS.ended);
+
+  expect(player.handle.time).toHaveBeenLastCalledWith(8);
+  expect(result.patches).not.toContainEqual(
+    expect.objectContaining({ playback: 'ended' })
+  );
+});
+
+test('keeps publishing ended for a looping player with no start boundary', async () => {
+  // Nothing to correct, so the pre-existing loop behaviour is left alone.
+  const result = await setup({ options: { loop: true } });
+  const player = element(result);
+  player.handle.currentTime = 60;
+  player.emit(WISTIA_EVENTS.ended);
+
+  expect(result.patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 60
+  });
+});
+
+test('restarts at the end boundary when looping, without publishing ended', async () => {
+  const result = await setup({
+    options: { loop: true, startTime: 5, endTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+
+  player.handle.currentTime = 20;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+  expect(player.handle.time).toHaveBeenLastCalledWith(5);
+  expect(result.patches).toContainEqual({ currentTime: 5, buffering: false });
+  expect(result.patches).not.toContainEqual(
+    expect.objectContaining({ playback: 'ended' })
+  );
+  expect(player.handle.pause).not.toHaveBeenCalled();
+});
+
+// The wrap guard compares against the duration-clamped start. Against the raw
+// one, the position the restart seeks to reads as another wrap and the player
+// restarts on every single time report, forever.
+test('does not restart-loop when the start boundary is past the duration', async () => {
+  const result = await setup({
+    options: { loop: true, startTime: 90 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  expect(seekTargets(player)).toEqual([60]);
+
+  player.handle.currentTime = 60;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(result.patches).toContainEqual({ currentTime: 60 });
+  expect(result.patches).not.toContainEqual({
+    currentTime: 60,
+    buffering: false
+  });
+  expect(seekTargets(player)).toEqual([60]);
+});
+
+test.each([
+  ['omitted', undefined],
+  ['not a number', Number.NaN],
+  ['infinite', Number.POSITIVE_INFINITY],
+  ['equal to the start', 5],
+  ['below the start', 2]
+])('honours no end boundary when the end is %s', async (_form, endTime) => {
+  const result = await setup({
+    options: { startTime: 5, endTime },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 30;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(result.patches).toContainEqual({ currentTime: 30 });
+  expect(result.patches).not.toContainEqual(
+    expect.objectContaining({ playback: 'ended' })
+  );
+  expect(player.handle.pause).not.toHaveBeenCalled();
+});
+
+test('clamps an end boundary past the duration onto the duration', async () => {
+  const result = await setup({
+    options: { endTime: 90 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 60;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(result.patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 60
+  });
+});
+
+test('collapses a start past the effective end onto it', async () => {
+  // The end is dropped for not being above the start, so the effective end is
+  // the duration and the start collapses onto that.
+  const result = await setup({
+    options: { startTime: 90, endTime: 20 },
+    fake: { duration: 60 }
+  });
+  expect(seekTargets(element(result))).toEqual([60]);
+  expect(readyPatch(result.patches)).toMatchObject({ currentTime: 60 });
+});
+
+test('resumes from the start boundary after a boundary end', async () => {
+  const result = await setup({
+    options: { startTime: 5, endTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 20;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  await result.provider.play();
+  expect(player.handle.time).toHaveBeenLastCalledWith(5);
+  expect(player.handle.play).toHaveBeenCalled();
+});
+
+// The media's own end, not the window's. A `play()` after it is a replay of
+// the window, so it returns to the start boundary rather than resuming at the
+// end of the media -- the native contract
+// (`provider-native/src/playback.ts:229-235`), which Vimeo and YouTube keep too.
+test('resumes from the start boundary after the media ends naturally', async () => {
+  const result = await setup({
+    options: { startTime: 8 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 60;
+  player.emit(WISTIA_EVENTS.ended);
+  expect(result.patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 60
+  });
+
+  await result.provider.play();
+
+  // The seek at adopt, then this replay: the last call proves nothing on its
+  // own, because the adopt seek already targets the same offset.
+  expect(seekTargets(player)).toEqual([8, 8]);
+  expect(player.handle.play).toHaveBeenCalled();
+});
+
+test('clamps a seek to the window rather than ending at it', async () => {
+  const result = await setup({
+    options: { startTime: 5, endTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+
+  await result.provider.seekTo(50);
+  expect(player.handle.time).toHaveBeenLastCalledWith(20);
+  await result.provider.seekTo(1);
+  expect(player.handle.time).toHaveBeenLastCalledWith(5);
+  await result.provider.seekBy(-99);
+  expect(player.handle.time).toHaveBeenLastCalledWith(5);
+  expect(result.patches).not.toContainEqual(
+    expect.objectContaining({ playback: 'ended' })
+  );
+});
+
 // --- teardown, retry and staleness ---
 
 test('destroy removes the player and stops publishing', async () => {

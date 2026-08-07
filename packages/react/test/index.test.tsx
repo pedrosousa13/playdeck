@@ -113,11 +113,12 @@ const verifyMediaPropsExclusions = (): Player.MediaProps[] => [
 
 // Compile-time guard: where `Root`'s own prop fans out to a provider, that
 // provider's bag must not spell the same setting a second time (ADR-0004).
-// The two props do not reach the same set of providers, so this list is
-// asymmetric on purpose: `loop` is omitted from all three bags (SIDEPRO-210),
-// `controls` from youtube and vimeo only. `{ wistia: { controls: true } }` is
-// deliberately absent below -- no fold reaches Wistia, its bag key is still
-// the only way to say it, and asserting an error there would fail.
+// The props do not reach the same set of providers, so this list is
+// asymmetric on purpose: `loop` (SIDEPRO-210) and `startTime`/`endTime` (#214)
+// are omitted from all three bags, `controls` from youtube and vimeo only.
+// `{ wistia: { controls: true } }` is deliberately absent below -- no fold
+// reaches Wistia, its bag key is still the only way to say it, and asserting an
+// error there would fail.
 const verifyProviderOptionExclusions = (): Player.PlayerProviderOptions[] => [
   // @ts-expect-error use Root's own controls prop instead of the youtube bag.
   { youtube: { controls: true } },
@@ -128,7 +129,19 @@ const verifyProviderOptionExclusions = (): Player.PlayerProviderOptions[] => [
   // @ts-expect-error use Root's own loop prop instead of the vimeo bag.
   { vimeo: { loop: true } },
   // @ts-expect-error use Root's own loop prop instead of the wistia bag.
-  { wistia: { loop: true } }
+  { wistia: { loop: true } },
+  // @ts-expect-error use Root's own startTime prop instead of the youtube bag.
+  { youtube: { startTime: 12 } },
+  // @ts-expect-error use Root's own startTime prop instead of the vimeo bag.
+  { vimeo: { startTime: 12 } },
+  // @ts-expect-error use Root's own startTime prop instead of the wistia bag.
+  { wistia: { startTime: 12 } },
+  // @ts-expect-error use Root's own endTime prop instead of the youtube bag.
+  { youtube: { endTime: 20 } },
+  // @ts-expect-error use Root's own endTime prop instead of the vimeo bag.
+  { vimeo: { endTime: 20 } },
+  // @ts-expect-error use Root's own endTime prop instead of the wistia bag.
+  { wistia: { endTime: 20 } }
 ];
 
 const confirmMetadataReady = (media: HTMLVideoElement): void => {

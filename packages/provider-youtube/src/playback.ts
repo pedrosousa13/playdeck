@@ -9,6 +9,7 @@ import {
   runYouTubeCommand,
   type EmitProviderState
 } from './adapter-values.js';
+import type { YouTubeBoundary } from './boundary.js';
 import type { YouTubePlayer } from './loader.js';
 import type { YouTubeTimeUpdates } from './time-updates.js';
 
@@ -66,6 +67,18 @@ export type YouTubePlaybackDeps = {
     YouTubeTimeUpdates,
     'start' | 'stop' | 'adoptCurrentTime' | 'setCurrentTime' | 'getCurrentTime'
   >;
+  // The [startTime, endTime] window: it clamps the seeks, repositions a play
+  // that arrives at the end of the window, and tells the pause and ended
+  // branches which of their events it caused itself.
+  readonly boundary: Pick<
+    YouTubeBoundary,
+    | 'applyPlayPosition'
+    | 'clearEnded'
+    | 'clearEndedAndPendingResume'
+    | 'isEnded'
+    | 'onProviderEnded'
+    | 'seekTarget'
+  >;
 };
 
 // The playback-command seam: the transport commands, the volume mirrors they
@@ -96,7 +109,8 @@ export const createYouTubePlayback = ({
   isDestroyed,
   getPlayer,
   getReadyPlayer,
-  timeUpdates
+  timeUpdates,
+  boundary
 }: YouTubePlaybackDeps): YouTubePlayback => {
   let pendingPlays: PendingPlay[] = [];
   // The iframe API proxies commands over postMessage, so getters read stale
@@ -128,7 +142,10 @@ export const createYouTubePlayback = ({
     if (!Number.isFinite(time)) {
       return Promise.resolve({ ok: false, reason: 'provider-error' });
     }
-    const target = Math.max(0, time);
+    // Clamped into the configured window: the floor is the start boundary (0
+    // when none is set) and the ceiling the effective end, which is the same
+    // place the boundary itself stops playback.
+    const target = boundary.seekTarget(time);
     return runCommand((current) => {
       current.seekTo(target, true);
       // Emit the intended position: a read-back here would still return the
@@ -147,6 +164,10 @@ export const createYouTubePlayback = ({
       if (current.getPlayerState() === playerStates.PLAYING) {
         return Promise.resolve({ ok: true });
       }
+      // A play at an end — this window's, or the media's own — replays the
+      // window from the start boundary, matching native
+      // (`provider-native/src/playback.ts:229-239`).
+      boundary.applyPlayPosition(current);
       return new Promise<CommandResult>((resolve) => {
         const pending: PendingPlay = {
           resolve,
@@ -235,6 +256,11 @@ export const createYouTubePlayback = ({
         const current = getPlayer();
         if (isDestroyed() || !current) return;
         if (data === playerStates.PLAYING) {
+          // Playback resumed, whether this adapter asked for it or the viewer
+          // pressed YouTube's own play button. Either way the window is open
+          // again, so the end boundary has to be able to fire a second time
+          // (`provider-native`, `:129-131`; Vimeo `onPlay`; Wistia `onPlay`).
+          boundary.clearEnded();
           settlePendingPlays({ ok: true });
           const duration = current.getDuration();
           emit(
@@ -251,6 +277,11 @@ export const createYouTubePlayback = ({
           return;
         }
         if (data === playerStates.PAUSED) {
+          // The boundary paused the player itself to stop at an end — this
+          // window's, or the media's own — and already published that as an
+          // end; reporting it again as a pause would contradict it
+          // (`provider-native`, `:142-148`).
+          if (boundary.isEnded()) return;
           timeUpdates.stop();
           emit(
             {
@@ -262,6 +293,11 @@ export const createYouTubePlayback = ({
           return;
         }
         if (data === playerStates.ENDED) {
+          // A looping embed with a start boundary restarts from that boundary
+          // rather than from wherever YouTube's playlist loop lands. Every
+          // other end is published as it always was, and latches the boundary
+          // so the next `play()` replays the window from its start.
+          if (boundary.onProviderEnded()) return;
           timeUpdates.stop();
           emit(
             {
@@ -288,6 +324,7 @@ export const createYouTubePlayback = ({
       onPlayerError: (code) => {
         if (isDestroyed()) return;
         timeUpdates.stop();
+        boundary.clearEndedAndPendingResume();
         const error = playbackError(code);
         settlePendingPlays({ ok: false, reason: 'provider-error', error });
         emit(

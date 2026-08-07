@@ -5,6 +5,7 @@ import {
   providerEvent,
   type EmitProviderState
 } from './adapter-values.js';
+import type { YouTubeBoundary } from './boundary.js';
 import type { YouTubeIframeApi, YouTubePlayer } from './loader.js';
 import type { YouTubePlayback } from './playback.js';
 import type { YouTubePresentation } from './presentation.js';
@@ -19,6 +20,12 @@ export type YouTubeAttachmentDeps = {
   // Unset and `false` both mean play once; see `YouTubeProviderOptions`.
   readonly loop: boolean | undefined;
   readonly host: string;
+  // The [startTime, endTime] window: it supplies the `start` player var and
+  // positions the playhead once the player is ready.
+  readonly boundary: Pick<
+    YouTubeBoundary,
+    'applyInitialPosition' | 'reset' | 'startPlayerVar'
+  >;
   readonly loadIframeApi: () => Promise<YouTubeIframeApi>;
   // The host's ready capabilities snapshot, for the state published on ready.
   readonly getCapabilities: () => PlayerCapabilities;
@@ -63,6 +70,7 @@ export const createYouTubeAttachment = (
     controls,
     loop,
     host,
+    boundary,
     loadIframeApi,
     getCapabilities,
     playback,
@@ -96,7 +104,14 @@ export const createYouTubeAttachment = (
     const duration = current.getDuration();
     // No command has run yet, so these reads are the player's own state.
     const { muted, volume } = playback.adoptVolume(current);
-    const currentTime = timeUpdates.adoptCurrentTime(current);
+    // The first moment the player will accept a seek, and the first moment its
+    // duration is known — so it is where the start boundary is applied. The
+    // `start` player var only saved loading from zero; it is whole-second, so
+    // this seek is the authority. With no start boundary the player's own
+    // position stands.
+    const currentTime =
+      boundary.applyInitialPosition(current) ??
+      timeUpdates.adoptCurrentTime(current);
     emit(
       {
         lifecycle: 'ready',
@@ -121,6 +136,10 @@ export const createYouTubeAttachment = (
     // into the new session's capabilities before its own onApiChange fires.
     // Neither must a buffer anchor: the new player has loaded nothing.
     timeUpdates.reset();
+    // Nor a boundary latch: the replacement player has been positioned by
+    // nothing, and any loop restart still deferred is for a player that is
+    // about to stop existing.
+    boundary.reset();
     ready = false;
     textTracks.reset();
     const current = player;
@@ -161,6 +180,14 @@ export const createYouTubeAttachment = (
         // vars are set together or not at all.
         loop: loop === true ? 1 : 0,
         ...(loop === true ? { playlist: videoId } : {}),
+        // A load hint, so the embed does not load from zero and seek away
+        // visibly. No `end` counterpart: it is whole-second too, its
+        // interaction with the loop + playlist pair above is undocumented, and
+        // it is not known to publish the state change the adapter needs — so
+        // the end boundary is enforced from the poll instead (#214).
+        ...(boundary.startPlayerVar === undefined
+          ? {}
+          : { start: boundary.startPlayerVar }),
         playsinline: 1,
         rel: 0,
         ...(embedOrigin ? { origin: embedOrigin } : {})

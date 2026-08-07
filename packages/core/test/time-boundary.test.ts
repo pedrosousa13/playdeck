@@ -1,0 +1,218 @@
+// @vitest-environment node
+
+import { describe, expect, test } from 'vitest';
+import { createTimeBoundary } from '../src/index';
+
+describe('startTime sanitisation', () => {
+  test.each<[string, number | undefined, number]>([
+    ['undefined', undefined, 0],
+    ['zero', 0, 0],
+    ['negative', -1, 0],
+    ['NaN', Number.NaN, 0],
+    ['Infinity', Number.POSITIVE_INFINITY, 0],
+    ['-Infinity', Number.NEGATIVE_INFINITY, 0],
+    ['a whole second', 12, 12],
+    ['a fraction', 1.5, 1.5]
+  ])('resolves %s to %s', (_label, startTime, expected) => {
+    expect(createTimeBoundary({ startTime }).startTime).toBe(expected);
+  });
+});
+
+describe('endTime sanitisation', () => {
+  test.each<[string, number | undefined, number | undefined]>([
+    ['undefined', undefined, undefined],
+    ['NaN', Number.NaN, undefined],
+    ['Infinity', Number.POSITIVE_INFINITY, undefined],
+    ['-Infinity', Number.NEGATIVE_INFINITY, undefined],
+    ['zero', 0, undefined],
+    ['equal to the start', 10, undefined],
+    ['below the start', 9, undefined],
+    ['above the start', 11, 11]
+  ])('resolves %s to %s against a start of 10', (_label, endTime, expected) => {
+    expect(createTimeBoundary({ startTime: 10, endTime }).endTime).toBe(
+      expected
+    );
+  });
+
+  test('is measured against the sanitised start, not the raw one', () => {
+    // A negative start sanitises to 0, so an end of 5 is still above it.
+    const boundary = createTimeBoundary({ startTime: -20, endTime: 5 });
+    expect(boundary.startTime).toBe(0);
+    expect(boundary.endTime).toBe(5);
+  });
+});
+
+describe('end', () => {
+  test.each<
+    [string, number | undefined, number | null | undefined, number | undefined]
+  >([
+    ['no end, finite duration', undefined, 30, 30],
+    ['no end, null duration', undefined, null, undefined],
+    ['no end, undefined duration', undefined, undefined, undefined],
+    ['no end, live duration', undefined, Number.POSITIVE_INFINITY, undefined],
+    ['end, no duration', 20, undefined, 20],
+    ['end inside duration', 20, 30, 20],
+    ['end past duration', 40, 30, 30],
+    ['end, live duration', 20, Number.POSITIVE_INFINITY, 20]
+  ])('resolves %s', (_label, endTime, duration, expected) => {
+    const boundary = createTimeBoundary({ startTime: 5, endTime });
+    expect(boundary.end(duration)).toBe(expected);
+  });
+});
+
+describe('start', () => {
+  test('is the sanitised start when it sits inside the window', () => {
+    const boundary = createTimeBoundary({ startTime: 5, endTime: 20 });
+    expect(boundary.start(30)).toBe(5);
+  });
+
+  test('clamps a start past the duration', () => {
+    const boundary = createTimeBoundary({ startTime: 50 });
+    expect(boundary.start(30)).toBe(30);
+  });
+
+  test('clamps a start past a duration-clamped end', () => {
+    const boundary = createTimeBoundary({ startTime: 50, endTime: 80 });
+    expect(boundary.start(20)).toBe(20);
+  });
+
+  test('is the start itself when there is no effective end', () => {
+    const boundary = createTimeBoundary({ startTime: 50 });
+    expect(boundary.start(undefined)).toBe(50);
+  });
+});
+
+describe('atEnd', () => {
+  test.each<[string, number | null | undefined, number]>([
+    ['no duration', undefined, 999],
+    ['at the duration', 30, 30],
+    ['past the duration', 30, 31]
+  ])('is false with no endTime and %s', (_label, duration, time) => {
+    const boundary = createTimeBoundary({ startTime: 5 });
+    expect(boundary.atEnd(duration, time)).toBe(false);
+  });
+
+  test.each<[string, number, boolean]>([
+    ['before the end', 19.9, false],
+    ['exactly at the end', 20, true],
+    ['past the end', 21, true]
+  ])('is %s at %s', (_label, time, expected) => {
+    const boundary = createTimeBoundary({ startTime: 5, endTime: 20 });
+    expect(boundary.atEnd(30, time)).toBe(expected);
+  });
+
+  test('uses the duration-clamped end', () => {
+    const boundary = createTimeBoundary({ startTime: 5, endTime: 40 });
+    expect(boundary.atEnd(30, 30)).toBe(true);
+    expect(boundary.atEnd(30, 29)).toBe(false);
+  });
+});
+
+describe('atWrap', () => {
+  const looping = { loop: true, positioned: true };
+
+  test.each<[string, { loop: boolean; positioned: boolean }]>([
+    ['not looping', { loop: false, positioned: true }],
+    ['not positioned yet', { loop: true, positioned: false }]
+  ])('is false while %s', (_label, state) => {
+    const boundary = createTimeBoundary({ startTime: 10 });
+    expect(boundary.atWrap(60, 1, state)).toBe(false);
+  });
+
+  test.each<[string, number, boolean]>([
+    ['behind the start', 1, true],
+    ['at the start', 10, false],
+    ['inside the window', 30, false]
+  ])('is %s for a playhead %s', (_label, time, expected) => {
+    const boundary = createTimeBoundary({ startTime: 10 });
+    expect(boundary.atWrap(60, time, looping)).toBe(expected);
+  });
+
+  test('is false with no start boundary, which is where a wrap already lands', () => {
+    const boundary = createTimeBoundary({ endTime: 20 });
+    expect(boundary.atWrap(60, 0, looping)).toBe(false);
+  });
+
+  // The guard compares against the duration-clamped start, not the raw one. A
+  // start past the duration collapses onto it, so the position the restart
+  // seeks to is not itself read as another wrap — which would restart forever.
+  test('compares against the duration-clamped start', () => {
+    const boundary = createTimeBoundary({ startTime: 90 });
+    expect(boundary.atWrap(60, 60, looping)).toBe(false);
+    expect(boundary.atWrap(60, 59, looping)).toBe(true);
+  });
+
+  test('is false when the clamped start collapses onto zero', () => {
+    const boundary = createTimeBoundary({ startTime: 90 });
+    expect(boundary.atWrap(0, 0, looping)).toBe(false);
+  });
+});
+
+// The gate all three embed ports apply to the platform's own end-of-media
+// event. It was written out three times before, which is how it drifted once.
+describe('restartsAtStart', () => {
+  test.each<[string, boolean, number | undefined, boolean]>([
+    ['is true while looping with a start boundary', true, 10, true],
+    ['is true while looping with a fractional start boundary', true, 0.5, true],
+    ['is false while looping with no start boundary', true, undefined, false],
+    ['is false while looping with a zero start boundary', true, 0, false],
+    [
+      'is false while looping with a start that sanitises away',
+      true,
+      -5,
+      false
+    ],
+    ['is false when not looping, with a start boundary', false, 10, false],
+    [
+      'is false when not looping, with no start boundary',
+      false,
+      undefined,
+      false
+    ]
+  ])('%s', (_label, loop, startTime, expected) => {
+    const boundary = createTimeBoundary({ startTime });
+    expect(boundary.restartsAtStart(loop)).toBe(expected);
+  });
+
+  // The gate reads the raw start, not the duration-clamped one: it decides
+  // whether there is anything to correct at all, and the correction itself is
+  // what clamps.
+  test('is true for a start past the duration, which the restart clamps', () => {
+    const boundary = createTimeBoundary({ startTime: 90 });
+    expect(boundary.restartsAtStart(true)).toBe(true);
+    expect(boundary.start(60)).toBe(60);
+  });
+
+  test('ignores endTime, which has its own gate in atEnd', () => {
+    const boundary = createTimeBoundary({ endTime: 20 });
+    expect(boundary.restartsAtStart(true)).toBe(false);
+  });
+});
+
+describe('clamp', () => {
+  test.each<[string, number, number]>([
+    ['below the start', 1, 5],
+    ['at the start', 5, 5],
+    ['inside the window', 12, 12],
+    ['at the end', 20, 20],
+    ['past the end', 25, 20]
+  ])('clamps a time %s', (_label, time, expected) => {
+    const boundary = createTimeBoundary({ startTime: 5, endTime: 20 });
+    expect(boundary.clamp(30, time)).toBe(expected);
+  });
+
+  test('has no upper bound with no endTime and no duration', () => {
+    const boundary = createTimeBoundary({ startTime: 5 });
+    expect(boundary.clamp(undefined, 9999)).toBe(9999);
+  });
+
+  test('clamps to the duration with no endTime', () => {
+    const boundary = createTimeBoundary({ startTime: 5 });
+    expect(boundary.clamp(30, 9999)).toBe(30);
+  });
+
+  test('clamps to the effective end when the start is past it', () => {
+    const boundary = createTimeBoundary({ startTime: 50, endTime: 80 });
+    expect(boundary.clamp(20, 0)).toBe(20);
+  });
+});
