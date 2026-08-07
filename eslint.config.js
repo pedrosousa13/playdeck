@@ -99,5 +99,54 @@ export default tseslint.config(
         }
       ]
     }
+  },
+  {
+    // A poster must be a real <img>/<picture> element: the geometry
+    // guarantees and the poster state machine both depend on that element
+    // existing, so a CSS background-image is a regression class (see
+    // e2e/poster.spec.ts), not a style preference. That gate used to read raw
+    // source text for every language and could not tell a declaration from a
+    // doc comment describing one (#184). ESLint parses an AST instead, where
+    // comments are never nodes, so a comment tripping this is structurally
+    // impossible rather than regex-patched. CSS has no AST tooling in this
+    // repo, so its half stays a comment-stripped text scan in
+    // e2e/poster.spec.ts.
+    //
+    // Scoped to the product source this gate polices. Two legitimate
+    // occurrences must keep passing, carved out by two different mechanisms:
+    // `packages/react/test/index.test.tsx` asserts the poster element
+    // carries no `background-image` inline style, and is carved out by
+    // `ignores` below (it is both a `.test.` file and inside a `test/`
+    // directory); `e2e/background-image-scan.ts` holds this same gate's CSS
+    // half as a regex literal, and needs no carve-out at all — `e2e/` was
+    // never in the `files` glob this block matches against, so it is out of
+    // this rule's reach regardless of what it contains. Verified
+    // red-then-green by
+    // apps/storybook/stories/no-background-image.contract.test.ts.
+    files: ['apps/**/*.{js,jsx,ts,tsx}', 'packages/**/*.{js,jsx,ts,tsx}'],
+    ignores: ['**/*.test.*', '**/*.spec.*', '**/test/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "Property[key.name='backgroundImage'], Property[key.value='backgroundImage']",
+          message:
+            'A poster must be a real <img>/<picture> element, never a CSS background-image: this object property sets one. If this is prose about the property rather than a live style, move it into a comment. See e2e/poster.spec.ts.'
+        },
+        {
+          selector:
+            "AssignmentExpression[left.property.name='backgroundImage'], AssignmentExpression[left.property.value='backgroundImage']",
+          message:
+            'A poster must be a real <img>/<picture> element, never a CSS background-image: this assignment sets one. If this is prose about the property rather than a live style, move it into a comment. See e2e/poster.spec.ts.'
+        },
+        {
+          selector:
+            'Literal[value=/background-image/], TemplateElement[value.raw=/background-image/]',
+          message:
+            'A poster must be a real <img>/<picture> element, never a CSS background-image: this string/template text contains one. If this is prose about the property rather than CSS text, move it into a comment. See e2e/poster.spec.ts.'
+        }
+      ]
+    }
   }
 );
