@@ -31,7 +31,7 @@ const meta = {
           '',
           '**Stalls** — `data-buffering` is a separate axis from `data-state`: it reports a stall, `data-state` reports whether a seek window exists. It is debounced (500ms before a stall is admitted, 500ms held once admitted) so a short rebuffer never twitches the slider; `state.buffering` remains the raw signal. The slider stays interactive during a stall — seeking away is how a user escapes one.',
           '',
-          '**Accessibility** — a range control; arrow keys seek.',
+          '**Accessibility** — a range control; arrow keys seek, and in `data-state="idle"` it announces itself `aria-disabled` with an `aria-valuetext` of `Unavailable`.',
           '',
           '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.',
           '',
@@ -111,6 +111,19 @@ export const Stalled: Story = {
     );
     // The seek window is a separate axis and must not move during a stall.
     await expect(root).toHaveAttribute('data-state', 'ready');
+  }
+};
+
+/** No seek window: the `seek` capability is available, but there is nothing to scrub. */
+export const Idle: Story = {
+  parameters: ready(
+    { seek: available },
+    { currentTime: 0, duration: null, seekable: [] }
+  ),
+  play: async ({ canvas }) => {
+    const slider = await canvas.findByRole('slider', { name: 'Seek' });
+    await expect(slider).toHaveAttribute('aria-disabled', 'true');
+    await expect(slider).toHaveAttribute('aria-valuetext', 'Unavailable');
   }
 };
 

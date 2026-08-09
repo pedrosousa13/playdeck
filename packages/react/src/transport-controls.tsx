@@ -144,8 +144,8 @@ export const VolumeSlider = ({
 export type SeekSliderProps = ComponentPropsWithRef<'div'> & {
   // Escape hatch onto the inner range control (aria-label, step, disabled,
   // id/name, data-*, onChange, style). The library keeps ownership of the
-  // controlled attributes (value/min/max/type/aria-valuetext); consumer
-  // onChange is chained after the seek.
+  // controlled attributes (value/min/max/type/aria-valuetext/aria-disabled);
+  // consumer onChange is chained after the seek.
   readonly inputProps?: ComponentPropsWithRef<'input'>;
 };
 
@@ -217,17 +217,20 @@ export const SeekSlider = ({
         aria-label="Seek"
         step={1}
         {...inputProps}
+        aria-disabled={window ? undefined : true}
         aria-valuetext={
-          hasDuration
-            ? `${formatTime(value)} of ${formatTime(duration)}`
-            : formatTime(value)
+          window
+            ? hasDuration
+              ? `${formatTime(value)} of ${formatTime(duration)}`
+              : formatTime(value)
+            : 'Unavailable'
         }
         data-reely-part="seek-slider-input"
         max={max}
         min={min}
         onChange={(event) => {
           const next = Number(event.currentTarget.value);
-          if (Number.isFinite(next)) void controller.seekTo(next);
+          if (window && Number.isFinite(next)) void controller.seekTo(next);
           inputProps?.onChange?.(event);
         }}
         style={{ width: '100%', minHeight: 44, ...inputProps?.style }}
