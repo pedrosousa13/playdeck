@@ -40,9 +40,10 @@ give a consumer who configures nothing three changes they will notice:
 - **`ArrowLeft`/`ArrowRight` on a focused volume slider now seek** rather than
   changing the volume. `ArrowUp`/`ArrowDown` still adjust it and `Home`/`End`
   still jump to 0 and 1, so the control stays fully operable — but they adjust
-  it by the layer's fixed 0.05, not by the input's `step`. `VolumeSlider`'s
-  `step` defaults to that same 0.05 and is overridable through `inputProps`, so
-  a consumer who set their own finds the arrows no longer honour it.
+  it by the layer's fixed 0.05, not by the input's `step`. `VolumeSlider` is
+  itself the range input, so its `step` — that same 0.05 by default, and
+  overridable with `<Player.VolumeSlider step={0.1} />` — no longer reaches the
+  arrows for a consumer who set their own.
 - **`ArrowLeft`/`ArrowRight` on a focused seek slider now travel 5s, not 1s.**
   They used to step the input by its `step`; the region owns them now, so the
   seek distance is the same wherever focus sits, and no `step` or `onChange`

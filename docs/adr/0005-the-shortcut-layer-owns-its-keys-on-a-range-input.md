@@ -3,7 +3,7 @@
 `Player.Controls` is a focusable region that binds ten media actions to keys,
 and two of the controls it holds are native range inputs: `SeekSlider`'s
 scrubber (`step={1}`) and `VolumeSlider` (`step={step ?? 0.05}`, so a consumer
-can set its own through `inputProps`). A range
+can set its own by passing `step` to the component, which is the input). A range
 input answers the arrow keys itself, so on those two controls every bound arrow
 has two plausible owners. Before #181 the region resolved that by standing
 down — `controls.tsx`'s target test skipped any element whose tag was `INPUT`,
@@ -90,12 +90,14 @@ key resolve identically on every render and in every consumer.
   consumer who reached for Left on the volume slider gets a seek. This is the
   real cost of one distance everywhere, and it is paid here.
 - **The arrow distances are the layer's numbers, not the sliders'.** Five
-  seconds and 0.05 are constants in `controls.tsx`, so a consumer who set
-  `VolumeSlider`'s `step` — it defaults to 0.05 but is `step={step ?? 0.05}`,
-  overridable — or `SeekSlider`'s (`step={1}`) through `inputProps` finds the
-  arrows no longer honour their value, and no `onChange` on that input sees an
-  arrow press, because the layer prevents the default before the input does
-  anything. `shortcuts={{ seekBackward: null, seekForward: null }}` suppresses
+  seconds and 0.05 are constants in `controls.tsx`, so a consumer who set either
+  slider's `step` finds the arrows no longer honour their value, and no
+  `onChange` on either input sees an arrow press, because the layer prevents the
+  default before the input does anything. Each slider takes that `step` by its
+  own route: `VolumeSlider` is itself the range input, so a `step` prop on the
+  component sets it, while `SeekSlider` wraps its input and takes
+  `inputProps={{ step: 5 }}`.
+  `shortcuts={{ seekBackward: null, seekForward: null }}` suppresses
   those two bindings and hands `ArrowLeft`/`ArrowRight` straight back to the
   input, in either scoping mode; the volume pair has the same escape hatch
   under `volumeUp`/`volumeDown`.
