@@ -2330,3 +2330,46 @@ test('clamps a seek to the window instead of crossing the end boundary', async (
 
   expect(patches.some((patch) => patch.playback === 'ended')).toBe(false);
 });
+
+// --- liveness is a documented gap (#187) ---
+//
+// The SDK reports nothing that separates a live event from a VOD, so this
+// adapter publishes no `live` at all rather than guessing one. The test pins
+// that: the key is absent from every patch, not present holding `null`. See
+// the README's "What it reports honestly" for the surface that was checked.
+//
+// DELETE THIS TEST, and the README section it pins, if this adapter is ever
+// made live-capable.
+test('pins the liveness gap: no patch ever carries a live key (#187)', async () => {
+  const { patches, provider, sdk } = await setup({ fake: { duration: 60 } });
+  const player = sdk.instances[0]!;
+
+  player.emit('play', { duration: 60, percent: 0, seconds: 0 });
+  player.emit('timeupdate', { duration: 60, percent: 0.2, seconds: 12 });
+
+  player.buffered = [[0, 30]];
+  player.emit('progress', { duration: 60, percent: 0.5, seconds: 30 });
+  await flushMicrotasks();
+
+  // A duration that grows as playback runs on -- the only thing the SDK
+  // offers that a live event and a VOD could ever be told apart by, and they
+  // cannot.
+  player.emit('durationchange', { duration: 90 });
+  player.emit('timeupdate', { duration: 90, percent: 0.4, seconds: 36 });
+
+  await provider.seekTo(48);
+  player.emit('seeking', { duration: 90, percent: 0.53, seconds: 48 });
+  player.emit('seeked', { duration: 90, percent: 0.53, seconds: 48 });
+  player.emit('pause', { duration: 90, percent: 0.53, seconds: 48 });
+  player.emit('ended', { duration: 90, percent: 1, seconds: 90 });
+  await flushMicrotasks();
+
+  // The lifecycle really ran, so the absence below is not a vacuous pass.
+  expect(patches).toContainEqual(
+    expect.objectContaining({ lifecycle: 'ready' })
+  );
+  expect(patches).toContainEqual(
+    expect.objectContaining({ playback: 'playing' })
+  );
+  expect(patches.filter((patch) => 'live' in patch)).toEqual([]);
+});

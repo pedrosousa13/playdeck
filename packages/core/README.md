@@ -75,6 +75,8 @@ out when a command will land; `activation` is not a substitute for either.
 | `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.         |
 | `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                  |
 | `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.     |
+| `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                         |
+| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.     |
 
 ### Types
 
@@ -93,7 +95,7 @@ Sources: `PlayerSource`, `ResolvedPlayerSource`, `VideoFileSource`, `HlsSource`,
 `SourceDetectionFailureReason`.
 
 Providers: `ProviderAdapter`, `ProviderStatePatch`, `ProviderStateListener`,
-`ProviderEvent`, `ProviderEventFor`, `TimeBoundary`.
+`ProviderEvent`, `ProviderEventFor`, `TimeBoundary`, `LiveDerivationInput`.
 
 Autoplay: `AutoplayMode`, `AutoplayConfigurationOptions`.
 
@@ -213,6 +215,58 @@ export const unbounded = createTimeBoundary({ startTime: -1, endTime: 0 });
 ```
 
 <!-- /example -->
+
+## Live state
+
+`deriveLiveState` is the one liveness derivation in the workspace, so
+`PlayerState.live` means the same thing whichever adapter published it. It reads
+provider signals and normalized state only — a duration, a seekable window, a
+playhead, and the provider's own live flag where it has one. A source URL, an id
+or a filename never decides: a name is a guess, and a guess published as state
+is a control that lies.
+
+`atEdgeThreshold` is optional, and omitting it is how an adapter takes the
+shared tolerance. The constant itself is not exported, so no adapter carries a
+number of its own.
+
+<!-- example:core-live-state -->
+
+```ts
+import { deriveLiveState, liveStateEqual } from '@reely/core';
+
+// Liveness comes from what the provider reports — never from the URL, the id
+// or a filename. `isLiveHint` is the provider's own answer where it has one;
+// leave it undefined and an infinite duration decides instead.
+export const live = deriveLiveState({
+  isLiveHint: true,
+  duration: Number.POSITIVE_INFINITY,
+  seekable: [{ start: 120, end: 3600 }],
+  currentTime: 3594
+});
+
+// -> { isLive: true, atLiveEdge: true }. `null` means "not live, or not yet
+// known" — a control should not claim either until it is.
+export const atEdge = live?.atLiveEdge ?? false;
+
+// Omitting `atEdgeThreshold` uses the shared tolerance every adapter uses.
+// Pass one only to answer a different question than the players do.
+const tight = deriveLiveState({
+  isLiveHint: true,
+  duration: Number.POSITIVE_INFINITY,
+  seekable: [{ start: 120, end: 3600 }],
+  currentTime: 3594,
+  atEdgeThreshold: 2
+});
+
+// An adapter publishes `live` only when the value changes. This is that test.
+export const changed = !liveStateEqual(live, tight);
+```
+
+<!-- /example -->
+
+Providers that cannot determine liveness leave `live` as `null`. That is not
+"this is on-demand" — it is "nobody has said", and a control should render
+neither claim until one arrives.
 
 ## Media Session
 
