@@ -141,8 +141,7 @@ export const live = deriveLiveState({
   seekable: [{ start: 120, end: 3600 }],
   currentTime: 3598,
   // hls.js's liveSyncPosition: the target edge, behind the raw seekable end.
-  liveEdge: 3594,
-  atEdgeThreshold: 10
+  liveEdge: 3594
 });
 
 // -> { isLive: true, atLiveEdge: true }. `null` means "not live, or not yet

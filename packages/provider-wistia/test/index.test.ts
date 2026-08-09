@@ -15,6 +15,10 @@ import {
   type WistiaMountElement,
   type WistiaProviderOptions
 } from '../src/index';
+// Not part of the package entry: the paused recompute is an implementation
+// detail no consumer configures, so the interval is read from the module that
+// owns it rather than published.
+import { LIVE_EDGE_POLL_MS } from '../src/attachment';
 import {
   installFakeWistiaPlayer,
   namedError,
@@ -1185,6 +1189,122 @@ test('publishes nothing for a live value equal to the last one', async () => {
   player.emit(WISTIA_EVENTS.timeUpdate);
 
   expect(livePatches(result.patches)).toHaveLength(published);
+});
+
+// Wistia dispatches `time-update` only while the player is playing, so a paused
+// live stream is the case the recompute interval exists for: the live edge goes
+// on advancing and no element event says so.
+test('recomputes the at-edge flag while the player is paused', async () => {
+  vi.useFakeTimers();
+  try {
+    const result = await setup({
+      fake: { mediaData: { mediaType: 'LiveStream' }, duration: 5 }
+    });
+    // Five seconds behind at load, which is inside the shared tolerance.
+    expect(readyPatch(result.patches)).toMatchObject({
+      live: { isLive: true, atLiveEdge: true }
+    });
+
+    // The broadcast runs on while the viewer stays put.
+    element(result).handle.durationSeconds = 100;
+    await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS);
+
+    expect(livePatches(result.patches).at(-1)).toEqual({
+      isLive: true,
+      atLiveEdge: false
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('publishes nothing while paused for a live value equal to the last one', async () => {
+  vi.useFakeTimers();
+  try {
+    const result = await setup({
+      fake: { mediaData: { mediaType: 'LiveStream' }, duration: 5 }
+    });
+    const published = livePatches(result.patches).length;
+
+    // The edge moves, but not far enough to leave the tolerance, so the value
+    // is the one already published and the interval has nothing to say.
+    element(result).handle.durationSeconds = 9;
+    await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS * 4);
+
+    expect(livePatches(result.patches)).toHaveLength(published);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('arms no paused recompute for a media that is not live', async () => {
+  vi.useFakeTimers();
+  try {
+    const result = await setup({
+      fake: { mediaData: { mediaType: 'Video' }, duration: 60 }
+    });
+    // Nothing armed at all, rather than an interval that wakes to find that
+    // there was never anything to report.
+    expect(vi.getTimerCount()).toBe(0);
+
+    element(result).handle.durationSeconds = 1000;
+    await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS * 4);
+
+    expect(livePatches(result.patches)).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('recomputes only while paused, and picks up again when playback stops', async () => {
+  vi.useFakeTimers();
+  try {
+    const result = await setup({
+      fake: { mediaData: { mediaType: 'LiveStream' }, duration: 5 }
+    });
+    const player = element(result);
+
+    player.emit(WISTIA_EVENTS.play);
+    // `time-update` covers a playing player, so a second clock would be two
+    // answers to one question.
+    expect(vi.getTimerCount()).toBe(0);
+    player.handle.durationSeconds = 100;
+    await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS * 2);
+    expect(livePatches(result.patches).at(-1)).toEqual({
+      isLive: true,
+      atLiveEdge: true
+    });
+
+    player.emit(WISTIA_EVENTS.pause);
+    await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS);
+    expect(livePatches(result.patches).at(-1)).toEqual({
+      isLive: true,
+      atLiveEdge: false
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('destroy clears the paused live recompute', async () => {
+  vi.useFakeTimers();
+  try {
+    const result = await setup({
+      fake: { mediaData: { mediaType: 'LiveStream' }, duration: 5 }
+    });
+    const player = element(result);
+
+    result.provider.destroy();
+    // No handle may outlive the attachment.
+    expect(vi.getTimerCount()).toBe(0);
+
+    const published = result.patches.length;
+    player.handle.durationSeconds = 100;
+    await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS * 4);
+    expect(result.patches).toHaveLength(published);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('republishes liveness for the player a retry puts in place', async () => {

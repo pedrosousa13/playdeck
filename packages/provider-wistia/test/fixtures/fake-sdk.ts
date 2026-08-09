@@ -63,6 +63,12 @@ export type FakePlayerOptions = {
 export class FakeWistiaApi implements WistiaPlayerApi {
   removed = false;
   currentTime = 0;
+  // Mutable for the same reason `currentTime` is. On a live stream `duration()`
+  // is where Wistia reports the live edge, and the edge advances on its own —
+  // including while the player is paused, which is the whole of what the paused
+  // recompute is measured against. Seeded from `duration` so a test that only
+  // wants a fixed figure still passes one option.
+  durationSeconds: number;
   #options: FakePlayerOptions;
   #muted: boolean;
   #volume: number;
@@ -71,6 +77,7 @@ export class FakeWistiaApi implements WistiaPlayerApi {
 
   constructor(options: FakePlayerOptions) {
     this.#options = options;
+    this.durationSeconds = options.duration ?? 60;
     this.#muted = options.muted ?? false;
     this.#volume = options.volume ?? 1;
     this.#playbackRate = options.playbackRate ?? 1;
@@ -123,7 +130,7 @@ export class FakeWistiaApi implements WistiaPlayerApi {
   );
 
   duration: Mock<WistiaPlayerApi['duration']> = vi.fn(
-    () => this.#options.duration ?? 60
+    () => this.durationSeconds
   );
 
   state: Mock<WistiaPlayerApi['state']> = vi.fn(() => this.#state);

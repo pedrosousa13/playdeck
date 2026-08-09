@@ -45,9 +45,6 @@ export type NativeAttachment = {
   readonly subscribeDimensions: (
     listener: (dimensions: MediaDimensions | undefined) => void
   ) => () => void;
-  // Drops the last published liveness so the next derivation is published
-  // again. Called wherever the element reloads its source.
-  readonly resetLiveState: () => void;
 };
 
 export const createNativeAttachment = (
@@ -313,9 +310,6 @@ export const createNativeAttachment = (
       dimensionListeners.clear();
     },
     isDestroyed: () => destroyed,
-    resetLiveState: () => {
-      liveState = null;
-    },
     subscribeDimensions: (listener) => {
       dimensionListeners.add(listener);
       return () => dimensionListeners.delete(listener);

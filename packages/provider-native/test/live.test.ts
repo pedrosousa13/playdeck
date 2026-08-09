@@ -84,6 +84,9 @@ test('never claims liveness for a finite source, even at a URL that says live', 
   media.dispatchEvent(new Event('timeupdate'));
   media.dispatchEvent(new Event('progress'));
 
+  // Non-empty first: the adapter really did publish state for this source, so
+  // the liveness assertion below cannot pass on an empty patch set.
+  expect(patches.length).toBeGreaterThan(0);
   expect(patches.every((patch) => (patch.live ?? null) === null)).toBe(true);
 });
 
@@ -147,7 +150,7 @@ test('carries no live key while the derived value is unchanged', async () => {
   ]);
 });
 
-test('publishes live again after a retry reloads the source', async () => {
+test('carries no live key when a retry reloads an unchanged source', async () => {
   const timeline: Timeline = {
     duration: Number.POSITIVE_INFINITY,
     currentTime: 0,
@@ -161,6 +164,29 @@ test('publishes live again after a retry reloads the source', async () => {
   await provider.retry?.();
   media.dispatchEvent(new Event('loadedmetadata'));
 
-  expect(livePatches(patches)).toHaveLength(2);
+  // A retry republishes the media state, but the liveness it derives is the one
+  // already published, so no second `live` patch escapes.
+  expect(livePatches(patches)).toHaveLength(1);
   expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: false });
+});
+
+test('publishes live again when a retry reloads a changed source', async () => {
+  const timeline: Timeline = {
+    duration: Number.POSITIVE_INFINITY,
+    currentTime: 0,
+    seekable: [[0, 30]]
+  };
+  const { media, patches, provider } = collect(timeline);
+
+  await provider.attach();
+  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: false });
+
+  await provider.retry?.();
+  // The reloaded source comes back with a window whose end is within the
+  // at-edge tolerance of the playhead, so the derived value really did move.
+  timeline.seekable = [[0, 5]];
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(livePatches(patches)).toHaveLength(2);
+  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: true });
 });

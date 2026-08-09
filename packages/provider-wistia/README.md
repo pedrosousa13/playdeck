@@ -126,12 +126,25 @@ origins list and what a page's CSP has to allow.
   signal the adapter reads: never the source URL, the media id or a filename.
   Media data that names no type, and a load that reports no media data at all,
   both read as not live. Wistia exposes no seekable window, so the at-edge flag
-  measures the playhead against `duration()` and is recomputed on every
-  `time-update`; a duration that is not a finite number leaves the edge unknown,
-  which reports as at the edge. The published `live` value changes or nothing is
-  published — an unchanged one produces no patch. `duration` is left as Wistia
-  reports it while live, which is where this adapter differs from
-  `@reely/provider-hls`.
+  measures the playhead against `duration()`; a duration that is not a finite
+  number leaves the edge unknown, which reports as at the edge. The published
+  `live` value changes or nothing is published — an unchanged one produces no
+  patch. `duration` is left as Wistia reports it while live, which is where this
+  adapter differs from `@reely/provider-hls`.
+- **The at-edge flag stays current while the player is paused.** It is
+  recomputed on every `time-update` while the player runs, and Wistia stops
+  dispatching that event the moment it pauses — so a paused live stream would
+  otherwise hold the last flag it published while the live edge went on
+  advancing, and read as "at the live edge" for a viewer minutes behind. Aurora
+  offers no idle event to bind instead: the playback events come from the engine
+  the element fetches at runtime and are all playback-driven, and the eight the
+  package itself declares are load, replace and embed-option notices. So the
+  adapter recomputes on a five-second interval, half the shared at-edge
+  tolerance, and only where that can change something: never for a media that is
+  not live, never while the player is playing, and never past teardown, destroy
+  or the player a `retry()` replaces. Each tick goes through the same equality
+  guard as every other recompute, so a paused player that has not moved relative
+  to the edge publishes nothing at all.
 - **`fullscreen` is `available`.** `PublicApi.requestFullscreen()` and
   `cancelFullscreen()` drive the player's own fullscreen element, and its
   `enter-fullscreen` / `cancel-fullscreen` events confirm the change.
