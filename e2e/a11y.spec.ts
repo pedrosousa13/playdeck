@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import {
+  captionsTrigger,
   controls,
   pipButton,
   playButton,
@@ -109,6 +110,22 @@ for (const state of states) {
         'data-reely-menu',
         'open'
       );
+      // The zero-violations claim below is only worth anything for
+      // `scrollable-region-focusable` if the region actually scrolls. The
+      // example bounds the menu at `max-height: 12rem; overflow-y: auto`, and
+      // a rate list plus a quality ladder overflows that — but a CSS edit
+      // could quietly take the overflow away and turn this state into a scan
+      // of a rule that no longer applies. Pin it.
+      const scroll = await settingsMenu(page).evaluate((el) => ({
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+        overflowY: getComputedStyle(el).overflowY
+      }));
+      expect(
+        scroll.scrollHeight,
+        `the menu must genuinely scroll for this state to exercise ` +
+          `scrollable-region-focusable (overflow-y: ${scroll.overflowY})`
+      ).toBeGreaterThan(scroll.clientHeight);
     }
 
     const results = await scan(page);
@@ -357,8 +374,8 @@ test('the settings menu takes focus on open and gives it back on Escape', async 
   await settingsTrigger(page).focus();
   await page.keyboard.press('ArrowDown');
   await expect(settingsMenu(page)).toHaveAttribute('data-reely-menu', 'open');
-  // The menu autofocuses its first item, so the scrollable container's own
-  // tabIndex={0} is never the landing spot.
+  // The menu autofocuses its first item, so the scrollable container's
+  // default tabIndex={0} is never the landing spot.
   await expect(
     page.getByRole('menuitemradio', { name: '0.5×', exact: true })
   ).toBeFocused();
@@ -371,4 +388,29 @@ test('the settings menu takes focus on open and gives it back on Escape', async 
   // from where it left off rather than restarting.
   await page.keyboard.press('Tab');
   await expect(pipButton(page)).toBeFocused();
+});
+
+// #193. The composition used to carry its own `tabIndex={0}` on
+// `SettingsMenuContent` precisely because the primitive shipped none, so the
+// menu-open axe state above was green on a workaround rather than on the
+// library. `SettingsMenuContent` now defaults it (`tabIndex ?? 0`, the shape
+// `Player.Controls` already used) and the composition no longer sets it — this
+// test is what stops the default being removed again and the violation
+// returning silently: it asserts the attribute is on the element while no
+// call site in `reference-player.tsx` supplies one, over both menus in the
+// composition. `CaptionsMenu` is a preset over the same content primitive and
+// renders it with no props at all, so it is the harder of the two.
+test('the menu content root is keyboard-focusable without the composition supplying a tabIndex', async ({
+  page
+}) => {
+  await page.goto(composition);
+  await expect(controls(page)).toBeVisible();
+
+  for (const openTrigger of [settingsTrigger, captionsTrigger]) {
+    await openTrigger(page).click();
+    await expect(settingsMenu(page)).toHaveAttribute('data-reely-menu', 'open');
+    await expect(settingsMenu(page)).toHaveJSProperty('tabIndex', 0);
+    await page.keyboard.press('Escape');
+    await expect(settingsMenu(page)).toHaveCount(0);
+  }
 });

@@ -929,4 +929,26 @@ describe('Player.CaptionsMenu', () => {
     fireEvent.click(off);
     expect(selectTextTrack).toHaveBeenCalledWith(null);
   });
+
+  test('its content root inherits the keyboard-focusable default', () => {
+    // CaptionsMenu is a preset over the same SettingsMenuContent and renders
+    // it with no className and no tabIndex, so it carried the identical
+    // `scrollable-region-focusable` gap. The default has to reach it without
+    // a second edit here.
+    const { container, emitState } = renderWithPlayer(<Player.CaptionsMenu />);
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: 'en'
+    });
+    fireEvent.click(
+      container.querySelector(
+        '[data-reely-part="settings-menu-trigger"]'
+      ) as HTMLButtonElement
+    );
+    const content = container.querySelector(
+      '[data-reely-part="settings-menu"]'
+    ) as HTMLDivElement;
+    expect(content.tabIndex).toBe(0);
+  });
 });
