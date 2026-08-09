@@ -291,6 +291,7 @@ describe('SeekSlider', () => {
     expect(attr(slider, 'max')).toBe('100');
     expect((slider as HTMLInputElement).value).toBe('30');
     expect(attr(slider, 'aria-valuetext')).toBe('0:30 of 1:40');
+    expect(attr(slider, 'aria-disabled')).toBeNull();
   });
 
   test('seeks to the chosen time on change', () => {
@@ -362,6 +363,7 @@ describe('SeekSlider', () => {
     expect(attr(slider, 'max')).toBe('80');
     expect((slider as HTMLInputElement).value).toBe('50');
     expect(attr(slider, 'aria-valuetext')).toBe('0:50');
+    expect(attr(slider, 'aria-disabled')).toBeNull();
     expect(
       attr(
         container.querySelector('[data-reely-part="seek-slider"]')!,
@@ -388,6 +390,54 @@ describe('SeekSlider', () => {
     // window span 60, offset 20: left (35-20)/60=25%, width 15/60=25%.
     expect(range.style.left).toBe('25%');
     expect(range.style.width).toBe('25%');
+  });
+
+  const noWindow = (patch: ProviderStatePatch = {}): ProviderStatePatch => ({
+    ...capabilities({ seek: available }),
+    duration: null,
+    currentTime: 0,
+    seekable: [],
+    ...patch
+  });
+
+  test('reports itself aria-disabled when no seek window exists', () => {
+    renderWithPlayer(<Player.SeekSlider />, noWindow());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(attr(slider, 'aria-disabled')).toBe('true');
+  });
+
+  test('announces no clock time when no seek window exists', () => {
+    renderWithPlayer(<Player.SeekSlider />, noWindow());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    // A position it does not have must not be asserted as one: `0:00` reads as
+    // the start of a timeline that is not there.
+    expect(attr(slider, 'aria-valuetext')).not.toMatch(/\d+:\d\d/);
+  });
+
+  test('stays keyboard-reachable when no seek window exists', () => {
+    renderWithPlayer(<Player.SeekSlider />, noWindow());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    // `aria-disabled`, not the native attribute: the state is transient, and
+    // `disabled` would drop the control out of the tab order and move focus
+    // out from under a keyboard user the moment a duration arrives.
+    expect((slider as HTMLInputElement).disabled).toBe(false);
+    expect(slider.hasAttribute('disabled')).toBe(false);
+  });
+
+  test('issues no seek command on change when no seek window exists', () => {
+    const { spies } = renderWithPlayer(<Player.SeekSlider />, noWindow());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    fireEvent.change(slider, { target: { value: '75' } });
+    expect(spies.seekTo).not.toHaveBeenCalled();
+  });
+
+  test('keeps ownership of aria-disabled against consumer inputProps', () => {
+    renderWithPlayer(
+      <Player.SeekSlider inputProps={{ 'aria-disabled': false }} />,
+      noWindow()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(attr(slider, 'aria-disabled')).toBe('true');
   });
 });
 

@@ -31,7 +31,7 @@ const meta = {
           '',
           '**Stalls** — `data-buffering` is a separate axis from `data-state`: it reports a stall, `data-state` reports whether a seek window exists. It is debounced (500ms before a stall is admitted, 500ms held once admitted) so a short rebuffer never twitches the slider; `state.buffering` remains the raw signal. The slider stays interactive during a stall — seeking away is how a user escapes one.',
           '',
-          '**Accessibility** — a range control; arrow keys seek.',
+          '**Accessibility** — a range control; arrow keys seek. With no seek window (`data-state="idle"`) it is `aria-disabled`, its `aria-valuetext` reads `Unavailable` rather than a clock time it does not have, and a change on it seeks nowhere. `aria-disabled` and not the native `disabled` attribute: the state ends the moment a duration or a seekable extent arrives, and `disabled` would move focus out from under a keyboard user each time.',
           '',
           '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.',
           '',
