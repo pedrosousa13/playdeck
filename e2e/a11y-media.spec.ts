@@ -4,7 +4,8 @@ import {
   captionsButton,
   controls,
   media,
-  muteButton
+  muteButton,
+  seekSliderInput
 } from './locators';
 
 declare global {
@@ -98,6 +99,45 @@ test('arrow-key seeking moves the media element', async ({ page }) => {
   await expect
     .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
     .toBe(0);
+});
+
+test('a focused seek slider does not silence the shortcut layer', async ({
+  page
+}) => {
+  await page.goto(realSources);
+  await activationButton(page).click();
+  await played(page);
+
+  // The slider is a native range input, and the layer used to skip every
+  // INPUT target before it looked at the key — so standing here killed `m`,
+  // `k`, `f`, `c`, the ten-second jumps and the volume arrows, none of which a
+  // range input consumes (#181). Focus goes on the input itself, not on the
+  // region: the two tests above both focus the region, which is exactly the
+  // position this defect never affected.
+  await seekSliderInput(page).focus();
+  await expect(seekSliderInput(page)).toBeFocused();
+
+  // `m` and not an arrow. The arrows are the keys whose OWNERSHIP moved, but
+  // both local fixtures are ~1s, so no arrow assertion here could tell the
+  // layer's 5s from the input's 1s `step`: `seekBy(-5)` and a 1s step both
+  // clamp to 0, and seeking forward races the clip ending. `m` proves the
+  // thing that was actually dead — that a bound key reaches the layer at all
+  // from this target — and it proves it deterministically.
+  await page.keyboard.press('m');
+  await expect(muteButton(page)).toHaveAttribute('data-state', 'muted');
+  await expect(
+    media(page).evaluate((el: HTMLVideoElement) => el.muted)
+  ).resolves.toBe(true);
+
+  // Still on the slider: the shortcut must not have moved focus, or the second
+  // press would be testing a different target than the first.
+  await expect(seekSliderInput(page)).toBeFocused();
+
+  await page.keyboard.press('m');
+  await expect(muteButton(page)).toHaveAttribute('data-state', 'unmuted');
+  await expect(
+    media(page).evaluate((el: HTMLVideoElement) => el.muted)
+  ).resolves.toBe(false);
 });
 
 test('live regions announce state transitions only, never time updates or cues', async ({

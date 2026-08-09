@@ -157,6 +157,38 @@ export const poster = Player.normalizePoster('/poster.jpg');
 `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time`,
 `FullscreenButton`, `PipButton`, `AirPlayButton`, `CaptionsButton`, `Controls`.
 
+`Controls` is a focusable region that owns the media keyboard shortcuts: Space
+and `k` toggle playback, `ArrowLeft`/`ArrowRight` seek 5s back and forward,
+`j`/`PageDown` seek 10s back and `l`/`PageUp` 10s forward, `ArrowUp`/`ArrowDown`
+move the volume by 0.05, and `m`, `f` and `c` toggle muted, fullscreen and
+captions. Every binding is gated on the matching capability — a key whose
+command the provider cannot honour is left to the page. The layer fires only
+while focus is inside the region; `global` attaches the same map to the document
+instead.
+
+The region owns those keys wherever focus sits inside it, a focused
+`<input type="range">` included, so the arrows seek and adjust volume at the
+same distances on `SeekSlider` and `VolumeSlider` as off them — see
+[ADR-0005](../../docs/adr/0005-the-shortcut-layer-owns-its-keys-on-a-range-input.md).
+Text entry (a text `<input>`, `<textarea>`, `<select>` or content-editable
+region) still swallows every key, and a focused button, link or checkbox keeps
+Space and `Enter` for itself.
+
+`shortcuts` controls the layer. `shortcuts={false}` turns it off entirely — in
+`global` mode no `document` listener is attached at all. An object is a partial
+override map of action to a `KeyboardEvent.key` value, an array of them, or
+`null` to suppress that one binding; every action it does not name keeps its
+default, so moving one key never means restating the map. Both forms behave the
+same in either scoping mode. WCAG 2.1.4 Character Key Shortcuts requires that
+of `global` mode, whose keys are live wherever focus is on the page; the
+region-scoped default conforms through the active-on-focus exception.
+
+`shortcuts={{ seekBackward: null, seekForward: null }}` suppresses the two seek
+bindings and hands the arrows back to whatever native control has focus.
+`ShortcutAction` names the ten actions and `ShortcutBindings` is the map type.
+Hoist the object or `useMemo` it: a fresh literal on every render re-attaches
+the global listener.
+
 ### Menus
 
 `SettingsMenu`, `SettingsMenuTrigger`, `SettingsMenuContent`, `MenuItem`,
@@ -219,7 +251,7 @@ it the same way.
 Every component has a matching props type (`RootProps`, `MediaProps`,
 `SeekSliderProps`, …), plus `PlayerHandle`, `PlayerActions`,
 `PlayerActivationProps`, `PosterInput`, `ResponsivePoster`, `NormalizedPoster`,
-`ErrorDisplayRenderProps`.
+`ErrorDisplayRenderProps`, `ShortcutAction`, `ShortcutBindings`.
 
 ### Icons
 
