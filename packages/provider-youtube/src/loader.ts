@@ -66,6 +66,19 @@ type YouTubeWindow = Window & {
 
 const scriptSrc = 'https://www.youtube.com/iframe_api';
 
+// How long the API is given to call `onYouTubeIframeAPIReady` before the load
+// is reported as failed. The script's own `error` event is not enough to lean
+// on: a response that arrives 200 OK but is not the API — a captive portal, an
+// inspecting proxy, a region block serving HTML — fires `load`, so the callback
+// never runs and nothing else would ever settle the promise. A script element
+// this loader adopted rather than created can be past both events already.
+//
+// Fifteen seconds, the same number as Wistia's `API_READY_TIMEOUT_MS` and for
+// the same reason: a "that is never coming" backstop, not a performance budget.
+// A second, differently tuned deadline for the same class of wait would only
+// make the two providers drift.
+export const API_READY_TIMEOUT_MS = 15_000;
+
 let sharedLoad: Promise<YouTubeIframeApi> | undefined;
 
 const apiFromWindow = (target: YouTubeWindow): YouTubeIframeApi | undefined =>
@@ -97,7 +110,16 @@ export const loadYouTubeIframeApi = (): Promise<YouTubeIframeApi> => {
       fail(new Error('The YouTube iframe API script failed to load.'));
     };
 
+    const deadline = setTimeout(() => {
+      fail(
+        new Error(
+          `The YouTube iframe API script loaded but did not initialize within ${API_READY_TIMEOUT_MS} ms.`
+        )
+      );
+    }, API_READY_TIMEOUT_MS);
+
     const cleanup = (): void => {
+      clearTimeout(deadline);
       script?.removeEventListener('error', onScriptError);
       if (target.onYouTubeIframeAPIReady === onApiReady) {
         target.onYouTubeIframeAPIReady = previousCallback;
@@ -105,9 +127,21 @@ export const loadYouTubeIframeApi = (): Promise<YouTubeIframeApi> => {
     };
 
     const fail = (error: Error): void => {
-      if (sharedLoad === load) sharedLoad = undefined;
+      // Whether this attempt is still the one the memo points at. A superseded
+      // attempt — one a reset, or a failure before it, has already replaced —
+      // owns neither the memo nor the document any more, and its deadline can
+      // still expire long after the attempt that took over adopted the very
+      // script element it injected.
+      const current = sharedLoad === load;
+      if (current) sharedLoad = undefined;
       cleanup();
-      if (createdScript) script?.remove();
+      // Removed only when this attempt both created the element and still owns
+      // it: a node another consumer put in the document is not this loader's to
+      // take out, and neither is one a later attempt is now waiting on. So a
+      // deadline that expires on an adopted element leaves it in place, and the
+      // next attempt adopts it again under its own deadline — which is what
+      // keeps that path a bounded rejection rather than a hang.
+      if (current && createdScript) script?.remove();
       reject(error);
     };
 
@@ -136,4 +170,8 @@ export const loadYouTubeIframeApi = (): Promise<YouTubeIframeApi> => {
   });
   sharedLoad = load;
   return load;
+};
+
+export const resetYouTubeIframeApiLoader = (): void => {
+  sharedLoad = undefined;
 };

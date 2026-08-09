@@ -14,7 +14,9 @@ import { createYouTubeTextTracks } from './text-tracks.js';
 import { createYouTubeTimeUpdates } from './time-updates.js';
 
 export {
+  API_READY_TIMEOUT_MS,
   loadYouTubeIframeApi,
+  resetYouTubeIframeApiLoader,
   type YouTubeIframeApi,
   type YouTubePlayer,
   type YouTubePlayerConstructor,

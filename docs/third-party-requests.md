@@ -39,7 +39,7 @@ Notes, per row:
 - **YouTube**'s API script is fetched from `https://www.youtube.com/iframe_api`
   unconditionally
   (`packages/provider-youtube/src/loader.ts:67`, appended to `document.head`
-  at `:127-130`), with no `integrity` and no `crossOrigin` set. This does not
+  at `:161-164`), with no `integrity` and no `crossOrigin` set. This does not
   change with the `host` option: `host` only decides which origin the _embed
   iframe_ itself points at (it defaults to `https://www.youtube-nocookie.com`,
   `packages/provider-youtube/src/index.ts:76`, and is resolved at `:96-104`; the
