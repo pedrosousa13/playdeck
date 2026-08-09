@@ -179,3 +179,82 @@ describe('ErrorDisplay', () => {
     expect(retrySpy).toHaveBeenLastCalledWith(null);
   });
 });
+
+describe('ErrorDisplay and ActivationButton', () => {
+  // Both read `error.recoverable` and nothing else, so the two can never offer
+  // and refuse the same retry at once again (#198).
+  test.each([
+    { error: recoverable, offered: true, subject: 'a recoverable error' },
+    { error: fatal, offered: false, subject: 'a non-recoverable error' }
+  ])('agree on what $subject offers', ({ error, offered }) => {
+    const { controller } = renderWithPlayer(
+      <>
+        <Player.ActivationButton />
+        <Player.ErrorDisplay />
+      </>,
+      errorState(error)
+    );
+
+    const activation = screen.getByRole('button', {
+      name: offered ? 'Retry loading video' : 'Play video'
+    });
+    expect(attr(activation, 'aria-disabled')).toBe(offered ? null : 'true');
+    expect(screen.queryAllByRole('button', { name: 'Retry' })).toHaveLength(
+      offered ? 1 : 0
+    );
+
+    fireEvent.click(activation);
+    expect(controller.getState().activation).toBe(
+      offered ? 'eligible' : 'error'
+    );
+  });
+
+  // The state where reading the flag beats reading the category, and the
+  // composition guarantee #235 depends on: a non-fatal notice — a rejected
+  // embed host, a rejected player colour — lands in the same single error slot
+  // as an activation failure, and one that reports itself retryable must leave
+  // the control operable however its category reads. The category rule this
+  // replaced disabled the button here (#198).
+  test('a recoverable error in the error state leaves the activation button operable whatever its category', () => {
+    const { controller } = renderWithPlayer(
+      <Player.ActivationButton />,
+      errorState({
+        category: 'configuration',
+        fatal: false,
+        recoverable: true,
+        message: 'The player colour was rejected.'
+      })
+    );
+
+    const activation = screen.getByRole('button', {
+      name: 'Retry loading video'
+    });
+    expect(attr(activation, 'aria-disabled')).toBeNull();
+
+    fireEvent.click(activation);
+    expect(controller.getState().activation).toBe('eligible');
+  });
+
+  // And outside `error` the button never reads the slot at all: the `isError`
+  // gate, not the retryability rule — a notice sitting there while activation is
+  // `eligible` says nothing about a control that only ever acts on an
+  // activation failure, whichever way its own retryability falls.
+  test.each([true, false])(
+    'an error reporting recoverable %s alongside eligible activation never reaches the activation button',
+    (isRecoverable) => {
+      renderWithPlayer(<Player.ActivationButton />, {
+        activation: 'eligible',
+        lifecycle: 'idle',
+        error: {
+          category: 'configuration',
+          fatal: false,
+          recoverable: isRecoverable,
+          message: 'The player colour was rejected.'
+        }
+      });
+
+      const activation = screen.getByRole('button', { name: 'Play video' });
+      expect(attr(activation, 'aria-disabled')).toBeNull();
+    }
+  );
+});

@@ -8,7 +8,7 @@ import {
 const failure: PlayerError = {
   category: 'configuration',
   fatal: false,
-  recoverable: true,
+  recoverable: false,
   message: 'Viewport activation requires Player.Viewport.'
 };
 

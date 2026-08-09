@@ -7,7 +7,7 @@ import {
   render,
   screen
 } from '@testing-library/react';
-import { createRef, useLayoutEffect, type Ref } from 'react';
+import { createRef, useLayoutEffect, type ReactNode, type Ref } from 'react';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
@@ -395,7 +395,7 @@ test('dormant viewport activation uses native options changed before intersectio
   });
 });
 
-test('invalid viewport margin construction reports a recoverable configuration error', async () => {
+test('invalid viewport margin construction reports a non-recoverable configuration error', async () => {
   class ThrowingConstructorObserver extends ControlledIntersectionObserver {
     constructor(
       callback: IntersectionObserverCallback,
@@ -416,7 +416,7 @@ test('invalid viewport margin construction reports a recoverable configuration e
       error: {
         category: 'configuration',
         fatal: false,
-        recoverable: true
+        recoverable: false
       },
       lifecycle: 'error'
     })
@@ -424,7 +424,7 @@ test('invalid viewport margin construction reports a recoverable configuration e
   expect(mockedLoadProvider).not.toHaveBeenCalled();
 });
 
-test('viewport observation failures report a recoverable configuration error', async () => {
+test('viewport observation failures report a non-recoverable configuration error', async () => {
   class ThrowingObserveObserver extends ControlledIntersectionObserver {
     override observe = vi.fn(() => {
       throw new Error('Target cannot be observed.');
@@ -441,7 +441,7 @@ test('viewport observation failures report a recoverable configuration error', a
       error: {
         category: 'configuration',
         fatal: false,
-        recoverable: true
+        recoverable: false
       },
       lifecycle: 'error'
     })
@@ -464,7 +464,7 @@ test('viewport without Viewport reports an error and never imports', async () =>
     expect(handle.current?.getState()).toMatchObject({
       activation: 'error',
       lifecycle: 'error',
-      error: { category: 'configuration' }
+      error: { category: 'configuration', fatal: false, recoverable: false }
     })
   );
   expect(mockedLoadProvider).not.toHaveBeenCalled();
@@ -753,7 +753,7 @@ test('interaction discards a loader resolved against an immediate error snapshot
         category: 'configuration',
         fatal: false,
         message: 'Interaction was invalidated.',
-        recoverable: true
+        recoverable: false
       }
     });
   });
@@ -1612,12 +1612,11 @@ test.each(['muted', 'audible'] as const)(
     await vi.waitFor(() =>
       expect(handle.current?.getState()).toMatchObject({
         activation: 'error',
-        error: { category: 'configuration' }
+        error: { category: 'configuration', fatal: false, recoverable: false }
       })
     );
-    const activation = screen.getByRole('button', {
-      name: 'Retry loading video'
-    });
+    // No retry is on offer here, so the control does not name one (#198).
+    const activation = screen.getByRole('button', { name: 'Play video' });
     expect(activation.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(activation);
     expect(mockedLoadProvider).not.toHaveBeenCalled();
@@ -1628,10 +1627,10 @@ test('configuration-error activation becomes actionable after configuration is v
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
   const { rerender } = render(interactionFixture({ autoplay: 'audible' }));
-  const activation = await screen.findByRole('button', {
-    name: 'Retry loading video'
-  });
-  expect(activation.getAttribute('aria-disabled')).toBe('true');
+  const activation = screen.getByRole('button', { name: 'Play video' });
+  await vi.waitFor(() =>
+    expect(activation.getAttribute('aria-disabled')).toBe('true')
+  );
 
   rerender(interactionFixture({ autoplay: false }));
 
@@ -1641,6 +1640,151 @@ test('configuration-error activation becomes actionable after configuration is v
   fireEvent.click(activation);
   await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
 });
+
+// The entry point behind the activation control reads the same state-level
+// signal the control does, so a direct call cannot re-activate what a click is
+// refused (#198).
+test.each([
+  { activated: 'error', recoverable: false },
+  { activated: 'eligible', recoverable: true }
+])(
+  'direct interaction activation over an error reporting recoverable $recoverable leaves activation $activated',
+  ({ activated, recoverable }) => {
+    const controller = new PlayerController();
+    let activateFromInteraction!: () => void;
+    render(
+      <ActivationProbe
+        controller={controller}
+        loading="interaction"
+        onActivate={(activate) => {
+          activateFromInteraction = activate;
+        }}
+        showMedia={false}
+      />
+    );
+    act(() =>
+      controller.setActivation({
+        activation: 'error',
+        error: {
+          category: 'source',
+          fatal: true,
+          message: 'This video is unavailable.',
+          recoverable
+        }
+      })
+    );
+
+    act(() => activateFromInteraction());
+
+    expect(controller.getState().activation).toBe(activated);
+  }
+);
+
+// Every producer of a configuration error, over the one surface that offers a
+// retry: the three published by this layer and the muted-autoplay conflict
+// published by core. None of them can be retried, so none of them may leave a
+// retry on offer (#198).
+const configurationErrorProducers = [
+  {
+    producer: 'interaction loading with autoplay',
+    mount: (surface: ReactNode, ref: Ref<Player.PlayerHandle>) => {
+      render(
+        <Player.Root
+          autoplay="muted"
+          loading="interaction"
+          ref={ref}
+          source="/tracer.mp4"
+        >
+          <Player.Viewport>
+            <Player.Media />
+            {surface}
+          </Player.Viewport>
+        </Player.Root>
+      );
+    }
+  },
+  {
+    producer: 'viewport loading without Player.Viewport',
+    mount: (surface: ReactNode, ref: Ref<Player.PlayerHandle>) => {
+      render(
+        <Player.Root ref={ref} source="/tracer.mp4">
+          <Player.Media />
+          {surface}
+        </Player.Root>
+      );
+    }
+  },
+  {
+    producer: 'an invalid viewport margin',
+    mount: (surface: ReactNode, ref: Ref<Player.PlayerHandle>) => {
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class extends ControlledIntersectionObserver {
+          constructor(
+            callback: IntersectionObserverCallback,
+            options?: IntersectionObserverInit
+          ) {
+            super(callback, options);
+            throw new DOMException('Invalid root margin.', 'SyntaxError');
+          }
+        }
+      );
+      render(
+        <Player.Root ref={ref} source="/tracer.mp4">
+          <Player.Viewport>
+            <Player.Media />
+            {surface}
+          </Player.Viewport>
+        </Player.Root>
+      );
+    }
+  },
+  {
+    producer: 'muted autoplay against a controlled unmuted state',
+    mount: (surface: ReactNode, ref: Ref<Player.PlayerHandle>) => {
+      render(
+        <Player.Root
+          autoplay="muted"
+          muted={false}
+          ref={ref}
+          source="/tracer.mp4"
+        >
+          <Player.Viewport>{surface}</Player.Viewport>
+        </Player.Root>
+      );
+    }
+  }
+];
+
+test.each(configurationErrorProducers)(
+  'a configuration error from $producer offers no retry',
+  async ({ mount }) => {
+    const renderPropRetry = vi.fn();
+    const handle = createRef<Player.PlayerHandle>();
+
+    mount(
+      <>
+        <Player.ErrorDisplay />
+        <Player.ErrorDisplay>
+          {({ retry }) => {
+            renderPropRetry(retry);
+            return <span>reason</span>;
+          }}
+        </Player.ErrorDisplay>
+      </>,
+      handle
+    );
+
+    await vi.waitFor(() =>
+      expect(handle.current?.getState().error).toMatchObject({
+        category: 'configuration',
+        recoverable: false
+      })
+    );
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(renderPropRetry).toHaveBeenLastCalledWith(null);
+  }
+);
 
 test('LoadingIndicator keeps a persistent live region so buffering is announced', async () => {
   const fake = createFakeProvider();

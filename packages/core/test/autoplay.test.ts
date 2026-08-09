@@ -84,7 +84,7 @@ test('does not attempt autoplay when it is disabled', () => {
   expect(controller.getState().autoplay).toBe('idle');
 });
 
-test('reports a recoverable configuration error for controlled unmuted autoplay', () => {
+test('reports a non-recoverable configuration error for controlled unmuted autoplay', () => {
   const fake = createProvider();
   const controller = new PlayerController();
 
@@ -96,7 +96,7 @@ test('reports a recoverable configuration error for controlled unmuted autoplay'
     lifecycle: 'ready',
     activation: 'ready',
     autoplay: 'failed',
-    error: { category: 'configuration', fatal: false, recoverable: true }
+    error: { category: 'configuration', fatal: false, recoverable: false }
   });
   expect(fake.getPlayCalls()).toBe(0);
 });
@@ -220,7 +220,7 @@ test('invalidates deferred autoplay when a controlled mute conflict appears', as
 
   expect(controller.getState()).toMatchObject({
     autoplay: 'failed',
-    error: { category: 'configuration', fatal: false, recoverable: true }
+    error: { category: 'configuration', fatal: false, recoverable: false }
   });
   expect(origins).toEqual(['provider']);
 });

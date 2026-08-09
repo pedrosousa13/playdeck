@@ -222,7 +222,7 @@ const meetsLoadThreshold = (
 const configurationError = (message: string) => ({
   category: 'configuration' as const,
   fatal: false,
-  recoverable: true,
+  recoverable: false,
   message
 });
 
@@ -410,7 +410,9 @@ export const useActivation = (
     }
     const activation = state.activation;
     if (activation === 'error') {
-      if (state.error?.category === 'configuration') return;
+      // The same state-level signal `ActivationButton` reads, so a direct call
+      // and a click refuse the same errors (#198).
+      if (state.error?.recoverable === false) return;
       const active = session.current;
       active.generation += 1;
       active.started = true;
