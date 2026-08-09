@@ -1,17 +1,26 @@
 # @reely/provider-wistia
 
-The Wistia provider for [Reely](https://github.com/pedrosousa13/reely), over the
-`@wistia/wistia-player` Aurora player.
+The Wistia provider for [Reely](https://github.com/pedrosousa13/reely), over
+Wistia's Aurora `<wistia-player>` element.
 
 ```sh
 pnpm add @reely/provider-wistia
 ```
 
 `@reely/react` loads this for you when the source resolves to `wistia`. The
-player is bundled as a dependency and imported dynamically — no `E-v1.js` script
-tag, no `window._wq`. Importing it registers the `<wistia-player>` custom
-element, which the adapter then mounts and drives through the `PublicApi` handle
-the element hands over on `api-ready`.
+player bundle is fetched from `https://fast.wistia.com/player.js` on the first
+attach — Aurora's own entry point, not the legacy `E-v1.js` shim, so there is
+still no `window._wq`. This package does **not** depend on
+`@wistia/wistia-player`: that package is a shell around the same CDN, and it
+declares build tooling among its runtime dependencies, so installing it dragged
+webpack into consumer installs for a bundle that was going to be fetched over
+the network anyway. Loading the script registers the `<wistia-player>` custom
+element, which the adapter then mounts and drives through the handle the element
+hands over on `api-ready`.
+
+Because nothing is imported from Wistia's package, every type this adapter reads
+off Wistia's declarations is restated here and published as this package's own —
+see `WistiaPlayerApi` and `WistiaPlayerAttribute` below.
 
 <!-- example:provider-wistia -->
 
@@ -21,9 +30,13 @@ import {
   API_READY_TIMEOUT_MS,
   createWistiaProvider,
   loadWistiaPlayer,
-  resetWistiaPlayerLoader
+  resetWistiaPlayerLoader,
+  SCRIPT_LOAD_TIMEOUT_MS
 } from '@reely/provider-wistia';
-import type { WistiaMountElement } from '@reely/provider-wistia';
+import type {
+  WistiaMountElement,
+  WistiaScriptInjector
+} from '@reely/provider-wistia';
 
 declare const mount: WistiaMountElement;
 
@@ -39,9 +52,23 @@ controller.setProvider(
   )
 );
 
-// The player element is loaded on demand and registered once per page. Pass
-// your own importer to serve it from somewhere other than the default module.
+// Wistia's bundle is fetched from `https://fast.wistia.com/player.js` on the
+// first attach, once per page, and registers the `<wistia-player>` element.
 export const warm = (): Promise<unknown> => loadWistiaPlayer();
+
+// Serve that bundle from your own origin by replacing the injector. The loader
+// still owns the shared promise, the deadline and the registration it waits
+// for — this only decides where the script comes from.
+const fromOwnOrigin: WistiaScriptInjector = () => {
+  const script = document.createElement('script');
+  script.src = '/vendor/wistia-player.js';
+  script.async = true;
+  document.head.appendChild(script);
+  return script;
+};
+
+export const warmFromOwnOrigin = (): Promise<unknown> =>
+  loadWistiaPlayer(fromOwnOrigin);
 
 // Drops the cached registration — for tests that need a clean load, not for
 // app code.
@@ -51,6 +78,11 @@ export const reset = (): void => resetWistiaPlayerLoader();
 // a recoverable error. Aurora fires no failure event of its own, so without
 // this an unreachable media would leave the player loading for ever.
 export const apiReadyTimeout = API_READY_TIMEOUT_MS; // 15000
+
+// The separate backstop on the script fetch that precedes that handshake. The
+// two run in sequence, so a black-holed network reports an error in up to
+// thirty seconds rather than fifteen.
+export const scriptLoadTimeout = SCRIPT_LOAD_TIMEOUT_MS; // 15000
 ```
 
 <!-- /example -->
@@ -65,26 +97,30 @@ origins list and what a page's CSP has to allow.
 | Export                                                                          | What it is                                                                                                                                                                                                                               |
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `createWistiaProvider`                                                          | Builds the adapter over a mount element and a `WistiaSource`.                                                                                                                                                                            |
-| `loadWistiaPlayer`                                                              | Loads the player bundle and resolves the `<wistia-player>` registration. Cached across players; takes your own importer.                                                                                                                 |
-| `resetWistiaPlayerLoader`                                                       | Drops the cached registration — for tests that need a clean load.                                                                                                                                                                        |
+| `loadWistiaPlayer`                                                              | Fetches the player bundle from `fast.wistia.com` and resolves the `<wistia-player>` registration. Shared across players; takes your own script injector.                                                                                 |
+| `resetWistiaPlayerLoader`                                                       | Drops the shared load — for tests that need a clean load.                                                                                                                                                                                |
 | `API_READY_TIMEOUT_MS`                                                          | How long the `api-ready` handshake is given before the attach reports an error.                                                                                                                                                          |
+| `SCRIPT_LOAD_TIMEOUT_MS`                                                        | How long the script fetch that precedes that handshake is given. Separate deadline, same 15 seconds; the two run in sequence.                                                                                                            |
+| `WistiaScriptInjector`                                                          | What `loadWistiaPlayer` takes to put the bundle in the document — replace it to serve the script from your own origin.                                                                                                                   |
 | `WistiaProviderOptions`                                                         | `controls`, `dnt`, `loop`, `startTime`, `endTime`. Through `Player.Root`, `loop`, `startTime` and `endTime` are each their own prop (ADR-0004), not bag keys; `controls` is still a bag key here, because no fan-out reaches Wistia yet. |
 | `WistiaProviderAdapter`                                                         | The adapter's own type.                                                                                                                                                                                                                  |
 | `WistiaMountElement`                                                            | What the adapter can mount into.                                                                                                                                                                                                         |
 | `WistiaPlayerElement`                                                           | The `<wistia-player>` element as this adapter types it.                                                                                                                                                                                  |
-| `WistiaPlayerApi`                                                               | The slice of Wistia's `PublicApi` this adapter drives.                                                                                                                                                                                   |
+| `WistiaPlayerApi`                                                               | The fifteen handle members this adapter drives, restated from Wistia's `PublicApi` at `0.7.12`.                                                                                                                                          |
 | `WistiaPlayerState`                                                             | Wistia's own `beforeplay` / `playing` / `paused` / `ended` vocabulary.                                                                                                                                                                   |
-| `WistiaPlayerAttribute`                                                         | Every embed-option name the element accepts, from Wistia's `Attributes`.                                                                                                                                                                 |
-| `PublicApi`                                                                     | Wistia's own handle declaration, re-exported rather than restated.                                                                                                                                                                       |
+| `WistiaPlayerAttribute`                                                         | Every embed-option name the element accepts, restated from Wistia's `Attributes` at `0.7.12`.                                                                                                                                            |
 | `WistiaApiReadyDetail`, `WistiaMuteChangeDetail`, `WistiaLoadedMediaDataDetail` | The payloads of the three declared events this adapter reads, for a listener you add to the same element.                                                                                                                                |
 
 ## What it reports honestly
 
-- **The player weighs 177 KB gzipped** as Wistia ships it, and about 87 KB once
-  your bundler minifies it. That is the number to weigh before choosing this
-  provider. The element also fetches its playback engine and media data from
-  Wistia's CDN at runtime, so the npm package is the shell, not the whole
-  player.
+- **The player is a runtime script, not bundle weight.** This provider adds no
+  Wistia bytes to your build; the page fetches `player.js` from
+  `fast.wistia.com` when a Wistia source first attaches, and the element then
+  fetches its playback engine, embed configuration and media data from the same
+  CDN. That is the trade to weigh before choosing this provider: nothing to
+  bundle, and a third-party origin your `script-src` has to allow, which no
+  `integrity` can pin — see
+  [Third-party requests and CSP](../../docs/third-party-requests.md).
 - **`controls: false` switches off every control by name.**
   `controls-visible-on-load` alone only hides Wistia's chrome until the first
   hover or click, so `play-pause-control`, `play-bar-control`, `volume-control`,
@@ -182,7 +218,11 @@ origins list and what a page's CSP has to allow.
   player engine an ad-blocker stops reaching, leaves the element silent for
   ever. The adapter gives the `api-ready` handshake `API_READY_TIMEOUT_MS` and
   then publishes a recoverable `lifecycle: 'error'`, so the host has something
-  to offer `retry()` on.
+  to offer `retry()` on. The script fetch before it has its own
+  `SCRIPT_LOAD_TIMEOUT_MS`, because a script `error` event does not cover every
+  way that fetch can fail to arrive: a captive portal, an inspecting proxy or a
+  truncated body answers 200 and fires `load` without registering the element. A
+  failed load is not remembered, so `retry()` genuinely re-fetches.
 - **`seeking` is never `true`.** The element does fire a `seeking` event, but
   measured against the live player it cannot bracket a seek: one unpaired
   `seeking` arrives during the initial load, and every seek after that

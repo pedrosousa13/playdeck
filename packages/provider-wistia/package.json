@@ -43,8 +43,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@reely/core": "workspace:^",
-    "@wistia/wistia-player": "0.7.12"
+    "@reely/core": "workspace:^"
   },
   "scripts": {
     "build": "vite build && tsc -b",
