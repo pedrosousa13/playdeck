@@ -66,17 +66,18 @@ out when a command will land; `activation` is not a substitute for either.
 
 ### Values
 
-| Export                       | What it is                                                                                          |
-| ---------------------------- | --------------------------------------------------------------------------------------------------- |
-| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.               |
-| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure. |
-| `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.             |
-| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership. |
-| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.         |
-| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                  |
-| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.     |
-| `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                         |
-| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.     |
+| Export                       | What it is                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                        |
+| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.          |
+| `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults. |
+| `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                      |
+| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.          |
+| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                  |
+| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                           |
+| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.              |
+| `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                                  |
+| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.              |
 
 ### Types
 
@@ -118,7 +119,7 @@ as `hls` and `video`.
 <!-- example:core-source-detection -->
 
 ```ts
-import { detectSource } from '@reely/core';
+import { detectSource, isPermittedSourceUrl } from '@reely/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
 const vimeo = detectSource('https://vimeo.com/76979871?h=8272103f6e');
@@ -134,18 +135,41 @@ if (ambiguous.status === 'failure') {
   console.log(ambiguous.reason, ambiguous.guidance);
 }
 
-// Explicit source objects are validated too, and skip detection.
+// Explicit source objects are validated too, and skip detection: the same
+// scheme allowlist runs over their `src` values, so `javascript:` and `data:`
+// cannot reach a provider by taking the object path.
 export const explicit = detectSource({
   type: 'hls',
   src: '/master.m3u8',
   engine: 'hls.js'
 });
+
+// The decision detection consults, should you need to ask it yourself. Pass
+// the type of the source the URL belongs to, or `undefined` for a bare string
+// no type has been resolved for yet. The type is load-bearing: a `blob:`
+// handle is for a video element to read, not for the HLS manifest loader to
+// fetch, and never for an undetected string.
+const objectUrl = URL.createObjectURL(new Blob([], { type: 'video/mp4' }));
+console.log(isPermittedSourceUrl(objectUrl, 'video')); // true
+console.log(isPermittedSourceUrl(objectUrl, 'hls')); // false
+console.log(isPermittedSourceUrl(objectUrl, undefined)); // false
 ```
 
 <!-- /example -->
 
-Only `http:` and `https:` (and protocol-relative `//`) are accepted for string
-sources.
+One scheme allowlist governs both paths, and `isPermittedSourceUrl` is it.
+`http:`, `https:` and the scheme-less forms — protocol-relative, root-relative
+and relative paths — are permitted; `blob:` is permitted only for a `video`
+source, which is how a `MediaSource` or a picked `File` is handed over.
+Everything else, `javascript:`, `data:` and `file:` included, is rejected,
+whether it arrives as a string or inside an explicit source object. A string
+carrying a raw tab, line feed or carriage return is rejected as malformed,
+because the URL parser strips those before parsing and would otherwise read a
+different scheme than the one validated. A protocol-relative URL resolves
+against `https:`, and the resolved source carries that resolution rather than
+the `//host/...` form — for a string and for every `src` inside an explicit
+source object alike. So a result's `source` may be a normalised copy of the
+object passed in; its `input` is always the caller's own object.
 
 ## Starting state
 
