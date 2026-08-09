@@ -32,11 +32,13 @@ const meta = {
           '',
           '**Contract** — `data-reely-part="activation"`, `data-state="<activation>"`.',
           '',
+          '**Retryability** — in `error` the button offers a retry only when `error.recoverable` is `true`; otherwise it is `aria-disabled` and refuses activation. It reads that one flag, never the error category, which is the same signal `ErrorDisplay` reads for its own retry action.',
+          '',
           '**Layout** — a full-bleed overlay (`position: absolute; inset: 0; margin: auto; z-index: 30`) meant to sit over a poster, not a button beside one. The `margin` does nothing at that size — an auto margin resolves to zero against an auto width and height — and exists for the case where your CSS gives the part a size of its own: four zero offsets over-constrain a sized box, and the margin is what centres it in the viewport rather than leaving it in the corner. See `SizedByConsumerCss`.',
           '',
-          '**Children** — `children` replaces the default text child (`Play`, or `Retry` in the error state); pass an icon or image instead. See `OverlayOnPoster`.',
+          '**Children** — `children` replaces the default text child (`Play`, or `Retry` where the error in state reports itself recoverable); pass an icon or image instead. See `OverlayOnPoster`.',
           '',
-          '**Accessibility** — native `<button>`, keyboard-operable. The accessible name comes from `aria-label` (default `Play video`, or `Retry loading video` in the error state), never from `children`, so a decorative child is safe.',
+          '**Accessibility** — native `<button>`, keyboard-operable. The accessible name comes from `aria-label` (default `Play video`, or `Retry loading video` where the error in state reports itself recoverable), never from `children`, so a decorative child is safe.',
           '',
           '**Styling** — plain CSS against the part, one selector per `data-state`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
           '```css',
@@ -108,6 +110,29 @@ export const ErrorState: Story = {
       name: 'Retry loading video'
     });
     await waitFor(() => expect(button).toHaveAttribute('data-state', 'error'));
+  }
+};
+
+export const ErrorNotRecoverable: Story = {
+  name: 'Error (not recoverable)',
+  parameters: overlayState({
+    activation: 'error',
+    lifecycle: 'error',
+    error: {
+      category: 'configuration',
+      fatal: false,
+      recoverable: false,
+      message: 'Interaction loading cannot be used with autoplay.'
+    }
+  }),
+  play: async ({ canvas }) => {
+    // The other half of the **Retryability** rule: the same `error` state as
+    // above, and the flag is all that differs. So the name is `Play video`
+    // rather than `Retry loading video`, and the button refuses the press it
+    // still carries the error state's colour for.
+    const button = await canvas.findByRole('button', { name: 'Play video' });
+    await waitFor(() => expect(button).toHaveAttribute('data-state', 'error'));
+    await expect(button).toHaveAttribute('aria-disabled', 'true');
   }
 };
 

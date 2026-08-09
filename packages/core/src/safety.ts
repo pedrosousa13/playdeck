@@ -50,7 +50,7 @@ export const autoplayConfigurationError = (): PlayerError =>
   freezeError({
     category: 'configuration',
     fatal: false,
-    recoverable: true,
+    recoverable: false,
     message: 'Muted autoplay conflicts with a controlled unmuted state.'
   });
 
