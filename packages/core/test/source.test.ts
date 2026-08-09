@@ -5,6 +5,7 @@ import {
   PlayerController,
   createInitialPlayerState,
   detectSource,
+  isPermittedSourceUrl,
   type HlsSource,
   type ProviderStateListener,
   type VideoFileSource,
@@ -251,6 +252,141 @@ test.each([
   }
 });
 
+// The explicit object is the documented public source API, so its `src` values
+// reach a media resource-load sink without a string ever being detected. They
+// go through the same scheme allowlist the string path uses (#219).
+test.each([
+  [
+    'javascript: among video sources',
+    {
+      type: 'video',
+      sources: [{ src: 'javascript:alert(1)', mimeType: 'video/mp4' }]
+    }
+  ],
+  [
+    'data: among video sources',
+    {
+      type: 'video',
+      sources: [
+        {
+          src: 'data:text/html,<script>alert(1)</script>',
+          mimeType: 'video/mp4'
+        }
+      ]
+    }
+  ],
+  [
+    'one rejected scheme among several video sources',
+    {
+      type: 'video',
+      sources: [
+        { src: '/movie.webm', mimeType: 'video/webm' },
+        { src: 'javascript:alert(1)', mimeType: 'video/mp4' }
+      ]
+    }
+  ],
+  ['file: as an HLS src', { type: 'hls', src: 'file:///etc/passwd' }],
+  [
+    'blob: as an HLS src',
+    { type: 'hls', src: 'blob:https://example.com/9b2c-4f1a' }
+  ]
+])('rejects explicit source objects carrying %s', (_case, input) => {
+  const result = detectSource(input);
+  expect(result).toMatchObject({
+    status: 'failure',
+    input,
+    reason: 'invalid-source'
+  });
+  if (result.status === 'failure') {
+    expect(result.guidance).toMatch(/explicit source object/i);
+  }
+});
+
+// `blob:` is how a consumer hands over an in-page object -- a `MediaSource` or
+// a picked `File` -- which only the video element can read. HLS rejects it
+// because its manifest loader fetches the URL itself (#219).
+test('accepts a blob: src on an explicit video source', () => {
+  const input: VideoFileSource = {
+    type: 'video',
+    sources: [
+      { src: 'blob:https://example.com/9b2c-4f1a', mimeType: 'video/mp4' }
+    ]
+  };
+
+  expect(expectDetected(input).source).toEqual(input);
+});
+
+test('permits blob: for a video source and rejects it everywhere else', () => {
+  const blob = 'blob:https://example.com/9b2c-4f1a';
+
+  expect(isPermittedSourceUrl(blob, 'video')).toBe(true);
+  expect(isPermittedSourceUrl(blob, 'hls')).toBe(false);
+  expect(isPermittedSourceUrl(blob, 'youtube')).toBe(false);
+  expect(isPermittedSourceUrl(blob, undefined)).toBe(false);
+});
+
+// Protocol-relative normalisation is a property of the emitted `src`, not of
+// the path the source arrived by: the object path resolves against `https:`
+// exactly as the string path does, so no source escapes it (#219).
+test('normalises a protocol-relative src on an explicit video source', () => {
+  const input: VideoFileSource = {
+    type: 'video',
+    sources: [
+      { src: '//cdn.example.com/v.mp4', mimeType: 'video/mp4' },
+      { src: '/local.webm', mimeType: 'video/webm' }
+    ]
+  };
+
+  const result = expectDetected(input);
+  expect(result.source).toEqual({
+    type: 'video',
+    sources: [
+      { src: 'https://cdn.example.com/v.mp4', mimeType: 'video/mp4' },
+      { src: '/local.webm', mimeType: 'video/webm' }
+    ]
+  });
+  // The copy is the emitted source only; `input` stays the caller's object.
+  expect(result.input).toBe(input);
+});
+
+test('normalises a protocol-relative src on an explicit HLS source', () => {
+  const input: HlsSource = {
+    type: 'hls',
+    src: '//cdn.example.com/m.m3u8',
+    engine: 'hls.js'
+  };
+
+  const result = expectDetected(input);
+  expect(result.source).toEqual({
+    type: 'hls',
+    src: 'https://cdn.example.com/m.m3u8',
+    engine: 'hls.js'
+  });
+  expect(result.input).toBe(input);
+});
+
+// The WHATWG URL parser strips tab, line feed and carriage return before
+// parsing, so a scheme split by one of them is not the scheme the allowlist
+// reads. Any of the three, anywhere, is malformed (#219).
+test.each([
+  'java\tscript:alert(1)//x.mp4',
+  'java\nscript:alert(1)//x.mp4',
+  'java\rscript:alert(1)//x.mp4'
+])('rejects strings split by whitespace the URL parser strips: %j', (input) => {
+  expect(detectSource(input)).toMatchObject({
+    status: 'failure',
+    input,
+    reason: 'malformed-string'
+  });
+});
+
+test('keeps http: media URLs detecting alongside https:', () => {
+  expect(expectDetected('http://cdn.example.com/clip.mp4').source).toEqual({
+    type: 'video',
+    sources: [{ src: 'http://cdn.example.com/clip.mp4', mimeType: 'video/mp4' }]
+  });
+});
+
 test.each(['https://youtube.com/embed/id.mp4', 'https://vimeo.com/123.mp4'])(
   'does not detect malformed known-provider URLs as files: %s',
   (input) => {
@@ -273,10 +409,15 @@ test.each(['//youtube.com/embed/id.mp4', '//vimeo.com/123.m3u8'])(
   }
 );
 
+// Detection resolves a network-path reference against `https:` to parse it,
+// and the emitted `src` now carries that resolution rather than the caller's
+// `//host/...` form -- so what plays is what was validated (#219).
 test('detects a generic file on an unknown network-path host', () => {
   expect(expectDetected('//cdn.example.com/video.mp4').source).toEqual({
     type: 'video',
-    sources: [{ src: '//cdn.example.com/video.mp4', mimeType: 'video/mp4' }]
+    sources: [
+      { src: 'https://cdn.example.com/video.mp4', mimeType: 'video/mp4' }
+    ]
   });
 });
 
