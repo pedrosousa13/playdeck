@@ -1,7 +1,11 @@
 import type { TimeRange } from '@reely/core';
-import { controlTargetStyle, useLoadingPresentation } from './loading-error.js';
+import {
+  controlTargetStyle,
+  useLoadingPresentation,
+  visuallyHiddenStyle
+} from './loading-error.js';
 import { usePlayer, usePlayerState } from './player-context.js';
-import type { ComponentPropsWithRef } from 'react';
+import { useId, type ComponentPropsWithRef } from 'react';
 
 const formatTime = (totalSeconds: number): string => {
   const clamped = Math.max(0, Math.floor(totalSeconds));
@@ -145,7 +149,8 @@ export type SeekSliderProps = ComponentPropsWithRef<'div'> & {
   // Escape hatch onto the inner range control (aria-label, step, disabled,
   // id/name, data-*, onChange, style). The library keeps ownership of the
   // controlled attributes (value/min/max/type/aria-valuetext/aria-disabled);
-  // consumer onChange is chained after the seek.
+  // consumer onChange is chained after the seek, and a consumer
+  // aria-describedby is composed with the buffered description, not replaced.
   readonly inputProps?: ComponentPropsWithRef<'input'>;
 };
 
@@ -162,6 +167,37 @@ const seekWindow = (
   const start = Math.min(...seekable.map((range) => range.start));
   const end = Math.max(...seekable.map((range) => range.end));
   return end > start ? { start, end } : null;
+};
+
+// How much of the seek window has loaded: the union of the buffered ranges
+// clamped to it, as a percentage of it. A share and not a "loaded through
+// <time>", which a gap would make name an unreachable time; window-relative,
+// so a live DVR window starting past zero measures as a VOD one does. Nothing
+// left after the clamp is `null` — unmeasured is absent, not zero (ADR-0002);
+// a wholly covered window is 100; everything between is 1-99, so no sliver
+// rounds away and no near-complete buffer rounds to done.
+const bufferedShare = (
+  buffered: ReadonlyArray<TimeRange>,
+  window: { readonly start: number; readonly end: number }
+): number | null => {
+  const span = window.end - window.start;
+  if (buffered.length === 0 || span <= 0) return null;
+  const ranges = buffered
+    .map((range) => ({
+      start: Math.max(range.start, window.start),
+      end: Math.min(range.end, window.end)
+    }))
+    .filter((range) => range.end > range.start)
+    .sort((left, right) => left.start - right.start);
+  let covered = 0;
+  let reached = window.start;
+  for (const range of ranges) {
+    covered += Math.max(range.end - Math.max(range.start, reached), 0);
+    reached = Math.max(reached, range.end);
+  }
+  if (covered <= 0) return null;
+  if (covered >= span) return 100;
+  return Math.min(99, Math.max(1, Math.round((covered / span) * 100)));
 };
 
 export const SeekSlider = ({
@@ -181,6 +217,7 @@ export const SeekSlider = ({
     }));
   const { controller } = usePlayer();
   const stalled = useLoadingPresentation() === 'buffering';
+  const descriptionId = useId();
   if (status !== 'available') return null;
   const hasDuration = typeof duration === 'number' && duration > 0;
   const window = seekWindow(duration, seekable);
@@ -188,6 +225,17 @@ export const SeekSlider = ({
   const max = window ? window.end : 0;
   const span = max - min;
   const value = window ? Math.min(Math.max(currentTime, min), max) : 0;
+  // The geometry below is `aria-hidden`, so this description is the extent's
+  // only route to assistive technology (#189) — read on demand, never a live
+  // region, because `buffered` moves many times a second.
+  const share = window ? bufferedShare(buffered, window) : null;
+  const suppliedDescribedBy = inputProps?.['aria-describedby'];
+  const describedBy =
+    share === null
+      ? suppliedDescribedBy
+      : suppliedDescribedBy
+        ? `${suppliedDescribedBy} ${descriptionId}`
+        : descriptionId;
 
   return (
     <div
@@ -217,6 +265,7 @@ export const SeekSlider = ({
         aria-label="Seek"
         step={1}
         {...inputProps}
+        aria-describedby={describedBy}
         aria-disabled={window ? undefined : true}
         aria-valuetext={
           window
@@ -237,6 +286,15 @@ export const SeekSlider = ({
         type="range"
         value={value}
       />
+      {share === null ? null : (
+        <span
+          data-reely-part="seek-buffered-description"
+          id={descriptionId}
+          style={visuallyHiddenStyle}
+        >
+          {share}% loaded
+        </span>
+      )}
       {children}
     </div>
   );
