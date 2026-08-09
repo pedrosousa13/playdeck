@@ -158,14 +158,23 @@ Two axe runners, deliberately. `.storybook/preview.tsx` sets
 for **every** story, primitive and composed — that is the authoring-time gate,
 and it is Chromium-only because `apps/storybook/vitest.config.ts` pins one
 browser instance. `e2e/a11y.spec.ts` adds `@axe-core/playwright` over the
-composed example's seven states in Chromium, Firefox and WebKit, scoped to
+composed example's eight states in Chromium, Firefox and WebKit, scoped to
 `[data-reely-part="viewport"]` so Storybook's own iframe chrome can never enter
 a result.
 
-The seven states are five stories: `Composition` is genuinely both _paused_ and
+The eight states are six stories: `Composition` is genuinely both _paused_ and
 _captions-on_, and _menu-open_ is that same story with the menu opened by the
 spec. `Idle`, `Playing`, `BlockedAutoplay` and `ErrorState` stage the rest
-through the mock decorator.
+through the mock decorator. `GlobalShortcuts` is the eighth, added by #181: the
+same composition with `Player.Controls global`, so the shortcut map sits on
+`document` rather than on the region. It is scanned because the issue requires
+an accessibility check over a composition using global mode, and no axe run had
+ever seen that mode — **not** because axe adjudicates SC 2.1.4 Character Key
+Shortcuts. It ships no rule for that criterion and cannot: a single-character
+binding is not statically distinguishable from one that can be turned off.
+What the state proves is that the mode introduces nothing else, which is the
+part a scan can settle. 2.1.4 itself rests on the `shortcuts` prop, unit-tested
+in `packages/react/test/controls.test.tsx`.
 
 **No axe rule is suppressed anywhere.** One finding was a real primitive bug,
 fixed rather than worked around: `Player.LoadingIndicator` kept its live region
@@ -209,7 +218,7 @@ carry a diagnosed entry, not an ignored one:
   correctly-built `aria-haspopup` + `aria-controls` menu trips this — a
   permanent axe-core limitation for the pattern, not something fixable here.
 
-The other four states assert both buckets empty.
+The other five states assert both buckets empty.
 
 ### Reflow
 

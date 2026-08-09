@@ -161,10 +161,13 @@ export const poster = Player.normalizePoster('/poster.jpg');
 and `k` toggle playback, `ArrowLeft`/`ArrowRight` seek 5s back and forward,
 `j`/`PageDown` seek 10s back and `l`/`PageUp` 10s forward, `ArrowUp`/`ArrowDown`
 move the volume by 0.05, and `m`, `f` and `c` toggle muted, fullscreen and
-captions. Every binding is gated on the matching capability — a key whose
-command the provider cannot honour is left to the page. The layer fires only
-while focus is inside the region; `global` attaches the same map to the document
-instead.
+captions. Every binding except `togglePlayback` is gated on the capability its
+command needs, and an unavailable one is inert — the key acts on nothing and
+keeps none of it, so it is left to the page. `togglePlayback` is ungated,
+because there is no playback capability to gate on: Space and `k` are taken on
+every provider, subject only to the target rules below. The layer fires only
+while focus is inside the region; `global` attaches the same map to the
+document instead.
 
 The region owns those keys wherever focus sits inside it, a focused
 `<input type="range">` included, so the arrows seek and adjust volume at the

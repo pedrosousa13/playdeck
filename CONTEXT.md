@@ -11,6 +11,10 @@ mounted to playing (activation, then lifecycle).
 
 ### Composition
 
+See [ADR-0005](docs/adr/0005-the-shortcut-layer-owns-its-keys-on-a-range-input.md)
+for why the shortcut layer claims its keys on a focused range input rather than
+conceding them to the control.
+
 **Primitive**:
 An exported React component a consumer composes into a player, such as
 `Player.PlayButton` or `Player.Media`.
@@ -35,6 +39,13 @@ _Avoid_: engine, backend, player
 What a consumer asks the player to play: a URL string, or a resolved descriptor
 naming its kind. Distinct from the `<source>` elements the native provider
 renders.
+
+**Shortcut layer**:
+The media keys `Player.Controls` owns. One binding maps keys to one action —
+`seekForward`, `toggleMuted` — and a consumer rebinds or suppresses a binding
+through `shortcuts` without restating the rest. Scoped to the region unless
+`global` moves it to the document.
+_Avoid_: hotkeys, key handler, keymap
 
 ### Loading
 

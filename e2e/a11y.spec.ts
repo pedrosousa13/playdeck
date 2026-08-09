@@ -23,15 +23,19 @@ const story = (id: string) =>
 
 const composition = story('composition');
 
-// The seven states #32 lists. They are seven states over five stories:
-// `composition` is genuinely both paused and captions-on, and menu-open is
-// that same story with the settings menu opened by this spec rather than by a
-// story play function — whether Storybook runs play functions on a plain
-// iframe render is not something this spec should depend on.
+// The seven states #32 lists, plus the global-shortcuts one #181 adds: eight
+// states over six stories. `composition` is genuinely both paused and
+// captions-on, and menu-open is that same story with the settings menu opened
+// by this spec rather than by a story play function — whether Storybook runs
+// play functions on a plain iframe render is not something this spec should
+// depend on.
 const states: ReadonlyArray<{
   readonly name: string;
   readonly url: string;
   readonly open?: boolean;
+  // Whether this state's story puts the shortcut layer on `document`. Pinned
+  // before the scan, because global mode is otherwise invisible in the DOM.
+  readonly globalShortcuts?: boolean;
   // The rule ids `results.incomplete` is expected to carry for this state,
   // asserted by equality below — so a new, undiagnosed rule id fails instead
   // of being silently absorbed alongside a documented one. An entry here
@@ -68,6 +72,19 @@ const states: ReadonlyArray<{
     knownIncomplete: ['aria-valid-attr-value']
   },
   { name: 'blocked-autoplay', url: story('blocked-autoplay') },
+  // global-shortcuts: the same composition with `Player.Controls global`, so
+  // the shortcut map is on `document` instead of on the region (#181). Axe
+  // has no rule for SC 2.1.4 Character Key Shortcuts and cannot acquire one —
+  // a single-character binding is not statically distinguishable from one
+  // that can be turned off — so this state is not a 2.1.4 verdict. It is the
+  // check the issue asks for: the mode is composed, scanned, and found to
+  // introduce nothing else. Expecting it as clean as `paused` is the whole
+  // assertion; the two states differ by one attribute and a listener.
+  {
+    name: 'global-shortcuts',
+    url: story('global-shortcuts'),
+    globalShortcuts: true
+  },
   // error: Player.ErrorDisplay is a real, full-viewport error surface while
   // an error exists (position: absolute; inset: 0; z-index: 40) — by design,
   // above everything else. Same #89 ruling as idle: the control row and the
@@ -126,6 +143,15 @@ for (const state of states) {
         `the menu must genuinely scroll for this state to exercise ` +
           `scrollable-region-focusable (overflow-y: ${scroll.overflowY})`
       ).toBeGreaterThan(scroll.clientHeight);
+    }
+
+    if (state.globalShortcuts) {
+      // Same reasoning as the scroll pin above. This state and `paused` scan
+      // the same tree; the only difference is where the shortcut listener is
+      // attached, and that is not something axe can see. Drop the `global`
+      // prop from the story and the scan would still pass while covering
+      // nothing, so assert the mode engaged before believing the result.
+      await expect(controls(page)).toHaveAttribute('data-state', 'global');
     }
 
     const results = await scan(page);
