@@ -401,9 +401,15 @@ describe('SeekSlider', () => {
   });
 
   test('reports itself aria-disabled when no seek window exists', () => {
-    renderWithPlayer(<Player.SeekSlider />, noWindow());
+    const { container } = renderWithPlayer(<Player.SeekSlider />, noWindow());
     const slider = screen.getByRole('slider', { name: 'Seek' });
     expect(attr(slider, 'aria-disabled')).toBe('true');
+    expect(
+      attr(
+        container.querySelector('[data-reely-part="seek-slider"]')!,
+        'data-state'
+      )
+    ).toBe('idle');
   });
 
   test('announces no clock time when no seek window exists', () => {
@@ -412,6 +418,7 @@ describe('SeekSlider', () => {
     // A position it does not have must not be asserted as one: `0:00` reads as
     // the start of a timeline that is not there.
     expect(attr(slider, 'aria-valuetext')).not.toMatch(/\d+:\d\d/);
+    expect(attr(slider, 'aria-valuetext')).toBe('Unavailable');
   });
 
   test('stays keyboard-reachable when no seek window exists', () => {
@@ -422,6 +429,8 @@ describe('SeekSlider', () => {
     // out from under a keyboard user the moment a duration arrives.
     expect((slider as HTMLInputElement).disabled).toBe(false);
     expect(slider.hasAttribute('disabled')).toBe(false);
+    (slider as HTMLInputElement).focus();
+    expect(document.activeElement).toBe(slider);
   });
 
   test('issues no seek command on change when no seek window exists', () => {
