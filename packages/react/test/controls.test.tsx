@@ -1205,10 +1205,10 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.mute).not.toHaveBeenCalled();
   });
 
-  test('page up and page down jump ten seconds', () => {
+  test('page up and page down jump ten seconds, the slider included', () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>
-        <Player.Time />
+        <Player.SeekSlider />
       </Player.Controls>,
       controlsState()
     );
@@ -1220,6 +1220,16 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.seekBy).toHaveBeenLastCalledWith(10);
     expect(fireEvent.keyDown(region, { key: 'PageDown' })).toBe(false);
     expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+    // The range input is the one target that pages natively, so this is where
+    // the jump is the library's number only if preventDefault fires.
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-reely-part="seek-slider-input"]'
+    )!;
+    seekInput.focus();
+    expect(fireEvent.keyDown(seekInput, { key: 'PageUp' })).toBe(false);
+    expect(fireEvent.keyDown(seekInput, { key: 'PageDown' })).toBe(false);
+    // One call per press, the same jump from either focus position.
+    expect(spies.seekBy.mock.calls).toEqual([[10], [-10], [10], [-10]]);
   });
 
   test('leaves Space and Enter to a focused native activation target', () => {

@@ -376,10 +376,10 @@ export const Controls = ({
       ref={setRef}
       // Deliberately role="group", not "toolbar": the region owns media
       // shortcuts by default — see `shortcuts` for the map, which a consumer
-      // can rebind or remove — rather than roving-tabindex toolbar
-      // navigation. Native controls inside keep
-      // whatever keys the layer does not bind — text entry keeps all of them,
-      // and a focused button or checkbox keeps Space and Enter.
+      // can rebind or remove — rather than roving-tabindex toolbar navigation.
+      // Native controls inside keep whatever keys the layer does not bind:
+      // text entry keeps all of them, and a focused button or checkbox keeps
+      // Space and Enter.
       role="group"
       style={style}
       tabIndex={tabIndex ?? 0}
