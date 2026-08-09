@@ -51,6 +51,8 @@ const meta = {
           '',
           '**Focus** — opening moves focus to the first item; Escape, selecting an item, or re-toggling returns focus to the trigger (never `<body>`).',
           '',
+          "**Tab** — the content root defaults to `tabIndex={0}`. Bound the menu's height and it becomes a scrollable region whose items are all `tabIndex={-1}` for roving focus, so without a tabbable root it is a `scrollable-region-focusable` violation (WCAG 2.1.1) and its lower entries are reachable only by arrowing until focus pushes the scroll. Opening still lands on the first item, so the root is never the landing spot, and the items stay `tabIndex={-1}`, so the default adds no stop inside the menu. Pass your own `tabIndex` — `-1` included — to override it.",
+          '',
           '**Options** — `Player.MenuRadioGroup` + `Player.MenuRadioItem` give single-select semantics (`role="menuitemradio"`, `aria-checked`).'
         ].join('\n')
       }
