@@ -817,6 +817,74 @@ describe('SeekSlider', () => {
     emit({ seekable: [{ start: 40, end: 100 }] });
     expect(attr(slider, 'aria-valuetext')).toBe('0:40');
   });
+
+  test('releases a held preview when the seek window disappears', () => {
+    const { emit, spies } = renderWithPlayer(
+      <Player.SeekSlider />,
+      liveWindow()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    holdNextSeek(spies.seekTo);
+
+    fireEvent.change(slider, { target: { value: '25' } });
+    expect(attr(slider, 'aria-valuetext')).toBe('0:25');
+
+    emit({ seekable: [] });
+    expect(attr(slider, 'aria-valuetext')).toBe('Unavailable');
+
+    // The window came back. A preview held across the gap would name a
+    // position in a window that stopped existing while it was outstanding.
+    emit({ seekable: [{ start: 20, end: 80 }] });
+    expect(attr(slider, 'aria-valuetext')).toBe('0:50');
+  });
+
+  test('releases a held preview when the provider is replaced under it', () => {
+    const { controller, spies } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    holdNextSeek(spies.seekTo);
+
+    fireEvent.change(slider, { target: { value: '75' } });
+    expect(valueOf(slider)).toBe('75');
+
+    // The source was swapped mid-drag. 1:15 was asked of media that is no
+    // longer loaded, and the replacement can never answer for it.
+    const replacement = createMockAdapter();
+    act(() => {
+      controller.setProvider(replacement.adapter);
+      replacement.emit({
+        lifecycle: 'ready',
+        activation: 'ready',
+        provider: 'youtube',
+        ...seekReady()
+      });
+    });
+    expect(valueOf(slider)).toBe('30');
+  });
+
+  test('holds the preview while a command is still outstanding', () => {
+    const { emit, spies } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    holdNextSeek(spies.seekTo);
+
+    fireEvent.change(slider, { target: { value: '31' } });
+    // Dragged back to where the media already is, so the reported time now
+    // matches the previewed one — but the command for it is queued behind one
+    // the provider has not answered, so nothing has answered for this either.
+    fireEvent.change(slider, { target: { value: '30' } });
+    expect(valueOf(slider)).toBe('30');
+
+    // Playback runs on under the outstanding chain. Reading the match above as
+    // an answer would hand the thumb back to media time mid-drag, which is the
+    // fighting-the-pointer this preview exists to stop.
+    emit({ currentTime: 33 });
+    expect(valueOf(slider)).toBe('30');
+  });
 });
 
 describe('Time', () => {

@@ -290,9 +290,14 @@ const useSeekPreview = (
       (!settling &&
         Math.abs(currentTime - preview.value) <= SEEK_ECHO_TOLERANCE_SECONDS));
   // Adjusted during render, the way React documents state that has to follow
-  // its inputs: conditional and convergent. It clears rather than merely stops
-  // being read, because a playhead running on past an answered preview would
-  // otherwise fall outside the tolerance again and re-hold it.
+  // its inputs: conditional and convergent, so the extra render is discarded
+  // before it commits. An effect is not the alternative it looks like —
+  // `react-hooks/set-state-in-effect` rejects a synchronous `setState` in an
+  // effect body, and releasing a render later would show the previewed
+  // position for one frame after the media had already answered for it. It
+  // clears rather than merely stopping being read, because a playhead running
+  // on past an answered preview would otherwise leave the tolerance again and
+  // re-hold it.
   if (release) setPreview(null);
   const held = release ? null : (preview?.value ?? null);
 
