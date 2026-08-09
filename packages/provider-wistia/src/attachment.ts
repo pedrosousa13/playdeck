@@ -94,8 +94,10 @@ const withDeadline = <Value>(
 
 // Wistia names its embed options in camelCase and reads them off kebab-case
 // attributes, so the two spellings are one conversion rather than a table to
-// keep in step. `WistiaPlayerAttribute` is derived from the SDK's own
-// `Attributes`, which is what makes a renamed option fail to compile here.
+// keep in step. `WistiaPlayerAttribute` restates Wistia's own `Attributes`
+// names, so an option this adapter sets has to be one of them — but since #225
+// that list is a local copy rather than the vendor's type, so a name Wistia
+// renames now diverges silently instead of failing to compile.
 const attributeName = (option: WistiaPlayerAttribute): string =>
   option.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 
@@ -203,7 +205,7 @@ export type WistiaAttachmentDeps = {
 };
 
 // The attachment seam: the adapter's binding to its embed — the element and
-// its option attributes, the SDK load, the `api-ready` handshake that hands
+// its option attributes, the player-bundle load, the `api-ready` handshake that hands
 // over the handle, every seam's event wiring, teardown, and the retry that
 // replaces one player with the next. Owns the attached/destroyed/started
 // flags, the element and its handle, the measured media shape, and the start
