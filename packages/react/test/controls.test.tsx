@@ -41,7 +41,8 @@ const createMockAdapter = () => {
     exitFullscreen: vi.fn(ok),
     requestPictureInPicture: vi.fn(ok),
     exitPictureInPicture: vi.fn(ok),
-    showAirPlayPicker: vi.fn(ok)
+    showAirPlayPicker: vi.fn(ok),
+    selectTextTrack: vi.fn(ok)
   };
   const adapter: ProviderAdapter = {
     provider: 'native',
@@ -1008,7 +1009,7 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.mute).not.toHaveBeenCalled();
   });
 
-  test('leaves arrow keys to a focused slider input instead of the seek/volume shortcuts', () => {
+  test('owns the arrow keys on a focused slider instead of its native stepping', () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>
         <Player.SeekSlider />
@@ -1020,20 +1021,99 @@ describe('Controls container and scoped shortcuts', () => {
       '[data-reely-part="seek-slider-input"]'
     )!;
     seekInput.focus();
-    fireEvent.keyDown(seekInput, { key: 'ArrowRight' });
-    fireEvent.keyDown(seekInput, { key: 'ArrowLeft' });
+    // preventDefault (a false return) is what makes the input's own stepping
+    // inert, so an arrow press means one library-sized jump and nothing else.
+    expect(fireEvent.keyDown(seekInput, { key: 'ArrowRight' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenLastCalledWith(5);
+    expect(fireEvent.keyDown(seekInput, { key: 'ArrowLeft' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenLastCalledWith(-5);
+    expect(fireEvent.keyDown(seekInput, { key: 'ArrowUp' })).toBe(false);
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.55);
+    // Home and End stay native: the layer binds neither.
+    expect(fireEvent.keyDown(seekInput, { key: 'End' })).toBe(true);
+    expect(fireEvent.keyDown(seekInput, { key: 'Home' })).toBe(true);
 
     const volumeInput = container.querySelector<HTMLInputElement>(
       '[data-reely-part="volume-slider"]'
     )!;
     volumeInput.focus();
-    fireEvent.keyDown(volumeInput, { key: 'ArrowUp' });
-    fireEvent.keyDown(volumeInput, { key: 'ArrowDown' });
+    expect(fireEvent.keyDown(volumeInput, { key: 'ArrowDown' })).toBe(false);
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.45);
+    expect(fireEvent.keyDown(volumeInput, { key: 'ArrowRight' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenLastCalledWith(5);
+  });
 
-    // The region's shortcut handler bails on native inputs, so the sliders'
-    // own arrow-key stepping owns the interaction (no double-handling).
-    expect(spies.seekBy).not.toHaveBeenCalled();
-    expect(spies.setVolume).not.toHaveBeenCalled();
+  test('seeks the same distance from an arrow wherever focus sits', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.SeekSlider />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-reely-part="seek-slider-input"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'ArrowRight' });
+    seekInput.focus();
+    fireEvent.keyDown(seekInput, { key: 'ArrowRight' });
+    region.focus();
+    fireEvent.keyDown(region, { key: 'ArrowLeft' });
+    seekInput.focus();
+    fireEvent.keyDown(seekInput, { key: 'ArrowLeft' });
+    // One call per press, at the same distance from both focus positions.
+    expect(spies.seekBy.mock.calls).toEqual([[5], [5], [-5], [-5]]);
+  });
+
+  test('runs every shortcut in the map while the seek slider has focus', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.SeekSlider />
+      </Player.Controls>,
+      controlsState({
+        ...capabilities({
+          seek: available,
+          setVolume: available,
+          fullscreen: available,
+          selectTextTrack: available
+        }),
+        selectedTextTrackId: null,
+        textTracks: [
+          {
+            id: 'en',
+            label: 'English',
+            language: 'en',
+            kind: 'subtitles',
+            readiness: 'loaded'
+          }
+        ]
+      })
+    );
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-reely-part="seek-slider-input"]'
+    )!;
+    seekInput.focus();
+    fireEvent.keyDown(seekInput, { key: ' ' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(seekInput, { key: 'k' });
+    expect(spies.play).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(seekInput, { key: 'm' });
+    expect(spies.mute).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(seekInput, { key: 'f' });
+    expect(spies.requestFullscreen).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(seekInput, { key: 'c' });
+    expect(spies.selectTextTrack).toHaveBeenCalledWith('en');
+    fireEvent.keyDown(seekInput, { key: 'l' });
+    expect(spies.seekBy).toHaveBeenLastCalledWith(10);
+    fireEvent.keyDown(seekInput, { key: 'j' });
+    expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+    fireEvent.keyDown(seekInput, { key: 'ArrowUp' });
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.55);
+    fireEvent.keyDown(seekInput, { key: 'ArrowDown' });
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.45);
   });
 
   test('ignores shortcuts while an open menu has focus', () => {
@@ -1074,6 +1154,373 @@ describe('Controls container and scoped shortcuts', () => {
     );
     fireEvent.keyDown(document.body, { key: 'k' });
     expect(spies.play).toHaveBeenCalledTimes(1);
+  });
+
+  test('ignores shortcuts originating from a textarea', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <textarea aria-label="note" />
+      </Player.Controls>,
+      controlsState()
+    );
+    const textarea = container.querySelector('textarea')!;
+    textarea.focus();
+    expect(fireEvent.keyDown(textarea, { key: 'k' })).toBe(true);
+    fireEvent.keyDown(textarea, { key: 'm' });
+    expect(spies.play).not.toHaveBeenCalled();
+    expect(spies.mute).not.toHaveBeenCalled();
+  });
+
+  test('ignores shortcuts originating from a select', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <select aria-label="speed" defaultValue="1">
+          <option value="1">1x</option>
+        </select>
+      </Player.Controls>,
+      controlsState()
+    );
+    const select = container.querySelector('select')!;
+    select.focus();
+    expect(fireEvent.keyDown(select, { key: 'k' })).toBe(true);
+    fireEvent.keyDown(select, { key: 'm' });
+    expect(spies.play).not.toHaveBeenCalled();
+    expect(spies.mute).not.toHaveBeenCalled();
+  });
+
+  test('ignores shortcuts originating from a contenteditable region', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <div contentEditable data-note suppressContentEditableWarning>
+          note
+        </div>
+      </Player.Controls>,
+      controlsState()
+    );
+    const editable = container.querySelector<HTMLElement>('[data-note]')!;
+    editable.focus();
+    expect(fireEvent.keyDown(editable, { key: 'k' })).toBe(true);
+    fireEvent.keyDown(editable, { key: 'm' });
+    expect(spies.play).not.toHaveBeenCalled();
+    expect(spies.mute).not.toHaveBeenCalled();
+  });
+
+  test('page up and page down jump ten seconds', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    expect(fireEvent.keyDown(region, { key: 'PageUp' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenLastCalledWith(10);
+    expect(fireEvent.keyDown(region, { key: 'PageDown' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+  });
+
+  test('leaves Space and Enter to a focused native activation target', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls shortcuts={{ togglePlayback: [' ', 'Enter'] }}>
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    const button = screen.getByRole('button', { name: 'Play' });
+    button.focus();
+    expect(fireEvent.keyDown(button, { key: ' ' })).toBe(true);
+    expect(fireEvent.keyDown(button, { key: 'Enter' })).toBe(true);
+    expect(spies.play).not.toHaveBeenCalled();
+    // Only those two keys are conceded; the rest of the map still fires here.
+    fireEvent.keyDown(button, { key: 'm' });
+    expect(spies.mute).toHaveBeenCalledTimes(1);
+    // And the same binding fires normally away from an activation target.
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'Enter' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+  });
+
+  test('leaves Space and Enter to a focused submit input', () => {
+    // A CSS `button` selector never matches an <input>, so the activation
+    // input types have to be named for the concession to reach them — and a
+    // swallowed Space here would cancel the form submit.
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls shortcuts={{ togglePlayback: [' ', 'Enter'] }}>
+        <input aria-label="save" type="submit" value="Save" />
+      </Player.Controls>,
+      controlsState()
+    );
+    const submit = container.querySelector<HTMLInputElement>(
+      'input[type="submit"]'
+    )!;
+    submit.focus();
+    expect(fireEvent.keyDown(submit, { key: ' ' })).toBe(true);
+    expect(fireEvent.keyDown(submit, { key: 'Enter' })).toBe(true);
+    expect(spies.play).not.toHaveBeenCalled();
+    fireEvent.keyDown(submit, { key: 'm' });
+    expect(spies.mute).toHaveBeenCalledTimes(1);
+  });
+
+  test('leaves Space and Enter to a focused picker input', () => {
+    // A file or colour input opens its picker on either key, so it activates
+    // as much as a submit input does even though it takes no text.
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls shortcuts={{ togglePlayback: [' ', 'Enter'] }}>
+        <input aria-label="upload" type="file" />
+        <input aria-label="tint" type="color" />
+      </Player.Controls>,
+      controlsState()
+    );
+    const file =
+      container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const color = container.querySelector<HTMLInputElement>(
+      'input[type="color"]'
+    )!;
+    file.focus();
+    expect(fireEvent.keyDown(file, { key: ' ' })).toBe(true);
+    expect(fireEvent.keyDown(file, { key: 'Enter' })).toBe(true);
+    color.focus();
+    expect(fireEvent.keyDown(color, { key: ' ' })).toBe(true);
+    expect(fireEvent.keyDown(color, { key: 'Enter' })).toBe(true);
+    expect(spies.play).not.toHaveBeenCalled();
+    // Still not text entry: everything else in the map fires here.
+    fireEvent.keyDown(color, { key: 'm' });
+    expect(spies.mute).toHaveBeenCalledTimes(1);
+  });
+
+  test('leaves Space to a focused checkbox but runs its other shortcuts', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <input aria-label="loop" type="checkbox" />
+      </Player.Controls>,
+      controlsState()
+    );
+    const checkbox = container.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]'
+    )!;
+    checkbox.focus();
+    expect(fireEvent.keyDown(checkbox, { key: ' ' })).toBe(true);
+    expect(spies.play).not.toHaveBeenCalled();
+    fireEvent.keyDown(checkbox, { key: 'm' });
+    expect(spies.mute).toHaveBeenCalledTimes(1);
+  });
+
+  test('a binding whose capability is unavailable stays inert', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState(
+        capabilities({
+          seek: unavailable,
+          setVolume: available,
+          fullscreen: available
+        })
+      )
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    // Inert means the key is left to the page, so no preventDefault either.
+    expect(fireEvent.keyDown(region, { key: 'ArrowRight' })).toBe(true);
+    expect(fireEvent.keyDown(region, { key: 'PageDown' })).toBe(true);
+    expect(spies.seekBy).not.toHaveBeenCalled();
+  });
+
+  test('disables the layer entirely with shortcuts={false}', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls shortcuts={false}>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    const swallowed = [' ', 'k', 'ArrowRight', 'ArrowUp', 'j', 'm', 'f'].filter(
+      (key) => !fireEvent.keyDown(region, { key })
+    );
+    expect(swallowed).toEqual([]);
+    expect(spies.play).not.toHaveBeenCalled();
+    expect(spies.seekBy).not.toHaveBeenCalled();
+    expect(spies.setVolume).not.toHaveBeenCalled();
+    expect(spies.mute).not.toHaveBeenCalled();
+    expect(spies.requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  test('attaches no document listener when global shortcuts are disabled', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global shortcuts={false}>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const outside = document.createElement('div');
+    outside.tabIndex = 0;
+    document.body.append(outside);
+    try {
+      outside.focus();
+      // A page element outside the player sees the keystroke untouched.
+      expect(fireEvent.keyDown(outside, { key: 'k' })).toBe(true);
+      expect(fireEvent.keyDown(outside, { key: ' ' })).toBe(true);
+      expect(spies.play).not.toHaveBeenCalled();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  test('registers no document keydown listener when the layer is off', () => {
+    // The outcome above holds either way once the handler bails; this pins
+    // the attachment itself, which is what `false` promises in global mode.
+    const addEventListener = vi.spyOn(document, 'addEventListener');
+    const removeEventListener = vi.spyOn(document, 'removeEventListener');
+    // Net, not gross: the effect re-runs whenever the handler identity
+    // changes, so a live listener is one attach the matching detach has not
+    // taken back.
+    const keydownListeners = (): number =>
+      addEventListener.mock.calls.filter(([type]) => type === 'keydown')
+        .length -
+      removeEventListener.mock.calls.filter(([type]) => type === 'keydown')
+        .length;
+    try {
+      // Positive control first, so the assertion below cannot pass because
+      // the layer stopped mounting rather than stopped binding.
+      renderWithPlayer(
+        <Player.Controls global>
+          <Player.Time />
+        </Player.Controls>,
+        controlsState()
+      );
+      expect(keydownListeners()).toBe(1);
+      cleanup();
+      addEventListener.mockClear();
+      removeEventListener.mockClear();
+      renderWithPlayer(
+        <Player.Controls global shortcuts={false}>
+          <Player.Time />
+        </Player.Controls>,
+        controlsState()
+      );
+      expect(keydownListeners()).toBe(0);
+    } finally {
+      addEventListener.mockRestore();
+      removeEventListener.mockRestore();
+    }
+  });
+
+  test('matches a single-character default binding case-insensitively', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'K' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(region, { key: 'M' });
+    expect(spies.mute).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(region, { key: 'J' });
+    expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+    fireEvent.keyDown(region, { key: 'F' });
+    expect(spies.requestFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  test('matches a rebound single-character key case-insensitively', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls shortcuts={{ togglePlayback: 'p' }}>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'P' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+  });
+
+  test('rebinds one action without restating the rest of the map', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls shortcuts={{ togglePlayback: 'p' }}>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'p' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+    // The named action's default keys are replaced, not added to.
+    expect(fireEvent.keyDown(region, { key: ' ' })).toBe(true);
+    expect(spies.play).toHaveBeenCalledTimes(1);
+    // Every action the consumer did not name keeps its default.
+    fireEvent.keyDown(region, { key: 'm' });
+    expect(spies.mute).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(region, { key: 'ArrowRight' });
+    expect(spies.seekBy).toHaveBeenLastCalledWith(5);
+  });
+
+  test('suppresses a single binding with null', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls shortcuts={{ toggleMuted: null }}>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    expect(fireEvent.keyDown(region, { key: 'm' })).toBe(true);
+    expect(spies.mute).not.toHaveBeenCalled();
+    fireEvent.keyDown(region, { key: 'k' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+  });
+
+  test('applies a rebinding in global mode too', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global shortcuts={{ togglePlayback: 'p' }}>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    fireEvent.keyDown(document.body, { key: 'p' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(document.body, { key: 'k' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+  });
+
+  test('resolves a key bound to two actions by the fixed action order', () => {
+    const { container, spies } = renderWithPlayer(
+      // Written mute first; togglePlayback still wins because it comes first
+      // in the action order.
+      <Player.Controls shortcuts={{ toggleMuted: 'x', togglePlayback: 'x' }}>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'x' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+    expect(spies.mute).not.toHaveBeenCalled();
   });
 
   test('restores focus to the region when a focused control unmounts', async () => {
