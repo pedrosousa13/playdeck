@@ -53,12 +53,13 @@ origins list and what a page's CSP has to allow.
 
 ## Exports
 
-| Export                 | What it is                                                                                                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createVimeoProvider`  | Builds the adapter over a mount element and a `VimeoSource`.                                                                                                                          |
-| `VimeoProviderOptions` | `controls`, `dnt`, `loop`, `startTime`, `endTime`, `customControls`. Through `Player.Root`, `controls`, `loop`, `startTime` and `endTime` are its own props (ADR-0004), not bag keys. |
-| `VimeoMountElement`    | What the adapter can mount into.                                                                                                                                                      |
-| `VimeoProviderAdapter` | The adapter's own type.                                                                                                                                                               |
+| Export                 | What it is                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createVimeoProvider`  | Builds the adapter over a mount element and a `VimeoSource`.                                                                                                                                                 |
+| `VimeoProviderOptions` | `controls`, `dnt`, `loop`, `startTime`, `endTime`, `customControls`, `suppressSeoMetadata`. Through `Player.Root`, `controls`, `loop`, `startTime` and `endTime` are its own props (ADR-0004), not bag keys. |
+| `VimeoSdkLoadOptions`  | What `loadVimeoSdk` takes beyond its importer: `suppressSeoMetadata`, honoured only by the call that actually imports the SDK.                                                                               |
+| `VimeoMountElement`    | What the adapter can mount into.                                                                                                                                                                             |
+| `VimeoProviderAdapter` | The adapter's own type.                                                                                                                                                                                      |
 
 ## What it reports honestly
 
@@ -69,9 +70,10 @@ origins list and what a page's CSP has to allow.
   `available`, and a tier we do not recognise stays unresolved rather than
   being guessed at. Without `customControls: true`, no request is made — the
   capability stays `unknown` / `provider-check` — so no viewer is disclosed to
-  Vimeo before anyone has asked for the capability. A `Player.Root` consumer
-  cannot reach this option yet, so the probe never fires from the React path
-  at all.
+  Vimeo before anyone has asked for the capability. That holds through
+  `Player.Root` too: the option is reachable as
+  `providerOptions={{ vimeo: { customControls: true } }}`, and the probe fires
+  only when it is set.
 - **`selectQuality` is `available` with a ladder** from the SDK's
   `getQualities()`. The rung's `height` is Vimeo's own name for it, not a
   measurement — the rung it labels `240p` renders at 480×270 — and `width` and
@@ -122,6 +124,28 @@ origins list and what a page's CSP has to allow.
   deliberately left alone by #214 — that change fanned `startTime` and `endTime`
   out to the embeds and did not revise how `loop` fans out. A `startTime` is
   what makes this adapter step in.
+- **The SDK sends the embedding page's full URL to the embed, and
+  `suppressSeoMetadata` is how you stop it.** When the embed answers the SDK's
+  readiness handshake, `@vimeo/player`'s own module-scope listener replies to it
+  with `window.location.href` — path and query included — over `postMessage`.
+  The iframe's `referrerpolicy="strict-origin-when-cross-origin"` does not
+  prevent this: it narrows the iframe's own request header, and this travels as
+  a message afterwards. Neither does `dnt`. Pass `suppressSeoMetadata: true` —
+  reachable from `Player.Root` as
+  `providerOptions={{ vimeo: { suppressSeoMetadata: true } }}` — and Reely sets
+  the SDK's own guard before the SDK is imported, so the listener is never
+  installed. It is off by default, and with it off nothing about this changes.
+  Two things to know before switching it on. First, **the effect is page-wide,
+  not per-embed**: the SDK's guard is a `window` global, so this silences the
+  handshake for every Vimeo embed on the page, including embeds Reely did not
+  create, and that blast radius is yours to accept rather than the library's to
+  decide. Second, **it takes effect on the first Vimeo attach and holds for the
+  life of the page**: the SDK module is imported once and cached, and it reads
+  the guard while it evaluates, so a page that attaches one Vimeo source without
+  the option and a later one with it gets no suppression at all. That is the
+  vendor's design, not something Reely works around. A page that has set the
+  guard itself keeps its own value, in either direction; Reely only ever writes
+  it when it is not already set.
 
 ## License
 

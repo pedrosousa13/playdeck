@@ -26,6 +26,9 @@ type PlayerFixtureProps = {
   // without it, `customControlsAvailability` never resolves, since the probe
   // is opt-in precisely so it never fires uninvited on attach.
   readonly vimeoCustomControls?: boolean;
+  // Opts a Vimeo-sourced fixture into the SEO-metadata suppression (#215), so
+  // e2e/vimeo-seo-metadata.spec.ts can drive both sides of the option.
+  readonly vimeoSuppressSeoMetadata?: boolean;
 };
 
 const PresentationControls = ({
@@ -234,7 +237,8 @@ const PlayerFixture = ({
   airplay,
   sourceChange: sourceChangeInput,
   captionRenderer,
-  vimeoCustomControls
+  vimeoCustomControls,
+  vimeoSuppressSeoMetadata
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -296,7 +300,16 @@ const PlayerFixture = ({
         }}
         preload={preload}
         providerOptions={
-          vimeoCustomControls ? { vimeo: { customControls: true } } : undefined
+          vimeoCustomControls || vimeoSuppressSeoMetadata
+            ? {
+                vimeo: {
+                  ...(vimeoCustomControls ? { customControls: true } : {}),
+                  ...(vimeoSuppressSeoMetadata
+                    ? { suppressSeoMetadata: true }
+                    : {})
+                }
+              }
+            : undefined
         }
         ref={(handle) => {
           window.reelyHandle = handle ?? undefined;
@@ -507,6 +520,12 @@ export const VimeoInteraction: Story = {
 
 export const VimeoViewport: Story = {
   args: { source: 'vimeo' }
+};
+
+export const VimeoSuppressSeoMetadata: Story = {
+  // e2e/vimeo-seo-metadata.spec.ts drives both sides of the option: this story
+  // for the suppressed one, `VimeoViewport` for the default.
+  args: { source: 'vimeo', vimeoSuppressSeoMetadata: true }
 };
 
 export const VimeoUnlistedInteraction: Story = {

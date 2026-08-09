@@ -1,12 +1,23 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   loadVimeoSdk,
   resetVimeoSdkLoader,
   type VimeoSdkConstructor,
   type VimeoSdkModule
 } from '../src/loader';
+
+declare global {
+  interface Window {
+    VimeoSeoMetadataAppended?: boolean;
+  }
+}
+
+const seoGuard = (): unknown =>
+  'VimeoSeoMetadataAppended' in window
+    ? window.VimeoSeoMetadataAppended
+    : 'unset';
 
 const fakeConstructor = (): VimeoSdkConstructor =>
   class {} as unknown as VimeoSdkConstructor;
@@ -29,6 +40,10 @@ const deferred = <Value>(): Deferred<Value> => {
 
 beforeEach(() => {
   resetVimeoSdkLoader();
+});
+
+afterEach(() => {
+  delete window.VimeoSeoMetadataAppended;
 });
 
 test('shares a single in-flight SDK load between concurrent calls', async () => {
@@ -79,6 +94,42 @@ test('contains a synchronously throwing importer in the returned promise', async
   await expect(
     loadVimeoSdk(async () => ({ default: fakeConstructor() }))
   ).resolves.toBeDefined();
+});
+
+test('sets the SDK seo-metadata guard before the import runs', async () => {
+  const seenDuringImport: unknown[] = [];
+  const importSdk = vi.fn(async () => {
+    seenDuringImport.push(seoGuard());
+    return { default: fakeConstructor() };
+  });
+
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(seenDuringImport).toEqual([true]);
+});
+
+test('writes nothing to the seo-metadata guard when suppression is off', async () => {
+  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+
+  await loadVimeoSdk(importSdk);
+  expect(seoGuard()).toBe('unset');
+
+  resetVimeoSdkLoader();
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: false });
+  expect(seoGuard()).toBe('unset');
+});
+
+test('leaves a seo-metadata guard the page already set, in either direction', async () => {
+  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+
+  window.VimeoSeoMetadataAppended = false;
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+  expect(seoGuard()).toBe(false);
+
+  resetVimeoSdkLoader();
+  window.VimeoSeoMetadataAppended = true;
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+  expect(seoGuard()).toBe(true);
 });
 
 test('resetVimeoSdkLoader clears the cached SDK', async () => {
