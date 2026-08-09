@@ -674,6 +674,149 @@ describe('SeekSlider', () => {
     const slider = screen.getByRole('slider', { name: 'Seek' });
     expect(attr(slider, 'aria-describedby')).toBe('house-rules');
   });
+
+  type SeekSpy = ReturnType<typeof createMockAdapter>['spies']['seekTo'];
+
+  // Stands in for a provider that has not answered yet: the next seek command
+  // hangs until the returned function settles it. The iframe providers this
+  // issue is about seek over an asynchronous cross-document bridge, so an
+  // unanswered command is the normal case there, not an edge one.
+  const holdNextSeek = (seekTo: SeekSpy): (() => void) => {
+    let settle = (): void => {};
+    seekTo.mockImplementationOnce(
+      () =>
+        new Promise<CommandResult>((resolve) => {
+          settle = () => resolve({ ok: true });
+        })
+    );
+    return () => settle();
+  };
+
+  const valueOf = (slider: Element): string =>
+    (slider as HTMLInputElement).value;
+
+  test('coalesces a drag into fewer seek commands than change events', async () => {
+    const { spies } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    const settle = holdNextSeek(spies.seekTo);
+
+    for (const position of ['40', '50', '60', '70', '75']) {
+      fireEvent.change(slider, { target: { value: position } });
+    }
+    // The first command is still in flight, so the four positions behind it
+    // superseded one another instead of queuing up as four more round trips.
+    expect(spies.seekTo).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settle();
+    });
+    expect(spies.seekTo.mock.calls.length).toBeLessThan(5);
+    expect(spies.seekTo).toHaveBeenLastCalledWith(75);
+  });
+
+  test('shows the dragged position while the provider has not echoed it', () => {
+    const { spies } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    holdNextSeek(spies.seekTo);
+
+    fireEvent.change(slider, { target: { value: '75' } });
+
+    // Media time is still 30: nothing has reported the seek. The control must
+    // show where the user is, not where the media was before the drag.
+    expect(valueOf(slider)).toBe('75');
+    expect(attr(slider, 'aria-valuetext')).toBe('1:15 of 1:40');
+  });
+
+  test('follows media time again once the provider reports the seeked time', async () => {
+    const { emit } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+
+    fireEvent.change(slider, { target: { value: '75' } });
+    await act(async () => {});
+    emit({ currentTime: 75 });
+    expect(valueOf(slider)).toBe('75');
+
+    // Player state owns the thumb again: a preview still held here would pin
+    // it at 75 while playback ran on.
+    emit({ currentTime: 76 });
+    expect(valueOf(slider)).toBe('76');
+    expect(attr(slider, 'aria-valuetext')).toBe('1:16 of 1:40');
+  });
+
+  test('reconciles to media time when the seek fails', async () => {
+    const { spies } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    spies.seekTo.mockResolvedValue({ ok: false, reason: 'provider-error' });
+
+    fireEvent.change(slider, { target: { value: '75' } });
+    expect(valueOf(slider)).toBe('75');
+
+    // No reported time is coming, so there is nothing to wait for.
+    await act(async () => {});
+    expect(valueOf(slider)).toBe('30');
+    expect(attr(slider, 'aria-valuetext')).toBe('0:30 of 1:40');
+  });
+
+  test('reconciles on a deadline when the provider never reports the seek', async () => {
+    const { spies } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    spies.seekTo.mockResolvedValue({ ok: true });
+
+    vi.useFakeTimers();
+    fireEvent.change(slider, { target: { value: '75' } });
+    await act(async () => {});
+    expect(valueOf(slider)).toBe('75');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(valueOf(slider)).toBe('75');
+
+    // A provider that accepted the command and then reported nothing must not
+    // strand the thumb on a position the media never reached.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(valueOf(slider)).toBe('30');
+
+    vi.useRealTimers();
+  });
+
+  test('issues exactly one immediate seek for a single arrow-key press', () => {
+    const { spies } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    holdNextSeek(spies.seekTo);
+
+    // A native range control raises one change event for an arrow press and no
+    // release event of any kind. happy-dom does not step the value itself, so
+    // the step the browser would apply is applied here.
+    (slider as HTMLInputElement).focus();
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    fireEvent.change(slider, { target: { value: '31' } });
+    fireEvent.keyUp(slider, { key: 'ArrowRight' });
+
+    expect(spies.seekTo).toHaveBeenCalledTimes(1);
+    expect(spies.seekTo).toHaveBeenCalledWith(31);
+    expect(valueOf(slider)).toBe('31');
+    expect(attr(slider, 'aria-valuetext')).toBe('0:31 of 1:40');
+  });
+
+  test('clamps a held preview into a live window that has slid past it', () => {
+    const { emit, spies } = renderWithPlayer(
+      <Player.SeekSlider />,
+      liveWindow()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    holdNextSeek(spies.seekTo);
+
+    fireEvent.change(slider, { target: { value: '25' } });
+    expect(attr(slider, 'aria-valuetext')).toBe('0:25');
+
+    // The DVR window moved on before the seek was answered. 0:25 is no longer
+    // a position the media has.
+    emit({ seekable: [{ start: 40, end: 100 }] });
+    expect(attr(slider, 'aria-valuetext')).toBe('0:40');
+  });
 });
 
 describe('Time', () => {

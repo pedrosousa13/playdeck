@@ -1,11 +1,17 @@
-import type { TimeRange } from '@reely/core';
+import type { PlayerProvider, TimeRange } from '@reely/core';
 import {
   controlTargetStyle,
   useLoadingPresentation,
   visuallyHiddenStyle
 } from './loading-error.js';
 import { usePlayer, usePlayerState } from './player-context.js';
-import { useId, type ComponentPropsWithRef } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ComponentPropsWithRef
+} from 'react';
 
 const formatTime = (totalSeconds: number): string => {
   const clamped = Math.max(0, Math.floor(totalSeconds));
@@ -200,6 +206,108 @@ const bufferedShare = (
   return Math.min(99, Math.max(1, Math.round((covered / span) * 100)));
 };
 
+// A seek can land on the nearest keyframe rather than the exact time asked
+// for, and the iframe providers report time back quantised over an
+// asynchronous bridge, so a reported time this close to the previewed one
+// counts as the provider having answered. It stays under the control's default
+// one-second step deliberately: a wider tolerance would read the time from
+// *before* a single arrow press as an answer to it and snap the thumb back
+// before the media had moved at all. A seek that lands further out than this
+// is released by the deadline below instead.
+const SEEK_ECHO_TOLERANCE_SECONDS = 0.5;
+
+// What defends against a provider that accepts a seek and then reports
+// nothing: a silently dropped seek across an iframe bridge would otherwise
+// leave the thumb on a position the media never reached for the rest of the
+// session. Measured from the moment the last command settles, so a slow
+// round trip spends none of it — long enough that a provider merely slow to
+// publish time still wins the race, short enough that a stranded thumb
+// corrects itself while the user is still looking at it.
+const SEEK_PREVIEW_DEADLINE_MS = 2000;
+
+// The position the user last asked for, held until the media answers for it.
+// Every change takes this path: a pointer drag is a burst of change events and
+// an arrow press is a single one, and the two are not distinguished, so a
+// keyboard seek previews exactly as a drag does and nothing here depends on a
+// release event. Commands are coalesced by trailing-edge supersession — one in
+// flight at a time, and a change arriving during one overwrites the pending
+// value rather than queuing behind it — so a drag through N positions costs
+// far fewer than N round trips and still ends on the drag's last position.
+const useSeekPreview = (
+  hasWindow: boolean,
+  currentTime: number,
+  provider: PlayerProvider | null
+): {
+  readonly preview: number | null;
+  readonly seek: (time: number) => void;
+} => {
+  const { controller } = usePlayer();
+  // The provider is carried with the position: one asked of a provider that
+  // has since been replaced is not a position anything can answer for.
+  const [preview, setPreview] = useState<{
+    readonly value: number;
+    readonly provider: PlayerProvider | null;
+  } | null>(null);
+  const [settling, setSettling] = useState(false);
+  const inFlight = useRef(false);
+  const pending = useRef<number | null>(null);
+
+  const seek = (time: number): void => {
+    setPreview({ value: time, provider });
+    if (inFlight.current) {
+      pending.current = time;
+      return;
+    }
+    inFlight.current = true;
+    setSettling(true);
+    void (async () => {
+      let next: number | null = time;
+      let ok = true;
+      while (next !== null) {
+        // `seekTo` never rejects: the controller catches a throwing adapter
+        // into an `ok: false` result, so settling is a plain await.
+        ok = (await controller.seekTo(next)).ok;
+        next = pending.current;
+        pending.current = null;
+      }
+      inFlight.current = false;
+      setSettling(false);
+      // A failed seek has no reported time coming, so it reconciles at once.
+      if (!ok) setPreview(null);
+    })();
+  };
+
+  // Reconciliation reads the reported time and never `PlayerState.seeking`:
+  // only the native and Vimeo adapters ever publish that flag, and the
+  // providers whose lag this preview exists for are exactly the ones that
+  // never do. The chain is held first — a time reported while more positions
+  // are still outstanding answers an earlier one, not the latest.
+  const release =
+    preview !== null &&
+    (preview.provider !== provider ||
+      // The window can slide past a held preview, or vanish under it (DVR).
+      !hasWindow ||
+      (!settling &&
+        Math.abs(currentTime - preview.value) <= SEEK_ECHO_TOLERANCE_SECONDS));
+  // Adjusted during render, the way React documents state that has to follow
+  // its inputs: conditional and convergent. It clears rather than merely stops
+  // being read, because a playhead running on past an answered preview would
+  // otherwise fall outside the tolerance again and re-hold it.
+  if (release) setPreview(null);
+  const held = release ? null : (preview?.value ?? null);
+
+  // Armed once the command chain drains, and deliberately not re-armed by a
+  // moving `currentTime`: playback reports several times a second, which would
+  // push the deadline out forever.
+  useEffect(() => {
+    if (preview === null || settling) return;
+    const timer = setTimeout(() => setPreview(null), SEEK_PREVIEW_DEADLINE_MS);
+    return () => clearTimeout(timer);
+  }, [preview, settling]);
+
+  return { preview: held, seek };
+};
+
 export const SeekSlider = ({
   children,
   inputProps,
@@ -215,16 +323,24 @@ export const SeekSlider = ({
       seekable: state.seekable,
       status: state.capabilities.seek.status
     }));
-  const { controller } = usePlayer();
   const stalled = useLoadingPresentation() === 'buffering';
   const descriptionId = useId();
+  const window = seekWindow(duration, seekable);
+  const { preview, seek } = useSeekPreview(
+    window !== null,
+    currentTime,
+    provider
+  );
   if (status !== 'available') return null;
   const hasDuration = typeof duration === 'number' && duration > 0;
-  const window = seekWindow(duration, seekable);
   const min = window ? window.start : 0;
   const max = window ? window.end : 0;
   const span = max - min;
-  const value = window ? Math.min(Math.max(currentTime, min), max) : 0;
+  // A held preview is clamped like media time is: the window it was asked
+  // against can have moved on before the seek was answered.
+  const value = window
+    ? Math.min(Math.max(preview ?? currentTime, min), max)
+    : 0;
   // The geometry below is `aria-hidden`, so this description is the extent's
   // only route to assistive technology (#189) — read on demand, never a live
   // region, because `buffered` moves many times a second.
@@ -279,7 +395,7 @@ export const SeekSlider = ({
         min={min}
         onChange={(event) => {
           const next = Number(event.currentTarget.value);
-          if (window && Number.isFinite(next)) void controller.seekTo(next);
+          if (window && Number.isFinite(next)) seek(next);
           inputProps?.onChange?.(event);
         }}
         style={{ width: '100%', minHeight: 44, ...inputProps?.style }}
