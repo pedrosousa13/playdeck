@@ -297,6 +297,29 @@ test('forwards the vimeo provider option bag to createVimeoProvider', async () =
   });
 });
 
+// #215: the option is only worth having if `Player.Root` can reach it, and the
+// bag omits `controls`, `loop`, `startTime` and `endTime` alone — so this
+// carries through with no plumbing of its own. Asserted rather than assumed.
+test('forwards suppressSeoMetadata to createVimeoProvider', async () => {
+  render(
+    <Player.Root
+      loading="eager"
+      providerOptions={{ vimeo: { suppressSeoMetadata: true } }}
+      source={{ type: 'vimeo', videoId: '76979871' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
+  expect(options).toEqual({ controls: undefined, suppressSeoMetadata: true });
+});
+
 // SIDEPRO's regression, mirrored from `youtube.test.tsx`: `providerOptionsEqual`
 // in `use-activation.ts` must compare the `vimeo` bag by value, or a changed
 // bag looks unchanged and the embed never re-attaches to pick it up. This is
