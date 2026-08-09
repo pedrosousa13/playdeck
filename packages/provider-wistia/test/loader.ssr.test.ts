@@ -3,11 +3,11 @@
 import { expect, test, vi } from 'vitest';
 import { loadWistiaPlayer } from '../src/loader';
 
-test('rejects without importing the SDK when no browser document exists', async () => {
-  const importSdk = vi.fn();
+test('rejects without injecting a script when no browser document exists', async () => {
+  const injectScript = vi.fn();
 
-  await expect(loadWistiaPlayer(importSdk)).rejects.toThrow(
+  await expect(loadWistiaPlayer(injectScript)).rejects.toThrow(
     'The Wistia player requires a browser document.'
   );
-  expect(importSdk).not.toHaveBeenCalled();
+  expect(injectScript).not.toHaveBeenCalled();
 });

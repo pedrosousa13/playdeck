@@ -14,20 +14,24 @@ import { createWistiaPresentation } from './presentation.js';
 
 export type { WistiaMountElement } from './adapter-values.js';
 export { API_READY_TIMEOUT_MS } from './attachment.js';
-export { loadWistiaPlayer, resetWistiaPlayerLoader } from './loader.js';
+export {
+  loadWistiaPlayer,
+  resetWistiaPlayerLoader,
+  SCRIPT_LOAD_TIMEOUT_MS
+} from './loader.js';
 // Every type the loader declares, with no gap: `dist/index.d.ts` is the only
 // surface `package.json`'s `exports` map offers, so a type left out of this
 // block is a type no consumer can import however the README describes it.
 // `test/exports.contract.test.ts` is what keeps the two in step.
 export type {
-  PublicApi,
   WistiaApiReadyDetail,
   WistiaLoadedMediaDataDetail,
   WistiaMuteChangeDetail,
   WistiaPlayerApi,
   WistiaPlayerAttribute,
   WistiaPlayerElement,
-  WistiaPlayerState
+  WistiaPlayerState,
+  WistiaScriptInjector
 } from './loader.js';
 
 export type WistiaProviderOptions = {
