@@ -5,6 +5,7 @@ import type {
 } from '@wistia/wistia-player/dist/types/types/player-api-types.js';
 import type {
   API_READY_EVENT_TYPE,
+  LOADED_MEDIA_DATA_EVENT_TYPE,
   MUTE_CHANGE_EVENT_TYPE
 } from '@wistia/wistia-player/dist/types/types/events.js';
 
@@ -19,11 +20,16 @@ import type {
 // package does not wire into its public API ahead of the issue that wires it.
 export type { PublicApi };
 
-// The payloads of the two declared events this adapter reads. Naming the
+// The payloads of the three declared events this adapter reads. Naming the
 // detail separately is what lets a handler cite Wistia's own field names
 // instead of matching a string nobody checks.
 export type WistiaApiReadyDetail = API_READY_EVENT_TYPE['detail'];
 export type WistiaMuteChangeDetail = MUTE_CHANGE_EVENT_TYPE['detail'];
+// Carries the media data the element fetched, which is where Wistia answers
+// whether the media is a live stream. `MediaData` itself is reached through
+// this rather than imported again, so the event stays the one source.
+export type WistiaLoadedMediaDataDetail =
+  LOADED_MEDIA_DATA_EVENT_TYPE['detail'];
 
 export const WISTIA_PLAYER_TAG = 'wistia-player';
 

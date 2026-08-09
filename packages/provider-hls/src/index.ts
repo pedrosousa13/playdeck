@@ -6,15 +6,14 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStateListener,
-  ProviderStatePatch,
-  TimeRange
+  ProviderStatePatch
 } from '@reely/core';
+import { deriveLiveState, liveStateEqual } from '@reely/core';
 import {
   createNativeProvider,
   type NativePlaybackOptions
 } from '@reely/provider-native';
 import {
-  liveStateEqual,
   readMediaRanges,
   unsupportedSelection,
   type HlsEngineSelection,
@@ -46,55 +45,18 @@ export type HlsProviderOptions = NativePlaybackOptions & {
   readonly loadHls?: HlsModuleLoader;
 };
 
-export type LiveDerivationInput = {
-  // Authoritative liveness when defined (hls.js level details). Left undefined
-  // on the native engine, where liveness is inferred from duration instead.
-  readonly isLiveHint?: boolean;
-  // Raw media element duration: Infinity or NaN for an ordinary live stream.
-  readonly duration: number;
-  readonly seekable: ReadonlyArray<TimeRange>;
-  readonly currentTime: number;
-  // hls.js liveSyncPosition when known; the target live edge behind the raw
-  // seekable end. Falls back to the seekable end when undefined.
-  readonly liveEdge?: number;
-  readonly atEdgeThreshold: number;
-};
-
-// Derives normalized live status from stream data alone. Liveness comes from
-// the hls.js live flag when present, otherwise from an infinite duration —
-// never from the source URL. Edge state is measured against a moving window,
-// clamped so a current time at or beyond the edge never reads as behind and no
-// arithmetic escapes as NaN or a negative distance.
-export const deriveLiveState = (
-  input: LiveDerivationInput
-): PlayerLiveState => {
-  const isLive =
-    input.isLiveHint ?? input.duration === Number.POSITIVE_INFINITY;
-  if (!isLive) return null;
-  const seekableEnd = input.seekable.reduce(
-    (end, range) => Math.max(end, range.end),
-    Number.NEGATIVE_INFINITY
-  );
-  const edge = Number.isFinite(input.liveEdge)
-    ? (input.liveEdge as number)
-    : seekableEnd;
-  if (!Number.isFinite(edge) || !Number.isFinite(input.currentTime)) {
-    return Object.freeze({ isLive: true, atLiveEdge: true });
-  }
-  const distance = Math.max(0, edge - input.currentTime);
-  return Object.freeze({
-    isLive: true,
-    atLiveEdge: distance <= input.atEdgeThreshold
-  });
-};
+// The liveness derivation lives in `@reely/core`, so every adapter shares one
+// copy. Re-exported here because it is part of this package's documented
+// surface: a custom HLS adapter reaches for it from the package it is
+// extending.
+export { deriveLiveState };
+export type { LiveDerivationInput } from '@reely/core';
 
 const NATIVE_HLS_MIME = 'application/vnd.apple.mpegurl';
 const MSE_TEST_CODEC = 'video/mp4; codecs="avc1.42E01E,mp4a.40.2"';
-// Ordinary-live tolerances. At-edge is a coarse "close to the live edge"
-// window, not the tight target of DVR/LL-HLS tuning (out of MVP scope). A
-// seekable span below the minimum is treated as pure live edge with no
-// meaningful window to scrub.
-const LIVE_EDGE_THRESHOLD_SECONDS = 10;
+// A seekable span below this minimum is treated as pure live edge with no
+// meaningful window to scrub. This is HLS's own seek-window rule, not the
+// shared at-edge tolerance, which `deriveLiveState` owns.
 const LIVE_MIN_SEEK_WINDOW_SECONDS = 2;
 
 type MediaSourceLike = { isTypeSupported?: (type: string) => boolean };
@@ -171,6 +133,17 @@ const withoutCaptionState = (patch: ProviderStatePatch): ProviderStatePatch => {
   return rest;
 };
 
+// The native adapter derives liveness too, from the raw element duration and
+// the seekable window alone. This adapter's own derivation adds the hls.js live
+// flag and `liveSyncPosition`, so it is the authority on both engines — and
+// `syncLive` merges its value only when *its* value changed, which would let an
+// unchanged native answer through underneath. Dropped before the merge.
+const withoutLiveState = (patch: ProviderStatePatch): ProviderStatePatch => {
+  const rest = { ...patch };
+  delete rest.live;
+  return rest;
+};
+
 export const createHlsProvider = (
   media: HTMLVideoElement,
   source: HlsSource,
@@ -243,8 +216,7 @@ export const createHlsProvider = (
       liveEdge:
         engine === 'hls.js'
           ? (attachment.getInstance()?.liveSyncPosition ?? undefined)
-          : undefined,
-      atEdgeThreshold: LIVE_EDGE_THRESHOLD_SECONDS
+          : undefined
     });
 
   const seekWindowMeaningful = (live: PlayerLiveState): boolean => {
@@ -310,10 +282,13 @@ export const createHlsProvider = (
       return;
     }
     if (patch.capabilities) lastCapabilities = patch.capabilities;
-    emit(
-      syncLive(engine === 'hls.js' ? withoutCaptionState(patch) : patch),
-      event
+    const merged = syncLive(
+      withoutLiveState(engine === 'hls.js' ? withoutCaptionState(patch) : patch)
     );
+    // A native patch whose only field was stripped leaves nothing to say —
+    // unless it carried an event, which is state-independent.
+    if (event === undefined && Object.keys(merged).length === 0) return;
+    emit(merged, event);
   });
 
   const surfaceFatal = (error: PlayerError): void => {

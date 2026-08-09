@@ -1,12 +1,17 @@
 import {
   createTimeBoundary,
+  deriveLiveState,
+  liveStateEqual,
   type CommandResult,
   type MediaDimensions,
   type PlayerCapabilities,
   type PlayerError,
+  type PlayerLiveState,
+  type ProviderStatePatch,
   type WistiaSource
 } from '@reely/core';
 import {
+  asRecord,
   errorString,
   providerEvent,
   type EmitProviderState,
@@ -18,6 +23,7 @@ import {
   loadWistiaPlayer,
   readApiHandle,
   WISTIA_PLAYER_TAG,
+  type WistiaLoadedMediaDataDetail,
   type WistiaPlayerApi,
   type WistiaPlayerAttribute,
   type WistiaPlayerElement
@@ -47,6 +53,23 @@ const loadFailure = (cause: unknown): PlayerError => ({
 // giving up. This is a "that is never coming" backstop, not a performance
 // budget, and cutting it short would report a slow connection as a failure.
 export const API_READY_TIMEOUT_MS = 15_000;
+
+// How often the at-edge half of `live` is recomputed while the media is paused.
+// Deliberately not an event: `time-update` is the only report that carries the
+// playhead, and Wistia stops dispatching it the moment the player pauses, so a
+// paused live stream would hold the last flag it published while the live edge
+// went on advancing — a control bar reading "at the live edge" for a viewer
+// minutes behind. There is no idle event to bind instead. Every playback name
+// this adapter binds is dispatched by the engine Wistia's element fetches from
+// its CDN, none of them fires while paused, and the eight events the shipped
+// package does declare (`dist/types/types/events.d.ts`) are load, replace and
+// embed-option notices with no counterpart to the native `progress`.
+//
+// Five seconds, which is half the shared at-edge tolerance in
+// `@reely/core`'s `deriveLiveState`: the published flag is then never more than
+// half a window out of date, and a paused player costs twelve wake-ups a minute
+// doing nothing but arithmetic on two numbers it already has.
+export const LIVE_EDGE_POLL_MS = 5_000;
 
 // Rejects if `settled` has not answered within the deadline. The timer is
 // cleared the moment it does, so a normal attach leaves nothing pending.
@@ -108,6 +131,32 @@ const isHttpsUrl = (value: string): boolean => {
   } catch {
     return false;
   }
+};
+
+// The event the element dispatches once its media data is back, named
+// `LOADED_MEDIA_DATA_EVENT` in the SDK's `utilities/eventConstants`. Restated
+// as a string for the same reason `API_READY_EVENT` in `loader.ts` is: that
+// module ships no runtime entry point this package can import.
+const LOADED_MEDIA_DATA_EVENT = 'loaded-media-data';
+
+type WistiaMediaData = WistiaLoadedMediaDataDetail['mediaData'];
+
+// Wistia's only liveness signal. `MediaData.mediaType` is optional and has four
+// members, of which `'LiveStream'` is the live one; anything else — `Audio`,
+// `Video`, `ab-test`, a payload naming no type at all, or a load that never
+// reports media data — is not live. The source URL, the media id and the
+// filename are never consulted: a name is a guess, and a guess published as
+// state is a control that lies.
+//
+// `MediaData.liveStreamEventDetails` is deliberately not read. It carries the
+// broadcast's schedule — `scheduledFor`, `startedAt`, a manifest URL — and
+// nothing about where the playhead sits, so it cannot answer the at-edge half.
+const isLiveMediaData = (detail: unknown): boolean => {
+  const mediaData =
+    asRecord(detail)['mediaData' satisfies keyof WistiaLoadedMediaDataDetail];
+  const mediaType =
+    asRecord(mediaData)['mediaType' satisfies keyof WistiaMediaData];
+  return mediaType === ('LiveStream' satisfies WistiaMediaData['mediaType']);
 };
 
 // The embed options this adapter expresses, read when the element is built
@@ -198,6 +247,14 @@ export const createWistiaAttachment = (
   let activeHandle: Promise<WistiaPlayerApi | undefined> | undefined;
   let releaseHandle: (() => void) | undefined;
   let unbindEvents: (() => void) | undefined;
+  // Wistia's answer to whether this media is a live stream, and the last live
+  // state published from it. Both are per-source and reset in `teardown`, so
+  // the value one player left behind cannot suppress its replacement's first
+  // report.
+  let liveMedia = false;
+  let liveState: PlayerLiveState = null;
+  // The paused recompute below, while it is armed.
+  let liveTimer: ReturnType<typeof setInterval> | undefined;
 
   // Anything that is not two finite positive numbers publishes as "not known".
   // A missing figure defaults to 0 so it fails the same `> 0` test the SDK's
@@ -219,6 +276,46 @@ export const createWistiaAttachment = (
     emitDimensions();
   };
 
+  // Recomputes liveness and answers the patch fragment carrying it, or an empty
+  // one when the value is the one already published. Recomputed rather than
+  // fixed at load: the at-edge half moves with the playhead. Wistia exposes no
+  // seekable window, so the seekable set is empty and the duration carries the
+  // live edge; a duration that does not read as a finite number leaves the edge
+  // unknown rather than feeding NaN through, which `deriveLiveState` reports as
+  // at the edge. `atEdgeThreshold` is omitted so the shared tolerance applies.
+  const liveFragment = (api: WistiaPlayerApi): ProviderStatePatch => {
+    const duration = api.duration();
+    const next = deriveLiveState({
+      isLiveHint: liveMedia,
+      duration,
+      seekable: [],
+      currentTime: api.time(),
+      ...(Number.isFinite(duration) ? { liveEdge: duration } : {})
+    });
+    if (liveStateEqual(next, liveState)) return {};
+    liveState = next;
+    return { live: next };
+  };
+
+  const stopLiveEdgePoll = (): void => {
+    if (liveTimer === undefined) return;
+    clearInterval(liveTimer);
+    liveTimer = undefined;
+  };
+
+  // Armed only where it can change something: the media has to be live, which
+  // `liveState` answers — it is null until `liveFragment` has said otherwise,
+  // and for a VOD it stays null — and paused, because `time-update` already
+  // recomputes a playing one. `liveFragment`'s own equality guard is what keeps
+  // a tick that finds the same value silent.
+  const startLiveEdgePoll = (api: WistiaPlayerApi): void => {
+    if (liveTimer !== undefined || liveState === null) return;
+    liveTimer = setInterval(() => {
+      const live = liveFragment(api);
+      if ('live' in live) emit(live);
+    }, LIVE_EDGE_POLL_MS);
+  };
+
   const isStale = (
     thisGeneration: number,
     element?: WistiaPlayerElement
@@ -227,7 +324,7 @@ export const createWistiaAttachment = (
     thisGeneration !== generation ||
     (element !== undefined && element !== activeElement);
 
-  const buildElement = (): WistiaPlayerElement => {
+  const buildElement = (thisGeneration: number): WistiaPlayerElement => {
     const element = mount.ownerDocument.createElement(
       WISTIA_PLAYER_TAG
     ) as WistiaPlayerElement;
@@ -286,8 +383,22 @@ export const createWistiaAttachment = (
     });
     const onApiReady = (): void => settle(readApiHandle(element));
     element.addEventListener(API_READY_EVENT, onApiReady, { once: true });
+
+    // Armed here rather than in `wireEvents` for the same reason: the element
+    // dispatches its media data inside the fetch that precedes the embed init
+    // (`WistiaPlayer.tsx:2628`, then `:2643`, whose `api-ready` lands at
+    // `:2946`), so by the time the handle exists the only dispatch has already
+    // happened. It carries the same staleness guard the wired events get, so a
+    // superseded player's parting media data cannot flip the live flag.
+    const onLoadedMediaData = (event: Event): void => {
+      if (isStale(thisGeneration, element)) return;
+      liveMedia = isLiveMediaData((event as CustomEvent<unknown>).detail);
+    };
+    element.addEventListener(LOADED_MEDIA_DATA_EVENT, onLoadedMediaData);
+
     releaseHandle = () => {
       element.removeEventListener(API_READY_EVENT, onApiReady);
+      element.removeEventListener(LOADED_MEDIA_DATA_EVENT, onLoadedMediaData);
       // Settles rather than rejects, so a load interrupted by destroy unwinds
       // through the same stale check as every other superseded start.
       settle(undefined);
@@ -299,6 +410,11 @@ export const createWistiaAttachment = (
   };
 
   const teardown = (): void => {
+    // First, and unconditionally: this is the one thing here that would go on
+    // running by itself, and it holds the handle the lines below are about to
+    // discard. Both callers have already moved the generation on, so a tick
+    // that had already been scheduled would publish for a player on its way out.
+    stopLiveEdgePoll();
     const element = activeElement;
     const api = activeApi;
     const release = releaseHandle;
@@ -312,6 +428,10 @@ export const createWistiaAttachment = (
     activeApi = undefined;
     releaseHandle = undefined;
     unbindEvents = undefined;
+    // Liveness describes the media this player was showing, so it goes with it.
+    // Holding it would suppress the replacement's first report.
+    liveMedia = false;
+    liveState = null;
     release?.();
     // A replacement may take a while to answer, or never answer, and until it
     // does a leftover ratio describes a video that is no longer there.
@@ -343,10 +463,27 @@ export const createWistiaAttachment = (
     };
 
     const { handlers } = playback;
-    on('play', handlers.onPlay);
-    on('pause', handlers.onPause);
+    // The paused recompute is handed over to `time-update` and taken back from
+    // it here, so exactly one of the two is measuring the edge at any moment.
+    on('play', (detail) => {
+      stopLiveEdgePoll();
+      handlers.onPlay(detail);
+    });
+    on('pause', (detail) => {
+      handlers.onPause(detail);
+      startLiveEdgePoll(api);
+    });
     on('ended', (detail) => handlers.onEnded(api, detail));
-    on('time-update', () => handlers.onTimeUpdate(api));
+    // The at-edge half of `live` is measured against the playhead, so it is
+    // recomputed on every time report rather than fixed at load. The reading is
+    // taken before the boundary handler runs: that handler can seek the player
+    // back inside the `[startTime, endTime]` window, and the distance to the
+    // live edge belongs to what Wistia reported, not to the correction.
+    on('time-update', () => {
+      const live = liveFragment(api);
+      handlers.onTimeUpdate(api);
+      if ('live' in live) emit(live);
+    });
     // `seeking` is deliberately not bound, though the element does fire it.
     // Measured against the live player (`e2e/wistia-smoke.spec.ts`): one
     // unpaired `seeking` arrives during the initial load, and every seek after
@@ -370,7 +507,7 @@ export const createWistiaAttachment = (
 
   const start = async (thisGeneration: number): Promise<CommandResult> => {
     try {
-      const element = buildElement();
+      const element = buildElement(thisGeneration);
       const handle = activeHandle;
       await loadWistiaPlayer();
       // Teardown settles the handshake with nothing rather than leaving it
@@ -412,10 +549,19 @@ export const createWistiaAttachment = (
           // command lands rather than being dropped (#69).
           commandsReady: true,
           ...playbackPatch,
+          // Folded into the ready patch rather than published after it: the
+          // media data that answers it arrived before the handshake, so the
+          // host learns liveness at the same moment as everything else.
+          ...liveFragment(api),
           capabilities: getCapabilities()
         },
         providerEvent('ready', undefined)
       );
+      // After the patch, so the fragment above is what seeds the value the
+      // interval compares against. A player is paused at ready — `beforeplay`
+      // for a media that has never run — and one that autoplays hands straight
+      // back to `time-update` on its `play`.
+      startLiveEdgePoll(api);
       return { ok: true };
     } catch (cause) {
       if (isStale(thisGeneration)) return { ok: true };

@@ -9,6 +9,11 @@ export const WISTIA_EVENTS = {
   cancelFullscreen: 'cancel-fullscreen',
   ended: 'ended',
   enterFullscreen: 'enter-fullscreen',
+  // Absent from that e2e spec, and it does not need to be there: unlike the
+  // names the runtime engine dispatches, this one is built by the shipped
+  // bundle itself (`WistiaPlayer.tsx:2628`, out of the media data it has just
+  // fetched), so the literal is readable from the installed package.
+  loadedMediaData: 'loaded-media-data',
   loadedMetadata: 'loaded-metadata',
   muteChange: 'mute-change',
   pause: 'pause',
@@ -37,6 +42,11 @@ export type FakePlayerOptions = {
   // Which of the three handle properties the element exposes. 0.7.12 uses
   // `deprecatedApiDoNotUse`; the other two exist so the read order is proven.
   readonly apiProperty?: 'api' | 'wistiaApi' | 'deprecatedApiDoNotUse';
+  // The `mediaData` the element carries on its `loaded-media-data` event.
+  // Typed loosely on purpose: the adapter has to survive a payload with no
+  // `mediaType`, which Wistia's own declaration allows, and a media data it
+  // never receives at all — which is what leaving this undefined models.
+  readonly mediaData?: unknown;
   // Holds `api-ready` back so a test can decide when the handle appears.
   readonly deferApiReady?: boolean;
   readonly play?: () => unknown;
@@ -53,6 +63,12 @@ export type FakePlayerOptions = {
 export class FakeWistiaApi implements WistiaPlayerApi {
   removed = false;
   currentTime = 0;
+  // Mutable for the same reason `currentTime` is. On a live stream `duration()`
+  // is where Wistia reports the live edge, and the edge advances on its own —
+  // including while the player is paused, which is the whole of what the paused
+  // recompute is measured against. Seeded from `duration` so a test that only
+  // wants a fixed figure still passes one option.
+  durationSeconds: number;
   #options: FakePlayerOptions;
   #muted: boolean;
   #volume: number;
@@ -61,6 +77,7 @@ export class FakeWistiaApi implements WistiaPlayerApi {
 
   constructor(options: FakePlayerOptions) {
     this.#options = options;
+    this.durationSeconds = options.duration ?? 60;
     this.#muted = options.muted ?? false;
     this.#volume = options.volume ?? 1;
     this.#playbackRate = options.playbackRate ?? 1;
@@ -113,7 +130,7 @@ export class FakeWistiaApi implements WistiaPlayerApi {
   );
 
   duration: Mock<WistiaPlayerApi['duration']> = vi.fn(
-    () => this.#options.duration ?? 60
+    () => this.durationSeconds
   );
 
   state: Mock<WistiaPlayerApi['state']> = vi.fn(() => this.#state);
@@ -167,8 +184,25 @@ export class FakeWistiaPlayerElement extends HTMLElement {
     // The real element reaches `api-ready` only after it has fetched its media
     // data, so it is never synchronous with the append.
     queueMicrotask(() => {
-      if (this.isConnected) this.becomeApiReady();
+      if (!this.isConnected) return;
+      // Strictly before `api-ready`, which is the order the real element keeps:
+      // `WistiaPlayer.tsx:2628` dispatches the media data inside the fetch's
+      // own `then`, and only the `#initPlayerEmbed` two statements later
+      // eventually reaches the `api-ready` at `:2946`. A fixture that dispatched
+      // the two the other way round would let a listener bound after the
+      // handshake look correct here and receive nothing on a live player.
+      this.emitLoadedMediaData();
+      this.becomeApiReady();
     });
+  }
+
+  // No-op when the test configured no media data, which models the load that
+  // never answers with any — a media-data error, or the legacy-iframe fallback
+  // the element takes without dispatching.
+  emitLoadedMediaData(): void {
+    const { mediaData } = this.options;
+    if (mediaData === undefined) return;
+    this.emit(WISTIA_EVENTS.loadedMediaData, { mediaData });
   }
 
   becomeApiReady(): void {

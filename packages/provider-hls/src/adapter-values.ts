@@ -1,7 +1,6 @@
 import type {
   HlsEngine,
   PlayerError,
-  PlayerLiveState,
   ProviderEvent,
   ProviderStatePatch,
   TimeRange
@@ -108,16 +107,6 @@ export const readMediaRanges = (
     start: ranges.start(index),
     end: ranges.end(index)
   }));
-
-export const liveStateEqual = (
-  a: PlayerLiveState,
-  b: PlayerLiveState
-): boolean =>
-  a === b ||
-  (a !== null &&
-    b !== null &&
-    a.isLive === b.isLive &&
-    a.atLiveEdge === b.atLiveEdge);
 
 export const unsupportedSelection = (message: string): HlsEngineSelection => ({
   engine: null,

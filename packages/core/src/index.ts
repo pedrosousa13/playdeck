@@ -44,6 +44,10 @@ export type {
   YouTubeSource
 } from './types.js';
 
+export { deriveLiveState, liveStateEqual } from './live-state.js';
+
+export type { LiveDerivationInput } from './live-state.js';
+
 export { detectSource } from './source-detection.js';
 
 export { textTrackLabel } from './text-tracks.js';

@@ -1,4 +1,10 @@
-import type { MediaDimensions, PlayerCapabilities } from '@reely/core';
+import type {
+  MediaDimensions,
+  PlayerCapabilities,
+  PlayerLiveState,
+  ProviderStatePatch
+} from '@reely/core';
+import { deriveLiveState, liveStateEqual } from '@reely/core';
 import {
   HAVE_METADATA,
   providerEvent,
@@ -59,6 +65,7 @@ export const createNativeAttachment = (
   let attached = false;
   let destroyed = false;
   let loaded = false;
+  let liveState: PlayerLiveState = null;
 
   // Before metadata arrives, and on an audio-only or errored source, both
   // dimensions read 0 — and some DOM test environments omit them entirely.
@@ -76,9 +83,39 @@ export const createNativeAttachment = (
     dimensionListeners.forEach((listener) => listener(dimensions));
   };
 
+  // Liveness from the element's own signals only: the *raw* duration, which is
+  // endless on a live stream (the published duration normalizes that away, so
+  // it cannot be the input), plus the moving seekable window and the playhead.
+  // No `isLiveHint` and no `liveEdge` — a media element offers neither — and no
+  // `atEdgeThreshold`, so the tolerance shared with every other adapter applies.
+  const computeLiveState = (): PlayerLiveState =>
+    deriveLiveState({
+      duration: media.duration,
+      seekable: toRanges(media.seekable),
+      currentTime: media.currentTime
+    });
+
+  // Merges `live` into an outgoing patch, and only when the derived value
+  // differs from the last one published: an unchanged liveness adds no key.
+  const syncLive = (patch: ProviderStatePatch): ProviderStatePatch => {
+    const nextLive = computeLiveState();
+    if (liveStateEqual(nextLive, liveState)) return patch;
+    liveState = nextLive;
+    return { ...patch, live: nextLive };
+  };
+
+  // Liveness on its own, for the paths whose other state is published
+  // elsewhere. Silent when the value held: no empty patch escapes.
+  const emitLiveUpdate = (): void => {
+    const before = liveState;
+    const patch = syncLive({});
+    if (liveStateEqual(before, liveState)) return;
+    emit(patch);
+  };
+
   const emitMediaState = (originalEvent?: Event): void =>
     emit(
-      {
+      syncLive({
         lifecycle: media.readyState >= HAVE_METADATA ? 'ready' : 'loading',
         activation:
           media.readyState >= HAVE_METADATA ? 'ready' : 'loading-provider',
@@ -90,7 +127,7 @@ export const createNativeAttachment = (
         volume: media.volume,
         playbackRate: media.playbackRate,
         capabilities: getCapabilities()
-      },
+      }),
       originalEvent
         ? providerEvent('ready', originalEvent, undefined)
         : undefined
@@ -104,9 +141,17 @@ export const createNativeAttachment = (
     onWaiting,
     onSeeking,
     onSeeked,
-    onTimeUpdate,
+    onTimeUpdate: onPlaybackTimeUpdate,
     onError
   } = playback.handlers;
+
+  // The at-edge flag is a distance between the playhead and the window end, so
+  // it goes stale on every tick. Published after the playback seam's own patch,
+  // and only when it actually moved.
+  const onTimeUpdate = (originalEvent: Event): void => {
+    onPlaybackTimeUpdate(originalEvent);
+    emitLiveUpdate();
+  };
 
   const {
     onFullscreenChange,
@@ -130,10 +175,12 @@ export const createNativeAttachment = (
   // event that reports it; `loadedmetadata` has already fired by then.
   const onResize = (): void => publishDimensions();
   const onProgress = (): void =>
-    emit({
-      buffered: toRanges(media.buffered),
-      seekable: toRanges(media.seekable)
-    });
+    emit(
+      syncLive({
+        buffered: toRanges(media.buffered),
+        seekable: toRanges(media.seekable)
+      })
+    );
   const onVolumeChange = (originalEvent: Event): void =>
     emit(
       { muted: media.muted, volume: media.volume },
