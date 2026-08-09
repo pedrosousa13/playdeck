@@ -1,5 +1,6 @@
 ---
 '@reely/provider-wistia': minor
+'@reely/react': patch
 ---
 
 The Wistia provider no longer depends on `@wistia/wistia-player`. It fetches
@@ -46,11 +47,13 @@ no `window._wq`.
   nothing are unaffected. Callers who passed an importer to serve the bundle
   from elsewhere pass an injector instead, and the affordance is otherwise the
   same one.
-- `WistiaPlayerState` and `WistiaPlayerAttribute` are unchanged in meaning and
-  members; they are restated locally rather than derived from Wistia's
-  `PlayerState` and `keyof Attributes`. Keeping them current is now a manual
-  re-check against Wistia's declarations, because the vendor package is no
-  longer installed to compare against.
+- `WistiaPlayerState` and `WistiaPlayerAttribute` are restated locally rather
+  than derived from Wistia's `PlayerState` and `keyof Attributes`. Both lists
+  were taken mechanically from `0.7.12`'s declarations at the time of the
+  change, so no member was intended to move — but nothing in this repo can
+  check that any more, and keeping them current is now a manual re-check
+  against Wistia's declarations, because the vendor package is no longer
+  installed to compare against.
 
 `SCRIPT_LOAD_TIMEOUT_MS` is exported alongside, holding 15 seconds. It is a
 second deadline rather than a reuse of `API_READY_TIMEOUT_MS`, because it covers
@@ -65,11 +68,20 @@ genuinely re-fetches; concurrent players share one injection; and a page that
 already registered `<wistia-player>` by other means resolves off the registry
 without fetching or registering anything twice.
 
-`minor`, because this is breaking and under 0.x this repo sends breaking changes
-on `minor`. Beyond the API, the trade is worth stating plainly: this provider
-adds no Wistia bytes to your bundle now, and in exchange your page's
-`script-src` must allow `fast.wistia.com` to run a script it cannot pin with
-`integrity` — Wistia serves that file unversioned and mutable, as YouTube does
-`iframe_api`. `docs/third-party-requests.md` covers that bargain, and the
-`WistiaScriptInjector` seam is how a page that self-hosts the bundle takes it
-back.
+**`@reely/react` consumers must act on this even though no React API changed.**
+`@reely/react` depends on this provider, so any page that can render a Wistia
+source now needs `fast.wistia.com` in its `script-src` — a page with a strict
+CSP that does not add it will see Wistia sources fail to load where they
+previously worked, because the bundle used to arrive through the bundler rather
+than the network. Note also that `WistiaScriptInjector` is a `loadWistiaPlayer`
+parameter and not a `WistiaProviderOptions` key, so it is **not** reachable
+through `Player.Root`'s `providerOptions={{ wistia: … }}` bag: a `Player.Root`
+consumer cannot currently redirect that script to their own origin the way
+`providerOptions={{ youtube: { loadIframeApi } }}` allows for YouTube.
+
+`minor` for the provider, because this is breaking and under 0.x this repo sends
+breaking changes on `minor`. Beyond the API, the trade is worth stating plainly:
+this provider adds no Wistia bytes to your bundle now, and in exchange your
+page's `script-src` must allow `fast.wistia.com` to run a script it cannot pin
+with `integrity` — Wistia serves that file unversioned and mutable, as YouTube
+does `iframe_api`. `docs/third-party-requests.md` covers that bargain.

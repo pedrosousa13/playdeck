@@ -8,7 +8,8 @@ import {
   SCRIPT_LOAD_TIMEOUT_MS,
   WISTIA_PLAYER_TAG,
   type WistiaPlayerApi,
-  type WistiaPlayerElement
+  type WistiaPlayerElement,
+  type WistiaScriptInjector
 } from '../src/loader';
 
 const scriptSrc = 'https://fast.wistia.com/player.js';
@@ -269,6 +270,33 @@ test('a superseded attempt leaves the script the next attempt adopted in place',
 
   const registered = defineElement();
   await expect(adopting).resolves.toBe(registered);
+});
+
+// The injector is consumer code, so it can throw — and it throws *during* the
+// promise executor, before the memo is assigned, which is the one failure the
+// shared `fail` path cannot reach.
+const throwingInjector: WistiaScriptInjector = () => {
+  throw new Error('The injector exploded.');
+};
+
+test('does not remember a load whose injector threw', async () => {
+  const failed = loadWistiaPlayer(throwingInjector);
+  await expect(failed).rejects.toThrow('The injector exploded.');
+
+  const retried = loadWistiaPlayer(injectScript);
+  expect(retried).not.toBe(failed);
+
+  const registered = defineElement();
+  await expect(retried).resolves.toBe(registered);
+});
+
+test('leaves no deadline armed when the injector throws', async () => {
+  vi.useFakeTimers();
+
+  await expect(loadWistiaPlayer(throwingInjector)).rejects.toThrow(
+    'The injector exploded.'
+  );
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 test('ignores a late script error once the registration resolved', async () => {

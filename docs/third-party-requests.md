@@ -8,9 +8,14 @@ providers](../README.md#honesty-about-providers) section in the root README
 points to — read against the loaders and attachment builders themselves, not
 against provider documentation.
 
-Every origin below was confirmed by reading the source cited next to it, except
-the storybook Backpack wrapper row: that source lives on the `backpack-parity`
-branch, not this tree, and is cited as such. Where the audit could not confirm
+Every origin below was confirmed by reading the source cited next to it, with
+two exceptions, each cited as such where it appears. The storybook Backpack
+wrapper row's source lives on the `backpack-parity` branch, not this tree. And
+the Wistia row's hostnames were read out of `@wistia/wistia-player@0.7.12`,
+which #225 removed from this repo's dependencies — that evidence is preserved
+because it is what the origins were confirmed from, but it is no longer
+re-checkable from a clean install, and Wistia can move those hostnames in a CDN
+bundle without anything here noticing. Where the audit could not confirm
 something from the shipped code, it says so rather than guessing.
 
 ## Per-provider origins
@@ -153,8 +158,8 @@ Notes, per row:
   already set.
 
 - **Wistia**'s player bundle is fetched from
-  `https://fast.wistia.com/player.js` (`packages/provider-wistia/src/loader.ts:176`,
-  appended to `document.head` at `:205-211`), with no `integrity` and no
+  `https://fast.wistia.com/player.js` (`packages/provider-wistia/src/loader.ts:158`,
+  appended to `document.head` at `:181-187`), with no `integrity` and no
   `crossOrigin` set — see the SRI note below, which now covers two vendors. That
   is Aurora's own entry point, not the legacy `E-v1.js` embed shim, so there is
   still no `window._wq`. This provider declares **no** dependency on
@@ -163,20 +168,23 @@ Notes, per row:
   which pulled webpack into consumer installs for a bundle that was fetched over
   the network regardless. A page can serve the script from its own origin
   instead, by passing `WistiaScriptInjector` to `loadWistiaPlayer`
-  (`packages/provider-wistia/src/loader.ts:184`) — that is the one way any origin
+  (`packages/provider-wistia/src/loader.ts:166`) — that is the one way any origin
   here moves, and it is not reachable through `Player.Root`. Loading the script
   registers the `<wistia-player>` custom element, which then fetches its own
   playback engine, embed configuration and media data from Wistia's CDN at
-  runtime, confirmed by reading the shipped bundle's hardcoded hostnames
-  (`fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`,
-  `embed-ssl.wistia.com`, `embed-fastly.wistia.com`) rather than assumed from
-  the npm dependency alone. Aurora does render an iframe on one path: when
-  the media-data response asks for the legacy embed, the element writes
+  runtime, confirmed by reading the hardcoded hostnames (`fast.wistia.net`,
+  `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`,
+  `embed-fastly.wistia.com`) in `@wistia/wistia-player@0.7.12`'s shipped
+  bundle — which this repo no longer installs, so that reading stands as
+  recorded evidence rather than something re-checkable here; see the preamble.
+  Aurora does render an iframe on one path: when the media-data response asks
+  for the legacy embed, the element writes
   `<iframe src="https://fast.wistia.net/embed/iframe/{mediaId}">` straight
   into its shadow root and returns without ever initialising a public API
-  — confirmed against the shipped bundle
-  (`dist/wistia-player.js:18517-18535`, building the URL from
-  `eV1HostWithPort()`) and against
+  — confirmed against that same bundle
+  (`@wistia/wistia-player@0.7.12`'s `dist/wistia-player.js:18517-18535`,
+  building the URL from `eV1HostWithPort()`, read before its removal) and
+  against
   `packages/provider-wistia/src/attachment.ts:42-49`, which already
   describes exactly this path. That render happens in the browser regardless
   of what this adapter does next: `API_READY_TIMEOUT_MS`
@@ -189,11 +197,11 @@ Notes, per row:
   Reely cannot harden that frame, for the same reason it cannot harden
   YouTube's: the element writes it into its own shadow root. Reely only ever
   sets attributes on the `<wistia-player>` element itself
-  (`packages/provider-wistia/src/attachment.ts:334-375`), and most of them are
+  (`packages/provider-wistia/src/attachment.ts:336-377`), and most of them are
   behavioural rather than presentational — `mediaId`, `doNotTrack`,
   `controlsVisibleOnLoad`, `endVideoBehavior` and `currentTime` — with
   `playerColor`, `swatch`, `poster` and `transparentLetterbox` the four the
-  source itself calls presentation-only (`:357`). None of them is a
+  source itself calls presentation-only (`:359`). None of them is a
   `referrerpolicy` or an `allow`, so the legacy embed iframe travels under the
   page's own referrer policy. The element also dynamically loads a Mux Data
   analytics module (`assets/external/wistia-mux.js`, from the same `fast.*`
@@ -203,7 +211,7 @@ Notes, per row:
   reports metrics to, since it is fetched at runtime rather than bundled —
   treat that as an open question if you need to pin it down, rather than an
   origin this table has verified. `dnt` (on by default,
-  `packages/provider-wistia/src/attachment.ts:335`) asks Wistia not to track
+  `packages/provider-wistia/src/attachment.ts:337`) asks Wistia not to track
   the session; it is a separate switch from the Mux module. Wistia's
   provider options (`controls`, `dnt`, `playerColor`, `swatch`, `poster`,
   `transparentLetterbox`) are reachable from `Player.Root` via
@@ -269,7 +277,7 @@ Mapped onto the origins above:
   for a click, and under `eager` they fire at mount. Wistia's set now begins
   with the `fast.wistia.com/player.js` fetch, which the first attaching Wistia
   player starts and every later one on the page shares
-  (`packages/provider-wistia/src/loader.ts:203`, the module-level shared load) —
+  (`packages/provider-wistia/src/loader.ts:179`, the module-level shared load) —
   so a page with four Wistia players makes that request once, at whichever
   player attaches first, and the per-player engine and media-data requests
   follow each attach as before. YouTube's script request behaves the same way
@@ -307,7 +315,7 @@ Two vendor scripts are injected into the page by Reely, and neither carries an
 `integrity` attribute:
 
 - YouTube's `iframe_api` (`packages/provider-youtube/src/loader.ts:67`).
-- Wistia's `player.js` (`packages/provider-wistia/src/loader.ts:176`), as of
+- Wistia's `player.js` (`packages/provider-wistia/src/loader.ts:158`), as of
   #225 — before it, Wistia's element came from an npm dependency and this
   section had one entry.
 
@@ -324,13 +332,30 @@ for the same reason `integrity` is — there is nothing to check the response
 against. That is the bargain a YouTube or Wistia source makes on your page's
 behalf, not a gap to close.
 
-Wistia's is the one of the two a page can take back. `loadWistiaPlayer` accepts
-a `WistiaScriptInjector` (`packages/provider-wistia/src/loader.ts:184`), so a
-page that self-hosts `player.js` can serve it from its own origin, under its own
-`integrity` if it pins a copy, and drop `fast.wistia.com` from `script-src`
-entirely — the element's own engine, configuration and media-data requests still
-go to Wistia's CDN, so the other directives in the table above do not change.
-YouTube's loader offers no equivalent seam.
+Both providers do offer a seam for replacing the load, and self-hosting the
+script is what either seam is for: the vendor's own engine, configuration and
+media-data requests still go to the vendor's CDN, so only `script-src` changes.
+But the two are not equally reachable, and the difference matters most to the
+consumer this project leads with — the one who installs `@reely/react` and never
+calls a provider factory:
+
+- **YouTube's is reachable through `Player.Root`.**
+  `YouTubeProviderOptions.loadIframeApi`
+  (`packages/provider-youtube/src/index.ts:71`, defaulted to the built-in loader
+  at `:194`, called at `packages/provider-youtube/src/attachment.ts:159`) is a
+  provider option, and the `youtube` bag omits only `controls`, `endTime`,
+  `loop` and `startTime` (`packages/react/src/provider-loaders.ts:51-56`) — so
+  `providerOptions={{ youtube: { loadIframeApi } }}` reaches it.
+- **Wistia's is not.** `WistiaScriptInjector`
+  (`packages/provider-wistia/src/loader.ts:166`) is a parameter of
+  `loadWistiaPlayer`, not a key of `WistiaProviderOptions`, so no `wistia` bag
+  carries it. Reaching it means calling `createWistiaProvider` yourself and
+  driving the load, which is the direct-construction path this document
+  describes at the Wistia row above — not something `Player.Root` exposes.
+
+So for a `Player.Root` consumer today, `fast.wistia.com` in `script-src` is not
+negotiable, while `www.youtube.com` is. That asymmetry is a gap in this
+provider's options surface rather than a property of Wistia's CDN.
 
 ## A note on `style-src`
 
