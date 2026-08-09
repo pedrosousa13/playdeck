@@ -19,6 +19,7 @@ export { loadVimeoSdk, resetVimeoSdkLoader } from './loader.js';
 export type {
   VimeoSdkConstructor,
   VimeoSdkEventListener,
+  VimeoSdkLoadOptions,
   VimeoSdkModule,
   VimeoSdkPlayer,
   VimeoSdkQuality,
@@ -57,6 +58,25 @@ export type VimeoProviderOptions = {
    */
   readonly endTime?: number;
   readonly customControls?: boolean;
+  /**
+   * Stop the Vimeo SDK sending the embedding page's `window.location.href` —
+   * path and query included — to the embed frame over `postMessage`. Off by
+   * default, so the SDK behaves exactly as it always has unless this is set.
+   *
+   * **The effect is page-wide, not per-embed.** The SDK's own opt-out is a
+   * `window` global, so switching this on silences that handshake for every
+   * Vimeo embed on the page, including embeds Reely did not create.
+   *
+   * **It takes effect on the first Vimeo attach and holds for the life of the
+   * page.** The SDK module is imported once and cached, and it reads the guard
+   * while it evaluates, so an attach that finds the module already loaded
+   * cannot change what the first one decided. Setting this on one player and
+   * not another leaves the first attach in charge.
+   *
+   * A page that has already set the guard itself keeps its own value, in
+   * either direction — Reely never overwrites it.
+   */
+  readonly suppressSeoMetadata?: boolean;
 };
 
 type VimeoCommand =

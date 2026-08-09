@@ -55,6 +55,12 @@ type VimeoEmbedOptions = {
   readonly endTime?: number;
 };
 
+// What this seam reads from the host's options: the embed url's fields, plus
+// the one field the SDK load takes rather than the url.
+type VimeoAttachmentOptions = VimeoEmbedOptions & {
+  readonly suppressSeoMetadata?: boolean;
+};
+
 const vimeoEmbedUrl = (
   source: VimeoSource,
   options: VimeoEmbedOptions,
@@ -77,7 +83,7 @@ const vimeoEmbedUrl = (
 
 export type VimeoAttachmentDeps = {
   readonly emit: EmitProviderState;
-  readonly options: VimeoEmbedOptions;
+  readonly options: VimeoAttachmentOptions;
   // The host's capabilities snapshot, for the state published on ready.
   readonly getCapabilities: () => PlayerCapabilities;
   readonly chromeless: Pick<VimeoChromelessAvailability, 'probe' | 'adopt'>;
@@ -251,7 +257,11 @@ export const createVimeoAttachment = (
 
   const start = async (thisGeneration: number): Promise<CommandResult> => {
     try {
-      const Sdk = await loadVimeoSdk();
+      // The suppression has to be decided before the SDK module evaluates, so
+      // it travels with the load rather than being applied to the player after.
+      const Sdk = await loadVimeoSdk(undefined, {
+        suppressSeoMetadata: options.suppressSeoMetadata
+      });
       if (isStale(thisGeneration)) return { ok: true };
       const iframe = mount.ownerDocument.createElement('iframe');
       iframe.src = vimeoEmbedUrl(source, options, mount.muted);
