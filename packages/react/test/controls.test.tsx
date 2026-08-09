@@ -448,6 +448,231 @@ describe('SeekSlider', () => {
     const slider = screen.getByRole('slider', { name: 'Seek' });
     expect(attr(slider, 'aria-disabled')).toBe('true');
   });
+
+  // The buffered geometry is `aria-hidden` (#189), so this description is the
+  // extent's only text equivalent.
+  const describedText = (slider: Element): string | null => {
+    const id = attr(slider, 'aria-describedby');
+    return id === null
+      ? null
+      : (document.getElementById(id)?.textContent ?? null);
+  };
+
+  test('describes the buffered share of a VOD seek window', () => {
+    const { container } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({ buffered: [{ start: 0, end: 45 }] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(describedText(slider)).toBe('45% loaded');
+    expect(
+      attr(
+        container.querySelector(
+          '[data-reely-part="seek-buffered-description"]'
+        )!,
+        'id'
+      )
+    ).toBe(attr(slider, 'aria-describedby'));
+  });
+
+  test('describes disjoint buffered ranges once, as their combined share', () => {
+    const { container } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({
+        buffered: [
+          { start: 0, end: 45 },
+          { start: 60, end: 80 }
+        ]
+      })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    // Not "loaded to 1:20": 0:45 to 1:00 is a gap the playhead cannot cross
+    // without waiting. 65 of the window's 100 seconds are loaded, once.
+    expect(describedText(slider)).toBe('65% loaded');
+    expect(
+      container.querySelectorAll(
+        '[data-reely-part="seek-buffered-description"]'
+      )
+    ).toHaveLength(1);
+    expect(attr(slider, 'aria-describedby')).not.toMatch(/\s/);
+  });
+
+  test('counts overlapping buffered ranges once', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({
+        buffered: [
+          { start: 20, end: 50 },
+          { start: 0, end: 40 }
+        ]
+      })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    // The list is neither sorted nor guaranteed disjoint. Summing the two
+    // lengths would claim 70%; the union covers 0 to 50.
+    expect(describedText(slider)).toBe('50% loaded');
+  });
+
+  test('describes the buffered share against a live DVR window, not media time', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      liveWindow({ buffered: [{ start: 35, end: 50 }] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    // Window [20, 80]: 15 loaded seconds of a 60-second window. Measured
+    // against absolute media time it would read 19% (15/80) or worse.
+    expect(describedText(slider)).toBe('25% loaded');
+  });
+
+  test('describes a sliver of buffer as 1%, never as nothing', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({ buffered: [{ start: 0, end: 0.3 }] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    // 0.3 of 100 seconds rounds to zero, and `0% loaded` would deny a
+    // measurement that was taken. Something loaded is not nothing.
+    expect(describedText(slider)).toBe('1% loaded');
+  });
+
+  test('describes a nearly complete buffer as 99%, never as complete', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({ buffered: [{ start: 0, end: 99.7 }] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    // 99.7 of 100 seconds rounds to a hundred, and `100% loaded` would promise
+    // a scrub to the end that still has 0.3s to wait for.
+    expect(describedText(slider)).toBe('99% loaded');
+  });
+
+  test('describes a wholly covered seek window as complete', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({ buffered: [{ start: 0, end: 100 }] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(describedText(slider)).toBe('100% loaded');
+  });
+
+  test('claims no buffered extent when the buffered list is empty', () => {
+    const { container } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({ buffered: [] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(attr(slider, 'aria-describedby')).toBeNull();
+    expect(
+      container.querySelector('[data-reely-part="seek-buffered-description"]')
+    ).toBeNull();
+  });
+
+  test('claims no buffered extent when no seek window exists', () => {
+    const { container } = renderWithPlayer(
+      <Player.SeekSlider />,
+      noWindow({ buffered: [{ start: 0, end: 10 }] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(attr(slider, 'aria-describedby')).toBeNull();
+    expect(
+      container.querySelector('[data-reely-part="seek-buffered-description"]')
+    ).toBeNull();
+  });
+
+  test('claims no buffered extent when the buffer has slid out of the live window', () => {
+    const { container } = renderWithPlayer(
+      <Player.SeekSlider />,
+      liveWindow({ buffered: [{ start: 0, end: 10 }] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    // Window [20, 80]: the buffer is behind the back of a DVR window that has
+    // moved past it, so none of it survives the clamp. There is a list, but
+    // nothing in it is reachable, and `0% loaded` would report that as a
+    // measurement of the window instead of an absence.
+    expect(attr(slider, 'aria-describedby')).toBeNull();
+    expect(
+      container.querySelector('[data-reely-part="seek-buffered-description"]')
+    ).toBeNull();
+  });
+
+  test('keeps the buffered geometry out of the accessibility tree', () => {
+    const { container } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({ buffered: [{ start: 0, end: 45 }] })
+    );
+    const buffered = container.querySelector(
+      '[data-reely-part="seek-buffered"]'
+    )!;
+    expect(attr(buffered, 'aria-hidden')).toBe('true');
+    // The description is a sibling of the geometry, not a child: inside the
+    // hidden subtree it would be unreadable, and every range element stays
+    // the empty box it is.
+    expect(
+      buffered.querySelector('[data-reely-part="seek-buffered-description"]')
+    ).toBeNull();
+    for (const range of container.querySelectorAll(
+      '[data-reely-part="seek-buffered-range"]'
+    )) {
+      expect(range.textContent).toBe('');
+    }
+  });
+
+  test('never announces a buffered change, on any update', () => {
+    const { container, emit } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({ buffered: [{ start: 0, end: 45 }] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    const root = container.querySelector('[data-reely-part="seek-slider"]')!;
+    const shouty = () =>
+      root.querySelectorAll(
+        '[aria-live], [role="status"], [role="alert"], [role="log"]'
+      );
+    expect(shouty()).toHaveLength(0);
+    const id = attr(slider, 'aria-describedby');
+
+    // `buffered` moves many times a second during playback. The description is
+    // read on demand, never pushed.
+    emit({ buffered: [{ start: 0, end: 70 }] });
+    expect(describedText(slider)).toBe('70% loaded');
+    expect(shouty()).toHaveLength(0);
+
+    // A moving id is the other re-announcement route: some screen readers
+    // re-read a description whose id changed. It has to hold across the gap
+    // where the description disappears and comes back, too.
+    expect(attr(slider, 'aria-describedby')).toBe(id);
+    emit({ buffered: [] });
+    expect(attr(slider, 'aria-describedby')).toBeNull();
+    emit({ buffered: [{ start: 0, end: 20 }] });
+    expect(attr(slider, 'aria-describedby')).toBe(id);
+  });
+
+  test('composes its description with one supplied through inputProps', () => {
+    renderWithPlayer(
+      <>
+        <p id="house-rules">Scrubbing is disabled during ads.</p>
+        <Player.SeekSlider inputProps={{ 'aria-describedby': 'house-rules' }} />
+      </>,
+      seekReady({ buffered: [{ start: 0, end: 45 }] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    const ids = attr(slider, 'aria-describedby')!.split(' ');
+    expect(ids).toContain('house-rules');
+    expect(ids).toHaveLength(2);
+    expect(document.getElementById(ids[1]!)?.textContent).toBe('45% loaded');
+  });
+
+  test('leaves a supplied description alone when it claims nothing itself', () => {
+    renderWithPlayer(
+      <>
+        <p id="house-rules">Scrubbing is disabled during ads.</p>
+        <Player.SeekSlider inputProps={{ 'aria-describedby': 'house-rules' }} />
+      </>,
+      seekReady({ buffered: [] })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(attr(slider, 'aria-describedby')).toBe('house-rules');
+  });
 });
 
 describe('Time', () => {

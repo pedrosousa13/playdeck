@@ -31,7 +31,7 @@ const meta = {
           '',
           '**Stalls** — `data-buffering` is a separate axis from `data-state`: it reports a stall, `data-state` reports whether a seek window exists. It is debounced (500ms before a stall is admitted, 500ms held once admitted) so a short rebuffer never twitches the slider; `state.buffering` remains the raw signal. The slider stays interactive during a stall — seeking away is how a user escapes one.',
           '',
-          '**Accessibility** — a range control; arrow keys seek, and in `data-state="idle"` it announces itself `aria-disabled` with an `aria-valuetext` of `Unavailable`.',
+          '**Accessibility** — a range control; arrow keys seek, and in `data-state="idle"` it announces itself `aria-disabled` with an `aria-valuetext` of `Unavailable`. The buffered geometry stays `aria-hidden`; its text equivalent is `seek-buffered-description`, a visually hidden share of the seek window (`45% loaded`) referenced by `aria-describedby`. It is not a live region, and it is absent rather than zero wherever nothing is measured.',
           '',
           '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.',
           '',
@@ -75,11 +75,21 @@ export const WithBufferedRanges: Story = {
       ]
     }
   ),
-  play: async ({ canvasElement }) => {
+  play: async ({ canvas, canvasElement }) => {
     const ranges = canvasElement.querySelectorAll(
       '[data-reely-part="seek-buffered-range"]'
     );
     await expect(ranges).toHaveLength(2);
+    // The geometry is `aria-hidden`, so the two ranges above reach assistive
+    // technology only through this one description: 65 of the window's 100
+    // seconds, counted once rather than per range.
+    const slider = await canvas.findByRole('slider', { name: 'Seek' });
+    const description = canvasElement.querySelector(
+      '[data-reely-part="seek-buffered-description"]'
+    );
+    await expect(description).not.toBeNull();
+    await expect(description).toHaveTextContent('65% loaded');
+    await expect(slider).toHaveAttribute('aria-describedby', description!.id);
   }
 };
 

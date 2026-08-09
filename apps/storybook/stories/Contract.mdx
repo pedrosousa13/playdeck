@@ -8,11 +8,12 @@ Every primitive exposes a stable styling/testing contract via data attributes.
 
 - **`data-reely-part`** — the stable name of a part: one named element in the
   rendered DOM (`play-button`, `mute-button`, `volume-slider`, `seek-slider` /
-  `seek-slider-input` / `seek-buffered` / `seek-buffered-range`,
-  `fullscreen-button`, `pip-button`, `airplay-button`, `time`, `controls`,
-  `poster`, `poster-image`, `loading-indicator`, `activation`, `viewport`,
-  `media`, `error` / `error-message` / `error-retry`, `captions` /
-  `captions-button` / `captions-announcer` / `caption-cue` / `caption-line`,
+  `seek-slider-input` / `seek-buffered` / `seek-buffered-range` /
+  `seek-buffered-description`, `fullscreen-button`, `pip-button`,
+  `airplay-button`, `time`, `controls`, `poster`, `poster-image`,
+  `loading-indicator`, `activation`, `viewport`, `media`, `error` /
+  `error-message` / `error-retry`, `captions` / `captions-button` /
+  `captions-announcer` / `caption-cue` / `caption-line`,
   `settings-menu-root` / `settings-menu-trigger` / `settings-menu`,
   `menu-item` / `menu-radio-group` / `menu-radio-item` / `menu-radio-indicator`,
   `gestures`). A part name is not a primitive's name, and several parts can
@@ -105,9 +106,10 @@ refused autoplay:
 
 {/* /example */}
 
-**A slider** — `Player/SeekSlider`. One part contains three others
-(`seek-slider-input`, `seek-buffered`, and a `seek-buffered-range` per range),
-and `data-buffering` is a second axis beside `data-state`:
+**A slider** — `Player/SeekSlider`. One part contains three visible others
+(`seek-slider-input`, `seek-buffered`, and a `seek-buffered-range` per range)
+plus `seek-buffered-description`, the visually hidden text equivalent of the
+buffered geometry, and `data-buffering` is a second axis beside `data-state`:
 
 {/* example:css-seek-slider */}
 
