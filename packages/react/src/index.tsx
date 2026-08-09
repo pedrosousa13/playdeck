@@ -99,7 +99,11 @@ export type {
 
 export { Controls } from './controls.js';
 
-export type { ControlsProps } from './controls.js';
+export type {
+  ControlsProps,
+  ShortcutAction,
+  ShortcutBindings
+} from './controls.js';
 
 export { Gestures } from './gestures.js';
 

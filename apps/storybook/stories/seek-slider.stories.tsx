@@ -31,7 +31,7 @@ const meta = {
           '',
           '**Stalls** — `data-buffering` is a separate axis from `data-state`: it reports a stall, `data-state` reports whether a seek window exists. It is debounced (500ms before a stall is admitted, 500ms held once admitted) so a short rebuffer never twitches the slider; `state.buffering` remains the raw signal. The slider stays interactive during a stall — seeking away is how a user escapes one.',
           '',
-          '**Accessibility** — a range control; arrow keys seek, and in `data-state="idle"` it announces itself `aria-disabled` with an `aria-valuetext` of `Unavailable`. The buffered geometry stays `aria-hidden`; its text equivalent is `seek-buffered-description`, a visually hidden share of the seek window (`45% loaded`) referenced by `aria-describedby`. It is not a live region, and it is absent rather than zero wherever nothing is measured.',
+          '**Accessibility** — a range control; arrow keys seek. Inside a `Player.Controls` region the shortcut layer owns them, so `ArrowLeft`/`ArrowRight` seek 5s and `ArrowUp`/`ArrowDown` adjust the volume; on its own the input steps by its `step` of 1s on all four. `Home` and `End` stay native either way. In `data-state="idle"` it announces itself `aria-disabled` with an `aria-valuetext` of `Unavailable`. The buffered geometry stays `aria-hidden`; its text equivalent is `seek-buffered-description`, a visually hidden share of the seek window (`45% loaded`) referenced by `aria-describedby`. It is not a live region, and it is absent rather than zero wherever nothing is measured.',
           '',
           '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.',
           '',
