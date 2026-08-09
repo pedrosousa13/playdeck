@@ -20,7 +20,7 @@ something from the shipped code, it says so rather than guessing.
 | **Native** (`@reely/provider-native`)                                                   | —                                    | —                                                                                               | —                                                                                                           | —                                                                                                           | Your own media host — nothing Reely adds.                                 |
 | **HLS** (`@reely/provider-hls`)                                                         | —                                    | —                                                                                               | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                     | Your own manifest/segment host, when the native engine plays it directly. |
 | **YouTube** (`@reely/provider-youtube`)                                                 | `www.youtube.com`                    | `www.youtube-nocookie.com` (the default) or `www.youtube.com`, and nothing else; see note below | —                                                                                                           | —                                                                                                           | —                                                                         |
-| **Vimeo** (`@reely/provider-vimeo`)                                                     | —                                    | `player.vimeo.com`                                                                              | —                                                                                                           | `vimeo.com` — opt-in only; see note below.                                                                  | —                                                                         |
+| **Vimeo** (`@reely/provider-vimeo`)                                                     | —                                    | `player.vimeo.com`                                                                              | —                                                                                                           | `vimeo.com` — opt-in only, and reachable through `Player.Root`; see note below.                             | —                                                                         |
 | **Wistia** (`@reely/provider-wistia`)                                                   | `fast.wistia.net`, `fast.wistia.com` | `fast.wistia.net` (legacy-embed fallback; see note below)                                       | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | Same five hosts as `img-src`.                                             |
 | **Storybook Backpack wrapper** (`backpack-parity` branch) — not shipped, see note below | —                                    | —                                                                                               | `img.youtube.com`, `ytimg.com` (+ subdomains), `vimeocdn.com` (+ subdomains)                                | `www.youtube.com`, `vimeo.com`                                                                              | —                                                                         |
 
@@ -42,9 +42,9 @@ Notes, per row:
   at `:127-130`), with no `integrity` and no `crossOrigin` set. This does not
   change with the `host` option: `host` only decides which origin the _embed
   iframe_ itself points at (it defaults to `https://www.youtube-nocookie.com`,
-  `packages/provider-youtube/src/index.ts:55`, and is resolved at `:157`; the
+  `packages/provider-youtube/src/index.ts:76`, and is resolved at `:96-104`; the
   value reaches the iframe via
-  `packages/provider-youtube/src/attachment.ts:149`). A
+  `packages/provider-youtube/src/attachment.ts:168`). A
   `Player.Root` consumer **can** change `host`: `provider-loaders.ts` passes
   `providerOptions?.youtube` straight to `createYouTubeProvider`, so every key
   `YouTubeProviderOptions` declares — `host` and the `loadIframeApi` injection
@@ -57,8 +57,22 @@ Notes, per row:
   gives is the whole set: the embed is either origin, never a third one. The
   API script itself always comes from `www.youtube.com` — that one `host` does
   not move.
+
+  That embed iframe carries no `referrerpolicy` and no `allow` from Reely,
+  because Reely never creates it: the attachment appends a `<div>` and hands
+  that to the IFrame API, which replaces it with an iframe of its own
+  (`packages/provider-youtube/src/attachment.ts:164-167`, `new api.Player(…)`).
+  Reely does reach the frame afterwards — `getIframe()`
+  (`packages/provider-youtube/src/attachment.ts:93-99`) hands it to the
+  presentation seam, which uses it for fullscreen
+  (`packages/provider-youtube/src/presentation.ts:63`) — but only after it has
+  loaded, and an attribute written then changes nothing about a request already
+  sent. So this frame travels under whatever referrer policy the page itself
+  declares, rather than the narrower one Reely pins on the Vimeo frame (see the
+  Vimeo note below).
+
 - **Vimeo**'s embed iframe is built from `player.vimeo.com`
-  (`packages/provider-vimeo/src/attachment.ts:60`). The SDK
+  (`packages/provider-vimeo/src/attachment.ts:69`). The SDK
   (`@vimeo/player`, pinned `2.30.4`) is a bundled dependency, imported
   dynamically — nothing is fetched from a Vimeo CDN
   (`packages/provider-vimeo/README.md`). The oEmbed probe at
@@ -67,15 +81,45 @@ Notes, per row:
   `VimeoProviderOptions.customControls === true`
   (`chromeless-availability.ts:128`), so the probe never fires uninvited — it
   needs the option, whether the caller builds the adapter directly or reaches
-  it through `Player.Root`'s `vimeo` bag. `dnt` (on by default unless set to
-  `false`, `packages/provider-vimeo/src/attachment.ts:63`) asks Vimeo not to
-  track the session; it is a separate switch and has no effect on whether the
-  oEmbed probe runs. `PlayerProviderOptions` carries a `vimeo` key
-  (`packages/react/src/provider-loaders.ts:46`), so `dnt`, `customControls` and
+  it through `Player.Root`'s `vimeo` bag. `dnt` **is on unless it is explicitly
+  `false`** — the embed url always carries a `dnt` parameter, `1` for every
+  value but `false`, including when the option is left unset
+  (`packages/provider-vimeo/src/attachment.ts:72`,
+  `options.dnt === false ? '0' : '1'`) — and asks Vimeo not to track the
+  session. It is a separate switch and has no effect on whether the oEmbed
+  probe runs. `PlayerProviderOptions` carries a `vimeo` key
+  (`packages/react/src/provider-loaders.ts:55`), so `dnt`, `customControls` and
   `suppressSeoMetadata` are reachable through `Player.Root` as
   `providerOptions={{ vimeo: {...} }}`; `controls`, `loop`, `startTime` and
   `endTime` are omitted from that bag because `Root` owns them as its own props
-  (ADR-0004).
+  (ADR-0004). So a `Player.Root` consumer can turn Do-Not-Track off —
+  `providerOptions={{ vimeo: { dnt: false } }}` sends `dnt=0` — and can fire the
+  oEmbed probe, `providerOptions={{ vimeo: { customControls: true } }}`. Neither
+  needs `createVimeoProvider` to be called directly. One part of that is
+  machine-checked: `packages/react/test/provider-loaders.test.ts` asserts, at
+  the type level, which providers have a bag and which keys each bag omits, so
+  `pnpm typecheck` fails if that shape moves again. It checks nothing else
+  here — what `dnt` does to the url, and every line cited in this paragraph,
+  were confirmed by reading the source and can still drift.
+
+  The embed iframe is hardened beyond the url. Reely sets, at
+  `packages/provider-vimeo/src/attachment.ts:268-271`:
+  `allow="autoplay; fullscreen; picture-in-picture"`, `allowfullscreen`,
+  `title="Vimeo video player"` and
+  `referrerpolicy="strict-origin-when-cross-origin"`. The referrer policy means
+  Vimeo receives this page's **origin** and not its path or query on the iframe
+  request — enough for Vimeo's own domain-restriction check, so a private or
+  domain-locked source still loads. `encrypted-media` is **deliberately absent**
+  from the `allow` list, and that absence is a capability withdrawal rather than
+  a tidy-up: a DRM-protected source (Widevine/FairPlay, an Enterprise/OTT video)
+  needs that grant to reach `requestMediaKeySystemAccess` from inside the frame,
+  and will not play. No Reely option turns it back on. There is no `sandbox`
+  attribute on this iframe at all — the origin isolation here is the
+  cross-origin frame itself, not a sandbox policy. Neither the missing
+  `encrypted-media` nor the absent `sandbox` changes which origin is reached;
+  they are here because this document is where a reader decides what to permit
+  this frame, and a DRM source that silently will not play is what an
+  origins-only reading would leave them to find in production.
 
   One more thing leaves the page here that no origin in the table above shows,
   because it is not a request: **the SDK sends the embedding page's full URL —
@@ -123,7 +167,7 @@ Notes, per row:
   — confirmed against the shipped bundle
   (`dist/wistia-player.js:18517-18535`, building the URL from
   `eV1HostWithPort()`) and against
-  `packages/provider-wistia/src/attachment.ts:37-39`, which already
+  `packages/provider-wistia/src/attachment.ts:42-49`, which already
   describes exactly this path. That render happens in the browser regardless
   of what this adapter does next: `API_READY_TIMEOUT_MS`
   (`packages/provider-wistia/README.md`) only decides how long Reely waits
@@ -132,23 +176,36 @@ Notes, per row:
   iframe from loading. So a page that can reach a media id serving the
   legacy embed needs `fast.wistia.net` in `frame-src` too, even though
   Reely's adapter never treats that path as a successful attach either way.
-  The element also dynamically loads a Mux Data analytics module
-  (`assets/external/wistia-mux.js`, from the same `fast.*` host) unless the
-  page sets `window.wistiaDisableMux = true`; that global is an Aurora
-  switch, not something `WistiaProviderOptions` exposes, and the audit could
-  not confirm from the shipped bundle which origin that module reports
-  metrics to, since it is fetched at runtime rather than bundled — treat
-  that as an open question if you need to pin it down, rather than an origin
-  this table has verified. `dnt` (on by default,
-  `packages/provider-wistia/src/attachment.ts:235`) asks Wistia not to track
+  Reely cannot harden that frame, for the same reason it cannot harden
+  YouTube's: the element writes it into its own shadow root. Reely only ever
+  sets attributes on the `<wistia-player>` element itself
+  (`packages/provider-wistia/src/attachment.ts:334-375`), and most of them are
+  behavioural rather than presentational — `mediaId`, `doNotTrack`,
+  `controlsVisibleOnLoad`, `endVideoBehavior` and `currentTime` — with
+  `playerColor`, `swatch`, `poster` and `transparentLetterbox` the four the
+  source itself calls presentation-only (`:357`). None of them is a
+  `referrerpolicy` or an `allow`, so the legacy embed iframe travels under the
+  page's own referrer policy. The element also dynamically loads a Mux Data
+  analytics module (`assets/external/wistia-mux.js`, from the same `fast.*`
+  host) unless the page sets `window.wistiaDisableMux = true`; that global is
+  an Aurora switch, not something `WistiaProviderOptions` exposes, and the
+  audit could not confirm from the shipped bundle which origin that module
+  reports metrics to, since it is fetched at runtime rather than bundled —
+  treat that as an open question if you need to pin it down, rather than an
+  origin this table has verified. `dnt` (on by default,
+  `packages/provider-wistia/src/attachment.ts:335`) asks Wistia not to track
   the session; it is a separate switch from the Mux module. Wistia's
   provider options (`controls`, `dnt`, `playerColor`, `swatch`, `poster`,
   `transparentLetterbox`) are reachable from `Player.Root` via
   `providerOptions={{ wistia: {...} }}`, as YouTube's and Vimeo's are through
-  their own bags (`packages/react/src/provider-loaders.ts`). `loop` is the one
-  exception:
-  SIDEPRO-210 omitted it from that bag, because `Root`'s own `loop` prop now
-  writes it (ADR-0004).
+  their own bags (`packages/react/src/provider-loaders.ts:46-59`). Three of
+  Wistia's options are omitted from that bag rather than reachable through it —
+  `loop` (SIDEPRO-210) and `startTime` and `endTime` (#214) — because `Root`'s
+  own props write them (ADR-0004). None of the three changes which origin is
+  reached; they are listed here so this paragraph names the bag's real shape.
+  Wistia keeps `controls` where YouTube and Vimeo omit it: Wistia has the
+  concept but no `Root` fold writes it, so the bag key is still the only way
+  there.
 - **The `backpack-parity` branch's storybook Backpack wrapper** is not in any
   published package there — `apps/storybook`'s `package.json` marks it
   `"private": true` on that branch. It fetches YouTube's oEmbed endpoint
@@ -163,13 +220,26 @@ Notes, per row:
 
 `Player.Root`'s `loading` prop decides when a provider attaches, and every
 third-party request above happens at attach time — nothing fires earlier than
-this table says, for any provider:
+this table says, for any provider. Three props gate activation, and activation
+is what emits the requests: `loading` chooses the gate, and `loadMargin` and
+`loadThreshold` tune it when that gate is the viewport.
 
-- **`viewport`** (the default, `packages/react/src/root.tsx:99`): the provider
+- **`viewport`** (the default, `packages/react/src/root.tsx:124`): the provider
   attaches once `Player.Viewport`'s box crosses into the viewport, watched
   with an `IntersectionObserver` and a `loadMargin` of `'200px 0px'` by
-  default — so the request can leave up to 200px of scroll before the box is
-  actually on screen, but not before.
+  default (`:122`) — so the request can leave up to 200px of scroll before the
+  box is actually on screen, but not before. `loadThreshold` (declared at
+  `packages/react/src/root.tsx:64`, defaulted to `0` at `:123`) is the other
+  half of this gate: the `IntersectionObserver` ratio — `0` to `1` — of the box
+  that must be on screen before the provider attaches. At its `0` default any
+  visible pixel attaches, which is why the `loadMargin` rule reads as it does;
+  raise it and every request in this document waits until that fraction of the
+  box is showing. It does not defer them indefinitely, though — a box taller or
+  wider than the scroll container it moves through can never reach a threshold
+  near `1`, and rather than never attaching, such a box attaches at the first
+  visible pixel instead (`packages/react/src/use-activation.ts:183-220`).
+  Neither prop applies under `interaction` or `eager`: the observer is only
+  ever built for `viewport` (`packages/react/src/use-activation.ts:466-467`).
 - **`interaction`**: nothing attaches until the viewer activates the
   play/retry affordance `Player.ActivationButton` renders
   (`packages/react/src/loading-error.tsx:56`, `activateFromInteraction()`).
@@ -192,8 +262,12 @@ Mapped onto the origins above:
   `preload` (`'none'` / `'metadata'` / `'auto'`, default `'metadata'`) once
   attached.
 - **Vimeo's oEmbed probe** does not fire at all unless `customControls: true`
-  is set, regardless of `loading` — see the per-provider note above. When it is
-  set, it starts at that provider's own attach, racing the embed's own load
+  is set, regardless of `loading` — see the per-provider note above. It is set
+  either on `createVimeoProvider` directly or through `Player.Root` as
+  `providerOptions={{ vimeo: { customControls: true } }}`; both reach the same
+  place, so a `Player.Root`-only page can reach `vimeo.com` and this timeline
+  covers it. Once set, the probe starts at that provider's own attach — the same
+  gate as everything else above — racing the embed's own load
   (`CHROMELESS_PROBE_TIMEOUT_MS`, 4 seconds).
 - **The Vimeo SDK's `appendVideoMetadata` message** is not on this timeline
   because it is not a request: it is a `postMessage` to the embed frame Reely
