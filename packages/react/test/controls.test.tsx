@@ -682,7 +682,11 @@ describe('SeekSlider', () => {
   // issue is about seek over an asynchronous cross-document bridge, so an
   // unanswered command is the normal case there, not an edge one.
   const holdNextSeek = (seekTo: SeekSpy): (() => void) => {
-    let settle = (): void => {};
+    // Not a no-op until the command runs: settling one that was never issued
+    // means the test did not exercise what it thinks it did.
+    let settle = (): void => {
+      throw new Error('No seek command is being held.');
+    };
     seekTo.mockImplementationOnce(
       () =>
         new Promise<CommandResult>((resolve) => {
@@ -710,7 +714,9 @@ describe('SeekSlider', () => {
     await act(async () => {
       settle();
     });
-    expect(spies.seekTo.mock.calls.length).toBeLessThan(5);
+    // Exactly two: the leading 40, then the one position the four behind it
+    // collapsed into. Three or four would mean partial queuing.
+    expect(spies.seekTo).toHaveBeenCalledTimes(2);
     expect(spies.seekTo).toHaveBeenLastCalledWith(75);
   });
 
@@ -851,6 +857,12 @@ describe('SeekSlider', () => {
 
     // The source was swapped mid-drag. 1:15 was asked of media that is no
     // longer loaded, and the replacement can never answer for it.
+    //
+    // Both steps share one `act` on purpose: the component then only ever
+    // renders the replacement's ready state, which still has a seek window, so
+    // the changed provider is the sole reason the preview goes. Split them and
+    // the window-less render in between releases it first, and this passes
+    // without the provider ever being compared.
     const replacement = createMockAdapter();
     act(() => {
       controller.setProvider(replacement.adapter);
@@ -884,6 +896,98 @@ describe('SeekSlider', () => {
     // fighting-the-pointer this preview exists to stop.
     emit({ currentTime: 33 });
     expect(valueOf(slider)).toBe('30');
+  });
+
+  test('gives up on a seek command that never answers, and seeks again after', async () => {
+    const { spies } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    // Nothing under this layer has a timeout, and an iframe provider hands
+    // back a raw SDK promise: a torn-down frame or a dropped message leaves it
+    // unsettled forever.
+    spies.seekTo.mockImplementationOnce(
+      () => new Promise<CommandResult>(() => {})
+    );
+
+    vi.useFakeTimers();
+    fireEvent.change(slider, { target: { value: '75' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3999);
+    });
+    expect(valueOf(slider)).toBe('75');
+
+    // SEEK_COMMAND_TIMEOUT_MS. The chain has to drain on this path too, or the
+    // thumb keeps a position the media never reached...
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(valueOf(slider)).toBe('30');
+
+    // ...and, worse, every later change is swallowed into the pending slot
+    // behind a command that will never settle, leaving seeking dead for the
+    // rest of the session.
+    fireEvent.change(slider, { target: { value: '60' } });
+    expect(spies.seekTo).toHaveBeenCalledTimes(2);
+    expect(spies.seekTo).toHaveBeenLastCalledWith(60);
+
+    vi.useRealTimers();
+  });
+
+  test('abandons a queued position when the provider is replaced under it', async () => {
+    const { controller, spies } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    const settle = holdNextSeek(spies.seekTo);
+
+    fireEvent.change(slider, { target: { value: '75' } });
+    fireEvent.change(slider, { target: { value: '80' } });
+
+    const replacement = createMockAdapter();
+    act(() => {
+      controller.setProvider(replacement.adapter);
+      replacement.emit({
+        lifecycle: 'ready',
+        activation: 'ready',
+        provider: 'youtube',
+        ...seekReady()
+      });
+    });
+
+    // The first command finally answers and the chain looks for what queued up
+    // behind it. 1:20 was chosen on media that is no longer loaded, so issuing
+    // it now would scrub a freshly loaded video to a position from the last
+    // one.
+    await act(async () => {
+      settle();
+    });
+    expect(replacement.spies.seekTo).not.toHaveBeenCalled();
+    expect(spies.seekTo).toHaveBeenCalledTimes(1);
+  });
+
+  test('abandons a queued position when the seek window disappears under it', async () => {
+    const { emit, spies } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    const settle = holdNextSeek(spies.seekTo);
+
+    fireEvent.change(slider, { target: { value: '75' } });
+    fireEvent.change(slider, { target: { value: '80' } });
+
+    // How a swap to another source of the same provider kind shows up: the
+    // window goes before the new media reports one of its own, and the
+    // provider comparison cannot see a native-to-native change at all.
+    emit({ duration: null, seekable: [] });
+    await act(async () => {
+      settle();
+    });
+    expect(spies.seekTo).toHaveBeenCalledTimes(1);
+
+    // The new source is ready, and nothing from the old one leaks into it.
+    emit({ duration: 200, currentTime: 0 });
+    expect(valueOf(slider)).toBe('0');
   });
 });
 
