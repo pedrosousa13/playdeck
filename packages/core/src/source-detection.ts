@@ -31,6 +31,56 @@ const isVimeoHash = (value: unknown): value is string =>
 const isWistiaMediaId = (value: unknown): value is string =>
   isNonEmptyString(value) && /^[A-Za-z0-9]+$/.test(value);
 
+// The WHATWG URL parser strips U+0009, U+000A and U+000D before parsing, so a
+// scheme split by one of them is not the scheme read here: `java<TAB>script:`
+// yields no scheme at all, and the parser then resolves `javascript:`. A
+// well-formed URL carries none of the three, so any occurrence is rejected
+// outright rather than stripped, which keeps the value that plays identical to
+// the value that was validated (#219).
+const parserStrippedWhitespace = /[\t\n\r]/;
+
+const schemeOf = (url: string): string | undefined =>
+  url.match(/^([a-z][a-z\d+.-]*):/i)?.[1]?.toLowerCase();
+
+/**
+ * Whether the library will carry a source URL to a provider. The one such
+ * decision in the library, and it turns on two things: the URL must be
+ * well-formed, and its scheme must be allowed for the source it belongs to.
+ *
+ * A URL carrying a raw tab, line feed or carriage return is refused as
+ * malformed, whatever its apparent scheme, because the URL parser strips those
+ * three before parsing and would read a different scheme than the one checked
+ * here -- `java<TAB>script:` names no scheme at all yet loads as `javascript:`.
+ *
+ * Of the schemes, `http:`, `https:` and the scheme-less forms --
+ * protocol-relative, root-relative and relative paths -- are permitted for
+ * every source. `blob:` is permitted only for a `video` source, which is how a
+ * consumer hands over an in-page object such as a `MediaSource` or a picked
+ * `File`; an `hls` source refuses it because its manifest loader fetches the
+ * URL itself. Everything else is refused.
+ *
+ * Pass the `type` of the {@link ResolvedPlayerSource} the URL belongs to, or
+ * `undefined` for a bare string the player has not yet resolved to a type.
+ */
+export const isPermittedSourceUrl = (
+  url: string,
+  type: ResolvedPlayerSource['type'] | undefined
+): boolean => {
+  if (parserStrippedWhitespace.test(url)) return false;
+
+  const scheme = schemeOf(url);
+  if (scheme === undefined) return true;
+  if (scheme === 'http' || scheme === 'https') return true;
+  return scheme === 'blob' && type === 'video';
+};
+
+// A network-path reference resolves against `https:`, and that resolution is
+// what a resolved source carries -- the caller's `//host/...` form is never
+// written through, whether it arrived as a string or inside an explicit source
+// object (#219).
+const resolveNetworkPath = (url: string): string =>
+  url.startsWith('//') ? `https:${url}` : url;
+
 const failure = (
   input: unknown,
   reason: SourceDetectionFailureReason
@@ -152,16 +202,25 @@ const sourceFromExplicitObject = (
         (source) =>
           isRecord(source) &&
           isNonEmptyString(source.src) &&
-          isNonEmptyString(source.mimeType)
+          isNonEmptyString(source.mimeType) &&
+          isPermittedSourceUrl(source.src, 'video')
       )
     ) {
       return undefined;
     }
-    return input as VideoFileSource;
+    const validated = input as VideoFileSource;
+    return {
+      ...validated,
+      sources: validated.sources.map((source) => ({
+        ...source,
+        src: resolveNetworkPath(source.src)
+      }))
+    };
   }
 
   if (input.type === 'hls') {
     if (!isNonEmptyString(input.src)) return undefined;
+    if (!isPermittedSourceUrl(input.src, 'hls')) return undefined;
     if (
       input.engine !== undefined &&
       input.engine !== 'auto' &&
@@ -170,7 +229,8 @@ const sourceFromExplicitObject = (
     ) {
       return undefined;
     }
-    return input as HlsSource;
+    const validated = input as HlsSource;
+    return { ...validated, src: resolveNetworkPath(validated.src) };
   }
 
   if (input.type === 'youtube') {
@@ -194,7 +254,11 @@ const sourceFromExplicitObject = (
 
 export const detectSource = (input: unknown): SourceDetectionResult => {
   if (typeof input === 'string') {
-    if (!isNonEmptyString(input) || input !== input.trim()) {
+    if (
+      !isNonEmptyString(input) ||
+      input !== input.trim() ||
+      parserStrippedWhitespace.test(input)
+    ) {
       return failure(input, 'malformed-string');
     }
 
@@ -202,8 +266,7 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
       return failure(input, 'malformed-string');
     }
 
-    const scheme = input.match(/^([a-z][a-z\d+.-]*):/i)?.[1]?.toLowerCase();
-    if (scheme && scheme !== 'http' && scheme !== 'https') {
+    if (!isPermittedSourceUrl(input, undefined)) {
       return failure(input, 'unsupported-string');
     }
 
@@ -212,12 +275,18 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
       return failure(input, 'malformed-string');
     }
 
-    const urlInput = isNetworkPath
-      ? `https:${input}`
-      : scheme
-        ? input
-        : undefined;
-    if (scheme && !/^https?:\/\//i.test(input)) {
+    const scheme = schemeOf(input);
+    const normalizedInput = resolveNetworkPath(input);
+    const urlInput = isNetworkPath || scheme ? normalizedInput : undefined;
+    // Only `http:` and `https:` reach here with a scheme, because
+    // `isPermittedSourceUrl` above refuses every other scheme for a bare
+    // string -- `blob:` included, since no `type` is resolved yet. Both are
+    // special schemes that must name an authority, so `https:/host/clip.mp4`
+    // and `https:clip.mp4` are malformed rather than unsupported. This is not a
+    // rule about permitted schemes generally: `blob:` is permitted for a
+    // `video` source and has no authority, so admitting any further scheme to
+    // the string case means revisiting this guard first.
+    if (scheme && !input.slice(scheme.length + 1).startsWith('//')) {
       return failure(input, 'malformed-string');
     }
 
@@ -251,13 +320,13 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
         // `/deliveries/` are its documented way to play without its player. So
         // a Wistia URL that is not an embed shape falls through to the file
         // extension before the recognised-host rule fails it outright.
-        const fileSource = sourceFromFileExtension(input);
+        const fileSource = sourceFromFileExtension(normalizedInput);
         if (fileSource) return { status: 'success', input, source: fileSource };
         return failure(input, 'malformed-string');
       }
     }
 
-    const fileSource = sourceFromFileExtension(input);
+    const fileSource = sourceFromFileExtension(normalizedInput);
     if (fileSource) return { status: 'success', input, source: fileSource };
 
     return failure(input, 'unsupported-string');
@@ -265,7 +334,15 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
 
   if (isRecord(input)) {
     const source = sourceFromExplicitObject(input);
-    if (source) return { status: 'success', input: source, source };
+    // `source` may be a normalised copy, so `input` reports the caller's own
+    // object rather than the copy -- a result's `input` is what was passed.
+    if (source) {
+      return {
+        status: 'success',
+        input: input as ResolvedPlayerSource,
+        source
+      };
+    }
   }
 
   return failure(input, 'invalid-source');
