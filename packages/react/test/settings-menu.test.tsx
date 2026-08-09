@@ -105,6 +105,19 @@ describe('SettingsMenu', () => {
     expect(attr(trigger, 'aria-expanded')).toBe('false');
   });
 
+  test('Tab closes the menu without pulling focus back to the trigger', async () => {
+    // Unlike Escape, Tab must not call close(): the browser's own focus move
+    // has to continue past the trigger to the next control, which it cannot
+    // do if the handler puts focus back on the trigger first.
+    render(<Menu />);
+    const trigger = screen.getByRole('button', { name: 'Settings' });
+    fireEvent.click(trigger);
+    await waitFor(() => expect(screen.getByRole('menu')).toBeTruthy());
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Tab' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(hasFocus(trigger)).toBe(false);
+  });
+
   test('selecting an item fires onSelect, closes, and restores focus to trigger', async () => {
     let picked = '';
     render(
@@ -138,6 +151,66 @@ describe('SettingsMenu', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'outside' }));
     expect(screen.queryByRole('menu')).toBeNull();
     expect(hasFocus(trigger)).toBe(false);
+  });
+
+  test('the content root is keyboard-focusable by default', () => {
+    // The fixture deliberately doesn't scroll. The default is unconditional,
+    // so no test here has to stage an overflowing menu to observe it.
+    render(<Menu />);
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByRole('menu').tabIndex).toBe(0);
+  });
+
+  test('a consumer-supplied tabIndex wins over the default, including -1', () => {
+    render(
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger />
+        <Player.SettingsMenuContent tabIndex={-1}>
+          <Player.MenuItem>Quality</Player.MenuItem>
+        </Player.SettingsMenuContent>
+      </Player.SettingsMenu>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByRole('menu').tabIndex).toBe(-1);
+  });
+
+  test('the default adds no tab stop inside the menu', () => {
+    // The content root becoming tabbable must not make the items tabbable
+    // too: roving focus owns movement inside the menu, and a second stop per
+    // item would change the composition's Tab order.
+    render(<Menu />);
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(
+      screen.getAllByRole('menuitem').map((item) => item.tabIndex)
+    ).toEqual([-1, -1]);
+  });
+
+  test('ArrowUp from the focused root goes to the last item', async () => {
+    // The root is tabbable, so it is a click target too: a user landing on
+    // the menu's padding focuses it and no item is current. Index math that
+    // reads that as index -1 wraps ArrowUp onto the second-to-last item.
+    render(<Menu />);
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const items = screen.getAllByRole('menuitem');
+    await waitFor(() => expect(hasFocus(items[0])).toBe(true));
+
+    const menu = screen.getByRole('menu');
+    menu.focus();
+    expect(hasFocus(menu)).toBe(true);
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    expect(hasFocus(items[items.length - 1])).toBe(true);
+  });
+
+  test('ArrowDown from the focused root goes to the first item', async () => {
+    render(<Menu />);
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const items = screen.getAllByRole('menuitem');
+    await waitFor(() => expect(hasFocus(items[0])).toBe(true));
+
+    const menu = screen.getByRole('menu');
+    menu.focus();
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(hasFocus(items[0])).toBe(true);
   });
 
   test('menu items meet the 44px hit target', async () => {

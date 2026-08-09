@@ -136,6 +136,7 @@ export const SettingsMenuContent = ({
   children,
   onKeyDown,
   style,
+  tabIndex,
   ...props
 }: ComponentPropsWithRef<'div'>) => {
   const { open, close, setOpen, rootRef, triggerId, contentId } =
@@ -171,6 +172,14 @@ export const SettingsMenuContent = ({
     const items = menuItems(contentRef.current);
     if (items.length === 0) return;
     const current = items.findIndex((el) => el === document.activeElement);
+    // The content root is tabbable, so it is also a click target: landing on
+    // the menu's padding focuses it and no item is current. That is "no item
+    // yet", not index -1 — wrapping from -1 sends ArrowUp to the
+    // second-to-last item.
+    if (current === -1) {
+      items[delta > 0 ? 0 : items.length - 1]?.focus();
+      return;
+    }
     const next = (current + delta + items.length) % items.length;
     items[next]?.focus();
   };
@@ -219,6 +228,12 @@ export const SettingsMenuContent = ({
       ref={contentRef}
       role="menu"
       style={style}
+      // Deliberately a default, not a fixed value: a bounded menu is a
+      // scrollable region whose items are all `tabIndex={-1}`, so the root
+      // has to be tabbable to satisfy `scrollable-region-focusable`, but a
+      // consumer-supplied value — `-1` included — still wins, the same shape
+      // `Player.Controls` uses.
+      tabIndex={tabIndex ?? 0}
     >
       {children}
     </div>

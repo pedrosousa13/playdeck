@@ -196,9 +196,10 @@ export const SettingsMenuSelection: Story = {
  * Deliberately left open when the play function ends: it's the only story
  * that leaves axe (`test: 'error'`) a settings menu to scan in its normal
  * open state, which is the state #32 needs covered. Reachable by keyboard —
- * `SettingsMenuContent`'s content root carries `tabIndex={0}` (in
- * `reference-player.tsx`) precisely so the scrollable, arrow-key-only menu
- * item list is Tab-reachable, not just mouse/arrow-reachable.
+ * `SettingsMenuContent` defaults its content root to `tabIndex={0}` (#193),
+ * precisely so the scrollable, arrow-key-only menu item list is Tab-reachable
+ * and not just mouse/arrow-reachable. This example sets nothing; it used to
+ * carry the workaround itself.
  */
 export const SettingsMenuFollowsState: Story = {
   play: async ({ canvas, userEvent }) => {

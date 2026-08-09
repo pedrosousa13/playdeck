@@ -177,8 +177,10 @@ background colour for **any** text in **any** reely viewport, for every
 consumer. It now renders visually-hidden while idle and takes the full-bleed
 overlay only once there is something to show; its own tests live in
 `packages/react/test/activation.test.tsx`. `SettingsMenuContent`'s
-`tabIndex={0}` is the other precedent: a real `scrollable-region-focusable`
-violation, remediated rather than silenced.
+`tabIndex` is the other precedent: a real `scrollable-region-focusable`
+violation on this example's bounded, scrollable menu, remediated rather than
+silenced — and remediated in the primitive, which now defaults its content root
+to `tabIndex={0}`, so this example sets nothing.
 
 Axe runs its **default rule set**, not a narrower WCAG-tag subset — scoping
 with `withTags` would silently drop the best-practice rules, which is a
