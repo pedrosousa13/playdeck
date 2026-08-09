@@ -14,9 +14,11 @@ pnpm add @reely/provider-youtube
 ```ts
 import { PlayerController } from '@reely/core';
 import {
+  API_READY_TIMEOUT_MS,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
   createYouTubeProvider,
-  loadYouTubeIframeApi
+  loadYouTubeIframeApi,
+  resetYouTubeIframeApiLoader
 } from '@reely/provider-youtube';
 
 declare const mount: HTMLElement;
@@ -29,6 +31,15 @@ controller.setProvider(createYouTubeProvider(mount, 'dQw4w9WgXcQ'));
 // The iframe API is loaded for you. Call this directly only to warm it before
 // a player mounts.
 export const warm = (): Promise<unknown> => loadYouTubeIframeApi();
+
+// Drops the memo of the API load — for tests that need a clean load, not for
+// app code.
+export const reset = (): void => resetYouTubeIframeApiLoader();
+
+// How long the script is given to hand over the API before the load is
+// reported as failed. A response that is 200 OK but is not the API fires no
+// error event, so without this every player on the page would wait for ever.
+export const apiReadyTimeout = API_READY_TIMEOUT_MS; // 15000
 
 // How long a play command waits for YouTube to confirm playback started before
 // it is reported as blocked, rather than resolving a promise that never lands.
@@ -56,6 +67,8 @@ origins list and what a page's CSP has to allow.
 | `YouTubeProviderOptions`           | `controls`, `loop`, `startTime`, `endTime`, `host`, and `loadIframeApi` to supply the API yourself. Through `Player.Root`, `controls`, `loop`, `startTime` and `endTime` are its own props (ADR-0004), not bag keys. |
 | `YouTubeProviderAdapter`           | The adapter's own type.                                                                                                                                                                                              |
 | `PLAYBACK_CONFIRMATION_TIMEOUT_MS` | How long a `play()` waits for the player to confirm it (3 seconds).                                                                                                                                                  |
+| `resetYouTubeIframeApiLoader`      | Drops the memo of the API load — for tests that need a clean load.                                                                                                                                                   |
+| `API_READY_TIMEOUT_MS`             | How long the API script is given to hand over the API before the load is reported as failed (15 seconds).                                                                                                            |
 
 ## What it reports honestly
 
