@@ -18,15 +18,40 @@ type ShortcutEvent = {
   readonly preventDefault: () => void;
 };
 
-const isEditableTarget = (node: EventTarget | null): boolean => {
+// `<input>` types that act on Space or Enter instead of taking text: these
+// submit, toggle, or open a picker. They are conceded those two keys below
+// exactly as a <button> is, and a CSS `button` selector matches <button> only,
+// so each one has to be named.
+const activationInputTypes = [
+  'button',
+  'submit',
+  'reset',
+  'image',
+  'checkbox',
+  'radio',
+  'color',
+  'file'
+] as const;
+
+// `<input>` types that take no text. The two lists ask different questions —
+// this one whether a keystroke is being typed, the one above whether Space and
+// Enter belong to the control — and they differ deliberately by `range` alone,
+// the one type that is neither: it takes no text, and it answers arrows rather
+// than Space, which is precisely the key group the layer owns on it. Every
+// other type — including an unknown or absent one — counts as text entry,
+// which fails safe: protecting text entry is the point of the rule.
+const nonTextInputTypes = new Set<string>([...activationInputTypes, 'range']);
+
+// Classified by what the control does with a keystroke, not by tag name, so a
+// focused range input (a seek or volume slider) no longer swallows the whole
+// map. Text entry swallows every key: nothing typed can mean a shortcut.
+const isTextEntryTarget = (node: EventTarget | null): boolean => {
   if (!(node instanceof HTMLElement)) return false;
+  if (node.isContentEditable) return true;
+  if (node instanceof HTMLInputElement)
+    return !nonTextInputTypes.has(node.type);
   const tag = node.tagName;
-  return (
-    tag === 'INPUT' ||
-    tag === 'TEXTAREA' ||
-    tag === 'SELECT' ||
-    node.isContentEditable
-  );
+  return tag === 'TEXTAREA' || tag === 'SELECT';
 };
 
 const isInOpenMenu = (node: EventTarget | null): boolean =>
@@ -35,9 +60,95 @@ const isInOpenMenu = (node: EventTarget | null): boolean =>
     '[role="menu"], [role="menubar"], [role="listbox"], [data-reely-menu="open"]'
   ) !== null;
 
+const nativeActivationSelector = 'button, [role="button"], a[href], summary';
+
 export const isNativeActivationTarget = (node: EventTarget | null): boolean =>
   node instanceof HTMLElement &&
-  node.closest('button, [role="button"], a[href], summary') !== null;
+  node.closest(nativeActivationSelector) !== null;
+
+const activationInputSelector = activationInputTypes
+  .map((type) => `input[type="${type}"]`)
+  .join(', ');
+
+// Space and Enter belong to the focused control on these targets — a checkbox
+// toggles on Space, a submit input activates on either, exactly as a button
+// does. While focus is on one, a binding on either key is inert; every other
+// bound key still fires.
+const ownsActivationKeys = (node: EventTarget | null): boolean =>
+  node instanceof HTMLElement &&
+  node.closest(`${nativeActivationSelector}, ${activationInputSelector}`) !==
+    null;
+
+// Every action the layer knows, and — because one key can reach two of them —
+// the order a key resolves in: the first match here wins, whatever order a
+// consumer wrote their bindings object in. The union below is derived from
+// this list, so an action cannot exist without a place in the order.
+const shortcutActions = [
+  'togglePlayback',
+  'seekBackward',
+  'seekForward',
+  'seekBackwardLarge',
+  'seekForwardLarge',
+  'volumeUp',
+  'volumeDown',
+  'toggleMuted',
+  'toggleFullscreen',
+  'toggleCaptions'
+] as const;
+
+export type ShortcutAction = (typeof shortcutActions)[number];
+
+export type ShortcutBindings = {
+  readonly [action in ShortcutAction]?: string | readonly string[] | null;
+};
+
+const defaultBindings: {
+  readonly [action in ShortcutAction]: readonly string[];
+} = {
+  togglePlayback: [' ', 'k'],
+  seekBackward: ['ArrowLeft'],
+  seekForward: ['ArrowRight'],
+  seekBackwardLarge: ['j', 'PageDown'],
+  seekForwardLarge: ['l', 'PageUp'],
+  volumeUp: ['ArrowUp'],
+  volumeDown: ['ArrowDown'],
+  toggleMuted: ['m'],
+  toggleFullscreen: ['f'],
+  toggleCaptions: ['c']
+};
+
+const seekSeconds = {
+  seekBackward: -5,
+  seekForward: 5,
+  seekBackwardLarge: -10,
+  seekForwardLarge: 10
+} as const;
+
+// Case-insensitive while both sides are a single character, so one bound `k`
+// still answers `K` without a consumer listing both.
+const keyMatches = (bound: string, key: string): boolean =>
+  bound.length === 1 && key.length === 1
+    ? bound.toLowerCase() === key.toLowerCase()
+    : bound === key;
+
+const boundKeys = (
+  bindings: ShortcutBindings | undefined,
+  action: ShortcutAction
+): readonly string[] => {
+  const bound = bindings?.[action];
+  // An action a consumer does not name keeps its default; `null` suppresses.
+  if (bound === undefined) return defaultBindings[action];
+  if (bound === null) return [];
+  return typeof bound === 'string' ? [bound] : bound;
+};
+
+const resolveShortcutAction = (
+  bindings: ShortcutBindings | undefined,
+  key: string
+): ShortcutAction | null =>
+  shortcutActions.find((action) =>
+    boundKeys(bindings, action).some((bound) => keyMatches(bound, key))
+  ) ?? null;
 
 export type ControlsProps = ComponentPropsWithRef<'div'> & {
   /**
@@ -46,6 +157,30 @@ export type ControlsProps = ComponentPropsWithRef<'div'> & {
    * focus is inside the controls region.
    */
   readonly global?: boolean;
+  /**
+   * Key bindings for the shortcut layer. Omitted, the default map applies.
+   * `false` turns the layer off entirely — in global mode no document
+   * listener is attached at all. An object overrides individual actions
+   * (`null` suppresses one); every action it does not name keeps its default.
+   *
+   * A key is a `KeyboardEvent.key` value — `' '`, `'k'`, `'ArrowLeft'`,
+   * `'PageUp'` — and a single-character key matches either case, so `'k'`
+   * answers `K` too. The defaults, which an override replaces rather than
+   * adds to:
+   *
+   * - `togglePlayback`: `' '`, `'k'`
+   * - `seekBackward` / `seekForward`: `'ArrowLeft'` / `'ArrowRight'` (5s)
+   * - `seekBackwardLarge`: `'j'`, `'PageDown'` (10s back)
+   * - `seekForwardLarge`: `'l'`, `'PageUp'` (10s forward)
+   * - `volumeUp` / `volumeDown`: `'ArrowUp'` / `'ArrowDown'` (0.05)
+   * - `toggleMuted`: `'m'`
+   * - `toggleFullscreen`: `'f'`
+   * - `toggleCaptions`: `'c'`
+   *
+   * Hoist this object or `useMemo` it: a fresh literal on every render
+   * re-attaches the global listener.
+   */
+  readonly shortcuts?: false | ShortcutBindings;
 };
 
 export const Controls = ({
@@ -56,6 +191,7 @@ export const Controls = ({
   onFocus,
   onKeyDown,
   ref,
+  shortcuts,
   style,
   tabIndex,
   ...props
@@ -96,47 +232,43 @@ export const Controls = ({
 
   const handleShortcut = useCallback(
     (event: ShortcutEvent) => {
+      if (shortcuts === false) return;
       if (event.defaultPrevented) return;
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target;
-      if (isEditableTarget(target) || isInOpenMenu(target)) return;
+      if (isTextEntryTarget(target) || isInOpenMenu(target)) return;
+      const action = resolveShortcutAction(shortcuts, event.key);
+      if (action === null) return;
+      if (
+        (event.key === ' ' || event.key === 'Enter') &&
+        ownsActivationKeys(target)
+      )
+        return;
 
-      switch (event.key) {
-        case ' ':
-        case 'k':
-        case 'K':
-          // Space natively activates a focused button; don't double-toggle.
-          if (event.key === ' ' && isNativeActivationTarget(target)) return;
+      switch (action) {
+        case 'togglePlayback':
           event.preventDefault();
           void controller.togglePlaybackWithOrigin('user');
           return;
-        case 'ArrowLeft':
+        case 'seekBackward':
+        case 'seekForward':
+        case 'seekBackwardLarge':
+        case 'seekForwardLarge':
           if (seekStatus !== 'available') return;
+          // The layer owns the seek keys everywhere in the region: preventing
+          // the default keeps a focused range input's own stepping out of it,
+          // so the distance travelled never depends on where focus sits. That
+          // also means a consumer `step` and `onChange` on `SeekSlider`'s
+          // input no longer see arrow presses; `shortcuts={{ seekBackward:
+          // null, seekForward: null }}` hands the arrows back to the input.
           event.preventDefault();
-          void controller.seekBy(-5);
+          void controller.seekBy(seekSeconds[action]);
           return;
-        case 'ArrowRight':
-          if (seekStatus !== 'available') return;
-          event.preventDefault();
-          void controller.seekBy(5);
-          return;
-        case 'j':
-        case 'J':
-          if (seekStatus !== 'available') return;
-          event.preventDefault();
-          void controller.seekBy(-10);
-          return;
-        case 'l':
-        case 'L':
-          if (seekStatus !== 'available') return;
-          event.preventDefault();
-          void controller.seekBy(10);
-          return;
-        case 'ArrowUp':
-        case 'ArrowDown': {
+        case 'volumeUp':
+        case 'volumeDown': {
           if (volumeStatus !== 'available') return;
           event.preventDefault();
-          const delta = event.key === 'ArrowUp' ? 0.05 : -0.05;
+          const delta = action === 'volumeUp' ? 0.05 : -0.05;
           const next = Math.min(
             1,
             Math.max(0, Math.round((volume + delta) * 100) / 100)
@@ -145,22 +277,19 @@ export const Controls = ({
           void controller.setVolume(next);
           return;
         }
-        case 'm':
-        case 'M':
+        case 'toggleMuted':
           if (volumeStatus !== 'available') return;
           event.preventDefault();
           void controller.toggleMuted();
           return;
-        case 'f':
-        case 'F':
+        case 'toggleFullscreen':
           if (fullscreenStatus !== 'available') return;
           event.preventDefault();
           void (fullscreen
             ? controller.exitFullscreen()
             : controller.requestFullscreen());
           return;
-        case 'c':
-        case 'C': {
+        case 'toggleCaptions': {
           if (selectTextTrackStatus !== 'available') return;
           event.preventDefault();
           const next = resolveCaptionToggle(
@@ -171,8 +300,6 @@ export const Controls = ({
           if (next !== undefined) void controller.selectTextTrack(next);
           return;
         }
-        default:
-          return;
       }
     },
     [
@@ -184,6 +311,7 @@ export const Controls = ({
       seekStatus,
       selectedTextTrackId,
       selectTextTrackStatus,
+      shortcuts,
       textTracks,
       volume,
       volumeStatus
@@ -191,11 +319,11 @@ export const Controls = ({
   );
 
   useEffect(() => {
-    if (!global) return;
+    if (!global || shortcuts === false) return;
     const listener = (event: KeyboardEvent): void => handleShortcut(event);
     document.addEventListener('keydown', listener);
     return () => document.removeEventListener('keydown', listener);
-  }, [global, handleShortcut]);
+  }, [global, handleShortcut, shortcuts]);
 
   // Keep focus inside the player region: when a capability-gated control
   // unmounts while focused, the browser drops focus to <body>. Restore it to
@@ -247,10 +375,11 @@ export const Controls = ({
       }}
       ref={setRef}
       // Deliberately role="group", not "toolbar": the region owns media
-      // shortcuts (Arrow keys seek/adjust volume, J/L/K/M/F, Space) rather
-      // than roving-tabindex toolbar navigation. Native controls inside
-      // (buttons, links, range inputs) keep their own key handling; the
-      // shortcut handler skips those targets.
+      // shortcuts by default — see `shortcuts` for the map, which a consumer
+      // can rebind or remove — rather than roving-tabindex toolbar navigation.
+      // Native controls inside keep whatever keys the layer does not bind:
+      // text entry keeps all of them, and a focused button or checkbox keeps
+      // Space and Enter.
       role="group"
       style={style}
       tabIndex={tabIndex ?? 0}

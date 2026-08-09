@@ -428,6 +428,36 @@ export const ErrorState: Story = {
 };
 
 /**
+ * The same composition with the shortcut layer on `document` rather than on
+ * the controls region — `Player.Controls global`. It exists to be scanned:
+ * #181 requires an accessibility check over a composition using global mode,
+ * and until this story there was none, so no axe run had ever seen the mode.
+ * One of #32's axe states, added by #181.
+ *
+ * What a clean scan here does and does not mean is worth stating, because the
+ * criterion invites the wrong reading. **Axe ships no rule for SC 2.1.4
+ * Character Key Shortcuts** — a single-character binding is invisible to
+ * static analysis, and no runner can tell one that can be turned off from one
+ * that cannot. This state proves the mode introduces no *other* accessibility
+ * regression: the same zero violations and zero needs-review entries the
+ * region-scoped composition reports, with a document-level listener attached.
+ * Conformance to 2.1.4 itself rests on `shortcuts` — the off switch and the
+ * remap — which `packages/react/test/controls.test.tsx` pins.
+ */
+export const GlobalShortcuts: Story = {
+  args: { globalShortcuts: true },
+  play: async ({ canvas }) => {
+    // The scan above is worthless if the mode did not actually engage, and
+    // global mode is otherwise indistinguishable in the DOM: the same tree,
+    // the same roles, one attribute different. Pin it.
+    const region = canvas.getByRole('group', {
+      name: 'Video player controls'
+    });
+    await expect(region).toHaveAttribute('data-state', 'global');
+  }
+};
+
+/**
  * Real providers, real media, real network — excluded from the deterministic
  * story test suite (tagged `!test`), which is also what makes the mock
  * decorator step aside. `e2e/reference.spec.ts` drives this one.

@@ -335,9 +335,17 @@ const ExampleSettingsMenu = (): ReactElement | null => {
 
 export type ReferencePlayerProps = {
   readonly textTracks?: Player.MediaProps['textTracks'];
+  /**
+   * Opt the shortcut layer onto `document` instead of the controls region.
+   * Exists so one story composes the mode WCAG 2.1.4 actually constrains
+   * (#181) — the region-scoped default is exempt under the active-on-focus
+   * exception, so scanning it proves nothing about the global one.
+   */
+  readonly globalShortcuts?: boolean;
 };
 
 export const ReferencePlayer = ({
+  globalShortcuts,
   textTracks
 }: ReferencePlayerProps): ReactElement => {
   const state = Player.usePlayerState((snapshot) => ({
@@ -409,6 +417,7 @@ export const ReferencePlayer = ({
           <Player.Controls
             aria-label="Video player controls"
             className="reely-example-controls"
+            global={globalShortcuts}
             hidden={overlayOwnsViewport}
           >
             <div className="reely-example-row">

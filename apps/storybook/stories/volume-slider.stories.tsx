@@ -23,7 +23,7 @@ const meta = {
           '',
           '**Contract** — renders `data-reely-part="volume-slider"`, `data-provider="<provider>"`, and `data-state="muted" | "unmuted"`.',
           '',
-          '**Accessibility** — exposes a range semantics control; arrow keys adjust the value.',
+          '**Accessibility** — exposes a range semantics control. On its own, every arrow key adjusts the value by `step`. Inside a `Player.Controls` region the shortcut layer owns the arrows: `ArrowUp`/`ArrowDown` still adjust the volume, by 0.05 through `setVolume` rather than through `step`, and `ArrowLeft`/`ArrowRight` seek instead. `Home` and `End` stay native either way.',
           '',
           '**Capability** — gated by `setVolume`; renders nothing until `setVolume` resolves `available`.'
         ].join('\n')
