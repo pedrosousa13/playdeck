@@ -40,9 +40,14 @@ export const ActivationButton = ({
   if (loading !== 'interaction' || activation === 'ready') return null;
   const isError = activation === 'error';
   const isLoading = activation === 'loading-provider';
-  const isConfigurationError = isError && error?.category === 'configuration';
-  const isDisabled = isLoading || isConfigurationError;
-  const label = ariaLabel ?? (isError ? 'Retry loading video' : 'Play video');
+  // Retryability is the state's to state, through `recoverable` (see
+  // `PlayerError` in @reely/core), and is never re-derived from the error's
+  // category here (#198): a notice that says nothing about retrying must not
+  // disable this control. An activation error carrying no error record says
+  // nothing either, so it stays retryable, as it always was.
+  const canRetry = isError && error?.recoverable !== false;
+  const isDisabled = isLoading || (isError && !canRetry);
+  const label = ariaLabel ?? (canRetry ? 'Retry loading video' : 'Play video');
   return (
     <button
       {...props}
@@ -59,7 +64,7 @@ export const ActivationButton = ({
       style={{ ...activationOverlayStyle, ...style }}
       type="button"
     >
-      {children ?? (isError ? 'Retry' : 'Play')}
+      {children ?? (canRetry ? 'Retry' : 'Play')}
     </button>
   );
 };
@@ -228,8 +233,8 @@ export const LoadingIndicator = ({
 /**
  * Render-prop context handed to `ErrorDisplay` children. `retry` is `null`
  * when the current error is not recoverable, so custom renderers stay
- * capability-aware — a retry action is never offered where the provider has
- * nothing to retry.
+ * capability-aware — a retry action is never offered where the error cannot be
+ * retried.
  */
 export type ErrorDisplayRenderProps = {
   readonly error: PlayerError;
@@ -260,8 +265,9 @@ export const ErrorDisplay = ({
   }));
   const { controller } = usePlayer();
   if (!error) return null;
-  // `recoverable` is the state-level signal that the provider offers a retry.
-  // Absent — not disabled — when it does not (issue #34 capability rule).
+  // `recoverable` is the state-level signal that a retry is worth offering (see
+  // `PlayerError` in @reely/core), and `ActivationButton` reads the same one.
+  // Absent — not disabled — when it does not hold (issue #34 capability rule).
   const retry = error.recoverable
     ? () => {
         void controller.retry();

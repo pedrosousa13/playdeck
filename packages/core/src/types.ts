@@ -15,6 +15,12 @@ export type PlayerErrorCategory =
 export type PlayerError = {
   readonly category: PlayerErrorCategory;
   readonly fatal: boolean;
+  // Whether retrying can change the outcome, and the one signal a control reads
+  // to decide whether to offer a retry — never the category, which says what
+  // went wrong rather than what a retry would do. Every `configuration` error
+  // carries `false`: the remedy for one is a change the consumer makes, so a
+  // retry re-runs the same rejected configuration and republishes the same
+  // error (#198).
   readonly recoverable: boolean;
   readonly message: string;
   readonly cause?: unknown;

@@ -32,10 +32,12 @@
   cursor: progress;
 }
 
-/* The child text reads "Retry", and a press does retry — activation acts on
-   this state as well as on `dormant`. So colour it as a recovery, and keep the
-   affordance. The exception is a configuration error, which is `aria-disabled`
-   and says so through that rather than through colour. */
+/* The child text reads "Retry" where the error can be retried, and a press does
+   retry — activation acts on this state as well as on `dormant`. So colour it
+   as a recovery, and keep the affordance. The exception is an error the state
+   reports as not recoverable — every configuration error among them — which
+   reads "Play", is `aria-disabled`, and says so through that rather than
+   through colour. */
 [data-reely-part='activation'][data-state='error'] {
   background: rgb(63 18 18 / 85%);
 }
