@@ -23,10 +23,10 @@ import type { CommandResult } from '@reely/core';
 //   - **Rollback.** A render attempt React throws away — a sibling suspending
 //     under the same boundary, a higher-priority update interrupting a
 //     concurrent render — must leave nothing behind. A `setState` computed
-//     purely from what the component holds is recomputed on the next attempt
-//     and reaches the same answer. A value released by mutating a store during
-//     render is released once, in an attempt that never commits, and the
-//     control and the store then disagree forever.
+//     purely from the state and props a render already has is recomputed on
+//     the next attempt and reaches the same answer. A value released by
+//     mutating a store during render is released once, in an attempt that
+//     never commits, and the control and the store then disagree forever.
 //   - **A commit at the drain.** `setSettling(false)` is what re-renders the
 //     control when the chain empties, and that render is what re-evaluates the
 //     echo. A provider can publish the value it was asked for *before* it

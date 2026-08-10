@@ -375,6 +375,42 @@ describe('VolumeSlider', () => {
     expect(attr(slider, 'aria-valuetext')).toBe('50%');
   });
 
+  test('gives up on a volume command that never answers, and sets volume again after', async () => {
+    const { spies } = renderWithPlayer(<Player.VolumeSlider />, volumeReady());
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    // Nothing under this layer has a timeout, and an iframe provider hands
+    // back a raw SDK promise: a torn-down frame or a dropped message leaves it
+    // unsettled forever.
+    spies.setVolume.mockImplementationOnce(
+      () => new Promise<CommandResult>(() => {})
+    );
+
+    vi.useFakeTimers();
+    fireEvent.change(slider, { target: { value: '0.8' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3999);
+    });
+    expect(valueOf(slider)).toBe('0.8');
+
+    // COMMAND_TIMEOUT_MS. The chain has to drain on this path too, or the
+    // thumb keeps a volume the media never reached...
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(valueOf(slider)).toBe('0.5');
+    expect(attr(slider, 'aria-valuetext')).toBe('50%');
+
+    // ...and, worse, every later change is swallowed into the pending slot
+    // behind a command that will never settle, leaving the volume dead for the
+    // rest of the session.
+    fireEvent.change(slider, { target: { value: '0.3' } });
+    expect(spies.setVolume).toHaveBeenCalledTimes(2);
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.3);
+    expect(valueOf(slider)).toBe('0.3');
+
+    vi.useRealTimers();
+  });
+
   test('shows a volume asked for while muted, not the muted zero', () => {
     const { spies } = renderWithPlayer(
       <Player.VolumeSlider />,

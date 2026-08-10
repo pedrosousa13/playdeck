@@ -47,6 +47,27 @@ through `shortcuts` without restating the rest. Scoped to the region unless
 `global` moves it to the document.
 _Avoid_: hotkeys, key handler, keymap
 
+**Requested value**:
+The value a user last asked a control for — a volume, a seek position — shown in
+place of published state until the player answers for it. Held over the round
+trip because published state moves only on the media element's own asynchronous
+events, so a control rendering it alone restores the old value and swallows the
+next press.
+_Avoid_: optimistic value, pending value
+
+**Command chain**:
+How a control's changes reach the player: one command in flight at a time, with
+a value asked for during it overwriting the value queued behind it rather than
+joining a queue. It coalesces the traffic only — every change still moves what
+the control shows.
+_Avoid_: queue, debounce, throttle
+
+**Echo**:
+A published value that answers the request that caused it, within the tolerance
+that control's own domain sets, and so releases it. A request nothing echoes is
+released by its deadline instead.
+_Avoid_: confirmation, acknowledgement
+
 ### Loading
 
 **Activation**:

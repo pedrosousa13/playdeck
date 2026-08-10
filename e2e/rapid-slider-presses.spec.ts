@@ -14,21 +14,23 @@ import {
 // nothing here waits for the media element to go quiet first — a test that only
 // passes because it waited proves the opposite of what this file is for.
 //
-// For whoever sees the first red WebKit run: these four have never been
-// observed green in-suite on WebKit anywhere, and CI is where they first
-// execute on it. Playwright's Linux WebKit on the maintainer's machine has no
-// H.264 (`canPlayType` for `avc1` is empty), so the composed example never
-// reaches activation `ready`, hides its whole control row, and all four fail
-// there on the arrangement — identically with main's `packages/react` in place,
-// and the archive records the same for the rest of the media suite. CI installs
-// the codec set with it (`.github/workflows/ci.yml:90`), so CI's WebKit very
-// likely plays the fixture. Driven on WebKit by hand with the control row
-// forced visible, the volume gestures reproduce the defect against the pre-fix
-// source (`[1, 1, 1]`, the player left silent) and pass against this one, so
-// what is unproven there is the run and not the technique. The alternative was
+// WebKit, for whoever meets a red run on it: the four tests in this file have
+// never been observed green in-suite on WebKit anywhere, and CI is where they
+// first execute on it. A locally installed Playwright Linux WebKit has no H.264
+// (`canPlayType` for `avc1` is empty), so the composed example never reaches
+// activation `ready`, hides its whole control row, and all four fail on the
+// arrangement — identically with main's `packages/react` in place, and the
+// archive records the same for the rest of the media suite. CI installs the
+// codec set alongside the browser (`playwright install --with-deps` in
+// `.github/workflows/ci.yml`), so CI's WebKit very likely plays the fixture.
+// Driven on WebKit by hand with the control row forced visible, the volume
+// gestures reproduce the defect against the pre-fix source (`[1, 1, 1]`, the
+// player left silent) and pass against this one, so what is unproven there is
+// the run and not the technique. The alternative was
 // `test.skip(browserName !== 'chromium')`, this repo's convention wherever
 // something is CDP-only, and it would have proven nothing at all on the engine
 // where #271's seek failure was first seen.
+
 const story = '/iframe.html?id=reference-player--real-sources&viewMode=story';
 
 // Both local fixtures are ~1 SECOND long, so `data-state="playing"` is a state

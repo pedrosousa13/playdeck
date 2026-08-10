@@ -41,13 +41,16 @@ import {
 // and a tolerance below that would leave a rounded echo failing to answer the
 // request that caused it.
 //
-// The lower bound is stated against the default step, and `VolumeSlider`'s
-// `step` is a documented escape hatch. A consumer step below this tolerance
-// moves the request less than the tolerance on a single arrow press, so the
-// volume from before the press reads as already-arrived and the thumb reverts
-// once the command settles — exactly as the seek tolerance documents. Deriving
-// the tolerance from the effective step would cost more machinery than a
-// fine-grained volume step is worth.
+// The lower bound is stated against that 0.05, which is also `VolumeSlider`'s
+// default `step`, and `step` is a documented escape hatch. What a consumer
+// `step` still governs is pointer scrubbing: the arrows are the layer's own
+// fixed 0.05 and never the input's, because ADR-0005 has the layer own
+// `ArrowUp`/`ArrowDown` inside `Player.Controls` and prevent the default before
+// the input steps. So a `step` below this tolerance moves the request less than
+// the tolerance on a single scrubbed increment, and the volume from before it
+// reads as already-arrived and reverts the thumb once the command settles.
+// Deriving the tolerance from the effective step would cost more machinery than
+// a fine-grained volume step is worth.
 const VOLUME_ECHO_TOLERANCE = 0.02;
 
 export type VolumeRequest = {
@@ -58,14 +61,16 @@ export type VolumeRequest = {
   // snapshot for `VolumeSlider` — a number or a null, never a fresh object, so
   // a snapshot is stable by value and cannot loop the store. And it is the
   // non-reactive read the shortcut layer compounds on inside its key handler,
-  // where subscribing would re-render the whole controls region on every
-  // volume the player publishes.
+  // which needs the value as of the keypress rather than as of the last
+  // commit: `request` below mutates it synchronously, so a press compounds on
+  // whatever the press before it asked for however React scheduled its
+  // renders.
   readonly getRequested: () => number | null;
   readonly subscribe: (listener: () => void) => () => void;
   // Ask for `volume`. Muting is a separate command and stays the caller's:
   // this only ever moves the volume.
   readonly request: (volume: number) => void;
-  // Start reconciling from the player, and return the teardown -- so `Root`
+  // Start reconciling from the player, and return the teardown — so `Root`
   // drives it from an effect, like any other subscription.
   readonly observe: () => () => void;
 };

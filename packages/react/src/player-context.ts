@@ -31,9 +31,9 @@ export type PlayerContextValue = ActivationBindings & {
   lastSelectedTextTrackId: RefObject<string | null>;
   // The volume the user last asked for, held over the round trip to the media
   // element. Player-scoped for the same reason as the selection above:
-  // VolumeSlider renders it and the Controls shortcut layer compounds its next
-  // value on it, neither can read the other's state, and the shortcuts run
-  // while no volume control is mounted at all (#271).
+  // `VolumeSlider` renders it and the `Controls` shortcut layer compounds its
+  // next value on it, neither can read the other's state, and the shortcuts
+  // run while no volume control is mounted at all (#271).
   volumeRequest: VolumeRequest;
 };
 

@@ -273,9 +273,12 @@ export const Controls = ({
           // and published state otherwise. Published state alone is a stale
           // base: it moves only on the media element's own `volumechange`, so
           // two presses inside one round trip would compute the same target and
-          // the second would be a silent no-op (#271). Read without
-          // subscribing — a subscription here would re-render the whole region
-          // on every volume the player publishes.
+          // the second would be a silent no-op (#271). Read straight off the
+          // store rather than through a subscription, because this handler
+          // needs the value as of the keypress and a subscribed one is only
+          // ever as fresh as the last commit — a base that lags the press is
+          // the whole of what this reads around. Nothing this region renders
+          // shows the request either; `VolumeSlider` subscribes for that.
           //
           // The two sides are different spaces, which nothing else here says: a
           // request is the muted-adjusted volume the thumb shows, while the

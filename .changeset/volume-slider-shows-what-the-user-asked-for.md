@@ -45,10 +45,13 @@ Two things a consumer will see. A volume set from outside the control —
 but does not move the thumb while a request is held; it appears when the request
 releases, up to the two-second deadline after the last command settles. And the
 echo tolerance is stated against the control's default `step` of `0.05`: a
-`step` below `0.02` moves the request less than the tolerance, so a single arrow
-press at that step reads the volume from before the press as an answer to it and
-the thumb reverts as soon as the command settles — which is what it did at every
-step before this release.
+`step` below `0.02` moves the request less than the tolerance, so a single
+scrubbed increment at that step reads the volume from before it as an answer to
+it and the thumb reverts as soon as the command settles — which is what it did
+at every step before this release. The arrows are not that path. `step` governs
+pointer scrubbing only, because the shortcut layer owns `ArrowUp`/`ArrowDown`
+inside `Player.Controls` at its own fixed `0.05` and prevents the default before
+the input steps (ADR-0005).
 
 `PlayerState` is untouched. `volume` and `muted` stay event-driven and still
 report only what the media element did, so a consumer reading state rather than

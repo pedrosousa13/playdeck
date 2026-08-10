@@ -124,7 +124,7 @@ export const VolumeSlider = ({
   // when the player publishes a volume that answers it. Player-scoped, because
   // the `Controls` shortcut layer computes its next value from the same
   // request and this primitive is optional (#271); the store owns the whole of
-  // that policy, and this component only renders what it holds.
+  // that policy, and this primitive only renders what it holds.
   const requested = useSyncExternalStore(
     volumeRequest.subscribe,
     volumeRequest.getRequested,
