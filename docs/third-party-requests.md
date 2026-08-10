@@ -25,7 +25,7 @@ something from the shipped code, it says so rather than guessing.
 | **Native** (`@reely/provider-native`)                                                   | —                                                                                                                 | —                                                                                               | —                                                                                                           | —                                                                                                                                                                                                                                                    | Your own media host — nothing Reely adds.                                 |
 | **HLS** (`@reely/provider-hls`)                                                         | —                                                                                                                 | —                                                                                               | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                                                                                                                                                              | Your own manifest/segment host, when the native engine plays it directly. |
 | **YouTube** (`@reely/provider-youtube`)                                                 | `www.youtube.com`                                                                                                 | `www.youtube-nocookie.com` (the default) or `www.youtube.com`, and nothing else; see note below | —                                                                                                           | —                                                                                                                                                                                                                                                    | —                                                                         |
-| **Vimeo** (`@reely/provider-vimeo`)                                                     | —                                                                                                                 | `player.vimeo.com`                                                                              | —                                                                                                           | `vimeo.com` — opt-in only, and reachable through `Player.Root`; see note below.                                                                                                                                                                      | —                                                                         |
+| **Vimeo** (`@reely/provider-vimeo`)                                                     | —                                                                                                                 | `player.vimeo.com`                                                                              | —                                                                                                           | `vimeo.com` — two paths: Reely's `customControls` probe, opt-in through `Player.Root`; and the SDK's own document scan, which needs no option but only fires if your page carries `data-vimeo-id`/`data-vimeo-url` markup. See note below.           | —                                                                         |
 | **Wistia** (`@reely/provider-wistia`)                                                   | `fast.wistia.net`, `fast.wistia.com`, `browser.sentry-cdn.com` (injected by Wistia's own element; see note below) | `fast.wistia.net` (legacy-embed fallback; see note below)                                       | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com`, `o4505518331658240.ingest.us.sentry.io`, `pipedream.wistia.com` — the last two are Wistia's error and metrics reporting; see note below | Same five hosts as `img-src`.                                             |
 | **Storybook Backpack wrapper** (`backpack-parity` branch) — not shipped, see note below | —                                                                                                                 | —                                                                                               | `img.youtube.com`, `ytimg.com` (+ subdomains), `vimeocdn.com` (+ subdomains)                                | `www.youtube.com`, `vimeo.com`                                                                                                                                                                                                                       | —                                                                         |
 
@@ -80,27 +80,30 @@ Notes, per row:
   (`packages/provider-vimeo/src/attachment.ts:69`). The SDK
   (`@vimeo/player`, pinned `2.30.4`) is a bundled dependency, imported
   dynamically — nothing is fetched from a Vimeo CDN
-  (`packages/provider-vimeo/README.md`). The oEmbed probe at
+  (`packages/provider-vimeo/README.md`). Reely's own oEmbed probe at
   `packages/provider-vimeo/src/chromeless-availability.ts` that would reach
   `vimeo.com/api/oembed.json` is opt-in as of SIDEPRO-217: it only fires when
   `VimeoProviderOptions.customControls === true`
-  (`chromeless-availability.ts:128`), so the probe never fires uninvited — it
-  needs the option, whether the caller builds the adapter directly or reaches
-  it through `Player.Root`'s `vimeo` bag. `dnt` **is on unless it is explicitly
-  `false`** — the embed url always carries a `dnt` parameter, `1` for every
-  value but `false`, including when the option is left unset
-  (`packages/provider-vimeo/src/attachment.ts:72`,
+  (`chromeless-availability.ts:128`), so Reely's own probe never fires
+  uninvited — it needs the option, whether the caller builds the adapter
+  directly or reaches it through `Player.Root`'s `vimeo` bag. That is a claim
+  about Reely's probe and not about `vimeo.com/api/oembed.json` traffic in
+  general: the SDK reaches the same endpoint by a route of its own, with no
+  option set anywhere — see the module-scope document scan below. `dnt` **is on
+  unless it is explicitly `false`** — the embed url always carries a `dnt`
+  parameter, `1` for every value but `false`, including when the option is left
+  unset (`packages/provider-vimeo/src/attachment.ts:72`,
   `options.dnt === false ? '0' : '1'`) — and asks Vimeo not to track the
-  session. It is a separate switch and has no effect on whether the oEmbed
-  probe runs. `PlayerProviderOptions` carries a `vimeo` key
+  session. It is a separate switch and has no effect on whether Reely's probe
+  runs. `PlayerProviderOptions` carries a `vimeo` key
   (`packages/react/src/provider-loaders.ts:55`), so `dnt`, `customControls` and
   `suppressSeoMetadata` are reachable through `Player.Root` as
   `providerOptions={{ vimeo: {...} }}`; `controls`, `loop`, `startTime` and
   `endTime` are omitted from that bag because `Root` owns them as its own props
   (ADR-0004). So a `Player.Root` consumer can turn Do-Not-Track off —
-  `providerOptions={{ vimeo: { dnt: false } }}` sends `dnt=0` — and can fire the
-  oEmbed probe, `providerOptions={{ vimeo: { customControls: true } }}`. Neither
-  needs `createVimeoProvider` to be called directly. One part of that is
+  `providerOptions={{ vimeo: { dnt: false } }}` sends `dnt=0` — and can fire
+  Reely's oEmbed probe, `providerOptions={{ vimeo: { customControls: true } }}`.
+  Neither needs `createVimeoProvider` to be called directly. One part of that is
   machine-checked: `packages/react/test/provider-loaders.test.ts` asserts, at
   the type level, which providers have a bag and which keys each bag omits, so
   `pnpm typecheck` fails if that shape moves again. It checks nothing else
@@ -126,9 +129,13 @@ Notes, per row:
   this frame, and a DRM source that silently will not play is what an
   origins-only reading would leave them to find in production.
 
-  One more thing leaves the page here that no origin in the table above shows,
-  because it is not a request: **the SDK sends the embedding page's full URL —
-  path and query included — to the embed frame over `postMessage`.**
+  Two more things leave the page here that the table above does not explain on
+  its face, and both are the SDK's own work at module scope rather than
+  anything Reely calls — two separate routines, each cited by line below. (Those
+  citations are to `dist/player.js`; a consumer's ESM bundler resolves
+  `player.es.js` instead, which is the same code six lines up.) The first is not
+  a request at all: **the SDK sends the embedding page's full URL — path and
+  query included — to the embed frame over `postMessage`.**
   `@vimeo/player` runs `initAppendVideoMetadata()` at module scope
   (`dist/player.js:2827`), which installs a `window` `message` listener
   (`:993-1016`); when a frame whose `src` matches
@@ -156,6 +163,100 @@ Notes, per row:
   cannot get it from a later one. A page that has already set that global itself
   keeps its own value, in either direction: Reely writes it only when it is not
   already set.
+
+  The second **is** a request, and it is the one the table's `connect-src` cell
+  points at: **importing the Vimeo provider makes the SDK scan the consumer's
+  whole document, and for every element carrying `data-vimeo-id` or
+  `data-vimeo-url` it issues an oEmbed request and writes the response's `html`
+  field into that element.** `initializeEmbeds()` runs at module scope with no
+  argument (`@vimeo/player@2.30.4`'s `dist/player.js:2825`), so its parent
+  defaults to `document` and the selector runs over the whole page (`:929-931`,
+  `parent.querySelectorAll('[data-vimeo-id], [data-vimeo-url]')`). Each match's
+  `data-vimeo-*` attributes — the SDK reads 51 of them (`:824`) — are appended
+  to the query string of an `XMLHttpRequest` to
+  `https://<host>/api/oembed.json?url=…` (`:876-891`), and the JSON response's
+  `html` field is assigned to a detached `div`'s `innerHTML`, whose
+  `firstChild` is then appended into the scanned element (`:858-865`). Nothing
+  Reely does causes this and no Reely option stops it. The precondition is
+  markup, and the markup is the consumer's: **a document carrying no
+  `data-vimeo-id` and no `data-vimeo-url` emits no oEmbed request from this
+  path at all**. Check whether yours does — markup left behind by Vimeo's own
+  embed script, or rendered from a CMS, is where those attributes turn up — and
+  read the rest of this note only if it describes your page.
+
+  The opt-out is per element and lives in that markup: the scan skips anything
+  carrying `data-vimeo-defer` (`:939-942`), tested with
+  `getAttribute(...) !== null`, so the attribute present with **any** value,
+  the empty string included, is enough. There is no page-wide opt-out, and that
+  is not an oversight to route around. The module-scope block runs six routines
+  (`:2823-2830`), and of the ones that touch the page or the network the scan
+  is the one with no settable guard: `resizeEmbeds` honours
+  `window.VimeoPlayerResizeEmbeds_` (`:963-966`), `initAppendVideoMetadata`
+  `window.VimeoSeoMetadataAppended` (`:996-999`), `checkUrlTimeParam`
+  `window.VimeoCheckedUrlTimeParam` (`:1028-1031`) and `updateDRMEmbeds`
+  `window.VimeoDRMEmbedsUpdated` (`:1069-1072`), while `initializeEmbeds`' only
+  condition is a Node/Bun/Deno/Cloudflare runtime sniff (`:17-44`) that is
+  false in every browser. The sixth, `initializeScreenfull` (`:2824`, defined
+  at `:1119`), has no guard either, but it only builds a fullscreen shim: no
+  scan, no request, nothing written into a consumer's elements. So
+  `suppressSeoMetadata` has no counterpart here, because the mechanism it uses
+  does not exist for this routine. What does bound it is that the scan is not
+  re-triggerable: `initializeEmbeds` is not exported and `Player`'s only static
+  is `isVimeoUrl` (`:1568`), so it runs when the SDK module evaluates — on a
+  Reely page, the first Vimeo attach — and not again. `data-vimeo-initialized`
+  is a weaker bound than it looks:
+  `createEmbed` checks it on entry (`:858`) but only sets it after the response
+  returns (`:864`), so it makes the injection once-per-element and does not
+  dedupe the request.
+
+  Which host is called is decided by that markup too, and by **either**
+  attribute — `data-vimeo-id` is not restricted to bare numeric ids.
+  `getVimeoUrl` returns `https://vimeo.com/<id>` only when the value is an
+  integer (`:130-132`); any other value, from either attribute, is put through
+  the SDK's own URL check instead (`:133-134`), and is rejected with no request
+  at all if it fails (`:136-139`). So an integer id always reaches `vimeo.com`
+  — the path the table's `connect-src` cell records — and every other value
+  reaches whichever host that check admits. It (`:89-91`) accepts exactly
+  `vimeo.com`, `www.vimeo.com` and `player.vimeo.com` — subdomains are **not**
+  wildcarded, so `m.vimeo.com` is rejected — plus exactly one further label
+  under three Vimeo Enterprise white-label suffixes: `<label>.videoji.hk`,
+  `<label>.videoji.cn` and `<label>.vimeo.work`, each optionally prefixed by a
+  literal `player.` that `getOembedDomain` strips before the request
+  (`:103-113`), so `player.acme.videoji.hk` is called as `acme.videoji.hk`. One
+  label, not arbitrary depth: bare `videoji.hk` and `a.b.videoji.hk` are both
+  rejected. The check is start-anchored and ends on a `(?=$|\/)` lookahead, so
+  `https://vimeo.com@evil.com/` and `https://vimeo.com:8080/` are rejected too;
+  the scheme is optional, so a protocol-relative `//vimeo.com/…` passes. The
+  three white-label suffixes are left out of the table for the same reason the
+  Wistia canary host is: nothing in Reely reaches them. They are called only
+  when the consumer's own document carries a `data-vimeo-id` or
+  `data-vimeo-url` naming one, so add them to `connect-src` only if that
+  describes your page.
+
+  **Where either attribute can come from untrusted content, that content picks
+  which of those hosts is called and its response is `innerHTML`-injected into
+  your page** — `data-vimeo-id` as much as `data-vimeo-url`, since a
+  non-integer id takes the same URL path. The 51 attribute values ride outbound
+  in the query string with it, so attacker-chosen values reach the host too.
+  The response is injected even on the rejection path: a body whose
+  `domain_status_code` is `403` is handed to `createEmbed` before the promise
+  rejects (`:904-906`). And while `innerHTML` on a detached `div` does not
+  execute an inline `<script>`, an `<img onerror>`-style loader does run once
+  that child is appended — that last is HTML-parsing semantics rather than
+  anything read off this bundle or observed in a browser here. A page rendering
+  third-party or CMS-authored markup should strip `data-vimeo-*` attributes
+  from it, or mark those elements `data-vimeo-defer`.
+
+  **Reely itself never takes the SDK's element-upgrade path**, which is the
+  same oEmbed-and-inject code reached from the constructor rather than from the
+  scan. The loader types the SDK constructor as taking an `HTMLIFrameElement`
+  (`packages/provider-vimeo/src/loader.ts:68-70`) and the attachment builds
+  that iframe and passes it
+  (`packages/provider-vimeo/src/attachment.ts:266-278`); the constructor only
+  branches into oEmbed when the element it is given is **not** an iframe
+  (`dist/player.js:1519-1531`), so that branch is dead here. That bounds the
+  constructor path only: it is a separate call site, and does nothing about the
+  module-scope scan at `:2825`.
 
 - **Wistia**'s player bundle is fetched from
   `https://fast.wistia.com/player.js` (`packages/provider-wistia/src/loader.ts:158`,
@@ -336,14 +437,22 @@ Mapped onto the origins above:
   loads their provider module; the actual media bytes additionally wait on
   `preload` (`'none'` / `'metadata'` / `'auto'`, default `'metadata'`) once
   attached.
-- **Vimeo's oEmbed probe** does not fire at all unless `customControls: true`
-  is set, regardless of `loading` — see the per-provider note above. It is set
-  either on `createVimeoProvider` directly or through `Player.Root` as
-  `providerOptions={{ vimeo: { customControls: true } }}`; both reach the same
-  place, so a `Player.Root`-only page can reach `vimeo.com` and this timeline
-  covers it. Once set, the probe starts at that provider's own attach — the same
+- **Reely's own Vimeo oEmbed probe** does not fire at all unless
+  `customControls: true` is set, regardless of `loading` — see the per-provider
+  note above. It is set either on `createVimeoProvider` directly or through
+  `Player.Root` as `providerOptions={{ vimeo: { customControls: true } }}`; both
+  reach the same place, so a `Player.Root`-only page can reach `vimeo.com` this
+  way. Once set, the probe starts at that provider's own attach — the same
   gate as everything else above — racing the embed's own load
   (`CHROMELESS_PROBE_TIMEOUT_MS`, 4 seconds).
+- **The Vimeo SDK's document scan** is a request, and `loading` decides when it
+  starts but not whether it happens. It runs when the SDK module evaluates —
+  the first Vimeo attach on the page, so the earliest gate any Vimeo source on
+  it passes — and no later attach repeats it. What decides whether it emits
+  anything is not a prop or a provider option but the consumer's own markup: a
+  document carrying `data-vimeo-id` or `data-vimeo-url` anywhere gets one
+  oEmbed request per matching element, and a document carrying neither gets
+  none. No `loading` setting suppresses it — see the per-provider note above.
 - **The Vimeo SDK's `appendVideoMetadata` message** is not on this timeline
   because it is not a request: it is a `postMessage` to the embed frame Reely
   already created, sent once that frame reports ready. It therefore happens
@@ -456,7 +565,11 @@ omissions:
   `player.js` from `fast.wistia.com` instead of depending on
   `@wistia/wistia-player`, so it is a remote script tag now, on the same terms
   as YouTube's — see the SRI note above. That is a deliberate trade and not an
-  oversight, but it is not a thing found "in good order" either.
+  oversight, but it is not a thing found "in good order" either. Nor is this
+  bullet unqualified for Vimeo: bundling the SDK is what makes importing it
+  evaluate the vendor's module scope on your page, which is what runs the
+  document scan — a remote script tag would too, but this one arrives without a
+  network request to notice. See the Vimeo row above.
 - **Every runtime dependency of every published package is pinned to an
   exact version**, not a caret range: `@vimeo/player` at `2.30.4`
   (`packages/provider-vimeo/package.json`) and `hls.js` at `1.6.16`
@@ -501,9 +614,14 @@ not any single page load actually renders all three providers. Do not treat the
 three reporting origins — the Sentry pair and `pipedream.wistia.com` — as
 optional: in the `0.7.12` bundle this document read, the visitor-tracking state
 that gates them defaults to enabled, and omitting them buys a silently failed
-error or metrics request rather than a video that visibly does not play. Add
-`vimeo.com` to `connect-src`
-only if some caller in your app sets `customControls: true`, whether directly
-or through `providerOptions={{ vimeo: {...} }}`. None
-of this needs `'unsafe-inline'` or `'unsafe-eval'` in `script-src` — every
-provider here is a script or iframe load, not inline code.
+error or metrics request rather than a video that visibly does not play.
+`vimeo.com` belongs in `connect-src` on two counts, and the second needs no
+caller to opt into anything: some caller in your app setting
+`customControls: true`, whether directly or through
+`providerOptions={{ vimeo: {...} }}`; and the Vimeo SDK's module-scope document
+scan, which fires for any element anywhere in your page carrying
+`data-vimeo-id` or `data-vimeo-url`. Leave it out only if neither describes
+your page. Vimeo's three white-label suffixes stay out of this union for the
+same reason the Wistia canary does — nothing in Reely reaches them; see the
+per-provider note. None of this needs `'unsafe-inline'` or `'unsafe-eval'` in
+`script-src` — every provider here is a script or iframe load, not inline code.
