@@ -1,15 +1,20 @@
-import type { CommandResult, PlayerProvider, TimeRange } from '@reely/core';
+import type { PlayerProvider, TimeRange } from '@reely/core';
 import {
   controlTargetStyle,
   useLoadingPresentation,
   visuallyHiddenStyle
 } from './loading-error.js';
+import {
+  createCommandChain,
+  requestAnswered,
+  ECHO_DEADLINE_MS
+} from './optimistic-request.js';
 import { usePlayer, usePlayerState } from './player-context.js';
 import {
   useEffect,
   useId,
-  useRef,
   useState,
+  useSyncExternalStore,
   type ComponentPropsWithRef
 } from 'react';
 
@@ -114,9 +119,24 @@ export const VolumeSlider = ({
     status: state.capabilities.setVolume.status,
     volume: state.volume
   }));
-  const { controller } = usePlayer();
+  const { controller, volumeRequest } = usePlayer();
+  // The volume the user last asked for, held over the round trip and released
+  // when the player publishes a volume that answers it. Player-scoped, because
+  // the `Controls` shortcut layer computes its next value from the same
+  // request and this primitive is optional (#271); the store owns the whole of
+  // that policy, and this primitive only renders what it holds.
+  const requested = useSyncExternalStore(
+    volumeRequest.subscribe,
+    volumeRequest.getRequested,
+    volumeRequest.getRequested
+  );
   if (status !== 'available') return null;
-  const value = muted ? 0 : volume;
+  // A request outranks the muted zero. Dragging up while muted unmutes, but
+  // `muted` stays true until the player publishes the unmute, so rendering the
+  // zero here would swallow that drag exactly as a lagging volume does.
+  const value = requested ?? (muted ? 0 : volume);
+  // Read off the value the thumb is showing, so assistive technology is never
+  // told something the sighted user is being shown the opposite of.
   const percent = Math.round(value * 100);
 
   return (
@@ -135,7 +155,7 @@ export const VolumeSlider = ({
         const next = Number(event.currentTarget.value);
         if (!Number.isFinite(next)) return;
         if (muted && next > 0) void controller.unmute();
-        void controller.setVolume(next);
+        volumeRequest.request(next);
       }}
       step={step ?? 0.05}
       style={{ ...controlTargetStyle, ...style }}
@@ -221,52 +241,23 @@ const bufferedShare = (
 // before the press reads as already-arrived and the thumb reverts as soon as
 // the command settles. Deriving the tolerance from the effective step would
 // cost more machinery than a fine-scrub step is worth.
+//
+// It is passed to `requestAnswered` rather than living inside it: this bound is
+// a property of time and of how providers report it, and no other quantity a
+// control asks for shares it.
 const SEEK_ECHO_TOLERANCE_SECONDS = 0.5;
 
-// Covers one failure only: a provider that answers the seek command and then
-// reports no time for it — HLS and YouTube never publish `seeking`, and a seek
-// dropped after it was accepted is silent. Without this the thumb would keep a
-// position the media never reached. It is measured from the moment the last
-// command settles, so a slow round trip spends none of it, and it is not what
-// defends against a command that never answers at all: that one holds the
-// chain open and never reaches this timer, which is what
-// `SEEK_COMMAND_TIMEOUT_MS` is for.
-const SEEK_PREVIEW_DEADLINE_MS = 2000;
-
-// How long a single seek command may go unanswered before the chain gives up
-// on it. Nothing below this layer has a timeout — the controller awaits the
-// adapter, and the iframe providers hand back raw SDK promises across a
-// postMessage bridge that a torn-down frame, a navigation or a dropped message
-// leaves unsettled forever. A chain that never drains is worse than a late
-// seek: `inFlight` would never clear, so every later change event would be
-// swallowed into `pending` and seeking would be dead for the rest of the
-// session. Four seconds is what Vimeo's `CHROMELESS_PROBE_TIMEOUT_MS` allows a
-// cross-document round trip, comfortably above any live one; losing the race
-// costs only an early reconcile, since the abandoned promise is ignored either
-// way.
-const SEEK_COMMAND_TIMEOUT_MS = 4000;
-
-// Resolves to whether the command succeeded, and to `false` if it has not
-// answered in time. The invented failure never leaves this module: only `ok`
-// is read, so a timeout and a refusal reconcile the thumb the same way.
-const seekAnswered = (command: Promise<CommandResult>): Promise<boolean> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    command.then((result) => result.ok),
-    new Promise<boolean>((resolve) => {
-      timer = setTimeout(() => resolve(false), SEEK_COMMAND_TIMEOUT_MS);
-    })
-  ]).finally(() => clearTimeout(timer));
+type SeekRequest = {
+  readonly value: number;
+  readonly provider: PlayerProvider | null;
 };
 
 // The position the user last asked for, held until the media answers for it.
-// Every change takes this path: a pointer drag is a burst of change events and
-// an arrow press is a single one, and the two are not distinguished, so a
-// keyboard seek previews exactly as a drag does and nothing here depends on a
-// release event. Commands are coalesced by trailing-edge supersession — one in
-// flight at a time, and a change arriving during one overwrites the pending
-// value rather than queuing behind it — so a drag through N positions costs
-// far fewer than N round trips and still ends on the drag's last position.
+// The parts of that policy no scope has an opinion about — coalescing, the
+// command timeout, generation invalidation, and the rule for reading a reported
+// value as an answer — are `createCommandChain` and `requestAnswered`. This is
+// the seek binding onto them: it keeps the held position in the control's own
+// React state, releases it during render, and times it out in an effect.
 const useSeekPreview = (
   hasWindow: boolean,
   currentTime: number,
@@ -279,90 +270,80 @@ const useSeekPreview = (
   // The requested position, with the provider kind it was asked of — a kind,
   // not the adapter, so a source swap within one kind does not show up here.
   // The chain generation below is what covers that case.
-  const [requested, setRequested] = useState<{
-    readonly value: number;
-    readonly provider: PlayerProvider | null;
-  } | null>(null);
-  // `inFlight` coalesces and `settling` renders, and the two are not one fact
+  const [requested, setRequested] = useState<SeekRequest | null>(null);
+  // The chain coalesces and `settling` renders, and the two are not one fact
   // written twice. A drag's change events all land in the same tick, before
   // React has re-rendered, so every one of them would still read `settling` as
-  // false and issue its own command: only the ref is read soon enough to
-  // supersede. The state exists so the render knows the chain is outstanding.
+  // false and issue its own command: only the chain's own flag is read soon
+  // enough to supersede. The state exists so the render knows the chain is
+  // outstanding — and so that draining the chain schedules React work, which is
+  // the only thing that re-reads a time the provider published *before* it
+  // answered the command that asked for it.
   const [settling, setSettling] = useState(false);
-  const inFlight = useRef(false);
-  const pending = useRef<number | null>(null);
+  const [chain] = useState(() =>
+    createCommandChain<number>({
+      // `seekTo` never rejects: the controller catches a throwing adapter into
+      // an `ok: false` result. `Root` makes exactly one controller and keeps it
+      // for its lifetime, so the one captured here stays this player's.
+      command: (time) => controller.seekTo(time),
+      onDrained: (ok) => {
+        setSettling(false);
+        // A failed seek has no reported time coming, so it reconciles at once.
+        if (!ok) setRequested(null);
+      }
+    })
+  );
   // A chain is aimed at whatever media was loaded when it started. Replacing
   // the provider, or losing the seek window — which is how a swap to another
   // source of the same kind shows up — invalidates every position still queued
   // in it.
-  const generation = useRef(0);
   useEffect(() => {
-    generation.current += 1;
-  }, [hasWindow, provider]);
+    chain.invalidate();
+  }, [chain, hasWindow, provider]);
 
   const seek = (time: number): void => {
     setRequested({ value: time, provider });
-    if (inFlight.current) {
-      pending.current = time;
-      return;
-    }
-    inFlight.current = true;
     setSettling(true);
-    const chain = generation.current;
-    void (async () => {
-      let next: number | null = time;
-      let ok = true;
-      while (next !== null) {
-        // `seekTo` never rejects: the controller catches a throwing adapter
-        // into an `ok: false` result. A command that never settles at all is
-        // counted as failed rather than left holding the chain open.
-        ok = await seekAnswered(controller.seekTo(next));
-        // Abandon a queued position whose media has gone, rather than scrub
-        // whatever is loaded now to a position chosen on the last source.
-        next = generation.current === chain ? pending.current : null;
-        pending.current = null;
-      }
-      inFlight.current = false;
-      setSettling(false);
-      // A failed seek has no reported time coming, so it reconciles at once.
-      if (!ok) setRequested(null);
-    })();
+    chain.send(time);
   };
 
   // Reconciliation reads the reported time and never `PlayerState.seeking`:
   // only the native and Vimeo adapters ever publish that flag, and the
   // providers whose lag this preview exists for are exactly the ones that
-  // never do. The chain is held first — a time reported while more positions
-  // are still outstanding answers an earlier one, not the latest.
+  // never do.
   const release =
     requested !== null &&
     (requested.provider !== provider ||
       // The window can slide past a held preview, or vanish under it (DVR).
       !hasWindow ||
-      (!settling &&
-        Math.abs(currentTime - requested.value) <=
-          SEEK_ECHO_TOLERANCE_SECONDS));
+      requestAnswered({
+        published: currentTime,
+        requested: requested.value,
+        settling,
+        tolerance: SEEK_ECHO_TOLERANCE_SECONDS
+      }));
   // Adjusted during render, the way React documents state that has to follow
   // its inputs: conditional and convergent, so the extra render is discarded
-  // before it commits. An effect is not the alternative it looks like —
-  // `react-hooks/set-state-in-effect` rejects a synchronous `setState` in an
-  // effect body, and releasing a render later would show the previewed
-  // position for one frame after the media had already answered for it. It
-  // clears rather than merely stopping being read, because a playhead running
-  // on past an answered preview would otherwise leave the tolerance again and
-  // re-hold it.
+  // before it commits. Computed rather than remembered, so a render attempt
+  // React throws away costs nothing: the next attempt recomputes the same
+  // answer from the same committed state and releases again. An effect is not
+  // the alternative it looks like — `react-hooks/set-state-in-effect` rejects a
+  // synchronous `setState` in an effect body, and releasing a render later
+  // would show the previewed position for one frame after the media had
+  // already answered for it. It clears rather than merely stopping being read,
+  // because a playhead running on past an answered preview would otherwise
+  // leave the tolerance again and re-hold it.
   if (release) setRequested(null);
   const preview = release ? null : (requested?.value ?? null);
 
   // Armed once the command chain drains, and deliberately not re-armed by a
   // moving `currentTime`: playback reports several times a second, which would
-  // push the deadline out forever.
+  // push the deadline out forever. It stays in an effect with a cleanup so that
+  // only a commit can arm or disarm it, and no discarded render can cancel the
+  // backstop for a release that never happened.
   useEffect(() => {
     if (requested === null || settling) return;
-    const timer = setTimeout(
-      () => setRequested(null),
-      SEEK_PREVIEW_DEADLINE_MS
-    );
+    const timer = setTimeout(() => setRequested(null), ECHO_DEADLINE_MS);
     return () => clearTimeout(timer);
   }, [requested, settling]);
 

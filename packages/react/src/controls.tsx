@@ -221,7 +221,7 @@ export const Controls = ({
     volume: state.volume,
     volumeStatus: state.capabilities.setVolume.status
   }));
-  const { controller, lastSelectedTextTrackId } = usePlayer();
+  const { controller, lastSelectedTextTrackId, volumeRequest } = usePlayer();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hadFocusWithin = useRef(false);
   // Signature of the capabilities that gate whether a child control is
@@ -269,12 +269,32 @@ export const Controls = ({
           if (volumeStatus !== 'available') return;
           event.preventDefault();
           const delta = action === 'volumeUp' ? 0.05 : -0.05;
+          // The volume the user last asked for while it is still outstanding,
+          // and published state otherwise. Published state alone is a stale
+          // base: it moves only on the media element's own `volumechange`, so
+          // two presses inside one round trip would compute the same target and
+          // the second would be a silent no-op (#271). Read straight off the
+          // store rather than through a subscription, because this handler
+          // needs the value as of the keypress and a subscribed one is only
+          // ever as fresh as the last commit — a base that lags the press is
+          // the whole of what this reads around. Nothing this region renders
+          // shows the request either; `VolumeSlider` subscribes for that.
+          //
+          // The two sides are different spaces, which nothing else here says: a
+          // request is the muted-adjusted volume the thumb shows, while the
+          // fallback is the raw published one, which ignores `muted`. They can
+          // only disagree when no request is outstanding, and the raw fallback
+          // is what keeps an arrow press while muted behaving exactly as it
+          // always has.
+          const base = volumeRequest.getRequested() ?? volume;
           const next = Math.min(
             1,
-            Math.max(0, Math.round((volume + delta) * 100) / 100)
+            Math.max(0, Math.round((base + delta) * 100) / 100)
           );
           if (muted && next > 0) void controller.unmute();
-          void controller.setVolume(next);
+          // The same request `VolumeSlider` renders, so the presses coalesce
+          // into one chain and the thumb shows every one of them.
+          volumeRequest.request(next);
           return;
         }
         case 'toggleMuted':
@@ -314,6 +334,7 @@ export const Controls = ({
       shortcuts,
       textTracks,
       volume,
+      volumeRequest,
       volumeStatus
     ]
   );
