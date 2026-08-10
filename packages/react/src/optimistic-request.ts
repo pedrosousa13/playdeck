@@ -57,6 +57,25 @@ import type { CommandResult } from '@reely/core';
 // way.
 const COMMAND_TIMEOUT_MS = 4000;
 
+// How long a requested value may go on being shown after the chain that asked
+// for it has drained with nothing published to answer it.
+//
+// It covers one failure only: a provider that answers the command and then
+// reports nothing for it — HLS and YouTube never publish `seeking`, and neither
+// a seek nor a volume change dropped after it was accepted announces itself.
+// Without this the control would keep a value the media never reached. It is
+// measured from the moment the last command settles, so a slow round trip
+// spends none of it, and it is not what defends against a command that never
+// answers at all: that one holds the chain open and never reaches this timer,
+// which is what `COMMAND_TIMEOUT_MS` above is for.
+//
+// Shared by both bindings because the failure is the same failure and the
+// duration is the same duration. The *timer* is not shared and must not be:
+// arming it belongs wherever the requested value is kept, so `useSeekPreview`
+// arms it in a commit-phase effect that no discarded render can cancel, and the
+// player-scoped volume request arms it in the store at the drain.
+export const ECHO_DEADLINE_MS = 2000;
+
 // Resolves to whether the command succeeded, and to `false` if it has not
 // answered in time. The invented failure never leaves this module: only `ok`
 // is read, so a timeout and a refusal reconcile the control the same way.

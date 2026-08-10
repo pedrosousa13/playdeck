@@ -4,9 +4,19 @@ import {
   useLoadingPresentation,
   visuallyHiddenStyle
 } from './loading-error.js';
-import { createCommandChain, requestAnswered } from './optimistic-request.js';
+import {
+  createCommandChain,
+  requestAnswered,
+  ECHO_DEADLINE_MS
+} from './optimistic-request.js';
 import { usePlayer, usePlayerState } from './player-context.js';
-import { useEffect, useId, useState, type ComponentPropsWithRef } from 'react';
+import {
+  useEffect,
+  useId,
+  useState,
+  useSyncExternalStore,
+  type ComponentPropsWithRef
+} from 'react';
 
 const formatTime = (totalSeconds: number): string => {
   const clamped = Math.max(0, Math.floor(totalSeconds));
@@ -109,9 +119,24 @@ export const VolumeSlider = ({
     status: state.capabilities.setVolume.status,
     volume: state.volume
   }));
-  const { controller } = usePlayer();
+  const { controller, volumeRequest } = usePlayer();
+  // The volume the user last asked for, held over the round trip and released
+  // when the player publishes a volume that answers it. Player-scoped, because
+  // the `Controls` shortcut layer computes its next value from the same
+  // request and this primitive is optional (#271); the store owns the whole of
+  // that policy, and this component only renders what it holds.
+  const requested = useSyncExternalStore(
+    volumeRequest.subscribe,
+    volumeRequest.getRequested,
+    volumeRequest.getRequested
+  );
   if (status !== 'available') return null;
-  const value = muted ? 0 : volume;
+  // A request outranks the muted zero. Dragging up while muted unmutes, but
+  // `muted` stays true until the player publishes the unmute, so rendering the
+  // zero here would swallow that drag exactly as a lagging volume does.
+  const value = requested ?? (muted ? 0 : volume);
+  // Read off the value the thumb is showing, so assistive technology is never
+  // told something the sighted user is being shown the opposite of.
   const percent = Math.round(value * 100);
 
   return (
@@ -130,7 +155,7 @@ export const VolumeSlider = ({
         const next = Number(event.currentTarget.value);
         if (!Number.isFinite(next)) return;
         if (muted && next > 0) void controller.unmute();
-        void controller.setVolume(next);
+        volumeRequest.request(next);
       }}
       step={step ?? 0.05}
       style={{ ...controlTargetStyle, ...style }}
@@ -221,16 +246,6 @@ const bufferedShare = (
 // a property of time and of how providers report it, and no other quantity a
 // control asks for shares it.
 const SEEK_ECHO_TOLERANCE_SECONDS = 0.5;
-
-// Covers one failure only: a provider that answers the seek command and then
-// reports no time for it — HLS and YouTube never publish `seeking`, and a seek
-// dropped after it was accepted is silent. Without this the thumb would keep a
-// position the media never reached. It is measured from the moment the last
-// command settles, so a slow round trip spends none of it, and it is not what
-// defends against a command that never answers at all: that one holds the
-// chain open and never reaches this timer, which is what the chain's own
-// command timeout is for.
-const SEEK_PREVIEW_DEADLINE_MS = 2000;
 
 type SeekRequest = {
   readonly value: number;
@@ -328,10 +343,7 @@ const useSeekPreview = (
   // backstop for a release that never happened.
   useEffect(() => {
     if (requested === null || settling) return;
-    const timer = setTimeout(
-      () => setRequested(null),
-      SEEK_PREVIEW_DEADLINE_MS
-    );
+    const timer = setTimeout(() => setRequested(null), ECHO_DEADLINE_MS);
     return () => clearTimeout(timer);
   }, [requested, settling]);
 
