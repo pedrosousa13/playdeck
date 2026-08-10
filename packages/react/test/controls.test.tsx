@@ -8,7 +8,7 @@ import {
   screen,
   waitFor
 } from '@testing-library/react';
-import { createRef, type ReactNode } from 'react';
+import { createRef, Suspense, type ReactNode } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   type Availability,
@@ -915,7 +915,7 @@ describe('SeekSlider', () => {
     });
     expect(valueOf(slider)).toBe('75');
 
-    // SEEK_COMMAND_TIMEOUT_MS. The chain has to drain on this path too, or the
+    // COMMAND_TIMEOUT_MS. The chain has to drain on this path too, or the
     // thumb keeps a position the media never reached...
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
@@ -988,6 +988,96 @@ describe('SeekSlider', () => {
     // The new source is ready, and nothing from the old one leaks into it.
     emit({ duration: 200, currentTime: 0 });
     expect(valueOf(slider)).toBe('0');
+  });
+
+  test('releases the preview at the drain when the time arrived mid-command', async () => {
+    const { emit, spies } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    const settle = holdNextSeek(spies.seekTo);
+
+    fireEvent.change(slider, { target: { value: '75' } });
+    // A provider that publishes the seeked position before it resolves the
+    // seek command, which is the ordinary shape of a native `seeked` event
+    // beating an awaited promise. Nothing may answer while the chain is
+    // outstanding, so this time is correctly ignored on the way in.
+    emit({ currentTime: 75 });
+    expect(valueOf(slider)).toBe('75');
+
+    await act(async () => {
+      settle();
+    });
+
+    // Draining the chain has to re-evaluate the echo, because the time that
+    // answers this request has already been and gone. A preview still held
+    // here pins the thumb at 1:15 while playback runs on, for the whole two
+    // seconds until the deadline fires.
+    emit({ currentTime: 90 });
+    expect(valueOf(slider)).toBe('90');
+  });
+
+  // Suspends the first time the player publishes `trap.time`, so the render
+  // attempt it takes part in is thrown away. Routine on a concurrent root:
+  // `usePlayerState` is a `useSyncExternalStore` over a store that publishes
+  // several times a second, and any sibling under the same boundary can
+  // suspend after the slider has rendered. Everything the slider did during
+  // that attempt goes with it, and React renders it again from the state it
+  // last committed — so a preview that answered itself in a discarded attempt
+  // must answer itself again in the next one.
+  const SuspendOnceAt = ({
+    trap
+  }: {
+    trap: { time: number | null };
+  }): ReactNode => {
+    const currentTime = Player.usePlayerState((state) => state.currentTime);
+    if (trap.time === currentTime) {
+      trap.time = null;
+      throw Promise.resolve();
+    }
+    return null;
+  };
+
+  test('releases the preview when the render that answered it is discarded', async () => {
+    const trap: { time: number | null } = { time: null };
+    const { emit, spies } = renderWithPlayer(
+      <Suspense fallback={null}>
+        <Player.SeekSlider />
+        <SuspendOnceAt trap={trap} />
+      </Suspense>,
+      seekReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    spies.seekTo.mockResolvedValue({ ok: true });
+
+    vi.useFakeTimers();
+    fireEvent.change(slider, { target: { value: '75' } });
+    await act(async () => {});
+    expect(valueOf(slider)).toBe('75');
+
+    trap.time = 75;
+    await act(async () => {
+      emit({ currentTime: 75 });
+    });
+    // The trap disarms itself as it throws, so a still-armed one means this
+    // test never discarded a render and proves nothing.
+    expect(trap.time).toBeNull();
+
+    // Playback runs on. A preview released only in whatever the discarded
+    // attempt touched, and not in what the slider committed, strands the thumb
+    // at 1:15 from here on.
+    emit({ currentTime: 90 });
+    expect(valueOf(slider)).toBe('90');
+
+    // ...and the deadline is no defence once a discarded attempt has been
+    // allowed to disarm it.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(valueOf(slider)).toBe('90');
+
+    vi.useRealTimers();
   });
 });
 

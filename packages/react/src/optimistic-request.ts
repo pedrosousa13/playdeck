@@ -1,8 +1,8 @@
 import type { CommandResult } from '@reely/core';
 
-// The optimistic-request policy a control shares with the commands it issues:
-// the value the user last asked for, held until the published state answers
-// for it, and the command traffic that asks for it coalesced.
+// The optimistic-request policy the sliders share: the value the user last
+// asked for, held until the published state answers for it, and the command
+// traffic that asks for it coalesced.
 //
 // It exists because a control whose `value` comes from `PlayerState` is
 // controlled by state the media element only publishes from its own
@@ -13,25 +13,43 @@ import type { CommandResult } from '@reely/core';
 // that restore window is silently swallowed. Holding the requested value over
 // the round trip is what keeps the control showing where the user is.
 //
-// A plain state machine rather than a hook, and the held value is mirrored out
-// through `onChange` rather than read back through a subscription, because the
-// scope a request has to live in is the caller's business and the policy's
-// business is only the policy. A control that owns its request keeps it in its
-// own React state, where a render can release it in the same pass that reads
-// the published value. A request that two sibling controls both consume cannot
-// live in either of them: it has to be player-scoped and reach them through a
-// subscription, the shape `lastSelectedTextTrackId` (`root.tsx`) already takes
-// for the same reason, after two controls each keeping their own copy
-// disagreed (#58). Coalescing, the command timeout, the echo release, the
-// deadline and the invalidation are identical in both scopes; the storage is
-// not, so the storage is the only part left to the caller.
+// Two pieces, and deliberately not one object owning the requested value. What
+// is scope-independent is the command chain: coalescing, the per-command
+// timeout and generation invalidation are the same wherever the value is kept,
+// and React has no opinion about any of them. What is not scope-independent is
+// the requested value itself, because holding it is a React fact and giving it
+// to a plain object costs two properties React was providing for free:
+//
+//   - **Rollback.** A render attempt React throws away — a sibling suspending
+//     under the same boundary, a higher-priority update interrupting a
+//     concurrent render — must leave nothing behind. A `setState` computed
+//     purely from what the component holds is recomputed on the next attempt
+//     and reaches the same answer. A value released by mutating a store during
+//     render is released once, in an attempt that never commits, and the
+//     control and the store then disagree forever.
+//   - **A commit at the drain.** `setSettling(false)` is what re-renders the
+//     control when the chain empties, and that render is what re-evaluates the
+//     echo. A provider can publish the value it was asked for *before* it
+//     resolves the command, and that value answers nothing on the way in
+//     (`requestAnswered` holds the chain first); the drain is the only moment
+//     left at which it can be recognised. A drain that schedules no React work
+//     leaves the control previewing a value the media already reached, for the
+//     whole of the deadline.
+//
+// So the chain below is shared, the release rule below it is shared as a pure
+// predicate, and each binding applies them in its own idiom: `useSeekPreview`
+// stores its request in the control's own React state and times it out in an
+// effect, while a request two sibling controls both consume has to be
+// player-scoped and reach them through a subscription instead — the shape
+// `lastSelectedTextTrackId` (`root.tsx`) already takes, after two controls each
+// keeping their own copy disagreed (#58).
 
 // How long a single command may go unanswered before the chain gives up on it.
 // Nothing below this layer has a timeout — the controller awaits the adapter,
 // and the iframe providers hand back raw SDK promises across a postMessage
 // bridge that a torn-down frame, a navigation or a dropped message leaves
 // unsettled forever. A chain that never drains is worse than a late command:
-// `settling` would never clear, so every later change event would be swallowed
+// `inFlight` would never clear, so every later change event would be swallowed
 // into `pending` and the control would be dead for the rest of the session.
 // Four seconds is what Vimeo's `CHROMELESS_PROBE_TIMEOUT_MS` allows a
 // cross-document round trip, comfortably above any live one; losing the race
@@ -52,92 +70,54 @@ const answeredInTime = (command: Promise<CommandResult>): Promise<boolean> => {
   ]).finally(() => clearTimeout(timer));
 };
 
-export type OptimisticRequest<Value, Published = Value> = {
-  // Ask for `value`, holding it until something answers for it.
-  readonly request: (value: Value) => void;
-  // Offer the value the player has published. Returns whether the held request
-  // was released by it, so a caller reconciling during its own render can act
-  // on the answer in the same pass rather than a render later.
-  readonly reconcile: (published: Published) => boolean;
-  // Release the held request now, and invalidate whatever is still queued in
-  // the chain, because the thing those values were aimed at has gone.
-  readonly abandon: () => void;
-  // End the request, for a caller whose scope is ending.
-  readonly dispose: () => void;
+export type CommandChain<Value> = {
+  // Ask for `value`, now or as soon as the chain has room for it.
+  readonly send: (value: Value) => void;
+  // Abandon whatever is still queued, because the media it was aimed at has
+  // gone. The command already in flight is left to settle: its result is a
+  // fact about media that no longer matters, and the drain reports it anyway.
+  readonly invalidate: () => void;
 };
 
-export const createOptimisticRequest = <Value, Published = Value>({
-  answers,
+// One command in flight at a time, with the value asked for during one
+// overwriting the value queued behind it rather than joining a queue.
+//
+// Every change takes this path: a pointer drag is a burst of change events and
+// an arrow press is a single one, and the two are not distinguished, so a
+// keyboard change is coalesced exactly as a drag is and nothing here depends on
+// a release event. Trailing-edge supersession is what makes that affordable —
+// a drag through N values costs far fewer than N round trips and still ends on
+// the drag's last value.
+export const createCommandChain = <Value>({
   command,
-  deadlineMs,
-  onChange
+  onDrained
 }: {
-  // Whether the published value counts as an answer to the requested one. The
-  // tolerance is domain-specific — a seek can land on the nearest keyframe,
-  // and a volume can be quantised by the platform — so the comparison belongs
-  // to the caller and never to the policy.
-  readonly answers: (published: Published, requested: Value) => boolean;
   readonly command: (value: Value) => Promise<CommandResult>;
-  readonly deadlineMs: number;
-  // The held request on its way out to wherever the caller stores it: the
-  // requested value on every request, and `null` on every release.
-  readonly onChange: (requested: Value | null) => void;
-}): OptimisticRequest<Value, Published> => {
-  // The value the user last asked for, held until the player answers for it.
-  // Every change takes this path: a pointer drag is a burst of change events
-  // and an arrow press is a single one, and the two are not distinguished, so a
-  // keyboard change previews exactly as a drag does and nothing here depends on
-  // a release event. Commands are coalesced by trailing-edge supersession —
-  // one in flight at a time, and a change arriving during one overwrites the
-  // pending value rather than queuing behind it — so a drag through N values
-  // costs far fewer than N round trips and still ends on the drag's last value.
-  let requested: Value | null = null;
-  // Whether the chain is outstanding. Deliberately not React state in any
-  // caller's scope: a drag's change events all land in the same tick, before
-  // React has re-rendered, so every one of them would still read a rendered
-  // flag as false and issue its own command. Only a value written the moment
-  // the chain starts is read soon enough to supersede.
-  let settling = false;
+  // The chain is empty again, carrying whether its last command succeeded. A
+  // binding holding a requested value has to react to this: a failed command
+  // has nothing coming to answer for it, and a successful one has just made
+  // whatever the player published during the chain worth re-reading.
+  readonly onDrained: (ok: boolean) => void;
+}): CommandChain<Value> => {
+  // Read the moment a change arrives rather than a render later, which is the
+  // whole of why it is not React state: a drag's change events all land in the
+  // same tick, before React has re-rendered, so every one of them would still
+  // read a rendered flag as false and issue its own command.
+  let inFlight = false;
   let pending: Value | null = null;
-  // A chain is aimed at whatever media was loaded when it started. Replacing
-  // the provider, or losing the window a value was chosen against — which is
-  // how a swap to another source of the same kind shows up — invalidates every
-  // value still queued in it.
+  // A chain is aimed at whatever media was loaded when it started, so
+  // invalidation is a generation and not a flag: the running loop compares the
+  // generation it started under, and a value queued for media that has gone is
+  // dropped rather than sent to whatever is loaded now.
   let generation = 0;
-  let deadline: ReturnType<typeof setTimeout> | undefined;
-
-  const disarm = (): void => {
-    clearTimeout(deadline);
-    deadline = undefined;
-  };
-
-  const release = (): void => {
-    if (requested === null) return;
-    requested = null;
-    disarm();
-    onChange(null);
-  };
-
-  // Armed once the command chain drains, and deliberately not re-armed by a
-  // moving published value: playback reports several times a second, which
-  // would push the deadline out forever.
-  const arm = (): void => {
-    if (requested === null || settling) return;
-    deadline = setTimeout(release, deadlineMs);
-  };
 
   return {
-    request: (value) => {
-      requested = value;
-      // The deadline measures a drained chain only, so a fresh request disarms
-      // it and the drain below arms it again.
-      disarm();
-      onChange(value);
-      if (settling) {
+    send: (value) => {
+      if (inFlight) {
         pending = value;
         return;
       }
-      settling = true;
+      inFlight = true;
       const chain = generation;
       void (async () => {
         let next: Value | null = value;
@@ -146,42 +126,37 @@ export const createOptimisticRequest = <Value, Published = Value>({
           // A command that never settles at all is counted as failed rather
           // than left holding the chain open.
           ok = await answeredInTime(command(next));
-          // Abandon a queued value whose media has gone, rather than drive
-          // whatever is loaded now to a value chosen on the last source.
           next = generation === chain ? pending : null;
           pending = null;
         }
-        settling = false;
-        // A failed command has no published value coming, so it reconciles at
-        // once; a successful one starts the backstop instead.
-        if (ok) arm();
-        else release();
+        inFlight = false;
+        onDrained(ok);
       })();
     },
-    reconcile: (published) => {
-      // The chain is held first — a value published while more commands are
-      // still outstanding answers an earlier request, not the latest.
-      if (requested === null || settling) return false;
-      if (!answers(published, requested)) return false;
-      release();
-      return true;
-    },
-    abandon: () => {
-      // Nothing is queued behind a request that is not held: every value the
-      // chain carries was held from the moment it was asked for until it was
-      // answered, failed, timed out or abandoned. So a generation the caller
-      // cannot see move is a generation with nothing to invalidate.
-      if (requested === null) return;
+    invalidate: () => {
       generation += 1;
-      release();
-    },
-    // The held value goes with the deadline, and unannounced: a scope that is
-    // ending has nobody left to tell. An outstanding chain is not stopped —
-    // its result is discarded either way — but with nothing held it can no
-    // longer arm a deadline that would outlive the caller.
-    dispose: () => {
-      requested = null;
-      disarm();
     }
   };
 };
+
+// Whether the published value answers the value that was asked for.
+//
+// The chain is held first: a value published while more commands are still
+// outstanding answers an earlier request, not the latest, and reading it as an
+// answer would hand the control back to player state mid-drag.
+//
+// The tolerance is the caller's, because it is domain-specific — a seek can
+// land on the nearest keyframe, and a volume can be quantised by the platform
+// — and because a control that gets it wrong gets it wrong in a way only its
+// own domain explains.
+export const requestAnswered = ({
+  published,
+  requested,
+  settling,
+  tolerance
+}: {
+  readonly published: number;
+  readonly requested: number;
+  readonly settling: boolean;
+  readonly tolerance: number;
+}): boolean => !settling && Math.abs(published - requested) <= tolerance;
