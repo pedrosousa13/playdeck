@@ -8,7 +8,7 @@ import {
   screen,
   waitFor
 } from '@testing-library/react';
-import { createRef, type ReactNode } from 'react';
+import { createRef, Suspense, type ReactNode } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   type Availability,
@@ -241,6 +241,197 @@ describe('VolumeSlider', () => {
     // presence attribute is gone.
     expect(attr(slider, 'data-state')).toBe('muted');
     expect(slider.hasAttribute('data-muted')).toBe(false);
+  });
+
+  type VolumeSpy = ReturnType<typeof createMockAdapter>['spies']['setVolume'];
+
+  // Stands in for a player that has not published `volumechange` yet: the next
+  // volume command hangs until the returned function settles it. That window is
+  // the whole of #271 — while it is open the control's value comes from a
+  // `PlayerState.volume` the media element has not moved yet, so React restores
+  // the input to the old value, and a range input raises no event at all when a
+  // key next asks it for the value it already holds.
+  const holdNextVolume = (setVolume: VolumeSpy): (() => void) => {
+    // Not a no-op until the command runs: settling one that was never issued
+    // means the test did not exercise what it thinks it did.
+    let settle = (): void => {
+      throw new Error('No volume command is being held.');
+    };
+    setVolume.mockImplementationOnce(
+      () =>
+        new Promise<CommandResult>((resolve) => {
+          settle = () => resolve({ ok: true });
+        })
+    );
+    return () => settle();
+  };
+
+  const valueOf = (slider: Element): string =>
+    (slider as HTMLInputElement).value;
+
+  const volumeReady = (patch: ProviderStatePatch = {}): ProviderStatePatch => ({
+    ...withVolume(available),
+    volume: 0.5,
+    muted: false,
+    ...patch
+  });
+
+  test('shows the changed volume while the player still reports the old one', () => {
+    const { emit, spies } = renderWithPlayer(
+      <Player.VolumeSlider />,
+      volumeReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    holdNextVolume(spies.setVolume);
+
+    fireEvent.change(slider, { target: { value: '0.8' } });
+
+    // Nothing has published a volume: the media element moves within the task
+    // and only reports on its own `volumechange`. Rendering that lagging value
+    // here is the restore that swallows the next keypress.
+    expect(valueOf(slider)).toBe('0.8');
+    expect(attr(slider, 'aria-valuetext')).toBe('80%');
+
+    // An unrelated tick must not hand the thumb back either — the screen
+    // reader and the thumb have to agree the whole way through.
+    emit({ currentTime: 5 });
+    expect(valueOf(slider)).toBe('0.8');
+    expect(attr(slider, 'aria-valuetext')).toBe('80%');
+  });
+
+  test('keeps every End, Home and End press of a rapid succession', async () => {
+    const { spies } = renderWithPlayer(<Player.VolumeSlider />, volumeReady());
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    const settle = holdNextVolume(spies.setVolume);
+
+    // Home and End stay native — the shortcut layer binds neither — so each
+    // one reaches the input as a change event. happy-dom does not step a range
+    // control itself, so the value the browser would set is set here.
+    for (const [key, next] of [
+      ['End', '1'],
+      ['Home', '0'],
+      ['End', '1']
+    ] as const) {
+      fireEvent.keyDown(slider, { key });
+      fireEvent.change(slider, { target: { value: next } });
+      fireEvent.keyUp(slider, { key });
+      // Every press is observable on the thumb the moment it lands. Without
+      // that, the second press asks a control still showing 0.5 for a value it
+      // is already holding, and the browser raises no event for it at all.
+      expect(valueOf(slider)).toBe(next);
+    }
+
+    // Two of the three presses landed behind a command the player has not
+    // answered, and superseded one another rather than queuing up as two more
+    // round trips. Fewer commands than presses is coalescing, not a lost press.
+    expect(spies.setVolume).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settle();
+    });
+    // It ends where the user left it: at maximum.
+    expect(spies.setVolume).toHaveBeenCalledTimes(2);
+    expect(spies.setVolume).toHaveBeenLastCalledWith(1);
+    expect(valueOf(slider)).toBe('1');
+  });
+
+  test('releases a requested volume the player never reports, on a deadline', async () => {
+    const { spies } = renderWithPlayer(<Player.VolumeSlider />, volumeReady());
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    spies.setVolume.mockResolvedValue({ ok: true });
+
+    vi.useFakeTimers();
+    fireEvent.change(slider, { target: { value: '0.8' } });
+    await act(async () => {});
+    expect(valueOf(slider)).toBe('0.8');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(valueOf(slider)).toBe('0.8');
+
+    // A player that accepted the command and then published nothing must not
+    // strand the thumb on a volume the media never reached.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(valueOf(slider)).toBe('0.5');
+    expect(attr(slider, 'aria-valuetext')).toBe('50%');
+
+    vi.useRealTimers();
+  });
+
+  test('reconciles to the published volume when the command fails', async () => {
+    const { spies } = renderWithPlayer(<Player.VolumeSlider />, volumeReady());
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    spies.setVolume.mockResolvedValue({ ok: false, reason: 'provider-error' });
+
+    fireEvent.change(slider, { target: { value: '0.8' } });
+    expect(valueOf(slider)).toBe('0.8');
+
+    // No `volumechange` is coming, so there is nothing to wait for.
+    await act(async () => {});
+    expect(valueOf(slider)).toBe('0.5');
+    expect(attr(slider, 'aria-valuetext')).toBe('50%');
+  });
+
+  test('gives up on a volume command that never answers, and sets volume again after', async () => {
+    const { spies } = renderWithPlayer(<Player.VolumeSlider />, volumeReady());
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    // Nothing under this layer has a timeout, and an iframe provider hands
+    // back a raw SDK promise: a torn-down frame or a dropped message leaves it
+    // unsettled forever.
+    spies.setVolume.mockImplementationOnce(
+      () => new Promise<CommandResult>(() => {})
+    );
+
+    vi.useFakeTimers();
+    fireEvent.change(slider, { target: { value: '0.8' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3999);
+    });
+    expect(valueOf(slider)).toBe('0.8');
+
+    // COMMAND_TIMEOUT_MS. The chain has to drain on this path too, or the
+    // thumb keeps a volume the media never reached...
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(valueOf(slider)).toBe('0.5');
+    expect(attr(slider, 'aria-valuetext')).toBe('50%');
+
+    // ...and, worse, every later change is swallowed into the pending slot
+    // behind a command that will never settle, leaving the volume dead for the
+    // rest of the session.
+    fireEvent.change(slider, { target: { value: '0.3' } });
+    expect(spies.setVolume).toHaveBeenCalledTimes(2);
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.3);
+    expect(valueOf(slider)).toBe('0.3');
+
+    vi.useRealTimers();
+  });
+
+  test('shows a volume asked for while muted, not the muted zero', () => {
+    const { spies } = renderWithPlayer(
+      <Player.VolumeSlider />,
+      volumeReady({ volume: 0.7, muted: true })
+    );
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    expect(valueOf(slider)).toBe('0');
+    holdNextVolume(spies.setVolume);
+
+    fireEvent.change(slider, { target: { value: '0.5' } });
+
+    // `muted` stays true until the player publishes the unmute, so a thumb
+    // still pinned to the muted zero would swallow this drag exactly as a
+    // lagging volume does.
+    expect(spies.unmute).toHaveBeenCalledTimes(1);
+    expect(spies.setVolume).toHaveBeenCalledWith(0.5);
+    expect(valueOf(slider)).toBe('0.5');
+    expect(attr(slider, 'aria-valuetext')).toBe('50%');
+    // The request wins the value, and nothing else: `data-state` still reports
+    // the player, which is still muted.
+    expect(attr(slider, 'data-state')).toBe('muted');
   });
 });
 
@@ -915,7 +1106,7 @@ describe('SeekSlider', () => {
     });
     expect(valueOf(slider)).toBe('75');
 
-    // SEEK_COMMAND_TIMEOUT_MS. The chain has to drain on this path too, or the
+    // COMMAND_TIMEOUT_MS. The chain has to drain on this path too, or the
     // thumb keeps a position the media never reached...
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
@@ -988,6 +1179,96 @@ describe('SeekSlider', () => {
     // The new source is ready, and nothing from the old one leaks into it.
     emit({ duration: 200, currentTime: 0 });
     expect(valueOf(slider)).toBe('0');
+  });
+
+  test('releases the preview at the drain when the time arrived mid-command', async () => {
+    const { emit, spies } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    const settle = holdNextSeek(spies.seekTo);
+
+    fireEvent.change(slider, { target: { value: '75' } });
+    // A provider that publishes the seeked position before it resolves the
+    // seek command, which is the ordinary shape of a native `seeked` event
+    // beating an awaited promise. Nothing may answer while the chain is
+    // outstanding, so this time is correctly ignored on the way in.
+    emit({ currentTime: 75 });
+    expect(valueOf(slider)).toBe('75');
+
+    await act(async () => {
+      settle();
+    });
+
+    // Draining the chain has to re-evaluate the echo, because the time that
+    // answers this request has already been and gone. A preview still held
+    // here pins the thumb at 1:15 while playback runs on, for the whole two
+    // seconds until the deadline fires.
+    emit({ currentTime: 90 });
+    expect(valueOf(slider)).toBe('90');
+  });
+
+  // Suspends the first time the player publishes `trap.time`, so the render
+  // attempt it takes part in is thrown away. Routine on a concurrent root:
+  // `usePlayerState` is a `useSyncExternalStore` over a store that publishes
+  // several times a second, and any sibling under the same boundary can
+  // suspend after the slider has rendered. Everything the slider did during
+  // that attempt goes with it, and React renders it again from the state it
+  // last committed — so a preview that answered itself in a discarded attempt
+  // must answer itself again in the next one.
+  const SuspendOnceAt = ({
+    trap
+  }: {
+    trap: { time: number | null };
+  }): ReactNode => {
+    const currentTime = Player.usePlayerState((state) => state.currentTime);
+    if (trap.time === currentTime) {
+      trap.time = null;
+      throw Promise.resolve();
+    }
+    return null;
+  };
+
+  test('releases the preview when the render that answered it is discarded', async () => {
+    const trap: { time: number | null } = { time: null };
+    const { emit, spies } = renderWithPlayer(
+      <Suspense fallback={null}>
+        <Player.SeekSlider />
+        <SuspendOnceAt trap={trap} />
+      </Suspense>,
+      seekReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    spies.seekTo.mockResolvedValue({ ok: true });
+
+    vi.useFakeTimers();
+    fireEvent.change(slider, { target: { value: '75' } });
+    await act(async () => {});
+    expect(valueOf(slider)).toBe('75');
+
+    trap.time = 75;
+    await act(async () => {
+      emit({ currentTime: 75 });
+    });
+    // The trap disarms itself as it throws, so a still-armed one means this
+    // test never discarded a render and proves nothing.
+    expect(trap.time).toBeNull();
+
+    // Playback runs on. A preview released only in whatever the discarded
+    // attempt touched, and not in what the slider committed, strands the thumb
+    // at 1:15 from here on.
+    emit({ currentTime: 90 });
+    expect(valueOf(slider)).toBe('90');
+
+    // ...and the deadline is no defence once a discarded attempt has been
+    // allowed to disarm it.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(valueOf(slider)).toBe('90');
+
+    vi.useRealTimers();
   });
 });
 
@@ -1254,7 +1535,76 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.play).toHaveBeenCalledTimes(2);
   });
 
-  test('arrows seek and change volume; J/L seek; M mutes; F toggles fullscreen', () => {
+  test('moves the volume one step per arrow press, collapsing none of them', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-reely-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    // Each press compounds on the volume the press before it asked for, not on
+    // a published volume none of them has caught up with — and every press is
+    // on the thumb straight away, which is the guarantee that matters to the
+    // user. Four presses that all read the same base would collapse into one.
+    for (const expected of ['0.55', '0.6', '0.65', '0.7']) {
+      fireEvent.keyDown(region, { key: 'ArrowUp' });
+      expect(slider.value).toBe(expected);
+    }
+    // One command so far: the three behind the first superseded one another.
+    // Fewer commands than presses is coalescing, and the rendered values above
+    // are what prove no press was lost.
+    expect(spies.setVolume).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.55], [0.7]]);
+
+    // Clamped at the top, and clamping is not a reason to stop showing where
+    // the user is.
+    for (let press = 0; press < 8; press += 1) {
+      fireEvent.keyDown(region, { key: 'ArrowUp' });
+    }
+    expect(slider.value).toBe('1');
+    expect(attr(slider, 'aria-valuetext')).toBe('100%');
+  });
+
+  test('reconciles the volume request while no volume slider is mounted', async () => {
+    const { container, emit, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    region.focus();
+
+    // `VolumeSlider` is an optional primitive and the shortcut layer runs
+    // without it, so nothing a control renders can be what holds or releases
+    // the request. This is the case that makes it player-scoped.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.55], [0.6]]);
+
+    // The player answers the request, and then the volume moves again from
+    // somewhere else entirely. The next press has to compound on published
+    // state, which only happens if the request was released with no control
+    // mounted to release it.
+    emit({ volume: 0.6 });
+    emit({ volume: 0.8 });
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.85);
+  });
+
+  test('arrows seek and change volume; J/L seek; M mutes; F toggles fullscreen', async () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>
         <Player.Time />
@@ -1276,7 +1626,13 @@ describe('Controls container and scoped shortcuts', () => {
     fireEvent.keyDown(region, { key: 'ArrowUp' });
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.55);
     fireEvent.keyDown(region, { key: 'ArrowDown' });
-    expect(spies.setVolume).toHaveBeenLastCalledWith(0.45);
+    // 0.5, not the 0.45 this asserted before #271: the second press compounds
+    // on the volume the first one asked for rather than on a published volume
+    // that has not caught up, so up-then-down returns the user to where they
+    // started instead of leaving them below it. It also coalesces behind the
+    // command still in flight, so it is issued when that one drains.
+    await act(async () => {});
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.5);
     fireEvent.keyDown(region, { key: 'm' });
     expect(spies.mute).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(region, { key: 'f' });
@@ -1324,7 +1680,7 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.mute).not.toHaveBeenCalled();
   });
 
-  test('owns the arrow keys on a focused slider instead of its native stepping', () => {
+  test('owns the arrow keys on a focused slider instead of its native stepping', async () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>
         <Player.SeekSlider />
@@ -1353,7 +1709,13 @@ describe('Controls container and scoped shortcuts', () => {
     )!;
     volumeInput.focus();
     expect(fireEvent.keyDown(volumeInput, { key: 'ArrowDown' })).toBe(false);
-    expect(spies.setVolume).toHaveBeenLastCalledWith(0.45);
+    // 0.5, not the 0.45 this asserted before #271: the press compounds on the
+    // volume the ArrowUp above asked for rather than on a published volume that
+    // has not caught up, and coalesces behind the command still in flight.
+    await act(async () => {});
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.5);
+    // The thumb tracks both presses, whichever control had focus for them.
+    expect(volumeInput.value).toBe('0.5');
     expect(fireEvent.keyDown(volumeInput, { key: 'ArrowRight' })).toBe(false);
     expect(spies.seekBy).toHaveBeenLastCalledWith(5);
   });
@@ -1383,7 +1745,7 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.seekBy.mock.calls).toEqual([[5], [5], [-5], [-5]]);
   });
 
-  test('runs every shortcut in the map while the seek slider has focus', () => {
+  test('runs every shortcut in the map while the seek slider has focus', async () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>
         <Player.SeekSlider />
@@ -1428,7 +1790,11 @@ describe('Controls container and scoped shortcuts', () => {
     fireEvent.keyDown(seekInput, { key: 'ArrowUp' });
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.55);
     fireEvent.keyDown(seekInput, { key: 'ArrowDown' });
-    expect(spies.setVolume).toHaveBeenLastCalledWith(0.45);
+    // 0.5, not the 0.45 this asserted before #271: the second press compounds
+    // on the volume the first one asked for, and coalesces behind the command
+    // still in flight.
+    await act(async () => {});
+    expect(spies.setVolume).toHaveBeenLastCalledWith(0.5);
   });
 
   test('ignores shortcuts while an open menu has focus', () => {

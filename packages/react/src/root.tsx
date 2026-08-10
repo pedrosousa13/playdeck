@@ -22,6 +22,7 @@ import {
   type ResolvedProviderOptions
 } from './use-activation.js';
 import { sourceKey } from './viewport-media.js';
+import { createVolumeRequest } from './volume-request.js';
 import {
   useCallback,
   useEffect,
@@ -727,6 +728,13 @@ export const Root = ({
     [controller]
   );
 
+  // Also fed by a subscription rather than by a control's render, and for a
+  // second reason on top of the one above: it is a store, so a render React
+  // discards would leave a release behind that never committed, and the control
+  // and the store would disagree from then on.
+  const [volumeRequest] = useState(() => createVolumeRequest(controller));
+  useEffect(() => volumeRequest.observe(), [volumeRequest]);
+
   const value = useMemo(
     () => ({
       controller,
@@ -734,9 +742,17 @@ export const Root = ({
       source: detectedSource,
       ...activation,
       lastSelectedTextTrackId,
-      registerMedia
+      registerMedia,
+      volumeRequest
     }),
-    [activation, controller, controls, detectedSource, registerMedia]
+    [
+      activation,
+      controller,
+      controls,
+      detectedSource,
+      registerMedia,
+      volumeRequest
+    ]
   );
   const posterState =
     hiddenTransition === sourceTransition ? 'hidden' : 'visible';

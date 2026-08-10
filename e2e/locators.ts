@@ -15,6 +15,12 @@ export const media = (page: Page) => page.locator('[data-reely-part="media"]');
 export const seekSliderInput = (page: Page) =>
   page.locator('[data-reely-part="seek-slider-input"]');
 
+// `VolumeSlider` puts the part on the range control itself, so there is no
+// `volume-slider-input` to pair with `seek-slider-input`: the seek control is a
+// wrapper element around its input, and this one is the input.
+export const volumeSlider = (page: Page) =>
+  page.locator('[data-reely-part="volume-slider"]');
+
 export const muteButton = (page: Page) =>
   page.locator('[data-reely-part="mute-button"]');
 
