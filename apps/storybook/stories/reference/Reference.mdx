@@ -45,11 +45,6 @@ slider drops, PiP and AirPlay fold into the settings menu so the button row
 fits one line, and the control row leaves the overlay to take its own space in
 flow beneath the media.
 
-The fold renders both forms and lets the query hide whichever does not apply,
-so the same action is never offered twice at one width. Hiding a menu entry
-rather than unmounting it is what turned up a bug in `SettingsMenu`'s roving
-focus, now fixed: a `display: none` entry stayed in the focus ring.
-
 In flow, the box gives up `aspect-ratio` and keeps a `min-height` of
 `56.25cqw` — 9/16 of the container. `Player.Media` takes part in flow, so the
 box becomes media plus row and grows when the row needs more room than the
@@ -76,6 +71,71 @@ toolbar's **Theme** toggle still applies to it like every other story: the
 mounting lives in `.storybook/theme.tsx`, outside the import rule below, so
 `Reference/Player` is themable without the example reaching for the theme
 itself.
+
+### Folding controls into the menu
+
+Below the breakpoint, PiP and AirPlay leave the button row and reappear as
+entries in the settings menu. None of that comes from the library. `@reely/react`
+ships no folding, no overflow behaviour and no notion of control priority —
+where a control sits, whether it exists at all, and what it contains are your
+decisions, taken in your own layout. What follows is a composition pattern this
+example authors on top of the primitives, not a feature you can switch on. 420px
+is a number this example picked; the row wraps, so it never overflows sideways
+and the cost lands vertically instead. At a 320px container the row has 312px of
+content to fill with 44px targets, so six fit on a line — and the eight present
+wrap two onto a second, taking the button row from 44px to 92px. Shedding two
+keeps it to one line. It is not a library constant, and yours will be different.
+
+The mechanism is two forms of the same action, both always rendered, with a pair
+of container queries hiding whichever form does not apply at the current width:
+below the breakpoint the buttons are hidden and the menu entries show, above it
+the menu entries are hidden and the buttons show. Rendering both and hiding one
+is deliberate rather than lazy. `display: none` takes the inactive copy out of
+the accessibility tree as well as out of the layout, so no width ever offers the
+same action twice — a screen reader finds exactly one PiP control at 320px and
+exactly one at 768px. That is what makes duplicating the action correct.
+Hiding rather than unmounting is also what turned up a bug in `SettingsMenu`'s
+roving focus, now fixed: a `display: none` entry stayed in the focus ring.
+
+The two queries are off by one on purpose, and the reason is that both of them
+_hide_ — there is no show/hide pair here, only two rules that each take a copy
+away. `max-width` is inclusive, so the rule that hides the buttons at
+`max-width: 420px` has to be paired with one that hides the menu entries from
+`421px` up. Write the same number in both and 420px matches both rules, so both
+copies are hidden and the action vanishes at exactly that width; leave a gap and
+the width in between matches neither rule, so both copies show and the duplicate
+is back.
+
+A selector that hides a folded menu entry must match or exceed the specificity
+of the menu-item styling it overrides. Get that wrong and the symptom is a
+duplicate that never goes away: here a bare single-class selector at (0,1,0)
+lost to the menu item's own `display: flex` at (0,2,0), and a PiP entry sat
+visible beside the PiP button at 768px — measured, not theorised. Writing the
+hide as a descendant selector, so the two specificities match, is the fix; the
+comment above the `min-width` block in `reference-player.tsx` records it.
+
+Folded menu entries have to repeat the capability gating their button
+counterparts get for free. The button primitives read the capability record
+themselves and render nothing when the provider does not offer the action —
+_Capability gating, on display_ below shows what that looks like as you switch
+sources. The menu-item primitive gates nothing, so the folded entries read the
+same capability statuses their buttons read, and the menu opens even when those
+entries are the only thing in it — otherwise the functionality it absorbed
+disappears at exactly the width that needs it. Copy only the buttons' half of
+this pattern and you ship menu entries for actions the provider cannot perform.
+
+The folded entries carry visible text alongside their icon; the buttons do not
+need it. A menu item's accessible name comes from its content and no primitive
+supplies one there, whereas the button primitives carry their own `aria-label`.
+An icon-only menu entry would simply be an unnamed one.
+
+Not every control that leaves at a narrow width can fold, and that is a limit of
+the pattern rather than a gap in this example. Folding needs a menu-item form of
+the action, and the settings menu's content root is a `role="menu"`, which admits
+only menu items, radio items, groups and separators. A range input is not a
+permitted child of one — measured, as a critical `aria-required-children`
+violation. So the volume slider drops below the breakpoint instead: mute and
+unmute survive it, and #196 records the decision that the drop stays.
 
 ## What the story mounting does not prove
 
