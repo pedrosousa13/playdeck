@@ -20,14 +20,14 @@ something from the shipped code, it says so rather than guessing.
 
 ## Per-provider origins
 
-| Provider                                                                                | `script-src`                         | `frame-src`                                                                                     | `img-src`                                                                                                   | `connect-src`                                                                                               | `media-src`                                                               |
-| --------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **Native** (`@reely/provider-native`)                                                   | —                                    | —                                                                                               | —                                                                                                           | —                                                                                                           | Your own media host — nothing Reely adds.                                 |
-| **HLS** (`@reely/provider-hls`)                                                         | —                                    | —                                                                                               | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                     | Your own manifest/segment host, when the native engine plays it directly. |
-| **YouTube** (`@reely/provider-youtube`)                                                 | `www.youtube.com`                    | `www.youtube-nocookie.com` (the default) or `www.youtube.com`, and nothing else; see note below | —                                                                                                           | —                                                                                                           | —                                                                         |
-| **Vimeo** (`@reely/provider-vimeo`)                                                     | —                                    | `player.vimeo.com`                                                                              | —                                                                                                           | `vimeo.com` — opt-in only, and reachable through `Player.Root`; see note below.                             | —                                                                         |
-| **Wistia** (`@reely/provider-wistia`)                                                   | `fast.wistia.net`, `fast.wistia.com` | `fast.wistia.net` (legacy-embed fallback; see note below)                                       | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | Same five hosts as `img-src`.                                             |
-| **Storybook Backpack wrapper** (`backpack-parity` branch) — not shipped, see note below | —                                    | —                                                                                               | `img.youtube.com`, `ytimg.com` (+ subdomains), `vimeocdn.com` (+ subdomains)                                | `www.youtube.com`, `vimeo.com`                                                                              | —                                                                         |
+| Provider                                                                                | `script-src`                                                                                                      | `frame-src`                                                                                     | `img-src`                                                                                                   | `connect-src`                                                                                                                                                                                                                                        | `media-src`                                                               |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Native** (`@reely/provider-native`)                                                   | —                                                                                                                 | —                                                                                               | —                                                                                                           | —                                                                                                                                                                                                                                                    | Your own media host — nothing Reely adds.                                 |
+| **HLS** (`@reely/provider-hls`)                                                         | —                                                                                                                 | —                                                                                               | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                                                                                                                                                              | Your own manifest/segment host, when the native engine plays it directly. |
+| **YouTube** (`@reely/provider-youtube`)                                                 | `www.youtube.com`                                                                                                 | `www.youtube-nocookie.com` (the default) or `www.youtube.com`, and nothing else; see note below | —                                                                                                           | —                                                                                                                                                                                                                                                    | —                                                                         |
+| **Vimeo** (`@reely/provider-vimeo`)                                                     | —                                                                                                                 | `player.vimeo.com`                                                                              | —                                                                                                           | `vimeo.com` — opt-in only, and reachable through `Player.Root`; see note below.                                                                                                                                                                      | —                                                                         |
+| **Wistia** (`@reely/provider-wistia`)                                                   | `fast.wistia.net`, `fast.wistia.com`, `browser.sentry-cdn.com` (injected by Wistia's own element; see note below) | `fast.wistia.net` (legacy-embed fallback; see note below)                                       | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com`, `o4505518331658240.ingest.us.sentry.io`, `pipedream.wistia.com` — the last two are Wistia's error and metrics reporting; see note below | Same five hosts as `img-src`.                                             |
+| **Storybook Backpack wrapper** (`backpack-parity` branch) — not shipped, see note below | —                                                                                                                 | —                                                                                               | `img.youtube.com`, `ytimg.com` (+ subdomains), `vimeocdn.com` (+ subdomains)                                | `www.youtube.com`, `vimeo.com`                                                                                                                                                                                                                       | —                                                                         |
 
 Notes, per row:
 
@@ -210,20 +210,70 @@ Notes, per row:
   audit could not confirm from the shipped bundle which origin that module
   reports metrics to, since it is fetched at runtime rather than bundled —
   treat that as an open question if you need to pin it down, rather than an
-  origin this table has verified. `dnt` (on by default,
-  `packages/provider-wistia/src/attachment.ts:337`) asks Wistia not to track
-  the session; it is a separate switch from the Mux module. Wistia's
-  provider options (`controls`, `dnt`, `playerColor`, `swatch`, `poster`,
-  `transparentLetterbox`) are reachable from `Player.Root` via
-  `providerOptions={{ wistia: {...} }}`, as YouTube's and Vimeo's are through
-  their own bags (`packages/react/src/provider-loaders.ts:46-59`). Three of
-  Wistia's options are omitted from that bag rather than reachable through it —
-  `loop` (SIDEPRO-210) and `startTime` and `endTime` (#214) — because `Root`'s
-  own props write them (ADR-0004). None of the three changes which origin is
+  origin this table has verified. Wistia's provider options (`controls`, `dnt`,
+  `playerColor`, `swatch`, `poster`, `transparentLetterbox`) are reachable from
+  `Player.Root` via `providerOptions={{ wistia: {...} }}`, as YouTube's and
+  Vimeo's are through their own bags
+  (`packages/react/src/provider-loaders.ts:46-59`). Three of Wistia's options
+  are omitted from that bag rather than reachable through it — `loop`
+  (SIDEPRO-210) and `startTime` and `endTime` (#214) — because `Root`'s own
+  props write them (ADR-0004). None of the three changes which origin is
   reached; they are listed here so this paragraph names the bag's real shape.
   Wistia keeps `controls` where YouTube and Vimeo omit it: Wistia has the
   concept but no `Root` fold writes it, so the bag key is still the only way
   there.
+
+  Three origins in the table above carry reporting rather than playback, and
+  two of those are not Wistia's at all. They were read out of that same
+  `0.7.12` bundle on the same terms — recorded evidence, no longer re-checkable
+  here. Besides the Mux module above and the `publicApi.js` load the SRI note
+  below covers, the element appends one more `<script>`, and this is the one
+  that is not on a Wistia host at all: Sentry's browser bundle from
+  `browser.sentry-cdn.com` (`dist/wistia-player.js:2938-2949`). It reports
+  errors through that bundle to a fixed DSN host,
+  `o4505518331658240.ingest.us.sentry.io`, over `fetch` rather than a script
+  tag — so `connect-src`, not `script-src` (`:2893-2894`). Separately it POSTs
+  counters to `pipedream.wistia.com/mput?topic=metrics` (`:990-999` and
+  `:1976-1990`); that host is a build-time constant, not a value derived from
+  the page (`:7483-7486`). All three sit behind one gate,
+  `isVisitorTrackingEnabled()` (`:5838-5871`), and **that gate is opt-out**: it
+  reads a `Wistia`-namespace global hydrated from `localStorage` and a
+  per-account `privacyMode` flag on media data, and with none of them set it
+  returns `true`, so a page with clean storage has it enabled. That is read off
+  the bundle rather than observed in a browser. An error report also tags itself
+  with `window.location.href` (`:2997-3004`), so Sentry receives the embedding
+  page's full URL — path, query and fragment — and not just its origin.
+
+  `dnt` (on by default, `packages/provider-wistia/src/attachment.ts:337`) is
+  **not** what gates those. The attribute is set, and the element mirrors it
+  into its embed options (`dist/wistia-player.js:15473`, read back as
+  `doNotTrack` at `:16072-16084`), but nothing in this bundle reads it again,
+  and neither gate above consults it. That is **not** a claim that `dnt` is
+  ineffective: the playback and stats engine the element fetches at runtime is
+  where Wistia would honour it, and that engine is not in this bundle, so the
+  audit could not check it either way. Treat what `dnt` suppresses as an open
+  question, like the Mux module above, rather than something this table has
+  verified. It is a separate switch from the Mux module either way.
+
+  The `fast.*` host is not unconditionally fixed either, on that same recorded
+  reading of `0.7.12`. The bundle chooses it once, while the module evaluates,
+  by walking the page's `<script>` tags for an existing Wistia `E-v1.js` embed
+  (`dist/wistia-player.js:7418-7449`); a tag only counts if its path is Wistia's
+  `/assets/external/E-v1.js`, its host is `fast.wistia.com`, `fast.wistia.net`
+  or the canary `fast-canary.wistia.net` (`:7346`), its protocol suits the
+  page's, and it has finished loading. Every media-data, engine, legacy-iframe
+  and asset URL afterwards is built from the result. **Reely never injects
+  `E-v1.js`** — the only script it builds is `player.js`, and
+  `packages/provider-wistia/src/loader.ts:155-158` says so in as many words — so
+  on a Reely page that scan matches nothing and takes its fallback,
+  `fast.wistia.net` (`dist/wistia-player.js:7447`) — which is why the
+  legacy-embed iframe above resolves to that host. The canary is left out of the
+  table for exactly that reason: the scan would accept it, but only on a page
+  already carrying a Wistia `E-v1.js` embed served from it, which nothing in
+  Reely creates. A page that carries one for its own reasons moves Reely's
+  media-data, engine, legacy-iframe and asset fetches to whichever of the three
+  that embed came from, so add the canary host if that describes your page.
+
 - **The `backpack-parity` branch's storybook Backpack wrapper** is not in any
   published package there — `apps/storybook`'s `package.json` marks it
   `"private": true` on that branch. It fetches YouTube's oEmbed endpoint
@@ -299,6 +349,13 @@ Mapped onto the origins above:
   already created, sent once that frame reports ready. It therefore happens
   whenever the embed attaches, at every `loading` setting, and
   `suppressSeoMetadata: true` is what stops it — see the per-provider note.
+- **Wistia's Sentry and metrics requests** (`browser.sentry-cdn.com`,
+  `o4505518331658240.ingest.us.sentry.io`, `pipedream.wistia.com`) sit
+  downstream of that attach rather than inside it: they leave once the bundle
+  has loaded and the element has initialised, so `loading` decides when the
+  sequence can start but not whether they happen. What decides that is Wistia's
+  own visitor-tracking state, which is not a `Player.Root` prop and which no
+  `loading` setting suppresses — see the per-provider note above.
 - **The storybook wrapper's** oEmbed lookup is independent of `loading`
   entirely: `useVideoThumbnail` fires its `fetch` once at mount, whenever it is
   given a URL and no `placeholderImageSrc` — the cover has to be ready before
@@ -322,7 +379,14 @@ Two vendor scripts are injected into the page by Reely, and neither carries an
 Neither can carry one. Both vendors serve those files unversioned and mutable,
 so any hash recorded today would break the next time they deploy. There is no
 fix to propose here — pinning a hash trades a working embed for one that
-silently stops loading on the vendor's schedule, which is worse.
+silently stops loading on the vendor's schedule, which is worse. That the
+constraint is versioning rather than diligence shows inside Wistia's own bundle:
+the one script it injects from a versioned URL, Sentry's
+`https://browser.sentry-cdn.com/9.6.1/bundle.min.js`, does carry a `sha384`
+`integrity` and `crossOrigin="anonymous"` — and is the only `integrity` in that
+bundle at all — while the `publicApi.js` it loads from its own unversioned
+`fast.*` host carries neither (`@wistia/wistia-player@0.7.12`'s
+`dist/wistia-player.js:2938-2949` and `:15607`, read before its removal).
 
 The consequence is not softened by that explanation: allowing `www.youtube.com`
 or `fast.wistia.com` in `script-src` grants that origin the ability to run
@@ -426,11 +490,19 @@ Adding another provider is additive, not multiplicative: union the origins
 from the table above for every provider a page can render, rather than
 building a separate policy per source. A page that can show YouTube, Vimeo and
 Wistia sources needs `script-src` to carry `www.youtube.com` and
-`fast.wistia.net`/`fast.wistia.com`; `frame-src` to carry
+`fast.wistia.net`/`fast.wistia.com`, plus `browser.sentry-cdn.com` for the
+Sentry bundle Wistia's own element injects; `frame-src` to carry
 `www.youtube-nocookie.com`, `player.vimeo.com` and `fast.wistia.net` (the last
-only matters if a media id can hit Wistia's legacy-embed fallback); and
-`connect-src`/`img-src` to carry Wistia's five hosts — whether or not any
-single page load actually renders all three. Add `vimeo.com` to `connect-src`
+only matters if a media id can hit Wistia's legacy-embed fallback); `img-src`
+and `media-src` to carry Wistia's five `fast.*`/`embed*.wistia.com` hosts; and
+`connect-src` to carry those same five plus
+`o4505518331658240.ingest.us.sentry.io` and `pipedream.wistia.com` — whether or
+not any single page load actually renders all three providers. Do not treat the
+three reporting origins — the Sentry pair and `pipedream.wistia.com` — as
+optional: in the `0.7.12` bundle this document read, the visitor-tracking state
+that gates them defaults to enabled, and omitting them buys a silently failed
+error or metrics request rather than a video that visibly does not play. Add
+`vimeo.com` to `connect-src`
 only if some caller in your app sets `customControls: true`, whether directly
 or through `providerOptions={{ vimeo: {...} }}`. None
 of this needs `'unsafe-inline'` or `'unsafe-eval'` in `script-src` — every
