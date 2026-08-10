@@ -43,6 +43,11 @@ test('plays the local hls fixture natively without downloading hls.js', async ({
   browserName,
   page
 }) => {
+  // No CI job runs this any more: CI is Linux-only by decision, and this skip
+  // requires darwin, so it is green-by-skip everywhere on CI. It runs only for
+  // someone working on a Mac. Kept because it is the only executable record of
+  // the native-HLS path, and a deleted test would hide the gap rather than
+  // mark it — see the comment above `storybook` in `.github/workflows/ci.yml`.
   test.skip(
     browserName !== 'webkit' || process.platform !== 'darwin',
     'Native HLS requires WebKit on macOS; Linux WebKit lacks native HLS.'
