@@ -163,65 +163,20 @@ jobs:
       - run: pnpm test:bundle
       - run: pnpm test:integrations
 
-  # Cheap, HLS/provider-path change detection that gates the macOS job below
-  # (macOS runners are billed at a higher multiplier than Linux).
-  hls-paths:
-    runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.check.outputs.run }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - id: check
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-          else
-            base="${{ github.event.before }}"
-          fi
-          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          changed=$(git diff --name-only "$base" "${{ github.sha }}")
-          echo "$changed"
-          if echo "$changed" | grep -qE '^(packages/provider-hls/|packages/provider-native/|packages/core/|e2e/|apps/storybook/|playwright\.config\.ts)'; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  # Native-HLS WebKit coverage needs Safari's media stack: Playwright's Linux
-  # WebKit has neither native HLS nor the proprietary codecs, so these tests
-  # can only run on a macOS runner (slower to schedule and billed at a higher
-  # multiplier — keep this job scoped to the WebKit HLS suite, and gated to
-  # only run when HLS/provider paths changed or the `run-hls-webkit` label is
-  # on the PR).
-  hls-native-webkit:
-    needs: hls-paths
-    if: needs.hls-paths.outputs.run == 'true' || contains(github.event.pull_request.labels.*.name, 'run-hls-webkit')
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-      - run: corepack enable
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - id: playwright-version
-        run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        id: playwright-cache
-        with:
-          path: ~/Library/Caches/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install webkit
-      # pnpm appends a literal `--` to compound scripts, which playwright would
-      # misread as a file filter, so the flags are appended without it.
-      - run: pnpm test:e2e --project=webkit --grep hls
+  # Every job in this workflow runs on Linux, deliberately. A macOS job
+  # (`hls-native-webkit`) used to run the WebKit HLS suite here, because
+  # native HLS needs Safari's media stack and Playwright's Linux WebKit has
+  # neither native HLS nor the proprietary codecs. It was removed as a
+  # maintainer decision to keep CI on one OS.
+  #
+  # What that costs, stated plainly so nobody rediscovers it as a surprise:
+  # `e2e/hls.spec.ts`'s "plays the local hls fixture natively without
+  # downloading hls.js" self-skips unless it is on WebKit *and* darwin
+  # (`hls.spec.ts:46-49`), so no CI job runs it any more and nothing else
+  # covers the native-HLS path on a real Safari media stack. The test is kept
+  # rather than deleted: it still runs for anyone working on a Mac, and it
+  # documents the gap. The `hls-paths` job that gated the macOS run went with
+  # it, having nothing left to gate.
 
   storybook:
     runs-on: ubuntu-latest
