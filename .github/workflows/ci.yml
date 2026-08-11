@@ -65,8 +65,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
+  # Stays on ubuntu-latest. a11y-media.spec.ts asserts a listener is installed
+  # before a 0.4s cue boundary; on the self-hosted host it lands at 0.46-0.54s.
+  # The test is calibrated to GitHub's hardware, and relaxing it would be
+  # changing an assertion to suit a runner rather than fixing anything.
   e2e:
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -144,8 +148,14 @@ jobs:
           path: test-results/
           retention-days: 14
 
+  # Stays on ubuntu-latest. `pnpm test:packages` dies under this repo's pinned
+  # pnpm 11.15.1 with `[ERR_SQLITE_ERROR] attempt to write a readonly database`
+  # from its new SQLite store index. Reproduced 3/3 on the self-hosted host and
+  # traced to pnpm itself - not a permissions or concurrency problem on the
+  # host, both of which were disproven. Revisit when the pin moves or upstream
+  # fixes it.
   package:
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
