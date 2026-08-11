@@ -103,7 +103,7 @@ jobs:
       # host already carries Playwright's system libraries host-wide, so only
       # the browser binary itself needs fetching here — no OS deps step is
       # needed at all, cache hit or miss.
-      - run: pnpm exec playwright install ${{ matrix.browser }}
+      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=${{ matrix.browser }}
@@ -175,7 +175,7 @@ jobs:
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
       # itself needs fetching — no OS deps step is needed, cache hit or miss.
-      - run: pnpm exec playwright install chromium
+      - run: pnpm exec playwright install --with-deps chromium
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
       # and hit that cache instead of rebuilding from scratch.
