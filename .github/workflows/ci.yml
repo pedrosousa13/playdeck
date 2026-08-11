@@ -81,6 +81,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - id: playwright-version
         run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+      # No cache-hit gate on the install below. On the self-hosted runner the
+      # home directory persists between jobs, so ~/.cache/ms-playwright is
+      # already warm; layering actions/cache over it produced a cache hit whose
+      # restored tree lacked the browser binary, the install step was skipped,
+      # and every e2e test failed with "Executable doesn't exist". `playwright
+      # install` is a fast no-op when the browser is already present, so just
+      # always run it. The cache is kept so a fallback to a hosted runner still
+      # benefits.
       - uses: actions/cache@v6
         id: playwright-cache
         with:
@@ -91,7 +99,6 @@ jobs:
       # host already carries Playwright's system libraries host-wide, so only
       # the browser binary itself needs fetching here — no OS deps step is
       # needed at all, cache hit or miss.
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install ${{ matrix.browser }}
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
@@ -124,7 +131,6 @@ jobs:
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
       # itself needs fetching — no OS deps step is needed, cache hit or miss.
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install chromium
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
@@ -159,7 +165,6 @@ jobs:
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
       # itself needs fetching — no OS deps step is needed, cache hit or miss.
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install chromium
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
@@ -206,7 +211,6 @@ jobs:
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
       # itself needs fetching — no OS deps step is needed, cache hit or miss.
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install chromium
       - run: pnpm --filter @reely/storybook build
       - run: pnpm test:storybook
