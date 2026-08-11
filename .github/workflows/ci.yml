@@ -176,10 +176,14 @@ jobs:
   # store on the host with both changes in place.
   package:
     runs-on: [self-hosted, linux, x64, vps]
-    env:
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v7
+      # The `runner` context isn't available in a job-level `env:` block
+      # (only in a step's), so TMPDIR is set here, into $GITHUB_ENV, where it
+      # then applies to every later step in the job — see the job comment
+      # above for why it's needed. $RUNNER_TEMP is the plain shell form of
+      # the same `runner.temp` value.
+      - run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - run: corepack enable
       - uses: actions/setup-node@v7
         with:
