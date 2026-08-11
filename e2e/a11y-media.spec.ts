@@ -145,7 +145,20 @@ test('live regions announce state transitions only, never time updates or cues',
 }) => {
   // `captions-reference.vtt`'s cue boundary — see the fixture and the guard
   // assertion below, both of which depend on this exact value.
-  const cueBoundary = 0.4;
+  //
+  // This was 0.4 until the self-hosted runner (slower than the previous
+  // GitHub-hosted one) started landing `installedAt` at 0.46-0.54s — past the
+  // old boundary — on real activation/decode + `page.evaluate` round-trip
+  // latency alone, well before any real work in the window below even starts.
+  // The guard's entire point is proving the observer is live strictly before
+  // the fixture's real cue transition, so the fix moves the transition itself
+  // (fixture + this constant, kept equal on purpose, see above) rather than
+  // just loosening the `toBeLessThan` check — decoupling the two would let the
+  // guard pass while the observer still missed the transition, silently
+  // reopening the exact gap this test exists to close. 0.7s clears the
+  // observed 0.46-0.54s range with comfortable headroom while still leaving a
+  // real 0.3s cue-two window inside the ~1s clip.
+  const cueBoundary = 0.7;
 
   await page.goto(realSources);
   await activationButton(page).click();
@@ -215,11 +228,12 @@ test('live regions announce state transitions only, never time updates or cues',
     });
   });
 
-  // Guard against a real race: the cue boundary above falls at 0.4s, and
+  // Guard against a real race: the cue boundary above falls at 0.7s, and
   // nothing forces the observer to be live before then. Real
   // activation-to-first-frame latency (no mock: real decode) can push
-  // installation past 0.4s on a slow engine — this plan's own constraints
-  // flag WebKit as the historically slow one here — and if it does, the cue
+  // installation past that boundary on a slow engine — this plan's own
+  // constraints flag WebKit as the historically slow one here, and the
+  // self-hosted runner as a slower host generally — and if it does, the cue
   // transition already happened unobserved, "no announcements" would pass for
   // having nothing left to see rather than the policy holding, and this test
   // would silently degrade back into exactly the structurally-unobservable
@@ -235,7 +249,7 @@ test('live regions announce state transitions only, never time updates or cues',
 
   // Play through the whole ~1s clip. `captions-reference.vtt` (this example's
   // own fixture, distinct from `captions-en.vtt`) carries two cues with a
-  // boundary at 0.4s, so a real cue TRANSITION happens inside this window, not
+  // boundary at 0.7s, so a real cue TRANSITION happens inside this window, not
   // just one steady cue sitting there unchanged — the fixture the composed
   // example used to declare span a single 0-5s cue, which a ~1s clip never
   // gets to see change at all. Time updates fire repeatedly over the same
@@ -265,7 +279,7 @@ test('live regions announce state transitions only, never time updates or cues',
   // and every time-update or cue leak all still fail here.
   //
   // The window is NOT moved later to dodge this. Its start point is
-  // load-bearing: the `installedAt < cueBoundary` guard above proves the 0.4s
+  // load-bearing: the `installedAt < cueBoundary` guard above proves the 0.7s
   // cue transition is still ahead of the observer, and waiting out the floor
   // first would advance `currentTime` past that boundary and silently drop the
   // cue coverage this test exists to hold.
