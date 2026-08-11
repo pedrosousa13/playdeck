@@ -65,12 +65,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
-  # Stays on ubuntu-latest. a11y-media.spec.ts asserts a listener is installed
-  # before a 0.4s cue boundary; on the self-hosted host it lands at 0.46-0.54s.
-  # The test is calibrated to GitHub's hardware, and relaxing it would be
-  # changing an assertion to suit a runner rather than fixing anything.
+  # Moved to the self-hosted runner: a11y-media.spec.ts's cue-boundary guard
+  # (installedAt < cueBoundary) was genuinely about proving the mutation
+  # observer installs before the fixture's real cue transition, not about a
+  # player performance budget, so the fix moved the fixture's cue boundary
+  # itself (captions-reference.vtt, 0.4s -> 0.7s) together with the matching
+  # JS constant, giving this host's 0.46-0.54s install time real headroom
+  # without decoupling the guard from what it's actually guarding. See
+  # e2e/a11y-media.spec.ts for the full rationale.
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     strategy:
       fail-fast: false
       matrix:
@@ -103,7 +107,7 @@ jobs:
       # host already carries Playwright's system libraries host-wide, so only
       # the browser binary itself needs fetching here — no OS deps step is
       # needed at all, cache hit or miss.
-      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - run: pnpm exec playwright install ${{ matrix.browser }}
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=${{ matrix.browser }}
@@ -148,16 +152,38 @@ jobs:
           path: test-results/
           retention-days: 14
 
-  # Stays on ubuntu-latest. `pnpm test:packages` dies under this repo's pinned
-  # pnpm 11.15.1 with `[ERR_SQLITE_ERROR] attempt to write a readonly database`
-  # from its new SQLite store index. Reproduced 3/3 on the self-hosted host and
-  # traced to pnpm itself - not a permissions or concurrency problem on the
-  # host, both of which were disproven. Revisit when the pin moves or upstream
-  # fixes it.
+  # Moved to the self-hosted runner. `pnpm test:packages` used to die under
+  # this repo's pinned pnpm 11.15.1 with `[ERR_SQLITE_ERROR] attempt to write
+  # a readonly database` from its new SQLite store index — reproduced 3/3
+  # against the real shared store and traced to pnpm 11's index itself, not a
+  # host permissions or concurrency problem (both investigated and
+  # disproven). Fixed by dropping the `packageManager` pin to pnpm@10.34.5
+  # (package.json), which predates the SQLite store index entirely, matching
+  # the version this host also pins at /usr/local/bin/pnpm.
+  #
+  # That alone wasn't sufficient: `scripts/verify-packaging.mjs`'s fixture
+  # install runs from a directory under Node's default tmpdir (`/tmp`), which
+  # is tmpfs here — a different filesystem device than `HOME`/the workspace
+  # (`/srv/runner`, on disk). Under pnpm 10 that device mismatch makes pnpm
+  # colocate a store at `/tmp/.pnpm-store` for hardlink-friendliness, and on
+  # this host that path already exists, owned by a uid from before the
+  # single-tenant migration — `runner` can't write into it, so the fixture
+  # install failed with EACCES even with the working pnpm version. `TMPDIR`
+  # below points Node's tmpdir at the job's own same-device temp dir instead,
+  # so no cross-device store redirection is ever attempted. Verified by
+  # actually running the full job sequence (build, test:packages,
+  # test:budgets, test:bundle, test:integrations) against the real shared
+  # store on the host with both changes in place.
   package:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     steps:
       - uses: actions/checkout@v7
+      # The `runner` context isn't available in a job-level `env:` block
+      # (only in a step's), so TMPDIR is set here, into $GITHUB_ENV, where it
+      # then applies to every later step in the job — see the job comment
+      # above for why it's needed. $RUNNER_TEMP is the plain shell form of
+      # the same `runner.temp` value.
+      - run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - run: corepack enable
       - uses: actions/setup-node@v7
         with:
@@ -175,7 +201,7 @@ jobs:
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
       # itself needs fetching — no OS deps step is needed, cache hit or miss.
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install chromium
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
       # and hit that cache instead of rebuilding from scratch.

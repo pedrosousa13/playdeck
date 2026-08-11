@@ -499,7 +499,7 @@ const sources = [
 // Media at all is the API #15 shipped without.
 //
 // `captions-reference.vtt`, not `captions-en.vtt`: this example's own fixture
-// carries two cues with a boundary at 0.4s, inside the ~1s clip, so a cue
+// carries two cues with a boundary at 0.7s, inside the ~1s clip, so a cue
 // transition actually happens during real playback here (#32's e2e
 // announcement-policy test needs one to fall inside its observation window).
 // `captions-en.vtt` stays a single 0-5s cue for the other stories/specs that
