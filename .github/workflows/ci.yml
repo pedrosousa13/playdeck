@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   static:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -42,7 +42,7 @@ jobs:
   # would just get ignored, and one that hid what it tolerated would be worse
   # than none.
   audit:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -54,7 +54,7 @@ jobs:
       - run: pnpm test:audit
 
   unit:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -66,7 +66,7 @@ jobs:
       - run: pnpm test
 
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     strategy:
       fail-fast: false
       matrix:
@@ -86,10 +86,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright-version.outputs.version }}
+      # `--with-deps` shells out to `apt-get` via sudo to install OS packages,
+      # which this runner's unprivileged user does not have. The self-hosted
+      # host already carries Playwright's system libraries host-wide, so only
+      # the browser binary itself needs fetching here — no OS deps step is
+      # needed at all, cache hit or miss.
       - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps ${{ matrix.browser }}
+        run: pnpm exec playwright install ${{ matrix.browser }}
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=${{ matrix.browser }}
@@ -101,7 +104,7 @@ jobs:
   # matrix. On macOS those five tests skip; the layering assertions in the same
   # spec run everywhere.
   visual:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -117,10 +120,12 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ steps.playwright-version.outputs.version }}
+      # `--with-deps` shells out to `apt-get` via sudo, which this runner's
+      # unprivileged user does not have. The self-hosted host already carries
+      # Playwright's system libraries host-wide, so only the browser binary
+      # itself needs fetching — no OS deps step is needed, cache hit or miss.
       - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm exec playwright install chromium
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=visual
@@ -134,7 +139,7 @@ jobs:
           retention-days: 14
 
   package:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -150,10 +155,12 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+      # `--with-deps` shells out to `apt-get` via sudo, which this runner's
+      # unprivileged user does not have. The self-hosted host already carries
+      # Playwright's system libraries host-wide, so only the browser binary
+      # itself needs fetching — no OS deps step is needed, cache hit or miss.
       - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm exec playwright install chromium
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
       # and hit that cache instead of rebuilding from scratch.
@@ -179,7 +186,7 @@ jobs:
   # it, having nothing left to gate.
 
   storybook:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -195,9 +202,11 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+      # `--with-deps` shells out to `apt-get` via sudo, which this runner's
+      # unprivileged user does not have. The self-hosted host already carries
+      # Playwright's system libraries host-wide, so only the browser binary
+      # itself needs fetching — no OS deps step is needed, cache hit or miss.
       - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm exec playwright install chromium
       - run: pnpm --filter @reely/storybook build
       - run: pnpm test:storybook
