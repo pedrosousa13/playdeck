@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   update:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vps]
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -35,7 +35,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      # `--with-deps` shells out to `apt-get` via sudo, which this runner's
+      # unprivileged user does not have. The self-hosted host already carries
+      # Playwright's system libraries host-wide, so only the browser binary
+      # itself needs fetching.
+      - run: pnpm exec playwright install chromium
       # `--update-snapshots` writes missing and changed baselines and reports
       # the run as failed when it changed anything, which is correct but not
       # useful here: the artifact is the deliverable either way.
