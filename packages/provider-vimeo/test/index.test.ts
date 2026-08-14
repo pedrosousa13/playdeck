@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   detectSource,
   type MediaDimensions,
+  type PlayerCapabilities,
   type ProviderAdapter,
   type ProviderEvent,
   type ProviderStateListener,
@@ -12,12 +13,20 @@ import {
   type TextCue,
   type VimeoSource
 } from '@reely/core';
+import { available } from '../src/adapter-values';
+import { createVimeoAttachment } from '../src/attachment';
+import { createVimeoBoundary } from '../src/boundary';
+import { createVimeoChromelessAvailability } from '../src/chromeless-availability';
 import {
   createVimeoProvider,
   type VimeoMountElement,
   type VimeoProviderOptions
 } from '../src/index';
 import type { VimeoSdkQuality } from '../src/loader';
+import { createVimeoPlayback } from '../src/playback';
+import { createVimeoPresentation } from '../src/presentation';
+import { createVimeoQualityLevels } from '../src/quality-levels';
+import { createVimeoTextTracks } from '../src/text-tracks';
 import {
   createFakeSdk,
   namedError,
@@ -239,16 +248,118 @@ test('produces a byte-identical embed URL for a valid numeric id with a hash', a
   );
 });
 
+// --- URL-builder defence in depth, independent of factory validation (#222) ---
+//
+// `createVimeoProvider`'s validation guard (below) is the only caller of
+// `createVimeoAttachment` in this package, so proving the path-segment
+// encoding is safe *on its own merits* -- Task 1's original acceptance
+// criterion, "even with validation bypassed" -- means calling
+// `createVimeoAttachment` directly, wired exactly the way the factory wires
+// it, skipping only the guard. This is not a duplicate of the rejection
+// tests below: those prove the factory never reaches the URL builder for a
+// hostile id; this proves the URL builder is not itself relying on that
+// guard to be safe.
+
+// Wires the same seams `createVimeoProvider` composes, in the same order,
+// minus its validation guard.
+const attachWithoutValidation = async (
+  videoId: string
+): Promise<{ mount: VimeoMountElement; sdk: FakeSdk }> => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const source: VimeoSource = { type: 'vimeo', videoId };
+  const options: VimeoProviderOptions = {};
+  const noopEmit = (): void => undefined;
+
+  const chromeless = createVimeoChromelessAvailability({ source, options });
+  const boundary = createVimeoBoundary(options);
+
+  const playback = createVimeoPlayback(mount, {
+    emit: noopEmit,
+    isStale: (player) => attachment.isStale(player),
+    getPlayer: () => attachment.getPlayer(),
+    getCapabilities: playerCapabilities,
+    boundary
+  });
+
+  const qualityLevels = createVimeoQualityLevels({
+    emit: noopEmit,
+    getPlayer: () => attachment.getPlayer()
+  });
+
+  const presentation = createVimeoPresentation({
+    emit: noopEmit,
+    getPlayer: () => attachment.getPlayer(),
+    getCapabilities: playerCapabilities
+  });
+
+  const textTracks = createVimeoTextTracks({
+    emit: noopEmit,
+    isStale: (player) => attachment.isStale(player),
+    getPlayer: () => attachment.getPlayer(),
+    getCurrentTime: playback.getCurrentTime,
+    getCapabilities: playerCapabilities
+  });
+
+  function playerCapabilities(): PlayerCapabilities {
+    return {
+      seek: available,
+      setVolume: playback.setVolumeAvailability(),
+      setPlaybackRate: playback.setPlaybackRateAvailability(),
+      selectQuality: qualityLevels.selectQualityAvailability(),
+      selectTextTrack: textTracks.selectTextTrackAvailability(),
+      fullscreen: available,
+      pictureInPicture: presentation.pictureInPictureAvailability(),
+      airPlay: { status: 'unavailable', reason: 'provider' },
+      customControls: chromeless.customControlsAvailability()
+    };
+  }
+
+  const attachment = createVimeoAttachment(mount, source, {
+    emit: noopEmit,
+    options,
+    getCapabilities: playerCapabilities,
+    chromeless,
+    playback,
+    presentation,
+    qualityLevels,
+    textTracks,
+    clearStateListeners: () => undefined
+  });
+
+  await attachment.attach();
+  await attachment.load();
+
+  return { mount, sdk };
+};
+
+test.each([
+  ['a path traversal', '../../@evil.com/x'],
+  ['a query string', '123?app_id=evil']
+])(
+  'encodes %s video id into the path segment rather than a new segment, query, or fragment, even with the factory guard bypassed',
+  async (_form, videoId) => {
+    const { sdk } = await attachWithoutValidation(videoId);
+    const url = new URL(sdk.instances[0]!.element.src);
+    expect(url.pathname).toBe(`/video/${encodeURIComponent(videoId)}`);
+    expect(url.pathname.slice('/video/'.length).includes('/')).toBe(false);
+    expect(url.origin).toBe('https://player.vimeo.com');
+    expect([...url.searchParams.keys()].sort()).toEqual(
+      ['controls', 'dnt', 'loop', 'playsinline'].sort()
+    );
+    expect(url.hash).toBe('');
+  }
+);
+
 // --- rejected video id / hash (#222) ---
 //
 // The factory now validates `source.videoId` (and `source.hash`, when
-// present) before composing anything, so a hostile id never reaches the
-// path-segment encoding this same file's URL-builder regression tests cover
-// (Task 1, above) -- it is rejected at the factory instead. The path-segment
-// encoding remains defence in depth against anything that reaches the URL
-// builder with an id validation did not catch; it is exercised directly by
-// this file's byte-identical regression tests, not by driving a hostile id
-// through the public factory.
+// present) before composing anything, so a hostile id never reaches the URL
+// builder at all in practice -- it is rejected at the factory instead. The
+// encoding guard above proves that even so, the URL builder does not depend
+// on this guard to be safe.
 
 test.each([
   ['a path traversal', '../../@evil.com/x'],
