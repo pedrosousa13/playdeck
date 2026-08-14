@@ -223,6 +223,45 @@ test('preserves the privacy hash from the ?h= URL form into the embed', async ()
   expect(embedUrl(result).searchParams.get('h')).toBe('abc123DEF');
 });
 
+test('produces a byte-identical embed URL for a valid numeric id without a hash', async () => {
+  const result = await setup();
+  expect(embedUrl(result).href).toBe(
+    'https://player.vimeo.com/video/76979871?controls=0&dnt=1&loop=0&playsinline=1'
+  );
+});
+
+test('produces a byte-identical embed URL for a valid numeric id with a hash', async () => {
+  const result = await setup({
+    source: { type: 'vimeo', videoId: '76979871', hash: 'abc123DEF' }
+  });
+  expect(embedUrl(result).href).toBe(
+    'https://player.vimeo.com/video/76979871?h=abc123DEF&controls=0&dnt=1&loop=0&playsinline=1'
+  );
+});
+
+// This adapter does not itself validate `source.videoId` (validation is the
+// factory's job, added alongside this predicate's export -- see issue #222).
+// These cases go through this seam with no validation applied, on purpose:
+// they prove the path-segment encoding itself is the guard against a hostile
+// id, not the presence or absence of an upstream check.
+test.each([
+  ['a path traversal', '../../@evil.com/x'],
+  ['a query string', '123?app_id=evil']
+])(
+  'encodes %s video id into the path segment rather than a new segment, query, or fragment',
+  async (_form, videoId) => {
+    const result = await setup({ source: { type: 'vimeo', videoId } });
+    const url = embedUrl(result);
+    expect(url.pathname).toBe(`/video/${encodeURIComponent(videoId)}`);
+    expect(url.pathname.slice('/video/'.length).includes('/')).toBe(false);
+    expect(url.origin).toBe('https://player.vimeo.com');
+    expect([...url.searchParams.keys()].sort()).toEqual(
+      ['controls', 'dnt', 'loop', 'playsinline'].sort()
+    );
+    expect(url.hash).toBe('');
+  }
+);
+
 test('seeds the embed muted state from the mount preference', async () => {
   const result = await setup({
     prepareMount: (mount) => {

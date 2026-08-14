@@ -103,11 +103,12 @@ const attributeName = (option: WistiaPlayerAttribute): string =>
 
 // `playerColor` and `poster` are documented as a hex colour and an image URL
 // but reach the provider as bare strings, so each is checked here — the one
-// place an option becomes an attribute, which covers every consumer of the
-// package rather than only those coming through `Player.Root`. A value that
-// fails its check sets no attribute, the same element state as omitting the
-// option, and the drop is silent: one bad presentation option must not fail
-// playback.
+// place either option becomes an attribute, which covers every consumer of
+// the package rather than only those coming through `Player.Root`. This does
+// not extend to `mediaId`, set below: that value reaches the element
+// unchecked by this file. A value that fails its check sets no attribute,
+// the same element state as omitting the option, and the drop is silent: one
+// bad presentation option must not fail playback.
 //
 // Every hex form CSS Color 4 spells: three, four, six, or eight digits, with
 // or without the hash — the four- and eight-digit forms carry an alpha channel.

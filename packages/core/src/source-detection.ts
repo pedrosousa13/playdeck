@@ -19,16 +19,16 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
-const isYouTubeVideoId = (value: unknown): value is string =>
+export const isYouTubeVideoId = (value: unknown): value is string =>
   isNonEmptyString(value) && /^[A-Za-z0-9_-]+$/.test(value);
 
-const isVimeoVideoId = (value: unknown): value is string =>
+export const isVimeoVideoId = (value: unknown): value is string =>
   isNonEmptyString(value) && /^\d+$/.test(value);
 
-const isVimeoHash = (value: unknown): value is string =>
+export const isVimeoHash = (value: unknown): value is string =>
   isNonEmptyString(value) && /^[A-Za-z0-9]+$/.test(value);
 
-const isWistiaMediaId = (value: unknown): value is string =>
+export const isWistiaMediaId = (value: unknown): value is string =>
   isNonEmptyString(value) && /^[A-Za-z0-9]+$/.test(value);
 
 // The WHATWG URL parser strips U+0009, U+000A and U+000D before parsing, so a
