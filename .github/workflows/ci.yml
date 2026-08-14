@@ -90,6 +90,10 @@ jobs:
       # host already carries Playwright's system libraries host-wide, so only
       # the browser binary itself needs fetching here — no OS deps step is
       # needed at all, cache hit or miss.
+      # No gate on this step: the self-hosted runner's HOME persists between
+      # jobs, so the browser is usually already present and the step below
+      # is then a fast no-op. That is also why this job no longer caches the
+      # Playwright browser directory.
       - run: pnpm exec playwright install ${{ matrix.browser }}
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
@@ -114,6 +118,10 @@ jobs:
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
       # itself needs fetching — no OS deps step is needed, cache hit or miss.
+      # No gate on this step: the self-hosted runner's HOME persists between
+      # jobs, so chromium is usually already present and the step below is
+      # then a fast no-op. That is also why this job no longer caches the
+      # Playwright browser directory.
       - run: pnpm exec playwright install chromium
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
@@ -168,6 +176,10 @@ jobs:
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
       # itself needs fetching — no OS deps step is needed, cache hit or miss.
+      # No gate on this step: the self-hosted runner's HOME persists between
+      # jobs, so chromium is usually already present and the step below is
+      # then a fast no-op. That is also why this job no longer caches the
+      # Playwright browser directory.
       - run: pnpm exec playwright install chromium
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
@@ -206,6 +218,10 @@ jobs:
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
       # itself needs fetching — no OS deps step is needed, cache hit or miss.
+      # No gate on this step: the self-hosted runner's HOME persists between
+      # jobs, so chromium is usually already present and the step below is
+      # then a fast no-op. That is also why this job no longer caches the
+      # Playwright browser directory.
       - run: pnpm exec playwright install chromium
       - run: pnpm --filter @reely/storybook build
       - run: pnpm test:storybook
