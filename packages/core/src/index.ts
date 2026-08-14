@@ -48,7 +48,14 @@ export { deriveLiveState, liveStateEqual } from './live-state.js';
 
 export type { LiveDerivationInput } from './live-state.js';
 
-export { detectSource, isPermittedSourceUrl } from './source-detection.js';
+export {
+  detectSource,
+  isPermittedSourceUrl,
+  isVimeoHash,
+  isVimeoVideoId,
+  isWistiaMediaId,
+  isYouTubeVideoId
+} from './source-detection.js';
 
 export { textTrackLabel } from './text-tracks.js';
 

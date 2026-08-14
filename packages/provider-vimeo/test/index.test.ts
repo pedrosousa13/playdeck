@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   detectSource,
   type MediaDimensions,
+  type PlayerCapabilities,
   type ProviderAdapter,
   type ProviderEvent,
   type ProviderStateListener,
@@ -12,12 +13,20 @@ import {
   type TextCue,
   type VimeoSource
 } from '@reely/core';
+import { available } from '../src/adapter-values';
+import { createVimeoAttachment } from '../src/attachment';
+import { createVimeoBoundary } from '../src/boundary';
+import { createVimeoChromelessAvailability } from '../src/chromeless-availability';
 import {
   createVimeoProvider,
   type VimeoMountElement,
   type VimeoProviderOptions
 } from '../src/index';
 import type { VimeoSdkQuality } from '../src/loader';
+import { createVimeoPlayback } from '../src/playback';
+import { createVimeoPresentation } from '../src/presentation';
+import { createVimeoQualityLevels } from '../src/quality-levels';
+import { createVimeoTextTracks } from '../src/text-tracks';
 import {
   createFakeSdk,
   namedError,
@@ -221,6 +230,237 @@ test('preserves the privacy hash from the ?h= URL form into the embed', async ()
     detected.status === 'success' ? (detected.source as VimeoSource) : null;
   const result = await setup({ source: source! });
   expect(embedUrl(result).searchParams.get('h')).toBe('abc123DEF');
+});
+
+test('produces a byte-identical embed URL for a valid numeric id without a hash', async () => {
+  const result = await setup();
+  expect(embedUrl(result).href).toBe(
+    'https://player.vimeo.com/video/76979871?controls=0&dnt=1&loop=0&playsinline=1'
+  );
+});
+
+test('produces a byte-identical embed URL for a valid numeric id with a hash', async () => {
+  const result = await setup({
+    source: { type: 'vimeo', videoId: '76979871', hash: 'abc123DEF' }
+  });
+  expect(embedUrl(result).href).toBe(
+    'https://player.vimeo.com/video/76979871?h=abc123DEF&controls=0&dnt=1&loop=0&playsinline=1'
+  );
+});
+
+// --- URL-builder defence in depth, independent of factory validation (#222) ---
+//
+// `createVimeoProvider`'s validation guard (below) is the only caller of
+// `createVimeoAttachment` in this package, so proving the path-segment
+// encoding is safe *on its own merits* -- Task 1's original acceptance
+// criterion, "even with validation bypassed" -- means calling
+// `createVimeoAttachment` directly, wired exactly the way the factory wires
+// it, skipping only the guard. This is not a duplicate of the rejection
+// tests below: those prove the factory never reaches the URL builder for a
+// hostile id; this proves the URL builder is not itself relying on that
+// guard to be safe.
+
+// Wires the same seams `createVimeoProvider` composes, in the same order,
+// minus its validation guard.
+const attachWithoutValidation = async (
+  videoId: string
+): Promise<{ mount: VimeoMountElement; sdk: FakeSdk }> => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const source: VimeoSource = { type: 'vimeo', videoId };
+  const options: VimeoProviderOptions = {};
+  const noopEmit = (): void => undefined;
+
+  const chromeless = createVimeoChromelessAvailability({ source, options });
+  const boundary = createVimeoBoundary(options);
+
+  const playback = createVimeoPlayback(mount, {
+    emit: noopEmit,
+    isStale: (player) => attachment.isStale(player),
+    getPlayer: () => attachment.getPlayer(),
+    getCapabilities: playerCapabilities,
+    boundary
+  });
+
+  const qualityLevels = createVimeoQualityLevels({
+    emit: noopEmit,
+    getPlayer: () => attachment.getPlayer()
+  });
+
+  const presentation = createVimeoPresentation({
+    emit: noopEmit,
+    getPlayer: () => attachment.getPlayer(),
+    getCapabilities: playerCapabilities
+  });
+
+  const textTracks = createVimeoTextTracks({
+    emit: noopEmit,
+    isStale: (player) => attachment.isStale(player),
+    getPlayer: () => attachment.getPlayer(),
+    getCurrentTime: playback.getCurrentTime,
+    getCapabilities: playerCapabilities
+  });
+
+  function playerCapabilities(): PlayerCapabilities {
+    return {
+      seek: available,
+      setVolume: playback.setVolumeAvailability(),
+      setPlaybackRate: playback.setPlaybackRateAvailability(),
+      selectQuality: qualityLevels.selectQualityAvailability(),
+      selectTextTrack: textTracks.selectTextTrackAvailability(),
+      fullscreen: available,
+      pictureInPicture: presentation.pictureInPictureAvailability(),
+      airPlay: { status: 'unavailable', reason: 'provider' },
+      customControls: chromeless.customControlsAvailability()
+    };
+  }
+
+  const attachment = createVimeoAttachment(mount, source, {
+    emit: noopEmit,
+    options,
+    getCapabilities: playerCapabilities,
+    chromeless,
+    playback,
+    presentation,
+    qualityLevels,
+    textTracks,
+    clearStateListeners: () => undefined
+  });
+
+  await attachment.attach();
+  await attachment.load();
+
+  return { mount, sdk };
+};
+
+test.each([
+  ['a path traversal', '../../@evil.com/x'],
+  ['a query string', '123?app_id=evil']
+])(
+  'encodes %s video id into the path segment rather than a new segment, query, or fragment, even with the factory guard bypassed',
+  async (_form, videoId) => {
+    const { sdk } = await attachWithoutValidation(videoId);
+    const url = new URL(sdk.instances[0]!.element.src);
+    expect(url.pathname).toBe(`/video/${encodeURIComponent(videoId)}`);
+    expect(url.pathname.slice('/video/'.length).includes('/')).toBe(false);
+    expect(url.origin).toBe('https://player.vimeo.com');
+    expect([...url.searchParams.keys()].sort()).toEqual(
+      ['controls', 'dnt', 'loop', 'playsinline'].sort()
+    );
+    expect(url.hash).toBe('');
+  }
+);
+
+// --- rejected video id / hash (#222) ---
+//
+// The factory now validates `source.videoId` (and `source.hash`, when
+// present) before composing anything, so a hostile id never reaches the URL
+// builder at all in practice -- it is rejected at the factory instead. The
+// encoding guard above proves that even so, the URL builder does not depend
+// on this guard to be safe.
+
+test.each([
+  ['a path traversal', '../../@evil.com/x'],
+  ['a query string', '123?app_id=evil']
+])('rejects a video id that is %s', async (_form, videoId) => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdkLoad = vi.fn(() => Promise.resolve(createFakeSdk().Sdk));
+  sdkState.load = sdkLoad;
+  const provider = createVimeoProvider(mount, { type: 'vimeo', videoId });
+  const patches: ProviderStatePatch[] = [];
+  const events: ProviderEvent[] = [];
+  provider.subscribe((patch, event) => {
+    patches.push(patch);
+    if (event) events.push(event);
+  });
+
+  await provider.attach();
+  await provider.load();
+  await provider.destroy();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      error: expect.objectContaining({
+        category: 'source',
+        fatal: true,
+        recoverable: true
+      })
+    })
+  );
+  expect(patches[0]?.error?.message).not.toContain(videoId);
+  expect(events.at(-1)).toMatchObject({ type: 'error' });
+
+  // No iframe ever built or appended into the mount, and the Vimeo SDK
+  // loader the real embed would call was never invoked. Scoped to this
+  // test's own mount, not the whole document: earlier tests in this file
+  // leave their own iframes appended to `document.body`.
+  expect(mount.querySelector('iframe')).toBeNull();
+  expect(sdkLoad).not.toHaveBeenCalled();
+
+  // Every command on a rejected adapter is a no-op that resolves rather than
+  // hangs or throws.
+  await expect(provider.play()).resolves.toEqual({
+    ok: false,
+    reason: 'not-ready'
+  });
+});
+
+// "A rejected Vimeo hash is treated the same as a rejected id" -- a valid
+// videoId paired with an invalid hash still rejects.
+test('rejects a valid video id paired with an invalid hash', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdkLoad = vi.fn(() => Promise.resolve(createFakeSdk().Sdk));
+  sdkState.load = sdkLoad;
+  const provider = createVimeoProvider(mount, {
+    type: 'vimeo',
+    videoId: '76979871',
+    hash: 'not a valid hash!'
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  await provider.load();
+  await provider.destroy();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      error: expect.objectContaining({
+        category: 'source',
+        fatal: true,
+        recoverable: true
+      })
+    })
+  );
+  expect(mount.querySelector('iframe')).toBeNull();
+  expect(sdkLoad).not.toHaveBeenCalled();
+});
+
+test('reports the rejected-id error to a subscriber that arrives late', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const provider = createVimeoProvider(mount, {
+    type: 'vimeo',
+    videoId: '123?app_id=evil'
+  });
+
+  await provider.destroy();
+
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      error: expect.objectContaining({ category: 'source', fatal: true })
+    })
+  );
 });
 
 test('seeds the embed muted state from the mount preference', async () => {

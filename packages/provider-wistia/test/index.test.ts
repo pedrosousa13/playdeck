@@ -191,6 +191,84 @@ test('embeds a chromeless, Do-Not-Track player by default', async () => {
   expect(player.getAttribute('end-video-behavior')).toBeNull();
 });
 
+// --- rejected media id ---
+
+test.each([
+  ['a script-injection payload', '"><script>alert(1)</script>'],
+  ['a path-traversal payload with a quote break', '../../evil" x="y'],
+  ['a value containing whitespace', 'a b']
+])('rejects a media id that is %s', async (_form, mediaId) => {
+  const mount = document.createElement('div') as WistiaMountElement;
+  document.body.appendChild(mount);
+  const sdk = installFakeWistiaPlayer();
+  const load = vi.fn(sdk.load);
+  sdkState.load = load;
+  const provider = createWistiaProvider(mount, { type: 'wistia', mediaId });
+  const patches: ProviderStatePatch[] = [];
+  const events: ProviderEvent[] = [];
+  provider.subscribe((patch, event) => {
+    patches.push(patch);
+    if (event) events.push(event);
+  });
+
+  provider.attach();
+  await provider.load();
+  provider.destroy();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      error: expect.objectContaining({
+        category: 'source',
+        fatal: true,
+        recoverable: true
+      })
+    })
+  );
+  expect(patches[0]?.error?.message).not.toContain(mediaId);
+  expect(lastEvent(events)).toMatchObject({ type: 'error' });
+
+  // No element ever built or appended, anywhere in the document, and the
+  // Wistia loader the real embed would call was never invoked.
+  expect(sdk.elements).toHaveLength(0);
+  expect(mount.querySelector('wistia-player')).toBeNull();
+  expect(document.querySelector('wistia-player')).toBeNull();
+  expect(load).not.toHaveBeenCalled();
+
+  // Every command on a rejected adapter is a no-op that resolves rather than
+  // hangs or throws.
+  await expect(provider.play()).resolves.toEqual({
+    ok: false,
+    reason: 'not-ready'
+  });
+});
+
+test('reports the rejected-id error to a subscriber that arrives late', async () => {
+  const mount = document.createElement('div') as WistiaMountElement;
+  document.body.appendChild(mount);
+  const provider = createWistiaProvider(mount, {
+    type: 'wistia',
+    mediaId: 'a b'
+  });
+
+  provider.destroy();
+
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      error: expect.objectContaining({ category: 'source', fatal: true })
+    })
+  );
+});
+
+test('still builds the embed for a valid media id, unaffected by validation', async () => {
+  const result = await setup();
+  expect(element(result).getAttribute('media-id')).toBe(source.mediaId);
+});
+
 test('keeps Wistia controls as the single layer when requested', async () => {
   const result = await setup({ options: { controls: true } });
   const player = element(result);

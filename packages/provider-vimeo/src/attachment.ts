@@ -66,7 +66,8 @@ const vimeoEmbedUrl = (
   options: VimeoEmbedOptions,
   muted: boolean | undefined
 ): string => {
-  const url = new URL(`https://player.vimeo.com/video/${source.videoId}`);
+  const url = new URL('https://player.vimeo.com/video/');
+  url.pathname = `${url.pathname}${encodeURIComponent(source.videoId)}`;
   if (source.hash) url.searchParams.set('h', source.hash);
   url.searchParams.set('controls', options.controls === true ? '1' : '0');
   url.searchParams.set('dnt', options.dnt === false ? '0' : '1');

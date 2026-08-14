@@ -194,6 +194,95 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+// --- rejected video id ---
+
+test.each([
+  ['a script-injection payload', '"><script>alert(1)</script>'],
+  ['a path-traversal payload with a quote break', '../../evil" x="y'],
+  ['a value containing whitespace', 'a b']
+])('rejects a video id that is %s', async (_form, videoId) => {
+  const { events, fake, patches, provider } = createAdapter(videoId);
+
+  await provider.attach();
+  await provider.load();
+  await provider.destroy();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      activation: 'error',
+      commandsReady: false,
+      error: expect.objectContaining({
+        category: 'source',
+        fatal: true,
+        recoverable: true
+      })
+    })
+  );
+  expect(patches[0]?.error?.message).not.toContain(videoId);
+  expect(events).toContainEqual(expect.objectContaining({ type: 'error' }));
+
+  // The iframe API's player constructor is the acceptance-critical call site:
+  // it must never be reached on the rejected path.
+  expect(fake.players).toHaveLength(0);
+
+  // Every command on a rejected adapter is a no-op that resolves rather than
+  // hangs or throws.
+  await expect(provider.play()).resolves.toEqual({
+    ok: false,
+    reason: 'not-ready'
+  });
+});
+
+test('rejects a video id even when loop is requested, never reaching the playlist var', async () => {
+  const { fake, provider } = createAdapter('a b', { loop: true });
+
+  await provider.attach();
+  await provider.load();
+
+  expect(fake.players).toHaveLength(0);
+});
+
+test('reports the rejected-id error to a subscriber that arrives late', async () => {
+  const mount = document.createElement('div');
+  document.body.appendChild(mount);
+  const provider = createYouTubeProvider(mount, 'a b');
+
+  await provider.destroy();
+
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      error: expect.objectContaining({ category: 'source', fatal: true })
+    })
+  );
+});
+
+test('a valid video id still constructs the player exactly as before, unaffected by validation', async () => {
+  const { fake, provider } = createAdapter('M7lc1UVf-VE');
+
+  await provider.attach();
+  await provider.load();
+
+  expect(fake.players).toHaveLength(1);
+  expect(fake.players[0]!.options).toMatchObject({
+    host: 'https://www.youtube-nocookie.com',
+    videoId: 'M7lc1UVf-VE',
+    width: '100%',
+    height: '100%',
+    playerVars: expect.objectContaining({
+      autoplay: 0,
+      controls: 0,
+      loop: 0,
+      playsinline: 1,
+      rel: 0
+    })
+  });
+});
+
 test('youtube adapter conforms to lifecycle and event-confirmed playback', async () => {
   const { fake, patches, provider } = createAdapter();
 
