@@ -123,7 +123,14 @@ as `hls` and `video`.
 <!-- example:core-source-detection -->
 
 ```ts
-import { detectSource, isPermittedSourceUrl } from '@reely/core';
+import {
+  detectSource,
+  isPermittedSourceUrl,
+  isVimeoHash,
+  isVimeoVideoId,
+  isWistiaMediaId,
+  isYouTubeVideoId
+} from '@reely/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
 const vimeo = detectSource('https://vimeo.com/76979871?h=8272103f6e');
@@ -157,6 +164,14 @@ const objectUrl = URL.createObjectURL(new Blob([], { type: 'video/mp4' }));
 console.log(isPermittedSourceUrl(objectUrl, 'video')); // true
 console.log(isPermittedSourceUrl(objectUrl, 'hls')); // false
 console.log(isPermittedSourceUrl(objectUrl, undefined)); // false
+
+// The same per-provider id checks a factory runs on a direct call, should you
+// need to validate an id before ever reaching `createYouTubeProvider`,
+// `createVimeoProvider` or `createWistiaProvider` yourself.
+console.log(isYouTubeVideoId('dQw4w9WgXcQ')); // true
+console.log(isVimeoVideoId('76979871')); // true
+console.log(isVimeoHash('8272103f6e')); // true
+console.log(isWistiaMediaId('abc123')); // true
 ```
 
 <!-- /example -->
