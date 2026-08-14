@@ -71,6 +71,7 @@ out when a command will land; `activation` is not a substitute for either.
 | `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                          |
 | `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.            |
 | `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults.   |
+| `resolveNetworkPath`         | Normalises a protocol-relative URL (`//host/...`) to `https:`; returns every other value unchanged.            |
 | `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                        |
 | `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.            |
 | `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                    |
@@ -129,7 +130,8 @@ import {
   isVimeoHash,
   isVimeoVideoId,
   isWistiaMediaId,
-  isYouTubeVideoId
+  isYouTubeVideoId,
+  resolveNetworkPath
 } from '@reely/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
@@ -172,6 +174,11 @@ console.log(isYouTubeVideoId('dQw4w9WgXcQ')); // true
 console.log(isVimeoVideoId('76979871')); // true
 console.log(isVimeoHash('8272103f6e')); // true
 console.log(isWistiaMediaId('abc123')); // true
+
+// The substitution `isPermittedSourceUrl` itself never performs, for a caller
+// that validates a URL and then needs to write the same normalisation back.
+console.log(resolveNetworkPath('//example.com/clip.mp4')); // 'https://example.com/clip.mp4'
+console.log(resolveNetworkPath('https://example.com/clip.mp4')); // unchanged
 ```
 
 <!-- /example -->

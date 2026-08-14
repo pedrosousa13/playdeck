@@ -97,12 +97,24 @@ test('leaves the wistia bag unbounded when Root omits the time props', async () 
   expect(options?.endTime).toBeUndefined();
 });
 
+// #223: `poster` reaches the provider option bag exactly as the consumer
+// wrote it — `resolveProviderOptions` (`root.tsx`) folds only `endTime`,
+// `loop` and `startTime`, so `poster` is neither omitted nor rewritten on the
+// way through `Root`. The scheme allowlist that decides whether it is written
+// to the element runs inside `createWistiaProvider` itself, so this confirms
+// only that `Root`'s composed path reaches that same check with the same
+// value, not the check's outcome.
 test('keeps a consumer-supplied wistia bag alongside the folded loop', async () => {
   render(
     <Player.Root
       loading="eager"
       loop
-      providerOptions={{ wistia: { playerColor: 'ff0000' } }}
+      providerOptions={{
+        wistia: {
+          playerColor: 'ff0000',
+          poster: 'http://example.test/poster.png'
+        }
+      }}
       source={{ type: 'wistia', mediaId: 'oifkgmxnkb' }}
     >
       <Player.Viewport>
@@ -115,5 +127,9 @@ test('keeps a consumer-supplied wistia bag alongside the folded loop', async () 
     expect(mockedCreateWistiaProvider).toHaveBeenCalledTimes(1)
   );
   const [, , options] = mockedCreateWistiaProvider.mock.calls[0]!;
-  expect(options).toMatchObject({ loop: true, playerColor: 'ff0000' });
+  expect(options).toMatchObject({
+    loop: true,
+    playerColor: 'ff0000',
+    poster: 'http://example.test/poster.png'
+  });
 });
