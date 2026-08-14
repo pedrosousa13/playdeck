@@ -199,3 +199,50 @@ test('whenReady stays pending on a recoverable error', async () => {
   await Promise.resolve();
   expect(settled).toBe(true);
 });
+
+// A rejected source id (a factory's rejected-adapter branch, e.g.
+// packages/provider-wistia/src/index.ts) publishes through the same slot and
+// precedence logic as any other provider error — no special-casing. A later,
+// unrelated fatal error must replace it rather than get stuck behind it, and
+// the rejected-id error must not itself survive past it (#222).
+test('a genuine fatal error replaces a rejected-id error rather than being masked by it', () => {
+  const controller = new PlayerController();
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+
+  emit({
+    lifecycle: 'error',
+    activation: 'error',
+    commandsReady: false,
+    error: {
+      category: 'source',
+      fatal: true,
+      recoverable: true,
+      message: 'Wistia rejected this media id.'
+    }
+  });
+  expect(controller.getState().error).toMatchObject({
+    category: 'source',
+    fatal: true,
+    recoverable: true,
+    message: 'Wistia rejected this media id.'
+  });
+
+  emit({
+    lifecycle: 'error',
+    activation: 'error',
+    commandsReady: false,
+    error: {
+      category: 'provider',
+      fatal: true,
+      recoverable: true,
+      message: 'a different failure'
+    }
+  });
+  expect(controller.getState().error).toMatchObject({
+    category: 'provider',
+    fatal: true,
+    recoverable: true,
+    message: 'a different failure'
+  });
+});
