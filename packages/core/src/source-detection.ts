@@ -74,11 +74,17 @@ export const isPermittedSourceUrl = (
   return scheme === 'blob' && type === 'video';
 };
 
-// A network-path reference resolves against `https:`, and that resolution is
-// what a resolved source carries -- the caller's `//host/...` form is never
-// written through, whether it arrived as a string or inside an explicit source
-// object (#219).
-const resolveNetworkPath = (url: string): string =>
+/**
+ * Normalises a protocol-relative URL (`//host/...`) to the `https:` form it
+ * resolves against, and returns every other value unchanged.
+ *
+ * A network-path reference resolves against `https:`, and that resolution is
+ * what a resolved source carries -- the caller's `//host/...` form is never
+ * written through, whether it arrived as a string or inside an explicit source
+ * object (#219). Exported so a caller that runs `isPermittedSourceUrl` itself
+ * can apply the same substitution to the value it writes.
+ */
+export const resolveNetworkPath = (url: string): string =>
   url.startsWith('//') ? `https:${url}` : url;
 
 const failure = (
