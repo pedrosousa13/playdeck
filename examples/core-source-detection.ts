@@ -4,7 +4,8 @@ import {
   isVimeoHash,
   isVimeoVideoId,
   isWistiaMediaId,
-  isYouTubeVideoId
+  isYouTubeVideoId,
+  resolveNetworkPath
 } from '@reely/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
@@ -47,3 +48,8 @@ console.log(isYouTubeVideoId('dQw4w9WgXcQ')); // true
 console.log(isVimeoVideoId('76979871')); // true
 console.log(isVimeoHash('8272103f6e')); // true
 console.log(isWistiaMediaId('abc123')); // true
+
+// The substitution `isPermittedSourceUrl` itself never performs, for a caller
+// that validates a URL and then needs to write the same normalisation back.
+console.log(resolveNetworkPath('//example.com/clip.mp4')); // 'https://example.com/clip.mp4'
+console.log(resolveNetworkPath('https://example.com/clip.mp4')); // unchanged

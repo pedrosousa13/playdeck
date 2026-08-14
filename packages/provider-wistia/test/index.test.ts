@@ -366,17 +366,47 @@ test('sets the poster as an attribute', async () => {
   );
 });
 
+// The shared allowlist (`isPermittedSourceUrl`, `@reely/core`) is genuinely
+// more permissive than the old Wistia-local `https:`-only check, and the
+// value written is the caller's own string verbatim — never a reparsed one —
+// with the single documented exception of the protocol-relative substitution.
 test.each([
   ['an http: URL', 'http://example.test/poster.png'],
-  ['a data: URL', 'data:image/png;base64,iVBORw0KGgo='],
-  ['a javascript: URL', 'javascript:alert(1)'],
   ['a root-relative path', '/poster.png'],
-  ['a protocol-relative URL', '//example.test/poster.png'],
+  ['a relative path', 'poster.png'],
   ['an unparseable string', 'not a url'],
   ['an empty string', ''],
   ['a scheme-prefixed relative path', 'https:poster.png'],
   ['a scheme-prefixed single-slash path', 'https:/example.test/poster.png'],
   ['an https: URL padded with whitespace', ' https://example.test/poster.png ']
+])('accepts and writes a poster that is %s', async (_form, poster) => {
+  const result = await setup({ options: { poster } });
+  expect(element(result).getAttribute('poster')).toBe(poster);
+});
+
+// The one documented exception to "written verbatim": a protocol-relative
+// poster is normalised to `https:` in the value written, the same
+// substitution source detection performs for a source URL (#219).
+test('accepts and normalises a protocol-relative poster', async () => {
+  const result = await setup({
+    options: { poster: '//example.test/poster.png' }
+  });
+  expect(element(result).getAttribute('poster')).toBe(
+    'https://example.test/poster.png'
+  );
+});
+
+test.each([
+  ['a data: URL', 'data:image/png;base64,iVBORw0KGgo='],
+  ['a javascript: URL', 'javascript:alert(1)'],
+  ['a file: URL', 'file:///etc/passwd'],
+  // `blob:` is permitted for a `video` source, never for a poster: no `type`
+  // is resolved for a poster, so `isPermittedSourceUrl`'s carve-out never
+  // applies here.
+  [
+    'a blob: URL',
+    'blob:https://example.test/9f1c9c9e-0000-4000-8000-000000000000'
+  ]
 ])('drops a poster that is %s', async (_form, poster) => {
   const result = await setup({ options: { poster } });
   expect(element(result).getAttribute('poster')).toBeNull();
@@ -386,7 +416,7 @@ test.each([
 // the rest of the attach runs, so the player still reaches ready.
 test('reaches ready with the dropped presentation options unset', async () => {
   const result = await setup({
-    options: { playerColor: 'red', poster: 'http://example.test/poster.png' }
+    options: { playerColor: 'red', poster: 'javascript:alert(1)' }
   });
   const player = element(result);
   expect(player.getAttribute('player-color')).toBeNull();

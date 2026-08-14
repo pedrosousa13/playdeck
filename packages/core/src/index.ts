@@ -54,7 +54,8 @@ export {
   isVimeoHash,
   isVimeoVideoId,
   isWistiaMediaId,
-  isYouTubeVideoId
+  isYouTubeVideoId,
+  resolveNetworkPath
 } from './source-detection.js';
 
 export { textTrackLabel } from './text-tracks.js';
