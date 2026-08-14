@@ -6,6 +6,10 @@ import {
   createInitialPlayerState,
   detectSource,
   isPermittedSourceUrl,
+  isVimeoHash,
+  isVimeoVideoId,
+  isWistiaMediaId,
+  isYouTubeVideoId,
   type HlsSource,
   type ProviderStateListener,
   type VideoFileSource,
@@ -450,6 +454,59 @@ test('continues to accept ordinary relative file paths', () => {
 
 test('imports and runs source detection in Node without browser globals', () => {
   expect(expectDetected('/server-rendered.mp4').source.type).toBe('video');
+});
+
+// --- exported id predicates ---
+//
+// `detectSource`'s coverage above exercises these indirectly, but each is now
+// public API in its own right, so each gets its own accept/reject cases.
+
+test.each([
+  ['alphanumeric', 'dQw4w9WgXcQ'],
+  ['underscore and hyphen', 'abc_123-XYZ']
+])('isYouTubeVideoId accepts a %s id', (_form, value) => {
+  expect(isYouTubeVideoId(value)).toBe(true);
+});
+
+test.each([
+  ['empty string', ''],
+  ['a slash', 'abc/def'],
+  ['a non-string', 42]
+])('isYouTubeVideoId rejects %s', (_form, value) => {
+  expect(isYouTubeVideoId(value)).toBe(false);
+});
+
+test('isVimeoVideoId accepts a numeric id', () => {
+  expect(isVimeoVideoId('76979871')).toBe(true);
+});
+
+test.each([
+  ['a non-numeric id', 'abc123'],
+  ['a non-string', 76979871]
+])('isVimeoVideoId rejects %s', (_form, value) => {
+  expect(isVimeoVideoId(value)).toBe(false);
+});
+
+test('isVimeoHash accepts an alphanumeric hash', () => {
+  expect(isVimeoHash('a1b2c3')).toBe(true);
+});
+
+test.each([
+  ['a hyphen', 'a1-b2'],
+  ['a non-string', undefined]
+])('isVimeoHash rejects %s', (_form, value) => {
+  expect(isVimeoHash(value)).toBe(false);
+});
+
+test('isWistiaMediaId accepts an alphanumeric id', () => {
+  expect(isWistiaMediaId('abc123XYZ')).toBe(true);
+});
+
+test.each([
+  ['a space', 'a b'],
+  ['a non-string', null]
+])('isWistiaMediaId rejects %s', (_form, value) => {
+  expect(isWistiaMediaId(value)).toBe(false);
 });
 
 test('returns not-ready without changing confirmed playback when no provider is attached', async () => {

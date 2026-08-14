@@ -66,18 +66,22 @@ out when a command will land; `activation` is not a substitute for either.
 
 ### Values
 
-| Export                       | What it is                                                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                        |
-| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.          |
-| `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults. |
-| `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                      |
-| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.          |
-| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                  |
-| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                           |
-| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.              |
-| `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                                  |
-| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.              |
+| Export                       | What it is                                                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                          |
+| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.            |
+| `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults.   |
+| `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                        |
+| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.            |
+| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                    |
+| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                             |
+| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                |
+| `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                                    |
+| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                |
+| `isYouTubeVideoId`           | Whether a value is a well-formed YouTube video id — what `createYouTubeProvider` validates a direct call with. |
+| `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id — what `createVimeoProvider` validates a direct call with.     |
+| `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash — what `createVimeoProvider` validates a direct call with. |
+| `isWistiaMediaId`            | Whether a value is a well-formed Wistia media id — what `createWistiaProvider` validates a direct call with.   |
 
 ### Types
 
@@ -119,7 +123,14 @@ as `hls` and `video`.
 <!-- example:core-source-detection -->
 
 ```ts
-import { detectSource, isPermittedSourceUrl } from '@reely/core';
+import {
+  detectSource,
+  isPermittedSourceUrl,
+  isVimeoHash,
+  isVimeoVideoId,
+  isWistiaMediaId,
+  isYouTubeVideoId
+} from '@reely/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
 const vimeo = detectSource('https://vimeo.com/76979871?h=8272103f6e');
@@ -153,6 +164,14 @@ const objectUrl = URL.createObjectURL(new Blob([], { type: 'video/mp4' }));
 console.log(isPermittedSourceUrl(objectUrl, 'video')); // true
 console.log(isPermittedSourceUrl(objectUrl, 'hls')); // false
 console.log(isPermittedSourceUrl(objectUrl, undefined)); // false
+
+// The same per-provider id checks a factory runs on a direct call, should you
+// need to validate an id before ever reaching `createYouTubeProvider`,
+// `createVimeoProvider` or `createWistiaProvider` yourself.
+console.log(isYouTubeVideoId('dQw4w9WgXcQ')); // true
+console.log(isVimeoVideoId('76979871')); // true
+console.log(isVimeoHash('8272103f6e')); // true
+console.log(isWistiaMediaId('abc123')); // true
 ```
 
 <!-- /example -->
