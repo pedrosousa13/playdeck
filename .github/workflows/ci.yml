@@ -24,7 +24,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
       # typecheck first: it is `tsc -b`, which emits the package declarations
       # the examples project resolves through its `paths`. test:docs proves the
@@ -51,7 +50,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:audit
 
@@ -63,7 +61,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
@@ -87,23 +84,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - id: playwright-version
-        run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
-      # No cache-hit gate on the install below. On the self-hosted runner the
-      # home directory persists between jobs, so ~/.cache/ms-playwright is
-      # already warm; layering actions/cache over it produced a cache hit whose
-      # restored tree lacked the browser binary, the install step was skipped,
-      # and every e2e test failed with "Executable doesn't exist". `playwright
-      # install` is a fast no-op when the browser is already present, so just
-      # always run it. The cache is kept so a fallback to a hosted runner still
-      # benefits.
-      - uses: actions/cache@v6
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright-version.outputs.version }}
       # `--with-deps` shells out to `apt-get` via sudo to install OS packages,
       # which this runner's unprivileged user does not have. The self-hosted
       # host already carries Playwright's system libraries host-wide, so only
@@ -128,15 +109,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - id: playwright-version
-        run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-${{ steps.playwright-version.outputs.version }}
       # `--with-deps` shells out to `apt-get` via sudo, which this runner's
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
@@ -190,15 +163,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - id: playwright-version
-        run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       # `--with-deps` shells out to `apt-get` via sudo, which this runner's
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
@@ -236,15 +201,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - id: playwright-version
-        run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       # `--with-deps` shells out to `apt-get` via sudo, which this runner's
       # unprivileged user does not have. The self-hosted host already carries
       # Playwright's system libraries host-wide, so only the browser binary
