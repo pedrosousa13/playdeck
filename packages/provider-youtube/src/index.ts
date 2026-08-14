@@ -1,10 +1,13 @@
-import type {
-  PlayerCapabilities,
-  ProviderAdapter,
-  ProviderEvent,
-  ProviderStateListener
+import {
+  isYouTubeVideoId,
+  type CommandResult,
+  type PlayerCapabilities,
+  type PlayerError,
+  type ProviderAdapter,
+  type ProviderEvent,
+  type ProviderStateListener
 } from '@reely/core';
-import { readyCapabilities } from './adapter-values.js';
+import { providerEvent, readyCapabilities } from './adapter-values.js';
 import { createYouTubeAttachment } from './attachment.js';
 import { createYouTubeBoundary } from './boundary.js';
 import { loadYouTubeIframeApi, type YouTubeIframeApi } from './loader.js';
@@ -124,11 +127,70 @@ export type YouTubeProviderAdapter = ProviderAdapter &
     readonly provider: 'youtube';
   };
 
+// Every command this adapter never has a live handle for, no matter which one
+// is asked: there is no player behind a rejected id, so every command answers
+// the same as one issued before a real handle has arrived (`not-ready`,
+// `attachment.ts`'s `retry` on a destroyed adapter).
+const rejectedCommand = async (): Promise<CommandResult> => ({
+  ok: false,
+  reason: 'not-ready'
+});
+
+// Built instead of the normal composition when `videoId` fails
+// `isYouTubeVideoId`, so `createYouTubeAttachment` (and the boundary/playback/
+// presentation/text-tracks/time-updates seams under it) are never called on
+// this path — no iframe API load, no `new api.Player(...)` call, no `playlist`
+// var written, by construction rather than by care. `attach`/`load`/`retry`
+// are permanent no-ops, `destroy` is idempotent, and every subscriber --
+// present or future -- is handed the same fixed `source` error immediately,
+// so a late subscriber sees it too rather than missing it.
+const createRejectedYouTubeProvider = (): YouTubeProviderAdapter => {
+  const error: PlayerError = {
+    category: 'source',
+    fatal: true,
+    recoverable: true,
+    message: 'YouTube rejected this video id.'
+  };
+
+  return {
+    provider: 'youtube',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: (listener) => {
+      listener(
+        {
+          lifecycle: 'error',
+          activation: 'error',
+          commandsReady: false,
+          error
+        },
+        providerEvent('error', error)
+      );
+      return () => undefined;
+    },
+    play: rejectedCommand,
+    pause: rejectedCommand,
+    seekTo: rejectedCommand,
+    seekBy: rejectedCommand,
+    mute: rejectedCommand,
+    unmute: rejectedCommand,
+    setVolume: rejectedCommand,
+    setPlaybackRate: rejectedCommand,
+    requestFullscreen: rejectedCommand,
+    exitFullscreen: rejectedCommand,
+    retry: rejectedCommand,
+    selectTextTrack: rejectedCommand
+  };
+};
+
 export const createYouTubeProvider = (
   mount: HTMLElement,
   videoId: string,
   options: YouTubeProviderOptions = {}
 ): YouTubeProviderAdapter => {
+  if (!isYouTubeVideoId(videoId)) return createRejectedYouTubeProvider();
+
   const listeners = new Set<ProviderStateListener>();
 
   const emit = (
