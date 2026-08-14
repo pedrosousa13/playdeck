@@ -239,28 +239,111 @@ test('produces a byte-identical embed URL for a valid numeric id with a hash', a
   );
 });
 
-// This adapter does not itself validate `source.videoId` (validation is the
-// factory's job, added alongside this predicate's export -- see issue #222).
-// These cases go through this seam with no validation applied, on purpose:
-// they prove the path-segment encoding itself is the guard against a hostile
-// id, not the presence or absence of an upstream check.
+// --- rejected video id / hash (#222) ---
+//
+// The factory now validates `source.videoId` (and `source.hash`, when
+// present) before composing anything, so a hostile id never reaches the
+// path-segment encoding this same file's URL-builder regression tests cover
+// (Task 1, above) -- it is rejected at the factory instead. The path-segment
+// encoding remains defence in depth against anything that reaches the URL
+// builder with an id validation did not catch; it is exercised directly by
+// this file's byte-identical regression tests, not by driving a hostile id
+// through the public factory.
+
 test.each([
   ['a path traversal', '../../@evil.com/x'],
   ['a query string', '123?app_id=evil']
-])(
-  'encodes %s video id into the path segment rather than a new segment, query, or fragment',
-  async (_form, videoId) => {
-    const result = await setup({ source: { type: 'vimeo', videoId } });
-    const url = embedUrl(result);
-    expect(url.pathname).toBe(`/video/${encodeURIComponent(videoId)}`);
-    expect(url.pathname.slice('/video/'.length).includes('/')).toBe(false);
-    expect(url.origin).toBe('https://player.vimeo.com');
-    expect([...url.searchParams.keys()].sort()).toEqual(
-      ['controls', 'dnt', 'loop', 'playsinline'].sort()
-    );
-    expect(url.hash).toBe('');
-  }
-);
+])('rejects a video id that is %s', async (_form, videoId) => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdkLoad = vi.fn(() => Promise.resolve(createFakeSdk().Sdk));
+  sdkState.load = sdkLoad;
+  const provider = createVimeoProvider(mount, { type: 'vimeo', videoId });
+  const patches: ProviderStatePatch[] = [];
+  const events: ProviderEvent[] = [];
+  provider.subscribe((patch, event) => {
+    patches.push(patch);
+    if (event) events.push(event);
+  });
+
+  await provider.attach();
+  await provider.load();
+  await provider.destroy();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      error: expect.objectContaining({
+        category: 'source',
+        fatal: true,
+        recoverable: true
+      })
+    })
+  );
+  expect(patches[0]?.error?.message).not.toContain(videoId);
+  expect(events.at(-1)).toMatchObject({ type: 'error' });
+
+  // No iframe ever built or appended into the mount, and the Vimeo SDK
+  // loader the real embed would call was never invoked. Scoped to this
+  // test's own mount, not the whole document: earlier tests in this file
+  // leave their own iframes appended to `document.body`.
+  expect(mount.querySelector('iframe')).toBeNull();
+  expect(sdkLoad).not.toHaveBeenCalled();
+});
+
+// "A rejected Vimeo hash is treated the same as a rejected id" -- a valid
+// videoId paired with an invalid hash still rejects.
+test('rejects a valid video id paired with an invalid hash', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdkLoad = vi.fn(() => Promise.resolve(createFakeSdk().Sdk));
+  sdkState.load = sdkLoad;
+  const provider = createVimeoProvider(mount, {
+    type: 'vimeo',
+    videoId: '76979871',
+    hash: 'not a valid hash!'
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  await provider.load();
+  await provider.destroy();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      error: expect.objectContaining({
+        category: 'source',
+        fatal: true,
+        recoverable: true
+      })
+    })
+  );
+  expect(mount.querySelector('iframe')).toBeNull();
+  expect(sdkLoad).not.toHaveBeenCalled();
+});
+
+test('reports the rejected-id error to a subscriber that arrives late', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const provider = createVimeoProvider(mount, {
+    type: 'vimeo',
+    videoId: '123?app_id=evil'
+  });
+
+  await provider.destroy();
+
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      error: expect.objectContaining({ category: 'source', fatal: true })
+    })
+  );
+});
 
 test('seeds the embed muted state from the mount preference', async () => {
   const result = await setup({

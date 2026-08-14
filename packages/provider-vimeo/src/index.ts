@@ -1,11 +1,19 @@
-import type {
-  PlayerCapabilities,
-  ProviderAdapter,
-  ProviderEvent,
-  ProviderStateListener,
-  VimeoSource
+import {
+  isVimeoHash,
+  isVimeoVideoId,
+  type CommandResult,
+  type PlayerCapabilities,
+  type PlayerError,
+  type ProviderAdapter,
+  type ProviderEvent,
+  type ProviderStateListener,
+  type VimeoSource
 } from '@reely/core';
-import { available, type VimeoMountElement } from './adapter-values.js';
+import {
+  available,
+  providerEvent,
+  type VimeoMountElement
+} from './adapter-values.js';
 import { createVimeoAttachment } from './attachment.js';
 import { createVimeoBoundary } from './boundary.js';
 import { createVimeoChromelessAvailability } from './chromeless-availability.js';
@@ -101,11 +109,87 @@ export type VimeoProviderAdapter = ProviderAdapter &
     readonly provider: 'vimeo';
   };
 
+// Every command this adapter never has a live handle for, no matter which one
+// is asked: there is no player behind a rejected id, so every command answers
+// the same as one issued before a real handle has arrived (`not-ready`,
+// `attachment.ts`'s `retry` on a destroyed adapter).
+const rejectedCommand = async (): Promise<CommandResult> => ({
+  ok: false,
+  reason: 'not-ready'
+});
+
+// Built instead of the normal composition when `source.videoId` fails
+// `isVimeoVideoId`, or `source.hash` is present and fails `isVimeoHash`, so
+// `createVimeoAttachment` (and the boundary/playback/presentation/quality/
+// text-track seams under it) are never called on this path — no iframe, no
+// SDK load, no oEmbed request, by construction rather than by care.
+// `attach`/`load`/`retry` are permanent no-ops, `destroy` is idempotent, and
+// every subscriber -- present or future -- is handed the same fixed `source`
+// error immediately, so a late subscriber sees it too rather than missing it.
+// `subscribeDimensions`, `subscribeCues` and `setCaptionRenderer` are given
+// safe no-op implementations rather than omitted: the real Vimeo adapter
+// always provides all three, so a rejected adapter keeps the same shape.
+const createRejectedVimeoProvider = (): VimeoProviderAdapter => {
+  const error: PlayerError = {
+    category: 'source',
+    fatal: true,
+    recoverable: true,
+    message: 'Vimeo rejected this video id or hash.'
+  };
+
+  return {
+    provider: 'vimeo',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: (listener) => {
+      listener(
+        {
+          lifecycle: 'error',
+          activation: 'error',
+          commandsReady: false,
+          error
+        },
+        providerEvent('error', error)
+      );
+      return () => undefined;
+    },
+    subscribeDimensions: (listener) => {
+      listener(undefined);
+      return () => undefined;
+    },
+    subscribeCues: () => () => undefined,
+    setCaptionRenderer: () => undefined,
+    play: rejectedCommand,
+    pause: rejectedCommand,
+    seekTo: rejectedCommand,
+    seekBy: rejectedCommand,
+    mute: rejectedCommand,
+    unmute: rejectedCommand,
+    setVolume: rejectedCommand,
+    setPlaybackRate: rejectedCommand,
+    selectQuality: rejectedCommand,
+    selectTextTrack: rejectedCommand,
+    requestFullscreen: rejectedCommand,
+    exitFullscreen: rejectedCommand,
+    requestPictureInPicture: rejectedCommand,
+    exitPictureInPicture: rejectedCommand,
+    retry: rejectedCommand
+  };
+};
+
 export const createVimeoProvider = (
   mount: VimeoMountElement,
   source: VimeoSource,
   options: VimeoProviderOptions = {}
 ): VimeoProviderAdapter => {
+  if (
+    !isVimeoVideoId(source.videoId) ||
+    (source.hash !== undefined && !isVimeoHash(source.hash))
+  ) {
+    return createRejectedVimeoProvider();
+  }
+
   const listeners = new Set<ProviderStateListener>();
 
   const emit = (
