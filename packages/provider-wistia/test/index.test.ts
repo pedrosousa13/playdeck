@@ -373,6 +373,7 @@ test('sets the poster as an attribute', async () => {
 test.each([
   ['an http: URL', 'http://example.test/poster.png'],
   ['a root-relative path', '/poster.png'],
+  ['a relative path', 'poster.png'],
   ['an unparseable string', 'not a url'],
   ['an empty string', ''],
   ['a scheme-prefixed relative path', 'https:poster.png'],
@@ -398,6 +399,7 @@ test('accepts and normalises a protocol-relative poster', async () => {
 test.each([
   ['a data: URL', 'data:image/png;base64,iVBORw0KGgo='],
   ['a javascript: URL', 'javascript:alert(1)'],
+  ['a file: URL', 'file:///etc/passwd'],
   // `blob:` is permitted for a `video` source, never for a poster: no `type`
   // is resolved for a poster, so `isPermittedSourceUrl`'s carve-out never
   // applies here.
