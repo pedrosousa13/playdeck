@@ -1,12 +1,19 @@
-import type {
-  Availability,
-  PlayerCapabilities,
-  ProviderAdapter,
-  ProviderEvent,
-  ProviderStateListener,
-  WistiaSource
+import {
+  isWistiaMediaId,
+  type Availability,
+  type CommandResult,
+  type PlayerCapabilities,
+  type PlayerError,
+  type ProviderAdapter,
+  type ProviderEvent,
+  type ProviderStateListener,
+  type WistiaSource
 } from '@reely/core';
-import { available, type WistiaMountElement } from './adapter-values.js';
+import {
+  available,
+  providerEvent,
+  type WistiaMountElement
+} from './adapter-values.js';
 import { createWistiaAttachment } from './attachment.js';
 import { createWistiaBoundary } from './boundary.js';
 import { createWistiaPlayback } from './playback.js';
@@ -100,11 +107,72 @@ export type WistiaProviderAdapter = ProviderAdapter &
 // to wire at all: `PublicApi` declares no member for either.
 const outOfScope: Availability = { status: 'unavailable', reason: 'provider' };
 
+// Every command this adapter never has a live handle for, no matter which one
+// is asked: there is no player behind a rejected id, so every command answers
+// the same as one issued before a real handle has arrived (`not-ready`,
+// `attachment.ts`'s `retry` on a destroyed adapter).
+const rejectedCommand = async (): Promise<CommandResult> => ({
+  ok: false,
+  reason: 'not-ready'
+});
+
+// Built instead of the normal composition when `source.mediaId` fails
+// `isWistiaMediaId`, so `createWistiaAttachment` (and the playback/presentation
+// seams under it) are never called on this path — no `<wistia-player>` element,
+// no vendor bundle, no DOM write, by construction rather than by care.
+// `attach`/`load`/`retry` are permanent no-ops, `destroy` is idempotent, and
+// every subscriber -- present or future -- is handed the same fixed `source`
+// error immediately, so a late subscriber sees it too rather than missing it.
+const createRejectedWistiaProvider = (): WistiaProviderAdapter => {
+  const error: PlayerError = {
+    category: 'source',
+    fatal: true,
+    recoverable: true,
+    message: 'Wistia rejected this media id.'
+  };
+
+  return {
+    provider: 'wistia',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: (listener) => {
+      listener(
+        {
+          lifecycle: 'error',
+          activation: 'error',
+          commandsReady: false,
+          error
+        },
+        providerEvent('error', error)
+      );
+      return () => undefined;
+    },
+    subscribeDimensions: (listener) => {
+      listener(undefined);
+      return () => undefined;
+    },
+    play: rejectedCommand,
+    pause: rejectedCommand,
+    seekTo: rejectedCommand,
+    seekBy: rejectedCommand,
+    mute: rejectedCommand,
+    unmute: rejectedCommand,
+    setVolume: rejectedCommand,
+    setPlaybackRate: rejectedCommand,
+    requestFullscreen: rejectedCommand,
+    exitFullscreen: rejectedCommand,
+    retry: rejectedCommand
+  };
+};
+
 export const createWistiaProvider = (
   mount: WistiaMountElement,
   source: WistiaSource,
   options: WistiaProviderOptions = {}
 ): WistiaProviderAdapter => {
+  if (!isWistiaMediaId(source.mediaId)) return createRejectedWistiaProvider();
+
   const listeners = new Set<ProviderStateListener>();
 
   const emit = (
