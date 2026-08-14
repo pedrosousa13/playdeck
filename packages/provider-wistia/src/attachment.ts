@@ -354,13 +354,17 @@ export const createWistiaAttachment = (
     }
     // The shared allowlist (`isPermittedSourceUrl`, `@reely/core`), the same
     // one source detection runs — `http:`, `https:` and the scheme-less forms
-    // are permitted, `data:` and `javascript:` are not. The value written is
-    // the caller's own string, never a reparsed one: nothing here constructs a
-    // `URL` and writes back its `.href`, so a scheme-prefixed relative value
-    // like `https:poster.png`, or one padded with whitespace, cannot resolve
-    // to a string other than the one that was just validated. The one
-    // exception is `resolveNetworkPath`'s protocol-relative substitution, the
-    // same normalisation source detection performs for a source URL (#219).
+    // are permitted, `data:` and `javascript:` are not; `blob:` is refused
+    // here too, since it is permitted only for a `video` source and no `type`
+    // is passed for a poster. The value this code writes is byte-identical to
+    // the caller's own string, never a reparsed one: nothing in this path
+    // constructs a `URL` and reads back its `.href`, so what gets validated
+    // above is exactly what lands on the attribute. The one exception is
+    // `resolveNetworkPath`'s protocol-relative substitution, the same
+    // normalisation source detection performs for a source URL (#219). This
+    // says nothing about how a later consumer of the attribute — a browser or
+    // Wistia's own SDK — resolves that string as a URL; that resolution is a
+    // property of the shared allowlist's own design (#219), not of this path.
     if (
       options.poster !== undefined &&
       isPermittedSourceUrl(options.poster, undefined)

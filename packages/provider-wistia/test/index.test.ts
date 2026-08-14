@@ -397,7 +397,14 @@ test('accepts and normalises a protocol-relative poster', async () => {
 
 test.each([
   ['a data: URL', 'data:image/png;base64,iVBORw0KGgo='],
-  ['a javascript: URL', 'javascript:alert(1)']
+  ['a javascript: URL', 'javascript:alert(1)'],
+  // `blob:` is permitted for a `video` source, never for a poster: no `type`
+  // is resolved for a poster, so `isPermittedSourceUrl`'s carve-out never
+  // applies here.
+  [
+    'a blob: URL',
+    'blob:https://example.test/9f1c9c9e-0000-4000-8000-000000000000'
+  ]
 ])('drops a poster that is %s', async (_form, poster) => {
   const result = await setup({ options: { poster } });
   expect(element(result).getAttribute('poster')).toBeNull();
