@@ -400,6 +400,13 @@ test.each([
   // leave their own iframes appended to `document.body`.
   expect(mount.querySelector('iframe')).toBeNull();
   expect(sdkLoad).not.toHaveBeenCalled();
+
+  // Every command on a rejected adapter is a no-op that resolves rather than
+  // hangs or throws.
+  await expect(provider.play()).resolves.toEqual({
+    ok: false,
+    reason: 'not-ready'
+  });
 });
 
 // "A rejected Vimeo hash is treated the same as a rejected id" -- a valid

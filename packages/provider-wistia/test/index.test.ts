@@ -234,6 +234,13 @@ test.each([
   expect(mount.querySelector('wistia-player')).toBeNull();
   expect(document.querySelector('wistia-player')).toBeNull();
   expect(load).not.toHaveBeenCalled();
+
+  // Every command on a rejected adapter is a no-op that resolves rather than
+  // hangs or throws.
+  await expect(provider.play()).resolves.toEqual({
+    ok: false,
+    reason: 'not-ready'
+  });
 });
 
 test('reports the rejected-id error to a subscriber that arrives late', async () => {

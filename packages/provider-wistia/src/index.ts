@@ -128,7 +128,7 @@ const createRejectedWistiaProvider = (): WistiaProviderAdapter => {
     category: 'source',
     fatal: true,
     recoverable: true,
-    message: 'Wistia rejected this media id.'
+    message: 'The Wistia media id is not a supported format.'
   };
 
   return {

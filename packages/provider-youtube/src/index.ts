@@ -149,7 +149,7 @@ const createRejectedYouTubeProvider = (): YouTubeProviderAdapter => {
     category: 'source',
     fatal: true,
     recoverable: true,
-    message: 'YouTube rejected this video id.'
+    message: 'The YouTube video id is not a supported format.'
   };
 
   return {

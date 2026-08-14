@@ -134,7 +134,7 @@ const createRejectedVimeoProvider = (): VimeoProviderAdapter => {
     category: 'source',
     fatal: true,
     recoverable: true,
-    message: 'Vimeo rejected this video id or hash.'
+    message: 'The Vimeo video id or privacy hash is not a supported format.'
   };
 
   return {

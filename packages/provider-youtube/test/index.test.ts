@@ -225,6 +225,13 @@ test.each([
   // The iframe API's player constructor is the acceptance-critical call site:
   // it must never be reached on the rejected path.
   expect(fake.players).toHaveLength(0);
+
+  // Every command on a rejected adapter is a no-op that resolves rather than
+  // hangs or throws.
+  await expect(provider.play()).resolves.toEqual({
+    ok: false,
+    reason: 'not-ready'
+  });
 });
 
 test('rejects a video id even when loop is requested, never reaching the playlist var', async () => {
