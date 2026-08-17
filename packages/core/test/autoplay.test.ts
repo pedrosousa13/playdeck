@@ -302,6 +302,233 @@ test('maps a blocked autoplay command to blocked without retrying muted', async 
   expect(fake.calls).toEqual(['mute', 'play']);
 });
 
+// --- 'audible-then-muted' recovery (#306) ---
+
+const blockedThenPlaying = () => {
+  let playCalls = 0;
+  return async (): Promise<CommandResult> => {
+    playCalls += 1;
+    return playCalls === 1 ? { ok: false, reason: 'blocked' } : { ok: true };
+  };
+};
+
+test('retries muted exactly once when an audible attempt is refused by policy', async () => {
+  const fake = createProvider({ play: blockedThenPlaying() });
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play', 'mute', 'play']));
+  fake.emit({ playback: 'playing' }, playEvent);
+  await flushCommands();
+
+  expect(fake.calls).toEqual(['play', 'mute', 'play']);
+});
+
+test('reports a recovered autoplay once the muted retry starts playback', async () => {
+  const fake = createProvider({ play: blockedThenPlaying() });
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play', 'mute', 'play']));
+  fake.emit({ playback: 'playing' }, playEvent);
+
+  expect(controller.getState()).toMatchObject({
+    autoplay: 'started',
+    autoplayRecovered: true
+  });
+});
+
+test('leaves autoplay unrecovered when the audible attempt is accepted', async () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+  fake.emit({ playback: 'playing' }, playEvent);
+
+  expect(controller.getState()).toMatchObject({
+    autoplay: 'started',
+    autoplayRecovered: false
+  });
+});
+
+test('leaves autoplay unrecovered while the muted retry is in flight', async () => {
+  const pendingRetry = deferred<CommandResult>();
+  let playCalls = 0;
+  const fake = createProvider({
+    play: () => {
+      playCalls += 1;
+      return playCalls === 1
+        ? Promise.resolve({ ok: false, reason: 'blocked' as const })
+        : pendingRetry.promise;
+    }
+  });
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play', 'mute', 'play']));
+
+  expect(controller.getState()).toMatchObject({
+    autoplay: 'attempting',
+    autoplayRecovered: false
+  });
+  pendingRetry.resolve({ ok: true });
+});
+
+test('reports blocked without recovery when both attempts are refused', async () => {
+  const fake = createProvider({
+    play: async () => ({ ok: false, reason: 'blocked' })
+  });
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() =>
+    expect(controller.getState().autoplay).toBe('blocked')
+  );
+  await flushCommands();
+
+  expect(fake.calls).toEqual(['play', 'mute', 'play']);
+  expect(controller.getState().autoplayRecovered).toBe(false);
+});
+
+test.each(['unsupported', 'not-ready', 'provider-error'] as const)(
+  'does not retry muted after a %s audible failure',
+  async (reason) => {
+    const error = {
+      category: 'provider',
+      fatal: false,
+      recoverable: true,
+      message: `${reason} failure`
+    } as const;
+    const fake = createProvider({
+      play: async () => ({ ok: false, reason, error })
+    });
+    const controller = new PlayerController();
+    controller.configureAutoplay('audible-then-muted');
+    controller.setProvider(fake.provider);
+
+    fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+    await vi.waitFor(() =>
+      expect(controller.getState()).toMatchObject({
+        autoplay: 'failed',
+        autoplayRecovered: false,
+        error
+      })
+    );
+    await flushCommands();
+
+    expect(fake.calls).toEqual(['play']);
+  }
+);
+
+test('stops the muted recovery when muting fails', async () => {
+  const fake = createProvider({
+    play: blockedThenPlaying(),
+    mute: async () => ({ ok: false, reason: 'unsupported' })
+  });
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(controller.getState().autoplay).toBe('failed'));
+
+  expect(fake.calls).toEqual(['play', 'mute']);
+  expect(controller.getState().autoplayRecovered).toBe(false);
+});
+
+test('does not retry muted after a source change supersedes the attempt', async () => {
+  const pendingPlay = deferred<CommandResult>();
+  const first = createProvider({
+    provider: 'native',
+    play: () => pendingPlay.promise
+  });
+  const second = createProvider({ provider: 'hls' });
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted');
+  controller.setProvider(first.provider);
+  first.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(first.calls).toEqual(['play']));
+
+  controller.setProvider(second.provider);
+  pendingPlay.resolve({ ok: false, reason: 'blocked' });
+  await flushCommands();
+
+  expect(first.calls).toEqual(['play']);
+});
+
+test('does not retry muted after a reconfiguration supersedes the attempt', async () => {
+  const pendingPlay = deferred<CommandResult>();
+  const fake = createProvider({ play: () => pendingPlay.promise });
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted');
+  controller.setProvider(fake.provider);
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+
+  controller.configureAutoplay('audible');
+  pendingPlay.resolve({ ok: false, reason: 'blocked' });
+  await flushCommands();
+
+  expect(fake.calls).toEqual(['play']);
+  expect(controller.getState().autoplay).toBe('idle');
+});
+
+test('does not retry muted after a teardown supersedes the attempt', async () => {
+  const pendingPlay = deferred<CommandResult>();
+  const fake = createProvider({ play: () => pendingPlay.promise });
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted');
+  controller.setProvider(fake.provider);
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+
+  controller.setProvider(undefined);
+  pendingPlay.resolve({ ok: false, reason: 'blocked' });
+  await flushCommands();
+
+  expect(fake.calls).toEqual(['play']);
+});
+
+test('suppresses the muted recovery under a controlled unmuted state', async () => {
+  const blockedError = {
+    category: 'policy',
+    fatal: false,
+    recoverable: true,
+    message: 'Playback blocked.'
+  } as const;
+  const fake = createProvider({
+    play: async () => ({ ok: false, reason: 'blocked', error: blockedError })
+  });
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible-then-muted', {
+    controlledMuted: false
+  });
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() =>
+    expect(controller.getState()).toMatchObject({
+      autoplay: 'blocked',
+      autoplayRecovered: false,
+      error: blockedError
+    })
+  );
+  await flushCommands();
+
+  expect(fake.calls).toEqual(['play']);
+});
+
 test.each(['unsupported', 'not-ready', 'provider-error'] as const)(
   'maps %s autoplay command failure to failed',
   async (reason) => {

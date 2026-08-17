@@ -395,7 +395,7 @@ const meta: Meta<PlayerFixtureProps> = {
     },
     autoplay: {
       control: 'radio',
-      options: [false, 'muted', 'audible']
+      options: [false, 'muted', 'audible', 'audible-then-muted']
     },
     loading: {
       control: 'radio',

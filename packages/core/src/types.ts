@@ -57,7 +57,11 @@ export type CommandResult =
   | { ok: true }
   | { ok: false; reason: CommandFailureReason; error?: PlayerError };
 
-export type AutoplayMode = false | 'muted' | 'audible';
+// `'audible-then-muted'` attempts audible playback and, only when that attempt
+// is refused by policy (`reason: 'blocked'`), mutes and attempts once more.
+// Any other failure is reported as it is, unretried. `'muted'` and `'audible'`
+// keep their strict meanings: neither ever changes what the other does (#306).
+export type AutoplayMode = false | 'muted' | 'audible' | 'audible-then-muted';
 
 export type AutoplayConfigurationOptions = {
   readonly controlledMuted?: boolean;
@@ -127,6 +131,13 @@ export type PlayerState = {
   readonly fullscreen: boolean;
   readonly pictureInPicture: boolean;
   readonly autoplay: 'idle' | 'attempting' | 'started' | 'blocked' | 'failed';
+  // True only where `autoplay` is `'started'` because an audible attempt was
+  // refused by policy and the muted retry of `'audible-then-muted'` is what
+  // played. It is what tells a deliberate muted autoplay apart from a recovered
+  // one, so a consumer can offer an unmute affordance. False everywhere else,
+  // the in-flight retry included: the recovery is only recorded once playback
+  // has started (#306).
+  readonly autoplayRecovered: boolean;
   readonly provider: PlayerProvider | null;
   readonly hlsEngine: HlsEngine | null;
   readonly quality: PlayerQuality | null;
