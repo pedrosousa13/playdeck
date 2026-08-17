@@ -19,9 +19,23 @@ export type ViewportProps = ComponentPropsWithRef<'div'>;
 // `PlayerContextValue` -- see the `usePlayer()` destructure below), and
 // `children` (Media renders its own <source> set). Passing those would
 // silently desync or bypass the player's state machine, so they're excluded.
+// #224: the list is a runtime value the type reads, not a type-level literal,
+// because `Omit` only stops a caller who is type-checked -- a cast, a spread or
+// untyped CMS data walks past it and lands on the element. `Media` strips these
+// keys off the remainder before spreading, so both halves move together.
+const EXCLUDED_MEDIA_PROPS = [
+  'children',
+  'src',
+  'muted',
+  'autoPlay',
+  'preload',
+  'poster',
+  'controls'
+] as const;
+
 export type MediaProps = Omit<
   ComponentPropsWithRef<'video'>,
-  'children' | 'src' | 'muted' | 'autoPlay' | 'preload' | 'poster' | 'controls'
+  (typeof EXCLUDED_MEDIA_PROPS)[number]
 > & {
   readonly nativePoster?: string;
   readonly textTracks?: ReadonlyArray<{
@@ -231,10 +245,21 @@ export const Media = ({
     return null;
   }
 
+  const passthrough = { ...rest };
+  for (const excluded of EXCLUDED_MEDIA_PROPS) {
+    delete (passthrough as Record<string, unknown>)[excluded];
+    // The same key in the DOM's own spelling. React reports an unknown
+    // property such as `autoplay` with a warning and still writes the
+    // attribute, so untyped data spelling the attribute rather than the React
+    // prop would otherwise reach the element. Derived from the list above so
+    // the two spellings cannot drift apart.
+    delete (passthrough as Record<string, unknown>)[excluded.toLowerCase()];
+  }
+
   return (
     <video
       playsInline
-      {...rest}
+      {...passthrough}
       aria-label={ariaLabel ?? 'Reely media'}
       // `Root`'s own `controls` prop, read as a DOM attribute rather than
       // through the provider-options bag YouTube and Vimeo use: a native
