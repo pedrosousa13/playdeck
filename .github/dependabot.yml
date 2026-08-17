@@ -1,0 +1,31 @@
+# `tests/audit/fixture/` holds two pnpm workspaces whose dependencies are
+# vulnerable on purpose. `scripts/audit.mjs` proves both of its directions
+# against those exact versions: `cookie@0.4.0` is the low-severity advisory
+# that must make the gate exit non-zero because a publishable package reaches
+# it, and `minimist@0.0.8` and `shell-quote@1.7.2` are the criticals that must
+# leave it exiting 0 because only a dev dependency and a private package do.
+# Bumping any of them deletes the thing under test while the tests still pass.
+#
+# Dependabot found them on its own -- three security pull requests were opened
+# and closed within a day of the fixture landing -- so this file exists to stop
+# that recurring. The two fixture workspaces sit outside the root
+# `pnpm-workspace.yaml` globs, which is why Dependabot sees them as their own
+# ecosystems and why they need their own entries here: an `ignore` rule only
+# applies to the directory whose entry carries it, so ignoring these package
+# names at the root would have suppressed real updates elsewhere in the repo
+# instead.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /tests/audit/fixture/shipped
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: '*'
+
+  - package-ecosystem: npm
+    directory: /tests/audit/fixture/development-only
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: '*'
