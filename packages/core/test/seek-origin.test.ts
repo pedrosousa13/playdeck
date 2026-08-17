@@ -4,6 +4,7 @@ import { expect, test } from 'vitest';
 import {
   PlayerController,
   type CommandResult,
+  type PlayerError,
   type PlayerEventOrigin,
   type ProviderAdapter,
   type ProviderStateListener
@@ -56,6 +57,13 @@ const playEvent = {
   detail: undefined,
   origin: 'provider'
 } as const;
+
+const mediaError: PlayerError = {
+  category: 'decode',
+  fatal: true,
+  recoverable: false,
+  message: 'decode failed'
+};
 
 const recordSeekOrigins = (controller: PlayerController) => {
   const origins: PlayerEventOrigin[] = [];
@@ -188,6 +196,32 @@ test('does not carry a pending seek origin across provider replacement', async (
   expect(origins).toEqual(['provider', 'provider']);
 });
 
+// The native and HLS adapters both reset `seeking` inside the patch that
+// reports a fatal error. That patch confirms no seek — it is the seek report,
+// not the presence of a `seeking` key, that a pending origin waits for.
+test('does not let an error patch consume a pending seek origin', async () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+  const origins = recordSeekOrigins(controller);
+
+  await controller.seekToWithOrigin(30, 'user');
+  fake.emit(
+    {
+      lifecycle: 'error',
+      activation: 'error',
+      playback: 'paused',
+      buffering: false,
+      seeking: false,
+      error: mediaError
+    },
+    { type: 'error', detail: mediaError, origin: 'provider' }
+  );
+  reportSeek(fake, 30);
+
+  expect(origins).toEqual(['user', 'user']);
+});
+
 test('does not carry a pending seek origin across a detach and reattach', async () => {
   const fake = createProvider();
   const controller = new PlayerController();
@@ -200,6 +234,49 @@ test('does not carry a pending seek origin across a detach and reattach', async 
   reportSeek(fake, 30);
 
   expect(origins).toEqual(['provider', 'provider']);
+});
+
+// A lifecycle failure advances the generation without swapping the provider,
+// which is the one route to a new generation that `setProvider`'s own clear
+// does not already cover. Nothing outstanding against the generation that
+// failed survives it, so no later report can be labelled from it.
+test('does not carry a pending seek origin across a generation bump', async () => {
+  let emit: ProviderStateListener | undefined;
+  const seeks: number[] = [];
+  const controller = new PlayerController();
+  const origins = recordSeekOrigins(controller);
+  // The seek has to be asked for inside the window the failure closes: the
+  // loading state is published before `subscribe()` is called, and a subscriber
+  // can issue a command from it.
+  const stopSubscribing = controller.subscribe((state) => {
+    if (state.lifecycle === 'loading') {
+      void controller.seekToWithOrigin(30, 'user');
+    }
+  });
+  controller.setProvider({
+    provider: 'native',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    seekTo: async (time) => {
+      seeks.push(time);
+      return { ok: true };
+    },
+    subscribe: (listener) => {
+      emit = listener;
+      throw new Error('subscribe failed');
+    }
+  });
+  stopSubscribing();
+  await Promise.resolve();
+
+  // The seek did reach the provider, so an origin really was left outstanding
+  // for the generation the failure ended.
+  expect(seeks).toEqual([30]);
+  emit?.({ seeking: true }, seekingEvent(30));
+  emit?.({ seeking: false, currentTime: 30 }, seekedEvent(30));
+
+  expect(origins).toEqual([]);
 });
 
 // The two pending origins are kept apart: a seek issued while a play command is

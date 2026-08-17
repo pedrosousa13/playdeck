@@ -6,10 +6,17 @@
 Seeks now carry a provenance, the way playback commands already do (#186).
 `PlayerController` gains `seekToWithOrigin` and `seekByWithOrigin`, each taking
 the same `PlayerEventOrigin` the playback commands take, and `PlayerState` gains
-`seekOrigin`. `Player.SeekSlider` tags the seeks it asks for as `'user'`, and
-the untagged `seekTo` and `seekBy` keep their signatures and delegate with
-`'api'`, exactly as the untagged `play` already did. A seek nobody asked for
-stays `'provider'`.
+`seekOrigin`. Every seek a person asks for is tagged `'user'`: a drag on
+`Player.SeekSlider`, an arrow, `j`, `l`, `PageUp` or `PageDown` inside
+`Player.Controls`, and a double tap on `Player.Gestures`. The untagged `seekTo`
+and `seekBy` keep their signatures and delegate with `'api'`, exactly as the
+untagged `play` already did. A seek nobody asked for stays `'provider'`.
+
+The three user routes report the same origin on purpose. ADR-0005 gives the
+arrow keys to the shortcut layer rather than to the scrubber's range input, so a
+keyboard seek never reaches `SeekSlider`'s own command — reporting it as `'api'`
+would make the provenance depend on where focus sat, which is the distinction
+that decision exists to remove.
 
 `seeking` is untouched: still a boolean, still true over the same interval.
 `seekOrigin` is the additive field beside it, set exactly while a seek is in

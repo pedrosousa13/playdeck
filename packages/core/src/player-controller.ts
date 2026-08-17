@@ -35,18 +35,27 @@ import {
 // command is still settling must neither evict the play's origin nor take it
 // on — and one lifecycle for both kinds: held at the request, dropped when the
 // command fails, dropped when the generation moves on, and consumed by the
-// provider patch that confirms it (#186).
-type PendingOriginKind = 'playback' | 'seek';
-
+// report that confirms it (#186).
 type PendingOrigin = {
   readonly generation: number;
   readonly origin: PlayerEventOrigin;
-  // The playback state the confirming patch has to carry: a pause request is
-  // not confirmed by playback starting. A seek has no such discriminator —
-  // whichever half of the seek the provider chose to report confirms it, and
-  // Wistia reports only the settled half.
-  readonly playback?: PlaybackState;
-};
+} & (
+  | {
+      readonly kind: 'playback';
+      // The playback state the confirming patch has to carry: a pause request
+      // is not confirmed by playback starting. Paired with the kind by the
+      // union rather than left optional, so neither can be written without the
+      // other.
+      readonly playback: PlaybackState;
+    }
+  // A seek has no such discriminator — whichever half of the seek the provider
+  // chose to report confirms it, and Wistia reports only the settled half. What
+  // stands in for it is the seek report itself: a patch that merely carries a
+  // `seeking` key, as an error or a ready patch does, confirms nothing.
+  | { readonly kind: 'seek' }
+);
+
+type PendingOriginKind = PendingOrigin['kind'];
 
 // A patch is the provider confirming the playback command that asked for it.
 const confirmsPlayback = (
@@ -257,8 +266,12 @@ export class PlayerController {
           patch.playback !== undefined
             ? this.#consumePendingOrigin('playback', generation, patch.playback)
             : undefined;
+        // Gated on the event, not on the patch carrying a `seeking` key: the
+        // error and reset patches of several adapters carry `seeking: false`
+        // without reporting a seek, and consuming there eats an origin the
+        // real report still needs.
         const confirmedSeekOrigin =
-          patch.seeking !== undefined
+          event !== undefined && isSeekEvent(event)
             ? this.#consumePendingOrigin('seek', generation)
             : undefined;
         // Read before the patch lands: the settled half of a seek arrives as
@@ -292,6 +305,11 @@ export class PlayerController {
       }
       this.#provider = undefined;
       destroyProviderSafely(provider);
+      // Cleared with the generation it belonged to, not left for the
+      // generation check in `#consumePendingOrigin` to reject downstream: a
+      // request outstanding against a generation that has moved on has nothing
+      // left to confirm it.
+      this.#pendingOrigins.clear();
       this.#handleLifecycleFailure(cause, ++this.#generation);
       return;
     }
@@ -900,8 +918,7 @@ export class PlayerController {
   ): Promise<CommandResult> =>
     this.#commandWithOrigin(
       provider,
-      'playback',
-      { generation, origin, playback: 'playing' },
+      { kind: 'playback', generation, origin, playback: 'playing' },
       'play'
     );
 
@@ -912,8 +929,7 @@ export class PlayerController {
   ): Promise<CommandResult> =>
     this.#commandWithOrigin(
       provider,
-      'playback',
-      { generation, origin, playback: 'paused' },
+      { kind: 'playback', generation, origin, playback: 'paused' },
       'pause'
     );
 
@@ -922,12 +938,12 @@ export class PlayerController {
     value: number,
     origin: PlayerEventOrigin
   ): Promise<CommandResult> => {
+    this.#pendingOrigins.delete('seek');
     const provider = this.#provider;
     if (!provider) return Promise.resolve({ ok: false, reason: 'not-ready' });
     return this.#commandWithOrigin(
       provider,
-      'seek',
-      { generation: this.#generation, origin },
+      { kind: 'seek', generation: this.#generation, origin },
       name,
       value
     );
@@ -940,20 +956,19 @@ export class PlayerController {
   // provider it was issued against may no longer be the one attached.
   #commandWithOrigin = async (
     provider: ProviderAdapter,
-    kind: PendingOriginKind,
     request: PendingOrigin,
     name: keyof Pick<ProviderAdapter, 'play' | 'pause' | 'seekTo' | 'seekBy'>,
     value?: number
   ): Promise<CommandResult> => {
-    this.#pendingOrigins.set(kind, request);
+    this.#pendingOrigins.set(request.kind, request);
     const result = await this.#providerCommand(provider, name, value);
     if (
       !result.ok &&
       provider === this.#provider &&
       request.generation === this.#generation &&
-      this.#pendingOrigins.get(kind) === request
+      this.#pendingOrigins.get(request.kind) === request
     ) {
-      this.#pendingOrigins.delete(kind);
+      this.#pendingOrigins.delete(request.kind);
     }
     return result;
   };
@@ -967,7 +982,7 @@ export class PlayerController {
     if (
       !pending ||
       pending.generation !== generation ||
-      (pending.playback !== undefined && pending.playback !== playback)
+      (pending.kind === 'playback' && pending.playback !== playback)
     )
       return undefined;
     this.#pendingOrigins.delete(kind);

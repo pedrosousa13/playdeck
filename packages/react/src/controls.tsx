@@ -262,7 +262,10 @@ export const Controls = ({
           // input no longer see arrow presses; `shortcuts={{ seekBackward:
           // null, seekForward: null }}` hands the arrows back to the input.
           event.preventDefault();
-          void controller.seekBy(seekSeconds[action]);
+          // Tagged as `PlayButton` and the scrubber tag theirs: owning the keys
+          // is what makes this a person seeking rather than an input stepping,
+          // so it must not report itself as an API call (#186).
+          void controller.seekByWithOrigin(seekSeconds[action], 'user');
           return;
         case 'volumeUp':
         case 'volumeDown': {

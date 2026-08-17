@@ -1633,6 +1633,37 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.85);
   });
 
+  // ADR-0005 takes the arrow keys off the scrubber's range input and gives them
+  // to this layer, so a keyboard seek is the same person seeking that a drag
+  // is. It carries the same origin (#186).
+  test('labels a keyboard seek as a user seek', () => {
+    const { container, controller, emit } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-reely-part="controls"]'
+    )!;
+    const origins: PlayerEventOrigin[] = [];
+    controller.on('seeking', (event) => origins.push(event.origin));
+    controller.on('seeked', (event) => origins.push(event.origin));
+    region.focus();
+
+    fireEvent.keyDown(region, { key: 'ArrowRight' });
+    emit(
+      { seeking: true },
+      { type: 'seeking', detail: { currentTime: 35 }, origin: 'provider' }
+    );
+    emit(
+      { seeking: false, currentTime: 35 },
+      { type: 'seeked', detail: { currentTime: 35 }, origin: 'provider' }
+    );
+
+    expect(origins).toEqual(['user', 'user']);
+  });
+
   test('arrows seek and change volume; J/L seek; M mutes; F toggles fullscreen', async () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>
