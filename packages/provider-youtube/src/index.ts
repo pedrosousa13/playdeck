@@ -84,10 +84,10 @@ const EMBED_ORIGINS: readonly string[] = [
   DEFAULT_HOST
 ];
 
-// `host` reaches the iframe API as the origin the embed is built from
-// (`attachment.ts:146`, `host,` passed to `new api.Player`), so an origin
-// unrelated to YouTube would both relocate the iframe and receive the page's
-// own origin in the `origin` player var. It is checked here, where the default
+// `host` is the origin the embed url is built from (`attachment.ts:193`,
+// `host` passed to `youTubeEmbedUrl`), so an origin unrelated to YouTube would
+// both relocate the iframe and receive the page's own origin in the `origin`
+// player var that url carries. It is checked here, where the default
 // is applied — the provider factory every consumer of this package passes
 // through, not only those coming via `Player.Root` — so the default and the
 // override flow through one decision.

@@ -11,12 +11,12 @@ export type YouTubePlayerEventHandlers = {
   onApiChange?: (event: { target: YouTubePlayer }) => void;
 };
 
+// The API also declares `host`, `videoId`, `width`, `height` and `playerVars`,
+// and reads none of them when the element it is given is an iframe that already
+// exists: it takes the embed from that frame's `src` instead. The adapter only
+// ever hands it such a frame (`attachment.ts`), so the events are all that
+// travels through here.
 export type YouTubePlayerOptions = {
-  readonly host?: string;
-  readonly videoId?: string;
-  readonly width?: string;
-  readonly height?: string;
-  readonly playerVars?: Readonly<Record<string, string | number>>;
   readonly events?: YouTubePlayerEventHandlers;
 };
 
@@ -49,8 +49,11 @@ export type YouTubePlayer = {
   setOption: (module: string, option: string, value: unknown) => void;
 };
 
+// Typed to the element the adapter passes rather than to every element the API
+// accepts: it also takes a `<div>` (or an element id) and builds the iframe
+// itself, which is the path this adapter deliberately does not take.
 export type YouTubePlayerConstructor = new (
-  element: HTMLElement,
+  element: HTMLIFrameElement,
   options: YouTubePlayerOptions
 ) => YouTubePlayer;
 

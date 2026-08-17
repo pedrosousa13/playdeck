@@ -17,20 +17,14 @@ const isYouTubeUrl = (url: URL): boolean =>
 
 // A deterministic stand-in for https://www.youtube.com/iframe_api. It mirrors
 // the parts of the real API the adapter relies on: the window-level ready
-// callback, an element-replacing iframe, and asynchronous state confirmation.
+// callback, the adoption of the iframe it is handed rather than one it builds,
+// and asynchronous state confirmation.
 const fakeIframeApi = `
   window.YT = {
     PlayerState: {
       UNSTARTED: -1, ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5
     },
-    Player: function (element, config) {
-      const iframe = document.createElement('iframe');
-      iframe.src =
-        (config.host || 'https://www.youtube.com') +
-        '/embed/' + config.videoId + '?enablejsapi=1';
-      iframe.width = config.width || '640';
-      iframe.height = config.height || '390';
-      element.replaceWith(iframe);
+    Player: function (iframe, config) {
       let state = -1;
       const target = {};
       const events = config.events || {};
@@ -143,6 +137,10 @@ test('youtube one interaction click loads the provider and queues playback', asy
   await expect(iframe).toHaveAttribute(
     'src',
     /^https:\/\/www\.youtube-nocookie\.com\/embed\//
+  );
+  await expect(iframe).toHaveAttribute(
+    'referrerpolicy',
+    'strict-origin-when-cross-origin'
   );
   const overlayParts = await page
     .getByTestId('viewport')

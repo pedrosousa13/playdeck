@@ -29,7 +29,6 @@ type FakeCaptionTrack = {
 };
 
 type FakePlayerHarness = {
-  readonly element: HTMLElement;
   readonly iframe: HTMLIFrameElement;
   readonly options: YouTubePlayerOptions;
   readonly player: YouTubePlayer;
@@ -51,18 +50,16 @@ type FakePlayerHarness = {
 
 const createFakeYouTube = () => {
   const players: FakePlayerHarness[] = [];
+  // Handed an iframe that already exists, the real API adopts it rather than
+  // building one of its own, and answers it from `getIframe()`. Everything
+  // about the embed — its host, its video and its player vars — is on the
+  // `src` the caller wrote, so this fake reads nothing from `options` but the
+  // events.
   const Player = function (
-    element: HTMLElement,
+    iframe: HTMLIFrameElement,
     options: YouTubePlayerOptions
   ) {
-    const iframe = document.createElement('iframe');
-    // A real src would make happy-dom fetch the embed; keep the suite offline.
-    iframe.dataset.embedSrc = `${options.host ?? 'https://www.youtube.com'}/embed/${
-      options.videoId ?? ''
-    }`;
-    element.replaceWith(iframe);
     const harness: FakePlayerHarness = {
-      element,
       iframe,
       options,
       state: playerStates.UNSTARTED,
@@ -156,6 +153,15 @@ const createFakeYouTube = () => {
     players
   };
 };
+
+// Where the embed is described now: the adapter builds the iframe, so its host,
+// its video and every player var are on the url it carries into the document
+// rather than in the options the constructor is called with.
+const embedUrl = (harness: FakePlayerHarness): URL =>
+  new URL(harness.iframe.src);
+
+const embedVars = (harness: FakePlayerHarness): Record<string, string> =>
+  Object.fromEntries(embedUrl(harness).searchParams);
 
 const createAdapter = (
   videoId = 'dQw4w9WgXcQ',
@@ -268,19 +274,19 @@ test('a valid video id still constructs the player exactly as before, unaffected
   await provider.load();
 
   expect(fake.players).toHaveLength(1);
-  expect(fake.players[0]!.options).toMatchObject({
-    host: 'https://www.youtube-nocookie.com',
-    videoId: 'M7lc1UVf-VE',
-    width: '100%',
-    height: '100%',
-    playerVars: expect.objectContaining({
-      autoplay: 0,
-      controls: 0,
-      loop: 0,
-      playsinline: 1,
-      rel: 0
-    })
+  const harness = fake.players[0]!;
+  expect(embedUrl(harness).origin).toBe('https://www.youtube-nocookie.com');
+  expect(embedUrl(harness).pathname).toBe('/embed/M7lc1UVf-VE');
+  expect(embedVars(harness)).toMatchObject({
+    enablejsapi: '1',
+    autoplay: '0',
+    controls: '0',
+    loop: '0',
+    playsinline: '1',
+    rel: '0'
   });
+  expect(harness.iframe.getAttribute('width')).toBe('100%');
+  expect(harness.iframe.getAttribute('height')).toBe('100%');
 });
 
 test('youtube adapter conforms to lifecycle and event-confirmed playback', async () => {
@@ -316,19 +322,44 @@ test('creates the player against the privacy-enhanced host without autoplay', as
   await provider.load();
 
   const harness = fake.players[0]!;
-  expect(harness.options.host).toBe('https://www.youtube-nocookie.com');
-  expect(harness.options.videoId).toBe('M7lc1UVf-VE');
-  expect(harness.options.playerVars).toMatchObject({
-    autoplay: 0,
+  expect(embedUrl(harness).origin).toBe('https://www.youtube-nocookie.com');
+  expect(embedUrl(harness).pathname).toBe('/embed/M7lc1UVf-VE');
+  expect(embedVars(harness)).toMatchObject({
+    autoplay: '0',
     origin: window.location.origin,
-    playsinline: 1
+    playsinline: '1'
   });
   expect(mount.contains(harness.iframe)).toBe(true);
 });
 
+// The `Referer` header goes out with the iframe's very first request, so the
+// policy has to be on the element before it is in the document: an attribute
+// written afterwards changes nothing about a request already sent. That
+// ordering is the whole point of building the iframe here rather than letting
+// the iframe API build one.
+test('declares the referrer policy before the embed iframe enters the document', async () => {
+  const { fake, mount, provider } = createAdapter('M7lc1UVf-VE');
+  const policiesAtAppend: (string | null)[] = [];
+  const append = mount.appendChild.bind(mount);
+  mount.appendChild = (<T extends Node>(node: T): T => {
+    policiesAtAppend.push(
+      node instanceof Element ? node.getAttribute('referrerpolicy') : null
+    );
+    return append(node);
+  }) as typeof mount.appendChild;
+
+  await provider.attach();
+  await provider.load();
+
+  expect(policiesAtAppend).toEqual(['strict-origin-when-cross-origin']);
+  expect(fake.players[0]!.iframe.getAttribute('referrerpolicy')).toBe(
+    'strict-origin-when-cross-origin'
+  );
+});
+
 // `host` decides the origin the embed iframe is built from, so only the two
-// origins YouTube serves that embed from are honoured. These two are handed to
-// the iframe API unchanged.
+// origins YouTube serves that embed from are honoured. These two are written
+// into the embed url unchanged.
 test.each([
   ['https://www.youtube.com'],
   ['https://www.youtube-nocookie.com']
@@ -339,11 +370,11 @@ test.each([
   await provider.load();
 
   const harness = fake.players[0]!;
-  expect(harness.options.host).toBe(host);
+  expect(embedUrl(harness).origin).toBe(host);
   // The `origin` player var is the embedding page's own origin for an accepted
   // `host` as much as for a rejected one: it is the origin YouTube validates
   // postMessage against, and it never tracks `host` in either direction.
-  expect(harness.options.playerVars).toMatchObject({
+  expect(embedVars(harness)).toMatchObject({
     origin: window.location.origin
   });
 });
@@ -366,8 +397,8 @@ test.each([
     await provider.load();
 
     const harness = fake.players[0]!;
-    expect(harness.options.host).toBe(expected);
-    expect(harness.options.playerVars).toMatchObject({
+    expect(embedUrl(harness).origin).toBe(expected);
+    expect(embedVars(harness)).toMatchObject({
       origin: window.location.origin
     });
   }
@@ -392,11 +423,11 @@ test.each([
     await provider.load();
 
     const harness = fake.players[0]!;
-    expect(harness.options.host).toBe('https://www.youtube-nocookie.com');
+    expect(embedUrl(harness).origin).toBe('https://www.youtube-nocookie.com');
     // The `origin` player var is the embedding page's own origin, not the
     // host — it is what a wrong `host` would have disclosed the page to. It
     // never carries the rejected value.
-    expect(harness.options.playerVars).toMatchObject({
+    expect(embedVars(harness)).toMatchObject({
       origin: window.location.origin
     });
   }
@@ -407,11 +438,11 @@ test.each([
 // '0'`): unset and `false` both mean chromeless. This pins YouTube to the
 // same polarity so the two cannot drift.
 test.each([
-  ['unset', undefined, 0],
-  ['false', false, 0],
-  ['true', true, 1]
+  ['unset', undefined, '0'],
+  ['false', false, '0'],
+  ['true', true, '1']
 ] as const)(
-  'sets playerVars.controls to the expected value when the controls option is %s',
+  'sets the controls player var to the expected value when the controls option is %s',
   async (_label, controls, expected) => {
     const { fake, provider } = createAdapter('M7lc1UVf-VE', { controls });
 
@@ -419,7 +450,7 @@ test.each([
     await provider.load();
 
     const harness = fake.players[0]!;
-    expect(harness.options.playerVars).toMatchObject({ controls: expected });
+    expect(embedVars(harness)).toMatchObject({ controls: expected });
   }
 );
 
@@ -439,9 +470,9 @@ test.each([
     await provider.attach();
     await provider.load();
 
-    const { playerVars } = fake.players[0]!.options;
-    expect(playerVars).toMatchObject({ loop: 0 });
-    expect(playerVars).not.toHaveProperty('playlist');
+    const vars = embedVars(fake.players[0]!);
+    expect(vars).toMatchObject({ loop: '0' });
+    expect(vars).not.toHaveProperty('playlist');
   }
 );
 
@@ -451,8 +482,8 @@ test('loops a single video by naming it as its own playlist', async () => {
   await provider.attach();
   await provider.load();
 
-  expect(fake.players[0]!.options.playerVars).toMatchObject({
-    loop: 1,
+  expect(embedVars(fake.players[0]!)).toMatchObject({
+    loop: '1',
     playlist: 'M7lc1UVf-VE'
   });
 });
@@ -1341,9 +1372,9 @@ test('writes the whole-second start player var as a load hint', async () => {
   await provider.attach();
   await provider.load();
 
-  const { playerVars } = fake.players[0]!.options;
-  expect(playerVars).toMatchObject({ start: 12 });
-  expect(playerVars).not.toHaveProperty('end');
+  const vars = embedVars(fake.players[0]!);
+  expect(vars).toMatchObject({ start: '12' });
+  expect(vars).not.toHaveProperty('end');
 });
 
 test('publishes one ended patch at the end boundary and pauses the player', async () => {
@@ -1480,7 +1511,7 @@ test.each([
     const { harness } = await readyAdapter('M7lc1UVf-VE', { startTime });
 
     expect(harness.player.seekTo).not.toHaveBeenCalled();
-    expect(harness.options.playerVars).not.toHaveProperty('start');
+    expect(embedVars(harness)).not.toHaveProperty('start');
   }
 );
 
