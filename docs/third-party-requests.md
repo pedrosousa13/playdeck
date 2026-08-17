@@ -560,6 +560,41 @@ for the same reason `integrity` is — there is nothing to check the response
 against. That is the bargain a YouTube or Wistia source makes on your page's
 behalf, not a gap to close.
 
+YouTube's script carries a second substitution path beside that one, and it is
+the cheaper of the two to reach. Before fetching anything, the loader checks
+whether a working API is already sitting on `window` and adopts it in
+preference to a fetch: `apiFromWindow`
+(`packages/provider-youtube/src/loader.ts:94-95`) asks only
+`typeof target.YT?.Player === 'function'`, and `loadYouTubeIframeApi` returns
+that object immediately when the check passes (`:106-110`) — the `<script>`
+element is never built and `iframe_api` is never requested. The test is
+structural and nothing more: it cannot tell YouTube's real API from anything
+shaped to answer `typeof … === 'function'` with a function, because no
+structural test can. Once adopted, the object is memoised into the
+module-global `sharedLoad` (`:92`) and handed back unchanged to every later
+call on the page; the memo is cleared only when a load fails (`:145-146`) or
+by the exported `resetYouTubeIframeApiLoader`, which nothing here calls and no
+`Player.Root` option reaches, so in practice a successful adoption holds for
+the document's lifetime.
+
+This is accepted, not overlooked, and on the same terms as the grant above:
+reaching the substitution requires a script that already runs on the page
+before Reely's first attach, and a script that already runs on the page
+already has the DOM, the cookies and everything else `www.youtube.com` would
+gain if it ran arbitrary code there — adopting its global costs the page
+nothing beyond the privilege the bargain above already discloses. It is
+**not a privilege escalation** over what this document already grants. A
+stricter shape test would not change that calculus; it would only dress an
+unverified adoption up as a verified one, which is worse than the current
+honest gap. The short-circuit itself earns its place independently: a page
+that has already loaded the iframe API for its own reasons — a co-tenant
+player, a tag manager, an embed Reely did not create — has already had
+`onYouTubeIframeAPIReady` fire once, and that callback does not fire twice
+without the script reloading. A loader that ignored the global and waited on
+the callback regardless would wait out its own deadline and report failure on
+exactly the pages where a working API is sitting right there. Adopting it is
+what lets those pages and Reely's own attach coexist.
+
 Both providers do offer a seam for replacing the load, and self-hosting the
 script is what either seam is for: the vendor's own engine, configuration and
 media-data requests still go to the vendor's CDN, so only `script-src` changes.
