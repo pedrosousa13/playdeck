@@ -1838,12 +1838,34 @@ test('strips the excluded video attributes that reach Media through a spread', (
     preload: 'auto',
     src: '/injected.mp4'
   } as unknown as Player.MediaProps;
+  // `muted` needs reading in the mount window: the player seeds its own mute
+  // state from an effect, which would overwrite a smuggled `muted` before a
+  // post-render assertion could see it. A callback ref runs during commit,
+  // before that effect, so what it records is the value React itself wrote.
+  const atAttach: {
+    autoplayAttribute: boolean;
+    muted: boolean;
+    mutedAttribute: boolean;
+  }[] = [];
   render(
     <LegacyRoot source="/clip.mp4">
-      <Player.Media {...smuggled} />
+      <Player.Media
+        {...smuggled}
+        ref={(node) => {
+          if (!node) return;
+          atAttach.push({
+            autoplayAttribute: node.hasAttribute('autoplay'),
+            muted: node.muted,
+            mutedAttribute: node.hasAttribute('muted')
+          });
+        }}
+      />
     </LegacyRoot>
   );
 
+  expect(atAttach).toEqual([
+    { autoplayAttribute: false, muted: false, mutedAttribute: false }
+  ]);
   const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
   expect(video.hasAttribute('src')).toBe(false);
   expect(video.hasAttribute('autoplay')).toBe(false);
@@ -1858,17 +1880,21 @@ test('strips the excluded video attributes that reach Media through a spread', (
     element.getAttribute('src')
   );
   expect(sources).toEqual(['/clip.mp4']);
+});
 
-  // Server markup too: `muted` is otherwise applied at mount and only
-  // overwritten later, when the media registers with the player.
-  const markup = renderToString(
-    <Player.Root source="/clip.mp4">
+test('strips the excluded attributes spelled the way the DOM spells them', () => {
+  // Untyped data carries DOM attribute names, not React prop names. React
+  // reports `autoplay` as an unknown property with a warning and still writes
+  // it, so the strip has to cover that spelling too.
+  const smuggled = { autoplay: 'true' } as unknown as Player.MediaProps;
+  render(
+    <LegacyRoot source="/clip.mp4">
       <Player.Media {...smuggled} />
-    </Player.Root>
+    </LegacyRoot>
   );
-  expect(markup).not.toContain('muted');
-  expect(markup).not.toContain('autoplay');
-  expect(markup).not.toContain('/injected');
+
+  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  expect(video.hasAttribute('autoplay')).toBe(false);
 });
 
 test('forwards props outside the excluded list alongside a smuggled one', () => {
@@ -1890,6 +1916,8 @@ test('forwards props outside the excluded list alongside a smuggled one', () => 
   expect(video.className).toBe('hero-video');
   expect(video.dataset.analytics).toBe('hero');
   expect(video.getAttribute('crossorigin')).toBe('anonymous');
+  // The smuggled key alongside them is still stripped.
+  expect(video.hasAttribute('src')).toBe(false);
   fireEvent.click(video);
   expect(onClick).toHaveBeenCalledTimes(1);
 });

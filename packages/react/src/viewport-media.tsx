@@ -248,6 +248,12 @@ export const Media = ({
   const passthrough = { ...rest };
   for (const excluded of EXCLUDED_MEDIA_PROPS) {
     delete (passthrough as Record<string, unknown>)[excluded];
+    // The same key in the DOM's own spelling. React reports an unknown
+    // property such as `autoplay` with a warning and still writes the
+    // attribute, so untyped data spelling the attribute rather than the React
+    // prop would otherwise reach the element. Derived from the list above so
+    // the two spellings cannot drift apart.
+    delete (passthrough as Record<string, unknown>)[excluded.toLowerCase()];
   }
 
   return (
