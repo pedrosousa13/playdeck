@@ -82,6 +82,11 @@ origins list and what a page's CSP has to allow.
   `selectedQualityId: null`. A quality id that the player never offered is
   refused before the SDK sees it: `setQuality` with an unoffered id never
   settles at all, so forwarding one would hang the command forever.
+- **Chapters come from the SDK's own chapter list**, read once the player is
+  ready, and kept current by its `chapterchange` event rather than by polling.
+  The SDK reports a start and a title per chapter and no end at all, so every
+  `endTime` is derived: each chapter ends where the next begins, and the last
+  takes the duration, or `null` where the duration is not known.
 - **Captions are Reely's to draw** (`captionRendering: 'custom'`): the track is
   enabled with `showing: false`, which makes Vimeo emit `cuechange` without
   drawing the cues itself. `setCaptionRenderer('native')` hands drawing back and

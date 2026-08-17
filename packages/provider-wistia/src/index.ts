@@ -208,6 +208,9 @@ export const createWistiaProvider = (
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: outOfScope,
       selectTextTrack: outOfScope,
+      // Wistia's chapters are an inbound embed-option plugin: the embedder
+      // supplies the list, and no documented read-back accessor exists (#182).
+      chapters: outOfScope,
       // `PublicApi.requestFullscreen()` / `cancelFullscreen()`.
       fullscreen: available,
       pictureInPicture: outOfScope,

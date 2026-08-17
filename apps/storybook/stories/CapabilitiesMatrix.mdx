@@ -58,7 +58,10 @@ composed by the consumer instead — see the **Reference example**, whose settin
 menu builds a playback-rate group and a quality group over
 `Player.SettingsMenu`/`Player.MenuRadioGroup`, each gated on its own capability.
 `selectQuality`'s ladder comes from `PlayerState.qualities` — see below for
-which providers populate it. `customControls` gates no shipped control.
+which providers populate it. `chapters` gates no shipped control either: it says
+whether the provider can report the divisions in `PlayerState.chapters` at all,
+and a consumer composes its own markers over `Player.SeekSlider`, which already
+takes children. `customControls` gates no shipped control.
 
 ## `commandsReady`: when a command will actually land
 

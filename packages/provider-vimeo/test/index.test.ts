@@ -16,13 +16,14 @@ import {
 import { available } from '../src/adapter-values';
 import { createVimeoAttachment } from '../src/attachment';
 import { createVimeoBoundary } from '../src/boundary';
+import { createVimeoChapters } from '../src/chapters';
 import { createVimeoChromelessAvailability } from '../src/chromeless-availability';
 import {
   createVimeoProvider,
   type VimeoMountElement,
   type VimeoProviderOptions
 } from '../src/index';
-import type { VimeoSdkQuality } from '../src/loader';
+import type { VimeoSdkChapter, VimeoSdkQuality } from '../src/loader';
 import { createVimeoPlayback } from '../src/playback';
 import { createVimeoPresentation } from '../src/presentation';
 import { createVimeoQualityLevels } from '../src/quality-levels';
@@ -295,6 +296,12 @@ const attachWithoutValidation = async (
     getCapabilities: playerCapabilities
   });
 
+  const chapters = createVimeoChapters({
+    emit: noopEmit,
+    isStale: (player) => attachment.isStale(player),
+    getCapabilities: playerCapabilities
+  });
+
   const textTracks = createVimeoTextTracks({
     emit: noopEmit,
     isStale: (player) => attachment.isStale(player),
@@ -310,6 +317,7 @@ const attachWithoutValidation = async (
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: qualityLevels.selectQualityAvailability(),
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      chapters: chapters.chaptersAvailability(),
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: { status: 'unavailable', reason: 'provider' },
@@ -326,6 +334,7 @@ const attachWithoutValidation = async (
     presentation,
     qualityLevels,
     textTracks,
+    chapters,
     clearStateListeners: () => undefined
   });
 
@@ -2673,4 +2682,157 @@ test('pins the liveness gap: no patch ever carries a live key (#187)', async () 
     expect.objectContaining({ playback: 'playing' })
   );
   expect(patches.filter((patch) => 'live' in patch)).toEqual([]);
+});
+
+// Vimeo is the one embed provider that reports chapters: the SDK has a chapter
+// list, a current-chapter accessor and a change event. End times are still the
+// library's own derivation -- the SDK reports a start and a title and nothing
+// else (#182).
+const introAndBody: ReadonlyArray<VimeoSdkChapter> = [
+  { startTime: 30, title: 'Body', index: 2 },
+  { startTime: 0, title: 'Intro', index: 1 }
+];
+
+test('publishes the chapters the SDK reports, ordered and closed by the duration', async () => {
+  const { patches } = await setup({
+    fake: { chapters: introAndBody, duration: 90 }
+  });
+
+  const ready = readyPatch(patches);
+  expect(ready.chapters).toEqual([
+    { id: 'vimeo:1', title: 'Intro', startTime: 0, endTime: 30 },
+    { id: 'vimeo:2', title: 'Body', startTime: 30, endTime: 90 }
+  ]);
+  expect(ready.capabilities?.chapters).toEqual({ status: 'available' });
+});
+
+test('leaves the last Vimeo chapter open when the duration is unknown', async () => {
+  const { patches } = await setup({
+    fake: {
+      chapters: introAndBody,
+      getDuration: () => Promise.reject(new Error('no duration'))
+    }
+  });
+
+  expect(
+    (
+      readyPatch(patches).chapters as ReadonlyArray<{ endTime: number | null }>
+    ).at(-1)?.endTime
+  ).toBeNull();
+});
+
+test('reports an empty chapter collection for a video that has none', async () => {
+  const { patches } = await setup();
+
+  const ready = readyPatch(patches);
+  expect(ready.chapters).toEqual([]);
+  expect(ready.capabilities?.chapters).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
+test('refreshes the chapter list from the chapterchange event rather than polling', async () => {
+  const { patches, sdk } = await setup({ fake: { duration: 90 } });
+  const player = sdk.instances[0]!;
+  patches.length = 0;
+
+  player.setChapters(introAndBody);
+  player.emit('chapterchange', { startTime: 0, title: 'Intro', index: 1 });
+  await flushMicrotasks();
+
+  const merged = patches.reduce<ProviderStatePatch>(
+    (accumulated, patch) => ({ ...accumulated, ...patch }),
+    {}
+  );
+  expect(merged.chapters).toEqual([
+    { id: 'vimeo:1', title: 'Intro', startTime: 0, endTime: 30 },
+    { id: 'vimeo:2', title: 'Body', startTime: 30, endTime: 90 }
+  ]);
+  expect(merged.capabilities?.chapters).toEqual({ status: 'available' });
+  expect(player.getChapters).toHaveBeenCalledTimes(2);
+});
+
+test('a chapterchange that changes nothing publishes nothing', async () => {
+  const { patches, sdk } = await setup({
+    fake: { chapters: introAndBody, duration: 90 }
+  });
+  const player = sdk.instances[0]!;
+  patches.length = 0;
+
+  player.emit('chapterchange', { startTime: 30, title: 'Body', index: 2 });
+  await flushMicrotasks();
+
+  expect(patches).toEqual([]);
+});
+
+// An embed that does not implement `getChapters` still answers it, and the
+// answer resolves rather than rejects — `null` is what the e2e fixture's
+// catch-all sends back. Trusting that shape threw a TypeError out of the attach
+// path and put activation on `error` (#182).
+const unlistedChapterAnswers: ReadonlyArray<readonly [string, unknown]> = [
+  ['null', null],
+  ['a non-list', { chapters: [] }]
+];
+
+for (const [label, answer] of unlistedChapterAnswers) {
+  test(`stays ready when the embed answers getChapters with ${label}`, async () => {
+    const { patches } = await setup({
+      fake: {
+        duration: 90,
+        getChapters: () =>
+          Promise.resolve(answer as ReadonlyArray<VimeoSdkChapter>)
+      }
+    });
+
+    const ready = readyPatch(patches);
+    expect(ready.activation).toBe('ready');
+    expect(ready.chapters).toEqual([]);
+    expect(ready.capabilities?.chapters).toEqual({
+      status: 'unavailable',
+      reason: 'source'
+    });
+  });
+}
+
+test('drops chapter entries the SDK reports without a start or a title', async () => {
+  const { patches } = await setup({
+    fake: {
+      duration: 90,
+      chapters: [
+        { startTime: 0, title: 'Intro', index: 1 },
+        { title: 'No start', index: 2 } as unknown as VimeoSdkChapter,
+        { startTime: 60, index: 3 } as unknown as VimeoSdkChapter
+      ]
+    }
+  });
+
+  const ready = readyPatch(patches);
+  expect(ready.activation).toBe('ready');
+  expect(ready.chapters).toEqual([
+    { id: 'vimeo:1', title: 'Intro', startTime: 0, endTime: 90 }
+  ]);
+  expect(ready.capabilities?.chapters).toEqual({ status: 'available' });
+});
+
+test('stays ready when a chapterchange answers with a non-list', async () => {
+  const { patches, sdk } = await setup({
+    fake: { chapters: introAndBody, duration: 90 }
+  });
+  const player = sdk.instances[0]!;
+  patches.length = 0;
+
+  player.setChapters(null as unknown as ReadonlyArray<VimeoSdkChapter>);
+  player.emit('chapterchange', { startTime: 0, title: 'Intro', index: 1 });
+  await flushMicrotasks();
+
+  const merged = patches.reduce<ProviderStatePatch>(
+    (accumulated, patch) => ({ ...accumulated, ...patch }),
+    {}
+  );
+  expect(merged.chapters).toEqual([]);
+  expect(merged.capabilities?.chapters).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
 });

@@ -18,6 +18,7 @@ export const freezeCapabilities = (
     setPlaybackRate: freezeAvailability(capabilities.setPlaybackRate),
     selectQuality: freezeAvailability(capabilities.selectQuality),
     selectTextTrack: freezeAvailability(capabilities.selectTextTrack),
+    chapters: freezeAvailability(capabilities.chapters),
     fullscreen: freezeAvailability(capabilities.fullscreen),
     pictureInPicture: freezeAvailability(capabilities.pictureInPicture),
     airPlay: freezeAvailability(capabilities.airPlay),

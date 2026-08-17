@@ -122,6 +122,10 @@ exist.
 - **Captions** on the hls.js engine come from hls.js, which is the sole owner:
   sidecar `<track>` children discovered by the native subsystem are dropped so
   the two cannot both claim the state.
+- **Chapters** are the native adapter's, on both engines. HLS carries no
+  chapters concept of its own, and `EXT-X-DATERANGE` routes into the metadata
+  track, so a `kind="chapters"` text track on the media element is the only
+  source — and it is not caption state, so the hls.js engine does not drop it.
 
 `deriveLiveState` is that derivation. It lives in
 [`@reely/core`](../core#live-state), where every adapter shares one copy, and is

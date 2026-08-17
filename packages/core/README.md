@@ -79,6 +79,8 @@ out when a command will land; `activation` is not a substitute for either.
 | `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                |
 | `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                                    |
 | `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                |
+| `deriveChapters`             | The published `Chapter` collection, given what a provider reports and the media duration — end times included. |
+| `chaptersEqual`              | Whether two chapter collections say the same thing — what an adapter checks before publishing a change.        |
 | `isYouTubeVideoId`           | Whether a value is a well-formed YouTube video id — what `createYouTubeProvider` validates a direct call with. |
 | `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id — what `createVimeoProvider` validates a direct call with.     |
 | `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash — what `createVimeoProvider` validates a direct call with. |
@@ -89,8 +91,9 @@ out when a command will land; `activation` is not a substitute for either.
 State and contract: `PlayerState`, `PlayerCapabilities`, `Availability`,
 `CommandResult`, `CommandFailureReason`, `PlaybackState`, `PlayerProvider`,
 `PlayerQuality`, `TimeRange`, `TextTrack`, `TextTrackKind`,
-`TextTrackReadiness`, `TextCue`, `CaptionRendering`, `PlayerLiveState`,
-`PlayerError`, `PlayerErrorCategory`, `PreProviderActivation`.
+`TextTrackReadiness`, `TextCue`, `CaptionRendering`, `Chapter`, `ChapterInput`,
+`PlayerLiveState`, `PlayerError`, `PlayerErrorCategory`,
+`PreProviderActivation`.
 
 Events: `PlayerEvent`, `PlayerEventType`, `PlayerEventDetailMap`,
 `PlayerEventFor`, `PlayerEventOrigin`.
@@ -317,6 +320,53 @@ export const changed = !liveStateEqual(live, tight);
 Providers that cannot determine liveness leave `live` as `null`. That is not
 "this is on-demand" — it is "nobody has said", and a control should render
 neither claim until one arrives.
+
+## Chapters
+
+`PlayerState.chapters` is the named divisions of the current video, ordered by
+`startTime`, and `capabilities.chapters` says whether the provider can report
+any at all — an empty collection means "none here", not "this provider cannot
+tell you". Reely publishes the vocabulary and draws none of it: a consumer maps
+a chapter to a position on the seek slider, which already takes children.
+
+`deriveChapters` is the one derivation every adapter publishes through, so a
+chapter means the same thing whichever one reported it.
+
+<!-- example:core-chapters -->
+
+```ts
+import { chaptersEqual, deriveChapters } from '@reely/core';
+
+// A provider reports where a chapter begins and what it is called. Nothing
+// reports where one ends, so `deriveChapters` is what decides: the list is
+// ordered by `startTime`, and each chapter ends where the next one begins.
+export const chapters = deriveChapters(
+  [
+    { id: 'ch2', title: 'The build', startTime: 132 },
+    { id: 'ch1', title: 'Introduction', startTime: 0 }
+  ],
+  248
+);
+
+// -> 132. The last chapter takes the media duration, so this reads 248.
+export const firstEnd = chapters[0]?.endTime;
+
+// An unknown or endless duration leaves the last chapter open. `null`, never
+// `Infinity`: an end nobody knows must not read as one somebody does.
+export const openEnded = deriveChapters(
+  [{ id: 'ch1', title: 'Live', startTime: 0 }],
+  null
+).at(-1)?.endTime;
+
+// An adapter publishes `chapters` only when the collection changes — a
+// duration report that moves nothing publishes nothing. This is that test.
+export const closed = !chaptersEqual(
+  chapters,
+  deriveChapters([{ id: 'ch1', title: 'Introduction', startTime: 0 }], null)
+);
+```
+
+<!-- /example -->
 
 ## Media Session
 

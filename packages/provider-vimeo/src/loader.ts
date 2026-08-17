@@ -14,6 +14,16 @@ export type VimeoSdkQuality = {
   readonly active: boolean;
 };
 
+// What the SDK reports for a chapter: where it begins, what it is called, and
+// its 1-based position. No end time — the library derives that (`Chapter` in
+// `@reely/core`), which is why `index` is not published: the position in the
+// derived collection already carries it.
+export type VimeoSdkChapter = {
+  readonly startTime: number;
+  readonly title: string;
+  readonly index: number;
+};
+
 export type VimeoSdkEventListener = (data?: unknown) => void;
 
 export type VimeoSdkPlayer = {
@@ -46,6 +56,9 @@ export type VimeoSdkPlayer = {
   // resolves nor rejects it (#82), so every call has to be resolved against the
   // published list first.
   setQuality: (id: string) => Promise<unknown>;
+  // The whole chapter list, read once the player is ready. The companion
+  // `chapterchange` event is what keeps it current — there is no polling.
+  getChapters: () => Promise<ReadonlyArray<VimeoSdkChapter>>;
   getTextTracks: () => Promise<ReadonlyArray<VimeoSdkTextTrack>>;
   // `showing: false` makes Vimeo fire `cuechange` without drawing the cues
   // with its own in-iframe renderer, which is what lets Reely own caption

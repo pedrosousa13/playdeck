@@ -46,6 +46,10 @@ export const providerCheck: Availability = {
   status: 'unknown',
   reason: 'provider-check'
 };
+export const noChapterSource: Availability = {
+  status: 'unavailable',
+  reason: 'source'
+};
 
 export const errorString = (cause: unknown, property: 'message' | 'name') => {
   if (

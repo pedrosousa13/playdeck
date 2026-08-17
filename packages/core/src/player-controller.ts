@@ -80,6 +80,7 @@ const initialCapabilities = (): PlayerCapabilities =>
     setPlaybackRate: notReady,
     selectQuality: notReady,
     selectTextTrack: notReady,
+    chapters: notReady,
     fullscreen: notReady,
     pictureInPicture: notReady,
     airPlay: notReady,
@@ -114,6 +115,7 @@ export const createInitialPlayerState = (): PlayerState =>
     capabilities: initialCapabilities(),
     error: null,
     textTracks: Object.freeze([]),
+    chapters: Object.freeze([]),
     selectedTextTrackId: null,
     captionRendering: 'unavailable',
     commandsReady: false
@@ -655,6 +657,12 @@ export class PlayerController {
           ? this.#state.textTracks
           : Object.freeze(
               patch.textTracks.map((track) => Object.freeze({ ...track }))
+            ),
+      chapters:
+        patch.chapters === undefined
+          ? this.#state.chapters
+          : Object.freeze(
+              patch.chapters.map((chapter) => Object.freeze({ ...chapter }))
             ),
       quality:
         patch.quality === undefined

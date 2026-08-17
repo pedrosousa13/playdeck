@@ -90,6 +90,10 @@ origins list and what a page's CSP has to allow.
   undocumented `captions` module, so it follows community-observed conventions
   rather than a published contract.
 - **`pictureInPicture` is `unavailable`**: the embed owns its own video element.
+- **Chapters are never reported.** The IFrame Player API documents no chapter
+  method and no chapter event, and the Data API's video resource has no chapter
+  property, so `chapters` stays empty and `capabilities.chapters` reports
+  `unavailable` / `provider`. No command fails over it.
 - **`live` is never reported.** The IFrame Player API surface this adapter
   declares (`src/loader.ts`) carries no liveness member, and nothing else the
   API offers separates a broadcast from a video on demand: on a live stream

@@ -45,6 +45,19 @@ export type TextCue = {
   readonly text: string;
 };
 
+// One named division of a video's timeline. No provider reports an end time —
+// Vimeo publishes only a start and a title, and a WebVTT chapter cue's own end
+// is not guaranteed to abut the next cue — so `endTime` is the library's own
+// derivation: the next chapter's `startTime`, and for the last chapter the
+// media duration, which is why it is nullable rather than a number. There is
+// no `index`: the position in the collection already carries it (#182).
+export type Chapter = {
+  readonly id: string;
+  readonly title: string;
+  readonly startTime: number;
+  readonly endTime: number | null;
+};
+
 // The media's own pixel dimensions, not the layout box it is drawn into.
 // Numbers only: core's public types compile with `"lib": ["ES2022"]`, so no
 // element the figures were read off may appear here.
@@ -107,6 +120,11 @@ export type PlayerCapabilities = {
   readonly setPlaybackRate: Availability;
   readonly selectQuality: Availability;
   readonly selectTextTrack: Availability;
+  // Whether the provider can report chapters at all, which is what tells a
+  // provider that cannot ('unavailable' with the `provider` reason) apart from
+  // a source that simply has none (the `source` reason) — both publish an
+  // empty `chapters` collection (#182).
+  readonly chapters: Availability;
   readonly fullscreen: Availability;
   readonly pictureInPicture: Availability;
   readonly airPlay: Availability;
@@ -157,6 +175,13 @@ export type PlayerState = {
   readonly capabilities: PlayerCapabilities;
   readonly error: PlayerError | null;
   readonly textTracks: readonly TextTrack[];
+  // Ordered by ascending `startTime`, and empty both where the provider cannot
+  // report chapters and where the source has none — `capabilities.chapters` is
+  // what tells those two apart. Never routed through `textTracks`: nothing
+  // downstream of that collection filters on kind, so a chapters track in it
+  // would reach the captions menu, the captions toggle and the cue overlay
+  // (#182).
+  readonly chapters: readonly Chapter[];
   readonly selectedTextTrackId: string | null;
   readonly captionRendering: CaptionRendering;
   // Declared by the provider adapter, not derived here: it means a command

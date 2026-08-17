@@ -537,6 +537,7 @@ test('reports the whole capability record it can justify', async () => {
     setPlaybackRate: { status: 'available' },
     selectQuality: { status: 'unavailable', reason: 'provider' },
     selectTextTrack: { status: 'unavailable', reason: 'provider' },
+    chapters: { status: 'unavailable', reason: 'provider' },
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'unavailable', reason: 'provider' },
     airPlay: { status: 'unavailable', reason: 'provider' },
@@ -1613,4 +1614,18 @@ test('takes the handle from the property the element actually exposes', async ()
 
   const viaLegacy = await setup({ fake: { apiProperty: 'wistiaApi' } });
   expect(readyPatch(viaLegacy.patches).lifecycle).toBe('ready');
+});
+
+// Wistia's chapters ship as an inbound embed-option plugin: the embedder
+// supplies the list, and no documented read-back accessor exists. So the
+// collection stays empty and the capability says the provider cannot report
+// them, exactly as YouTube's does (#182).
+test('reports chapters as unavailable for the provider', async () => {
+  const { patches } = await setup();
+
+  expect(readyPatch(patches).capabilities?.chapters).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+  expect(readyPatch(patches).chapters).toBeUndefined();
 });
