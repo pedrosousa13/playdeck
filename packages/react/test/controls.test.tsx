@@ -15,7 +15,9 @@ import {
   type CommandResult,
   PlayerController,
   type PlayerCapabilities,
+  type PlayerEventOrigin,
   type ProviderAdapter,
+  type ProviderEvent,
   type ProviderStateListener,
   type ProviderStatePatch
 } from '@reely/core';
@@ -58,8 +60,8 @@ const createMockAdapter = () => {
   return {
     adapter,
     spies,
-    emit: (patch: ProviderStatePatch) =>
-      listeners.forEach((listener) => listener(patch))
+    emit: (patch: ProviderStatePatch, event?: ProviderEvent) =>
+      listeners.forEach((listener) => listener(patch, event))
   };
 };
 
@@ -85,7 +87,8 @@ const renderWithPlayer = (ui: ReactNode, initial?: ProviderStatePatch) => {
     ...utils,
     controller,
     spies: mock.spies,
-    emit: (patch: ProviderStatePatch) => act(() => mock.emit(patch))
+    emit: (patch: ProviderStatePatch, event?: ProviderEvent) =>
+      act(() => mock.emit(patch, event))
   };
 };
 
@@ -491,6 +494,32 @@ describe('SeekSlider', () => {
     const slider = screen.getByRole('slider', { name: 'Seek' });
     fireEvent.change(slider, { target: { value: '75' } });
     expect(spies.seekTo).toHaveBeenCalledWith(75);
+  });
+
+  // The provider stamps every seek it reports `'provider'`; a seek this control
+  // asked for is the user's, and the controller is what relabels it (#186).
+  test('labels the seek it asks for as a user seek', () => {
+    const { controller, emit } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady()
+    );
+    const origins: PlayerEventOrigin[] = [];
+    controller.on('seeking', (event) => origins.push(event.origin));
+    controller.on('seeked', (event) => origins.push(event.origin));
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Seek' }), {
+      target: { value: '75' }
+    });
+    emit(
+      { seeking: true },
+      { type: 'seeking', detail: { currentTime: 75 }, origin: 'provider' }
+    );
+    emit(
+      { seeking: false, currentTime: 75 },
+      { type: 'seeked', detail: { currentTime: 75 }, origin: 'provider' }
+    );
+
+    expect(origins).toEqual(['user', 'user']);
   });
 
   test('renders buffered ranges from player state', () => {

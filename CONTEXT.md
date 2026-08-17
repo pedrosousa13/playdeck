@@ -68,6 +68,14 @@ that control's own domain sets, and so releases it. A request nothing echoes is
 released by its deadline instead.
 _Avoid_: confirmation, acknowledgement
 
+**Requested origin**:
+Where a command the library issued came from — a control a person operated, an
+untagged public command, an autoplay attempt. Held from the moment the command
+is issued until the provider reports the change that confirms it, and used in
+place of the `provider` an adapter stamps every report of its own with. Distinct
+from a requested value: this is who asked, not what for.
+_Avoid_: source, trigger, cause
+
 ### Loading
 
 **Activation**:

@@ -120,6 +120,13 @@ export type PlayerState = {
   readonly playback: PlaybackState;
   readonly buffering: boolean;
   readonly seeking: boolean;
+  // Where the seek in flight came from, and `null` whenever `seeking` is false
+  // — a seek that is not happening has no provenance. `seeking` keeps its plain
+  // boolean meaning; this is the additive field beside it. The library's own
+  // requests are labelled with the origin their command carried (`'user'` from
+  // a control, `'api'` from an untagged public command), and a seek nobody
+  // asked for keeps the `'provider'` the adapter stamps it with (#186).
+  readonly seekOrigin: PlayerEventOrigin | null;
   readonly currentTime: number;
   readonly duration: number | null;
   readonly buffered: ReadonlyArray<TimeRange>;
