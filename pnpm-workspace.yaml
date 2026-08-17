@@ -4,9 +4,10 @@ packages:
   - tests/bundle/*
   - tests/integrations/*
 # Advisories pinned forward here rather than left for `pnpm audit` to keep
-# reporting -- the alternative is re-triaging the same five findings on every
-# run. Every floor names the advisory behind it, so a later reader can tell
-# when an entry has outlived its reason:
+# reporting -- the alternative is re-triaging the same findings on every run.
+# Every floor names the advisory behind it, so a later reader can tell when an
+# entry has outlived its reason. Six entries cover five advisories, because
+# js-yaml takes one entry per major for the reason given below:
 #   brace-expansion >=5.0.9  GHSA-rgw5-rvv9-x895 (high, DoS)
 #   postcss         >=8.5.23 GHSA-fxqj-rqcc-2cmp (moderate, sourceMappingURL)
 #   sharp           >=0.35.0 GHSA-f88m-g3jw-g9cj (high, libvips CVEs)
@@ -14,30 +15,31 @@ packages:
 #   js-yaml         >=3.15.1 GHSA-5p4m-2wfm-xmqj (high, quadratic CPU in !!omap)
 #   js-yaml         >=4.3.1  GHSA-5p4m-2wfm-xmqj (same advisory, 4.x range)
 # None of the five reaches a publishable package as the graph resolves today.
-# Publishable is decided by the manifest -- no `private` flag, and a
-# `publishConfig` block -- and not by which directory a package sits in:
-# tests/integrations/next-image declares `next` under `dependencies`, and
-# `postcss`, `sharp` and `nanoid` all arrive through it, but it is private and
-# ships nowhere. `postcss` also arrives under `vite` and under Storybook's
-# webpack, `brace-expansion` under eslint's minimatch and Storybook's glob,
-# `nanoid` under every copy of `postcss`, and `js-yaml` only under
-# @changesets/cli.
-# Do not take that paragraph on trust when you edit this block. It was false
-# from #170, when @reely/provider-wistia arrived carrying
-# `@wistia/wistia-player` in its `dependencies` -- which dragged webpack, and
-# so `postcss`, into a package that would have shipped -- until #266 dropped
-# the vendor package for a CDN load. A floor in this file cannot travel to a
-# consumer, so anything published in that window would have carried the
-# advisory with no way for a consumer to patch it, and this block said none.
+# Publishable means the manifest does not set `private`, and nothing else --
+# scripts/workspace-packages.mjs holds that definition, and it is not the
+# directory a package sits in: tests/integrations/next-image declares `next`
+# under `dependencies`, and `postcss`, `sharp` and `nanoid` all arrive through
+# it, but it is private and ships nowhere. `postcss` also arrives under `vite`
+# and under Storybook's webpack, `brace-expansion` under eslint's minimatch and
+# Storybook's glob, `nanoid` only under `postcss` and so everywhere `postcss`
+# reaches, and `js-yaml` only under @changesets/cli.
+# That paragraph is a reading of the graph at one moment, not a standing
+# property of this repo. It was false from #170, when @reely/provider-wistia
+# arrived carrying `@wistia/wistia-player` in its `dependencies` -- which
+# dragged webpack, and so `postcss`, into a package that would have shipped --
+# until #266 dropped the vendor package for a CDN load. A floor in this file
+# cannot travel to a consumer, so anything published in that window would have
+# carried the advisory with no way for a consumer to patch it, and this block
+# said none.
 # `scripts/audit.mjs` recomputes the reachability on every CI run, from each
 # publishable package's own `dependencies`, and fails on any advisory it can
 # reach at any severity; `pnpm test:audit` is what answers the question.
-# `sharp` carried no advisory identifier until #231. The entry came in with
-# #107, which recorded a count of findings and no identifier, so what it was
-# raised for is not recoverable. Removing the floor resolves `sharp` to 0.34.5
-# and `pnpm test:audit` reports GHSA-f88m-g3jw-g9cj, so the floor stays with
-# that named -- the reason it has now, not necessarily the one it was raised
-# for.
+# `sharp` carried no advisory identifier until the one above was added here.
+# The floor came in with #107, which recorded a count of findings and no
+# identifier, so what it was raised for is not recoverable. It was established
+# by removal instead: without the floor `sharp` resolves to 0.34.5 and
+# `pnpm test:audit` reports GHSA-f88m-g3jw-g9cj, so the floor stays with that
+# named -- the reason it has now, not necessarily the one it was raised for.
 # js-yaml needs one entry per major: the advisory covers 3.x and 4.x with
 # separate patched versions, and a single `<4.3.1` selector would drag 3.x
 # across a major boundary.
