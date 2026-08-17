@@ -29,18 +29,20 @@ jobs:
       # typecheck first: it is `tsc -b`, which emits the package declarations
       # the examples project resolves through its `paths`. test:docs proves the
       # checker itself works before docs:check trusts it.
-      - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:docs && pnpm docs:check
+      - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:docs && pnpm test:audit-unit && pnpm docs:check
 
   # A job rather than a step because a pull request runs its own copy of this
   # file: a deleted step leaves the job around it still reporting green,
   # whereas a deleted job never reports the `audit` context at all, and a
   # required context that never arrives blocks the pull request instead of
-  # passing it. Standing alone also keeps the report readable. `pnpm audit`
-  # prints every advisory it found; the second, silent run is the gate and
-  # fails only on high and critical, so a moderate one is visible here without
-  # turning the build red — a gate that fired on every transitive dev advisory
-  # would just get ignored, and one that hid what it tolerated would be worse
-  # than none.
+  # passing it. Standing alone also keeps the report readable.
+  #
+  # `pnpm test:audit` prints every advisory it found, each labelled with its
+  # severity and with whether it is reachable from a non-private workspace
+  # package's `dependencies`, and fails on reachability alone — at any
+  # severity. Severity was the wrong axis: it fired hardest on the linting
+  # toolchain, which never ships, and stayed quiet about a published
+  # package's own runtime tree. See scripts/audit.mjs.
   audit:
     runs-on: [self-hosted, linux, x64, vps]
     steps:

@@ -150,3 +150,23 @@ Something the library states about itself for a consumer's CSS or tests to
 read — a part name, a `data-state`, or a measurement written as a CSS custom
 property. The library writes it and the consumer reads it, the opposite
 direction to a token.
+
+### Dependency audit
+
+**Publishable**:
+A workspace package whose `package.json` does not set `private`, so npm would
+accept it. `scripts/workspace-packages.mjs` holds the one definition, and both
+the audit gate and the packaging harness draw their boundary from it.
+_Avoid_: public, released
+
+**Reachable**:
+An advisory whose resolved version appears in the transitive `dependencies`
+closure of at least one publishable package. What the audit gate turns on.
+Severity is a separate label and gates nothing.
+_Avoid_: affected, vulnerable
+
+**Shipped**:
+What the audit report calls a reachable advisory, against `not shipped` for one
+it prints and tolerates. A critical in the linting toolchain is not shipped; a
+low under a published package's `dependencies` is.
+_Avoid_: production, runtime
