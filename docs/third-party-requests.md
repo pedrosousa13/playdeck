@@ -40,7 +40,7 @@ Notes, per row:
   straight to `<video src>`, which is `media-src`. `auto` (the default) picks
   per browser, so allow your host under both unless you pin one engine.
 - **YouTube**'s API script is fetched from `https://www.youtube.com/iframe_api`
-  unconditionally
+  unless a working API is already present on the page — see the SRI note below
   (`packages/provider-youtube/src/loader.ts:70`, appended to `document.head`
   at `:164-167`), with no `integrity` and no `crossOrigin` set. This does not
   change with the `host` option: `host` only decides which origin the _embed
@@ -566,16 +566,27 @@ whether a working API is already sitting on `window` and adopts it in
 preference to a fetch: `apiFromWindow`
 (`packages/provider-youtube/src/loader.ts:94-95`) asks only
 `typeof target.YT?.Player === 'function'`, and `loadYouTubeIframeApi` returns
-that object immediately when the check passes (`:106-110`) — the `<script>`
-element is never built and `iframe_api` is never requested. The test is
-structural and nothing more: it cannot tell YouTube's real API from anything
-shaped to answer `typeof … === 'function'` with a function, because no
-structural test can. Once adopted, the object is memoised into the
+a resolved promise over that value when the check passes (`:106-110`) — the
+`<script>` element is never built and `iframe_api` is never requested. The
+test is structural and nothing more: it cannot tell YouTube's real API from
+anything shaped to answer `typeof … === 'function'` with a function, because
+no structural test can. Once adopted, the object is memoised into the
 module-global `sharedLoad` (`:92`) and handed back unchanged to every later
-call on the page; the memo is cleared only when a load fails (`:145-146`) or
-by the exported `resetYouTubeIframeApiLoader`, which nothing here calls and no
-`Player.Root` option reaches, so in practice a successful adoption holds for
-the document's lifetime.
+call on the page. That memo has exactly one clearer: the exported
+`resetYouTubeIframeApiLoader` (`:185-187`). `fail()`'s clearing (`:145-146`,
+and even there conditional on `sharedLoad === load`) belongs to the fetch
+path's own promise executor, which a bare `Promise.resolve` adoption never
+enters, so nothing on that path ever runs against an adopted memo. And
+`resetYouTubeIframeApiLoader` is a test seam, not a runtime one: every call
+site is a test (`packages/provider-youtube/test/loader.test.ts:263`, `:281`)
+or this package's own example harness (`examples/provider-youtube.ts:23`),
+the README tables it as such ("for tests that need a clean load",
+`packages/provider-youtube/README.md:70`), and the changeset that introduced
+it says the same in as many words ("for tests that need a clean load, not for
+app code", `.changeset/youtube-api-load-has-a-deadline.md:39-41`). No runtime
+path in Reely calls it, and no `Player.Root` option reaches it either — so a
+successful adoption holds for the document's lifetime unless the page's own
+code calls that reset itself.
 
 This is accepted, not overlooked, and on the same terms as the grant above:
 reaching the substitution requires a script that already runs on the page
@@ -589,11 +600,22 @@ unverified adoption up as a verified one, which is worse than the current
 honest gap. The short-circuit itself earns its place independently: a page
 that has already loaded the iframe API for its own reasons — a co-tenant
 player, a tag manager, an embed Reely did not create — has already had
-`onYouTubeIframeAPIReady` fire once, and that callback does not fire twice
-without the script reloading. A loader that ignored the global and waited on
-the callback regardless would wait out its own deadline and report failure on
-exactly the pages where a working API is sitting right there. Adopting it is
-what lets those pages and Reely's own attach coexist.
+`onYouTubeIframeAPIReady` fire once. That callback fires exactly once per
+script evaluation, at the vendor script's own module scope, with no loop,
+listener or re-invocation that could trigger it again — read out of
+`www-widgetapi.js` (build `3891b194`, fetched 2026-08-17, the same file the
+referrer section below cites for an unrelated claim); not confirmed against a
+real player in a browser the way that one was. A loader that ignored the
+global and waited on the callback regardless would not merely miss it: it
+would adopt the co-tenant's own `<script>` element too (`:114-117`, the same
+lookup the fetch path itself uses to avoid double-injecting), so no fresh
+`load` or `error` event would fire on it either — a script element this
+loader adopts rather than creates can be past both already, which is exactly
+what the comment at `:83-84` says. With no event left to wait on, such a
+loader would sit out the full `API_READY_TIMEOUT_MS` (`:90`, 15 seconds; the
+deadline itself set at `:123-129`) before reporting failure on exactly the
+pages where a working API is sitting right there. Adopting it is what lets
+those pages and Reely's own attach coexist.
 
 Both providers do offer a seam for replacing the load, and self-hosting the
 script is what either seam is for: the vendor's own engine, configuration and
