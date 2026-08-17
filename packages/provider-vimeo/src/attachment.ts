@@ -87,7 +87,10 @@ export type VimeoAttachmentDeps = {
   readonly options: VimeoAttachmentOptions;
   // The host's capabilities snapshot, for the state published on ready.
   readonly getCapabilities: () => PlayerCapabilities;
-  readonly chromeless: Pick<VimeoChromelessAvailability, 'probe' | 'adopt'>;
+  readonly chromeless: Pick<
+    VimeoChromelessAvailability,
+    'probe' | 'adopt' | 'cancel'
+  >;
   readonly playback: Pick<VimeoPlayback, 'adopt' | 'handlers'>;
   readonly presentation: Pick<VimeoPresentation, 'handlers'>;
   readonly qualityLevels: Pick<VimeoQualityLevels, 'adopt' | 'handlers'>;
@@ -171,6 +174,13 @@ export const createVimeoAttachment = (
     (player !== undefined && player !== activePlayer);
 
   const teardown = (): void => {
+    // First, and unconditionally: the probe's request is the one thing here
+    // that would go on running by itself, and nothing below holds a handle on
+    // it. Every caller either has already moved the generation on or is a
+    // failed attach, so no verdict it could still bring back would be adopted
+    // — and an embed on its way out must stop talking to Vimeo, not merely
+    // have its answer ignored.
+    chromeless.cancel();
     const player = activePlayer;
     const iframe = activeIframe;
     activePlayer = undefined;
