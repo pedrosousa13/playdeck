@@ -1,6 +1,7 @@
 import {
   isVimeoHash,
   isVimeoVideoId,
+  notifySafely,
   type CommandResult,
   type PlayerCapabilities,
   type PlayerError,
@@ -197,7 +198,8 @@ export const createVimeoProvider = (
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   const chromeless = createVimeoChromelessAvailability({ source, options });
 

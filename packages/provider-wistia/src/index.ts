@@ -1,5 +1,6 @@
 import {
   isWistiaMediaId,
+  notifySafely,
   type Availability,
   type CommandResult,
   type PlayerCapabilities,
@@ -178,7 +179,8 @@ export const createWistiaProvider = (
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   // Resolved once, from the raw options, and consulted by the playback seam on
   // every time report, seek and restart.

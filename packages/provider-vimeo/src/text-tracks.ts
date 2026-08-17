@@ -8,7 +8,7 @@ import type {
   TextTrack,
   TextTrackKind
 } from '@reely/core';
-import { textTrackLabel } from '@reely/core';
+import { notifySafely, textTrackLabel } from '@reely/core';
 import {
   asRecord,
   available,
@@ -221,7 +221,7 @@ export const createVimeoTextTracks = ({
 
   const emitCues = (cues: readonly TextCue[]): void => {
     activeCues = cues;
-    cueListeners.forEach((listener) => listener(cues));
+    cueListeners.forEach((listener) => notifySafely(listener, cues));
   };
 
   const clearCues = (): void => {

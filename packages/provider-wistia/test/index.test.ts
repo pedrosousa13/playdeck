@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import type {
   MediaDimensions,
   ProviderAdapter,
@@ -1628,4 +1628,79 @@ test('reports chapters as unavailable for the provider', async () => {
     reason: 'provider'
   });
   expect(readyPatch(patches).chapters).toBeUndefined();
+});
+
+// --- subscriber isolation (#233) ---
+
+// The deliberate throws below are rethrown on a fresh task so they still reach
+// uncaught-error handling; captured rather than run, which is what keeps them
+// from landing in the runner as an unhandled error.
+const captureRethrows = (): unknown[] => {
+  const errors: unknown[] = [];
+  const real = globalThis.queueMicrotask;
+  // Wrapped rather than replaced: the fixtures schedule microtasks of their
+  // own, and swallowing those would stall the very load these tests drive.
+  globalThis.queueMicrotask = (task: () => void) =>
+    real(() => {
+      try {
+        task();
+      } catch (error) {
+        errors.push(error);
+      }
+    });
+  onTestFinished(() => {
+    globalThis.queueMicrotask = real;
+  });
+  return errors;
+};
+
+// Subscribed ahead of the recorder, unlike `setup`, because the thrower has to
+// come first for the fan-out behind it to be the thing under test.
+const setupBehindAThrowingSubscriber = async (): Promise<{
+  readonly provider: ReturnType<typeof createWistiaProvider>;
+  readonly patches: ProviderStatePatch[];
+  readonly dimensions: Array<MediaDimensions | undefined>;
+}> => {
+  const mount = document.createElement('div') as WistiaMountElement;
+  document.body.appendChild(mount);
+  const sdk = installFakeWistiaPlayer({});
+  sdkState.load = sdk.load;
+  const provider = createWistiaProvider(mount, source);
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  provider.subscribeDimensions?.(() => {
+    throw new Error('dimension listener blew up');
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+  const dimensions: Array<MediaDimensions | undefined> = [];
+  provider.subscribeDimensions?.((next) => dimensions.push(next));
+  await provider.attach();
+  await provider.load();
+  return { provider, patches, dimensions };
+};
+
+// #95 and its second consequence at once (#233). The start path emits inside
+// its own try, so a bare `Set.forEach` both starved every subscriber behind
+// the thrower and handed the throw to the load's catch — which mapped a
+// consumer's rendering bug through `loadFailure` into a provider load error.
+test('a throwing subscriber does not starve the subscribers behind it', async () => {
+  captureRethrows();
+
+  const { patches } = await setupBehindAThrowingSubscriber();
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+  expect(readyPatch(patches).activation).toBe('ready');
+});
+
+// The dimension channel is its own set, iterated the same way.
+test('a throwing dimension listener does not starve the listeners behind it', async () => {
+  captureRethrows();
+
+  const { dimensions } = await setupBehindAThrowingSubscriber();
+
+  expect(dimensions.at(-1)).toEqual({ width: 1920, height: 1080 });
 });

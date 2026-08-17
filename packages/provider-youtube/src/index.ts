@@ -1,5 +1,6 @@
 import {
   isYouTubeVideoId,
+  notifySafely,
   type CommandResult,
   type PlayerCapabilities,
   type PlayerError,
@@ -196,7 +197,8 @@ export const createYouTubeProvider = (
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   // The poll is where the window is enforced and the window drives the poll,
   // so one of the two has to reach the other lazily; the seams below reach

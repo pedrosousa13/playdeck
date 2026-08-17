@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { expect, test } from 'vitest';
+import { expect, onTestFinished, test } from 'vitest';
 import { PlayerController } from '@reely/core';
 import {
   createFakeTrack,
@@ -485,5 +485,48 @@ test('cuechange with an empty, whitespace-only, or missing cue text normalizes t
       { id: 'cue-whitespace', startTime: 1, endTime: 2, text: '' },
       { id: 'cue-missing', startTime: 2, endTime: 3, text: '' }
     ]
+  ]);
+});
+
+// --- subscriber isolation (#233) ---
+
+// The cue channel is its own listener set, fanned out the same way the state
+// channel is, and owes its subscribers the same isolation. The deliberate
+// throw is rethrown on a fresh task, which would otherwise land in the runner
+// as an unhandled error, so the scheduled rethrow is captured rather than run.
+test('a throwing cue listener does not starve the listeners behind it', async () => {
+  const real = globalThis.queueMicrotask;
+  globalThis.queueMicrotask = (task: () => void) =>
+    real(() => {
+      try {
+        task();
+      } catch {
+        // Asserted by the surfacing test in this package's index suite; here
+        // it only has to stay out of the runner's unhandled-error handling.
+      }
+    });
+  onTestFinished(() => {
+    globalThis.queueMicrotask = real;
+  });
+  const { provider, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t1');
+  provider.subscribeCues?.(() => {
+    throw new Error('cue listener blew up');
+  });
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  const track = tracks[0];
+  if (track)
+    track.activeCues = [
+      { id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }
+    ];
+
+  expect(() => track?.dispatch('cuechange')).not.toThrow();
+
+  expect(cueFrames).toEqual([
+    [{ id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }]
   ]);
 });

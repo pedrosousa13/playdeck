@@ -15,7 +15,7 @@
 // setting and which logs a `NotSupportedError` per frame rather than staying
 // quiet. Same intent, newer spelling.
 
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import {
   PlayerController,
   type ProviderEvent,
@@ -1737,4 +1737,51 @@ test('reports chapters as unavailable for the provider without failing a command
   });
   expect(controller.getState().error).toBeNull();
   expect(await controller.seekTo(10)).toEqual({ ok: true });
+});
+
+// --- subscriber isolation (#233) ---
+
+// The deliberate throw below is rethrown on a fresh task so it still reaches
+// uncaught-error handling; captured rather than run, which is what keeps it
+// from landing in the runner as an unhandled error.
+const captureRethrows = (): unknown[] => {
+  const errors: unknown[] = [];
+  const real = globalThis.queueMicrotask;
+  // Wrapped rather than replaced: the fake player applies its command effects
+  // on a later microtask, and swallowing those would stall this suite.
+  globalThis.queueMicrotask = (task: () => void) =>
+    real(() => {
+      try {
+        task();
+      } catch (error) {
+        errors.push(error);
+      }
+    });
+  onTestFinished(() => {
+    globalThis.queueMicrotask = real;
+  });
+  return errors;
+};
+
+// #95, reached through the adapter's own fan-out rather than the controller's
+// (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
+// behind the thrower missed that notification — and the throw escaped back
+// into the caller of `emit`, which on this path is the iframe API's own event
+// dispatch.
+test('a throwing subscriber does not starve the subscribers behind it', async () => {
+  const { harness, provider } = await readyAdapter();
+  captureRethrows();
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  const after = vi.fn();
+  provider.subscribe(after);
+
+  harness.currentTime = 12;
+  expect(() => harness.fireStateChange(playerStates.PLAYING)).not.toThrow();
+
+  expect(after.mock.calls.at(-1)?.[0]).toMatchObject({
+    playback: 'playing',
+    currentTime: 12
+  });
 });

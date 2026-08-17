@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { runInNewContext } from 'node:vm';
-import { expect, test, vi } from 'vitest';
+import { expect, onTestFinished, test, vi } from 'vitest';
 import type {
   MediaDimensions,
   ProviderAdapter,
@@ -990,4 +990,85 @@ test('native stops observing resize after destroy', async () => {
   resize(1920, 1080);
 
   expect(seen).toHaveLength(afterDestroy);
+});
+
+// --- subscriber isolation (#233) ---
+
+// Every test below throws from a listener on purpose, and a listener that
+// throws is rethrown on a fresh task so it still reaches uncaught-error
+// handling. Left alone that would land in the runner as an unhandled error and
+// fail the file, so the scheduled rethrows are captured rather than run — and
+// the test that owns the surfacing contract asserts against what was captured.
+const captureRethrows = (): unknown[] => {
+  const errors: unknown[] = [];
+  const real = globalThis.queueMicrotask;
+  // Wrapped rather than replaced: the fixtures schedule microtasks of their
+  // own, and swallowing those would stall the very load these tests drive.
+  globalThis.queueMicrotask = (task: () => void) =>
+    real(() => {
+      try {
+        task();
+      } catch (error) {
+        errors.push(error);
+      }
+    });
+  onTestFinished(() => {
+    globalThis.queueMicrotask = real;
+  });
+  return errors;
+};
+
+const throwingListener = (): (() => never) => () => {
+  throw new Error('subscriber blew up');
+};
+
+// #95, reached through the provider's own fan-out rather than the controller's
+// (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
+// registered behind the thrower missed that notification — and the throw
+// escaped into whatever called `emit`, here the adapter's own `attach`.
+test('a throwing subscriber does not starve the subscribers behind it', () => {
+  captureRethrows();
+  const media = document.createElement('video');
+  const provider = createNativeProvider(media);
+  provider.subscribe(throwingListener());
+  const after = vi.fn();
+  provider.subscribe(after);
+
+  expect(() => provider.attach()).not.toThrow();
+
+  expect(after).toHaveBeenCalled();
+});
+
+// Isolated is not the same as silenced: the error is rethrown on a fresh task,
+// so a consumer's broken listener still reaches the page's uncaught-error
+// handling instead of disappearing into the adapter.
+test('a throwing subscriber still surfaces its error asynchronously', async () => {
+  const media = document.createElement('video');
+  const provider = createNativeProvider(media);
+  provider.attach();
+  // Subscribed after attach, and the rethrows captured after that, so exactly
+  // one emit — the `playing` below — is on trial here.
+  provider.subscribe(throwingListener());
+  const rethrows = captureRethrows();
+
+  media.dispatchEvent(new Event('playing'));
+  await Promise.resolve();
+
+  expect(rethrows).toEqual([
+    expect.objectContaining({ message: 'subscriber blew up' })
+  ]);
+});
+
+// The dimension channel is its own set, iterated the same way.
+test('a throwing dimension listener does not starve the listeners behind it', () => {
+  captureRethrows();
+  const { media } = videoWithDimensions(1080, 1920);
+  const provider = createNativeProvider(media);
+  provider.subscribeDimensions?.(throwingListener());
+  const seen = collectDimensions(provider);
+
+  provider.attach();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(seen.at(-1)).toEqual({ width: 1080, height: 1920 });
 });

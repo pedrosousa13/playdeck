@@ -1,5 +1,6 @@
 import {
   createTimeBoundary,
+  notifySafely,
   type CommandResult,
   type MediaDimensions,
   type PlayerCapabilities,
@@ -164,7 +165,9 @@ export const createVimeoAttachment = (
         ? { width, height }
         : undefined;
     activeDimensions = dimensions;
-    dimensionListeners.forEach((listener) => listener(dimensions));
+    dimensionListeners.forEach((listener) =>
+      notifySafely(listener, dimensions)
+    );
   };
 
   const clearDimensions = (): void => {

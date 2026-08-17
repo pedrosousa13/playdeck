@@ -8,7 +8,7 @@ import type {
   ProviderStateListener,
   ProviderStatePatch
 } from '@reely/core';
-import { deriveLiveState, liveStateEqual } from '@reely/core';
+import { deriveLiveState, liveStateEqual, notifySafely } from '@reely/core';
 import {
   createNativeProvider,
   type NativePlaybackOptions
@@ -164,7 +164,7 @@ export const createHlsProvider = (
 
   const emit = (patch: ProviderStatePatch, event?: ProviderEvent): void => {
     if (attachment.isDestroyed()) return;
-    listeners.forEach((listener) => listener(patch, event));
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
   };
 
   const decorateCapabilities = (

@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  expect,
+  onTestFinished,
+  test,
+  vi
+} from 'vitest';
 import type {
   ProviderAdapter,
   ProviderEvent,
@@ -1345,3 +1352,51 @@ test.each([
     expect(seen.at(-1)).toEqual({ width: 1080, height: 1920 });
   }
 );
+
+// --- subscriber isolation (#233) ---
+
+// The deliberate throw below is rethrown on a fresh task so it still reaches
+// uncaught-error handling; captured rather than run, which is what keeps it
+// from landing in the runner as an unhandled error.
+const captureRethrows = (): unknown[] => {
+  const errors: unknown[] = [];
+  const real = globalThis.queueMicrotask;
+  // Wrapped rather than replaced: the fixtures schedule microtasks of their
+  // own, and swallowing those would stall the very load these tests drive.
+  globalThis.queueMicrotask = (task: () => void) =>
+    real(() => {
+      try {
+        task();
+      } catch (error) {
+        errors.push(error);
+      }
+    });
+  onTestFinished(() => {
+    globalThis.queueMicrotask = real;
+  });
+  return errors;
+};
+
+// #95, reached through the adapter's own fan-out rather than the controller's
+// (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
+// behind the thrower missed that notification and the throw escaped into
+// whatever called `emit` — here the adapter's own `attach`.
+test('a throwing subscriber does not starve the subscribers behind it', () => {
+  captureRethrows();
+  const media = document.createElement('video');
+  stubMseOnlySupport(media);
+  const provider = createHlsProvider(media, source, {
+    loadHls: fakeHlsLoader().loadHls
+  });
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  const after = vi.fn();
+  provider.subscribe(after);
+
+  expect(() => provider.attach()).not.toThrow();
+
+  expect(after.mock.calls.map((call) => call[0])).toContainEqual({
+    hlsEngine: 'hls.js'
+  });
+});

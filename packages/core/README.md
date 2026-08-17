@@ -76,6 +76,7 @@ out when a command will land; `activation` is not a substitute for either.
 | `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.            |
 | `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                    |
 | `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                             |
+| `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                 |
 | `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                |
 | `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                                    |
 | `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                |
@@ -364,6 +365,55 @@ export const closed = !chaptersEqual(
   chapters,
   deriveChapters([{ id: 'ch1', title: 'Introduction', startTime: 0 }], null)
 );
+```
+
+<!-- /example -->
+
+## Notifying subscribers
+
+`notifySafely()` is how a provider adapter notifies one of its own listeners.
+An adapter's `subscribe` accepts any number of subscribers and promises each of
+them every notification, so no single listener may abandon an emit — and a
+listener that throws must not be reported as a provider failure (#233).
+
+<!-- example:core-notify-safely -->
+
+```ts
+import { notifySafely, type ProviderStateListener } from '@reely/core';
+
+// What a provider adapter owes the subscribers it fans out to. `Set.forEach`
+// stops at the first throw, so one broken listener would abandon the emit:
+// every listener registered behind it misses that notification, and the throw
+// escapes back into whatever called the emit — often a vendor SDK's own event
+// dispatch, or the adapter's start path, where it would be reported as a
+// provider load failure rather than as the consumer's bug it is.
+const listeners = new Set<ProviderStateListener>();
+
+export const subscribe = (listener: ProviderStateListener): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+// Isolated, not silenced: a listener that throws has its error rethrown on a
+// fresh task, so it still reaches the page's uncaught-error handling the way a
+// listener throwing at top level would.
+export const emit: ProviderStateListener = (patch, event) => {
+  listeners.forEach((listener) => notifySafely(listener, patch, event));
+};
+
+subscribe(() => {
+  throw new Error('a subscriber defect');
+});
+const seen: string[] = [];
+subscribe((patch) => {
+  seen.push(patch.lifecycle ?? 'unchanged');
+});
+
+emit({ lifecycle: 'ready' });
+
+console.log(seen); // ['ready'] — the subscriber behind the thrower still ran
 ```
 
 <!-- /example -->

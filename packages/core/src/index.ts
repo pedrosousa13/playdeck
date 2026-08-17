@@ -53,6 +53,11 @@ export { deriveLiveState, liveStateEqual } from './live-state.js';
 
 export type { LiveDerivationInput } from './live-state.js';
 
+// Public because every provider package fans out to its own subscribers and
+// owes them the same isolation the controller gives its own (#233). The rest of
+// `safety.ts` is controller-internal and stays unexported.
+export { notifySafely } from './safety.js';
+
 export {
   detectSource,
   isPermittedSourceUrl,
