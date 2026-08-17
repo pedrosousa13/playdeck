@@ -26,7 +26,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
-import { selectPublishable } from './workspace-packages.mjs';
+import { selectPublishable, workspaceProjects } from './workspace-packages.mjs';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -34,6 +34,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 /**
  * @typedef {import('./workspace-packages.mjs').WorkspaceProject} WorkspaceProject
+ * @typedef {import('./workspace-packages.mjs').PublishablePackage} PublishablePackage
  *
  * A finding from `pnpm audit --json`: one resolved version of the vulnerable
  * module, and the dependency paths that reach it. Each path starts with the
@@ -48,7 +49,9 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  * @typedef {{ version: string; dependencies?: Record<string, DependencyNode> }} DependencyNode
  * @typedef {{ name: string; dependencies?: Record<string, DependencyNode> }} ProjectTree
  *
- * @typedef {{ workspace: WorkspaceProject[]; prodTrees: ProjectTree[]; audit: AuditReport }} AuditInputs
+ * The three captured pnpm outputs the gate reads, plus the one thing gather()
+ * derives from them -- which package boundary reachability is drawn around.
+ * @typedef {{ workspace: WorkspaceProject[]; publishable: PublishablePackage[]; prodTrees: ProjectTree[]; audit: AuditReport }} AuditInputs
  * @typedef {{ severity: string; module: string; advisoryId: string; title: string; url: string; shipped: boolean; reachableFrom: string[]; paths: string[] }} ClassifiedAdvisory
  */
 
@@ -190,15 +193,14 @@ const formatReport = (advisories, metadata, importers, publishable) => {
  * @param {AuditInputs} inputs
  * @returns {{ report: string; advisories: ClassifiedAdvisory[]; exitCode: number }}
  */
-export const gate = ({ workspace, prodTrees, audit }) => {
-  const publishable = selectPublishable(workspace).map((pkg) => pkg.name);
+export const gate = ({ workspace, publishable, prodTrees, audit }) => {
   const advisories = classify(audit, shippedVersions(prodTrees));
   return {
     report: formatReport(
       advisories,
       audit.metadata,
       workspace.length,
-      publishable
+      publishable.map((pkg) => pkg.name)
     ),
     advisories,
     exitCode: advisories.some((advisory) => advisory.shipped) ? 1 : 0
@@ -216,8 +218,7 @@ const pnpm = (args) =>
 
 /** @returns {AuditInputs} */
 const gather = () => {
-  /** @type {WorkspaceProject[]} */
-  const workspace = JSON.parse(pnpm(['list', '-r', '--depth', '-1', '--json']));
+  const workspace = workspaceProjects(repoRoot);
   const publishable = selectPublishable(workspace);
   /** @type {ProjectTree[]} */
   const prodTrees = JSON.parse(
@@ -245,7 +246,7 @@ const gather = () => {
     output = stdout;
   }
 
-  return { workspace, prodTrees, audit: parseAuditOutput(output) };
+  return { workspace, publishable, prodTrees, audit: parseAuditOutput(output) };
 };
 
 // Only when run as a command: audit.test.mjs imports this module for its pure

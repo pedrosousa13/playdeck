@@ -29,7 +29,7 @@ jobs:
       # typecheck first: it is `tsc -b`, which emits the package declarations
       # the examples project resolves through its `paths`. test:docs proves the
       # checker itself works before docs:check trusts it.
-      - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:docs && pnpm test:audit-gate && pnpm docs:check
+      - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:docs && pnpm test:audit-unit && pnpm docs:check
 
   # A job rather than a step because a pull request runs its own copy of this
   # file: a deleted step leaves the job around it still reporting green,

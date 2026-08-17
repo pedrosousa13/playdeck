@@ -31,7 +31,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const fixtureTemplate = join(repoRoot, 'tests/packaging/fixture');
 
 /**
- * @typedef {import('./workspace-packages.mjs').PublishablePackage} WorkspaceProject
+ * @typedef {import('./workspace-packages.mjs').PublishablePackage} PublishablePackage
  */
 
 /**
@@ -233,7 +233,7 @@ async function main() {
 }
 
 /**
- * @param {readonly WorkspaceProject[]} packages
+ * @param {readonly PublishablePackage[]} packages
  * @param {string} tarballDir
  */
 async function runFixture(packages, tarballDir) {
