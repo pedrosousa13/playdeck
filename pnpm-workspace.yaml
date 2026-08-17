@@ -31,6 +31,19 @@ overrides:
   js-yaml@4: '>=4.3.1 <5'
 allowBuilds:
   esbuild@0.28.1: true
+# A 24-hour hold, in minutes, before a newly published version is eligible to
+# resolve. It covers the window an audit gate cannot: a maintainer-compromise
+# release carries no advisory yet, so `pnpm audit` has nothing to report and
+# only time separates us from it. The two controls are complements.
+# A frozen-lockfile install replays resolutions that already happened and is
+# unaffected, so the cost falls on dependency-update work rather than on CI.
+# The entries below are exempt from the hold. Unlike the override floors
+# above, they name no reason: all five arrived with the workspace bootstrap
+# (#20), before any cooldown existed to be excluded from, so there is no
+# record of why each was chosen and no way to tell when one has outlived its
+# reason. They are kept as they are here -- re-triaging them is its own
+# decision. A new entry should name the version it unblocks and why.
+minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - '@vitejs/plugin-react@6.0.4'
   - react-dom@19.2.8
