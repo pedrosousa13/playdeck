@@ -1,19 +1,13 @@
 // @vitest-environment happy-dom
 
-import {
-  afterEach,
-  beforeEach,
-  expect,
-  onTestFinished,
-  test,
-  vi
-} from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStatePatch
 } from '@reely/core';
 import { createHlsProvider } from '../src/index';
+import { captureRethrows } from './fixtures/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 
 const source = { type: 'hls', src: '/hls/master.m3u8' } as const;
@@ -1354,28 +1348,6 @@ test.each([
 );
 
 // --- subscriber isolation (#233) ---
-
-// The deliberate throw below is rethrown on a fresh task so it still reaches
-// uncaught-error handling; captured rather than run, which is what keeps it
-// from landing in the runner as an unhandled error.
-const captureRethrows = (): unknown[] => {
-  const errors: unknown[] = [];
-  const real = globalThis.queueMicrotask;
-  // Wrapped rather than replaced: the fixtures schedule microtasks of their
-  // own, and swallowing those would stall the very load these tests drive.
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch (error) {
-        errors.push(error);
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
-  return errors;
-};
 
 // #95, reached through the adapter's own fan-out rather than the controller's
 // (#233): a bare `Set.forEach` stops at the first throw, so every subscriber

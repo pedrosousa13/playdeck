@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 
-import { expect, onTestFinished, test } from 'vitest';
+import { expect, test } from 'vitest';
 import { PlayerController } from '@reely/core';
+import { captureRethrows } from './fixtures/capture-rethrows';
 import {
   createFakeTrack,
   latest,
@@ -491,23 +492,11 @@ test('cuechange with an empty, whitespace-only, or missing cue text normalizes t
 // --- subscriber isolation (#233) ---
 
 // The cue channel is its own listener set, fanned out the same way the state
-// channel is, and owes its subscribers the same isolation. The deliberate
-// throw is rethrown on a fresh task, which would otherwise land in the runner
-// as an unhandled error, so the scheduled rethrow is captured rather than run.
+// channel is, and owes its subscribers the same isolation. The deliberate throw
+// is rethrown on a fresh task, so it is captured rather than left to the
+// runner's unhandled-error handling.
 test('a throwing cue listener does not starve the listeners behind it', async () => {
-  const real = globalThis.queueMicrotask;
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch {
-        // Asserted by the surfacing test in this package's index suite; here
-        // it only has to stay out of the runner's unhandled-error handling.
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
+  captureRethrows();
   const { provider, tracks } = mountNative([
     { kind: 'captions', label: 'English', language: 'en', id: 't1' }
   ]);

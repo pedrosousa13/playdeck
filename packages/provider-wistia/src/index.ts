@@ -137,6 +137,10 @@ const createRejectedWistiaProvider = (): WistiaProviderAdapter => {
     attach: () => undefined,
     load: () => undefined,
     destroy: () => undefined,
+    // Called straight rather than through `notifySafely`: this is the one call
+    // a `subscribe` makes at registration, on the subscriber's own stack, and
+    // not a fan-out — only the emits after registration are the emitter's to
+    // isolate (#233). Same for `subscribeDimensions` below.
     subscribe: (listener) => {
       listener(
         {

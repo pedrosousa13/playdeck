@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
 
 import { runInNewContext } from 'node:vm';
-import { expect, onTestFinished, test, vi } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type {
   MediaDimensions,
   ProviderAdapter,
   ProviderStateListener
 } from '@reely/core';
 import { createNativeProvider } from '../src/index';
+import { captureRethrows } from './fixtures/capture-rethrows';
 
 type ContractAdapter = {
   provider: ProviderAdapter;
@@ -993,30 +994,6 @@ test('native stops observing resize after destroy', async () => {
 });
 
 // --- subscriber isolation (#233) ---
-
-// Every test below throws from a listener on purpose, and a listener that
-// throws is rethrown on a fresh task so it still reaches uncaught-error
-// handling. Left alone that would land in the runner as an unhandled error and
-// fail the file, so the scheduled rethrows are captured rather than run — and
-// the test that owns the surfacing contract asserts against what was captured.
-const captureRethrows = (): unknown[] => {
-  const errors: unknown[] = [];
-  const real = globalThis.queueMicrotask;
-  // Wrapped rather than replaced: the fixtures schedule microtasks of their
-  // own, and swallowing those would stall the very load these tests drive.
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch (error) {
-        errors.push(error);
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
-  return errors;
-};
 
 const throwingListener = (): (() => never) => () => {
   throw new Error('subscriber blew up');

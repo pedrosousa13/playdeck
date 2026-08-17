@@ -1,14 +1,8 @@
 // @vitest-environment happy-dom
 
-import {
-  afterEach,
-  beforeEach,
-  expect,
-  onTestFinished,
-  test,
-  vi
-} from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createHlsProvider, type HlsSubtitleTrackLike } from '../src/index';
+import { captureRethrows } from './fixtures/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 import {
   createFakeTrack,
@@ -566,23 +560,10 @@ test('keeps sidecar chapters on the hls.js engine, which strips only caption sta
 // --- subscriber isolation (#233) ---
 
 // The cue channel is its own listener set, fanned out the same way the state
-// channel is. The deliberate throw is rethrown on a fresh task, which would
-// otherwise land in the runner as an unhandled error, so the scheduled rethrow
-// is captured rather than run.
+// channel is. The deliberate throw is rethrown on a fresh task, so it is
+// captured rather than left to the runner's unhandled-error handling.
 test('a throwing cue listener does not starve the listeners behind it', async () => {
-  const real = globalThis.queueMicrotask;
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch {
-        // Asserted by the surfacing test in this package's index suite; here
-        // it only has to stay out of the runner's unhandled-error handling.
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
+  captureRethrows();
   const { provider, media, hls } = await mountHlsEngineHls();
   discoverHlsSubtitles(hls, [
     { id: 0, name: 'English', lang: 'en', default: true, type: 'SUBTITLES' }

@@ -128,6 +128,13 @@ An adapter's binding to its media element — attach, load, listener wiring and
 teardown. Not Lifecycle, which is what the player state reports.
 _Avoid_: adapter lifecycle, setup
 
+**Fan-out**:
+One emit delivered to every listener in a subscriber set — state, dimensions or
+cues. Isolating a listener that throws is the emitter's duty, not the
+subscriber's: the rest of the set is owed that notification. Not the single call
+a `subscribe` makes at registration, which runs on the subscriber's own stack.
+_Avoid_: broadcast, notify loop
+
 **Aurora**:
 Wistia's current player generation — the `<wistia-player>` custom element the
 Wistia provider targets, and the only one it supports. Named here because the
