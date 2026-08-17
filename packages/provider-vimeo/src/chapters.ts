@@ -20,6 +20,20 @@ const vimeoChapterId = (chapter: VimeoSdkChapter, position: number): string =>
     ? `vimeo:${chapter.index}`
     : `vimeo:${position}`;
 
+// An embed that does not implement `getChapters` still answers it, so what
+// comes back is not guaranteed to be a list of chapters at all. Same rule the
+// quality ladder follows: a shape we cannot vouch for is dropped, not guessed
+// at. An entry without a start or a title is dropped for the same reason —
+// publishing it would put `undefined` in the collection.
+const toVimeoChapters = (value: unknown): ReadonlyArray<VimeoSdkChapter> =>
+  Array.isArray(value)
+    ? (value as ReadonlyArray<VimeoSdkChapter>).filter(
+        (chapter) =>
+          Number.isFinite(chapter?.startTime) &&
+          typeof chapter.title === 'string'
+      )
+    : [];
+
 // The slice of the player this seam drives: the chapter list and the duration
 // the last chapter is closed with, nothing else.
 export type VimeoChaptersPlayer = Pick<
@@ -41,9 +55,10 @@ export type VimeoChaptersDeps = {
 // native path.
 export type VimeoChapters = {
   // Adopts the list read at attach, returning the patch fragment the
-  // attachment seam folds into its ready state.
+  // attachment seam folds into its ready state. What the SDK answered is
+  // untrusted in shape, not merely in success, so this takes `unknown`.
   readonly adopt: (
-    chapters: ReadonlyArray<VimeoSdkChapter>,
+    chapters: unknown,
     duration: number | null
   ) => ProviderStatePatch;
   readonly handlers: {
@@ -66,12 +81,15 @@ export const createVimeoChapters = ({
   let chapters: readonly Chapter[] = Object.freeze([]);
   let chaptersAvailability: Availability = noChapterSource;
 
+  // The one place an SDK answer becomes the published collection, so it is the
+  // one place the coercion has to run: the attach read and the `chapterchange`
+  // refresh both arrive here.
   const publish = (
-    raw: ReadonlyArray<VimeoSdkChapter>,
+    raw: unknown,
     duration: number | null
   ): readonly Chapter[] => {
     chapters = deriveChapters(
-      raw.map((chapter, position) => ({
+      toVimeoChapters(raw).map((chapter, position) => ({
         id: vimeoChapterId(chapter, position),
         title: chapter.title,
         startTime: chapter.startTime

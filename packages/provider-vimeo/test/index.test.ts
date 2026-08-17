@@ -2765,3 +2765,74 @@ test('a chapterchange that changes nothing publishes nothing', async () => {
 
   expect(patches).toEqual([]);
 });
+
+// An embed that does not implement `getChapters` still answers it, and the
+// answer resolves rather than rejects — `null` is what the e2e fixture's
+// catch-all sends back. Trusting that shape threw a TypeError out of the attach
+// path and put activation on `error` (#182).
+const unlistedChapterAnswers: ReadonlyArray<readonly [string, unknown]> = [
+  ['null', null],
+  ['a non-list', { chapters: [] }]
+];
+
+for (const [label, answer] of unlistedChapterAnswers) {
+  test(`stays ready when the embed answers getChapters with ${label}`, async () => {
+    const { patches } = await setup({
+      fake: {
+        duration: 90,
+        getChapters: () =>
+          Promise.resolve(answer as ReadonlyArray<VimeoSdkChapter>)
+      }
+    });
+
+    const ready = readyPatch(patches);
+    expect(ready.activation).toBe('ready');
+    expect(ready.chapters).toEqual([]);
+    expect(ready.capabilities?.chapters).toEqual({
+      status: 'unavailable',
+      reason: 'source'
+    });
+  });
+}
+
+test('drops chapter entries the SDK reports without a start or a title', async () => {
+  const { patches } = await setup({
+    fake: {
+      duration: 90,
+      chapters: [
+        { startTime: 0, title: 'Intro', index: 1 },
+        { title: 'No start', index: 2 } as unknown as VimeoSdkChapter,
+        { startTime: 60, index: 3 } as unknown as VimeoSdkChapter
+      ]
+    }
+  });
+
+  const ready = readyPatch(patches);
+  expect(ready.activation).toBe('ready');
+  expect(ready.chapters).toEqual([
+    { id: 'vimeo:1', title: 'Intro', startTime: 0, endTime: 90 }
+  ]);
+  expect(ready.capabilities?.chapters).toEqual({ status: 'available' });
+});
+
+test('stays ready when a chapterchange answers with a non-list', async () => {
+  const { patches, sdk } = await setup({
+    fake: { chapters: introAndBody, duration: 90 }
+  });
+  const player = sdk.instances[0]!;
+  patches.length = 0;
+
+  player.setChapters(null as unknown as ReadonlyArray<VimeoSdkChapter>);
+  player.emit('chapterchange', { startTime: 0, title: 'Intro', index: 1 });
+  await flushMicrotasks();
+
+  const merged = patches.reduce<ProviderStatePatch>(
+    (accumulated, patch) => ({ ...accumulated, ...patch }),
+    {}
+  );
+  expect(merged.chapters).toEqual([]);
+  expect(merged.capabilities?.chapters).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});

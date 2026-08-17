@@ -26,6 +26,7 @@ export type FakePlayerOptions = {
   readonly textTracks?: ReadonlyArray<VimeoSdkTextTrack>;
   readonly chapters?: ReadonlyArray<VimeoSdkChapter>;
   readonly qualities?: ReadonlyArray<VimeoSdkQuality>;
+  readonly getChapters?: () => Promise<ReadonlyArray<VimeoSdkChapter>>;
   readonly getQualities?: () => Promise<ReadonlyArray<VimeoSdkQuality>>;
   readonly setQuality?: (id: string) => Promise<unknown>;
   readonly ready?: () => Promise<void>;
@@ -155,8 +156,8 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
     () => Promise.resolve(this.#textTracks)
   );
 
-  getChapters: Mock<() => Promise<ReadonlyArray<VimeoSdkChapter>>> = vi.fn(() =>
-    Promise.resolve(this.#chapters)
+  getChapters: Mock<() => Promise<ReadonlyArray<VimeoSdkChapter>>> = vi.fn(
+    () => this.#options.getChapters?.() ?? Promise.resolve(this.#chapters)
   );
 
   getVideoWidth: Mock<() => Promise<number>> = vi.fn(

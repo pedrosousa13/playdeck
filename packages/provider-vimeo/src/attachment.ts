@@ -322,9 +322,11 @@ export const createVimeoAttachment = (
         player
           .getTextTracks()
           .catch((): ReadonlyArray<VimeoSdkTextTrack> => []),
-        // A video without chapters answers with an empty list, and an SDK
-        // build without the method rejects — neither is a reason to fail the
-        // attach, and both publish the same empty collection.
+        // A video without chapters answers with an empty list. An embed that
+        // does not implement the method may reject, but it may just as well
+        // resolve with something that is not a list at all — the chapters seam
+        // coerces the answer, so this `catch` covers only the rejection. All of
+        // it publishes the same empty collection, and none of it fails attach.
         player.getChapters().catch((): ReadonlyArray<VimeoSdkChapter> => []),
         player.getQualities().catch((): ReadonlyArray<VimeoSdkQuality> => []),
         chromelessProbe,
