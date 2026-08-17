@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createHlsProvider, type HlsSubtitleTrackLike } from '../src/index';
+import { captureRethrows } from './fixtures/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 import {
   createFakeTrack,
@@ -554,4 +555,33 @@ test('keeps sidecar chapters on the hls.js engine, which strips only caption sta
   expect(last.capabilities).toMatchObject({
     chapters: { status: 'available' }
   });
+});
+
+// --- subscriber isolation (#233) ---
+
+// The cue channel is its own listener set, fanned out the same way the state
+// channel is. The deliberate throw is rethrown on a fresh task, so it is
+// captured rather than left to the runner's unhandled-error handling.
+test('a throwing cue listener does not starve the listeners behind it', async () => {
+  captureRethrows();
+  const { provider, media, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: true, type: 'SUBTITLES' }
+  ]);
+  provider.subscribeCues?.(() => {
+    throw new Error('cue listener blew up');
+  });
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+
+  media.currentTime = 1.5;
+  expect(() =>
+    hls.emitCuesParsed([
+      { id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }
+    ])
+  ).not.toThrow();
+
+  expect(cueFrames.at(-1)).toEqual([
+    { id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }
+  ]);
 });

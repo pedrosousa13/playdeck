@@ -1,5 +1,6 @@
 import {
   isYouTubeVideoId,
+  notifySafely,
   type CommandResult,
   type PlayerCapabilities,
   type PlayerError,
@@ -157,6 +158,10 @@ const createRejectedYouTubeProvider = (): YouTubeProviderAdapter => {
     attach: () => undefined,
     load: () => undefined,
     destroy: () => undefined,
+    // Called straight rather than through `notifySafely`: this is the one call
+    // a `subscribe` makes at registration, on the subscriber's own stack, and
+    // not a fan-out — only the emits after registration are the emitter's to
+    // isolate (#233).
     subscribe: (listener) => {
       listener(
         {
@@ -196,7 +201,8 @@ export const createYouTubeProvider = (
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   // The poll is where the window is enforced and the window drives the poll,
   // so one of the two has to reach the other lazily; the seams below reach

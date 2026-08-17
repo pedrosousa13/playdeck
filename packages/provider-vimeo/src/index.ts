@@ -1,6 +1,7 @@
 import {
   isVimeoHash,
   isVimeoVideoId,
+  notifySafely,
   type CommandResult,
   type PlayerCapabilities,
   type PlayerError,
@@ -144,6 +145,10 @@ const createRejectedVimeoProvider = (): VimeoProviderAdapter => {
     attach: () => undefined,
     load: () => undefined,
     destroy: () => undefined,
+    // Called straight rather than through `notifySafely`: this is the one call
+    // a `subscribe` makes at registration, on the subscriber's own stack, and
+    // not a fan-out — only the emits after registration are the emitter's to
+    // isolate (#233). Same for `subscribeDimensions` below.
     subscribe: (listener) => {
       listener(
         {
@@ -197,7 +202,8 @@ export const createVimeoProvider = (
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   const chromeless = createVimeoChromelessAvailability({ source, options });
 

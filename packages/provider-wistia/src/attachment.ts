@@ -3,6 +3,7 @@ import {
   deriveLiveState,
   isPermittedSourceUrl,
   liveStateEqual,
+  notifySafely,
   resolveNetworkPath,
   type CommandResult,
   type MediaDimensions,
@@ -256,7 +257,9 @@ export const createWistiaAttachment = (
         ? { width, height }
         : undefined;
     activeDimensions = dimensions;
-    dimensionListeners.forEach((listener) => listener(dimensions));
+    dimensionListeners.forEach((listener) =>
+      notifySafely(listener, dimensions)
+    );
   };
 
   const clearDimensions = (): void => {

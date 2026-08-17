@@ -1,7 +1,14 @@
 // @vitest-environment happy-dom
 // @vitest-environment-options { "settings": { "disableIframePageLoading": true } }
 
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  expect,
+  onTestFinished,
+  test,
+  vi
+} from 'vitest';
 import {
   detectSource,
   type MediaDimensions,
@@ -2835,4 +2842,118 @@ test('stays ready when a chapterchange answers with a non-list', async () => {
     status: 'unavailable',
     reason: 'source'
   });
+});
+
+// --- subscriber isolation (#233) ---
+
+// The deliberate throws below are rethrown on a fresh task so they still reach
+// uncaught-error handling; captured rather than run, which is what keeps them
+// from landing in the runner as an unhandled error.
+const captureRethrows = (): unknown[] => {
+  const errors: unknown[] = [];
+  const real = globalThis.queueMicrotask;
+  // Wrapped rather than replaced: the fixtures schedule microtasks of their
+  // own, and swallowing those would stall the very load these tests drive.
+  globalThis.queueMicrotask = (task: () => void) =>
+    real(() => {
+      try {
+        task();
+      } catch (error) {
+        errors.push(error);
+      }
+    });
+  onTestFinished(() => {
+    globalThis.queueMicrotask = real;
+  });
+  return errors;
+};
+
+// #95, reached through the adapter's own fan-out rather than the controller's
+// (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
+// behind the thrower missed that notification — and the throw escaped back
+// into the caller of `emit`, which on this path is the Vimeo SDK's own event
+// dispatch.
+test('a throwing subscriber does not starve the subscribers behind it', async () => {
+  const { sdk, provider } = await setup();
+  captureRethrows();
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  const after = vi.fn();
+  provider.subscribe(after);
+
+  expect(() =>
+    sdk.instances[0]!.emit('play', { duration: 60, percent: 0, seconds: 0 })
+  ).not.toThrow();
+
+  expect(after.mock.calls.at(-1)?.[0]).toMatchObject({ playback: 'playing' });
+});
+
+// The second half of #95, and the one that misattributes the defect: the start
+// path emits inside its own try, so a subscriber throwing there was caught by
+// the load's catch and mapped through `loadFailure` — reporting a consumer's
+// rendering bug to the user as "The Vimeo player could not load".
+test('a throwing subscriber is not reported as a Vimeo load failure', async () => {
+  captureRethrows();
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource);
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  await provider.load();
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+  expect(readyPatch(patches).activation).toBe('ready');
+});
+
+// The dimension channel is its own set, iterated the same way.
+test('a throwing dimension listener does not starve the listeners behind it', async () => {
+  const { sdk, provider } = await setup();
+  captureRethrows();
+  provider.subscribeDimensions?.(() => {
+    throw new Error('dimension listener blew up');
+  });
+  const seen: Array<MediaDimensions | undefined> = [];
+  provider.subscribeDimensions?.((next) => seen.push(next));
+
+  expect(() =>
+    sdk.instances[0]!.emit('resize', { videoWidth: 1920, videoHeight: 1080 })
+  ).not.toThrow();
+
+  expect(seen.at(-1)).toEqual({ width: 1920, height: 1080 });
+});
+
+// As is the cue channel.
+test('a throwing cue listener does not starve the listeners behind it', async () => {
+  const { sdk, provider } = await setup({
+    fake: {
+      textTracks: [
+        { label: 'English', language: 'en', kind: 'captions', mode: 'disabled' }
+      ]
+    }
+  });
+  await provider.selectTextTrack?.('vimeo:captions:en');
+  captureRethrows();
+  provider.subscribeCues?.(() => {
+    throw new Error('cue listener blew up');
+  });
+  const cueFrames: Array<readonly TextCue[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+
+  expect(() =>
+    sdk.instances[0]!.emit('cuechange', {
+      cues: [{ text: 'Hello', startTime: 1, endTime: 2 }]
+    })
+  ).not.toThrow();
+
+  expect(cueFrames.at(-1)).toMatchObject([{ text: 'Hello' }]);
 });

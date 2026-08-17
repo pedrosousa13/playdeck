@@ -7,6 +7,7 @@ import type {
   ProviderStatePatch
 } from '@reely/core';
 import { createHlsProvider } from '../src/index';
+import { captureRethrows } from './fixtures/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 
 const source = { type: 'hls', src: '/hls/master.m3u8' } as const;
@@ -1345,3 +1346,29 @@ test.each([
     expect(seen.at(-1)).toEqual({ width: 1080, height: 1920 });
   }
 );
+
+// --- subscriber isolation (#233) ---
+
+// #95, reached through the adapter's own fan-out rather than the controller's
+// (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
+// behind the thrower missed that notification and the throw escaped into
+// whatever called `emit` — here the adapter's own `attach`.
+test('a throwing subscriber does not starve the subscribers behind it', () => {
+  captureRethrows();
+  const media = document.createElement('video');
+  stubMseOnlySupport(media);
+  const provider = createHlsProvider(media, source, {
+    loadHls: fakeHlsLoader().loadHls
+  });
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  const after = vi.fn();
+  provider.subscribe(after);
+
+  expect(() => provider.attach()).not.toThrow();
+
+  expect(after.mock.calls.map((call) => call[0])).toContainEqual({
+    hlsEngine: 'hls.js'
+  });
+});

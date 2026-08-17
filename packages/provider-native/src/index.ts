@@ -4,6 +4,7 @@ import type {
   ProviderEvent,
   ProviderStateListener
 } from '@reely/core';
+import { notifySafely } from '@reely/core';
 import { createNativeAttachment } from './attachment.js';
 import { available } from './adapter-values.js';
 import {
@@ -48,7 +49,8 @@ export const createNativeProvider = (
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   const playback = createNativePlayback(media, options, {
     emit,

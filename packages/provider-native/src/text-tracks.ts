@@ -11,7 +11,12 @@ import type {
   TextTrackKind,
   TextTrackReadiness
 } from '@reely/core';
-import { chaptersEqual, deriveChapters, textTrackLabel } from '@reely/core';
+import {
+  chaptersEqual,
+  deriveChapters,
+  notifySafely,
+  textTrackLabel
+} from '@reely/core';
 import { available } from './adapter-values.js';
 
 // The `default` IDL attribute lives on HTMLTrackElement per spec, but engines
@@ -359,7 +364,7 @@ export const createNativeTextTracks = (
   };
 
   const emitCues = (cues: readonly TextCue[]): void =>
-    cueListeners.forEach((listener) => listener(cues));
+    cueListeners.forEach((listener) => notifySafely(listener, cues));
 
   // Normalizes a cue's text so downstream overlay rendering never has to
   // guard against a missing, empty, or whitespace-only value: all three

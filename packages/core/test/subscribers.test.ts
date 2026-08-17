@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
+  notifySafely,
   PlayerController,
   type ProviderAdapter,
+  type ProviderEvent,
+  type ProviderStatePatch,
   type ProviderStateListener,
   type TextCue
 } from '../src/index';
@@ -152,4 +155,29 @@ test('a throwing event listener does not starve the listeners behind it', () => 
   );
 
   expect(after).toHaveBeenCalled();
+});
+
+// The helper is public so the provider packages can give their own subscribers
+// this same isolation (#233), and their state listeners take two arguments
+// rather than one. Asserted here, at the helper, rather than only through the
+// five provider suites that consume it — a regression in its arity would
+// otherwise be diagnosed a package away from its cause.
+test('notifySafely delivers every argument and isolates a two-argument listener', () => {
+  const patch: ProviderStatePatch = { currentTime: 5 };
+  const event: ProviderEvent = {
+    type: 'play',
+    detail: undefined,
+    origin: 'provider'
+  };
+  const thrower: ProviderStateListener = () => {
+    throw new Error('subscriber blew up');
+  };
+  const after = vi.fn<ProviderStateListener>();
+
+  expect(() => notifySafely(thrower, patch, event)).not.toThrow();
+  notifySafely(after, patch, event);
+
+  expect(after).toHaveBeenCalledWith(patch, event);
+  expect(rethrows).toHaveLength(1);
+  expect(() => rethrows[0]?.()).toThrow('subscriber blew up');
 });

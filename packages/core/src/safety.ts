@@ -82,12 +82,15 @@ export const unsubscribeSafely = (
 // still reaches the page's uncaught-error handling the way a listener throwing
 // at top level would. Swallowing it outright is what would have hidden the
 // media-session defect that found this bug in the first place.
-export const notifySafely = <Value>(
-  listener: (value: Value) => void,
-  value: Value
+// Variadic rather than single-value: a provider's state listener takes
+// `(patch, event?)`, and wrapping every one of those fan-outs in a thunk would
+// allocate a closure per listener per emit to say the same thing.
+export const notifySafely = <Args extends readonly unknown[]>(
+  listener: (...args: Args) => void,
+  ...args: Args
 ): void => {
   try {
-    listener(value);
+    listener(...args);
   } catch (cause) {
     queueMicrotask(() => {
       throw cause;

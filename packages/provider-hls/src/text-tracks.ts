@@ -7,7 +7,7 @@ import type {
   TextTrack,
   TextTrackKind
 } from '@reely/core';
-import { textTrackLabel } from '@reely/core';
+import { notifySafely, textTrackLabel } from '@reely/core';
 import type {
   EmitProviderState,
   HlsInstanceLike,
@@ -121,7 +121,7 @@ export const createHlsTextTracks = (
     hlsTextTracks.length === 0 ? 'unavailable' : 'custom';
 
   const emitHlsCues = (cues: readonly TextCue[]): void =>
-    hlsCueListeners.forEach((listener) => listener(cues));
+    hlsCueListeners.forEach((listener) => notifySafely(listener, cues));
 
   // Windows the held cues down to the ones active at the media's current
   // time — mirrors what a native `TextTrack`'s `activeCues`/`cuechange`
