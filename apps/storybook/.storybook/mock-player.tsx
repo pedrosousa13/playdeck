@@ -25,9 +25,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
  *   confirming `playback` patch instead of doing nothing, so a story can
  *   drive playback through the `PlayerHandle` ref it already gets back —
  *   `activateFromInteraction` then `play`, or `pause` on its own — and see
- *   `onPlayChange` and the surface follow, the same way the `backpack-parity`
- *   branch's `createReportingProvider` let a contract test do it.
- *   `playResult` still decides
+ *   `onPlayChange` and the surface follow. `playResult` still decides
  *   what `play()` resolves to, and a failing one still emits nothing: a
  *   command that did not succeed has nothing to confirm. `seekTo` is reported
  *   under the same knob — it emits the new `currentTime` when set and is a
