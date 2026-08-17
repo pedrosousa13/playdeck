@@ -174,6 +174,13 @@ export const createVimeoAttachment = (
     (player !== undefined && player !== activePlayer);
 
   const teardown = (): void => {
+    // First, and unconditionally: the probe's request is the one thing here
+    // that would go on running by itself, and nothing below holds a handle on
+    // it. Every caller either has already moved the generation on or is a
+    // failed attach, so no verdict it could still bring back would be adopted
+    // — and an embed on its way out must stop talking to Vimeo, not merely
+    // have its answer ignored.
+    chromeless.cancel();
     const player = activePlayer;
     const iframe = activeIframe;
     activePlayer = undefined;
@@ -368,10 +375,6 @@ export const createVimeoAttachment = (
       if (destroyed) return;
       destroyed = true;
       ++generation;
-      // The generation the probe belonged to is gone, so its request is too:
-      // an unmounted player must stop talking to Vimeo, not just have its
-      // verdict discarded.
-      chromeless.cancel();
       teardown();
       clearStateListeners();
       textTracks.clearCueListeners();
@@ -380,9 +383,6 @@ export const createVimeoAttachment = (
     retry: async () => {
       if (destroyed) return { ok: false, reason: 'not-ready' };
       const thisGeneration = ++generation;
-      // Before `start` below issues the next one, so a retry replaces the
-      // superseded request rather than adding to it.
-      chromeless.cancel();
       teardown();
       started = true;
       return start(thisGeneration);

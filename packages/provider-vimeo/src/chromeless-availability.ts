@@ -108,9 +108,9 @@ export type VimeoChromelessAvailability = {
   // a live one adopted.
   readonly adopt: (verdict: Availability) => void;
   // Abandons the probe in flight: aborts its request and settles it on the
-  // provisional verdict. The attachment calls this wherever it already bumps
-  // the start generation, so the counter that decides which verdict is adopted
-  // also decides which request keeps running.
+  // provisional verdict. The attachment calls this from its teardown, which
+  // every path that discards a player already runs, so the request goes with
+  // the player it informed instead of outliving it.
   readonly cancel: () => void;
   // The `customControls` facet of the host's capabilities.
   readonly customControlsAvailability: () => Availability;
@@ -121,8 +121,8 @@ export const createVimeoChromelessAvailability = ({
   options
 }: VimeoChromelessAvailabilityDeps): VimeoChromelessAvailability => {
   let customControlsAvailability: Availability = providerCheck;
-  // The request in flight, or the last one that ran: aborting one that has
-  // already settled is inert, so `cancel` needs no separate record of that.
+  // The request in flight, and nothing once its probe has settled — so a
+  // `cancel` after the fact holds no handle on a request that is already done.
   let activeRequest: AbortController | undefined;
 
   return {
@@ -144,6 +144,10 @@ export const createVimeoChromelessAvailability = ({
       if (options.customControls !== true) {
         return Promise.resolve<Availability>(providerCheck);
       }
+      // One request at a time, held here rather than in the caller's ordering:
+      // a probe that starts while another is running abandons it, whether or
+      // not whoever started this one remembered to cancel first.
+      activeRequest?.abort();
       const controller = new AbortController();
       activeRequest = controller;
       return settleWithFallback(
@@ -151,7 +155,9 @@ export const createVimeoChromelessAvailability = ({
         providerCheck,
         CHROMELESS_PROBE_TIMEOUT_MS,
         controller
-      );
+      ).finally(() => {
+        if (activeRequest === controller) activeRequest = undefined;
+      });
     },
     adopt: (verdict) => {
       customControlsAvailability = verdict;

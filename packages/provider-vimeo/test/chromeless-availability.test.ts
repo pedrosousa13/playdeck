@@ -172,9 +172,26 @@ test('cancel aborts the request of a probe still in flight', async () => {
   });
 });
 
+test('a probe that starts while another runs abandons the older request', async () => {
+  fetchMock.mockImplementation(() => new Promise(() => undefined));
+  const chromeless = createVimeoChromelessAvailability({
+    source: publicSource,
+    options: { customControls: true }
+  });
+  const abandoned = chromeless.probe();
+  chromeless.probe();
+  expect(probeSignal(0).aborted).toBe(true);
+  expect(probeSignal(1).aborted).toBe(false);
+  await expect(abandoned).resolves.toEqual({
+    status: 'unknown',
+    reason: 'provider-check'
+  });
+});
+
 test('a cancelled probe resolves rather than rejecting', async () => {
-  // What a real fetch does with a signal that aborts: it rejects, and the
-  // rejection must never reach the page.
+  // The request rejects on abort, the way a real fetch does. The cancel
+  // settles the probe on the provisional verdict, and that rejection lands on
+  // the request's own catch instead of reaching the caller.
   fetchMock.mockImplementation(
     (_url: string, init: RequestInit) =>
       new Promise((_resolve, reject) => {
@@ -195,14 +212,24 @@ test('a cancelled probe resolves rather than rejecting', async () => {
   });
 });
 
-test('a cancel between the response and the verdict still resolves', async () => {
-  // The response's headers have arrived and its body is still being read, so
-  // the abort interrupts the read rather than the request.
-  let settleRequest!: (response: Response) => void;
+test('a cancel between the response and the verdict still reaches the request', async () => {
+  // The response's headers have arrived and its body is still being read when
+  // the cancel lands, so it is the read the abort interrupts rather than the
+  // request — and the body only ever fails because that abort reached it.
+  let deliverResponse!: () => void;
   fetchMock.mockImplementation(
-    () =>
+    (_url: string, init: RequestInit) =>
       new Promise<Response>((resolve) => {
-        settleRequest = resolve;
+        deliverResponse = () =>
+          resolve({
+            ok: true,
+            json: () =>
+              new Promise((_resolve, reject) => {
+                init.signal?.addEventListener('abort', () =>
+                  reject(init.signal?.reason)
+                );
+              })
+          } as unknown as Response);
       })
   );
   const chromeless = createVimeoChromelessAvailability({
@@ -210,11 +237,12 @@ test('a cancel between the response and the verdict still resolves', async () =>
     options: { customControls: true }
   });
   const probe = chromeless.probe();
-  settleRequest({
-    ok: true,
-    json: () => Promise.reject(new Error('The body read was aborted.'))
-  } as unknown as Response);
+  deliverResponse();
+  // Let the probe take the response and start reading its body.
+  await Promise.resolve();
+  await Promise.resolve();
   chromeless.cancel();
+  expect(probeSignal().aborted).toBe(true);
   await expect(probe).resolves.toEqual({
     status: 'unknown',
     reason: 'provider-check'

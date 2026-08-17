@@ -19,11 +19,15 @@ did not work: a player scrolled past, unmounted or retried went on disclosing th
 viewer to `vimeo.com` after the consumer's component was gone.
 
 Each probe now runs under its own `AbortController`. The seam gains a `cancel`
-alongside its `probe` and `adopt`, and the attachment calls it exactly where it
-already bumps that generation counter — in `destroy`, and in `retry` before the
-replacement request is issued — so the counter that decides which verdict is
-adopted now decides which request is still allowed to run. The deadline aborts
-too, rather than only resolving beside the request.
+alongside its `probe` and `adopt`, and the attachment calls it from its own
+teardown — the one thing `destroy` and `retry` both already run, and which a
+failed attach runs too. So the request is discarded with the player it was
+informing, in `retry`'s case before the replacement request is issued, and a
+teardown path added later cancels without having to remember to. The seam also
+abandons a request of its own accord if a second probe starts while one is
+running, so "one request at a time" holds in the seam rather than in its
+caller's ordering. The deadline aborts too, rather than only resolving beside
+the request.
 
 What the caller receives is unchanged in every case. An abandoned probe — timed
 out, destroyed, or superseded — resolves the same provisional `unknown` /
