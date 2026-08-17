@@ -1825,6 +1825,75 @@ test('forwards a ref, custom attributes, style, and aria-label to the native vid
   expect(video.getAttribute('data-reely-part')).toBe('media');
 });
 
+test('strips the excluded video attributes that reach Media through a spread', () => {
+  // The `Omit` on `MediaProps` is a compile-time guard only
+  // (`verifyMediaPropsExclusions` above pins it); a cast or untyped CMS data
+  // walks straight past it, so the same list is enforced at render time.
+  const smuggled = {
+    autoPlay: true,
+    children: <source src="/injected-child.mp4" type="video/mp4" />,
+    controls: true,
+    muted: true,
+    poster: '/injected.jpg',
+    preload: 'auto',
+    src: '/injected.mp4'
+  } as unknown as Player.MediaProps;
+  render(
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media {...smuggled} />
+    </LegacyRoot>
+  );
+
+  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  expect(video.hasAttribute('src')).toBe(false);
+  expect(video.hasAttribute('autoplay')).toBe(false);
+  expect(video.muted).toBe(false);
+  expect(video.hasAttribute('poster')).toBe(false);
+  expect(video.controls).toBe(false);
+  // Library-owned values, not the smuggled ones: `preload` comes from the
+  // loading strategy.
+  expect(video.getAttribute('preload')).toBe('metadata');
+  // The <source> set Media renders is the only media source left.
+  const sources = [...video.querySelectorAll('source')].map((element) =>
+    element.getAttribute('src')
+  );
+  expect(sources).toEqual(['/clip.mp4']);
+
+  // Server markup too: `muted` is otherwise applied at mount and only
+  // overwritten later, when the media registers with the player.
+  const markup = renderToString(
+    <Player.Root source="/clip.mp4">
+      <Player.Media {...smuggled} />
+    </Player.Root>
+  );
+  expect(markup).not.toContain('muted');
+  expect(markup).not.toContain('autoplay');
+  expect(markup).not.toContain('/injected');
+});
+
+test('forwards props outside the excluded list alongside a smuggled one', () => {
+  const onClick = vi.fn();
+  const smuggled = {
+    'data-analytics': 'hero',
+    className: 'hero-video',
+    crossOrigin: 'anonymous',
+    onClick,
+    src: '/injected.mp4'
+  } as unknown as Player.MediaProps;
+  render(
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media {...smuggled} />
+    </LegacyRoot>
+  );
+
+  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  expect(video.className).toBe('hero-video');
+  expect(video.dataset.analytics).toBe('hero');
+  expect(video.getAttribute('crossorigin')).toBe('anonymous');
+  fireEvent.click(video);
+  expect(onClick).toHaveBeenCalledTimes(1);
+});
+
 test('renders the controls attribute on the native video when controls is true', () => {
   render(
     <LegacyRoot controls source="/clip.mp4">
