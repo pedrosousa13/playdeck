@@ -87,7 +87,10 @@ export type VimeoAttachmentDeps = {
   readonly options: VimeoAttachmentOptions;
   // The host's capabilities snapshot, for the state published on ready.
   readonly getCapabilities: () => PlayerCapabilities;
-  readonly chromeless: Pick<VimeoChromelessAvailability, 'probe' | 'adopt'>;
+  readonly chromeless: Pick<
+    VimeoChromelessAvailability,
+    'probe' | 'adopt' | 'cancel'
+  >;
   readonly playback: Pick<VimeoPlayback, 'adopt' | 'handlers'>;
   readonly presentation: Pick<VimeoPresentation, 'handlers'>;
   readonly qualityLevels: Pick<VimeoQualityLevels, 'adopt' | 'handlers'>;
@@ -365,6 +368,10 @@ export const createVimeoAttachment = (
       if (destroyed) return;
       destroyed = true;
       ++generation;
+      // The generation the probe belonged to is gone, so its request is too:
+      // an unmounted player must stop talking to Vimeo, not just have its
+      // verdict discarded.
+      chromeless.cancel();
       teardown();
       clearStateListeners();
       textTracks.clearCueListeners();
@@ -373,6 +380,9 @@ export const createVimeoAttachment = (
     retry: async () => {
       if (destroyed) return { ok: false, reason: 'not-ready' };
       const thisGeneration = ++generation;
+      // Before `start` below issues the next one, so a retry replaces the
+      // superseded request rather than adding to it.
+      chromeless.cancel();
       teardown();
       started = true;
       return start(thisGeneration);

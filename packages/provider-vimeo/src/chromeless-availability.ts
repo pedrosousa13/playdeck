@@ -28,13 +28,15 @@ const chromelessAccountTypes = new Set([
 ]);
 
 const chromelessAvailability = async (
-  source: Pick<VimeoSource, 'videoId' | 'hash'>
+  source: Pick<VimeoSource, 'videoId' | 'hash'>,
+  signal: AbortSignal
 ): Promise<Availability> => {
   try {
     const response = await fetch(
       `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(
         vimeoWatchUrl(source)
-      )}`
+      )}`,
+      { signal }
     );
     if (!response.ok) return providerCheck;
     const data: unknown = await response.json();
@@ -55,23 +57,29 @@ const chromelessAvailability = async (
   }
 };
 
+// Settles on whichever comes first: the request, the deadline above, or a
+// cancel. The last two both abort the request rather than leaving it running
+// beside a fallback verdict, and the caller receives that same fallback in
+// either case — an abandoned probe stops talking to Vimeo instead of merely
+// having its answer ignored. An abort makes the request reject, which lands on
+// the fallback here the way any other failure does, so nothing rejects at the
+// caller.
 const settleWithFallback = <Value>(
   promise: Promise<Value>,
   fallback: Value,
-  milliseconds: number
+  milliseconds: number,
+  controller: AbortController
 ): Promise<Value> =>
   new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(fallback), milliseconds);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      () => {
-        clearTimeout(timer);
-        resolve(fallback);
-      }
-    );
+    const settle = (value: Value): void => {
+      clearTimeout(timer);
+      controller.signal.removeEventListener('abort', abandon);
+      resolve(value);
+    };
+    const abandon = (): void => settle(fallback);
+    const timer = setTimeout(() => controller.abort(), milliseconds);
+    controller.signal.addEventListener('abort', abandon);
+    promise.then(settle, abandon);
   });
 
 export type VimeoChromelessAvailabilityDeps = {
@@ -99,6 +107,11 @@ export type VimeoChromelessAvailability = {
   // been superseded by the time its probe settles cannot overwrite the verdict
   // a live one adopted.
   readonly adopt: (verdict: Availability) => void;
+  // Abandons the probe in flight: aborts its request and settles it on the
+  // provisional verdict. The attachment calls this wherever it already bumps
+  // the start generation, so the counter that decides which verdict is adopted
+  // also decides which request keeps running.
+  readonly cancel: () => void;
   // The `customControls` facet of the host's capabilities.
   readonly customControlsAvailability: () => Availability;
 };
@@ -108,6 +121,9 @@ export const createVimeoChromelessAvailability = ({
   options
 }: VimeoChromelessAvailabilityDeps): VimeoChromelessAvailability => {
   let customControlsAvailability: Availability = providerCheck;
+  // The request in flight, or the last one that ran: aborting one that has
+  // already settled is inert, so `cancel` needs no separate record of that.
+  let activeRequest: AbortController | undefined;
 
   return {
     // This narrows what probe() does, not when it is called: the eager call
@@ -128,14 +144,20 @@ export const createVimeoChromelessAvailability = ({
       if (options.customControls !== true) {
         return Promise.resolve<Availability>(providerCheck);
       }
+      const controller = new AbortController();
+      activeRequest = controller;
       return settleWithFallback(
-        chromelessAvailability(source),
+        chromelessAvailability(source, controller.signal),
         providerCheck,
-        CHROMELESS_PROBE_TIMEOUT_MS
+        CHROMELESS_PROBE_TIMEOUT_MS,
+        controller
       );
     },
     adopt: (verdict) => {
       customControlsAvailability = verdict;
+    },
+    cancel: () => {
+      activeRequest?.abort();
     },
     customControlsAvailability: () => customControlsAvailability
   };

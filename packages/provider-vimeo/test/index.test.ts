@@ -547,7 +547,8 @@ test('reports provider-plan when chromeless controls require an unavailable plan
     customControls: { status: 'unavailable', reason: 'provider-plan' }
   });
   expect(fetchMock).toHaveBeenCalledWith(
-    'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871'
+    'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871',
+    { signal: expect.any(AbortSignal) }
   );
 });
 
@@ -561,7 +562,8 @@ test('resolves the plan for unlisted videos through the hashed watch URL', async
     customControls: { status: 'unavailable', reason: 'provider-plan' }
   });
   expect(fetchMock).toHaveBeenCalledWith(
-    'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871%2Fabc123'
+    'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871%2Fabc123',
+    { signal: expect.any(AbortSignal) }
   );
 });
 
@@ -1810,6 +1812,65 @@ test('a chromeless verdict from a superseded attach cannot overwrite the live on
   expect(latestCapabilities).toMatchObject({
     customControls: { status: 'unavailable', reason: 'provider-plan' }
   });
+});
+
+test('destroy aborts a probe whose request is still in flight', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+
+  const signals: AbortSignal[] = [];
+  fetchMock.mockImplementation((_url: string, init: RequestInit) => {
+    signals.push(init.signal!);
+    return new Promise(() => undefined);
+  });
+
+  const provider = createVimeoProvider(mount, publicSource, {
+    customControls: true
+  });
+  await provider.attach();
+  const loading = provider.load();
+  await flushMicrotasks();
+  expect(signals).toHaveLength(1);
+
+  await provider.destroy();
+  expect(signals[0]!.aborted).toBe(true);
+  await loading;
+});
+
+test('retry aborts the superseded probe before issuing its own', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+
+  // What the previous request's signal read as each time a new one was
+  // issued — the ordering the retry has to hold, not merely that both
+  // requests ended up cancelled.
+  const previouslyAborted: boolean[] = [];
+  const signals: AbortSignal[] = [];
+  fetchMock.mockImplementation((_url: string, init: RequestInit) => {
+    previouslyAborted.push(signals.at(-1)?.aborted ?? false);
+    signals.push(init.signal!);
+    return new Promise(() => undefined);
+  });
+
+  const provider = createVimeoProvider(mount, publicSource, {
+    customControls: true
+  });
+  await provider.attach();
+  const loading = provider.load();
+  await flushMicrotasks();
+  expect(signals).toHaveLength(1);
+
+  const retrying = provider.retry();
+  await flushMicrotasks();
+  expect(signals).toHaveLength(2);
+  expect(previouslyAborted).toEqual([false, true]);
+
+  await provider.destroy();
+  await Promise.all([loading, retrying]);
 });
 
 test('destroy tears down the SDK player, removes the iframe, and silences events', async () => {
