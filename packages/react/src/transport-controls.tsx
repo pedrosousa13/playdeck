@@ -285,7 +285,14 @@ const useSeekPreview = (
       // `seekTo` never rejects: the controller catches a throwing adapter into
       // an `ok: false` result. `Root` makes exactly one controller and keeps it
       // for its lifetime, so the one captured here stays this player's.
-      command: (time) => controller.seekTo(time),
+      //
+      // Origin-tagged, as `PlayButton` tags its own command: every change that
+      // reaches here is a person scrubbing, and the `'provider'` the adapter
+      // stamps the resulting `seeking`/`seeked` with says only who reported it
+      // (#186). Not every seek from this control comes through here — ADR-0005
+      // gives the arrow keys to the shortcut layer, which prevents the input's
+      // default and tags its own seek `'user'` from there.
+      command: (time) => controller.seekToWithOrigin(time, 'user'),
       onDrained: (ok) => {
         setSettling(false);
         // A failed seek has no reported time coming, so it reconciles at once.
