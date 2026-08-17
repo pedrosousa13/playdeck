@@ -1,0 +1,254 @@
+{
+  "workspace": [
+    {
+      "name": "@reely/audit-fixture-shipped",
+      "path": ".",
+      "private": true
+    },
+    {
+      "name": "@reely/audit-fixture-internal",
+      "version": "0.0.0",
+      "path": "./packages/internal",
+      "private": true
+    },
+    {
+      "name": "@reely/audit-fixture-publishable",
+      "version": "0.0.0",
+      "path": "./packages/publishable",
+      "private": false
+    }
+  ],
+  "prodTrees": [
+    {
+      "name": "@reely/audit-fixture-publishable",
+      "version": "0.0.0",
+      "path": "./packages/publishable",
+      "private": false,
+      "dependencies": {
+        "cookie": {
+          "from": "cookie",
+          "version": "0.4.0",
+          "resolved": "https://registry.npmjs.org/cookie/-/cookie-0.4.0.tgz",
+          "path": ".pnpm/cookie@0.4.0/node_modules/cookie"
+        }
+      }
+    }
+  ],
+  "audit": {
+    "actions": [],
+    "advisories": {
+      "1096466": {
+        "findings": [
+          {
+            "version": "0.0.8",
+            "paths": [".>minimist"]
+          }
+        ],
+        "found_by": null,
+        "deleted": null,
+        "references": "- https://nvd.nist.gov/vuln/detail/CVE-2020-7598\n- https://snyk.io/vuln/SNYK-JS-MINIMIST-559764\n- http://lists.opensuse.org/opensuse-security-announce/2020-06/msg00024.html\n- https://www.npmjs.com/advisories/1179\n- https://github.com/minimistjs/minimist/commit/10bd4cdf49d9686d48214be9d579a9cdfda37c68\n- https://github.com/minimistjs/minimist/commit/38a4d1caead72ef99e824bb420a2528eec03d9ab\n- https://github.com/minimistjs/minimist/commit/4cf1354839cb972e38496d35e12f806eea92c11f#diff-a1e0ee62c91705696ddb71aa30ad4f95\n- https://github.com/minimistjs/minimist/commit/63e7ed05aa4b1889ec2f3b196426db4500cbda94\n- https://github.com/advisories/GHSA-vh95-rmgr-6w4m",
+        "created": "2020-04-03T21:48:32.000Z",
+        "id": 1096466,
+        "npm_advisory_id": null,
+        "overview": "Affected versions of `minimist` are vulnerable to prototype pollution. Arguments are not properly sanitized, allowing an attacker to modify the prototype of `Object`, causing the addition or modification of an existing property that will exist on all objects.  \nParsing the argument `--__proto__.y=Polluted` adds a `y` property with value `Polluted` to all objects. The argument `--__proto__=Polluted` raises and uncaught error and crashes the application.  \nThis is exploitable if attackers have control over the arguments being passed to `minimist`.\n\n\n## Recommendation\n\nUpgrade to versions 0.2.1, 1.2.3 or later.",
+        "reported_by": null,
+        "title": "Prototype Pollution in minimist",
+        "metadata": null,
+        "cves": ["CVE-2020-7598"],
+        "access": "public",
+        "severity": "moderate",
+        "module_name": "minimist",
+        "vulnerable_versions": "<0.2.1",
+        "github_advisory_id": "GHSA-vh95-rmgr-6w4m",
+        "recommendation": "Upgrade to version 0.2.1 or later",
+        "patched_versions": ">=0.2.1",
+        "updated": "2024-02-13T20:00:55.000Z",
+        "cvss": {
+          "score": 5.6,
+          "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L"
+        },
+        "cwe": ["CWE-1321"],
+        "url": "https://github.com/advisories/GHSA-vh95-rmgr-6w4m"
+      },
+      "1097677": {
+        "findings": [
+          {
+            "version": "0.0.8",
+            "paths": [".>minimist"]
+          }
+        ],
+        "found_by": null,
+        "deleted": null,
+        "references": "- https://nvd.nist.gov/vuln/detail/CVE-2021-44906\n- https://github.com/substack/minimist/issues/164\n- https://github.com/substack/minimist/blob/master/index.js#L69\n- https://snyk.io/vuln/SNYK-JS-MINIMIST-559764\n- https://stackoverflow.com/questions/8588563/adding-custom-properties-to-a-function/20278068#20278068\n- https://github.com/Marynk/JavaScript-vulnerability-detection/blob/main/minimist%20PoC.zip\n- https://github.com/minimistjs/minimist/issues/11\n- https://github.com/minimistjs/minimist/pull/24\n- https://github.com/minimistjs/minimist/commit/34e20b8461118608703d6485326abbb8e35e1703\n- https://github.com/minimistjs/minimist/commit/bc8ecee43875261f4f17eb20b1243d3ed15e70eb\n- https://github.com/minimistjs/minimist/commit/c2b981977fa834b223b408cfb860f933c9811e4d\n- https://github.com/minimistjs/minimist/commit/ef9153fc52b6cea0744b2239921c5dcae4697f11\n- https://github.com/minimistjs/minimist/commits/v0.2.4\n- https://security.netapp.com/advisory/ntap-20240621-0006\n- https://github.com/advisories/GHSA-xvch-5gv4-984h",
+        "created": "2022-03-18T00:01:09.000Z",
+        "id": 1097677,
+        "npm_advisory_id": null,
+        "overview": "Minimist prior to 1.2.6 and 0.2.4 is vulnerable to Prototype Pollution via file `index.js`, function `setKey()` (lines 69-95).",
+        "reported_by": null,
+        "title": "Prototype Pollution in minimist",
+        "metadata": null,
+        "cves": ["CVE-2021-44906"],
+        "access": "public",
+        "severity": "critical",
+        "module_name": "minimist",
+        "vulnerable_versions": "<0.2.4",
+        "github_advisory_id": "GHSA-xvch-5gv4-984h",
+        "recommendation": "Upgrade to version 0.2.4 or later",
+        "patched_versions": ">=0.2.4",
+        "updated": "2024-06-21T21:33:52.000Z",
+        "cvss": {
+          "score": 9.8,
+          "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        },
+        "cwe": ["CWE-1321"],
+        "url": "https://github.com/advisories/GHSA-xvch-5gv4-984h"
+      },
+      "1103907": {
+        "findings": [
+          {
+            "version": "0.4.0",
+            "paths": ["packages__publishable>cookie"]
+          }
+        ],
+        "found_by": null,
+        "deleted": null,
+        "references": "- https://github.com/jshttp/cookie/security/advisories/GHSA-pxg6-pf52-xh8x\n- https://github.com/jshttp/cookie/pull/167\n- https://github.com/jshttp/cookie/commit/e10042845354fea83bd8f34af72475eed1dadf5c\n- https://github.com/advisories/GHSA-pxg6-pf52-xh8x",
+        "created": "2024-10-04T20:31:00.000Z",
+        "id": 1103907,
+        "npm_advisory_id": null,
+        "overview": "### Impact\n\nThe cookie name could be used to set other fields of the cookie, resulting in an unexpected cookie value. For example, `serialize(\"userName=<script>alert('XSS3')</script>; Max-Age=2592000; a\", value)` would result in `\"userName=<script>alert('XSS3')</script>; Max-Age=2592000; a=test\"`, setting `userName` cookie to `<script>` and ignoring `value`.\n\nA similar escape can be used for `path` and `domain`, which could be abused to alter other fields of the cookie.\n\n### Patches\n\nUpgrade to 0.7.0, which updates the validation for `name`, `path`, and `domain`.\n\n### Workarounds\n\nAvoid passing untrusted or arbitrary values for these fields, ensure they are set by the application instead of user input.\n\n### References\n\n* https://github.com/jshttp/cookie/pull/167",
+        "reported_by": null,
+        "title": "cookie accepts cookie name, path, and domain with out of bounds characters",
+        "metadata": null,
+        "cves": ["CVE-2024-47764"],
+        "access": "public",
+        "severity": "low",
+        "module_name": "cookie",
+        "vulnerable_versions": "<0.7.0",
+        "github_advisory_id": "GHSA-pxg6-pf52-xh8x",
+        "recommendation": "Upgrade to version 0.7.0 or later",
+        "patched_versions": ">=0.7.0",
+        "updated": "2025-04-15T13:56:44.000Z",
+        "cvss": {
+          "score": 0,
+          "vectorString": null
+        },
+        "cwe": ["CWE-74"],
+        "url": "https://github.com/advisories/GHSA-pxg6-pf52-xh8x"
+      },
+      "1107366": {
+        "findings": [
+          {
+            "version": "1.7.2",
+            "paths": ["packages__internal>shell-quote"]
+          }
+        ],
+        "found_by": null,
+        "deleted": null,
+        "references": "- https://nvd.nist.gov/vuln/detail/CVE-2021-42740\n- https://www.npmjs.com/package/shell-quote\n- https://github.com/ljharb/shell-quote/commit/5799416ed454aa4ec9afafc895b4e31760ea1abe\n- https://github.com/ljharb/shell-quote/blob/master/CHANGELOG.md#173\n- https://github.com/advisories/GHSA-g4rg-993r-mgx7",
+        "created": "2022-05-24T19:18:27.000Z",
+        "id": 1107366,
+        "npm_advisory_id": null,
+        "overview": "The shell-quote package before 1.7.3 for Node.js allows command injection. An attacker can inject unescaped shell metacharacters through a regex designed to support Windows drive letters. If the output of this package is passed to a real shell as a quoted argument to a command with `exec()`, an attacker can inject arbitrary commands. This is because the Windows drive letter regex character class is `[A-z]` instead of the correct `[A-Za-z]`. Several shell metacharacters exist in the space between capital letter Z and lower case letter a, such as the backtick character.",
+        "reported_by": null,
+        "title": "Improper Neutralization of Special Elements used in a Command in Shell-quote",
+        "metadata": null,
+        "cves": ["CVE-2021-42740"],
+        "access": "public",
+        "severity": "critical",
+        "module_name": "shell-quote",
+        "vulnerable_versions": ">=1.6.3 <=1.7.2",
+        "github_advisory_id": "GHSA-g4rg-993r-mgx7",
+        "recommendation": "Upgrade to version 1.7.3 or later",
+        "patched_versions": ">=1.7.3",
+        "updated": "2025-09-10T17:27:09.000Z",
+        "cvss": {
+          "score": 9.8,
+          "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        },
+        "cwe": ["CWE-77"],
+        "url": "https://github.com/advisories/GHSA-g4rg-993r-mgx7"
+      },
+      "1120422": {
+        "findings": [
+          {
+            "version": "1.7.2",
+            "paths": ["packages__internal>shell-quote"]
+          }
+        ],
+        "found_by": null,
+        "deleted": null,
+        "references": "- https://github.com/ljharb/shell-quote/security/advisories/GHSA-w7jw-789q-3m8p\n- https://nvd.nist.gov/vuln/detail/CVE-2026-9277\n- https://github.com/ljharb/shell-quote/commit/1518179\n- https://github.com/ljharb/shell-quote\n- https://www.npmjs.com/package/shell-quote\n- http://www.openwall.com/lists/oss-security/2026/05/23/2\n- https://github.com/advisories/GHSA-w7jw-789q-3m8p",
+        "created": "2026-06-09T14:27:15.000Z",
+        "id": 1120422,
+        "npm_advisory_id": null,
+        "overview": "### Summary\n\n`shell-quote`'s `quote()` function did not validate object-token inputs against the operator model used by `parse()`. The `.op` field was backslash-escaped character by character using `/(.)/g`, which in JavaScript does not match line terminators (`\\n`, `\\r`, U+2028, U+2029). A line terminator in `.op` therefore passed through unescaped into the output; POSIX shells treat a literal `\\n` as a command separator, so any content after it would execute as a second command.\n\nThe vulnerable code path is reachable in two ways. Neither requires the parser to misbehave — `parse()` only emits ops from a fixed control set — but both are documented API surface:\n\n1. **Direct construction.** A caller builds `{ op: '...\\n...' }` from external input (e.g. a deserialized argument array) and passes it to `quote()`.\n2. **`envFn` return.** `parse(cmd, envFn)` is documented to splice the return value of `envFn` into the result array when it is an object. An attacker-influenced data source consulted by `envFn` can introduce an object token whose `.op` reaches `quote()`.\n\n### Impact\n\nShell command injection in callers that pass object tokens with attacker-influenced `.op` values to `quote()` and then hand the result to a shell. The preconditions are narrower than ordinary string injection — they require the caller to feed object tokens into `quote()` — but object tokens are a public, documented part of the API surface, and `quote()` is intended to be a shell-safety boundary.\n\n### PoC\n\n```js\nconst { parse, quote } = require('shell-quote');\n\n// Direct construction\nquote([{ op: ';\\nid' }]);\n// → \"\\;\\n\\\\i\\\\d\"  ← literal newline; second line executes as a command\n\n// Via parse() with an envFn returning attacker-shaped objects\nconst tokens = parse('echo $X', () => ({ op: ';\\nid' }));\nrequire('child_process').execSync(quote(tokens), { shell: true });\n// Executes `id` after `echo \\;`.\n```\n\nConfirmed under `sh`, `bash`, `dash`, and `zsh`.\n\n### Patch\n\nFixed by replacing the per-character escape with strict shape validation in `quote()`. The object-token branch now:\n\n- **`{ op }`** — `.op` must be a string from the same allowlist the parser emits (`||`, `&&`, `;;`, `|&`, `<(`, `<<<`, `>>`, `>&`, `<&`, `&`, `;`, `(`, `)`, `|`, `<`, `>`). Anything else throws `TypeError`. This is the direct fix for the reported issue and removes the entire class of `.op` injection.\n- **`{ op: 'glob', pattern }`** — `.pattern` must be a string with no line terminators. Glob metacharacters (`*`, `?`, `[`, `]`, `{`, `}`, `,`) pass through; all other shell-special characters are backslash-escaped. (Previously the pattern field was discarded entirely and the literal string `\\g\\l\\o\\b` was emitted — a latent bug, not security-relevant.)\n- **`{ comment }`** — `.comment` must be a string with no line terminators (line terminators would end the shell comment and resume command parsing — same injection shape).\n- **Any other object shape** — `TypeError`.\n\nThe fix is allowlist-based rather than a targeted regex tweak, so it closes the reported vector and forecloses adjacent ones (U+2028 / U+2029 line separators in `.op`, line terminators in comments, unknown-shape objects coerced through `.replace`).\n\n### Workarounds\n\nPrior to upgrading, callers that build object tokens from untrusted input should validate `.op` against the parser's operator set themselves, and never construct `{ op }` from attacker-controlled strings.\n\n### Credits\n\nReported by Akshat Sinha",
+        "reported_by": null,
+        "title": "shell-quote quote() does not escape newlines in object .op values",
+        "metadata": null,
+        "cves": ["CVE-2026-9277"],
+        "access": "public",
+        "severity": "critical",
+        "module_name": "shell-quote",
+        "vulnerable_versions": ">=1.1.0 <=1.8.3",
+        "github_advisory_id": "GHSA-w7jw-789q-3m8p",
+        "recommendation": "Upgrade to version 1.8.4 or later",
+        "patched_versions": ">=1.8.4",
+        "updated": "2026-06-09T14:27:16.000Z",
+        "cvss": {
+          "score": 8.1,
+          "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        },
+        "cwe": ["CWE-77", "CWE-78"],
+        "url": "https://github.com/advisories/GHSA-w7jw-789q-3m8p"
+      },
+      "1123944": {
+        "findings": [
+          {
+            "version": "1.7.2",
+            "paths": ["packages__internal>shell-quote"]
+          }
+        ],
+        "found_by": null,
+        "deleted": null,
+        "references": "- https://github.com/ljharb/shell-quote/security/advisories/GHSA-395f-4hp3-45gv\n- https://nvd.nist.gov/vuln/detail/CVE-2026-13311\n- https://github.com/ljharb/shell-quote/commit/7ff5488599d01c323514f02f5efb74088dd134ec\n- https://github.com/ljharb/shell-quote/releases/tag/v1.9.0\n- https://www.npmjs.com/package/shell-quote\n- https://github.com/advisories/GHSA-395f-4hp3-45gv",
+        "created": "2026-07-20T21:49:34.000Z",
+        "id": 1123944,
+        "npm_advisory_id": null,
+        "overview": "### Summary\n`shell-quote`'s `parse()` finalizes its token list with a `reduce` that uses\n`Array.prototype.concat` as the accumulator. Each `prev.concat(arg)` copies the entire growing\narray, so `parse()` runs in **O(n²)** in the number of tokens. An unauthenticated attacker who\ncan submit a string to any code path that calls `parse()` on it can block the single-threaded\nNode.js event loop for tens of seconds with a small input — a denial of service. The trigger\nneeds **no shell metacharacters** (plain space-separated words suffice), so input filters that\nonly screen for `;`, `|`, `$`, or backticks do not help.\n\n### Root cause\n`parse.js` (lines 200–203), in `parseInternal` — this path runs on **every** `parse()` call:\n\n```js\n}).reduce(function (prev, arg) { // finalize parsed arguments\n    // TODO: replace this whole reduce with a concat\n    return typeof arg === 'undefined' ? prev : prev.concat(arg);\n}, []);\n```\n\n`prev.concat(arg)` allocates a new array and copies all of `prev` on every iteration, so\nproducing an N-token result costs `1 + 2 + … + N = O(N²)` copies. A second `acc.concat(s)`\nreduce in the `module.exports` wrapper (lines 211–224, reached only when `env` is a function)\nhas the same shape. The maintainer's own `// TODO: replace this whole reduce with a concat`\nalready flags the construct.\n\n### Proof of Concept\n```js\nconst { parse } = require('shell-quote');\nconst ms = fn => { const t = process.hrtime.bigint(); fn(); return Number(process.hrtime.bigint()-t)/1e6; };\nfor (const N of [16000, 32000, 64000, 128000]) {\n  console.log(N, 'tokens ->', ms(() => parse('x '.repeat(N))).toFixed(0), 'ms');\n}\n```\n\nMeasured on `shell-quote@1.8.4`, Node v24:\n\n| input (N tokens) | bytes  | `parse()` | ratio vs prev (2× input) |\n|-----------------:|-------:|----------:|:------------------------:|\n| 16 000           | 32 KB  |    678 ms | —                        |\n| 32 000           | 64 KB  |  4 169 ms | ×6.2                     |\n| 64 000           | 128 KB | 14 914 ms | ×3.6                     |\n| 128 000          | 256 KB | **57 319 ms** | ×3.8                 |\n\nTime grows ~×4 per 2× input → confirmed O(n²). A ~128 KB input blocks the event loop ~15 s;\n~256 KB → ~57 s; a few hundred KB more → minutes.\n<img width=\"656\" height=\"214\" alt=\"image\" src=\"https://github.com/user-attachments/assets/e8955b0e-0527-45ca-94b7-c3a2d8c0c82e\" />\n[poc.js](https://github.com/user-attachments/files/29255995/poc.js)\n\n### Impact\n`parse()` is synchronous on the main thread; while it copies arrays quadratically the entire\nevent loop is blocked and the process serves no other requests. Any service that calls `parse()`\non attacker-influenced input (command parsers, chat-ops / bot command handlers, REPLs,\nbuild-script / arg-string splitters) can be driven to a sustained DoS with a single small\nrequest. No code execution and no data disclosure — availability only.\n\nEnd-to-end confirmation: a minimal HTTP server that calls `parse()` on the request body, hit\nwith **one** `POST` of `'x '.repeat(32000)` (~63 KB), froze for ~4.5 s. An out-of-process probe\nclient issuing harmless `GET /ping` requests (normally ~1 ms) observed **27 consecutive pings\nstalled by up to 4374 ms** during that single request — i.e. every concurrent client was denied\nservice for the whole parse. Scaling the body to a few hundred KB extends the outage to minutes.\n\nThis is the same class as several accepted 2026 advisories for quadratic-parser DoS on\nuntrusted input (e.g. markdown-it CVE-2026-48988, js-yaml CVE-2026-53550,\npython-multipart CVE-2026-53539). It is **distinct** from the known `shell-quote`\ncommand-injection issues (CVE-2021-42740, CVE-2016-10541, CVE-2026-9277), which are all in\n`quote()`, not `parse()`.\n\n### Suggested remediation\nReplace the O(n²) concat-in-reduce with a linear flatten that **pushes into the\naccumulator** instead of reallocating and copying it on every iteration. Apply the\nsame shape to the wrapper's `acc.concat(s)` reduce. A defensive input-length cap on\n`parse()` is a cheap additional stop-gap.\n\n> **Maintainer note (edit):** the originally-suggested `Array.prototype.flat()` is\n> ES2019 / Node 11+, but `shell-quote` declares `engines: node >= 0.4`, so `.flat()`\n> would silently drop support for older runtimes. The fix instead flattens one-level\n> array tokens with `forEach`/`push` — and deliberately not `push.apply(...)`, since\n> spreading a large array into function arguments can exceed the engine's argument\n> count limit. Output is byte-identical to the current code across strings, `undefined`\n> holes, one-level array tokens, and `{op}`/`{comment}`/`{op:'glob'}` objects, and\n> finalizing is now linear (1,024,000 tokens in ~150 ms vs ~57 s for 128,000 before).\n> Thanks for the clear report and PoC — the analysis and reproduction were spot on.\n\n### Disclosure\nFound by source audit + wall-clock confirmation against 1.8.4 (and verified the same code is\npresent on `main`). Reported privately here; no public disclosure until a fix is available.",
+        "reported_by": null,
+        "title": "shell-quote: Quadratic-complexity Denial of Service in `parse()` (CWE-407)",
+        "metadata": null,
+        "cves": ["CVE-2026-13311"],
+        "access": "public",
+        "severity": "high",
+        "module_name": "shell-quote",
+        "vulnerable_versions": "<=1.8.4",
+        "github_advisory_id": "GHSA-395f-4hp3-45gv",
+        "recommendation": "Upgrade to version 1.9.0 or later",
+        "patched_versions": ">=1.9.0",
+        "updated": "2026-07-20T21:49:34.000Z",
+        "cvss": {
+          "score": 7.5,
+          "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        "cwe": ["CWE-407"],
+        "url": "https://github.com/advisories/GHSA-395f-4hp3-45gv"
+      }
+    },
+    "muted": [],
+    "metadata": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 1,
+        "moderate": 1,
+        "high": 1,
+        "critical": 3
+      },
+      "dependencies": 6,
+      "devDependencies": 0,
+      "optionalDependencies": 0,
+      "totalDependencies": 6
+    }
+  }
+}

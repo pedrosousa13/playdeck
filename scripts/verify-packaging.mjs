@@ -5,8 +5,8 @@
 // it, and smoke-tests the result in a real browser.
 //
 // New workspace packages are covered automatically: package discovery comes
-// from `pnpm list -r`, filtered to non-private projects. Nothing here is
-// hardcoded to today's package names.
+// from scripts/workspace-packages.mjs, the single definition of "publishable"
+// this repo has. Nothing here is hardcoded to today's package names.
 
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
@@ -22,6 +22,7 @@ import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
+import { publishablePackages } from './workspace-packages.mjs';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -30,8 +31,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const fixtureTemplate = join(repoRoot, 'tests/packaging/fixture');
 
 /**
- * A project entry from `pnpm list -r --depth -1 --json`.
- * @typedef {{ name: string; version: string; path: string; private: boolean }} WorkspaceProject
+ * @typedef {import('./workspace-packages.mjs').PublishablePackage} PublishablePackage
  */
 
 /**
@@ -136,18 +136,7 @@ const tarballProblems = (tarball) => {
 
 async function main() {
   // 1. Discover every publishable (non-private) workspace package.
-  const listing = /** @type {WorkspaceProject[]} */ (
-    JSON.parse(
-      execFileSync('pnpm', ['list', '-r', '--depth', '-1', '--json'], {
-        cwd: repoRoot,
-        encoding: 'utf8'
-      })
-    )
-  );
-  const packages = listing.filter((entry) => entry.private === false);
-  if (packages.length === 0) {
-    throw new Error('No publishable workspace packages were discovered.');
-  }
+  const packages = publishablePackages(repoRoot);
   console.log(
     `Discovered ${packages.length} publishable package(s): ${packages
       .map((pkg) => pkg.name)
@@ -244,7 +233,7 @@ async function main() {
 }
 
 /**
- * @param {readonly WorkspaceProject[]} packages
+ * @param {readonly PublishablePackage[]} packages
  * @param {string} tarballDir
  */
 async function runFixture(packages, tarballDir) {
