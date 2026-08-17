@@ -1,4 +1,19 @@
 // @vitest-environment happy-dom
+// @vitest-environment-options { "settings": { "navigation": { "disableChildFrameNavigation": true } } }
+//
+// This suite stays offline, and the option above is what now keeps it so. The
+// adapter builds the embed iframe itself and gives it a real `src`, and
+// happy-dom loads an iframe's page as soon as the element is connected — so
+// every attach here would otherwise reach youtube-nocookie.com over the
+// network. With child-frame navigation disabled the frame keeps its url and
+// fetches nothing, so the url stays assertable and no request leaves. Before
+// the iframe was the adapter's, the fake's `data-embed-src` is what kept this
+// promise; the promise is the same one.
+//
+// `provider-vimeo/test/index.test.ts` buys the same guarantee with
+// `disableIframePageLoading`, which happy-dom deprecates in favour of this
+// setting and which logs a `NotSupportedError` per frame rather than staying
+// quiet. Same intent, newer spelling.
 
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ProviderEvent, ProviderStatePatch } from '@reely/core';

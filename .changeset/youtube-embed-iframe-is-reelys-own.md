@@ -52,20 +52,21 @@ is how the Vimeo embed spells the same thing.
 
 `YouTubeProviderOptions` is unchanged — this introduces no option, and the
 referrer policy is not consumer-configurable, exactly as it is not for Vimeo.
-Two exported types do change, and only a caller who injects their own
-`loadIframeApi` can notice:
+One exported type changes, and only a caller who injects their own
+`loadIframeApi` can notice: **`YouTubePlayerConstructor` takes an
+`HTMLIFrameElement`** rather than an `HTMLElement`, because that is what the
+adapter now hands it. Constructor parameters are checked contravariantly, so an
+injected fake typed against the wider element type still satisfies it.
 
-- **`YouTubePlayerConstructor` takes an `HTMLIFrameElement`** rather than an
-  `HTMLElement`. An injected fake typed against the wider element type still
-  satisfies it.
-- **`YouTubePlayerOptions` declares only `events`.** `host`, `videoId`, `width`,
-  `height` and `playerVars` are gone from it because the adapter no longer
-  passes them and the API would not read them if it did. A fake that read them
-  to build its own iframe should read the `src` of the iframe it is handed
-  instead, which is where the whole embed is described now.
+`YouTubePlayerOptions` keeps every field it declared. The adapter now sets only
+`events` — `host`, `videoId`, `width`, `height` and `playerVars` are read by the
+API on the `<div>` path and ignored on this one — but they remain optional
+members of a public type, so an existing fake that names them still compiles. A
+fake that used them to build its own iframe should read the `src` of the iframe
+it is handed instead, which is where the whole embed is described now.
 
-`minor` rather than `patch` for those two: every package is still at `0.0.0`,
-and under 0.x this repo sends breaking changes on `minor`.
+`minor` rather than `patch`: every package is still at `0.0.0`, and under 0.x
+this repo sends breaking changes on `minor`.
 
 This is verified against a real player, not only against a stand-in —
 `e2e/youtube-real.spec.ts` now asserts the attribute on the attached frame, and
