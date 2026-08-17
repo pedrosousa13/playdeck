@@ -604,7 +604,7 @@ player, a tag manager, an embed Reely did not create — has already had
 script evaluation, at the vendor script's own module scope, with no loop,
 listener or re-invocation that could trigger it again — read out of
 `www-widgetapi.js` (build `3891b194`, fetched 2026-08-17, the same file the
-referrer section below cites for an unrelated claim); not confirmed against a
+referrer section above cites for an unrelated claim); not confirmed against a
 real player in a browser the way that one was. A loader that ignored the
 global and waited on the callback regardless would not merely miss it: it
 would adopt the co-tenant's own `<script>` element too (`:114-117`, the same
