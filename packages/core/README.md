@@ -379,7 +379,12 @@ listener that throws must not be reported as a provider failure (#233).
 <!-- example:core-notify-safely -->
 
 ```ts
-import { notifySafely, type ProviderStateListener } from '@reely/core';
+import {
+  notifySafely,
+  type ProviderEvent,
+  type ProviderStatePatch,
+  type ProviderStateListener
+} from '@reely/core';
 
 // What a provider adapter owes the subscribers it fans out to. `Set.forEach`
 // stops at the first throw, so one broken listener would abandon the emit:
@@ -399,7 +404,10 @@ export const subscribe = (listener: ProviderStateListener): (() => void) => {
 // Isolated, not silenced: a listener that throws has its error rethrown on a
 // fresh task, so it still reaches the page's uncaught-error handling the way a
 // listener throwing at top level would.
-export const emit: ProviderStateListener = (patch, event) => {
+export const emit = (
+  patch: ProviderStatePatch,
+  event?: ProviderEvent
+): void => {
   listeners.forEach((listener) => notifySafely(listener, patch, event));
 };
 
