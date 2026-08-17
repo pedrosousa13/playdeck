@@ -31,6 +31,13 @@ test(
       /^https:\/\/www\.youtube-nocookie\.com\/embed\//,
       { timeout: 30_000 }
     );
+    // The frame the real API is now handed rather than one it built: this is
+    // where the referrer policy is proved to survive a real player, which the
+    // deterministic spec's stand-in cannot show.
+    await expect(iframe).toHaveAttribute(
+      'referrerpolicy',
+      'strict-origin-when-cross-origin'
+    );
     // Queued playback is best-effort under real autoplay policy: require the
     // provider to become ready, and accept a confirmed playing state when the
     // browser allows it.

@@ -41,13 +41,13 @@ Notes, per row:
   per browser, so allow your host under both unless you pin one engine.
 - **YouTube**'s API script is fetched from `https://www.youtube.com/iframe_api`
   unconditionally
-  (`packages/provider-youtube/src/loader.ts:67`, appended to `document.head`
-  at `:161-164`), with no `integrity` and no `crossOrigin` set. This does not
+  (`packages/provider-youtube/src/loader.ts:70`, appended to `document.head`
+  at `:164-167`), with no `integrity` and no `crossOrigin` set. This does not
   change with the `host` option: `host` only decides which origin the _embed
   iframe_ itself points at (it defaults to `https://www.youtube-nocookie.com`,
-  `packages/provider-youtube/src/index.ts:76`, and is resolved at `:96-104`; the
-  value reaches the iframe via
-  `packages/provider-youtube/src/attachment.ts:168`). A
+  `packages/provider-youtube/src/index.ts:81`, and is resolved at `:101-109`; the
+  value reaches the iframe as the origin of the embed url the adapter builds,
+  `packages/provider-youtube/src/attachment.ts:193`). A
   `Player.Root` consumer **can** change `host`: `provider-loaders.ts` passes
   `providerOptions?.youtube` straight to `createYouTubeProvider`, so every key
   `YouTubeProviderOptions` declares — `host` and the `loadIframeApi` injection
@@ -61,18 +61,14 @@ Notes, per row:
   API script itself always comes from `www.youtube.com` — that one `host` does
   not move.
 
-  That embed iframe carries no `referrerpolicy` and no `allow` from Reely,
-  because Reely never creates it: the attachment appends a `<div>` and hands
-  that to the IFrame API, which replaces it with an iframe of its own
-  (`packages/provider-youtube/src/attachment.ts:164-167`, `new api.Player(…)`).
-  Reely does reach the frame afterwards — `getIframe()`
-  (`packages/provider-youtube/src/attachment.ts:93-99`) hands it to the
-  presentation seam, which uses it for fullscreen
-  (`packages/provider-youtube/src/presentation.ts:63`) — but only after it has
-  loaded, and an attribute written then changes nothing about a request already
-  sent. So this frame travels under whatever referrer policy the page itself
-  declares, rather than the narrower one Reely pins on the Vimeo frame (see the
-  Vimeo note below).
+  Reely builds that embed iframe itself, as of #221
+  (`packages/provider-youtube/src/attachment.ts:192-239`), and hands the
+  finished element to the iframe API, which adopts a frame that already exists
+  instead of building one (`:246`, `new api.Player(…)`). So the `src`, the
+  `referrerpolicy` and the `allow` on it are Reely's — see the referrer section
+  below for what that changes and what it does not. The player vars ride on
+  that url rather than through the constructor, `enablejsapi=1` among them,
+  because the API reads neither `videoId` nor `playerVars` on this path.
 
 - **Vimeo**'s embed iframe is built from `player.vimeo.com`
   (`packages/provider-vimeo/src/attachment.ts:69`). The SDK
@@ -293,8 +289,10 @@ Notes, per row:
   iframe from loading. So a page that can reach a media id serving the
   legacy embed needs `fast.wistia.net` in `frame-src` too, even though
   Reely's adapter never treats that path as a successful attach either way.
-  Reely cannot harden that frame, for the same reason it cannot harden
-  YouTube's: the element writes it into its own shadow root. Reely only ever
+  Reely cannot harden that frame: the element writes it into its own shadow
+  root, where nothing this adapter can call reaches it. YouTube's embed was out
+  of reach for a comparable reason until #221 moved the frame into this repo;
+  no such move exists here, because the element is the vendor's. Reely only ever
   sets attributes on the `<wistia-player>` element itself
   (`packages/provider-wistia/src/attachment.ts:336-377`), and most of them are
   behavioural rather than presentational — `mediaId`, `doNotTrack`,
@@ -302,7 +300,8 @@ Notes, per row:
   `playerColor`, `swatch`, `poster` and `transparentLetterbox` the four the
   source itself calls presentation-only (`:359`). None of them is a
   `referrerpolicy` or an `allow`, so the legacy embed iframe travels under the
-  page's own referrer policy. The element also dynamically loads a Mux Data
+  page's own referrer policy — see the referrer section below for the only
+  remedy there is. The element also dynamically loads a Mux Data
   analytics module (`assets/external/wistia-mux.js`, from the same `fast.*`
   host) unless the page sets `window.wistiaDisableMux = true`; that global is
   an Aurora switch, not something `WistiaProviderOptions` exposes, and the
@@ -372,6 +371,74 @@ Notes, per row:
   Reely creates. A page that carries one for its own reasons moves Reely's
   media-data, engine, legacy-iframe and asset fetches to whichever of the three
   that embed came from, so add the canary host if that describes your page.
+
+## What referrer each embed sends
+
+Three providers load a third-party iframe, and a frame's first request carries
+the embedding page's URL in its `Referer` header unless something narrows it.
+On a page whose own URL holds a customer id, an order number or a search term,
+that identifier is what travels. `referrerpolicy` on the frame is what narrows
+it, and it only counts if it is on the element before the element is in the
+document: the header leaves with the first request, so an attribute written
+after that changes nothing.
+
+- **Vimeo** — `strict-origin-when-cross-origin`, set by Reely on the frame it
+  builds (`packages/provider-vimeo/src/attachment.ts:272`), before the append at
+  `:278`. Vimeo receives this page's origin and not its path or query, which is
+  still enough for Vimeo's own domain-restriction check. See the Vimeo note
+  above for what the policy does **not** cover: the SDK sends the page's full
+  URL to the frame over `postMessage` afterwards, and that is a separate switch.
+- **YouTube** — the same policy, on the same terms, as of #221
+  (`packages/provider-youtube/src/attachment.ts:220`, before the append at
+  `:239`). Reely builds this frame precisely so that the attribute can be on it
+  in time; the iframe API adopts the frame it is handed rather than building one
+  of its own.
+
+  Two things about this are worth stating plainly, because a reader who assumes
+  the change closed an open leak would be assuming too much.
+
+  First, the frame the API used to build already carried the same policy. Read
+  out of `www-widgetapi.js` — player build `b0d2d49a`, fetched 2026-08-17 — and
+  confirmed against a real player in a browser: the API sets `frameBorder`,
+  `allowfullscreen`, `allow`, `referrerPolicy` and `title` on the iframe it
+  creates, and its referrer policy is `strict-origin-when-cross-origin` too. So
+  this change did not narrow the header. What it changed is who guarantees it:
+  that script is unversioned and mutable, on the same terms as the SRI note
+  below, so the old guarantee was Google's to withdraw on Google's schedule and
+  the new one is this repo's.
+
+  Second, the header was never the whole of it, and this is the part that did
+  narrow. When the API builds the frame it composes the embed url itself, and
+  appends `forigin=<this page's full URL>` to it, plus `aoriginsup`, plus
+  `gporigin` and `widget_referrer` where a referrer exists. So the path and the
+  query reached YouTube in the query string regardless of what the `Referer`
+  header said, and a `referrerpolicy` was never going to stop that. Reely's url
+  carries none of those parameters. That is a real narrowing and also a
+  behavioural change on Google's side of the frame that nothing here can test:
+  whatever those parameters are for, this embed no longer reports them.
+
+- **Wistia** — nothing Reely can set. The frame only exists on the legacy-embed
+  fallback path, where the `<wistia-player>` element writes it into its own
+  shadow root, and the element's attribute surface carries no referrer key; see
+  the Wistia note above. **The only remedy is a page-level `Referrer-Policy`
+  response header on the embedding page**, and that is the consuming
+  application's call rather than something this library can make:
+  `Referrer-Policy: strict-origin-when-cross-origin` (or narrower) on the
+  document that mounts the player covers every frame it loads, Wistia's
+  included. No Reely option exists for it and none is planned — the exposure is
+  the vendor element's shadow root, not a gap in this provider's options.
+
+One thing tempers all three, and it is worth knowing before treating the two
+attributes as load-bearing: browsers have defaulted to
+`strict-origin-when-cross-origin` for some years (Chrome 85, Firefox 87), so on
+a page that declares no policy of its own these attributes match the default
+rather than narrow past it. They earn their place on a page that declares
+something wider — `unsafe-url` or `no-referrer-when-downgrade`, whether by
+header or by `<meta name="referrer">` — because a frame's own attribute
+overrides the document's policy, while Wistia's frame follows it. That default
+is read off the specification and the browsers' release notes, not verified
+here; the two attributes are verified, by `e2e/youtube-real.spec.ts` against a
+real player and by each provider's unit suite.
 
 ## When each request happens
 
