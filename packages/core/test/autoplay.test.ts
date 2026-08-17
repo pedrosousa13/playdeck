@@ -431,9 +431,15 @@ test.each(['unsupported', 'not-ready', 'provider-error'] as const)(
   }
 );
 
-test('stops the muted recovery when muting fails', async () => {
+test('keeps the original refusal when muting fails', async () => {
+  const blockedError = {
+    category: 'policy',
+    fatal: false,
+    recoverable: true,
+    message: 'Playback blocked.'
+  } as const;
   const fake = createProvider({
-    play: blockedThenPlaying(),
+    play: async () => ({ ok: false, reason: 'blocked', error: blockedError }),
     mute: async () => ({ ok: false, reason: 'unsupported' })
   });
   const controller = new PlayerController();
@@ -441,10 +447,15 @@ test('stops the muted recovery when muting fails', async () => {
   controller.setProvider(fake.provider);
 
   fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
-  await vi.waitFor(() => expect(controller.getState().autoplay).toBe('failed'));
+  await vi.waitFor(() =>
+    expect(controller.getState()).toMatchObject({
+      autoplay: 'blocked',
+      autoplayRecovered: false,
+      error: blockedError
+    })
+  );
 
   expect(fake.calls).toEqual(['play', 'mute']);
-  expect(controller.getState().autoplayRecovered).toBe(false);
 });
 
 test('does not retry muted after a source change supersedes the attempt', async () => {
@@ -465,6 +476,10 @@ test('does not retry muted after a source change supersedes the attempt', async 
   await flushCommands();
 
   expect(first.calls).toEqual(['play']);
+  expect(controller.getState()).toMatchObject({
+    autoplay: 'idle',
+    autoplayRecovered: false
+  });
 });
 
 test('does not retry muted after a reconfiguration supersedes the attempt', async () => {
@@ -498,6 +513,10 @@ test('does not retry muted after a teardown supersedes the attempt', async () =>
   await flushCommands();
 
   expect(fake.calls).toEqual(['play']);
+  expect(controller.getState()).toMatchObject({
+    autoplay: 'idle',
+    autoplayRecovered: false
+  });
 });
 
 test('suppresses the muted recovery under a controlled unmuted state', async () => {

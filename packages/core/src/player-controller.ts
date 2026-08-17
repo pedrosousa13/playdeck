@@ -679,21 +679,11 @@ export class PlayerController {
     revision: number,
     mode: Exclude<AutoplayMode, false>
   ): Promise<void> => {
-    if (mode === 'muted') {
-      const muteResult = await this.#providerCommand(provider, 'mute');
-      if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
-        return;
-      if (!muteResult.ok) {
-        this.#applyAutoplayFailure(
-          muteResult,
-          provider,
-          generation,
-          revision,
-          mode
-        );
-        return;
-      }
-    }
+    if (
+      mode === 'muted' &&
+      !(await this.#muteForAutoplay(provider, generation, revision, mode))
+    )
+      return;
 
     const playResult = await this.#playWithOrigin(
       provider,
@@ -716,7 +706,13 @@ export class PlayerController {
       // consumer asked for two contradictory things at once.
       this.#autoplayControlledMuted !== false
     ) {
-      await this.#recoverMutedAutoplay(provider, generation, revision, mode);
+      await this.#recoverMutedAutoplay(
+        provider,
+        generation,
+        revision,
+        mode,
+        playResult
+      );
       return;
     }
     this.#applyAutoplayFailure(
@@ -751,29 +747,32 @@ export class PlayerController {
     provider: ProviderAdapter,
     generation: number,
     revision: number,
-    mode: Exclude<AutoplayMode, false>
+    mode: Exclude<AutoplayMode, false>,
+    // The refusal the audible attempt already reported. It is what the attempt
+    // settles on if the retry cannot be issued at all: nothing about the policy
+    // refusal became less true because the provider cannot mute (#306).
+    blockedResult: Extract<CommandResult, { ok: false }>
   ): Promise<void> => {
-    const muteResult = await this.#providerCommand(provider, 'mute');
-    if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
-      return;
-    if (!muteResult.ok) {
-      this.#applyAutoplayFailure(
-        muteResult,
+    if (
+      !(await this.#muteForAutoplay(
         provider,
         generation,
         revision,
-        mode
-      );
+        mode,
+        blockedResult
+      ))
+    )
       return;
-    }
     this.#autoplayRecoveryPending = true;
     const retryResult = await this.#playWithOrigin(
       provider,
       generation,
       'autoplay'
     );
-    if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
+    if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode)) {
+      this.#autoplayRecoveryPending = false;
       return;
+    }
     if (!retryResult.ok) {
       this.#autoplayRecoveryPending = false;
       this.#applyAutoplayFailure(
@@ -784,6 +783,33 @@ export class PlayerController {
         mode
       );
     }
+  };
+
+  // Mutes ahead of a play command. Returns false when the caller must stop --
+  // the attempt was superseded, or the mute failed and the attempt has already
+  // been settled. The two callers settle a mute failure differently, so the
+  // result to settle on is passed in: `#attemptAutoplay` has nothing to report
+  // but the mute failure itself, while the recovery keeps the audible refusal
+  // it already observed (#306).
+  #muteForAutoplay = async (
+    provider: ProviderAdapter,
+    generation: number,
+    revision: number,
+    mode: Exclude<AutoplayMode, false>,
+    settleWith?: Extract<CommandResult, { ok: false }>
+  ): Promise<boolean> => {
+    const muteResult = await this.#providerCommand(provider, 'mute');
+    if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
+      return false;
+    if (muteResult.ok) return true;
+    this.#applyAutoplayFailure(
+      settleWith ?? muteResult,
+      provider,
+      generation,
+      revision,
+      mode
+    );
+    return false;
   };
 
   #applyAutoplayFailure = (

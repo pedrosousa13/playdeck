@@ -89,6 +89,14 @@ provider's bag by `resolvedProviderOptions`, and omitted from all three bags in
   double home survives, and the only spelling that works there is the spelling
   this ADR calls wrong. Closing it is a fold in `resolvedProviderOptions` and an
   `Omit` in the bag, in that order.
+- Autoplay's `'audible-then-muted'` mode is the second instance, and it is unpaid
+  too. #306 put the value on `Root`'s `autoplay` prop, where a policy refusal of
+  the audible attempt is what triggers the muted retry. Wistia never reports one:
+  `player.play()` is synchronous and returns nothing, so `runWistiaCommand`
+  resolves successfully whatever the browser did, and no refusal reaches the
+  controller to retry from. The mode is therefore `'audible'` on a
+  `<wistia-player>` — the prop compiles, the retry never runs. Closing it is a
+  refusal check in the Wistia adapter's play command.
 - The fan-out is not uniform, and a consumer can observe that. Folding `controls`
   into a bag makes a change to it look like a provider-option change, which
   re-attaches a Vimeo or YouTube embed — it must, the value being baked into the
