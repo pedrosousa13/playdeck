@@ -2,6 +2,6 @@
   "name": "@reely/audit-fixture-shipped",
   "private": true,
   "devDependencies": {
-    "minimist": "0.0.8"
+    "minimist": "1.2.6"
   }
 }
