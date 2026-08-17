@@ -66,6 +66,7 @@ export const createInitialPlayerState = (): PlayerState =>
     fullscreen: false,
     pictureInPicture: false,
     autoplay: 'idle',
+    autoplayRecovered: false,
     provider: null,
     hlsEngine: null,
     quality: null,
@@ -104,6 +105,11 @@ export class PlayerController {
   #hasAutoplayConfigurationError = false;
   #autoplayConfigurationRevision = 0;
   #autoplayAttemptGeneration: number | undefined;
+  // Set once the muted retry of `'audible-then-muted'` is issued, and read at
+  // the moment the attempt turns into `'started'`. The state flag cannot be
+  // written from here directly: playback is confirmed by a provider patch, not
+  // by the play command resolving (#306).
+  #autoplayRecoveryPending = false;
   // The generation whose `load()` has run. No play command may be issued before
   // it: `load()` aborts a play already in flight, per the HTML media spec. This
   // is reachable because a provider may report ready from inside `attach()` —
@@ -561,6 +567,13 @@ export class PlayerController {
       patch.error !== null &&
       (patch.lifecycle === 'error' || patch.error.fatal);
     const nextLifecycle = patch.lifecycle ?? this.#state.lifecycle;
+    const nextAutoplay = this.#hasAutoplayConfigurationError
+      ? ('failed' as const)
+      : patch.playback === 'playing' && this.#state.autoplay === 'attempting'
+        ? ('started' as const)
+        : acceptAutoplay
+          ? (patch.autoplay ?? this.#state.autoplay)
+          : this.#state.autoplay;
     const nextState: PlayerState = {
       ...this.#state,
       ...patch,
@@ -594,13 +607,17 @@ export class PlayerController {
           : Object.freeze(
               patch.qualities.map((quality) => Object.freeze({ ...quality }))
             ),
-      autoplay: this.#hasAutoplayConfigurationError
-        ? 'failed'
-        : patch.playback === 'playing' && this.#state.autoplay === 'attempting'
-          ? 'started'
-          : acceptAutoplay
-            ? (patch.autoplay ?? this.#state.autoplay)
-            : this.#state.autoplay,
+      autoplay: nextAutoplay,
+      // Derived here and never taken from the patch: a provider has no way to
+      // know an attempt was refused before this one. The recovery is recorded
+      // at the one transition that means playback started, so an in-flight
+      // retry -- still `'attempting'` -- reads false (#306).
+      autoplayRecovered:
+        nextAutoplay !== 'started'
+          ? false
+          : this.#state.autoplay === 'started'
+            ? this.#state.autoplayRecovered
+            : this.#autoplayRecoveryPending,
       error: explicitProviderError
         ? freezeError(patch.error)
         : this.#hasAutoplayConfigurationError
@@ -624,6 +641,7 @@ export class PlayerController {
       ? {
           ...state,
           autoplay: 'failed',
+          autoplayRecovered: false,
           error: autoplayConfigurationError()
         }
       : state;
@@ -648,6 +666,7 @@ export class PlayerController {
     const mode = this.#autoplayMode;
     const revision = this.#autoplayConfigurationRevision;
     this.#autoplayAttemptGeneration = generation;
+    this.#autoplayRecoveryPending = false;
     this.#applyPatch({ autoplay: 'attempting' });
     if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
       return;
@@ -660,21 +679,11 @@ export class PlayerController {
     revision: number,
     mode: Exclude<AutoplayMode, false>
   ): Promise<void> => {
-    if (mode === 'muted') {
-      const muteResult = await this.#providerCommand(provider, 'mute');
-      if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
-        return;
-      if (!muteResult.ok) {
-        this.#applyAutoplayFailure(
-          muteResult,
-          provider,
-          generation,
-          revision,
-          mode
-        );
-        return;
-      }
-    }
+    if (
+      mode === 'muted' &&
+      !(await this.#muteForAutoplay(provider, generation, revision, mode))
+    )
+      return;
 
     const playResult = await this.#playWithOrigin(
       provider,
@@ -683,15 +692,124 @@ export class PlayerController {
     );
     if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
       return;
-    if (!playResult.ok) {
+    if (playResult.ok) return;
+    if (
+      mode === 'audible-then-muted' &&
+      playResult.reason === 'blocked' &&
+      // The collision between `'audible-then-muted'` and a controlled
+      // `muted={false}` resolves by suppressing the recovery, not by rejecting
+      // the configuration: an audible attempt under a controlled unmuted state
+      // is legitimate, and muting to recover would override a value the
+      // consumer owns, which this library never does. The attempt therefore
+      // ends `'blocked'`, exactly as `'audible'` would (#306). `'muted'` keeps
+      // its up-front configuration error, which is a different case: there the
+      // consumer asked for two contradictory things at once.
+      this.#autoplayControlledMuted !== false
+    ) {
+      await this.#recoverMutedAutoplay(
+        provider,
+        generation,
+        revision,
+        mode,
+        playResult
+      );
+      return;
+    }
+    this.#applyAutoplayFailure(
+      playResult,
+      provider,
+      generation,
+      revision,
+      mode
+    );
+  };
+
+  // Exactly one retry, and only from a policy refusal: retrying a decode error
+  // or a provider fault muted would change nothing about why it failed (#306).
+  //
+  // Which providers this reaches was established per adapter, not assumed:
+  // - Native maps a `NotAllowedError` to `reason: 'blocked'`
+  //   (`provider-native/src/adapter-values.ts:104-119`), and HLS delegates
+  //   `play` to it verbatim (`provider-hls/src/playback.ts:44`). Both recover.
+  // - Vimeo maps the same error name (`provider-vimeo/src/adapter-values.ts:65`)
+  //   off a promise the SDK rejects, so it recovers wherever the SDK names the
+  //   rejection that way.
+  // - YouTube throws nothing. It reports `'blocked'` when the player has not
+  //   reached playing or buffering inside its confirmation window
+  //   (`provider-youtube/src/playback.ts:159-206`), so the recovery does run,
+  //   only after that window rather than at the refusal.
+  // - Wistia does NOT recover. It carries the same error-name mapping, but
+  //   `player.play()` is synchronous and returns nothing, so
+  //   `runWistiaCommand` resolves `{ ok: true }` whatever the browser did
+  //   (`provider-wistia/src/adapter-values.ts:111-122`). No refusal reaches
+  //   here to retry from. Making Wistia report one is a separate change.
+  #recoverMutedAutoplay = async (
+    provider: ProviderAdapter,
+    generation: number,
+    revision: number,
+    mode: Exclude<AutoplayMode, false>,
+    // The refusal the audible attempt already reported. It is what the attempt
+    // settles on if the retry cannot be issued at all: nothing about the policy
+    // refusal became less true because the provider cannot mute (#306).
+    blockedResult: Extract<CommandResult, { ok: false }>
+  ): Promise<void> => {
+    if (
+      !(await this.#muteForAutoplay(
+        provider,
+        generation,
+        revision,
+        mode,
+        blockedResult
+      ))
+    )
+      return;
+    this.#autoplayRecoveryPending = true;
+    const retryResult = await this.#playWithOrigin(
+      provider,
+      generation,
+      'autoplay'
+    );
+    if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode)) {
+      this.#autoplayRecoveryPending = false;
+      return;
+    }
+    if (!retryResult.ok) {
+      this.#autoplayRecoveryPending = false;
       this.#applyAutoplayFailure(
-        playResult,
+        retryResult,
         provider,
         generation,
         revision,
         mode
       );
     }
+  };
+
+  // Mutes ahead of a play command. Returns false when the caller must stop --
+  // the attempt was superseded, or the mute failed and the attempt has already
+  // been settled. The two callers settle a mute failure differently, so the
+  // result to settle on is passed in: `#attemptAutoplay` has nothing to report
+  // but the mute failure itself, while the recovery keeps the audible refusal
+  // it already observed (#306).
+  #muteForAutoplay = async (
+    provider: ProviderAdapter,
+    generation: number,
+    revision: number,
+    mode: Exclude<AutoplayMode, false>,
+    settleWith?: Extract<CommandResult, { ok: false }>
+  ): Promise<boolean> => {
+    const muteResult = await this.#providerCommand(provider, 'mute');
+    if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
+      return false;
+    if (muteResult.ok) return true;
+    this.#applyAutoplayFailure(
+      settleWith ?? muteResult,
+      provider,
+      generation,
+      revision,
+      mode
+    );
+    return false;
   };
 
   #applyAutoplayFailure = (

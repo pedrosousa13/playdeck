@@ -89,6 +89,12 @@ The source whose media element may mount, because its activation identity
 matches the one activation committed to.
 _Avoid_: eligible media
 
+**Recovered autoplay**:
+Playback that started only because the audible attempt was refused by policy and
+the muted retry behind it played. Reported next to the `started` autoplay a
+recovery does not change, and reachable from the `audible-then-muted` mode only.
+_Avoid_: autoplay fallback, muted fallback
+
 ### Adapters
 
 See [ADR-0004](docs/adr/0004-cross-provider-options-live-on-root.md) for what

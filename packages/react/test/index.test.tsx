@@ -1699,6 +1699,79 @@ test('keeps the poster visible when cached media attaches under refused autoplay
   ).toBe('visible');
 });
 
+test('keeps the poster visible while the muted autoplay retry is in flight', async () => {
+  const { Poster } = posterPrimitives;
+  let playCalls = 0;
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => {
+    playCalls += 1;
+    return playCalls === 1
+      ? Promise.reject(new DOMException('Playback blocked.', 'NotAllowedError'))
+      : new Promise<void>(() => undefined);
+  });
+  render(
+    <LegacyRoot autoplay="audible-then-muted" source="/recovering.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Recovering autoplay poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+
+  confirmMetadataReady(media);
+  await waitFor(() => expect(playCalls).toBe(2));
+  fireEvent.loadedData(media);
+
+  expect(screen.getByRole('button').dataset.autoplayState).toBe('attempting');
+  expect(
+    screen
+      .getByText('Recovering autoplay poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+});
+
+test('hides the poster when the muted autoplay retry starts playback', async () => {
+  const { Poster } = posterPrimitives;
+  let playCalls = 0;
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+    this: HTMLMediaElement
+  ) {
+    playCalls += 1;
+    if (playCalls === 1) {
+      return Promise.reject(
+        new DOMException('Playback blocked.', 'NotAllowedError')
+      );
+    }
+    this.dispatchEvent(new Event('play'));
+    return Promise.resolve();
+  });
+  render(
+    <LegacyRoot autoplay="audible-then-muted" source="/recovered.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Recovered autoplay poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+
+  confirmMetadataReady(screen.getByLabelText<HTMLVideoElement>('Reely media'));
+
+  await waitFor(() =>
+    expect(
+      screen
+        .getByText('Recovered autoplay poster')
+        .parentElement?.getAttribute('data-state')
+    ).toBe('hidden')
+  );
+  expect(screen.getByRole('button').dataset.autoplayState).toBe('started');
+});
+
 test('hides the poster when autoplay confirms playback', async () => {
   const { Poster } = posterPrimitives;
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
