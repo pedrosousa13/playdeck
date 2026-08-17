@@ -1,6 +1,8 @@
 import type {
   Availability,
   CaptionRendering,
+  Chapter,
+  ChapterInput,
   CommandResult,
   PlayerCapabilities,
   ProviderStatePatch,
@@ -9,7 +11,7 @@ import type {
   TextTrackKind,
   TextTrackReadiness
 } from '@reely/core';
-import { textTrackLabel } from '@reely/core';
+import { chaptersEqual, deriveChapters, textTrackLabel } from '@reely/core';
 import { available } from './adapter-values.js';
 
 // The `default` IDL attribute lives on HTMLTrackElement per spec, but engines
@@ -33,10 +35,34 @@ export type NativeTextTracks = {
   // The `selectTextTrack` facet of the host's capabilities: available only
   // while the current source exposes at least one caption/subtitle track.
   readonly selectTextTrackAvailability: () => Availability;
+  // The `chapters` facet of the host's capabilities. A media element can always
+  // report chapters, so this never says `provider`: it says `source` where the
+  // element carries no chapters track, and stays undecided while one is there
+  // whose cues have not arrived yet.
+  readonly chaptersAvailability: () => Availability;
 };
 
 const isCaptionTrackKind = (kind: string): kind is TextTrackKind =>
   kind === 'captions' || kind === 'subtitles';
+
+// Deliberately not folded into `isCaptionTrackKind`, and `TextTrackKind` is
+// deliberately not widened to admit it: nothing downstream of the published
+// track collection filters on kind, so a chapters track allowed into it would
+// reach the captions menu, the captions toggle and the cue overlay. Chapters
+// get their own collection instead (#182).
+const isChapterTrackKind = (kind: string): boolean => kind === 'chapters';
+
+const noChapterSource: Availability = {
+  status: 'unavailable',
+  reason: 'source'
+};
+
+// A chapters track is present and its cues have not arrived. Undecided rather
+// than unavailable: the answer is not "no chapters", it is "not yet".
+const chaptersUndecided: Availability = {
+  status: 'unknown',
+  reason: 'provider-check'
+};
 
 const nativeTextTrackId = (track: NativeTextTrack, index: number): string =>
   track.id || `native:${index}`;
@@ -77,6 +103,13 @@ export const createNativeTextTracks = (
   // TextTrackList, so our own mode writes would otherwise self-trigger
   // `discoverTextTracks` and reset selection state mid-write.
   let suppressDiscovery = false;
+  // The chapters slice: the published collection, the track it was read off,
+  // the `<track>` element behind that track when the source has one, and the
+  // capability facet the three of them decide.
+  let chapters: readonly Chapter[] = Object.freeze([]);
+  let chapterTrack: NativeTextTrack | undefined;
+  let chapterTrackElement: HTMLTrackElement | undefined;
+  let chapterAvailability: Availability = noChapterSource;
   const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
 
   const captionTrackEntries = (): Array<{
@@ -195,6 +228,117 @@ export const createNativeTextTracks = (
       : null;
   };
 
+  const chapterTrackEntry = (): NativeTextTrack | undefined => {
+    const nativeTracks = media.textTracks;
+    for (let index = 0; index < nativeTracks.length; index += 1) {
+      const track = nativeTracks[index] as NativeTextTrack | undefined;
+      if (track && isChapterTrackKind(track.kind)) return track;
+    }
+    return undefined;
+  };
+
+  // The `<track>` element behind a text track, matched the way
+  // `defaultCaptionTrackEntry` matches one: by object identity first, falling
+  // back to id equality. Absent for an in-band chapters track, which is why the
+  // element's `load` event cannot be the only read trigger.
+  const chapterTrackElementFor = (
+    track: NativeTextTrack
+  ): HTMLTrackElement | undefined => {
+    const elements = media.querySelectorAll('track');
+    for (let index = 0; index < elements.length; index += 1) {
+      const element = elements[index];
+      if (!element) continue;
+      if (element.track === track) return element;
+      if (element.id && element.id === track.id) return element;
+    }
+    return undefined;
+  };
+
+  const chapterCueInputs = (track: NativeTextTrack): ChapterInput[] => {
+    const cues = track.cues;
+    if (!cues) return [];
+    return Array.from({ length: cues.length }, (_, index) => {
+      const cue = cues[index] as NativeTextTrackCue;
+      return {
+        id: cue.id || `chapters:${index}`,
+        title: cueText(cue),
+        startTime: cue.startTime
+      };
+    });
+  };
+
+  // Recomputes the published collection and its capability from whatever the
+  // chapters track currently holds, and reports whether either moved — so a
+  // duration report or a cue event that changes nothing publishes nothing.
+  const syncChapters = (): boolean => {
+    const nextChapters = chapterTrack
+      ? deriveChapters(
+          chapterCueInputs(chapterTrack),
+          Number.isFinite(media.duration) ? media.duration : null
+        )
+      : Object.freeze([]);
+    const nextAvailability =
+      nextChapters.length > 0
+        ? available
+        : chapterTrack
+          ? chaptersUndecided
+          : noChapterSource;
+    const moved =
+      !chaptersEqual(chapters, nextChapters) ||
+      chapterAvailability !== nextAvailability;
+    chapters = nextChapters;
+    chapterAvailability = nextAvailability;
+    return moved;
+  };
+
+  const onChapterUpdate = (): void => {
+    if (!syncChapters()) return;
+    emit({ chapters, capabilities: getCapabilities() });
+  };
+
+  const detachChapterTrack = (): void => {
+    chapterTrack?.removeEventListener('cuechange', onChapterUpdate);
+    chapterTrackElement?.removeEventListener('load', onChapterUpdate);
+    chapterTrack = undefined;
+    chapterTrackElement = undefined;
+  };
+
+  // Points the chapters slice at the source's chapters track, and moves that
+  // track off `disabled`. This is the whole reason chapters need a mode write
+  // at all: a track's cues are not obtained while its mode is `disabled` — the
+  // WebVTT file is not even requested — and `disabled` is the default for any
+  // track without the `default` attribute, so a chapters track left alone would
+  // sit empty for the whole session. `hidden` is what populates the cues
+  // without drawing anything; `showing` would ask the browser to render them.
+  //
+  // The cues are read on the track's `cuechange` and the `<track>` element's
+  // `load` instead of here, because at this point there are none to read: the
+  // fetch the mode write starts has not finished. The read below covers the
+  // other case only — a re-discovery of a track whose cues are already in
+  // place.
+  const syncChapterTrack = (): void => {
+    const track = chapterTrackEntry();
+    if (track !== chapterTrack) {
+      detachChapterTrack();
+      if (track) {
+        chapterTrack = track;
+        track.addEventListener('cuechange', onChapterUpdate);
+        chapterTrackElement = chapterTrackElementFor(track);
+        chapterTrackElement?.addEventListener('load', onChapterUpdate);
+      }
+    }
+    if (!chapterTrack || chapterTrack.mode === 'hidden') return;
+    // Wrapped in the same guard the caption mode writes use: assigning
+    // `TextTrack.mode` queues a `change` event on the TextTrackList, which
+    // would otherwise re-enter discovery mid-write.
+    suppressDiscovery = true;
+    try {
+      chapterTrack.mode = 'hidden';
+    } finally {
+      suppressDiscovery = false;
+    }
+  };
+
   const discoverTextTracks = (): void => {
     const entries = captionTrackEntries();
     hasSelectableTextTracks = entries.length > 0;
@@ -207,8 +351,11 @@ export const createNativeTextTracks = (
     }));
     selectedTextTrackId = resolveSelection(entries);
     applySelection(entries, selectedTextTrackId);
+    syncChapterTrack();
+    syncChapters();
     emit({
       textTracks,
+      chapters,
       selectedTextTrackId,
       captionRendering: resolveCaptionRendering(entries, selectedTextTrackId),
       capabilities: getCapabilities()
@@ -300,18 +447,26 @@ export const createNativeTextTracks = (
       textTrackList.addEventListener('addtrack', onTextTracksChange);
       textTrackList.addEventListener('removetrack', onTextTracksChange);
       textTrackList.addEventListener('change', onTextTracksChange);
+      // The last chapter ends where the media does, and the duration is often
+      // not known when the chapter cues arrive — a `<track>` load can beat
+      // `loadedmetadata`. Without this the last chapter would stay open for the
+      // whole session on a source whose duration is perfectly well known.
+      media.addEventListener('durationchange', onChapterUpdate);
     },
     destroy: () => {
       textTrackList?.removeEventListener('addtrack', onTextTracksChange);
       textTrackList?.removeEventListener('removetrack', onTextTracksChange);
       textTrackList?.removeEventListener('change', onTextTracksChange);
       textTrackList = undefined;
+      media.removeEventListener('durationchange', onChapterUpdate);
       detachCueChangeTrack();
+      detachChapterTrack();
       cueListeners.clear();
     },
     selectTextTrackAvailability: () =>
       hasSelectableTextTracks
         ? available
-        : { status: 'unavailable', reason: 'source' }
+        : { status: 'unavailable', reason: 'source' },
+    chaptersAvailability: () => chapterAvailability
   };
 };

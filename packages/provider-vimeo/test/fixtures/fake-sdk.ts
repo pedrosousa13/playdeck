@@ -1,5 +1,6 @@
 import { vi, type Mock } from 'vitest';
 import type {
+  VimeoSdkChapter,
   VimeoSdkConstructor,
   VimeoSdkEventListener,
   VimeoSdkPlayer,
@@ -23,6 +24,7 @@ export type FakePlayerOptions = {
   readonly volume?: number;
   readonly playbackRate?: number;
   readonly textTracks?: ReadonlyArray<VimeoSdkTextTrack>;
+  readonly chapters?: ReadonlyArray<VimeoSdkChapter>;
   readonly qualities?: ReadonlyArray<VimeoSdkQuality>;
   readonly getQualities?: () => Promise<ReadonlyArray<VimeoSdkQuality>>;
   readonly setQuality?: (id: string) => Promise<unknown>;
@@ -33,6 +35,7 @@ export type FakePlayerOptions = {
   readonly requestFullscreen?: () => Promise<unknown>;
   readonly requestPictureInPicture?: () => Promise<unknown>;
   readonly getBuffered?: () => Promise<ReadonlyArray<readonly number[]>>;
+  readonly getDuration?: () => Promise<number>;
   readonly videoWidth?: number;
   readonly videoHeight?: number;
   readonly getVideoWidth?: () => Promise<number>;
@@ -48,6 +51,7 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
   readonly #options: FakePlayerOptions;
   readonly #listeners = new Map<string, Set<VimeoSdkEventListener>>();
   #textTracks: ReadonlyArray<VimeoSdkTextTrack>;
+  #chapters: ReadonlyArray<VimeoSdkChapter>;
 
   constructor(element: HTMLIFrameElement, options: FakePlayerOptions) {
     this.element = element;
@@ -56,6 +60,13 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
     this.volume = options.volume ?? 1;
     this.playbackRate = options.playbackRate ?? 1;
     this.#textTracks = options.textTracks ?? [];
+    this.#chapters = options.chapters ?? [];
+  }
+
+  // Lets tests simulate Vimeo's chapter list changing after ready, which is
+  // what a `chapterchange` refresh has to pick up.
+  setChapters(chapters: ReadonlyArray<VimeoSdkChapter>): void {
+    this.#chapters = chapters;
   }
 
   // Lets tests simulate Vimeo's track list changing after ready (e.g. a
@@ -104,8 +115,10 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
 
   getCurrentTime: Mock<() => Promise<number>> = vi.fn(() => Promise.resolve(0));
 
-  getDuration: Mock<() => Promise<number>> = vi.fn(() =>
-    Promise.resolve(this.#options.duration ?? 60)
+  getDuration: Mock<() => Promise<number>> = vi.fn(
+    () =>
+      this.#options.getDuration?.() ??
+      Promise.resolve(this.#options.duration ?? 60)
   );
 
   getMuted: Mock<() => Promise<boolean>> = vi.fn(() =>
@@ -140,6 +153,10 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
 
   getTextTracks: Mock<() => Promise<ReadonlyArray<VimeoSdkTextTrack>>> = vi.fn(
     () => Promise.resolve(this.#textTracks)
+  );
+
+  getChapters: Mock<() => Promise<ReadonlyArray<VimeoSdkChapter>>> = vi.fn(() =>
+    Promise.resolve(this.#chapters)
   );
 
   getVideoWidth: Mock<() => Promise<number>> = vi.fn(

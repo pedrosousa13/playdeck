@@ -507,3 +507,51 @@ test('setCaptionRenderer accepts native but honestly keeps reporting custom rend
 
   expect(latest(patches).captionRendering).toBe('custom');
 });
+
+// HLS carries no chapters concept of its own on either engine: chapters come
+// off the media element's own track list, which the native adapter under this
+// one already reads. What this guards is that the hls.js engine's caption
+// stripping does not take them with it -- chapters are not caption state, and
+// hls.js has nothing of its own to publish in their place (#182).
+const chapterTrack = (cues: readonly unknown[] | null): FakeTrackInit => ({
+  kind: 'chapters',
+  label: 'Chapters',
+  language: null,
+  id: 'ch1',
+  cues
+});
+
+test('publishes chapters from a chapters track on the native HLS engine', async () => {
+  const { provider, patches, tracks } = mountNativeEngineHls([
+    chapterTrack(null)
+  ]);
+
+  await provider.attach();
+  const track = tracks[0];
+  if (track)
+    track.cues = [
+      { id: 'c1', startTime: 0, endTime: 1, text: 'Intro' },
+      { id: 'c2', startTime: 30, endTime: 31, text: 'Body' }
+    ];
+  track?.dispatch('cuechange');
+
+  expect(latest(patches).chapters).toEqual([
+    { id: 'c1', title: 'Intro', startTime: 0, endTime: 30 },
+    { id: 'c2', title: 'Body', startTime: 30, endTime: null }
+  ]);
+});
+
+test('keeps sidecar chapters on the hls.js engine, which strips only caption state', async () => {
+  const { patches } = await mountHlsEngineHlsWithSidecarTracks([
+    chapterTrack([{ id: 'c1', startTime: 0, endTime: 1, text: 'Intro' }])
+  ]);
+
+  const last = latest(patches);
+  expect(last.textTracks).toBeUndefined();
+  expect(last.chapters).toEqual([
+    { id: 'c1', title: 'Intro', startTime: 0, endTime: null }
+  ]);
+  expect(last.capabilities).toMatchObject({
+    chapters: { status: 'available' }
+  });
+});

@@ -3,6 +3,7 @@ export type {
   AutoplayMode,
   Availability,
   CaptionRendering,
+  Chapter,
   CommandFailureReason,
   CommandResult,
   HlsEngine,
@@ -43,6 +44,10 @@ export type {
   WistiaSource,
   YouTubeSource
 } from './types.js';
+
+export { chaptersEqual, deriveChapters } from './chapters.js';
+
+export type { ChapterInput } from './chapters.js';
 
 export { deriveLiveState, liveStateEqual } from './live-state.js';
 

@@ -16,8 +16,10 @@ import {
   type VimeoMountElement
 } from './adapter-values.js';
 import type { VimeoChromelessAvailability } from './chromeless-availability.js';
+import type { VimeoChapters } from './chapters.js';
 import {
   loadVimeoSdk,
+  type VimeoSdkChapter,
   type VimeoSdkPlayer,
   type VimeoSdkQuality,
   type VimeoSdkTextTrack
@@ -98,6 +100,7 @@ export type VimeoAttachmentDeps = {
     VimeoTextTracks,
     'adopt' | 'handlers' | 'reset' | 'clearCueListeners'
   >;
+  readonly chapters: Pick<VimeoChapters, 'adopt' | 'handlers' | 'reset'>;
   // Drops the host's provider-state subscribers on destroy.
   readonly clearStateListeners: () => void;
 };
@@ -134,6 +137,7 @@ export const createVimeoAttachment = (
     presentation,
     qualityLevels,
     textTracks,
+    chapters,
     clearStateListeners
   }: VimeoAttachmentDeps
 ): VimeoAttachment => {
@@ -190,6 +194,7 @@ export const createVimeoAttachment = (
     // answer, or never answer, and until it does a leftover ratio describes a
     // video that is no longer there.
     textTracks.reset();
+    chapters.reset();
     clearDimensions();
     if (player) {
       try {
@@ -236,6 +241,7 @@ export const createVimeoAttachment = (
     on('fullscreenchange', presentation.handlers.onFullscreenChange);
     on('enterpictureinpicture', presentation.handlers.onEnterPictureInPicture);
     on('leavepictureinpicture', presentation.handlers.onLeavePictureInPicture);
+    on('chapterchange', () => chapters.handlers.onChapterChange(player));
     on('cuechange', textTracks.handlers.onCueChange);
     on('texttrackchange', (data) =>
       textTracks.handlers.onTextTrackChange(player, data)
@@ -303,6 +309,7 @@ export const createVimeoAttachment = (
         initialVolume,
         initialPlaybackRate,
         initialTracks,
+        initialChapters,
         initialQualities,
         chromelessVerdict,
         initialWidth,
@@ -315,6 +322,10 @@ export const createVimeoAttachment = (
         player
           .getTextTracks()
           .catch((): ReadonlyArray<VimeoSdkTextTrack> => []),
+        // A video without chapters answers with an empty list, and an SDK
+        // build without the method rejects — neither is a reason to fail the
+        // attach, and both publish the same empty collection.
+        player.getChapters().catch((): ReadonlyArray<VimeoSdkChapter> => []),
         player.getQualities().catch((): ReadonlyArray<VimeoSdkQuality> => []),
         chromelessProbe,
         // An embed that does not answer these leaves the size unknown, which
@@ -326,6 +337,7 @@ export const createVimeoAttachment = (
       if (isStale(thisGeneration, player)) return { ok: true };
       emitDimensions(initialWidth, initialHeight);
       const textTrackPatch = textTracks.adopt(player, initialTracks);
+      const chapterPatch = chapters.adopt(initialChapters, initialDuration);
       const qualityPatch = qualityLevels.adopt(initialQualities);
       chromeless.adopt(chromelessVerdict);
       const playbackPatch = playback.adopt(player, {
@@ -343,6 +355,7 @@ export const createVimeoAttachment = (
           seeking: false,
           ...playbackPatch,
           ...textTrackPatch,
+          ...chapterPatch,
           ...qualityPatch,
           capabilities: getCapabilities()
         },

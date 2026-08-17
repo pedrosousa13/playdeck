@@ -61,6 +61,10 @@ const fixedCapabilities = {
   // Asking for `tiny` failed exactly like asking for `hd720`, which is what
   // rules out a bandwidth or viewport ceiling rather than a discarded argument.
   selectQuality: providerUnavailable,
+  // The IFrame Player API documents no chapter method and no chapter event,
+  // and the Data API's video resource has no chapter property either. Nothing
+  // resolves this later, so it is a verdict rather than an 'unknown' (#182).
+  chapters: providerUnavailable,
   pictureInPicture: providerUnavailable,
   airPlay: providerUnavailable,
   customControls: policyUnavailable

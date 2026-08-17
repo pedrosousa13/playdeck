@@ -16,7 +16,11 @@
 // quiet. Same intent, newer spelling.
 
 import { afterEach, expect, test, vi } from 'vitest';
-import type { ProviderEvent, ProviderStatePatch } from '@reely/core';
+import {
+  PlayerController,
+  type ProviderEvent,
+  type ProviderStatePatch
+} from '@reely/core';
 import {
   createYouTubeProvider,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
@@ -549,6 +553,7 @@ test('maps player ready onto confirmed state and honest capabilities', async () 
         setPlaybackRate: { status: 'available' },
         selectQuality: { status: 'unavailable', reason: 'provider' },
         selectTextTrack: { status: 'unavailable', reason: 'source' },
+        chapters: { status: 'unavailable', reason: 'provider' },
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
@@ -1711,4 +1716,25 @@ test('pins the liveness gap: no patch ever carries a live key (#187)', async () 
     expect.objectContaining({ playback: 'playing' })
   );
   expect(patches.filter((patch) => 'live' in patch)).toEqual([]);
+});
+
+// The IFrame Player API documents no chapter method and no chapter event, and
+// the Data API's video resource carries no chapter property either. That is a
+// published fact rather than an omission: the collection stays empty, the
+// capability says why, and no command rejects over it (#182).
+test('reports chapters as unavailable for the provider without failing a command', async () => {
+  const controller = new PlayerController();
+  const { fake, provider } = createAdapter();
+  controller.setProvider(provider);
+  await provider.attach();
+  await provider.load();
+  fake.players[0]!.fireReady();
+
+  expect(controller.getState().chapters).toEqual([]);
+  expect(controller.getState().capabilities.chapters).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+  expect(controller.getState().error).toBeNull();
+  expect(await controller.seekTo(10)).toEqual({ ok: true });
 });

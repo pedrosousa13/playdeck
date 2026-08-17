@@ -76,6 +76,7 @@ export const createNativeProvider = (
       // arrived.
       selectQuality: { status: 'unavailable', reason: 'source' },
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      chapters: textTracks.chaptersAvailability(),
       fullscreen: presentation.fullscreenAvailability(),
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: presentation.airPlayAvailability(),

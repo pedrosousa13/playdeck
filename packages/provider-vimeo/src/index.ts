@@ -16,6 +16,7 @@ import {
 } from './adapter-values.js';
 import { createVimeoAttachment } from './attachment.js';
 import { createVimeoBoundary } from './boundary.js';
+import { createVimeoChapters } from './chapters.js';
 import { createVimeoChromelessAvailability } from './chromeless-availability.js';
 import { createVimeoPlayback } from './playback.js';
 import { createVimeoPresentation } from './presentation.js';
@@ -25,6 +26,7 @@ import { createVimeoTextTracks } from './text-tracks.js';
 export type { VimeoMountElement } from './adapter-values.js';
 export { loadVimeoSdk, resetVimeoSdkLoader } from './loader.js';
 export type {
+  VimeoSdkChapter,
   VimeoSdkConstructor,
   VimeoSdkEventListener,
   VimeoSdkLoadOptions,
@@ -220,6 +222,12 @@ export const createVimeoProvider = (
     getCapabilities: playerCapabilities
   });
 
+  const chapters = createVimeoChapters({
+    emit,
+    isStale: (player) => attachment.isStale(player),
+    getCapabilities: playerCapabilities
+  });
+
   const textTracks = createVimeoTextTracks({
     emit,
     isStale: (player) => attachment.isStale(player),
@@ -238,6 +246,7 @@ export const createVimeoProvider = (
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: qualityLevels.selectQualityAvailability(),
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      chapters: chapters.chaptersAvailability(),
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       // The SDK exposes remote-playback methods, but this adapter wires no
@@ -257,6 +266,7 @@ export const createVimeoProvider = (
     presentation,
     qualityLevels,
     textTracks,
+    chapters,
     clearStateListeners: () => listeners.clear()
   });
 

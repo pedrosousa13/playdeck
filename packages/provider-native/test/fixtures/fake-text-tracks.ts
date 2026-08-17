@@ -1,9 +1,11 @@
+import { createNativeProvider } from '../../src/index';
+
 // happy-dom's real TextTrack/TextTrackList implementation is too limited to
-// drive caption tests: `kind`/`label`/`language`/`id` have no public setters,
-// there is no `default` flag, and `mode` rejects `'hidden'`. This fabricates a
-// minimal stand-in shaping the properties the native caption subsystem
-// actually reads, mirroring the fixture used by
-// packages/provider-native/test/captions.test.ts.
+// drive these tests: `kind`/`label`/`language`/`id` have no public setters,
+// there is no `default` flag, and `mode` rejects `'hidden'`. We fabricate a
+// minimal stand-in that shapes the properties the adapter actually reads and
+// attach it over the media element's `textTracks` getter, the same way
+// existing tests in index.test.ts override `duration`/`buffered`/`seekable`.
 export type FakeTrackInit = {
   readonly kind: string;
   readonly label: string;
@@ -12,7 +14,8 @@ export type FakeTrackInit = {
   readonly default?: boolean;
   readonly hasCues?: boolean;
   // The cues the track arrives with. A track whose WebVTT has not been fetched
-  // yet has none at all, which is `null`.
+  // yet has none at all, which is `null` — the state a `disabled` track never
+  // leaves.
   readonly cues?: readonly unknown[] | null;
 };
 
@@ -36,6 +39,14 @@ export type FakeTrackList = FakeTrack[] & {
   dispatch: (type: string) => void;
 };
 
+// `default` is only set when the init explicitly provides it, so tests can
+// produce a fake track that omits the property entirely (as real `TextTrack`
+// objects do) rather than defaulting it to `false`.
+//
+// `mode` is a real accessor (not a plain field) that calls `onModeChange`
+// when assigned — mirroring the DOM spec, where assigning `TextTrack.mode`
+// queues a `change` event on the owning `TextTrackList`. Tests that don't
+// care about that cascade can ignore the callback entirely.
 export const createFakeTrack = (
   init: FakeTrackInit,
   onModeChange?: () => void
@@ -89,3 +100,28 @@ export const createFakeTrackList = (
   };
   return list;
 };
+
+export const mountNative = (trackInits: readonly FakeTrackInit[]) => {
+  const media = document.createElement('video');
+  const trackList = createFakeTrackList([]);
+  const tracks = trackInits.map((init) =>
+    createFakeTrack(init, () => trackList.dispatch('change'))
+  );
+  trackList.push(...tracks);
+  Object.defineProperty(media, 'textTracks', {
+    configurable: true,
+    value: trackList
+  });
+  const provider = createNativeProvider(media);
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch as Record<string, unknown>));
+  return { media, provider, patches, tracks, trackList };
+};
+
+export const latest = (
+  patches: ReadonlyArray<Record<string, unknown>>
+): Record<string, unknown> =>
+  patches.reduce<Record<string, unknown>>(
+    (merged, patch) => ({ ...merged, ...patch }),
+    {}
+  );

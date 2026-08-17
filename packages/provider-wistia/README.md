@@ -233,7 +233,11 @@ origins list and what a page's CSP has to allow.
   handle exposes no buffered ranges, so the adapter reports nothing rather than
   a guess. `buffering` stays `false` for the same reason.
 - **Cue timings, chapters and analytics are not reported.** They are outside
-  this adapter's playback core.
+  this adapter's playback core. Wistia's chapters are an inbound embed-option
+  plugin — the embedder supplies the list — and no documented read-back accessor
+  exists, so `PlayerState.chapters` stays empty and `capabilities.chapters`
+  reports `{ status: 'unavailable', reason: 'provider' }` rather than leaving a
+  consumer to guess.
 
 ## License
 

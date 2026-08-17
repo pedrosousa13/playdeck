@@ -64,6 +64,12 @@ export const play = (): Promise<unknown> => controller.play();
   again only when it changes.
 - **`commandsReady`** is declared after `media.load()`, because `load()` resets
   `playbackRate` and anything applied earlier would be silently undone.
+- **Chapters** come from a `kind="chapters"` text track. Its mode is moved to
+  `hidden`, because a track's cues are never obtained while its mode is
+  `disabled`, and its cues are read on the track's `cuechange` and the
+  `<track>` element's `load` — not at the mode write, where there is nothing to
+  read yet. The track stays out of `textTracks`: chapters are their own
+  collection.
 
 ## License
 
