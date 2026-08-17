@@ -49,14 +49,14 @@ test('reads the chapter cues on cuechange rather than at the mode assignment', a
   await provider.attach();
 
   // The mode write alone obtains nothing: a track the user agent has only just
-  // been told to load has no cues yet, so a synchronous read here publishes an
-  // empty list that is indistinguishable from "this video has no chapters".
-  // The capability is what keeps the two apart — a chapters track is there,
-  // and what is in it is not known yet.
+  // been told to load has no cues yet, so the capability reads `unavailable`
+  // until cues actually arrive — never `unknown`, which would promise a verdict
+  // that a track whose fetch fails, or one that holds no cues at all, never
+  // delivers.
   expect(latest(patches).chapters).toEqual([]);
   expect(capability(patches)).toEqual({
-    status: 'unknown',
-    reason: 'provider-check'
+    status: 'unavailable',
+    reason: 'source'
   });
 
   const track = tracks[0];
@@ -146,6 +146,49 @@ test('reports the chapter capability unavailable for a source with no chapters t
   ]);
 
   await provider.attach();
+
+  expect(latest(patches).chapters).toEqual([]);
+  expect(capability(patches)).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
+// The two ways a chapters track produces no chapters at all. Neither fires an
+// event the adapter listens for, so neither can resolve a pending verdict:
+// `unavailable` has to be the state the source starts in, not one it moves to.
+test('leaves the chapter capability unavailable when the chapters track fails to load', async () => {
+  const { media, provider, patches } = mountNative([chapterTrack(null)]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'chapters');
+  trackElement.id = 'ch1';
+  media.appendChild(trackElement);
+
+  await provider.attach();
+  // A WebVTT that 404s fires `error` on the element and nothing else: no
+  // `load`, no `cuechange`, and the cues stay `null` for the session.
+  trackElement.dispatchEvent(new Event('error'));
+
+  expect(latest(patches).chapters).toEqual([]);
+  expect(capability(patches)).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
+test('leaves the chapter capability unavailable when the chapters track loads no cues', async () => {
+  const { media, provider, patches, tracks } = mountNative([
+    chapterTrack(null)
+  ]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'chapters');
+  trackElement.id = 'ch1';
+  media.appendChild(trackElement);
+
+  await provider.attach();
+  const track = tracks[0];
+  if (track) track.cues = [];
+  trackElement.dispatchEvent(new Event('load'));
 
   expect(latest(patches).chapters).toEqual([]);
   expect(capability(patches)).toEqual({

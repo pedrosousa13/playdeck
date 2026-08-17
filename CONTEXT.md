@@ -80,9 +80,7 @@ _Avoid_: source, trigger, cause
 One named division of a video's timeline, published as an ordered collection on
 player state beside a capability that says whether the provider can report any
 at all. No provider reports where a chapter ends, so every end is derived: each
-chapter ends where the next begins, and the last where the media does. Reely
-publishes the vocabulary and never draws it — markers and labels are the
-consumer's, composed over the seek slider.
+chapter ends where the next begins, and the last where the media does.
 _Avoid_: segment, marker, cue point
 
 ### Loading

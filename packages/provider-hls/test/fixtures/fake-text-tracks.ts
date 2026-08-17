@@ -10,7 +10,6 @@ export type FakeTrackInit = {
   readonly language: string | null;
   readonly id?: string;
   readonly default?: boolean;
-  readonly hasCues?: boolean;
   // The cues the track arrives with. A track whose WebVTT has not been fetched
   // yet has none at all, which is `null`.
   readonly cues?: readonly unknown[] | null;
@@ -55,7 +54,7 @@ export const createFakeTrack = (
       mode = value;
       onModeChange?.();
     },
-    cues: init.cues ?? (init.hasCues ? [{}] : null),
+    cues: init.cues ?? null,
     activeCues: null,
     addEventListener: (type, listener) => {
       const set = listeners.get(type) ?? new Set<() => void>();

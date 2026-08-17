@@ -136,7 +136,7 @@ test('discovers embedded WebVTT tracks on the native HLS engine and honors the d
       language: 'en',
       id: 't1',
       default: true,
-      hasCues: true
+      cues: [{}]
     }
   ]);
 
@@ -265,7 +265,7 @@ test('keeps native caption state out of the hls.js engine path so hls.js is the 
       language: 'en',
       id: 'sidecar',
       default: true,
-      hasCues: true
+      cues: [{}]
     }
   ]);
 

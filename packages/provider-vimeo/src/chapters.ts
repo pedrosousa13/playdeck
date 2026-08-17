@@ -7,15 +7,11 @@ import type {
 import { chaptersEqual, deriveChapters } from '@reely/core';
 import {
   available,
+  noChapterSource,
   type EmitProviderState,
   type IsStalePlayer
 } from './adapter-values.js';
 import type { VimeoSdkChapter, VimeoSdkPlayer } from './loader.js';
-
-const noChapterSource: Availability = {
-  status: 'unavailable',
-  reason: 'source'
-};
 
 // The SDK's `index` is 1-based and stable for the video, so it makes the id.
 // The array position stands in for an entry that arrives without one.

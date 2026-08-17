@@ -16,7 +16,7 @@ test('discovers external tracks and normalizes them', async () => {
       language: 'en',
       id: 't1',
       default: true,
-      hasCues: true
+      cues: [{}]
     },
     { kind: 'metadata', label: 'chapters', language: null, id: 'm1' }
   ]);

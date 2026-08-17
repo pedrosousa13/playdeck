@@ -850,6 +850,71 @@ describe('provider-supplied strings never render as markup', () => {
   });
 });
 
+// #182: chapters are published as their own collection, so a source carrying a
+// chapters track beside a captions track has exactly one track in `textTracks`.
+// The provider half of that is tested against the media element's track list;
+// this is the same claim at the layer a consumer sees it — nothing the captions
+// menu lists, and nothing the captions toggle can resolve to, comes from
+// chapters.
+describe('a source carrying both a chapters track and a captions track', () => {
+  const ChapterProbe = () => {
+    const chapters = Player.usePlayerState((state) => state.chapters);
+    return (
+      <div data-testid="chapters">{chapters.map((c) => c.title).join('|')}</div>
+    );
+  };
+
+  const renderWithBothCollections = (ui: ReactNode) => {
+    const utils = renderWithPlayer(
+      <>
+        <ChapterProbe />
+        {ui}
+      </>
+    );
+    utils.emitState({
+      capabilities: { ...withSelectTextTrack(available), chapters: available },
+      chapters: [
+        { id: 'c1', title: 'Introduction', startTime: 0, endTime: 30 },
+        { id: 'c2', title: 'The build', startTime: 30, endTime: 90 }
+      ],
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: null
+    });
+    // The chapters really did arrive: the assertions below say the captions
+    // controls ignore them, which means nothing unless they are there to ignore.
+    expect(utils.getByTestId('chapters').textContent).toBe(
+      'Introduction|The build'
+    );
+    return utils;
+  };
+
+  test('the captions menu lists only the captions track', () => {
+    const { container } = renderWithBothCollections(<Player.CaptionsMenu />);
+    fireEvent.click(
+      container.querySelector(
+        '[data-reely-part="settings-menu-trigger"]'
+      ) as HTMLButtonElement
+    );
+    const items = Array.from(
+      container.querySelectorAll('[role="menuitemradio"]')
+    );
+    expect(items.map((item) => item.textContent)).toEqual(['Off', 'English']);
+  });
+
+  test('the captions button toggle resolves only to the captions track', () => {
+    const { container, selectTextTrack } = renderWithBothCollections(
+      <Player.CaptionsButton />
+    );
+    fireEvent.click(
+      container.querySelector(
+        '[data-reely-part="captions-button"]'
+      ) as HTMLButtonElement
+    );
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+    expect(selectTextTrack).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('Player.CaptionsMenu', () => {
   test('renders nothing when there are no tracks', () => {
     const { container, emitState } = renderWithPlayer(<Player.CaptionsMenu />);

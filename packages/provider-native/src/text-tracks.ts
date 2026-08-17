@@ -36,9 +36,8 @@ export type NativeTextTracks = {
   // while the current source exposes at least one caption/subtitle track.
   readonly selectTextTrackAvailability: () => Availability;
   // The `chapters` facet of the host's capabilities. A media element can always
-  // report chapters, so this never says `provider`: it says `source` where the
-  // element carries no chapters track, and stays undecided while one is there
-  // whose cues have not arrived yet.
+  // report chapters, so this never says `provider`: it says `source` until cues
+  // are actually in hand, and `available` once they are.
   readonly chaptersAvailability: () => Availability;
 };
 
@@ -52,16 +51,15 @@ const isCaptionTrackKind = (kind: string): kind is TextTrackKind =>
 // get their own collection instead (#182).
 const isChapterTrackKind = (kind: string): boolean => kind === 'chapters';
 
+// No chapters to report — the state a source stays in until cues are in hand.
+// Deliberately not `unknown`/`provider-check` while a chapters track is present
+// but empty: nothing would ever resolve that verdict. A WebVTT that 404s fires
+// only `error`, an in-band chapters track has no `<track>` element to fire
+// `load` at all, and a track that parses to zero cues fires no `cuechange` — so
+// a consumer gating a chapter list on it would wait forever.
 const noChapterSource: Availability = {
   status: 'unavailable',
   reason: 'source'
-};
-
-// A chapters track is present and its cues have not arrived. Undecided rather
-// than unavailable: the answer is not "no chapters", it is "not yet".
-const chaptersUndecided: Availability = {
-  status: 'unknown',
-  reason: 'provider-check'
 };
 
 const nativeTextTrackId = (track: NativeTextTrack, index: number): string =>
@@ -272,17 +270,10 @@ export const createNativeTextTracks = (
   // duration report or a cue event that changes nothing publishes nothing.
   const syncChapters = (): boolean => {
     const nextChapters = chapterTrack
-      ? deriveChapters(
-          chapterCueInputs(chapterTrack),
-          Number.isFinite(media.duration) ? media.duration : null
-        )
+      ? deriveChapters(chapterCueInputs(chapterTrack), media.duration)
       : Object.freeze([]);
     const nextAvailability =
-      nextChapters.length > 0
-        ? available
-        : chapterTrack
-          ? chaptersUndecided
-          : noChapterSource;
+      nextChapters.length > 0 ? available : noChapterSource;
     const moved =
       !chaptersEqual(chapters, nextChapters) ||
       chapterAvailability !== nextAvailability;
