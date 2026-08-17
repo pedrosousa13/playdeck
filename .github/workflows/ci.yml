@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   static:
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -44,7 +44,7 @@ jobs:
   # toolchain, which never ships, and stayed quiet about a published
   # package's own runtime tree. See scripts/audit.mjs.
   audit:
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -56,7 +56,7 @@ jobs:
       - run: pnpm test:audit
 
   unit:
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -67,16 +67,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
-  # Moved to the self-hosted runner: a11y-media.spec.ts's cue-boundary guard
-  # (installedAt < cueBoundary) was genuinely about proving the mutation
-  # observer installs before the fixture's real cue transition, not about a
-  # player performance budget, so the fix moved the fixture's cue boundary
-  # itself (captions-reference.vtt, 0.4s -> 0.7s) together with the matching
-  # JS constant, giving this host's 0.46-0.54s install time real headroom
-  # without decoupling the guard from what it's actually guarding. See
+  # a11y-media.spec.ts's cue-boundary guard (installedAt < cueBoundary) proves
+  # the mutation observer installs before the fixture's real cue transition; it
+  # is not a player performance budget. The fixture's cue boundary
+  # (captions-reference.vtt, 0.7s) and the matching JS constant carry the
+  # headroom that keeps the guard honest on a slower host. See
   # e2e/a11y-media.spec.ts for the full rationale.
   e2e:
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -91,25 +89,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - id: playwright-version
         run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
-      # No cache-hit gate on the install below. On the self-hosted runner the
-      # home directory persists between jobs, so ~/.cache/ms-playwright is
-      # already warm; layering actions/cache over it produced a cache hit whose
-      # restored tree lacked the browser binary, the install step was skipped,
-      # and every e2e test failed with "Executable doesn't exist". `playwright
-      # install` is a fast no-op when the browser is already present, so just
-      # always run it. The cache is kept so a fallback to a hosted runner still
-      # benefits.
+      # The install below is never gated on a cache hit. A restored tree that
+      # is missing the browser binary would skip the install and fail every
+      # test with "Executable doesn't exist"; `playwright install` is a fast
+      # no-op when the browser is already there, so it always runs.
       - uses: actions/cache@v6
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` shells out to `apt-get` via sudo to install OS packages,
-      # which this runner's unprivileged user does not have. The self-hosted
-      # host already carries Playwright's system libraries host-wide, so only
-      # the browser binary itself needs fetching here — no OS deps step is
-      # needed at all, cache hit or miss.
-      - run: pnpm exec playwright install ${{ matrix.browser }}
+      # `--with-deps` installs the browser's OS packages, which a hosted
+      # runner image does not carry for every engine.
+      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=${{ matrix.browser }}
@@ -121,7 +112,7 @@ jobs:
   # matrix. On macOS those five tests skip; the layering assertions in the same
   # spec run everywhere.
   visual:
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -137,11 +128,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` shells out to `apt-get` via sudo, which this runner's
-      # unprivileged user does not have. The self-hosted host already carries
-      # Playwright's system libraries host-wide, so only the browser binary
-      # itself needs fetching — no OS deps step is needed, cache hit or miss.
-      - run: pnpm exec playwright install chromium
+      # `--with-deps` installs the browser's OS packages, which a hosted
+      # runner image does not carry for every engine.
+      - run: pnpm exec playwright install --with-deps chromium
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=visual
@@ -154,38 +143,15 @@ jobs:
           path: test-results/
           retention-days: 14
 
-  # Moved to the self-hosted runner. `pnpm test:packages` used to die under
-  # this repo's pinned pnpm 11.15.1 with `[ERR_SQLITE_ERROR] attempt to write
-  # a readonly database` from its new SQLite store index — reproduced 3/3
-  # against the real shared store and traced to pnpm 11's index itself, not a
-  # host permissions or concurrency problem (both investigated and
-  # disproven). Fixed by dropping the `packageManager` pin to pnpm@10.34.5
-  # (package.json), which predates the SQLite store index entirely, matching
-  # the version this host also pins at /usr/local/bin/pnpm.
-  #
-  # That alone wasn't sufficient: `scripts/verify-packaging.mjs`'s fixture
-  # install runs from a directory under Node's default tmpdir (`/tmp`), which
-  # is tmpfs here — a different filesystem device than `HOME`/the workspace
-  # (`/srv/runner`, on disk). Under pnpm 10 that device mismatch makes pnpm
-  # colocate a store at `/tmp/.pnpm-store` for hardlink-friendliness, and on
-  # this host that path already exists, owned by a uid from before the
-  # single-tenant migration — `runner` can't write into it, so the fixture
-  # install failed with EACCES even with the working pnpm version. `TMPDIR`
-  # below points Node's tmpdir at the job's own same-device temp dir instead,
-  # so no cross-device store redirection is ever attempted. Verified by
-  # actually running the full job sequence (build, test:packages,
-  # test:budgets, test:bundle, test:integrations) against the real shared
-  # store on the host with both changes in place.
+  # `pnpm test:packages` runs `scripts/verify-packaging.mjs`, which installs
+  # each packed tarball into a throwaway fixture project. The repo pins
+  # pnpm@10.34.5 in package.json: pnpm 11's SQLite store index failed this job
+  # with `[ERR_SQLITE_ERROR] attempt to write a readonly database`, and 10.34.5
+  # predates that index entirely.
   package:
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # The `runner` context isn't available in a job-level `env:` block
-      # (only in a step's), so TMPDIR is set here, into $GITHUB_ENV, where it
-      # then applies to every later step in the job — see the job comment
-      # above for why it's needed. $RUNNER_TEMP is the plain shell form of
-      # the same `runner.temp` value.
-      - run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - run: corepack enable
       - uses: actions/setup-node@v7
         with:
@@ -199,11 +165,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` shells out to `apt-get` via sudo, which this runner's
-      # unprivileged user does not have. The self-hosted host already carries
-      # Playwright's system libraries host-wide, so only the browser binary
-      # itself needs fetching — no OS deps step is needed, cache hit or miss.
-      - run: pnpm exec playwright install chromium
+      # `--with-deps` installs the browser's OS packages, which a hosted
+      # runner image does not carry for every engine.
+      - run: pnpm exec playwright install --with-deps chromium
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
       # and hit that cache instead of rebuilding from scratch.
@@ -229,7 +193,7 @@ jobs:
   # it, having nothing left to gate.
 
   storybook:
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -245,10 +209,8 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` shells out to `apt-get` via sudo, which this runner's
-      # unprivileged user does not have. The self-hosted host already carries
-      # Playwright's system libraries host-wide, so only the browser binary
-      # itself needs fetching — no OS deps step is needed, cache hit or miss.
-      - run: pnpm exec playwright install chromium
+      # `--with-deps` installs the browser's OS packages, which a hosted
+      # runner image does not carry for every engine.
+      - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm --filter @reely/storybook build
       - run: pnpm test:storybook
