@@ -93,8 +93,13 @@ const initialPosterImageState = (
 
 // `srcSet` is a comma-separated list of `url [descriptor]` candidates. This
 // splits on the comma rather than running a full HTML srcset parser, so a
-// candidate URL containing a literal comma splits wrongly and is dropped.
-// That is fail-closed and acceptable (#236).
+// candidate URL containing a literal comma splits into two halves that are
+// then validated independently -- `"/a,b.jpg 1x"` splits into `/a` and
+// `b.jpg 1x`, both scheme-less, both permitted, and both are written into the
+// output as two wrong candidates. No scheme escalation is possible this way:
+// a dangerous scheme surviving the split still fails its own check on
+// whichever half carries it. This is list grammar, not URL policy -- the
+// candidate is corrupted by the split, not dropped by it (#236).
 //
 // Each trimmed candidate -- its URL and any trailing descriptor together --
 // is passed to `permittedUrl` (`permitted-url.ts`), this package's one
@@ -109,6 +114,14 @@ const initialPosterImageState = (
 // scheme check, silently defeating it (#219, #236). Validating the whole
 // candidate closes that gap: the embedded tab is still there for
 // `isPermittedSourceUrl`'s own check to catch.
+//
+// Each surviving candidate's own text is still exactly what was validated --
+// that property matters and holds here same as everywhere else the shared
+// allowlist gates a write. What is not byte-identical is the list itself:
+// survivors are rejoined with `', '` below, so the emitted `srcSet` is a
+// reconstructed string whose separators may differ from the consumer's own
+// (unlike, say, the Wistia poster check, which writes its one value
+// untouched).
 //
 // An empty result is `undefined`, not `''` -- an empty string is
 // truthy-adjacent enough to be a trap.
