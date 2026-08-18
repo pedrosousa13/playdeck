@@ -73,9 +73,7 @@ const isSeekEvent = (event: ProviderEvent): boolean =>
 // on with a safe default. Non-fatal and outside the error lifecycle, which is
 // what separates it from a failure: nothing stopped working, so it must not
 // reach `explicitProviderError` and drive lifecycle or activation (#235).
-const configurationNotice = (
-  patch: ProviderStatePatch
-): PlayerError | undefined =>
+const noticeIn = (patch: ProviderStatePatch): PlayerError | undefined =>
   patch.error &&
   patch.error.category === 'configuration' &&
   !patch.error.fatal &&
@@ -323,7 +321,7 @@ export class PlayerController {
         // `#applyPatch` decides whether it is published, the same way the
         // autoplay conflict is recorded by `configureAutoplay` and resolved
         // there (#235).
-        const notice = configurationNotice(patch);
+        const notice = noticeIn(patch);
         if (notice) this.#configurationNotice ??= freezeError(notice);
         // The confirmed origin joins the patch rather than being derived from
         // the pending record inside `#applyPatch`: the patch is consumed once,
@@ -687,7 +685,7 @@ export class PlayerController {
     // only where this is `null`: it is the least important thing the slot can
     // carry, so it may take the slot but never take it from something else
     // (#235).
-    const patchedError =
+    const errorBeforeNotice =
       patch.lifecycle === 'ready' && patch.error === undefined
         ? null
         : patch.error === undefined
@@ -764,7 +762,7 @@ export class PlayerController {
             // behind a fatal one: the `provider` error a refused autoplay
             // attempt publishes keeps the slot too, and the notice becomes
             // visible when it clears (#235).
-            (patchedError ?? this.#configurationNotice ?? null)
+            (errorBeforeNotice ?? this.#configurationNotice ?? null)
     };
     this.#setState(nextState);
   };
