@@ -117,10 +117,10 @@ Notes, per row:
   needs that grant to reach `requestMediaKeySystemAccess` from inside the frame,
   and will not play. No Reely option turns it back on. There is no `sandbox`
   attribute on this iframe at all, and that absence is a weighed decision
-  rather than an oversight — see the sandbox bargain below. Neither the missing
-  `encrypted-media` nor the absent `sandbox` changes which origin is reached;
-  they are here because this document is where a reader decides what to permit
-  this frame, and a DRM source that silently will not play is what an
+  rather than an oversight — see the Vimeo sandbox bargain below. Neither the
+  missing `encrypted-media` nor the absent `sandbox` changes which origin is
+  reached; they are here because this document is where a reader decides what
+  to permit this frame, and a DRM source that silently will not play is what an
   origins-only reading would leave them to find in production.
 
   Two more things leave the page here that the table above does not explain on
@@ -642,18 +642,16 @@ So for a `Player.Root` consumer today, `fast.wistia.com` in `script-src` is not
 negotiable, while `www.youtube.com` is. That asymmetry is a gap in this
 provider's options surface rather than a property of Wistia's CDN.
 
-## The sandbox bargain
+## The Vimeo sandbox bargain
 
 Reely builds two of the three embed frames itself. The Vimeo one is
 `packages/provider-vimeo/src/attachment.ts:307-318`, with the comment recording
 this decision at `:302-306`. The YouTube one is
 `packages/provider-youtube/src/attachment.ts:192-239`, handed to the iframe API
-at `:246`, which adopts a frame that already exists instead of building one —
-the YouTube row above records that, and the comment at `:216-219` says why the
-frame is built there rather than left to the API. Only Wistia's frame is
-genuinely not Reely's to configure: that provider creates the vendor's custom
-element (`packages/provider-wistia/src/attachment.ts:339-341`), and whatever
-frame the element then makes is the vendor's.
+at `:246` — see the YouTube row above. Only Wistia's frame is genuinely not
+Reely's to configure: that provider creates the vendor's custom element
+(`packages/provider-wistia/src/attachment.ts:339-341`), and whatever frame the
+element then makes is the vendor's.
 
 This section records the decision taken for the **Vimeo** frame. The YouTube
 frame's sandbox posture is not addressed here and is tracked separately in
@@ -661,7 +659,7 @@ frame's sandbox posture is not addressed here and is tracked separately in
 
 On the Vimeo frame, Reely sets no `sandbox` attribute. No tracked file sets one
 on any element: `git grep sandbox` returns this document, the comment at
-`packages/provider-vimeo/src/attachment.ts:302-305` that points back at this
+`packages/provider-vimeo/src/attachment.ts:302-306` that points back at this
 section, and one unrelated hit — the `sandbox;` CSP directive `next/image`
 needs for SVG (`tests/integrations/next-image/next.config.ts:7`), a different
 mechanism on a different surface. The absence is deliberate (#237), and it is
