@@ -128,6 +128,29 @@ when the refresh workflow is not dispatchable — GitHub only offers
 `workflow_dispatch` for workflows already on the default branch, so a workflow
 file added on a branch cannot be run until it has merged once.
 
+## Releasing
+
+A release is cut by hand, from `main`, with `release.yml`. There is no push
+trigger: the version bump lands as an ordinary pull request first, and
+dispatching the workflow is the separate, deliberate act that publishes it.
+
+```sh
+gh workflow run release.yml --ref main -f dry_run=true   # resolve and pack only
+gh workflow run release.yml --ref main -f dry_run=false  # publish
+```
+
+`dry_run` defaults to true, so an accidental dispatch cannot publish. Either way
+the job runs `typecheck`, `test`, `test:audit`, `build`, `test:packages`,
+`test:budgets`, `test:bundle` and `test:integrations` before it goes near the
+registry, so the provenance attestation covers artifacts that run actually
+checked.
+
+The publish is `pnpm publish -r`, never `npm publish`: the packages depend on
+each other through pnpm's `workspace:^` protocol, and only pnpm rewrites that to
+a real version range when it packs. `-r` takes every workspace package that is
+not `private` and whose version is not already on the registry, so the set comes
+from the manifests and no name is listed in the workflow.
+
 ## Browser support
 
 | Browser     | Minimum |
