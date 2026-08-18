@@ -6,6 +6,7 @@ import type {
   MediaDimensions,
   PlaybackState,
   PlayerCapabilities,
+  PlayerError,
   PlayerEvent,
   PlayerEventFor,
   PlayerEventOrigin,
@@ -67,6 +68,18 @@ const confirmsPlayback = (
 
 const isSeekEvent = (event: ProviderEvent): boolean =>
   event.type === 'seeking' || event.type === 'seeked';
+
+// A provider reporting that it rejected a consumer-supplied option and carried
+// on with a safe default. Non-fatal and outside the error lifecycle, which is
+// what separates it from a failure: nothing stopped working, so it must not
+// reach `explicitProviderError` and drive lifecycle or activation (#235).
+const noticeIn = (patch: ProviderStatePatch): PlayerError | undefined =>
+  patch.error &&
+  patch.error.category === 'configuration' &&
+  !patch.error.fatal &&
+  patch.lifecycle !== 'error'
+    ? patch.error
+    : undefined;
 
 const notReady: Availability = freezeAvailability({
   status: 'unknown',
@@ -158,6 +171,14 @@ export class PlayerController {
   // while `load()` is only queued once `attach()` returns (#87).
   #loadedGeneration: number | undefined;
   #pendingOrigins = new Map<PendingOriginKind, PendingOrigin>();
+  // The provider's first configuration rejection, held as controller state the
+  // way `#hasAutoplayConfigurationError` holds the autoplay conflict: the state
+  // has one error slot, so a notice left in the patch would be cleared by the
+  // next patch that omits an `error` key, and would overwrite an error that
+  // actually stopped playback. First one wins — two rejections in the same
+  // attach would otherwise flap the slot — and it is dropped with the provider
+  // that reported it (#235).
+  #configurationNotice: PlayerError | undefined;
 
   configureAutoplay = (
     mode: AutoplayMode,
@@ -244,6 +265,9 @@ export class PlayerController {
     }
     if (generation !== this.#generation) return;
     this.#provider = provider;
+    // A notice describes one provider's configuration, so it goes with that
+    // provider — on a swap and on a detach alike (#235).
+    this.#configurationNotice = undefined;
     if (!provider) {
       this.#setState(
         this.#withAutoplayConfiguration(createInitialPlayerState())
@@ -290,12 +314,28 @@ export class PlayerController {
               provider: provider.provider
             }
           : undefined;
+        // Recorded here rather than inside `#applyPatch`, which the autoplay
+        // configuration and the activation setter also reach: a notice is
+        // something a provider reports, and this is the one path a provider
+        // speaks on. It leaves the patch with it, so the resolution in
+        // `#applyPatch` decides whether it is published, the same way the
+        // autoplay conflict is recorded by `configureAutoplay` and resolved
+        // there (#235).
+        const notice = noticeIn(patch);
+        if (notice) this.#configurationNotice ??= freezeError(notice);
         // The confirmed origin joins the patch rather than being derived from
         // the pending record inside `#applyPatch`: the patch is consumed once,
         // and both the event above and the state below have to read the same
         // answer. Setting the key unconditionally also drops any value an
         // adapter put there — provenance is the controller's to decide.
-        this.#applyPatch({ ...patch, seekOrigin: confirmedSeekOrigin }, false);
+        this.#applyPatch(
+          {
+            ...patch,
+            seekOrigin: confirmedSeekOrigin,
+            error: notice ? undefined : patch.error
+          },
+          false
+        );
         if (originatingEvent) this.#emitEvent(originatingEvent);
         if (generation !== this.#generation || provider !== this.#provider)
           return;
@@ -307,6 +347,10 @@ export class PlayerController {
       }
       this.#provider = undefined;
       destroyProviderSafely(provider);
+      // The third path a provider leaves by, and the notice goes with it here
+      // too: a provider may report one from inside `subscribe()` and then throw
+      // (#235).
+      this.#configurationNotice = undefined;
       // Cleared with the generation it belonged to, not left for the
       // generation check in `#consumePendingOrigin` to reject downstream: a
       // request outstanding against a generation that has moved on has nothing
@@ -637,6 +681,18 @@ export class PlayerController {
         : acceptAutoplay
           ? (patch.autoplay ?? this.#state.autoplay)
           : this.#state.autoplay;
+    // What the patch alone says the slot should hold. A held notice fills in
+    // only where this is `null`: it is the least important thing the slot can
+    // carry, so it may take the slot but never take it from something else
+    // (#235).
+    const errorBeforeNotice =
+      patch.lifecycle === 'ready' && patch.error === undefined
+        ? null
+        : patch.error === undefined
+          ? this.#state.error
+          : patch.error === null
+            ? null
+            : freezeError(patch.error);
     const nextState: PlayerState = {
       ...this.#state,
       ...patch,
@@ -702,13 +758,11 @@ export class PlayerController {
             this.#state.error?.category !== 'configuration'
             ? this.#state.error
             : autoplayConfigurationError()
-          : patch.lifecycle === 'ready' && patch.error === undefined
-            ? null
-            : patch.error === undefined
-              ? this.#state.error
-              : patch.error === null
-                ? null
-                : freezeError(patch.error)
+          : // A notice waits behind whatever the slot already holds, not only
+            // behind a fatal one: the `provider` error a refused autoplay
+            // attempt publishes keeps the slot too, and the notice becomes
+            // visible when it clears (#235).
+            (errorBeforeNotice ?? this.#configurationNotice ?? null)
     };
     this.#setState(nextState);
   };

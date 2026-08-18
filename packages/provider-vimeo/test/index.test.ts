@@ -24,7 +24,10 @@ import { available } from '../src/adapter-values';
 import { createVimeoAttachment } from '../src/attachment';
 import { createVimeoBoundary } from '../src/boundary';
 import { createVimeoChapters } from '../src/chapters';
-import { createVimeoChromelessAvailability } from '../src/chromeless-availability';
+import {
+  CHROMELESS_PROBE_TIMEOUT_MS,
+  createVimeoChromelessAvailability
+} from '../src/chromeless-availability';
 import {
   createVimeoProvider,
   type VimeoMountElement,
@@ -626,6 +629,162 @@ test('keeps Vimeo controls as the single layer when requested', async () => {
   });
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+// --- the chromeless probe that never completed (#235) ---
+//
+// `customControls` reports `unknown` on four different outcomes, and on one of
+// them the reason is the consumer's own environment — a Content-Security-Policy
+// that refuses `vimeo.com` is the likeliest — which is a thing they can act on
+// only if it is reported. The other three are Vimeo answering, and stay silent.
+
+const configurationNotices = (
+  patches: ProviderStatePatch[]
+): ProviderStatePatch[] =>
+  patches.filter((patch) => patch.error?.category === 'configuration');
+
+test('reports a chromeless probe that never reached Vimeo as a configuration notice', async () => {
+  fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+  const { patches } = await setup({ options: { customControls: true } });
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    customControls: { status: 'unknown', reason: 'provider-check' }
+  });
+  // The whole patch, not a subset: a notice carries an error and nothing else,
+  // so it never moves the lifecycle, the activation, or command readiness.
+  expect(configurationNotices(patches)).toEqual([
+    {
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false,
+        message: expect.stringContaining('could not be completed')
+      }
+    }
+  ]);
+});
+
+test('keeps the ready state and its lifecycle intact behind that notice', async () => {
+  fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+  const { patches } = await setup({ options: { customControls: true } });
+  expect(readyPatch(patches)).toMatchObject({
+    lifecycle: 'ready',
+    activation: 'ready'
+  });
+  expect(readyPatch(patches).error).toBeUndefined();
+  expect(patches.some((patch) => patch.lifecycle === 'error')).toBe(false);
+});
+
+test('the notice repeats neither the request url nor what the failure said', async () => {
+  fetchMock.mockRejectedValue(
+    new TypeError(
+      "Refused to connect to 'https://vimeo.com/api/oembed.json?url=x' because it violates the Content Security Policy directive"
+    )
+  );
+  const { patches } = await setup({ options: { customControls: true } });
+  const [notice] = configurationNotices(patches);
+  expect(notice?.error?.message).not.toContain('vimeo.com');
+  expect(notice?.error?.message).not.toContain('Content Security Policy');
+  expect(notice?.error?.cause).toBeUndefined();
+});
+
+test('reports a probe given up on at its deadline as a configuration notice', async () => {
+  vi.useFakeTimers();
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  fetchMock.mockImplementation(() => new Promise(() => undefined));
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+
+  const provider = createVimeoProvider(mount, publicSource, {
+    customControls: true
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  const loading = provider.load();
+  await vi.advanceTimersByTimeAsync(CHROMELESS_PROBE_TIMEOUT_MS);
+  await loading;
+
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    customControls: { status: 'unknown', reason: 'provider-check' }
+  });
+  // The whole patch, not a subset: a notice carries an error and nothing else,
+  // so it never moves the lifecycle, the activation, or command readiness.
+  expect(configurationNotices(patches)).toEqual([
+    {
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false,
+        message: expect.stringContaining('could not be completed')
+      }
+    }
+  ]);
+});
+
+test.each([
+  ['a refused request', (): Response => new Response('nope', { status: 404 })],
+  ['a body that is not JSON', (): Response => new Response('<html>')],
+  [
+    'a record naming no tier',
+    (): Response => Response.json({ video_id: 76979871 })
+  ],
+  ['an unrecognized tier', (): Response => oembedResponse('future_tier')]
+])('reports no notice when Vimeo answered with %s', async (_form, response) => {
+  fetchMock.mockResolvedValue(response());
+  const { patches } = await setup({ options: { customControls: true } });
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    customControls: { status: 'unknown', reason: 'provider-check' }
+  });
+  expect(configurationNotices(patches)).toEqual([]);
+});
+
+test.each(['pro', 'basic'])(
+  'reports no notice for the tier %s Vimeo resolved',
+  async (accountType) => {
+    fetchMock.mockResolvedValue(oembedResponse(accountType));
+    const { patches } = await setup({ options: { customControls: true } });
+    expect(configurationNotices(patches)).toEqual([]);
+  }
+);
+
+// The attachment cancels the probe from its teardown, which every path that
+// discards a player runs — an ordinary unmount included. A notice there would
+// fire on the way out of a page that never had a problem.
+test('reports no notice when teardown abandons a probe still in flight', async () => {
+  fetchMock.mockImplementation(() => new Promise(() => undefined));
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+
+  const provider = createVimeoProvider(mount, publicSource, {
+    customControls: true
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  const loading = provider.load();
+  await flushMicrotasks();
+  await provider.destroy();
+  await loading;
+
+  expect(configurationNotices(patches)).toEqual([]);
+});
+
+test.each([
+  ['Vimeo draws its own controls', { controls: true }],
+  ['custom controls were not requested', {}]
+])(
+  'sends no request and reports no notice when %s',
+  async (_form, options: VimeoProviderOptions) => {
+    const { patches } = await setup({ options });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(configurationNotices(patches)).toEqual([]);
+  }
+);
 
 test('honors an explicit Do-Not-Track opt-out', async () => {
   const result = await setup({ options: { dnt: false } });

@@ -135,6 +135,14 @@ subscriber's: the rest of the set is owed that notification. Not the single call
 a `subscribe` makes at registration, which runs on the subscriber's own stack.
 _Avoid_: broadcast, notify loop
 
+**Notice**:
+A non-fatal `configuration` error a provider publishes to report a value it
+rejected, while the fall-back behaviour it degraded to stands unchanged. Held
+as controller state and surfaced on `PlayerState.error` like any other error,
+but never a failure: it never masks a standing error, and it never drives a
+transition into the error lifecycle.
+_Avoid_: warning, soft error
+
 **Aurora**:
 Wistia's current player generation — the `<wistia-player>` custom element the
 Wistia provider targets, and the only one it supports. Named here because the

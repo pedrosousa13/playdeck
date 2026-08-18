@@ -48,6 +48,22 @@ const loadFailure = (cause: unknown): PlayerError => {
   };
 };
 
+// What a chromeless probe that never completed publishes. Non-fatal: the
+// capability falls back to `unknown`, which the consumer already handles, and
+// the rest of the embed is untouched. Never `recoverable`: a retry re-runs the
+// same request against the same environment and gets the same nothing (#198).
+// Names neither the url it asked for nor what came back — the likeliest cause
+// is the embedding page's own Content-Security-Policy refusing `vimeo.com`,
+// and a notice that echoed the refusal back would only repeat what the page
+// already decided (#235).
+const chromelessProbeConfigurationNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  message:
+    'The chromeless-capability check could not be completed, so the customControls capability is reported as unknown.'
+};
+
 // The fields of the host's options the embed url carries, read when the embed
 // is built rather than snapshotted at construction.
 type VimeoEmbedOptions = {
@@ -314,7 +330,7 @@ export const createVimeoAttachment = (
         initialTracks,
         initialChapters,
         initialQualities,
-        chromelessVerdict,
+        chromelessProbeResult,
         initialWidth,
         initialHeight
       ] = await Promise.all([
@@ -344,7 +360,15 @@ export const createVimeoAttachment = (
       const textTrackPatch = textTracks.adopt(player, initialTracks);
       const chapterPatch = chapters.adopt(initialChapters, initialDuration);
       const qualityPatch = qualityLevels.adopt(initialQualities);
-      chromeless.adopt(chromelessVerdict);
+      chromeless.adopt(chromelessProbeResult);
+      // A probe that never reached Vimeo leaves `customControls` reporting
+      // `unknown` in the ready patch below with nothing to say why, and the
+      // reason is likelier to be the embedding page's own policy than
+      // anything Vimeo did. A probe Vimeo answered says nothing here: the
+      // consumer has no move to make against an unusable tier (#235).
+      if (!chromelessProbeResult.completed) {
+        emit({ error: chromelessProbeConfigurationNotice });
+      }
       const playbackPatch = playback.adopt(player, {
         duration: initialDuration,
         muted: initialMuted,

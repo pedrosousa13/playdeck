@@ -96,6 +96,14 @@ const readyPatch = (patches: ProviderStatePatch[]): ProviderStatePatch => {
   return patch!;
 };
 
+// Every non-fatal `configuration` notice among the patches a setup collected,
+// in emission order — filtered out from the lifecycle patches (`ready`, live
+// updates, dimensions) that share the same `patches` array.
+const configurationNotices = (
+  patches: ProviderStatePatch[]
+): ProviderStatePatch[] =>
+  patches.filter((patch) => patch.error?.category === 'configuration');
+
 const lastEvent = (events: ProviderEvent[]): ProviderEvent => {
   const event = events.at(-1);
   expect(event).toBeDefined();
@@ -352,6 +360,34 @@ test.each([
   expect(element(result).getAttribute('player-color')).toBeNull();
 });
 
+// The drop above used to be silent; it now also publishes a non-fatal
+// `configuration` notice, so a rejected `playerColor` is observable rather
+// than merely safe (#235).
+test('publishes a configuration notice when playerColor fails isHexColor', async () => {
+  const result = await setup({ options: { playerColor: 'red' } });
+
+  const notices = configurationNotices(result.patches);
+  expect(notices).toHaveLength(1);
+  const [notice] = notices;
+  expect(notice).toMatchObject({
+    error: { category: 'configuration', fatal: false, recoverable: false }
+  });
+  // Not a state transition: only `error` is set.
+  expect(notice?.lifecycle).toBeUndefined();
+  expect(notice?.activation).toBeUndefined();
+  expect(notice?.commandsReady).toBeUndefined();
+  // Names the option and what was expected, never the rejected value.
+  expect(notice?.error?.message).toBe(
+    'The playerColor option was rejected: expected a CSS hex colour.'
+  );
+  expect(notice?.error?.message).not.toContain('red');
+});
+
+test('does not publish a notice for a valid playerColor', async () => {
+  const result = await setup({ options: { playerColor: '#ff0000' } });
+  expect(configurationNotices(result.patches)).toHaveLength(0);
+});
+
 test('sets swatch as a boolean-string attribute', async () => {
   const result = await setup({ options: { swatch: false } });
   expect(element(result).getAttribute('swatch')).toBe('false');
@@ -412,9 +448,41 @@ test.each([
   expect(element(result).getAttribute('poster')).toBeNull();
 });
 
+// The drop above used to be silent; it now also publishes a non-fatal
+// `configuration` notice, so a rejected `poster` is observable rather than
+// merely safe (#235).
+test('publishes a configuration notice when poster fails isPermittedSourceUrl', async () => {
+  const result = await setup({
+    options: { poster: 'javascript:alert(1)' }
+  });
+
+  const notices = configurationNotices(result.patches);
+  expect(notices).toHaveLength(1);
+  const [notice] = notices;
+  expect(notice).toMatchObject({
+    error: { category: 'configuration', fatal: false, recoverable: false }
+  });
+  expect(notice?.lifecycle).toBeUndefined();
+  expect(notice?.activation).toBeUndefined();
+  expect(notice?.commandsReady).toBeUndefined();
+  expect(notice?.error?.message).toBe(
+    'The poster option was rejected: expected a permitted source URL.'
+  );
+  expect(notice?.error?.message).not.toContain('javascript:alert(1)');
+});
+
+test('does not publish a notice for a valid poster', async () => {
+  const result = await setup({
+    options: { poster: 'https://example.test/poster.png' }
+  });
+  expect(configurationNotices(result.patches)).toHaveLength(0);
+});
+
 // One bad presentation option must not fail playback: the drop is silent and
-// the rest of the attach runs, so the player still reaches ready.
-test('reaches ready with the dropped presentation options unset', async () => {
+// the rest of the attach runs, so the player still reaches ready. Both
+// rejections are reported (#235): the controller's first-wins behaviour is
+// Task 1's, so at the provider level each rejection emits its own notice.
+test('reaches ready with the dropped presentation options unset, and publishes a notice for each rejection', async () => {
   const result = await setup({
     options: { playerColor: 'red', poster: 'javascript:alert(1)' }
   });
@@ -422,6 +490,15 @@ test('reaches ready with the dropped presentation options unset', async () => {
   expect(player.getAttribute('player-color')).toBeNull();
   expect(player.getAttribute('poster')).toBeNull();
   expect(readyPatch(result.patches)).toMatchObject({ lifecycle: 'ready' });
+
+  const notices = configurationNotices(result.patches);
+  expect(notices).toHaveLength(2);
+  expect(notices[0]?.error?.message).toBe(
+    'The playerColor option was rejected: expected a CSS hex colour.'
+  );
+  expect(notices[1]?.error?.message).toBe(
+    'The poster option was rejected: expected a permitted source URL.'
+  );
 });
 
 test('sets transparent letterbox as a boolean-string attribute', async () => {
@@ -436,6 +513,8 @@ test('leaves the presentation attributes unset when the options are omitted', as
   expect(player.getAttribute('swatch')).toBeNull();
   expect(player.getAttribute('poster')).toBeNull();
   expect(player.getAttribute('transparent-letterbox')).toBeNull();
+  // An omitted option is not a rejection: no notice either.
+  expect(configurationNotices(result.patches)).toHaveLength(0);
 });
 
 test('seeds the embed muted state from the mount preference', async () => {
