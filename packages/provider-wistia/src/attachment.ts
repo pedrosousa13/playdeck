@@ -112,8 +112,9 @@ const attributeName = (option: WistiaPlayerAttribute): string =>
 // unchecked by this file, because `createWistiaProvider` already validates it
 // with `isWistiaMediaId` before this seam is even built (#222). A value that
 // fails its check sets no attribute, the same element state as omitting the
-// option, and the drop is silent: one bad presentation option must not fail
-// playback.
+// option — one bad presentation option must not fail playback. That drop used
+// to be silent; it is no longer unreported, since `buildElement` below
+// publishes it as a non-fatal `configuration` notice (#235).
 //
 // Every hex form CSS Color 4 spells: three, four, six, or eight digits, with
 // or without the hash — the four- and eight-digit forms carry an alpha channel.
@@ -121,6 +122,25 @@ const attributeName = (option: WistiaPlayerAttribute): string =>
 // and the attribute is handed to the player as given.
 const isHexColor = (value: string): boolean =>
   /^#?(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value);
+
+// What a rejected `playerColor` or `poster` publishes. Never `recoverable`:
+// the fix is a different option value, so a retry would just replay the same
+// rejection (#198). Names the option and what was expected rather than
+// echoing the rejected value, the same posture as the YouTube adapter's
+// `hostConfigurationNotice` (#235).
+const playerColorConfigurationNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  message: 'The playerColor option was rejected: expected a CSS hex colour.'
+};
+
+const posterConfigurationNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  message: 'The poster option was rejected: expected a permitted source URL.'
+};
 
 // The event the element dispatches once its media data is back, named
 // `LOADED_MEDIA_DATA_EVENT` in the SDK's `utilities/eventConstants`. Restated
@@ -348,9 +368,14 @@ export const createWistiaAttachment = (
     // These four are presentation-only and each has no Wistia-side default to
     // preserve, so an omitted option sets no attribute at all rather than a
     // computed 'false' or empty string. A `playerColor` or `poster` that fails
-    // its check is dropped onto that same path.
-    if (options.playerColor !== undefined && isHexColor(options.playerColor)) {
-      setOption('playerColor', options.playerColor);
+    // its check is dropped onto that same path, and now also reported as a
+    // notice (#235).
+    if (options.playerColor !== undefined) {
+      if (isHexColor(options.playerColor)) {
+        setOption('playerColor', options.playerColor);
+      } else {
+        emit({ error: playerColorConfigurationNotice });
+      }
     }
     if (options.swatch !== undefined) {
       setOption('swatch', options.swatch ? 'true' : 'false');
@@ -368,11 +393,12 @@ export const createWistiaAttachment = (
     // says nothing about how a later consumer of the attribute — a browser or
     // Wistia's own SDK — resolves that string as a URL; that resolution is a
     // property of the shared allowlist's own design (#219), not of this path.
-    if (
-      options.poster !== undefined &&
-      isPermittedSourceUrl(options.poster, undefined)
-    ) {
-      setOption('poster', resolveNetworkPath(options.poster));
+    if (options.poster !== undefined) {
+      if (isPermittedSourceUrl(options.poster, undefined)) {
+        setOption('poster', resolveNetworkPath(options.poster));
+      } else {
+        emit({ error: posterConfigurationNotice });
+      }
     }
     if (options.transparentLetterbox !== undefined) {
       setOption(
