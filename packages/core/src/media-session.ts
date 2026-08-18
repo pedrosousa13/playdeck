@@ -1,3 +1,7 @@
+import {
+  isPermittedSourceUrl,
+  resolveNetworkPath
+} from './source-detection.js';
 import type { PlaybackState } from './types.js';
 
 import type { PlayerController } from './player-controller.js';
@@ -121,11 +125,31 @@ const globalMediaMetadata = ():
     : undefined;
 };
 
+// An artwork entry whose `src` the shared allowlist refuses is dropped
+// rather than carried into either `MediaMetadata` path below: one bad entry
+// must not cost the caller its other artwork sizes, and this is the one URL
+// prop of the four #236 covers that never had a provider-side check to hide
+// behind (#219, #236). `type: undefined` refuses `blob:` here, the same as
+// every other consumer-supplied prop the allowlist governs. A surviving
+// entry's `src` is written through `resolveNetworkPath`, so a
+// protocol-relative artwork URL resolves the same way a source URL does; its
+// `sizes` and `type` are copied verbatim.
+const permittedArtwork = (
+  artwork: MediaMetadataInput['artwork']
+): MediaSessionArtwork[] =>
+  artwork
+    ? artwork.flatMap((art) =>
+        isPermittedSourceUrl(art.src, undefined)
+          ? [{ ...art, src: resolveNetworkPath(art.src) }]
+          : []
+      )
+    : [];
+
 const toMediaMetadata = (metadata: MediaMetadataInput): unknown => {
   const Ctor = globalMediaMetadata();
   const init = {
     ...metadata,
-    artwork: metadata.artwork ? metadata.artwork.map((art) => ({ ...art })) : []
+    artwork: permittedArtwork(metadata.artwork)
   };
   if (!Ctor) return init;
   try {
