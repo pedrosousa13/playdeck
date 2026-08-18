@@ -40,6 +40,15 @@ What a consumer asks the player to play: a URL string, or a resolved descriptor
 naming its kind. Distinct from the `<source>` elements the native provider
 renders.
 
+**Shared allowlist**:
+The one rule (`isPermittedSourceUrl` / `resolveNetworkPath`, `@reely/core`)
+for whether a URL the library did not construct is carried forward: `http:`,
+`https:` and the scheme-less forms are permitted, `blob:` only for a `video`
+source, and everything else is refused. Governs source detection, every
+consumer-supplied URL prop and provider option alike (#219, #236). A refused
+value is treated exactly as if the prop were absent — never a throw.
+_Avoid_: whitelist, sanitise, safe URL
+
 **Shortcut layer**:
 The media keys `Player.Controls` owns. One binding maps keys to one action —
 `seekForward`, `toggleMuted` — and a consumer rebinds or suppresses a binding
