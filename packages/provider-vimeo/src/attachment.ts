@@ -299,6 +299,11 @@ export const createVimeoAttachment = (
         suppressSeoMetadata: options.suppressSeoMetadata
       });
       if (isStale(thisGeneration)) return { ok: true };
+      // No `sandbox` here, and that is a decision rather than an omission: the
+      // SDK's postMessage bridge needs `allow-scripts allow-same-origin`, and a
+      // sandbox carrying both is close to none (#237). The reasoning, and what
+      // would reopen it, are in docs/third-party-requests.md, under
+      // "The Vimeo sandbox bargain".
       const iframe = mount.ownerDocument.createElement('iframe');
       iframe.src = vimeoEmbedUrl(source, options, mount.muted);
       iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
