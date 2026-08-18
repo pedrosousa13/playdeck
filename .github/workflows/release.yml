@@ -1,0 +1,135 @@
+name: Release
+
+# Publishing is a deliberate act, so this is `workflow_dispatch` and nothing
+# else. #229's brief asked for a push trigger on the default branch, but that
+# was written for a changesets version-PR flow -- push, and the workflow decides
+# for you whether the tree is a release. The repo is not using that flow for the
+# bootstrap: the 0.1.0 bump landed by hand in #341, so a push trigger would put
+# every merge to `main` in front of the publish step to make that call alone.
+#
+# `dry_run` defaults to true, so an accidental dispatch cannot publish. Flip it
+# off only when the run is meant to claim the versions for real: npm has no
+# unpublish for a version more than 72 hours old, and none of the seven names
+# exists on the registry yet.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Resolve, pack and check the packages without publishing them
+        type: boolean
+        default: true
+
+# Read-only, as in `ci.yml`. The release job below widens its own copy; nothing
+# here is a reason to widen that one.
+permissions:
+  contents: read
+
+# Deliberately not `cancel-in-progress`, unlike `ci.yml`: half the workspace on
+# the registry and half of it not is worse than a queued second run.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # A fork gets its own copy of this file, its own Actions tab and its own
+    # dispatch button. It does not get `NPM_TOKEN`, so a publish from one would
+    # fail rather than succeed -- but it would still build and pack under this
+    # repo's package names, so refuse outright instead.
+    if: github.repository == 'pedrosousa13/playdeck'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Provenance is not optional-with-a-warning. Without this permission npm
+      # throws `Provenance generation in GitHub Actions requires "write" access
+      # to the "id-token" permission` and the publish fails outright -- see
+      # `ensureProvenanceGeneration` in libnpmpublish/lib/publish.js.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+          # This is the whole of the registry auth setup, and it is not
+          # decorative. `registry-url` makes setup-node write
+          # `$RUNNER_TEMP/.npmrc` holding
+          # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`, and export
+          # `NPM_CONFIG_USERCONFIG` pointing at it. pnpm honours that variable
+          # and expands `${...}` in a *user-level* npmrc, which is the only
+          # route that works here: pnpm 10 deliberately refuses to expand
+          # environment variables in registry credentials that come from a
+          # project `.npmrc`, so the same line written into the repo root would
+          # be ignored with a warning and the publish would fail unauthenticated.
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+
+      # The gates, in the same job as the publish rather than as a separate
+      # workflow, so the attestation covers artifacts this run actually
+      # verified. These are the checks that say something about what ships;
+      # `format:check`, `lint`, `docs:check` and the browser suites say
+      # something about the source and already ran on `main` in `ci.yml`.
+      #
+      # typecheck first: it is `tsc -b`, and it emits the declaration files the
+      # packages ship and the later checks read.
+      - run: pnpm typecheck
+      - run: pnpm test
+      # Fails on any advisory reachable from a publishable package's own
+      # `dependencies`, at any severity. It is the one check whose finding
+      # travels to a consumer, and a consumer cannot patch it from their side.
+      - run: pnpm test:audit
+      # `test:bundle` and `test:integrations` drive a real browser.
+      # No `actions/cache` here, unlike `ci.yml`: this workflow runs a handful
+      # of times a year, so the cache would be cold on almost every run.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test:packages
+      - run: pnpm test:budgets
+      - run: pnpm test:bundle
+      - run: pnpm test:integrations
+
+      # Both publish steps below fail closed. If `inputs.dry_run` ever arrives
+      # as the string "false" rather than the boolean, the first step runs
+      # (a string is truthy) and the second does not (`"false" == false` is
+      # false under GitHub's comparison rules) -- so the failure mode is a
+      # second dry run, never an unintended publish.
+      #
+      # On both flags:
+      #
+      # `--access public`: required, not habitual. All seven names are new to
+      # the registry, and libnpmpublish refuses provenance for a package it
+      # cannot see as public -- "Can't generate provenance for new or private
+      # package, you must set `access` to public."
+      #
+      # `--provenance`: documented for pnpm 10 (https://pnpm.io/10.x/cli/publish)
+      # and accepted by the pinned 10.34.5, which rejects unknown options. But
+      # under `-r` pnpm forwards only `--tag`, `--registry`, `--access`,
+      # `--dry-run`, `--force` and `--otp` to the `npm publish` it spawns per
+      # package, so this flag does not reach npm. What actually turns provenance
+      # on is `publishConfig.provenance: true` in each of the seven manifests,
+      # which npm reads back out of the packed tarball. The flag is kept because
+      # it is correct and becomes load-bearing the day a manifest loses that
+      # field -- but do not read its presence as proof provenance is on.
+      #
+      # `--no-git-checks`: the runner's checkout is a detached HEAD, which
+      # pnpm's publish-branch check rejects.
+      #
+      # `-r`: publishes every workspace package that is not `private` and whose
+      # exact version is not already on the registry. The seven come out of the
+      # manifests; nothing here names them.
+      #
+      # The dry run gets the token too. It cannot publish -- npm never calls
+      # libnpmpublish under `--dry-run` -- and running it authenticated is the
+      # point: a misconfigured token is the likeliest way a first publish fails,
+      # and an unauthenticated dry run would prove nothing about it.
+      - name: Publish (dry run)
+        if: inputs.dry_run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish -r --access public --provenance --no-git-checks --dry-run
+      - name: Publish
+        if: inputs.dry_run == false
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish -r --access public --provenance --no-git-checks
