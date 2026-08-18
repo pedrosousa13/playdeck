@@ -167,8 +167,9 @@ export const PosterImage = ({
   // truthiness -- a rejected pair filtered after them would land in
   // `loading` and never resolve. Filtering first makes "a poster given only
   // rejected values settles in idle" fall out of the existing state machine
-  // (#236). A bare poster string never carries a `type: 'video'`, so
-  // `permittedUrl`'s default `type: undefined` refuses `blob:` here too.
+  // (#236). `permittedUrl` passes `undefined` for `isPermittedSourceUrl`'s
+  // `type` internally, which is what refuses `blob:` here too -- a bare
+  // poster string never carries a `type: 'video'`.
   const src = permittedUrl(srcProp);
   const srcSet = permittedPosterSrcSet(srcSetProp);
   const requestKey = posterRequestKey({ src, srcSet, sizes });
