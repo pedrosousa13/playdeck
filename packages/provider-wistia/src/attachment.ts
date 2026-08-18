@@ -380,19 +380,22 @@ export const createWistiaAttachment = (
     if (options.swatch !== undefined) {
       setOption('swatch', options.swatch ? 'true' : 'false');
     }
-    // The shared allowlist (`isPermittedSourceUrl`, `@reely/core`), the same
-    // one source detection runs — `http:`, `https:` and the scheme-less forms
-    // are permitted, `data:` and `javascript:` are not; `blob:` is refused
-    // here too, since it is permitted only for a `video` source and no `type`
-    // is passed for a poster. The value this code writes is byte-identical to
-    // the caller's own string, never a reparsed one: nothing in this path
-    // constructs a `URL` and reads back its `.href`, so what gets validated
-    // above is exactly what lands on the attribute. The one exception is
-    // `resolveNetworkPath`'s protocol-relative substitution, the same
-    // normalisation source detection performs for a source URL (#219). This
-    // says nothing about how a later consumer of the attribute — a browser or
-    // Wistia's own SDK — resolves that string as a URL; that resolution is a
-    // property of the shared allowlist's own design (#219), not of this path.
+    // This check applies the shared allowlist (`isPermittedSourceUrl`,
+    // `@reely/core`) rather than restating a rule of its own. That allowlist
+    // is the library's rule — the same one source detection and every other
+    // consumer-supplied URL prop apply (#219, #236): it permits `http:`,
+    // `https:` and the scheme-less forms and refuses `data:` and
+    // `javascript:`; `blob:` is refused here too, since it is permitted only
+    // for a `video` source and no `type` is passed for a poster. The value
+    // this code writes is byte-identical to the caller's own string, never a
+    // reparsed one: nothing in this path constructs a `URL` and reads back
+    // its `.href`, so what gets validated above is exactly what lands on
+    // the attribute. The one exception is `resolveNetworkPath`'s
+    // protocol-relative substitution, the same normalisation source
+    // detection performs for a source URL (#219). This says nothing about
+    // how a later consumer of the attribute — a browser or Wistia's own SDK
+    // — resolves that string as a URL; that resolution is a property of the
+    // shared allowlist's own design (#219), not of this path.
     if (options.poster !== undefined) {
       if (isPermittedSourceUrl(options.poster, undefined)) {
         setOption('poster', resolveNetworkPath(options.poster));
