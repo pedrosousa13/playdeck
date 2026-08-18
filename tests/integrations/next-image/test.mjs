@@ -27,7 +27,7 @@ const equalRectangles = (actual, expected) => {
 /** @param {import('@playwright/test').Page} page */
 const readPosterMarkup = (page) =>
   page
-    .locator('[data-reely-part="poster"]')
+    .locator('[data-playdeck-part="poster"]')
     .evaluate((/** @type {HTMLElement} */ poster) => {
       const image = poster.querySelector('img[alt=""]');
       if (!image) throw new Error('Expected a poster image in the live DOM.');
@@ -100,7 +100,7 @@ await runWithCleanup({
         page.goto(`${origin}/`, { waitUntil: 'commit' })
       ]);
       await page
-        .locator('[data-reely-part="poster"] img[alt=""]')
+        .locator('[data-playdeck-part="poster"] img[alt=""]')
         .waitFor({ state: 'attached', timeout: 10_000 });
 
       const beforeHydration = await readPosterMarkup(page);

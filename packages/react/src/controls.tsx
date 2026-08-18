@@ -57,7 +57,7 @@ const isTextEntryTarget = (node: EventTarget | null): boolean => {
 const isInOpenMenu = (node: EventTarget | null): boolean =>
   node instanceof HTMLElement &&
   node.closest(
-    '[role="menu"], [role="menubar"], [role="listbox"], [data-reely-menu="open"]'
+    '[role="menu"], [role="menubar"], [role="listbox"], [data-playdeck-menu="open"]'
   ) !== null;
 
 const nativeActivationSelector = 'button, [role="button"], a[href], summary';
@@ -376,7 +376,7 @@ export const Controls = ({
       {...props}
       aria-label={ariaLabel ?? 'Video player controls'}
       data-provider={provider ?? undefined}
-      data-reely-part="controls"
+      data-playdeck-part="controls"
       data-state={global ? 'global' : 'scoped'}
       onBlur={(event) => {
         onBlur?.(event);

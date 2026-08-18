@@ -16,7 +16,7 @@ import {
   SettingsIcon,
   VolumeHighIcon,
   VolumeLowIcon
-} from '@reely/react';
+} from '@playdeck/react';
 
 // Every icon is an optional named export that tree-shakes out when unused, so
 // importing one costs you only that one.

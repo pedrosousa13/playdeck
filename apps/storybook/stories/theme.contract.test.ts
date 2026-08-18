@@ -35,7 +35,7 @@ describe('withTheme toolbar gate', () => {
     const [style, story] = (element.props as { children: ThemedChildren })
       .children;
     expect(style.type).toBe('style');
-    expect(style.props.children).toContain('@layer reely');
+    expect(style.props.children).toContain('@layer playdeck');
     expect(story.type).toBe(Story);
   });
 });

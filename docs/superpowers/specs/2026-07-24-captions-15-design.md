@@ -10,7 +10,7 @@ Add captions to native media and HLS as a **hybrid** model (locked at product le
 
 ## Contract inherited from #8 (do not break)
 
-- Stable `data-reely-part` / `data-state` / `data-provider` attributes + ARIA state.
+- Stable `data-playdeck-part` / `data-state` / `data-provider` attributes + ARIA state.
 - `className` / `style` / `ref` passthrough; `{...props}` spread; replaceable children.
 - Selector-gated `usePlayerState` — new PlayerState fields re-render only their subscribers.
 - `capabilities.selectTextTrack` Availability + `controller.selectTextTrack(id | null)` command already scaffolded in core; reuse them.
@@ -36,7 +36,7 @@ subscribeCues(listener: (cues: readonly TextCue[]) => void): () => void;
 useActiveCues(): readonly TextCue[];   // useSyncExternalStore; only Player.Captions subscribes
 ```
 
-## Core contracts (`@reely/core`)
+## Core contracts (`@playdeck/core`)
 
 ```ts
 export type TextTrackKind = 'subtitles' | 'captions';
@@ -77,7 +77,7 @@ Controller re-exposes `subscribeCues` (fans out to whichever provider is attache
 
 ## Provider mapping
 
-### `@reely/provider-native`
+### `@playdeck/provider-native`
 
 - Discovery: external `<track>` elements + `HTMLMediaElement.textTracks`. Normalize each to `TextTrack`; derive a stable id (underlying `track.id` when present, else `native:<index>`), map `kind` (`captions`/`subtitles` → keep; others → excluded from the list), `readiness` from track load state.
 - **Default selection rule:** if a discovered `captions`/`subtitles` track carries the `default` attribute (native `<track default>` / provider default flag), it is selected on load; otherwise selection starts `off` (`selectedTextTrackId = null`). User selection always overrides and persists until source switch.
@@ -85,11 +85,11 @@ Controller re-exposes `subscribeCues` (fans out to whichever provider is attache
 - Native mode: `mode = 'showing'` for the selected track, `disabled` for others; overlay stands down; effective `captionRendering = 'native'`.
 - `capabilities.selectTextTrack` flips to `available` once a track list exists.
 
-### `@reely/provider-hls`
+### `@playdeck/provider-hls`
 
 - Embedded WebVTT for **both engines**: native Safari (`HTMLMediaElement.textTracks`, same path as native provider) and hls.js (`hlsjs` subtitle tracks + cue events). Normalize to the same `TextTrack` / `TextCue` shapes. Same custom/native mode handling.
 
-## React primitives (`@reely/react`)
+## React primitives (`@playdeck/react`)
 
 ### `Player.Captions` — the custom overlay
 
@@ -97,7 +97,7 @@ Controller re-exposes `subscribeCues` (fans out to whichever provider is attache
 - Subscribes to active cues via `useActiveCues()`.
 - Caption layer at `z-index: 20`, safe-area-aware positioning (`env(safe-area-inset-*)`), user style variables (font size, colors, background, edge style) exposed as CSS custom properties.
 - `renderCue?: (cue: TextCue) => ReactNode` render prop for full customization; default renders `text` (multi-line preserved). Engine cue objects never exposed.
-- Contract attrs: `data-reely-part="captions"`, `data-state` = `custom` / `off`, no `aria-live`.
+- Contract attrs: `data-playdeck-part="captions"`, `data-state` = `custom` / `off`, no `aria-live`.
 - Robustness: malformed / empty cues don't crash the overlay (guarded render).
 
 ### `Player.Root` renderer prop
@@ -111,10 +111,10 @@ Controller re-exposes `subscribeCues` (fans out to whichever provider is attache
 
 ## Testing
 
-- **Core** (`@reely/core`): initial-state fields; `subscribeCues` fan-out / empty when no provider; `setCaptionRenderer` → effective mode; source-switch reset. Failing-first.
+- **Core** (`@playdeck/core`): initial-state fields; `subscribeCues` fan-out / empty when no provider; `setCaptionRenderer` → effective mode; source-switch reset. Failing-first.
 - **Provider-native**: external `<track>` discovery, default selection rules, off state, language switching, cue enter/exit timing, source-switch reset, malformed cues, capability changes. Failing-first.
 - **Provider-hls**: embedded WebVTT discovery for both engines; cue normalization.
-- **React** (`@reely/react`): overlay renders only in custom mode; `renderCue` customization without engine leakage; native mode → overlay empty + effective mode `native`; announcement fires once on selection, cue text never in a live region; safe-area styling present.
+- **React** (`@playdeck/react`): overlay renders only in custom mode; `renderCue` customization without engine leakage; native mode → overlay empty + effective mode `native`; announcement fires once on selection, cue text never in a live region; safe-area styling present.
 - **Stories** (per #19, mock controller): one-line, multi-line, long-text, high-contrast, safe-area cue variants.
 - **e2e**: `pnpm test:e2e -- --grep captions` in Chromium and WebKit.
 - **Axe**: passes with captions on.
@@ -122,7 +122,7 @@ Controller re-exposes `subscribeCues` (fans out to whichever provider is attache
 ## HITL gates
 
 - **Owner visual review (required):** the cue stories reviewed and approved in Storybook (`verify-storybook-visually` memory: drive real dev server).
-- Docs: both rendering modes + **author responsibilities** — caption accuracy, sync, language labeling, and WCAG conformance remain the content author's job; Reely provides the mechanics only.
+- Docs: both rendering modes + **author responsibilities** — caption accuracy, sync, language labeling, and WCAG conformance remain the content author's job; Playdeck provides the mechanics only.
 
 ## Out of scope
 

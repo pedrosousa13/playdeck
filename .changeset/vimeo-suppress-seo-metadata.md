@@ -1,6 +1,6 @@
 ---
-'@reely/provider-vimeo': patch
-'@reely/react': patch
+'@playdeck/provider-vimeo': patch
+'@playdeck/react': patch
 ---
 
 `VimeoProviderOptions` gains `suppressSeoMetadata`, an opt-in switch that stops
@@ -10,7 +10,7 @@ to the embed frame.
 `@vimeo/player` installs a `window` `message` listener at module scope. When a
 frame whose src matches its embed pattern completes the readiness handshake, the
 listener answers it with `appendVideoMetadata` carrying `window.location.href`.
-The url Reely builds matches that pattern, so Reely's own embed is the frame it
+The url Playdeck builds matches that pattern, so Playdeck's own embed is the frame it
 resolves. The `referrerpolicy="strict-origin-when-cross-origin"` set on that
 iframe does not prevent this — that narrows the iframe's own request header, and
 this is a message sent afterwards — and neither does `dnt=1`. So any app
@@ -19,7 +19,7 @@ segment or query string was sending it to the embed on every Vimeo attach, with
 default options. Reproduced in a real browser by `e2e/vimeo-seo-metadata.spec.ts`
 rather than read off the bundle.
 
-With `suppressSeoMetadata: true`, Reely sets the SDK's own guard global before
+With `suppressSeoMetadata: true`, Playdeck sets the SDK's own guard global before
 the dynamic import, so the listener is never installed. Reachable from
 `Player.Root` as `providerOptions={{ vimeo: { suppressSeoMetadata: true } }}`.
 Two consequences it is opt-in because of, both documented in
@@ -27,7 +27,7 @@ Two consequences it is opt-in because of, both documented in
 
 - **The suppression is page-wide, not per-embed.** The SDK's guard is a `window`
   global, so it silences the handshake for every Vimeo embed on the page,
-  including embeds Reely did not create. That blast radius is the consumer's to
+  including embeds Playdeck did not create. That blast radius is the consumer's to
   accept, not the library's to decide.
 - **It takes effect on the first Vimeo attach, for the life of the page.** The
   SDK module is imported once and cached, and reads the guard while it
@@ -36,13 +36,13 @@ Two consequences it is opt-in because of, both documented in
   pretend otherwise.
 
 A page that has already set that global keeps its own value, in either
-direction — Reely writes it only when it is not already set, and never writes it
+direction — Playdeck writes it only when it is not already set, and never writes it
 at all with the option off or absent.
 
-**Nothing changes by default.** With the option absent or `false`, Reely writes
+**Nothing changes by default.** With the option absent or `false`, Playdeck writes
 nothing to the global and the handshake happens exactly as it did before. So
 both packages land as `patch`: an added optional option that defaults to off
-breaks nothing, and `@reely/react` moves only because
+breaks nothing, and `@playdeck/react` moves only because
 `PlayerProviderOptions.vimeo` now carries the key.
 
 **A documentation correction rides along.** `packages/provider-vimeo/README.md`

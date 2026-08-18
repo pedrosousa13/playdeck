@@ -3,7 +3,7 @@ import type {
   PlayerState,
   TextCue,
   detectSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   createContext,
   useCallback,

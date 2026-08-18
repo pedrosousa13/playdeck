@@ -6,7 +6,7 @@ Per the brief's step order (stories → red → machinery → wiring → green):
 
 1. `packages/react/src/activation.stories.tsx` — five `Player/ActivationButton` stories (`Dormant`, `Eligible`, `LoadingProvider`, `ErrorState`, `ActivatesOnClick`), exactly as specified in the brief, exercising `Player.Root`'s `interaction` loading strategy through play functions.
 2. `apps/storybook/src/mock-provider-loader.ts` — the mock loader seam: `MockScenario` type, `setScenario`, `getFakeProviderHandle`, and a `loadProvider` that wraps `createFakeProvider` from the react package's test fixtures, with `resolve` / `pending` / `reject` scenarios and post-subscribe patch flushing.
-3. `apps/storybook/src/with-mock-controller.tsx` — the global `withMockController` decorator that reads `parameters.reely` (`rootProps`, `scenario`), resets the mock scenario at render time, and wraps every story in `Player.Root`.
+3. `apps/storybook/src/with-mock-controller.tsx` — the global `withMockController` decorator that reads `parameters.playdeck` (`rootProps`, `scenario`), resets the mock scenario at render time, and wraps every story in `Player.Root`.
 4. Wiring: `apps/storybook/.storybook/main.ts` (alias `./provider-loaders` → the mock module inside `use-activation.ts`'s import graph) and `apps/storybook/.storybook/preview.ts` (registers `withMockController` as a global decorator).
 
 ## TDD evidence
@@ -57,7 +57,7 @@ Confirmed stable across three repeat runs (including a run with a fully cleared 
 | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm test:storybook` (RED, pre-machinery)                                 | 5 activation-story failures for missing `Player.Root` context; `Idle` passed |
 | `pnpm test:storybook` (GREEN, post-machinery, ×3 incl. one cold-cache run) | 6/6 passed, stable                                                           |
-| `pnpm --filter @reely/storybook build`                                     | exit 0                                                                       |
+| `pnpm --filter @playdeck/storybook build`                                  | exit 0                                                                       |
 | `pnpm format`                                                              | no changes (all files already formatted)                                     |
 | `pnpm format:check`                                                        | pass                                                                         |
 | `pnpm lint`                                                                | pass (after removing the unused mock-loader parameter — see deviations)      |
@@ -92,4 +92,4 @@ Commit: `21f3532 feat: add mock controller decorator and activation stories`
 
 4. **Unused parameter removed from the mock `loadProvider` (`mock-provider-loader.ts`)**: the brief's snippet declared an unused `_request` parameter (typed but never read). This repo's `eslint.config.js` uses `@typescript-eslint/recommended`'s default `no-unused-vars` (no `argsIgnorePattern`), which flags a sole unused parameter regardless of the underscore prefix (unlike the pre-existing `_option` in `activation.test.tsx`, which is followed by used parameters and so is exempted by the default `"after-used"` behavior). Since the mock loader's whole point is that the request payload is ignored and only the scenario matters, and TypeScript's structural typing permits a zero-parameter function wherever a one-parameter function is expected, I dropped the parameter entirely rather than adding an inline `eslint-disable` comment — same behavior, no lint suppression needed. Updated the adjacent comment to describe the call-compatibility instead of naming a phantom parameter.
 
-None of these deviations touch `packages/react/src` runtime behavior, weaken the a11y gate, or change the public contract described in the brief (`setScenario`, `getFakeProviderHandle`, `MockScenario`, `parameters.reely`, `withMockController` are all exactly as specified).
+None of these deviations touch `packages/react/src` runtime behavior, weaken the a11y gate, or change the public contract described in the brief (`setScenario`, `getFakeProviderHandle`, `MockScenario`, `parameters.playdeck`, `withMockController` are all exactly as specified).

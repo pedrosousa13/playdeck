@@ -3,7 +3,7 @@ import {
   type ProviderEvent,
   type ProviderStatePatch,
   type ProviderStateListener
-} from '@reely/core';
+} from '@playdeck/core';
 
 // What a provider adapter owes the subscribers it fans out to. `Set.forEach`
 // stops at the first throw, so one broken listener would abandon the emit:

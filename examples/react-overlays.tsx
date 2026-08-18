@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 // The overlay layers, in the order they stack inside a Viewport. Each renders
 // only when its own state says it should: no disabled-looking placeholders.

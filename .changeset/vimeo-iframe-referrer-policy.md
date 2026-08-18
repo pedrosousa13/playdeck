@@ -1,5 +1,5 @@
 ---
-'@reely/provider-vimeo': minor
+'@playdeck/provider-vimeo': minor
 ---
 
 The Vimeo embed iframe now declares `referrerpolicy="strict-origin-when-cross-origin"`,
@@ -14,8 +14,8 @@ half is a capability withdrawal, not a narrowing: a Vimeo source that needs EME
 (Widevine/FairPlay) for DRM-protected playback — an Enterprise/OTT video —
 relied on that grant to call `requestMediaKeySystemAccess` from inside the
 iframe, and will stop playing after this change where it played before. Nothing
-in Reely's own option surface ever turned that grant on or off; it is the video
-ID a consumer passes, not a Reely option, that decides whether a source needs
+in Playdeck's own option surface ever turned that grant on or off; it is the video
+ID a consumer passes, not a Playdeck option, that decides whether a source needs
 it. There is no flag to opt back in today — DRM support is out of scope for
 this change.
 

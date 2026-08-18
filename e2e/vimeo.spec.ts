@@ -51,7 +51,7 @@ const routeVimeo = async (
 
 const customControls = (page: Page): Promise<CapabilityValue | undefined> =>
   page.evaluate(
-    () => window.reelyHandle?.getState().capabilities.customControls
+    () => window.playdeckHandle?.getState().capabilities.customControls
   );
 
 test('interaction loading contacts no Vimeo domain before one click plays', async ({
@@ -69,7 +69,7 @@ test('interaction loading contacts no Vimeo domain before one click plays', asyn
   expect(requests, 'no Vimeo request may start before activation').toEqual([]);
 
   await activation.click();
-  const iframe = page.locator('[data-reely-part="media"] iframe');
+  const iframe = page.locator('[data-playdeck-part="media"] iframe');
   await expect(iframe).toHaveAttribute(
     'src',
     /^https:\/\/player\.vimeo\.com\/video\/76979871\?/
@@ -94,13 +94,15 @@ test('viewport loading mounts the Vimeo embed without interaction', async ({
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--vimeo-viewport&viewMode=story'
   );
-  const iframe = page.locator('[data-reely-part="media"] iframe');
+  const iframe = page.locator('[data-playdeck-part="media"] iframe');
   await expect(iframe).toHaveAttribute(
     'src',
     /^https:\/\/player\.vimeo\.com\/video\/76979871\?/
   );
   await expect
-    .poll(() => page.evaluate(() => window.reelyHandle?.getState().activation))
+    .poll(() =>
+      page.evaluate(() => window.playdeckHandle?.getState().activation)
+    )
     .toBe('ready');
 });
 
@@ -111,7 +113,7 @@ test('unlisted embeds carry the privacy hash end to end', async ({ page }) => {
   );
   await page.getByRole('button', { name: 'Play video', exact: true }).click();
 
-  const iframe = page.locator('[data-reely-part="media"] iframe');
+  const iframe = page.locator('[data-playdeck-part="media"] iframe');
   await expect(iframe).toHaveAttribute('src', /h=abc123hash/);
   await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
   const oembedRequest = requests.find((url) =>
@@ -151,14 +153,14 @@ test('caption tracks discovered from the embed are selectable', async ({
   await expect
     .poll(() =>
       page.evaluate(
-        () => window.reelyHandle?.getState().capabilities.selectTextTrack
+        () => window.playdeckHandle?.getState().capabilities.selectTextTrack
       )
     )
     .toEqual({ status: 'available' });
   // Vimeo hands its cues over rather than drawing them (the track is enabled
-  // with `showing: false`), so Reely owns rendering and reports `custom`.
+  // with `showing: false`), so Playdeck owns rendering and reports `custom`.
   // Tracks are addressed by their normalized id.
-  const state = await page.evaluate(() => window.reelyHandle?.getState());
+  const state = await page.evaluate(() => window.playdeckHandle?.getState());
   expect(state?.captionRendering).toBe('custom');
   expect(state?.textTracks).toEqual([
     {
@@ -170,14 +172,14 @@ test('caption tracks discovered from the embed are selectable', async ({
     }
   ]);
   const result = await page.evaluate(() =>
-    window.reelyHandle?.selectTextTrack('vimeo:en')
+    window.playdeckHandle?.selectTextTrack('vimeo:en')
   );
   expect(result).toEqual({ ok: true });
 
   // The whole cue chain, deterministically in CI: the fixture emits a
   // `cuechange` carrying `<i>fake cue text</i>`, so seeing the un-marked-up
-  // text in Reely's own overlay proves the payload arrived, normalized, and
+  // text in Playdeck's own overlay proves the payload arrived, normalized, and
   // rendered. The real-Vimeo smoke covers the same path against the live SDK.
-  const cue = page.locator('[data-reely-part="caption-cue"]');
+  const cue = page.locator('[data-playdeck-part="caption-cue"]');
   await expect(cue).toHaveText('fake cue text');
 });

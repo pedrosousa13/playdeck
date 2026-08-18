@@ -1,11 +1,11 @@
 /*
- * @reely/react/theme.css — the optional theme.
+ * @playdeck/react/theme.css — the optional theme.
  *
  * Import it or don't: the primitives ship no CSS of their own, so nothing here
  * is required for a working player. Three rules make it safe to adopt without
  * ever forking or fighting it:
  *
- *   1. Everything is inside `@layer reely`. Unlayered consumer CSS beats a
+ *   1. Everything is inside `@layer playdeck`. Unlayered consumer CSS beats a
  *      cascade layer whatever its specificity, so your own rules win by
  *      default — no `!important`, no ordering games.
  *   2. Every selector is wrapped in `:where()`, which contributes zero
@@ -19,33 +19,33 @@
  *
  * Tokens, with their defaults:
  *
- *   Color        --reely-color-surface       rgb(0 0 0 / 0.72)
- *                --reely-color-on-surface    #fff
- *                --reely-color-accent        #3ea6ff
- *                --reely-color-track         rgb(255 255 255 / 0.3)
- *                --reely-color-buffered      rgb(255 255 255 / 0.5)
- *                --reely-color-focus         #fff
- *                --reely-color-backdrop      #000
- *   Typography   --reely-font-family         system-ui stack
- *                --reely-font-size           0.875rem
- *                --reely-font-size-small     0.8125rem
- *                --reely-line-height         1.4
- *   Spacing      --reely-space-1             0.25rem
- *                --reely-space-2             0.5rem
- *                --reely-space-3             0.75rem
- *   Shape        --reely-radius              0.375rem
- *                --reely-radius-large        0.5rem
- *   Controls     --reely-control-size        2.75rem  (44px, the locked target)
- *                --reely-control-icon-size   1.25rem
- *                --reely-control-hover       rgb(255 255 255 / 0.12)
- *                --reely-slider-thickness    0.25rem
- *   Overlays     --reely-overlay-opacity     1
- *                --reely-overlay-scrim       bottom-up black gradient
- *   Motion       --reely-transition-duration 150ms
- *                --reely-transition-easing   ease
- *   Safe area    --reely-safe-bottom/-left/-right   env(safe-area-inset-*)
- *   Poster       --reely-poster-fit          cover      (read by PosterImage)
- *                --reely-poster-position     center     (read by PosterImage)
+ *   Color        --playdeck-color-surface       rgb(0 0 0 / 0.72)
+ *                --playdeck-color-on-surface    #fff
+ *                --playdeck-color-accent        #3ea6ff
+ *                --playdeck-color-track         rgb(255 255 255 / 0.3)
+ *                --playdeck-color-buffered      rgb(255 255 255 / 0.5)
+ *                --playdeck-color-focus         #fff
+ *                --playdeck-color-backdrop      #000
+ *   Typography   --playdeck-font-family         system-ui stack
+ *                --playdeck-font-size           0.875rem
+ *                --playdeck-font-size-small     0.8125rem
+ *                --playdeck-line-height         1.4
+ *   Spacing      --playdeck-space-1             0.25rem
+ *                --playdeck-space-2             0.5rem
+ *                --playdeck-space-3             0.75rem
+ *   Shape        --playdeck-radius              0.375rem
+ *                --playdeck-radius-large        0.5rem
+ *   Controls     --playdeck-control-size        2.75rem  (44px, the locked target)
+ *                --playdeck-control-icon-size   1.25rem
+ *                --playdeck-control-hover       rgb(255 255 255 / 0.12)
+ *                --playdeck-slider-thickness    0.25rem
+ *   Overlays     --playdeck-overlay-opacity     1
+ *                --playdeck-overlay-scrim       bottom-up black gradient
+ *   Motion       --playdeck-transition-duration 150ms
+ *                --playdeck-transition-easing   ease
+ *   Safe area    --playdeck-safe-bottom/-left/-right   env(safe-area-inset-*)
+ *   Poster       --playdeck-poster-fit          cover      (read by PosterImage)
+ *                --playdeck-poster-position     center     (read by PosterImage)
  *
  * Layer geometry is deliberately NOT here. `Player.Media`, `Player.Poster` and
  * `Player.PosterImage` apply position, inset, sizing and object-fit inline, so
@@ -54,7 +54,7 @@
  * be dead CSS. The last two tokens above are the ones the poster components
  * read.
  *
- * `--reely-media-aspect-ratio` is a `--reely-*` name that is deliberately NOT
+ * `--playdeck-media-aspect-ratio` is a `--playdeck-*` name that is deliberately NOT
  * in the table above, because it is not a token: the library writes it onto the
  * viewport part when a provider can measure its media, and a consumer reads it.
  * That is the opposite direction to everything here, all of which a primitive
@@ -62,10 +62,10 @@
  * with the library's other outputs on the Contract docs page.
  */
 
-@layer reely {
-  :where([data-reely-part='viewport']) {
+@layer playdeck {
+  :where([data-playdeck-part='viewport']) {
     font-family: var(
-      --reely-font-family,
+      --playdeck-font-family,
       system-ui,
       -apple-system,
       'Segoe UI',
@@ -74,99 +74,99 @@
       arial,
       sans-serif
     );
-    color: var(--reely-color-on-surface, #fff);
-    background-color: var(--reely-color-backdrop, #000);
+    color: var(--playdeck-color-on-surface, #fff);
+    background-color: var(--playdeck-color-backdrop, #000);
   }
 
   /* ---- media --------------------------------------------------------------
    * Appearance only; layer geometry belongs to the components (see above).
    */
-  :where([data-reely-part='media']) {
-    background-color: var(--reely-color-backdrop, #000);
+  :where([data-playdeck-part='media']) {
+    background-color: var(--playdeck-color-backdrop, #000);
   }
 
   /* ---- activation and status --------------------------------------------- */
-  :where([data-reely-part='activation']) {
+  :where([data-playdeck-part='activation']) {
     display: grid;
     place-items: center;
     inline-size: 4rem;
     block-size: 4rem;
     border: 0;
     border-radius: 50%;
-    color: var(--reely-color-on-surface, #fff);
-    background-color: var(--reely-color-surface, rgb(0 0 0 / 0.72));
+    color: var(--playdeck-color-on-surface, #fff);
+    background-color: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
     cursor: pointer;
-    transition: opacity var(--reely-transition-duration, 150ms)
-      var(--reely-transition-easing, ease);
+    transition: opacity var(--playdeck-transition-duration, 150ms)
+      var(--playdeck-transition-easing, ease);
   }
 
-  :where([data-reely-part='loading-indicator']) {
-    color: var(--reely-color-on-surface, #fff);
+  :where([data-playdeck-part='loading-indicator']) {
+    color: var(--playdeck-color-on-surface, #fff);
   }
 
-  :where([data-reely-part='error']) {
+  :where([data-playdeck-part='error']) {
     display: grid;
-    gap: var(--reely-space-2, 0.5rem);
+    gap: var(--playdeck-space-2, 0.5rem);
     place-items: center;
-    padding: var(--reely-space-3, 0.75rem);
-    border-radius: var(--reely-radius-large, 0.5rem);
-    color: var(--reely-color-on-surface, #fff);
-    background-color: var(--reely-color-surface, rgb(0 0 0 / 0.72));
+    padding: var(--playdeck-space-3, 0.75rem);
+    border-radius: var(--playdeck-radius-large, 0.5rem);
+    color: var(--playdeck-color-on-surface, #fff);
+    background-color: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
   }
 
-  :where([data-reely-part='error-message']) {
+  :where([data-playdeck-part='error-message']) {
     margin: 0;
-    font-size: var(--reely-font-size, 0.875rem);
-    line-height: var(--reely-line-height, 1.4);
+    font-size: var(--playdeck-font-size, 0.875rem);
+    line-height: var(--playdeck-line-height, 1.4);
   }
 
-  :where([data-reely-part='error-retry']) {
-    padding: var(--reely-space-1, 0.25rem) var(--reely-space-3, 0.75rem);
-    border: 1px solid var(--reely-color-on-surface, #fff);
-    border-radius: var(--reely-radius, 0.375rem);
-    color: var(--reely-color-on-surface, #fff);
+  :where([data-playdeck-part='error-retry']) {
+    padding: var(--playdeck-space-1, 0.25rem) var(--playdeck-space-3, 0.75rem);
+    border: 1px solid var(--playdeck-color-on-surface, #fff);
+    border-radius: var(--playdeck-radius, 0.375rem);
+    color: var(--playdeck-color-on-surface, #fff);
     font: inherit;
     background-color: transparent;
     cursor: pointer;
   }
 
   /* ---- control surface --------------------------------------------------- */
-  :where([data-reely-part='controls']) {
+  :where([data-playdeck-part='controls']) {
     display: flex;
-    gap: var(--reely-space-1, 0.25rem);
+    gap: var(--playdeck-space-1, 0.25rem);
     align-items: center;
-    padding: var(--reely-space-2, 0.5rem);
+    padding: var(--playdeck-space-2, 0.5rem);
     padding-bottom: calc(
-      var(--reely-space-2, 0.5rem) +
-        var(--reely-safe-bottom, env(safe-area-inset-bottom, 0px))
+      var(--playdeck-space-2, 0.5rem) +
+        var(--playdeck-safe-bottom, env(safe-area-inset-bottom, 0px))
     );
     padding-left: calc(
-      var(--reely-space-2, 0.5rem) +
-        var(--reely-safe-left, env(safe-area-inset-left, 0px))
+      var(--playdeck-space-2, 0.5rem) +
+        var(--playdeck-safe-left, env(safe-area-inset-left, 0px))
     );
     padding-right: calc(
-      var(--reely-space-2, 0.5rem) +
-        var(--reely-safe-right, env(safe-area-inset-right, 0px))
+      var(--playdeck-space-2, 0.5rem) +
+        var(--playdeck-safe-right, env(safe-area-inset-right, 0px))
     );
-    color: var(--reely-color-on-surface, #fff);
+    color: var(--playdeck-color-on-surface, #fff);
     background: var(
-      --reely-overlay-scrim,
+      --playdeck-overlay-scrim,
       linear-gradient(to top, rgb(0 0 0 / 0.72), rgb(0 0 0 / 0))
     );
-    opacity: var(--reely-overlay-opacity, 1);
-    transition: opacity var(--reely-transition-duration, 150ms)
-      var(--reely-transition-easing, ease);
+    opacity: var(--playdeck-overlay-opacity, 1);
+    transition: opacity var(--playdeck-transition-duration, 150ms)
+      var(--playdeck-transition-easing, ease);
   }
 
   /* Every button-shaped control shares one box. */
   :where(
-    [data-reely-part='play-button'],
-    [data-reely-part='mute-button'],
-    [data-reely-part='captions-button'],
-    [data-reely-part='fullscreen-button'],
-    [data-reely-part='pip-button'],
-    [data-reely-part='airplay-button'],
-    [data-reely-part='settings-menu-trigger']
+    [data-playdeck-part='play-button'],
+    [data-playdeck-part='mute-button'],
+    [data-playdeck-part='captions-button'],
+    [data-playdeck-part='fullscreen-button'],
+    [data-playdeck-part='pip-button'],
+    [data-playdeck-part='airplay-button'],
+    [data-playdeck-part='settings-menu-trigger']
   ) {
     display: inline-grid;
     place-items: center;
@@ -174,148 +174,154 @@
      * squeezed below their target size when the bar runs out of room, or the
      * locked 44px minimum quietly stops holding on narrow players. */
     flex: 0 0 auto;
-    inline-size: var(--reely-control-size, 2.75rem);
-    block-size: var(--reely-control-size, 2.75rem);
+    inline-size: var(--playdeck-control-size, 2.75rem);
+    block-size: var(--playdeck-control-size, 2.75rem);
     padding: 0;
     border: 0;
-    border-radius: var(--reely-radius, 0.375rem);
-    color: var(--reely-color-on-surface, #fff);
+    border-radius: var(--playdeck-radius, 0.375rem);
+    color: var(--playdeck-color-on-surface, #fff);
     background-color: transparent;
     cursor: pointer;
   }
 
   :where(
-    [data-reely-part='play-button'],
-    [data-reely-part='mute-button'],
-    [data-reely-part='captions-button'],
-    [data-reely-part='fullscreen-button'],
-    [data-reely-part='pip-button'],
-    [data-reely-part='airplay-button'],
-    [data-reely-part='settings-menu-trigger']
+    [data-playdeck-part='play-button'],
+    [data-playdeck-part='mute-button'],
+    [data-playdeck-part='captions-button'],
+    [data-playdeck-part='fullscreen-button'],
+    [data-playdeck-part='pip-button'],
+    [data-playdeck-part='airplay-button'],
+    [data-playdeck-part='settings-menu-trigger']
   ):where(:hover) {
-    background-color: var(--reely-control-hover, rgb(255 255 255 / 0.12));
+    background-color: var(--playdeck-control-hover, rgb(255 255 255 / 0.12));
   }
 
-  :where([data-reely-part]):where(:focus-visible) {
-    outline: 2px solid var(--reely-color-focus, #fff);
+  :where([data-playdeck-part]):where(:focus-visible) {
+    outline: 2px solid var(--playdeck-color-focus, #fff);
     outline-offset: 2px;
   }
 
-  :where([data-reely-part] svg) {
-    inline-size: var(--reely-control-icon-size, 1.25rem);
-    block-size: var(--reely-control-icon-size, 1.25rem);
+  :where([data-playdeck-part] svg) {
+    inline-size: var(--playdeck-control-icon-size, 1.25rem);
+    block-size: var(--playdeck-control-icon-size, 1.25rem);
   }
 
-  :where([data-reely-part='time']) {
-    padding-inline: var(--reely-space-2, 0.5rem);
-    font-size: var(--reely-font-size-small, 0.8125rem);
+  :where([data-playdeck-part='time']) {
+    padding-inline: var(--playdeck-space-2, 0.5rem);
+    font-size: var(--playdeck-font-size-small, 0.8125rem);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
   /* ---- sliders ----------------------------------------------------------- */
-  :where([data-reely-part='seek-slider']) {
+  :where([data-playdeck-part='seek-slider']) {
     position: relative;
     flex: 1 1 auto;
     min-inline-size: 4rem;
   }
 
-  :where([data-reely-part='seek-buffered']) {
+  :where([data-playdeck-part='seek-buffered']) {
     position: absolute;
     inset-inline: 0;
     inset-block-start: 50%;
-    block-size: var(--reely-slider-thickness, 0.25rem);
+    block-size: var(--playdeck-slider-thickness, 0.25rem);
     translate: 0 -50%;
-    border-radius: calc(var(--reely-slider-thickness, 0.25rem) / 2);
-    background-color: var(--reely-color-track, rgb(255 255 255 / 0.3));
+    border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+    background-color: var(--playdeck-color-track, rgb(255 255 255 / 0.3));
     pointer-events: none;
   }
 
-  :where([data-reely-part='seek-buffered-range']) {
+  :where([data-playdeck-part='seek-buffered-range']) {
     position: absolute;
     inset-block: 0;
     border-radius: inherit;
-    background-color: var(--reely-color-buffered, rgb(255 255 255 / 0.5));
+    background-color: var(--playdeck-color-buffered, rgb(255 255 255 / 0.5));
   }
 
   /* A stall the 500ms debounce has admitted (#35). Motion-free on purpose: a
      pulse would carry the same information but needs a prefers-reduced-motion
      carve-out to do it, and a static opacity change does not. */
   :where(
-    [data-reely-part='seek-slider'][data-buffering='true']
-      [data-reely-part='seek-buffered-range']
+    [data-playdeck-part='seek-slider'][data-buffering='true']
+      [data-playdeck-part='seek-buffered-range']
   ) {
     opacity: 0.5;
   }
 
   :where(
-    [data-reely-part='seek-slider-input'],
-    [data-reely-part='volume-slider']
+    [data-playdeck-part='seek-slider-input'],
+    [data-playdeck-part='volume-slider']
   ) {
     inline-size: 100%;
     margin: 0;
-    accent-color: var(--reely-color-accent, #3ea6ff);
+    accent-color: var(--playdeck-color-accent, #3ea6ff);
     background-color: transparent;
     cursor: pointer;
   }
 
-  :where([data-reely-part='volume-slider']) {
+  :where([data-playdeck-part='volume-slider']) {
     inline-size: 5rem;
   }
 
   /* ---- menus ------------------------------------------------------------- */
-  :where([data-reely-part='settings-menu-root']) {
+  :where([data-playdeck-part='settings-menu-root']) {
     position: relative;
   }
 
-  :where([data-reely-part='settings-menu'], [data-reely-part='captions-menu']) {
+  :where(
+    [data-playdeck-part='settings-menu'],
+    [data-playdeck-part='captions-menu']
+  ) {
     position: absolute;
-    inset-block-end: calc(100% + var(--reely-space-1, 0.25rem));
+    inset-block-end: calc(100% + var(--playdeck-space-1, 0.25rem));
     inset-inline-end: 0;
     min-inline-size: 10rem;
-    padding: var(--reely-space-1, 0.25rem);
-    border-radius: var(--reely-radius-large, 0.5rem);
-    color: var(--reely-color-on-surface, #fff);
-    background-color: var(--reely-color-surface, rgb(0 0 0 / 0.72));
+    padding: var(--playdeck-space-1, 0.25rem);
+    border-radius: var(--playdeck-radius-large, 0.5rem);
+    color: var(--playdeck-color-on-surface, #fff);
+    background-color: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
     box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.4);
   }
 
-  :where([data-reely-part='menu-item'], [data-reely-part='menu-radio-item']) {
+  :where(
+    [data-playdeck-part='menu-item'],
+    [data-playdeck-part='menu-radio-item']
+  ) {
     display: flex;
-    gap: var(--reely-space-2, 0.5rem);
+    gap: var(--playdeck-space-2, 0.5rem);
     align-items: center;
     inline-size: 100%;
-    min-block-size: var(--reely-control-size, 2.75rem);
-    padding-inline: var(--reely-space-2, 0.5rem);
+    min-block-size: var(--playdeck-control-size, 2.75rem);
+    padding-inline: var(--playdeck-space-2, 0.5rem);
     border: 0;
-    border-radius: var(--reely-radius, 0.375rem);
+    border-radius: var(--playdeck-radius, 0.375rem);
     color: inherit;
     font: inherit;
-    font-size: var(--reely-font-size, 0.875rem);
+    font-size: var(--playdeck-font-size, 0.875rem);
     text-align: start;
     background-color: transparent;
     cursor: pointer;
   }
 
   :where(
-    [data-reely-part='menu-item'],
-    [data-reely-part='menu-radio-item']
+    [data-playdeck-part='menu-item'],
+    [data-playdeck-part='menu-radio-item']
   ):where(:hover) {
-    background-color: var(--reely-control-hover, rgb(255 255 255 / 0.12));
+    background-color: var(--playdeck-control-hover, rgb(255 255 255 / 0.12));
   }
 
-  :where([data-reely-part='menu-radio-indicator']) {
+  :where([data-playdeck-part='menu-radio-indicator']) {
     display: inline-grid;
     place-items: center;
-    inline-size: var(--reely-control-icon-size, 1.25rem);
+    inline-size: var(--playdeck-control-icon-size, 1.25rem);
   }
 
   /* ---- captions ---------------------------------------------------------- */
   /* Cue styling variables belong to the captions work, not the theme; this
    * only makes the default overlay match the themed player's typography. */
-  :where([data-reely-part='caption-cue']) {
+  :where([data-playdeck-part='caption-cue']) {
     font-family: inherit;
-    line-height: var(--reely-line-height, 1.4);
+    line-height: var(--playdeck-line-height, 1.4);
   }
 
   /* ---- reduced motion ---------------------------------------------------- */
@@ -324,15 +330,15 @@
      * and the activation affordance. No state change is conveyed by motion, so
      * nothing is hidden by removing it. */
     :where(
-      [data-reely-part='controls'],
-      [data-reely-part='activation'],
-      [data-reely-part='play-button'],
-      [data-reely-part='mute-button'],
-      [data-reely-part='captions-button'],
-      [data-reely-part='fullscreen-button'],
-      [data-reely-part='pip-button'],
-      [data-reely-part='airplay-button'],
-      [data-reely-part='settings-menu-trigger']
+      [data-playdeck-part='controls'],
+      [data-playdeck-part='activation'],
+      [data-playdeck-part='play-button'],
+      [data-playdeck-part='mute-button'],
+      [data-playdeck-part='captions-button'],
+      [data-playdeck-part='fullscreen-button'],
+      [data-playdeck-part='pip-button'],
+      [data-playdeck-part='airplay-button'],
+      [data-playdeck-part='settings-menu-trigger']
     ) {
       transition-duration: 0.01ms;
     }
@@ -345,20 +351,20 @@
      * system colors instead — otherwise a hovered or focused control becomes
      * indistinguishable from an idle one.
      */
-    :where([data-reely-part='controls']) {
+    :where([data-playdeck-part='controls']) {
       background: canvas;
     }
 
     :where(
-      [data-reely-part='play-button'],
-      [data-reely-part='mute-button'],
-      [data-reely-part='captions-button'],
-      [data-reely-part='fullscreen-button'],
-      [data-reely-part='pip-button'],
-      [data-reely-part='airplay-button'],
-      [data-reely-part='settings-menu-trigger'],
-      [data-reely-part='menu-item'],
-      [data-reely-part='menu-radio-item']
+      [data-playdeck-part='play-button'],
+      [data-playdeck-part='mute-button'],
+      [data-playdeck-part='captions-button'],
+      [data-playdeck-part='fullscreen-button'],
+      [data-playdeck-part='pip-button'],
+      [data-playdeck-part='airplay-button'],
+      [data-playdeck-part='settings-menu-trigger'],
+      [data-playdeck-part='menu-item'],
+      [data-playdeck-part='menu-radio-item']
     ) {
       border: 1px solid buttonborder;
       color: buttontext;
@@ -367,15 +373,15 @@
     }
 
     :where(
-      [data-reely-part='play-button'],
-      [data-reely-part='mute-button'],
-      [data-reely-part='captions-button'],
-      [data-reely-part='fullscreen-button'],
-      [data-reely-part='pip-button'],
-      [data-reely-part='airplay-button'],
-      [data-reely-part='settings-menu-trigger'],
-      [data-reely-part='menu-item'],
-      [data-reely-part='menu-radio-item']
+      [data-playdeck-part='play-button'],
+      [data-playdeck-part='mute-button'],
+      [data-playdeck-part='captions-button'],
+      [data-playdeck-part='fullscreen-button'],
+      [data-playdeck-part='pip-button'],
+      [data-playdeck-part='airplay-button'],
+      [data-playdeck-part='settings-menu-trigger'],
+      [data-playdeck-part='menu-item'],
+      [data-playdeck-part='menu-radio-item']
     ):where(:hover) {
       /* `Highlight`/`HighlightText` rather than the newer
        * `selecteditem`/`selecteditemtext`: WebKit drops the latter as invalid,
@@ -384,24 +390,24 @@
       background-color: highlight;
     }
 
-    :where([data-reely-part]):where(:focus-visible) {
+    :where([data-playdeck-part]):where(:focus-visible) {
       outline: 2px solid highlight;
     }
 
     :where(
-      [data-reely-part='settings-menu'],
-      [data-reely-part='captions-menu']
+      [data-playdeck-part='settings-menu'],
+      [data-playdeck-part='captions-menu']
     ) {
       border: 1px solid canvastext;
       background-color: canvas;
     }
 
-    :where([data-reely-part='seek-buffered']) {
+    :where([data-playdeck-part='seek-buffered']) {
       border: 1px solid canvastext;
       background-color: canvas;
     }
 
-    :where([data-reely-part='seek-buffered-range']) {
+    :where([data-playdeck-part='seek-buffered-range']) {
       background-color: canvastext;
     }
   }

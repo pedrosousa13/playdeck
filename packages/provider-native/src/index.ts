@@ -3,8 +3,8 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStateListener
-} from '@reely/core';
-import { notifySafely } from '@reely/core';
+} from '@playdeck/core';
+import { notifySafely } from '@playdeck/core';
 import { createNativeAttachment } from './attachment.js';
 import { available } from './adapter-values.js';
 import {

@@ -1,6 +1,6 @@
 # Adapter-declared command readiness (#69) — design
 
-Issue: [#69](https://github.com/pedrosousa13/reely/issues/69). Prior attempt: [PR #72](https://github.com/pedrosousa13/reely/pull/72), **closed unmerged after two review rounds**. Blocker [#74](https://github.com/pedrosousa13/reely/issues/74) is now fixed, which is what makes this testable.
+Issue: [#69](https://github.com/pedrosousa13/playdeck/issues/69). Prior attempt: [PR #72](https://github.com/pedrosousa13/playdeck/pull/72), **closed unmerged after two review rounds**. Blocker [#74](https://github.com/pedrosousa13/playdeck/issues/74) is now fixed, which is what makes this testable.
 
 ## What #69 actually is, after two corrections
 

@@ -1,4 +1,4 @@
-import { createTimeBoundary } from '@reely/core';
+import { createTimeBoundary } from '@playdeck/core';
 
 // The fields of the host's options the boundary is resolved from. `loop` is
 // here because the two settings only mean something together: the same end
@@ -16,7 +16,7 @@ export type VimeoBoundaryOptions = {
 // loop restart inert once another one has opened.
 //
 // Vimeo expresses a start as a load hint only and has no end mechanism at all,
-// so every decision here is the adapter's. The arithmetic is `@reely/core`'s,
+// so every decision here is the adapter's. The arithmetic is `@playdeck/core`'s,
 // shared with the other embeds so all three read one window the same way.
 export type VimeoBoundary = {
   readonly loop: boolean;
@@ -37,7 +37,7 @@ export type VimeoBoundary = {
   // load emits before the initial seek do not read as a wrap.
   readonly wrapped: (duration: number | null, time: number) => boolean;
   // Whether the player's own `ended` is one this seam has to correct rather
-  // than publish. `@reely/core`'s shared gate, where the reasoning and the
+  // than publish. `@playdeck/core`'s shared gate, where the reasoning and the
   // declared divergence from native both live; the YouTube and Wistia ports
   // ask it the same question.
   readonly restartsOnEnded: () => boolean;

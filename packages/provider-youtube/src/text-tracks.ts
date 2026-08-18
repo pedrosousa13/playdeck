@@ -3,8 +3,8 @@ import type {
   CommandResult,
   PlayerCapabilities,
   TextTrack
-} from '@reely/core';
-import { textTrackLabel } from '@reely/core';
+} from '@playdeck/core';
+import { textTrackLabel } from '@playdeck/core';
 import {
   available,
   runYouTubeCommand,

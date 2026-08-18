@@ -27,7 +27,9 @@ const startPlayback = async (page: Page) => {
   const play = playButton(page);
   await expect(play).toBeVisible();
   await expect
-    .poll(() => page.evaluate(() => window.reelyHandle?.getState().activation))
+    .poll(() =>
+      page.evaluate(() => window.playdeckHandle?.getState().activation)
+    )
     .toBe('ready');
   await play.click();
 };
@@ -67,7 +69,7 @@ test('a play issued before the player is ready is dropped (#69)', async ({
   // command directly is the same code path the button uses
   // (`togglePlaybackWithOrigin` -> `playWithOrigin`) with the race removed.
   const outcome = await page.evaluate(async () => {
-    const handle = () => window.reelyHandle;
+    const handle = () => window.playdeckHandle;
     const start = Date.now();
     while (!handle() && Date.now() - start < 5000) {
       await new Promise((resolve) => setTimeout(resolve, 5));

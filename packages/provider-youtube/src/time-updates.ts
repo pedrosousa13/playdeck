@@ -1,4 +1,4 @@
-import type { TimeRange } from '@reely/core';
+import type { TimeRange } from '@playdeck/core';
 import { clamp01, type EmitProviderState } from './adapter-values.js';
 import type { YouTubeBoundary } from './boundary.js';
 import type { YouTubePlayer } from './loader.js';

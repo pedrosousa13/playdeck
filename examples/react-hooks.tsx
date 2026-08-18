@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 // `usePlayerState` takes a selector and re-renders only when the selected
 // value changes — not on every time update.

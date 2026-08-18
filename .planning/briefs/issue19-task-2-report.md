@@ -6,7 +6,7 @@ Exactly the brief's Step 1–5, no deviations from the code as written:
 
 1. `apps/storybook/vitest.config.ts` (new) — Vitest config using `storybookTest` (addon-vitest vitest-plugin) + `@vitest/browser-playwright` provider, Chromium instance, headless, `setupFiles: ['./.storybook/vitest.setup.ts']`.
 2. `apps/storybook/.storybook/vitest.setup.ts` (new) — `setProjectAnnotations([a11yAddonAnnotations, projectAnnotations])`, `beforeAll(annotations.beforeAll)`, and an `afterEach` that asserts (a) no cross-origin `performance` resource entries and (b) no request whose name contains `/media/sample.mp4`.
-3. Root `package.json` — added `"test:storybook": "pnpm --filter @reely/storybook test"` directly after `test:integrations`.
+3. Root `package.json` — added `"test:storybook": "pnpm --filter @playdeck/storybook test"` directly after `test:integrations`.
 4. `.github/workflows/ci.yml` — appended `&& pnpm test:storybook` to the single verify `run:` step.
 
 No changes were needed to `apps/storybook/tsconfig.json` — typecheck passed cleanly with the existing Task-1 `paths` entry, so the scoped-paths workaround mentioned as a fallback in the task context was not required.

@@ -1,10 +1,10 @@
-import { PlayerController } from '@reely/core';
+import { PlayerController } from '@playdeck/core';
 import {
   createVimeoProvider,
   loadVimeoSdk,
   resetVimeoSdkLoader
-} from '@reely/provider-vimeo';
-import type { VimeoMountElement } from '@reely/provider-vimeo';
+} from '@playdeck/provider-vimeo';
+import type { VimeoMountElement } from '@playdeck/provider-vimeo';
 
 declare const mount: VimeoMountElement;
 

@@ -13,7 +13,7 @@ import {
 const fixtures = new Map([
   ['demo', { source: 'export const a = 1;\n', language: 'ts' }],
   ['ui', { source: 'export const B = () => null;\n', language: 'tsx' }],
-  ['part', { source: "[data-reely-part='time'] {\n}\n", language: 'css' }]
+  ['part', { source: "[data-playdeck-part='time'] {\n}\n", language: 'css' }]
 ]);
 
 test('injects a fixture into a marked region in markdown', () => {
@@ -91,7 +91,7 @@ test('injects a css fixture with a css fence', () => {
       '{/* example:part */}',
       '',
       '```css',
-      "[data-reely-part='time'] {",
+      "[data-playdeck-part='time'] {",
       '}',
       '```',
       '',
@@ -123,14 +123,14 @@ test('rejects an unterminated marker', () => {
 });
 
 test('leaves an unmarked fence alone', () => {
-  const input = '```sh\npnpm add @reely/core\n```\n';
+  const input = '```sh\npnpm add @playdeck/core\n```\n';
   assert.equal(renderDoc(input, 'md', fixtures), input);
 });
 
 test('an export used in a fixture is covered', () => {
   assert.deepEqual(
-    uncoveredExports(new Map([['@reely/core', ['detectSource']]]), [
-      "import { detectSource } from '@reely/core';\ndetectSource('a.mp4');\n"
+    uncoveredExports(new Map([['@playdeck/core', ['detectSource']]]), [
+      "import { detectSource } from '@playdeck/core';\ndetectSource('a.mp4');\n"
     ]),
     []
   );
@@ -139,21 +139,21 @@ test('an export used in a fixture is covered', () => {
 test('a substring is not coverage', () => {
   // `Time` must not be satisfied by the word "sometimes" in a comment.
   assert.deepEqual(
-    uncoveredExports(new Map([['@reely/react', ['Time']]]), [
+    uncoveredExports(new Map([['@playdeck/react', ['Time']]]), [
       '// sometimes the runtime is slow\n'
     ]),
-    [{ package: '@reely/react', name: 'Time' }]
+    [{ package: '@playdeck/react', name: 'Time' }]
   );
 });
 
 test('reports every uncovered export, not just the first', () => {
   assert.deepEqual(
-    uncoveredExports(new Map([['@reely/core', ['a', 'b']]]), [
+    uncoveredExports(new Map([['@playdeck/core', ['a', 'b']]]), [
       'const c = 1;\n'
     ]),
     [
-      { package: '@reely/core', name: 'a' },
-      { package: '@reely/core', name: 'b' }
+      { package: '@playdeck/core', name: 'a' },
+      { package: '@playdeck/core', name: 'b' }
     ]
   );
 });
@@ -248,7 +248,7 @@ test('an explicitly ignored fence is allowed', () => {
     '<!-- example:ignore two import lines, nothing to compile -->',
     '',
     '```ts',
-    "import '@reely/react/theme.css';",
+    "import '@playdeck/react/theme.css';",
     '```'
   ].join('\n');
 
@@ -256,7 +256,14 @@ test('an explicitly ignored fence is allowed', () => {
 });
 
 test('a fence in an ungated language is never reported', () => {
-  const input = ['```sh', 'pnpm add @reely/core', '```', '```json', '{}', '```']
+  const input = [
+    '```sh',
+    'pnpm add @playdeck/core',
+    '```',
+    '```json',
+    '{}',
+    '```'
+  ]
     .join('\n')
     .concat('\n');
 
@@ -277,7 +284,7 @@ test('a css fence inside a marked region is gated', () => {
     '{/* example:part */}',
     '',
     '```css',
-    "[data-reely-part='time'] {",
+    "[data-playdeck-part='time'] {",
     '}',
     '```',
     '',
@@ -293,7 +300,7 @@ test('an explicitly ignored css fence is allowed', () => {
     '',
     '```css',
     '.brand {',
-    '  --reely-radius: 0;',
+    '  --playdeck-radius: 0;',
     '}',
     '```'
   ].join('\n');

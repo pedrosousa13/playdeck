@@ -17,7 +17,7 @@ import {
   type ProviderEvent,
   type ProviderStateListener,
   type ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import * as Player from '../src/index';
 
 const ok = async (): Promise<CommandResult> => ({ ok: true });
@@ -107,7 +107,7 @@ afterEach(() => {
 });
 
 const getLayer = () =>
-  document.querySelector('[data-reely-part="gestures"]') as HTMLElement;
+  document.querySelector('[data-playdeck-part="gestures"]') as HTMLElement;
 
 describe('Gestures', () => {
   test('single tap toggles controls and never toggles playback', () => {

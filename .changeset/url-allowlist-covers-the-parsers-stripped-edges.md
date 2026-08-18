@@ -1,7 +1,7 @@
 ---
-'@reely/core': minor
-'@reely/react': minor
-'@reely/provider-wistia': minor
+'@playdeck/core': minor
+'@playdeck/react': minor
+'@playdeck/provider-wistia': minor
 ---
 
 `isPermittedSourceUrl` now refuses a URL carrying a C0 control (U+0000 to
@@ -34,12 +34,12 @@ path,
 `{ type: 'video', sources: [{ src: ' javascript:alert(1)', … }] }` and
 `{ type: 'hls', src: ' blob:https://…' }` no longer detect, and fail with the
 existing `invalid-source` reason. MediaSession artwork with such an edge is
-omitted. In `@reely/react`, a `Player.Poster` `src` or `srcSet` candidate, a
+omitted. In `@playdeck/react`, a `Player.Poster` `src` or `srcSet` candidate, a
 `nativePoster` or a text-track `src` carrying one is dropped rather than
-rendered; `@reely/provider-wistia` emits its poster configuration notice
+rendered; `@playdeck/provider-wistia` emits its poster configuration notice
 instead of writing the value onto `<wistia-player>`.
 
-`@reely/core`'s README stated that everything outside the allowlist "is
+`@playdeck/core`'s README stated that everything outside the allowlist "is
 rejected, whether it arrives as a string or inside an explicit source object".
 That was false as executed for as long as the bypass stood. It is true now, and
 the sentence after it describes the whole set the parser strips rather than the

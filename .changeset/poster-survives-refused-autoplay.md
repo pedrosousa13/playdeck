@@ -1,5 +1,5 @@
 ---
-'@reely/react': patch
+'@playdeck/react': patch
 ---
 
 `Player.Poster` now stays visible when autoplay is refused on a native or HLS

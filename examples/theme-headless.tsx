@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 // No stylesheet imported: the primitives ship structure, behaviour and
 // accessibility semantics, and every visual rule is yours.

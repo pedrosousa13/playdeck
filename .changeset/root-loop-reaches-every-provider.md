@@ -1,7 +1,7 @@
 ---
-'@reely/provider-youtube': minor
-'@reely/provider-vimeo': minor
-'@reely/react': minor
+'@playdeck/provider-youtube': minor
+'@playdeck/provider-vimeo': minor
+'@playdeck/react': minor
 ---
 
 `Player.Root`'s `loop` prop now loops a YouTube, Vimeo or Wistia source. It

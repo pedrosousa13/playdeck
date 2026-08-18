@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { available, notReady, unavailable, ready } from './support';
@@ -21,7 +21,7 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-reely-part="airplay-button"` and `data-provider="<provider>"`. It carries **no `data-state`**: which device the user picked is never exposed, and Reely does not currently surface an active-route flag, so there is no state to render. Current behaviour rather than a permanent guarantee — WebKit can report an active wireless route and Reely has deferred plumbing it.',
+          '**Contract** — renders `data-playdeck-part="airplay-button"` and `data-provider="<provider>"`. It carries **no `data-state`**: which device the user picked is never exposed, and Playdeck does not currently surface an active-route flag, so there is no state to render. Current behaviour rather than a permanent guarantee — WebKit can report an active wireless route and Playdeck has deferred plumbing it.',
           '',
           '**Not a toggle** — unlike `PipButton` and `FullscreenButton`, this has no `aria-pressed` and one static label. Opening the picker is a request; `aria-pressed` on a non-toggle would have a screen reader announce "not pressed" forever, which is an active lie about state.',
           '',
@@ -47,7 +47,10 @@ export const Available: Story = {
   parameters: ready({ airPlay: available }),
   play: async ({ canvas }) => {
     const button = await canvas.findByRole('button', { name: 'AirPlay' });
-    await expect(button).toHaveAttribute('data-reely-part', 'airplay-button');
+    await expect(button).toHaveAttribute(
+      'data-playdeck-part',
+      'airplay-button'
+    );
     await expect(button).not.toHaveAttribute('aria-pressed');
   }
 };

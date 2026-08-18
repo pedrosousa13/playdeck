@@ -1,6 +1,6 @@
-# @reely/storybook
+# @playdeck/storybook
 
-Component workbench for the Reely player. Every story doubles as a
+Component workbench for the Playdeck player. Every story doubles as a
 real-browser component test: `@storybook/addon-vitest` runs each one under
 Vitest browser mode (Playwright/Chromium), including an axe accessibility
 check and a guard that fails the test if anything is requested from outside
@@ -26,7 +26,7 @@ the test origin.
   logic-level tests in plain Vitest — not here.
 - Stories must be deterministic and offline: **no story may request anything
   from outside the test origin**, and no external URL may reach the DOM. Use
-  data URIs for images that must load or fail, and `/__reely__/pending.png`
+  data URIs for images that must load or fail, and `/__playdeck__/pending.png`
   (held open forever by a dev-server middleware in `.storybook/main.ts`) for
   permanently-pending loads. The guard in `.storybook/vitest.setup.ts` enforces
   it per story, checking fetch, resource timing, and the URLs the DOM declares.
@@ -115,7 +115,7 @@ controller, so both paths share one implementation.
 ## Theme toggle
 
 The toolbar's **Theme** control (Headless / Themed) switches every story
-between the raw primitives and the optional `@reely/react/theme.css`. It
+between the raw primitives and the optional `@playdeck/react/theme.css`. It
 defaults to Headless, because that is what the library ships and what most
 stories assert. The decorator in `.storybook/theme.tsx` is the only place
 the stylesheet is mounted: it renders it as a `<style>` inside the story, so

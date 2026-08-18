@@ -1,19 +1,19 @@
 ---
-'@reely/core': minor
-'@reely/react': minor
-'@reely/provider-native': minor
-'@reely/provider-hls': minor
-'@reely/provider-vimeo': minor
+'@playdeck/core': minor
+'@playdeck/react': minor
+'@playdeck/provider-native': minor
+'@playdeck/provider-hls': minor
+'@playdeck/provider-vimeo': minor
 ---
 
 `Player.Viewport` now reports the media's own aspect ratio as
-`--reely-media-aspect-ratio` on the `viewport` part, so you can size a player to
+`--playdeck-media-aspect-ratio` on the `viewport` part, so you can size a player to
 its content — vertical video, a Short, anything not 16:9 — without knowing the
 shape in advance (#174). Opt in with one rule:
 
 ```css
-[data-reely-part='viewport'] {
-  aspect-ratio: var(--reely-media-aspect-ratio, 16 / 9);
+[data-playdeck-part='viewport'] {
+  aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9);
 }
 ```
 
@@ -39,7 +39,7 @@ The value is written straight to the DOM and is deliberately not in
 
 If you have written your own provider adapter, `ProviderAdapter` gains an
 optional `subscribeDimensions`; omitting it means that adapter reports no ratio,
-which is what YouTube's does. `@reely/core` also exports a `MediaDimensions`
+which is what YouTube's does. `@playdeck/core` also exports a `MediaDimensions`
 type and adds `PlayerController.subscribeDimensions`. If you supply your own
 Vimeo SDK module, note that `VimeoSdkPlayer` now requires `getVideoWidth()` and
 `getVideoHeight()` — the real SDK has both, but a hand-written stub will need

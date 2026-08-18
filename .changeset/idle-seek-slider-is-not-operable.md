@@ -1,10 +1,10 @@
 ---
-'@reely/react': minor
+'@playdeck/react': minor
 ---
 
 `SeekSlider` now exposes its idle state to assistive technology. While the
 `seek` capability is available but no seek window can be derived — no positive
-duration and no seekable extent — its `[data-reely-part='seek-slider-input']`
+duration and no seekable extent — its `[data-playdeck-part='seek-slider-input']`
 range control carries `aria-disabled="true"`, its `aria-valuetext` reads
 `Unavailable` instead of `0:00`, and a change event on it issues no seek.
 Previously the control announced a position it did not have and silently
@@ -19,7 +19,7 @@ attribute the library owns against `inputProps`.
 It lands as `minor`: every package is still at `0.0.0` with `first-prerelease`
 not yet released, and under 0.x `minor` is the channel a breaking change travels
 on. It is breaking because that last sentence takes an attribute away from the
-consumer. `aria-disabled` on `[data-reely-part='seek-slider-input']` was
+consumer. `aria-disabled` on `[data-playdeck-part='seek-slider-input']` was
 settable through the documented `inputProps` escape hatch and was applied as
 passed; it is now owned by the library, which strips it wherever a seek window
 exists and forces `true` wherever none does. A consumer disabling the control

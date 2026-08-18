@@ -3,8 +3,8 @@ import type {
   PlayerCapabilities,
   PlayerLiveState,
   ProviderStatePatch
-} from '@reely/core';
-import { deriveLiveState, liveStateEqual, notifySafely } from '@reely/core';
+} from '@playdeck/core';
+import { deriveLiveState, liveStateEqual, notifySafely } from '@playdeck/core';
 import {
   HAVE_METADATA,
   providerEvent,

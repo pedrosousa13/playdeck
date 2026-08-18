@@ -1,4 +1,4 @@
-import type { PlayerProvider, TimeRange } from '@reely/core';
+import type { PlayerProvider, TimeRange } from '@playdeck/core';
 import {
   controlTargetStyle,
   useLoadingPresentation,
@@ -52,7 +52,7 @@ export const PlayButton = ({
       aria-pressed={isPlaying}
       data-autoplay-state={autoplay}
       data-provider={provider ?? undefined}
-      data-reely-part="play-button"
+      data-playdeck-part="play-button"
       data-state={playback}
       onClick={(event) => {
         onClick?.(event);
@@ -90,7 +90,7 @@ export const MuteButton = ({
       aria-label={muted ? 'Unmute' : 'Mute'}
       aria-pressed={muted}
       data-provider={provider ?? undefined}
-      data-reely-part="mute-button"
+      data-playdeck-part="mute-button"
       data-state={muted ? 'muted' : 'unmuted'}
       onClick={(event) => {
         onClick?.(event);
@@ -145,7 +145,7 @@ export const VolumeSlider = ({
       aria-label={ariaLabel ?? 'Volume'}
       aria-valuetext={`${percent}%`}
       data-provider={provider ?? undefined}
-      data-reely-part="volume-slider"
+      data-playdeck-part="volume-slider"
       data-state={muted ? 'muted' : 'unmuted'}
       max={1}
       min={0}
@@ -407,15 +407,15 @@ export const SeekSlider = ({
       {...props}
       data-buffering={stalled ? 'true' : 'false'}
       data-provider={provider ?? undefined}
-      data-reely-part="seek-slider"
+      data-playdeck-part="seek-slider"
       data-state={window ? 'ready' : 'idle'}
       style={{ position: 'relative', minHeight: 44, ...style }}
     >
-      <div aria-hidden="true" data-reely-part="seek-buffered">
+      <div aria-hidden="true" data-playdeck-part="seek-buffered">
         {window
           ? buffered.map((range, index) => (
               <div
-                data-reely-part="seek-buffered-range"
+                data-playdeck-part="seek-buffered-range"
                 key={`${range.start}:${range.end}:${index}`}
                 style={{
                   position: 'absolute',
@@ -439,7 +439,7 @@ export const SeekSlider = ({
               : formatTime(value)
             : 'Unavailable'
         }
-        data-reely-part="seek-slider-input"
+        data-playdeck-part="seek-slider-input"
         max={max}
         min={min}
         onChange={(event) => {
@@ -453,7 +453,7 @@ export const SeekSlider = ({
       />
       {share === null ? null : (
         <span
-          data-reely-part="seek-buffered-description"
+          data-playdeck-part="seek-buffered-description"
           id={descriptionId}
           style={visuallyHiddenStyle}
         >
@@ -495,7 +495,7 @@ export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
       {...props}
       dateTime={`PT${Math.max(0, Math.floor(seconds))}S`}
       data-provider={provider ?? undefined}
-      data-reely-part="time"
+      data-playdeck-part="time"
       data-state={hasDuration ? 'timed' : 'untimed'}
       data-time-type={type}
     >

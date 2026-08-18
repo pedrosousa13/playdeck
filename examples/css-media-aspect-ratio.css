@@ -1,5 +1,5 @@
 /* Reading a value the library writes.
-   `--reely-media-aspect-ratio` is an output, not a token: Reely sets it on the
+   `--playdeck-media-aspect-ratio` is an output, not a token: Playdeck sets it on the
    viewport part once a provider has measured its media, and this one rule is
    what opts in to it. Nothing in the library reads it back, so without a rule
    like this the player is shaped by whatever you already sized it to.
@@ -9,6 +9,6 @@
    arrived — because the property is absent then rather than zero. Pick a value
    you are happy to render, and size the box's width yourself as usual. */
 
-[data-reely-part='viewport'] {
-  aspect-ratio: var(--reely-media-aspect-ratio, 16 / 9);
+[data-playdeck-part='viewport'] {
+  aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9);
 }

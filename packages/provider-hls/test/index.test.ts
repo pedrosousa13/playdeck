@@ -5,7 +5,7 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import { createHlsProvider } from '../src/index';
 import { captureRethrows } from './fixtures/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';

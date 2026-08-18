@@ -40,12 +40,12 @@ open/close_, which is a different path.
    320px viewport with `html { font-size: 32px }`:
 
    ```
-   .reely-example         h = 144px
-   [data-reely-part=controls]  h = 179px
+   .playdeck-example         h = 144px
+   [data-playdeck-part=controls]  h = 179px
    controls clipped at top by 35px
    ```
 
-   `.reely-example` is `aspect-ratio: 16/9` + `overflow: hidden`, so the control
+   `.playdeck-example` is `aspect-ratio: 16/9` + `overflow: hidden`, so the control
    row is cut off — loss of functionality. At 1280px the same resize passes
    clean, because `max-width: 48rem` lets the box grow 768px → 1216px. The
    existing 320px test in `e2e/reference.spec.ts` passes because it measures
@@ -97,7 +97,7 @@ and the coverage claim for the primitive stories. Chromium only, by
 
 **`@axe-core/playwright`** — new root devDependency, new `e2e/a11y.spec.ts`,
 seven states × chromium / firefox / webkit. Scoped with
-`.include('[data-reely-part="viewport"]')` so Storybook's own DOM can never
+`.include('[data-playdeck-part="viewport"]')` so Storybook's own DOM can never
 enter the result.
 
 The cost is two places to update when a state changes; that is accepted. The
@@ -116,13 +116,13 @@ breakpoint so the control row leaves the fixed-ratio clipping box:
 
 ```css
 @media (max-width: 420px) {
-  .reely-example {
+  .playdeck-example {
     aspect-ratio: auto;
   }
-  .reely-example-controls {
+  .playdeck-example-controls {
     position: relative;
   }
-  .reely-example-volume {
+  .playdeck-example-volume {
     display: none;
   }
 }
@@ -257,7 +257,7 @@ this repo.
 
 ```sh
 pnpm test; pnpm typecheck; pnpm lint; pnpm test:packages; pnpm test:budgets
-pnpm --filter @reely/storybook test; pnpm test:e2e
+pnpm --filter @playdeck/storybook test; pnpm test:e2e
 git diff --name-only main...HEAD | xargs npx prettier --check
 ```
 
@@ -278,7 +278,7 @@ Substantive deltas between this design and what shipped:
   confirmed by `elementFromPoint` at the row's own center resolving to the
   gestures element instead. `relative` keeps the same in-flow position while
   keeping `z-index` effective. The `background` re-declaration in this doc's
-  original snippet was also dropped: the base `.reely-example-controls` rule
+  original snippet was also dropped: the base `.playdeck-example-controls` rule
   is already opaque (`rgb(4, 6, 10)`) for axe color-contrast, so a second,
   different opaque color inside the media query would be redundant and
   inconsistent.

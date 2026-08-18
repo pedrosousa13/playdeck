@@ -38,41 +38,45 @@ const gzipKilobytes = async (path) => {
 // `budget: null` means report-only.
 /** @type {readonly { name: string; path: string; budget: number | null }[]} */
 const targets = [
-  { name: '@reely/core', path: '../packages/core/dist/index.js', budget: 10 },
   {
-    name: '@reely/react (primitives, excl. React)',
+    name: '@playdeck/core',
+    path: '../packages/core/dist/index.js',
+    budget: 10
+  },
+  {
+    name: '@playdeck/react (primitives, excl. React)',
     path: '../packages/react/dist/index.js',
     budget: 18
   },
   {
     // Shipped as-is rather than built: it is plain CSS, and the primitives
     // never import it, which is what keeps the headless chain CSS-free.
-    name: '@reely/react/theme.css',
+    name: '@playdeck/react/theme.css',
     path: '../packages/react/theme.css',
     budget: 6
   },
   {
-    name: '@reely/provider-native',
+    name: '@playdeck/provider-native',
     path: '../packages/provider-native/dist/index.js',
     budget: null
   },
   {
-    name: '@reely/provider-hls',
+    name: '@playdeck/provider-hls',
     path: '../packages/provider-hls/dist/index.js',
     budget: null
   },
   {
-    name: '@reely/provider-youtube',
+    name: '@playdeck/provider-youtube',
     path: '../packages/provider-youtube/dist/index.js',
     budget: null
   },
   {
-    name: '@reely/provider-vimeo',
+    name: '@playdeck/provider-vimeo',
     path: '../packages/provider-vimeo/dist/index.js',
     budget: null
   },
   {
-    name: '@reely/provider-wistia',
+    name: '@playdeck/provider-wistia',
     path: '../packages/provider-wistia/dist/index.js',
     budget: null
   }

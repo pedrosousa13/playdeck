@@ -1,5 +1,5 @@
 ---
-'@reely/react': patch
+'@playdeck/react': patch
 ---
 
 `SettingsMenuContent` now defaults its content root to `tabIndex={0}`. Bound

@@ -4,8 +4,8 @@ import type {
   ProviderAdapter,
   ResolvedPlayerSource,
   SourceDetectionResult
-} from '@reely/core';
-import type { NativePlaybackOptions } from '@reely/provider-native';
+} from '@playdeck/core';
+import type { NativePlaybackOptions } from '@playdeck/provider-native';
 import {
   useCallback,
   useEffect,

@@ -44,19 +44,19 @@ export default tseslint.config(
           selector:
             "CallExpression[callee.property.name='getByRole'] > ObjectExpression:has(> Property[key.name='name']):not(:has(> Property[key.name='exact'][value.value=true]))",
           message:
-            'Playwright name matching is a substring match. Locate reely controls by [data-reely-part=...], or pass exact: true.'
+            'Playwright name matching is a substring match. Locate playdeck controls by [data-playdeck-part=...], or pass exact: true.'
         },
         {
           selector:
             'CallExpression[callee.property.name=/^getBy(Label|Text|Placeholder|Title|AltText)$/][arguments.length<2]',
           message:
-            'Playwright text matching is a substring match. Locate by [data-reely-part=...], or pass exact: true.'
+            'Playwright text matching is a substring match. Locate by [data-playdeck-part=...], or pass exact: true.'
         },
         {
           selector:
             "CallExpression[callee.property.name=/^getBy(Label|Text|Placeholder|Title|AltText)$/] > ObjectExpression:not(:has(> Property[key.name='exact'][value.value=true]))",
           message:
-            'Playwright text matching is a substring match. Locate by [data-reely-part=...], or pass exact: true.'
+            'Playwright text matching is a substring match. Locate by [data-playdeck-part=...], or pass exact: true.'
         }
       ]
     }
@@ -67,8 +67,8 @@ export default tseslint.config(
     // failed twice (#15, #73), so this is a gate rather than a comment.
     //
     // A denylist, not an allowlist: ESLint's group negation never un-matches a
-    // specifier containing `/`, so `['**', '!@reely/react', ...]` rejects
-    // `@reely/react` itself. Verified over 13 cases by
+    // specifier containing `/`, so `['**', '!@playdeck/react', ...]` rejects
+    // `@playdeck/react` itself. Verified over 13 cases by
     // stories/reference/import-rule.contract.test.ts, which is also what keeps
     // this rule red-then-green rather than merely present.
     //
@@ -83,15 +83,15 @@ export default tseslint.config(
             {
               group: ['../*', '../**'],
               message:
-                'The reference example must not reach outside its own directory: it exists to prove the primitives are sufficient from public exports alone. Rebuild what you need from @reely/react / @reely/core.'
+                'The reference example must not reach outside its own directory: it exists to prove the primitives are sufficient from public exports alone. Rebuild what you need from @playdeck/react / @playdeck/core.'
             },
             {
-              group: ['**/packages/**', '@reely/*/src/**'],
+              group: ['**/packages/**', '@playdeck/*/src/**'],
               message:
-                'Import the package entry (@reely/react, @reely/core), never a path into its source.'
+                'Import the package entry (@playdeck/react, @playdeck/core), never a path into its source.'
             },
             {
-              group: ['@reely/provider-*', 'hls.js'],
+              group: ['@playdeck/provider-*', 'hls.js'],
               message:
                 'The example composes against the public React surface only; providers are wired by Player.Root.'
             }

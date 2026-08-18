@@ -1,13 +1,13 @@
 ---
-'@reely/core': minor
-'@reely/provider-native': patch
-'@reely/provider-hls': patch
-'@reely/provider-vimeo': patch
-'@reely/provider-wistia': patch
-'@reely/provider-youtube': patch
+'@playdeck/core': minor
+'@playdeck/provider-native': patch
+'@playdeck/provider-hls': patch
+'@playdeck/provider-vimeo': patch
+'@playdeck/provider-wistia': patch
+'@playdeck/provider-youtube': patch
 ---
 
-Every provider fan-out now isolates a throwing subscriber, and `@reely/core`
+Every provider fan-out now isolates a throwing subscriber, and `@playdeck/core`
 exports the helper that does it (#233).
 
 An adapter's `subscribe` accepts any number of subscribers and promises each of
@@ -23,7 +23,7 @@ Vimeo player could not load". A subscriber defect was misattributed to the
 provider.
 
 The controller had the answer already — `notifySafely`, added for #95 — but it
-was private to `@reely/core` and applied only at the controller's own four
+was private to `@playdeck/core` and applied only at the controller's own four
 fan-outs. Through `Player.Root` the controller is the single subscriber to each
 adapter, so the composed path was bounded by subscriber count rather than by
 design; a consumer subscribing to an adapter directly, which the public
@@ -42,7 +42,7 @@ Nothing about `subscribe`/unsubscribe, listener signatures, or the patches and
 events an adapter publishes changes. A listener that does not throw sees exactly
 what it saw before.
 
-`minor` for `@reely/core`: `notifySafely` joins the public entry, because a
+`minor` for `@playdeck/core`: `notifySafely` joins the public entry, because a
 provider package cannot reach a private helper and copying the implementation
 into five packages is how five copies drift. It also takes its arguments
 variadically now, so a `(patch, event)` state listener is called through it

@@ -1,11 +1,11 @@
-import { PlayerController } from '@reely/core';
+import { PlayerController } from '@playdeck/core';
 import {
   API_READY_TIMEOUT_MS,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
   createYouTubeProvider,
   loadYouTubeIframeApi,
   resetYouTubeIframeApiLoader
-} from '@reely/provider-youtube';
+} from '@playdeck/provider-youtube';
 
 declare const mount: HTMLElement;
 

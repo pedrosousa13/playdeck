@@ -11,8 +11,8 @@ export default defineConfig({
   // CPU-contention flakiness under full parallel load. Locally, no retries.
   retries: process.env.CI ? 2 : 0,
   // Tests tagged @real hit third-party networks and are nondeterministic, so
-  // they never block; opt in with REELY_REAL_PROVIDERS=1.
-  grepInvert: process.env.REELY_REAL_PROVIDERS ? undefined : /@real/,
+  // they never block; opt in with PLAYDECK_REAL_PROVIDERS=1.
+  grepInvert: process.env.PLAYDECK_REAL_PROVIDERS ? undefined : /@real/,
   // One baseline set, not one per platform. The default template appends
   // `-{projectName}-{platform}`, which here would mean a darwin set nobody can
   // regenerate on linux and a linux set nobody can regenerate on darwin. There
@@ -31,7 +31,7 @@ export default defineConfig({
   use: { baseURL: 'http://127.0.0.1:4173' },
   webServer: {
     command:
-      'pnpm --filter @reely/storybook exec storybook dev --ci --no-open -p 4173 --host 127.0.0.1',
+      'pnpm --filter @playdeck/storybook exec storybook dev --ci --no-open -p 4173 --host 127.0.0.1',
     url: 'http://127.0.0.1:4173/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story',
     gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
     reuseExistingServer: !process.env.CI,

@@ -15,7 +15,7 @@
 
 **Interfaces:**
 
-- Produces: workspace package `@reely/storybook` with scripts `dev`, `build`; Storybook config with `@reely/*` → source aliases that Tasks 2–4 extend; stories glob `packages/react/src/**/*.stories.tsx`.
+- Produces: workspace package `@playdeck/storybook` with scripts `dev`, `build`; Storybook config with `@playdeck/*` → source aliases that Tasks 2–4 extend; stories glob `packages/react/src/**/*.stories.tsx`.
 
 - [ ] **Step 1: Create the app package manifest**
 
@@ -23,7 +23,7 @@
 
 ```json
 {
-  "name": "@reely/storybook",
+  "name": "@playdeck/storybook",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -34,9 +34,9 @@
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
-    "@reely/core": "workspace:*",
-    "@reely/provider-native": "workspace:*",
-    "@reely/react": "workspace:*",
+    "@playdeck/core": "workspace:*",
+    "@playdeck/provider-native": "workspace:*",
+    "@playdeck/react": "workspace:*",
     "@storybook/addon-a11y": "10.5.3",
     "@storybook/addon-vitest": "10.5.3",
     "@storybook/react-vite": "10.5.3",
@@ -71,15 +71,15 @@ const config: StorybookConfig = {
       resolve: {
         alias: [
           {
-            find: '@reely/react',
+            find: '@playdeck/react',
             replacement: fromRepoRoot('packages/react/src/index.tsx')
           },
           {
-            find: '@reely/core',
+            find: '@playdeck/core',
             replacement: fromRepoRoot('packages/core/src/index.ts')
           },
           {
-            find: '@reely/provider-native',
+            find: '@playdeck/provider-native',
             replacement: fromRepoRoot('packages/provider-native/src/index.ts')
           }
         ]
@@ -136,7 +136,7 @@ export default preview;
 }
 ```
 
-(`src/` and `vitest.config.ts` do not exist yet — a non-matching include pattern is not an error. Stories and the fake-provider fixture are type-checked by THIS project; `@reely/*` imports resolve to built declarations via project references, exactly like `apps/docs`.)
+(`src/` and `vitest.config.ts` do not exist yet — a non-matching include pattern is not an error. Stories and the fake-provider fixture are type-checked by THIS project; `@playdeck/*` imports resolve to built declarations via project references, exactly like `apps/docs`.)
 
 In `packages/react/tsconfig.json` add an exclude so the library build never emits story declarations:
 
@@ -178,7 +178,7 @@ In `eslint.config.js`, add to the `ignores` array:
 
 ```tsx
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const meta = {
   title: 'Player/PosterImage',
@@ -197,7 +197,7 @@ Run (serially):
 
 ```sh
 pnpm install
-pnpm --filter @reely/storybook build
+pnpm --filter @playdeck/storybook build
 ```
 
 Expected: install succeeds with **no** new build-script warnings (if any appear, STOP — reviewed decision required); `storybook build` exits 0 and emits `apps/storybook/storybook-static/`. If Storybook errors on the `stories` glob or aliases, fix the config — do not relax the pins.

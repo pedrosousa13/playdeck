@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import { withCss } from '../.storybook/theme';
@@ -27,7 +27,7 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-reely-part="seek-slider"` (with a child `data-reely-part="seek-buffered"`), `data-provider="<provider>"`, `data-state="idle" | "ready"` (`ready` once a duration is known), and `data-buffering="true" | "false"`.',
+          '**Contract** — renders `data-playdeck-part="seek-slider"` (with a child `data-playdeck-part="seek-buffered"`), `data-provider="<provider>"`, `data-state="idle" | "ready"` (`ready` once a duration is known), and `data-buffering="true" | "false"`.',
           '',
           '**Stalls** — `data-buffering` is a separate axis from `data-state`: it reports a stall, `data-state` reports whether a seek window exists. It is debounced (500ms before a stall is admitted, 500ms held once admitted) so a short rebuffer never twitches the slider; `state.buffering` remains the raw signal. The slider stays interactive during a stall — seeking away is how a user escapes one.',
           '',
@@ -35,7 +35,7 @@ const meta = {
           '',
           '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.',
           '',
-          '**Styling** — plain CSS against the parts. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
+          '**Styling** — plain CSS against the parts. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer playdeck` the whole theme lives in:',
           '```css',
           partCss.trim(),
           '```'
@@ -77,7 +77,7 @@ export const WithBufferedRanges: Story = {
   ),
   play: async ({ canvas, canvasElement }) => {
     const ranges = canvasElement.querySelectorAll(
-      '[data-reely-part="seek-buffered-range"]'
+      '[data-playdeck-part="seek-buffered-range"]'
     );
     await expect(ranges).toHaveLength(2);
     // The geometry is `aria-hidden`, so the two ranges above reach assistive
@@ -85,7 +85,7 @@ export const WithBufferedRanges: Story = {
     // seconds, counted once rather than per range.
     const slider = await canvas.findByRole('slider', { name: 'Seek' });
     const description = canvasElement.querySelector(
-      '[data-reely-part="seek-buffered-description"]'
+      '[data-playdeck-part="seek-buffered-description"]'
     );
     await expect(description).not.toBeNull();
     await expect(description).toHaveTextContent('65% loaded');
@@ -108,7 +108,7 @@ export const Stalled: Story = {
   play: async ({ canvas, canvasElement }) => {
     await canvas.findByRole('slider', { name: 'Seek' });
     const root = canvasElement.querySelector(
-      '[data-reely-part="seek-slider"]'
+      '[data-playdeck-part="seek-slider"]'
     ) as HTMLElement;
     // A stall must persist 500ms before it is admitted (#35). The timeout is
     // explicit so this does not silently depend on waitFor's default being
@@ -163,10 +163,10 @@ export const Styled: Story = {
   play: async ({ canvas, canvasElement }) => {
     const input = await canvas.findByRole('slider', { name: 'Seek' });
     const root = canvasElement.querySelector(
-      '[data-reely-part="seek-slider"]'
+      '[data-playdeck-part="seek-slider"]'
     ) as HTMLElement;
     const buffered = canvasElement.querySelector(
-      '[data-reely-part="seek-buffered"]'
+      '[data-playdeck-part="seek-buffered"]'
     ) as HTMLElement;
 
     // The buffered layer is a child part with no size of its own until CSS
@@ -175,7 +175,10 @@ export const Styled: Story = {
     // The example selects the input by part name rather than by tag, as this
     // page's own rule demands. Nothing else would fail if that part name were
     // wrong, so it is asserted here.
-    await expect(input).toHaveAttribute('data-reely-part', 'seek-slider-input');
+    await expect(input).toHaveAttribute(
+      'data-playdeck-part',
+      'seek-slider-input'
+    );
     await expect(globalThis.getComputedStyle(input).accentColor).toBe(
       'rgb(122, 167, 255)'
     );

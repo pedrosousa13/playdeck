@@ -1,5 +1,5 @@
 ---
-'@reely/provider-vimeo': patch
+'@playdeck/provider-vimeo': patch
 ---
 
 The Vimeo chromeless-availability probe is now cancellable, and every path that

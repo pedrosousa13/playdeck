@@ -8,7 +8,7 @@ import type {
   ProviderStateListener,
   ProviderStatePatch,
   WistiaSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   API_READY_TIMEOUT_MS,
   createWistiaProvider,
@@ -402,7 +402,7 @@ test('sets the poster as an attribute', async () => {
   );
 });
 
-// The shared allowlist (`isPermittedSourceUrl`, `@reely/core`) is genuinely
+// The shared allowlist (`isPermittedSourceUrl`, `@playdeck/core`) is genuinely
 // more permissive than the old Wistia-local `https:`-only check, and the
 // value written is the caller's own string verbatim — never a reparsed one —
 // with the single documented exception of the protocol-relative substitution.

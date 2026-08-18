@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { withCss } from '../.storybook/theme';
@@ -32,13 +32,13 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-reely-part="play-button"`, `data-provider="<provider>"`, and `data-state="paused" | "playing"`.',
+          '**Contract** — renders `data-playdeck-part="play-button"`, `data-provider="<provider>"`, and `data-state="paused" | "playing"`.',
           '',
           '**Accessibility** — a native `<button>`; label switches between "Play" and "Pause"; reachable and operable by keyboard (Tab to focus, Enter/Space to toggle).',
           '',
           '**Capability** — not capability-gated; always renders (`data-provider` is set once a provider attaches).',
           '',
-          '**Styling** — plain CSS against the part. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
+          '**Styling** — plain CSS against the part. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer playdeck` the whole theme lives in:',
           '```css',
           partCss.trim(),
           '```'

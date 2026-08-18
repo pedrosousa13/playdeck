@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { expect, test } from 'vitest';
-import type { ProviderStatePatch } from '@reely/core';
+import type { ProviderStatePatch } from '@playdeck/core';
 import { createNativeProvider } from '../src/index';
 
 type Timeline = {

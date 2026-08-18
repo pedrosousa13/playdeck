@@ -1,4 +1,4 @@
-import { chaptersEqual, deriveChapters } from '@reely/core';
+import { chaptersEqual, deriveChapters } from '@playdeck/core';
 
 // A provider reports where a chapter begins and what it is called. Nothing
 // reports where one ends, so `deriveChapters` is what decides: the list is

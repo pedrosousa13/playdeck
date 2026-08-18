@@ -1,4 +1,4 @@
-import { deriveLiveState, liveStateEqual } from '@reely/core';
+import { deriveLiveState, liveStateEqual } from '@playdeck/core';
 
 // Liveness comes from what the provider reports — never from the URL, the id
 // or a filename. `isLiveHint` is the provider's own answer where it has one;

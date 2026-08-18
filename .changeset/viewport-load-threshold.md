@@ -1,5 +1,5 @@
 ---
-'@reely/react': minor
+'@playdeck/react': minor
 ---
 
 Add `loadThreshold` to `Player.Root`, alongside `loadMargin`. Under

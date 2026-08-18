@@ -1,10 +1,10 @@
 ---
-'@reely/core': minor
-'@reely/react': minor
-'@reely/provider-native': minor
-'@reely/provider-hls': minor
-'@reely/provider-youtube': minor
-'@reely/provider-vimeo': minor
+'@playdeck/core': minor
+'@playdeck/react': minor
+'@playdeck/provider-native': minor
+'@playdeck/provider-hls': minor
+'@playdeck/provider-youtube': minor
+'@playdeck/provider-vimeo': minor
 ---
 
 Add `PlayerState.commandsReady` and `PlayerController.whenReady()`. Each

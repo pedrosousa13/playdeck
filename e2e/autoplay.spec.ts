@@ -9,7 +9,7 @@ test('muted autoplay reaches a confirmed started state', async ({ page }) => {
   const button = page.locator('[data-autoplay-state]');
   await expect(button).toHaveAttribute('data-autoplay-state', 'started');
   await expect(
-    page.getByLabel('Reely media', { exact: true })
+    page.getByLabel('Playdeck media', { exact: true })
   ).toHaveJSProperty('muted', true);
 });
 
@@ -40,13 +40,13 @@ test('blocked audible autoplay waits for a user retry without muting', async ({
   await expect(play).toHaveAttribute('data-autoplay-state', 'blocked');
   await expect(play).toHaveJSProperty('tabIndex', 0);
   await expect(
-    page.getByLabel('Reely media', { exact: true })
+    page.getByLabel('Playdeck media', { exact: true })
   ).toHaveJSProperty('muted', false);
 
   await play.click();
 
   await expect(play).toHaveAttribute('data-state', 'playing');
   await expect(
-    page.getByLabel('Reely media', { exact: true })
+    page.getByLabel('Playdeck media', { exact: true })
   ).toHaveJSProperty('muted', false);
 });

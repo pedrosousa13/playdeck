@@ -6,7 +6,7 @@ import type {
   MediaDimensions,
   ProviderAdapter,
   ProviderStateListener
-} from '@reely/core';
+} from '@playdeck/core';
 import { createNativeProvider } from '../src/index';
 import { captureRethrows } from './fixtures/capture-rethrows';
 

@@ -1,23 +1,23 @@
-# @reely/provider-hls
+# @playdeck/provider-hls
 
-The HLS provider for [Reely](https://github.com/pedrosousa13/reely). Picks
+The HLS provider for [Playdeck](https://github.com/pedrosousa13/playdeck). Picks
 between the browser's native HLS and hls.js, and delegates everything the
-`<video>` element already answers to `@reely/provider-native` rather than
+`<video>` element already answers to `@playdeck/provider-native` rather than
 reimplementing it.
 
 ```sh
-pnpm add @reely/provider-hls
+pnpm add @playdeck/provider-hls
 ```
 
-`@reely/react` loads this for you when the source resolves to `hls`. hls.js is a
+`@playdeck/react` loads this for you when the source resolves to `hls`. hls.js is a
 dependency but is imported dynamically, so it only reaches the network when the
 hls.js engine is actually selected.
 
 <!-- example:provider-hls -->
 
 ```ts
-import { PlayerController } from '@reely/core';
-import { createHlsProvider } from '@reely/provider-hls';
+import { PlayerController } from '@playdeck/core';
+import { createHlsProvider } from '@playdeck/provider-hls';
 
 declare const videoElement: HTMLVideoElement;
 
@@ -48,7 +48,7 @@ import {
   createHlsProvider,
   detectHlsEnvironment,
   selectHlsEngine
-} from '@reely/provider-hls';
+} from '@playdeck/provider-hls';
 
 declare const videoElement: HTMLVideoElement;
 
@@ -73,12 +73,12 @@ export const provider = createHlsProvider(videoElement, {
 
 ## Exports
 
-| Export                 | What it is                                                                     |
-| ---------------------- | ------------------------------------------------------------------------------ |
-| `createHlsProvider`    | Builds the adapter over a `<video>` element and an `HlsSource`.                |
-| `selectHlsEngine`      | The engine decision, given a requested engine and a detected environment.      |
-| `detectHlsEnvironment` | What the browser offers: native HLS, MSE, or neither.                          |
-| `deriveLiveState`      | The shared `isLive` / `atLiveEdge` derivation, re-exported from `@reely/core`. |
+| Export                 | What it is                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| `createHlsProvider`    | Builds the adapter over a `<video>` element and an `HlsSource`.                   |
+| `selectHlsEngine`      | The engine decision, given a requested engine and a detected environment.         |
+| `detectHlsEnvironment` | What the browser offers: native HLS, MSE, or neither.                             |
+| `deriveLiveState`      | The shared `isLive` / `atLiveEdge` derivation, re-exported from `@playdeck/core`. |
 
 Types: `HlsProviderOptions`, `HlsEnvironment`, `HlsEngineSelection`,
 `LiveDerivationInput`, `HlsModuleLoader`, and the structural shapes this adapter
@@ -93,7 +93,7 @@ from somewhere else:
 <!-- example:provider-hls-loader -->
 
 ```ts
-import { createHlsProvider } from '@reely/provider-hls';
+import { createHlsProvider } from '@playdeck/provider-hls';
 
 declare const videoElement: HTMLVideoElement;
 
@@ -128,13 +128,13 @@ exist.
   source — and it is not caption state, so the hls.js engine does not drop it.
 
 `deriveLiveState` is that derivation. It lives in
-[`@reely/core`](../core#live-state), where every adapter shares one copy, and is
+[`@playdeck/core`](../core#live-state), where every adapter shares one copy, and is
 re-exported here so a custom HLS adapter can reuse it:
 
 <!-- example:provider-hls-live -->
 
 ```ts
-import { deriveLiveState } from '@reely/provider-hls';
+import { deriveLiveState } from '@playdeck/provider-hls';
 
 // Liveness is derived from what the stream reports — never from the URL or a
 // filename. `isLiveHint` is hls.js's own answer where it has one; the native

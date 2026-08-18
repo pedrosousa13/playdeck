@@ -1,5 +1,5 @@
 ---
-'@reely/provider-youtube': minor
+'@playdeck/provider-youtube': minor
 ---
 
 The YouTube provider now builds the embed iframe itself and hands the finished
@@ -18,7 +18,7 @@ header, because that header was already narrow. `www-widgetapi.js` — the scrip
 `iframe_api` loads, read at player build `b0d2d49a` and confirmed against a real
 player in a browser — sets `referrerPolicy="strict-origin-when-cross-origin"` on
 the iframe it builds, alongside `frameBorder`, `allowfullscreen`, `allow` and
-`title`. So a Reely YouTube embed was already sending only the page's origin in
+`title`. So a Playdeck YouTube embed was already sending only the page's origin in
 that header. What changes is who guarantees it: Google serves that script
 unversioned and mutable, so the guarantee was theirs to withdraw on their
 schedule, and it is now this repo's to keep.
@@ -28,7 +28,7 @@ appends `forigin=<the embedding page's full URL>`, plus `aoriginsup`, plus
 `gporigin` and `widget_referrer` where a referrer exists. The page's path and
 query therefore reached YouTube in the query string whatever the referrer policy
 said — a `referrerpolicy` was never going to stop that, which is the part the
-issue behind this change had not established. Reely's own url carries the video,
+issue behind this change had not established. Playdeck's own url carries the video,
 `enablejsapi=1` and the player vars this adapter has always set, and none of
 those parameters. That is a real narrowing and also a behavioural change on
 Google's side of the frame that nothing here can test: whatever those parameters
@@ -70,7 +70,7 @@ this repo sends breaking changes on `minor`.
 
 This is verified against a real player, not only against a stand-in —
 `e2e/youtube-real.spec.ts` now asserts the attribute on the attached frame, and
-that spec is the manually-run `REELY_REAL_PROVIDERS=1` suite rather than a CI
+that spec is the manually-run `PLAYDECK_REAL_PROVIDERS=1` suite rather than a CI
 one. Wistia gets no code change and can get none: its frame is written into a
 vendor element's shadow root, so the only remedy there is a page-level
 `Referrer-Policy` response header on the embedding page, which is the consuming

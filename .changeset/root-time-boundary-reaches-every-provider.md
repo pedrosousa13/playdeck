@@ -1,9 +1,9 @@
 ---
-'@reely/core': minor
-'@reely/provider-youtube': minor
-'@reely/provider-vimeo': minor
-'@reely/provider-wistia': minor
-'@reely/react': minor
+'@playdeck/core': minor
+'@playdeck/provider-youtube': minor
+'@playdeck/provider-vimeo': minor
+'@playdeck/provider-wistia': minor
+'@playdeck/react': minor
 ---
 
 `Player.Root`'s `startTime` and `endTime` props now bound a YouTube, Vimeo or
@@ -26,7 +26,7 @@ is trusted.
 The sanitisation rules are the native provider's, unchanged and now identical on
 all five: a start that is absent, non-positive or non-finite is no start; an end
 that is absent, non-finite, or not above the start is no end; an end past the
-duration is clamped to it. `@reely/core` gains one export that states them:
+duration is clamped to it. `@playdeck/core` gains one export that states them:
 `createTimeBoundary(options)` resolves the window once and returns a
 `TimeBoundary` carrying every question the ports ask of it — `start`, `end`,
 `atEnd`, `atWrap`, `restartsAtStart` and `clamp`, alongside the sanitised

@@ -1,4 +1,4 @@
-import type { PlayerEventFor, ProviderEventFor } from '@reely/core';
+import type { PlayerEventFor, ProviderEventFor } from '@playdeck/core';
 
 declare const playerEvent: PlayerEventFor<'play'>;
 declare const providerEvent: ProviderEventFor<'play'>;

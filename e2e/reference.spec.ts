@@ -73,7 +73,10 @@ test('the settings menu changes the playback rate on the media element', async (
   await played(page);
 
   await settingsTrigger(page).click();
-  await expect(settingsMenu(page)).toHaveAttribute('data-reely-menu', 'open');
+  await expect(settingsMenu(page)).toHaveAttribute(
+    'data-playdeck-menu',
+    'open'
+  );
   // exact: true — Playwright name matching is a substring match, and "1.5x"
   // is a substring of nothing here only by luck.
   await page.getByRole('menuitemradio', { name: '1.5×', exact: true }).click();
@@ -142,7 +145,7 @@ test('swapping MP4 to HLS populates the quality ladder', async ({
   const quality = page.getByRole('group', { name: 'Quality', exact: true });
   await expect(quality).toBeVisible();
   await expect(
-    quality.locator('[data-reely-part="menu-radio-item"]')
+    quality.locator('[data-playdeck-part="menu-radio-item"]')
   ).toHaveCount(3);
   await quality
     .getByRole('menuitemradio', { name: '90p', exact: true })
@@ -166,7 +169,7 @@ test('the control row does not overflow at 320px, and hides the volume slider be
   //
   // The overflow assertions below hold at 320px regardless of the
   // `@container (max-width: 420px)` volume-slider rule, because
-  // `.reely-example-row-buttons` sets `flex-wrap: wrap` — the row cannot
+  // `.playdeck-example-row-buttons` sets `flex-wrap: wrap` — the row cannot
   // overflow horizontally either way. What actually exercises that
   // breakpoint is the volume-slider visibility check that follows: hidden at
   // 320px, visible again at 480px (comfortably above the breakpoint).
@@ -186,7 +189,7 @@ test('the control row does not overflow at 320px, and hides the volume slider be
   }));
   expect(page320.scrollWidth).toBeLessThanOrEqual(page320.clientWidth);
 
-  const volumeSlider = page.locator('[data-reely-part="volume-slider"]');
+  const volumeSlider = page.locator('[data-playdeck-part="volume-slider"]');
   await expect(volumeSlider).toBeHidden();
 
   await page.setViewportSize({ width: 480, height: 640 });
@@ -205,14 +208,14 @@ test('the volume slider hides on the player width, not the viewport width', asyn
   await page.goto(story);
   // Constrain the CONTAINING element, not the player: that is what an embed in
   // a narrow column does, and the player's own `width: 100%` then resolves to
-  // 320px. Styling `.reely-example` directly does not work anyway — the story
+  // 320px. Styling `.playdeck-example` directly does not work anyway — the story
   // injects its stylesheet from the body, so a rule added here loses on
   // document order at equal specificity (measured: the player stayed 768px).
   await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
   await expect
     .poll(() =>
       page
-        .locator('.reely-example')
+        .locator('.playdeck-example')
         .evaluate((el) => el.getBoundingClientRect().width)
     )
     .toBeLessThanOrEqual(320);
@@ -220,7 +223,9 @@ test('the volume slider hides on the player width, not the viewport width', asyn
   await activationButton(page).click();
   await played(page);
 
-  await expect(page.locator('[data-reely-part="volume-slider"]')).toBeHidden();
+  await expect(
+    page.locator('[data-playdeck-part="volume-slider"]')
+  ).toBeHidden();
 
   // And the viewport really was wide throughout — otherwise this would be the
   // same assertion as the test above, passing for the wrong reason.
@@ -242,7 +247,7 @@ test('a narrow container keeps the 16:9 floor and puts the row in flow', async (
   await page.goto(story);
   await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
 
-  const player = page.locator('.reely-example');
+  const player = page.locator('.playdeck-example');
   await expect
     .poll(() => player.evaluate((el) => el.getBoundingClientRect().width))
     .toBeLessThanOrEqual(320);
@@ -329,7 +334,7 @@ test('a narrow container folds PiP into the settings menu', async ({
   await expect(airPlayButton(page)).toBeHidden();
 
   // One line: the button row is exactly one 44px target tall.
-  const buttonRow = page.locator('.reely-example-row-buttons');
+  const buttonRow = page.locator('.playdeck-example-row-buttons');
   expect(
     await buttonRow.evaluate((el) =>
       Math.round(el.getBoundingClientRect().height)

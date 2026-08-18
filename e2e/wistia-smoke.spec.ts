@@ -3,7 +3,7 @@ import { playButton } from './locators';
 
 // Real-provider smoke tests: tagged @real so they never block CI (see
 // grepInvert in playwright.config.ts). Run with:
-//   REELY_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
+//   PLAYDECK_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
 
 const STORY =
   '/iframe.html?id=fixtures-playerfixture--wistia-interaction-muted&viewMode=story';
@@ -62,7 +62,7 @@ const firedTypes = async (page: Page): Promise<string[]> =>
   (await recorded(page)).map((event) => event.type);
 
 const state = (page: Page) =>
-  page.evaluate(() => window.reelyHandle?.getState());
+  page.evaluate(() => window.playdeckHandle?.getState());
 
 const activate = async (page: Page): Promise<void> => {
   await page.goto(STORY);
@@ -85,8 +85,8 @@ test(
     await activate(page);
 
     // A mounted element is not playback: the media element has to be the real
-    // `<wistia-player>`, on screen, carrying the mediaId Reely detected.
-    const player = page.locator('[data-reely-part="media"] wistia-player');
+    // `<wistia-player>`, on screen, carrying the mediaId Playdeck detected.
+    const player = page.locator('[data-playdeck-part="media"] wistia-player');
     await expect(player).toHaveAttribute('media-id', 'oifkgmxnkb');
     await expect(player).toBeInViewport();
     expect(await player.boundingBox()).toMatchObject({
@@ -112,7 +112,7 @@ test(
 // fast.wistia.com at runtime. The unit suite cannot tell a correct name from a
 // misread one, because its fixture dispatches the same literals the adapter
 // listens for. So each name is driven against the live player here, and both
-// halves are asserted: the element really dispatched it, AND the state Reely
+// halves are asserted: the element really dispatched it, AND the state Playdeck
 // publishes moved because of it.
 //
 // One name is the exception, and it is marked at its own assertion:
@@ -120,7 +120,7 @@ test(
 // is already published by the ready-time `adopt` patch, so on this player no
 // state assertion can be attributed to it.
 test(
-  'every element event the adapter binds fires on the live player and moves Reely state',
+  'every element event the adapter binds fires on the live player and moves Playdeck state',
   { tag: '@real' },
   async ({ page }) => {
     test.setTimeout(300_000);
@@ -139,7 +139,7 @@ test(
     // publishes the same two fields. Measured on this media, `api.duration()`
     // already answers 115.434 at `api-ready` (t=2225ms), and `loaded-metadata`
     // lands ~490ms later (t=2714ms), by which time the ready patch has already
-    // published both. A probe that recorded Reely's state either side of the
+    // published both. A probe that recorded Playdeck's state either side of the
     // live dispatch found it unchanged across it:
     //   before {"duration":115.434,"seekable":[{"start":0,"end":115.434}]}
     //   after  {"duration":115.434,"seekable":[{"start":0,"end":115.434}]}
@@ -166,7 +166,7 @@ test(
 
     // `volume-change`, driven on its own: a volume set does not touch the mute
     // state, so `state.volume` moving proves this event and no other.
-    await page.evaluate(() => window.reelyHandle?.setVolume(0.25));
+    await page.evaluate(() => window.playdeckHandle?.setVolume(0.25));
     await expect.poll(async () => (await state(page))?.volume).toBe(0.25);
     expect(await firedTypes(page)).toContain('volume-change');
 
@@ -183,23 +183,23 @@ test(
     });
 
     // `mute-change`. The story starts muted, so the unmute is what moves.
-    await page.evaluate(() => window.reelyHandle?.unmute());
+    await page.evaluate(() => window.playdeckHandle?.unmute());
     await expect.poll(async () => (await state(page))?.muted).toBe(false);
-    await page.evaluate(() => window.reelyHandle?.mute());
+    await page.evaluate(() => window.playdeckHandle?.mute());
     await expect.poll(async () => (await state(page))?.muted).toBe(true);
     expect(await firedTypes(page)).toContain('mute-change');
 
     // `rate-change`.
-    await page.evaluate(() => window.reelyHandle?.setPlaybackRate(1.5));
+    await page.evaluate(() => window.playdeckHandle?.setPlaybackRate(1.5));
     await expect.poll(async () => (await state(page))?.playbackRate).toBe(1.5);
     expect(await firedTypes(page)).toContain('rate-change');
 
     // `seeked`. `seeking` is deliberately NOT bound — measured, the element
     // dispatches it about a millisecond after the `seeked` for the same seek,
-    // plus one unpaired one during load, so binding the pair pinned Reely's
+    // plus one unpaired one during load, so binding the pair pinned Playdeck's
     // `seeking` true for the whole session. This asserts the correction holds:
     // a settled seek leaves `seeking` false, not stuck.
-    await page.evaluate(() => window.reelyHandle?.seekTo(60));
+    await page.evaluate(() => window.playdeckHandle?.seekTo(60));
     await expect
       .poll(async () => (await state(page))?.currentTime ?? 0, {
         timeout: 30_000
@@ -217,14 +217,14 @@ test(
       .toBe(true);
     expect(await firedTypes(page)).toContain('enter-fullscreen');
 
-    await page.evaluate(() => window.reelyHandle?.exitFullscreen());
+    await page.evaluate(() => window.playdeckHandle?.exitFullscreen());
     await expect
       .poll(async () => (await state(page))?.fullscreen, { timeout: 30_000 })
       .toBe(false);
     expect(await firedTypes(page)).toContain('cancel-fullscreen');
 
     // `pause`.
-    await page.evaluate(() => window.reelyHandle?.pause());
+    await page.evaluate(() => window.playdeckHandle?.pause());
     await expect
       .poll(async () => (await state(page))?.playback, { timeout: 30_000 })
       .toBe('paused');
@@ -232,10 +232,10 @@ test(
 
     // `ended`, last because it consumes the rest of the media.
     await page.evaluate(() => {
-      const duration = window.reelyHandle?.getState().duration ?? 0;
-      void window.reelyHandle?.seekTo(Math.max(0, duration - 3));
+      const duration = window.playdeckHandle?.getState().duration ?? 0;
+      void window.playdeckHandle?.seekTo(Math.max(0, duration - 3));
     });
-    await page.evaluate(() => window.reelyHandle?.play());
+    await page.evaluate(() => window.playdeckHandle?.play());
     await expect
       .poll(async () => (await state(page))?.playback, { timeout: 60_000 })
       .toBe('ended');
@@ -256,7 +256,7 @@ test(
     test.setTimeout(180_000);
     await activate(page);
 
-    const media = page.locator('[data-reely-part="media"]');
+    const media = page.locator('[data-playdeck-part="media"]');
     // Playwright's CSS engine pierces the open shadow root, so Wistia's chrome
     // is reachable as if it were in the light DOM.
     const control = (handle: string) =>

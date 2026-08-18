@@ -1,15 +1,15 @@
-# @reely/core
+# @playdeck/core
 
 Framework-neutral player state, commands, events and the provider contract that
-[Reely](https://github.com/pedrosousa13/reely) is built on. No DOM rendering, no
+[Playdeck](https://github.com/pedrosousa13/playdeck) is built on. No DOM rendering, no
 React, no provider SDKs.
 
 Use it directly if you are wiring a player into something other than React, or
 writing a provider adapter. If you are building UI in React, use
-[`@reely/react`](../react), which owns a controller for you.
+[`@playdeck/react`](../react), which owns a controller for you.
 
 ```sh
-pnpm add @reely/core
+pnpm add @playdeck/core
 ```
 
 ## What it gives you
@@ -17,8 +17,8 @@ pnpm add @reely/core
 <!-- example:core-quickstart -->
 
 ```ts
-import { PlayerController, detectSource } from '@reely/core';
-import { createNativeProvider } from '@reely/provider-native';
+import { PlayerController, detectSource } from '@playdeck/core';
+import { createNativeProvider } from '@playdeck/provider-native';
 
 declare const videoElement: HTMLVideoElement;
 
@@ -136,7 +136,7 @@ import {
   isWistiaMediaId,
   isYouTubeVideoId,
   resolveNetworkPath
-} from '@reely/core';
+} from '@playdeck/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
 const vimeo = detectSource('https://vimeo.com/76979871?h=8272103f6e');
@@ -213,7 +213,7 @@ render on a server, and what a test fixture should begin with.
 <!-- example:core-state -->
 
 ```ts
-import { createInitialPlayerState, textTrackLabel } from '@reely/core';
+import { createInitialPlayerState, textTrackLabel } from '@playdeck/core';
 
 // The state a controller starts from. Safe to render on a server, where no
 // provider exists yet — and the same state a test fixture should start from.
@@ -245,7 +245,7 @@ the same way.
 <!-- example:core-time-boundary -->
 
 ```ts
-import { createTimeBoundary } from '@reely/core';
+import { createTimeBoundary } from '@playdeck/core';
 
 // The `[startTime, endTime]` window a provider plays inside, sanitised once.
 // A start that is absent, non-positive or non-finite is no start; an end that
@@ -290,7 +290,7 @@ number of its own.
 <!-- example:core-live-state -->
 
 ```ts
-import { deriveLiveState, liveStateEqual } from '@reely/core';
+import { deriveLiveState, liveStateEqual } from '@playdeck/core';
 
 // Liveness comes from what the provider reports — never from the URL, the id
 // or a filename. `isLiveHint` is the provider's own answer where it has one;
@@ -331,7 +331,7 @@ neither claim until one arrives.
 `PlayerState.chapters` is the named divisions of the current video, ordered by
 `startTime`, and `capabilities.chapters` says whether the provider can report
 any at all — an empty collection means "none here", not "this provider cannot
-tell you". Reely publishes the vocabulary and draws none of it: a consumer maps
+tell you". Playdeck publishes the vocabulary and draws none of it: a consumer maps
 a chapter to a position on the seek slider, which already takes children.
 
 `deriveChapters` is the one derivation every adapter publishes through, so a
@@ -340,7 +340,7 @@ chapter means the same thing whichever one reported it.
 <!-- example:core-chapters -->
 
 ```ts
-import { chaptersEqual, deriveChapters } from '@reely/core';
+import { chaptersEqual, deriveChapters } from '@playdeck/core';
 
 // A provider reports where a chapter begins and what it is called. Nothing
 // reports where one ends, so `deriveChapters` is what decides: the list is
@@ -388,7 +388,7 @@ import {
   type ProviderEvent,
   type ProviderStatePatch,
   type ProviderStateListener
-} from '@reely/core';
+} from '@playdeck/core';
 
 // What a provider adapter owes the subscribers it fans out to. `Set.forEach`
 // stops at the first throw, so one broken listener would abandon the emit:
@@ -444,7 +444,7 @@ import {
   PlayerController,
   bindMediaSession,
   getMediaSessionCoordinator
-} from '@reely/core';
+} from '@playdeck/core';
 
 declare const controller: PlayerController;
 

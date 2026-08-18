@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { available, notReady, ready } from './support';
@@ -21,7 +21,7 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-reely-part="mute-button"`, `data-provider="<provider>"`, and `data-state="muted" | "unmuted"`.',
+          '**Contract** — renders `data-playdeck-part="mute-button"`, `data-provider="<provider>"`, and `data-state="muted" | "unmuted"`.',
           '',
           '**Accessibility** — a native `<button>`; label reflects the mute state; reachable and operable by keyboard (Tab to focus, Enter/Space to toggle).',
           '',

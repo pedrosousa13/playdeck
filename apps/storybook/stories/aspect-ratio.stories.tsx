@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { withCss } from '../.storybook/theme';
 // The one consumer rule these stories exist to show, read as text so what is
@@ -71,7 +71,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A provider that can measure its media publishes the intrinsic ratio onto the `viewport` part as `--reely-media-aspect-ratio`. Every player below mounts the same single rule from `examples/css-media-aspect-ratio.css` — `aspect-ratio: var(--reely-media-aspect-ratio, 16 / 9)` — and is given a width and nothing else, so each box is shaped by what its own source measures, or by the fallback where nothing has been measured. Local fixtures, no network, but real media through a real provider — so excluded from the deterministic story test suite (tagged `!test`).'
+          'A provider that can measure its media publishes the intrinsic ratio onto the `viewport` part as `--playdeck-media-aspect-ratio`. Every player below mounts the same single rule from `examples/css-media-aspect-ratio.css` — `aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9)` — and is given a width and nothing else, so each box is shaped by what its own source measures, or by the fallback where nothing has been measured. Local fixtures, no network, but real media through a real provider — so excluded from the deterministic story test suite (tagged `!test`).'
       }
     }
   }

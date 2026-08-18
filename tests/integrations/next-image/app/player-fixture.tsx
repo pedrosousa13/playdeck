@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect } from 'react';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 export const PlayerFixture = () => {
   useEffect(() => {

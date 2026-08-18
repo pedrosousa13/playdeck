@@ -1,6 +1,6 @@
 ---
-'@reely/core': minor
-'@reely/react': minor
+'@playdeck/core': minor
+'@playdeck/react': minor
 ---
 
 Seeks now carry a provenance, the way playback commands already do (#186).

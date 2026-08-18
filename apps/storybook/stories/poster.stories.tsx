@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { ReactNode } from 'react';
@@ -17,7 +17,7 @@ const Frame = ({ children }: { readonly children: ReactNode }) => (
 
 const posterImage = (canvasElement: HTMLElement): HTMLElement => {
   const image = canvasElement.querySelector<HTMLElement>(
-    '[data-reely-part="poster-image"]'
+    '[data-playdeck-part="poster-image"]'
   );
   if (!image) throw new Error('Expected a poster image in the story.');
   return image;
@@ -32,13 +32,13 @@ const meta = {
         component: [
           '`Player.Poster` is the pre-playback surface; wrap a `Player.PosterImage` or arbitrary children.',
           '',
-          '**Contract** — `data-reely-part="poster"`, `data-state`.',
+          '**Contract** — `data-playdeck-part="poster"`, `data-state`.',
           '',
           '**Note** — children replace the default image.',
           '',
           "**Poster image states** — the bitmap's own load lifecycle (`idle`, `loading`, `loaded`, `error`) belongs to `Player.PosterImage` and is staged under `Player/PosterImage`.",
           '',
-          '**Styling** — plain CSS against the parts; the primitive keeps its own geometry and `visibility`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
+          '**Styling** — plain CSS against the parts; the primitive keeps its own geometry and `visibility`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer playdeck` the whole theme lives in:',
           '```css',
           partCss.trim(),
           '```'
@@ -103,7 +103,7 @@ export const CustomChild: Story = {
     </Frame>
   ),
   play: async ({ canvasElement }) => {
-    const poster = canvasElement.querySelector('[data-reely-part="poster"]');
+    const poster = canvasElement.querySelector('[data-playdeck-part="poster"]');
     await expect(poster).toHaveTextContent('Custom poster content');
   }
 };

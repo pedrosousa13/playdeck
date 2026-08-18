@@ -6,7 +6,7 @@ import {
   type ProviderAdapter,
   type ProviderStateListener,
   type ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 
 const createProvider = (): {
   emit: (patch: ProviderStatePatch) => void;

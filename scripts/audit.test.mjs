@@ -15,7 +15,7 @@ import { selectPublishable } from './workspace-packages.mjs';
 //   pnpm install --lockfile-only --ignore-scripts
 //   pnpm list -r --depth -1 --json
 //   pnpm list --prod --no-optional --depth Infinity --json --lockfile-only \
-//     --filter @reely/audit-fixture-publishable
+//     --filter @playdeck/audit-fixture-publishable
 //   pnpm audit --json
 //
 // and storing them as `workspace`, `prodTrees` and `audit`, with the absolute
@@ -131,16 +131,16 @@ test('every advisory the tool found is printed with its severity and its label',
 test('the report names the dependency count and the packages the gate is drawn around', () => {
   const result = gate(shipped);
   assert.ok(result.report.includes('6 dependencies'));
-  assert.ok(result.report.includes('@reely/audit-fixture-publishable'));
+  assert.ok(result.report.includes('@playdeck/audit-fixture-publishable'));
 });
 
 test('collects the transitive production closure of each publishable package', () => {
   assert.deepEqual(
     shippedVersions([
       {
-        name: '@reely/react',
+        name: '@playdeck/react',
         dependencies: {
-          '@reely/core': {
+          '@playdeck/core': {
             version: 'link:../core',
             dependencies: { 'hls.js': { version: '1.6.16' } }
           }
@@ -149,7 +149,7 @@ test('collects the transitive production closure of each publishable package', (
     ]),
     // The workspace link itself is not a registry package and can carry no
     // advisory; what it pulls in transitively is the point.
-    new Map([['hls.js@1.6.16', ['@reely/react']]])
+    new Map([['hls.js@1.6.16', ['@playdeck/react']]])
   );
 });
 

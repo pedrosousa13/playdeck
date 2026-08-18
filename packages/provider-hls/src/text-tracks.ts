@@ -6,8 +6,8 @@ import type {
   TextCue,
   TextTrack,
   TextTrackKind
-} from '@reely/core';
-import { notifySafely, textTrackLabel } from '@reely/core';
+} from '@playdeck/core';
+import { notifySafely, textTrackLabel } from '@playdeck/core';
 import type {
   EmitProviderState,
   HlsInstanceLike,

@@ -1,4 +1,4 @@
-import type { CommandResult, PlayerCapabilities } from '@reely/core';
+import type { CommandResult, PlayerCapabilities } from '@playdeck/core';
 import {
   loadFailure,
   preReadyCapabilities,

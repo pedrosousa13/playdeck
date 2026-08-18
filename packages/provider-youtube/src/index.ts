@@ -7,7 +7,7 @@ import {
   type ProviderAdapter,
   type ProviderEvent,
   type ProviderStateListener
-} from '@reely/core';
+} from '@playdeck/core';
 import { providerEvent, readyCapabilities } from './adapter-values.js';
 import { createYouTubeAttachment } from './attachment.js';
 import { createYouTubeBoundary } from './boundary.js';

@@ -1,25 +1,25 @@
-# @reely/provider-youtube
+# @playdeck/provider-youtube
 
-The YouTube provider for [Reely](https://github.com/pedrosousa13/reely), over
+The YouTube provider for [Playdeck](https://github.com/pedrosousa13/playdeck), over
 the IFrame Player API.
 
 ```sh
-pnpm add @reely/provider-youtube
+pnpm add @playdeck/provider-youtube
 ```
 
-`@reely/react` loads this for you when the source resolves to `youtube`.
+`@playdeck/react` loads this for you when the source resolves to `youtube`.
 
 <!-- example:provider-youtube -->
 
 ```ts
-import { PlayerController } from '@reely/core';
+import { PlayerController } from '@playdeck/core';
 import {
   API_READY_TIMEOUT_MS,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
   createYouTubeProvider,
   loadYouTubeIframeApi,
   resetYouTubeIframeApiLoader
-} from '@reely/provider-youtube';
+} from '@playdeck/provider-youtube';
 
 declare const mount: HTMLElement;
 

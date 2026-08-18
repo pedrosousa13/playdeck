@@ -2,7 +2,7 @@ import {
   createHlsProvider,
   detectHlsEnvironment,
   selectHlsEngine
-} from '@reely/provider-hls';
+} from '@playdeck/provider-hls';
 
 declare const videoElement: HTMLVideoElement;
 

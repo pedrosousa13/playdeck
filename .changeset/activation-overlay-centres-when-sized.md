@@ -1,5 +1,5 @@
 ---
-'@reely/react': patch
+'@playdeck/react': patch
 ---
 
 `ActivationButton` now states `margin: auto` alongside its inline
@@ -17,7 +17,7 @@ the problem to begin with — a `<button>` centres its own content, so the
 full-bleed box already put an icon child in the middle. The bundled
 `theme.css`, whose 4rem circle is where this surfaced, is unchanged and now
 renders centred; so does any consumer stylesheet that gives
-`[data-reely-part='activation']` a size of its own, which for a headless
+`[data-playdeck-part='activation']` a size of its own, which for a headless
 library is the case that matters. It stays overridable through the `style` prop
 under the #89 rule, `margin` included.
 

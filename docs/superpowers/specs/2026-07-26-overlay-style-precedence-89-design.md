@@ -1,6 +1,6 @@
 # Overlay geometry vs. the consumer's `style` prop (#89) — design
 
-Issue: [#89](https://github.com/pedrosousa13/reely/issues/89). Both of its open questions were delegated to the agent on 2026-07-26 rather than answered by the owner; the rulings and the evidence behind them are recorded here.
+Issue: [#89](https://github.com/pedrosousa13/playdeck/issues/89). Both of its open questions were delegated to the agent on 2026-07-26 rather than answered by the owner; the rulings and the evidence behind them are recorded here.
 
 #89 was found while doing #32's WCAG 2.2 AA pass. `LoadingIndicator`'s half was already fixed on that branch, because #32 could not make its contrast claim otherwise. What remained were two questions the issue deliberately left open: a contract question about `style` precedence, and a question about whether an overlay that is legitimately covering the player should leave residue in an automated audit.
 
@@ -26,7 +26,7 @@ Full-bleed overlay with a stacking context, on both sides of the line. Whatever 
 Two further facts push the same way:
 
 - **Inline styles beat stylesheet rules.** For the 7 invariant sites, the _only_ override path available to a consumer today is `!important`. `Reference.mdx:34` ("Layout is your job too") advertises layout as consumer-owned; a documented escape hatch that requires `!important` to work is not an escape hatch.
-- **Ecosystem convention.** Headless React libraries in this space (Radix, Base UI) treat a forwarded `style` prop as last-wins. A consumer's first guess will be wrong 7 times out of 22 in reely today, with no signal telling them which.
+- **Ecosystem convention.** Headless React libraries in this space (Radix, Base UI) treat a forwarded `style` prop as last-wins. A consumer's first guess will be wrong 7 times out of 22 in playdeck today, with no signal telling them which.
 
 ### Ruling for Q1
 
@@ -45,12 +45,12 @@ The carve-out is narrow and mechanical: if the value is computed from `usePlayer
 
 ### `PosterImage` and its dedicated props
 
-`PosterImage` (`index.tsx:1484`) is the one site where a third precedence exists. `objectFit` and `objectPosition` are **explicit props** whose defaults are theming variables (`var(--reely-poster-fit, cover)`, `var(--reely-poster-position, center)`). They are neither static geometry nor state-derived.
+`PosterImage` (`index.tsx:1484`) is the one site where a third precedence exists. `objectFit` and `objectPosition` are **explicit props** whose defaults are theming variables (`var(--playdeck-poster-fit, cover)`, `var(--playdeck-poster-position, center)`). They are neither static geometry nor state-derived.
 
 An explicit prop is more specific than a generic `style` bag, so it wins; `style` in turn beats the CSS-variable default, because a consumer who writes `style={{ objectFit: 'contain' }}` has asked for exactly that. Precedence is stated in one expression rather than by spread ordering:
 
 ```ts
-objectFit: objectFit ?? style?.objectFit ?? 'var(--reely-poster-fit, cover)';
+objectFit: objectFit ?? style?.objectFit ?? 'var(--playdeck-poster-fit, cover)';
 ```
 
 The rest of `PosterImage`'s geometry (`display`, `width`, `height`) moves before `...style` with everything else.
@@ -69,7 +69,7 @@ It is a composition question, and the composition has a defect materially worse 
 
 `e2e/a11y.spec.ts` pins `color-contrast` as a known-incomplete on two states, `idle` and `error`. In both, the finding is `bgOverlap` on the time row inside `Player.Controls`. What the reference example actually renders in those states:
 
-- **`error`** — `ErrorDisplay` is `position: absolute; inset: 0; z-index: 40` and, with the example's `reely-example-error` CSS, opaque. The control row is beneath it.
+- **`error`** — `ErrorDisplay` is `position: absolute; inset: 0; z-index: 40` and, with the example's `playdeck-example-error` CSS, opaque. The control row is beneath it.
 - **`idle`** — `ActivationButton` is a real `<button>` at `position: absolute; inset: 0; z-index: 30`, covering the viewport. The control row is beneath it.
 
 In both cases the controls beneath are **invisible and unclickable, but still in the tab order and still exposed to assistive technology.** A keyboard user tabs into a play button they cannot see and a click cannot reach; a screen-reader user is offered a full control row that the pointer cannot operate. That is a WCAG 2.2 problem in its own right — 2.4.11 Focus Not Obscured most directly — and axe never says so. It reports only a contrast determination it could not complete, filed under `incomplete`, which is precisely the bucket #89 already identifies as the reason this class was invisible.
@@ -92,7 +92,7 @@ The reference example stops rendering the interactive control row while a full-b
 
 ### What this buys
 
-Both `knownIncomplete: ['color-contrast']` entries in `e2e/a11y.spec.ts` become `[]`. Since that spec asserts `incomplete` by **equality**, that is not a suppression — it is a strictly stronger assertion than the one it replaces. After this change, six of the seven #32 states are fully clean, and the seventh (`menu-open`) carries only the documented axe-core limitation on `aria-haspopup` + `aria-controls`, which is not reely's.
+Both `knownIncomplete: ['color-contrast']` entries in `e2e/a11y.spec.ts` become `[]`. Since that spec asserts `incomplete` by **equality**, that is not a suppression — it is a strictly stronger assertion than the one it replaces. After this change, six of the seven #32 states are fully clean, and the seventh (`menu-open`) carries only the documented axe-core limitation on `aria-haspopup` + `aria-controls`, which is not playdeck's.
 
 ## Scope
 
@@ -139,15 +139,15 @@ AFTER-CAPTIONS-CLICK
 
 Every other control (mute, play) updated on the same emits. Clicking anything else afterwards made the captions button catch up immediately, so the subscription was alive — **a single notification was dropped.** A control that subscribes to player state _after_ that state has already advanced can miss its next notification and render stale.
 
-That is a `usePlayerState` bug, not an example bug, and conditionally rendering controls is an ordinary consumer pattern. Filed as [#95](https://github.com/pedrosousa13/reely/issues/95) rather than worked around silently.
+That is a `usePlayerState` bug, not an example bug, and conditionally rendering controls is an ordinary consumer pattern. Filed as [#95](https://github.com/pedrosousa13/playdeck/issues/95) rather than worked around silently.
 
 Switching to `hidden` sidesteps it and is better on its own merits: the subtree never unmounts, so there is no remount churn and no subscription to re-establish, and `hidden` still removes the row from layout, from the accessibility tree and from the tab order — everything SC 2.4.11 asks for.
 
-`hidden` needs `.reely-example [hidden] { display: none !important }` to work here. reely's overlay primitives carry inline `display` (`Captions` is `display: flex` from `captionsOverlayStyle`), and a non-important stylesheet rule cannot beat an inline one. This is one of the few honest uses of `!important`.
+`hidden` needs `.playdeck-example [hidden] { display: none !important }` to work here. playdeck's overlay primitives carry inline `display` (`Captions` is `display: flex` from `captionsOverlayStyle`), and a non-important stylesheet rule cannot beat an inline one. This is one of the few honest uses of `!important`.
 
 ### 2. Hiding the row collapsed the viewport below 420px
 
-`@media (max-width: 420px)` drops `aspect-ratio` so the in-flow control row is not clipped (#32's 1.4.10 fix). With the row hidden, the box has no in-flow content left and collapses to zero height — measured as the viewport resolving to `hidden` at 320px, so `ActivationButton` could not be clicked at all. `aspect-ratio: 16 / 9` is restored via `:has(.reely-example-controls[hidden])`: the reason for dropping it only exists while there is a visible row to clip.
+`@media (max-width: 420px)` drops `aspect-ratio` so the in-flow control row is not clipped (#32's 1.4.10 fix). With the row hidden, the box has no in-flow content left and collapses to zero height — measured as the viewport resolving to `hidden` at 320px, so `ActivationButton` could not be clicked at all. `aspect-ratio: 16 / 9` is restored via `:has(.playdeck-example-controls[hidden])`: the reason for dropping it only exists while there is a visible row to clip.
 
 ### 3. Blast radius was smaller than expected on the library side, larger on the example side
 

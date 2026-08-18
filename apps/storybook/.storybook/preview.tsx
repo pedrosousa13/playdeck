@@ -7,7 +7,7 @@ const preview: Preview = {
   tags: ['autodocs'],
   globalTypes: {
     theme: {
-      description: 'Mount the optional @reely/react/theme.css',
+      description: 'Mount the optional @playdeck/react/theme.css',
       toolbar: {
         title: 'Theme',
         icon: 'paintbrush',

@@ -1,4 +1,4 @@
-import { isPermittedSourceUrl, resolveNetworkPath } from '@reely/core';
+import { isPermittedSourceUrl, resolveNetworkPath } from '@playdeck/core';
 
 // Internal to packages/react -- not exported from the package's entry point
 // (`index.tsx`). Every consumer-supplied URL prop the React layer renders

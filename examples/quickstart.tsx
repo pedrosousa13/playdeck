@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 // One API across MP4/WebM, HLS, YouTube, Vimeo and Wistia: the source decides
 // which provider loads, and nothing else changes.

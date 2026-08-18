@@ -1,10 +1,10 @@
 # Buffering/stall UX policy (#35) — design
 
-Issue: [#35](https://github.com/pedrosousa13/reely/issues/35). Owner rulings taken 2026-07-26, recorded below at the point they apply.
+Issue: [#35](https://github.com/pedrosousa13/playdeck/issues/35). Owner rulings taken 2026-07-26, recorded below at the point they apply.
 
 `LoadingIndicator` shipped in #8 with no policy behind it: it renders whenever `activation === 'loading-provider'` or `state.buffering` is true, undebounced, so a short rebuffer strobes it. This issue owns the policy and its implementation.
 
-`#35` is the last agent-actionable blocker on #18. Its other open blockers are #17 and #32 (both owner/HITL) and #9, which is a stale blocker — the `DefaultPlayer` preset was [deferred out of the MVP](https://github.com/pedrosousa13/reely/issues/1#issuecomment-5078544716).
+`#35` is the last agent-actionable blocker on #18. Its other open blockers are #17 and #32 (both owner/HITL) and #9, which is a stale blocker — the `DefaultPlayer` preset was [deferred out of the MVP](https://github.com/pedrosousa13/playdeck/issues/1#issuecomment-5078544716).
 
 ## What is already true, and is confirmed rather than rebuilt
 
@@ -28,7 +28,7 @@ Measured on `main` @ `d317df7`, not assumed:
 
 On YouTube the user gets a stopped playhead with no explanation; on Vimeo the ranges are a progress bar wearing a buffer's clothes. So the slider needs an explicit stall signal, not an inferred one.
 
-Fixing the two adapters is the strictly better UX and is **deliberately not done here** — #35 lists "provider-specific buffering quirks" as out of scope, and it would widen the branch into three more packages. Filed as [#91](https://github.com/pedrosousa13/reely/issues/91) instead.
+Fixing the two adapters is the strictly better UX and is **deliberately not done here** — #35 lists "provider-specific buffering quirks" as out of scope, and it would widen the branch into three more packages. Filed as [#91](https://github.com/pedrosousa13/playdeck/issues/91) instead.
 
 ## The policy
 
@@ -39,10 +39,12 @@ This section is what gets mirrored onto the issue to satisfy acceptance criterio
 Two `data-state` values, two default labels, one box. The primitive exposes the distinction; CSS decides whether the two _look_ different:
 
 ```html
-<div data-reely-part="loading-indicator" data-state="loading-provider">
+<div data-playdeck-part="loading-indicator" data-state="loading-provider">
   Loading video
 </div>
-<div data-reely-part="loading-indicator" data-state="buffering">Buffering</div>
+<div data-playdeck-part="loading-indicator" data-state="buffering">
+  Buffering
+</div>
 ```
 
 **Why not different geometry** (full-bleed blocking backdrop for initial load, small non-blocking badge for a stall, which is defensible on its own terms): #89 is an open bug about overlay primitives hardcoding geometry past the consumer's `...style`. Baking a second hardcoded layout into `LoadingIndicator` widens exactly the defect that is already filed against it. Geometry belongs to `theme.css` and consumer CSS, which can select on `[data-state="buffering"]` and already have everything they need.
@@ -74,7 +76,7 @@ Consequences, stated as a table because these are the cases the tests assert:
 - No new `PlayerState` field, so nothing extra lands in `.changeset/first-prerelease.md`, which #18 already has to reconcile.
 - No timer lifecycle in the core state machine. #85 (`hls.js` instance leaked by a second `load()`) shows core disposal is a live leak surface; a core timer would need clearing on `dispose()`, `load()` and the error transition.
 
-**The cost, stated plainly**: a vanilla/headless `@reely/core` consumer does not get this and must write it themselves over `state.buffering`. That is the accepted trade — the MVP ships React primitives, and the raw signal is the honest thing for core to expose.
+**The cost, stated plainly**: a vanilla/headless `@playdeck/core` consumer does not get this and must write it themselves over `state.buffering`. That is the accepted trade — the MVP ships React primitives, and the raw signal is the honest thing for core to expose.
 
 **Fixed constants, no props.** `CLAUDE.md` rule 2: no configurability that was not asked for. Two public props would also mean two more entries in #18's API reference and two more typechecked doc examples. Add them when someone asks.
 
@@ -82,7 +84,7 @@ Consequences, stated as a table because these are the cases the tests assert:
 
 ```html
 <div
-  data-reely-part="seek-slider"
+  data-playdeck-part="seek-slider"
   data-state="ready"
   data-buffering="true"
 ></div>
@@ -112,7 +114,7 @@ These are not in #35's question list, but the state machine cannot be written wi
 
 ## Architecture
 
-One module-private hook, two consumers. The hook is **not exported** from `@reely/react` — it is an implementation detail, not public API, so it adds nothing to #18's documentation surface.
+One module-private hook, two consumers. The hook is **not exported** from `@playdeck/react` — it is an implementation detail, not public API, so it adds nothing to #18's documentation surface.
 
 ```
 usePlayerState({activation, buffering})   ← raw core state, unchanged
@@ -196,7 +198,7 @@ Three assertions currently depend on the undebounced behaviour. Each is updated,
 
 ## Theme
 
-**One** rule in `packages/react/theme.css`, inside `@layer reely` and `:where()`-wrapped for specificity zero, as `packages/react/test/theme.test.ts` enforces: `[data-buffering='true']` on `seek-slider` dims the buffered ranges, so a stall reads on the slider in the shipped theme.
+**One** rule in `packages/react/theme.css`, inside `@layer playdeck` and `:where()`-wrapped for specificity zero, as `packages/react/test/theme.test.ts` enforces: `[data-buffering='true']` on `seek-slider` dims the buffered ranges, so a stall reads on the slider in the shipped theme.
 
 No companion rule for `loading-indicator[data-state='buffering']`. The theme sets only `color` on that part (`theme.css:98`) and policy 1 forbids new geometry, so a second rule would have nothing meaningful to declare — an empty rule is noise, not a contract.
 
@@ -210,15 +212,15 @@ No companion rule for `loading-indicator[data-state='buffering']`. The theme set
 
 ## Out of scope
 
-- **Provider `buffered` gaps** — YouTube emits none, Vimeo fabricates. Real UX debt, explicitly out of scope per #35 ("provider-specific buffering quirks"). Filed as [#91](https://github.com/pedrosousa13/reely/issues/91).
+- **Provider `buffered` gaps** — YouTube emits none, Vimeo fabricates. Real UX debt, explicitly out of scope per #35 ("provider-specific buffering quirks"). Filed as [#91](https://github.com/pedrosousa13/playdeck/issues/91).
 - **Live-edge stall behaviour** — #14.
 - **Auto-hide** — was preset-scoped, dropped with #9's deferral. No primitive implements it (`grep autoHide packages/react/src` is empty).
 - **Configurable thresholds as props** — see policy 2.
-- **Debouncing in `@reely/core`** — see policy 2.
+- **Debouncing in `@playdeck/core`** — see policy 2.
 
 ## Verification
 
-`#35`'s own verification line is `pnpm --filter @reely/react test && pnpm test:e2e -- --grep "buffer|stall"`. The e2e half is wrong for this repo: Playwright's `--grep` matches file paths as well as titles, and there is no buffering e2e spec to match, so it selects nothing and exits green having proven nothing. The real gate is the root suite.
+`#35`'s own verification line is `pnpm --filter @playdeck/react test && pnpm test:e2e -- --grep "buffer|stall"`. The e2e half is wrong for this repo: Playwright's `--grep` matches file paths as well as titles, and there is no buffering e2e spec to match, so it selects nothing and exits green having proven nothing. The real gate is the root suite.
 
 ```sh
 pnpm typecheck && pnpm lint && pnpm test && pnpm test:storybook && pnpm build && pnpm test:budgets

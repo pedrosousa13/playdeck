@@ -1,5 +1,5 @@
 ---
-'@reely/react': patch
+'@playdeck/react': patch
 ---
 
 The volume control now shows the volume the user last asked for until the media

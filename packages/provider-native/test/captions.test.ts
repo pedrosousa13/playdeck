@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { expect, test } from 'vitest';
-import { PlayerController } from '@reely/core';
+import { PlayerController } from '@playdeck/core';
 import { captureRethrows } from './fixtures/capture-rethrows';
 import {
   createFakeTrack,

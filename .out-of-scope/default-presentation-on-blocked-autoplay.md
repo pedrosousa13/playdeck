@@ -1,6 +1,6 @@
 # A default presentation when autoplay is refused
 
-When a browser refuses autoplay, reely keeps the poster over the video and
+When a browser refuses autoplay, playdeck keeps the poster over the video and
 changes nothing else. It does not reveal controls, does not render a play
 overlay, and does not substitute any other presentation of its own. The player
 reaches `autoplay: 'blocked'`, `playback` stays where it was, and what the
@@ -8,7 +8,7 @@ viewer sees is whatever the consumer composed.
 
 `PlayButton` still works and still retries through the refusal. A consumer who
 wants an affordance on screen mounts one; a consumer who wants to react to the
-refusal subscribes to player state. What reely will not do is decide for them.
+refusal subscribes to player state. What playdeck will not do is decide for them.
 
 ## Why this is out of scope
 
@@ -24,7 +24,7 @@ attempted, which is the state the consumer designed. Adding a second behaviour
 on top would be solving a problem that no longer exists.
 
 **Revealing controls overrides composition in the worst possible moment.**
-Reely's controls are composed, not configured — where they sit, whether they
+Playdeck's controls are composed, not configured — where they sit, whether they
 exist, and what they contain are the consumer's decisions, made in their own
 layout. A library that materialises its own control row on refusal is making a
 layout decision inside someone else's design, in a case they cannot reproduce on
@@ -35,9 +35,9 @@ consumer's ability to see it coming is narrowest.
 Mode, an audible autoplay refused by a permissions policy, and an autoplay
 refused because the tab was never foregrounded are the same state and different
 products. A default presentation has to pick one interpretation and apply it to
-all three. The consumer knows which one their application is in; reely does not.
+all three. The consumer knows which one their application is in; playdeck does not.
 
-## What reely does provide
+## What playdeck does provide
 
 - The poster stays visible through the refusal, on every source type.
 - `autoplay` reaches `'blocked'` for a refusal and `'failed'` for other errors,
@@ -45,7 +45,7 @@ all three. The consumer knows which one their application is in; reely does not.
 - `PlayButton` retries from a user-origin click and works after a refusal.
 
 That is enough to build any of the presentations this was asking for, in the
-consumer's own components, without reely choosing among them.
+consumer's own components, without playdeck choosing among them.
 
 ## What would reopen this
 
@@ -56,8 +56,8 @@ a default.
 
 ## Prior requests
 
-- [#240](https://github.com/pedrosousa13/reely/issues/240) — Nothing in the
+- [#240](https://github.com/pedrosousa13/playdeck/issues/240) — Nothing in the
   React surface reacts to `autoplay: 'blocked'`, so a client that refuses
   playback presents no fallback. The proven defect in it was split out as
-  [#242](https://github.com/pedrosousa13/reely/issues/242) and fixed; the
+  [#242](https://github.com/pedrosousa13/playdeck/issues/242) and fixed; the
   remaining design half is what this file records as declined.

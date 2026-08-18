@@ -28,12 +28,12 @@ export type {
 } from './use-activation.js';
 
 // The bag `PlayerProviderOptions.wistia` holds, so a caller can name the type
-// of a value it builds without depending on `@reely/provider-wistia` directly.
-export type { WistiaProviderOptions } from '@reely/provider-wistia';
+// of a value it builds without depending on `@playdeck/provider-wistia` directly.
+export type { WistiaProviderOptions } from '@playdeck/provider-wistia';
 
 // The bag `PlayerProviderOptions.youtube` holds, so a caller can name the type
-// of a value it builds without depending on `@reely/provider-youtube` directly.
-export type { YouTubeProviderOptions } from '@reely/provider-youtube';
+// of a value it builds without depending on `@playdeck/provider-youtube` directly.
+export type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
 
 export { Root } from './root.js';
 

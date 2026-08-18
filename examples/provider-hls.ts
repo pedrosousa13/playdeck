@@ -1,5 +1,5 @@
-import { PlayerController } from '@reely/core';
-import { createHlsProvider } from '@reely/provider-hls';
+import { PlayerController } from '@playdeck/core';
+import { createHlsProvider } from '@playdeck/provider-hls';
 
 declare const videoElement: HTMLVideoElement;
 

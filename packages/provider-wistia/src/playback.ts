@@ -4,7 +4,7 @@ import type {
   PlaybackState,
   ProviderAdapter,
   ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   available,
   booleanField,

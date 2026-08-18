@@ -1,4 +1,4 @@
-import { createTimeBoundary } from '@reely/core';
+import { createTimeBoundary } from '@playdeck/core';
 import {
   playerStates,
   providerEvent,

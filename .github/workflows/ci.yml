@@ -212,5 +212,5 @@ jobs:
       # `--with-deps` installs the browser's OS packages, which a hosted
       # runner image does not carry for every engine.
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm --filter @reely/storybook build
+      - run: pnpm --filter @playdeck/storybook build
       - run: pnpm test:storybook

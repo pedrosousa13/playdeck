@@ -11,7 +11,7 @@
 **Interfaces:**
 
 - Consumes: `createFakeProvider` from `packages/react/test/fixtures/fake-provider.ts`; `loadProvider` call-signature from `packages/react/src/provider-loaders.ts` (loader receives `{ source, media, nativeOptions }`, returns `Promise<ProviderAdapter>`).
-- Produces: `setScenario(scenario: MockScenario)`, `getFakeProviderHandle()`, `MockScenario` type; story parameter contract `parameters.reely = { rootProps?, scenario? }`; global decorator `withMockController`.
+- Produces: `setScenario(scenario: MockScenario)`, `getFakeProviderHandle()`, `MockScenario` type; story parameter contract `parameters.playdeck = { rootProps?, scenario? }`; global decorator `withMockController`.
 
 **Read first:** `packages/react/test/activation.test.tsx` (how the fake adapter drives activation) and the spec's "Mock controller decorator" section.
 
@@ -22,7 +22,7 @@
 ```tsx
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const viewportStyle = { width: 320, height: 180 } as const;
 
@@ -30,7 +30,7 @@ const meta = {
   title: 'Player/ActivationButton',
   component: Player.ActivationButton,
   parameters: {
-    reely: { rootProps: { loading: 'interaction' } }
+    playdeck: { rootProps: { loading: 'interaction' } }
   },
   render: () => (
     <Player.Viewport style={viewportStyle}>
@@ -74,7 +74,7 @@ export const Eligible: Story = {
 
 export const LoadingProvider: Story = {
   parameters: {
-    reely: {
+    playdeck: {
       rootProps: { loading: 'interaction' },
       scenario: { kind: 'pending' }
     }
@@ -97,7 +97,7 @@ export const LoadingProvider: Story = {
 
 export const ErrorState: Story = {
   parameters: {
-    reely: {
+    playdeck: {
       rootProps: { loading: 'interaction' },
       scenario: { kind: 'reject' }
     }
@@ -115,12 +115,12 @@ export const ErrorState: Story = {
 
 /**
  * Reference play-function interaction pattern for later issues:
- * arrange via `parameters.reely`, act with `userEvent`, assert the
+ * arrange via `parameters.playdeck`, act with `userEvent`, assert the
  * state transition on the part's `data-state` attribute.
  */
 export const ActivatesOnClick: Story = {
   parameters: {
-    reely: {
+    playdeck: {
       rootProps: { loading: 'interaction' },
       scenario: { kind: 'pending' }
     }
@@ -153,7 +153,7 @@ Expected: the new activation stories FAIL (no decorator wraps them in `Player.Ro
 `apps/storybook/src/mock-provider-loader.ts`:
 
 ```ts
-import type { ProviderAdapter, ProviderStatePatch } from '@reely/core';
+import type { ProviderAdapter, ProviderStatePatch } from '@playdeck/core';
 import { createFakeProvider } from '../../../packages/react/test/fixtures/fake-provider';
 
 export type MockScenario =
@@ -220,25 +220,29 @@ export const loadProvider = async (_request: {
 ```tsx
 import type { ComponentProps } from 'react';
 import type { Decorator } from '@storybook/react-vite';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import { setScenario, type MockScenario } from './mock-provider-loader';
 
 type RootProps = Partial<Omit<ComponentProps<typeof Player.Root>, 'children'>>;
 
-export type ReelyParameters = {
+export type PlaydeckParameters = {
   readonly rootProps?: RootProps;
   readonly scenario?: MockScenario;
 };
 
 export const withMockController: Decorator = (Story, context) => {
-  const reely = (context.parameters.reely ?? {}) as ReelyParameters;
+  const playdeck = (context.parameters.playdeck ?? {}) as PlaydeckParameters;
   // Render-phase reset is safe: Root's activation work runs in effects,
   // strictly after this decorator body.
-  setScenario(reely.scenario ?? { kind: 'resolve' });
+  setScenario(playdeck.scenario ?? { kind: 'resolve' });
   return (
     // preload="none" keeps the browser from fetching the fake source once
     // Media renders <source> children; the fake adapter never calls load().
-    <Player.Root source="/media/sample.mp4" preload="none" {...reely.rootProps}>
+    <Player.Root
+      source="/media/sample.mp4"
+      preload="none"
+      {...playdeck.rootProps}
+    >
       <Story />
     </Player.Root>
   );
@@ -285,7 +289,7 @@ Expected: ALL stories pass, including Task 1's `Idle` (now also wrapped in Root 
 - [ ] **Step 7: Verify the static build still succeeds**
 
 ```sh
-pnpm --filter @reely/storybook build
+pnpm --filter @playdeck/storybook build
 ```
 
 Expected: exit 0.

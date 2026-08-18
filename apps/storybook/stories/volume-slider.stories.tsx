@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { available, notReady, ready } from './support';
@@ -21,7 +21,7 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-reely-part="volume-slider"`, `data-provider="<provider>"`, and `data-state="muted" | "unmuted"`.',
+          '**Contract** — renders `data-playdeck-part="volume-slider"`, `data-provider="<provider>"`, and `data-state="muted" | "unmuted"`.',
           '',
           '**Accessibility** — exposes a range semantics control. On its own, every arrow key adjusts the value by `step`. Inside a `Player.Controls` region the shortcut layer owns the arrows: `ArrowUp`/`ArrowDown` still adjust the volume, by 0.05 through `setVolume` rather than through `step`, and `ArrowLeft`/`ArrowRight` seek instead. `Home` and `End` stay native either way.',
           '',

@@ -16,10 +16,10 @@ instead of deriving from it).
 
 ## Context (verified)
 
-- Storybook lives in `apps/storybook` (`@reely/storybook`, private).
+- Storybook lives in `apps/storybook` (`@playdeck/storybook`, private).
   Config under `apps/storybook/.storybook/`: `main.ts` (globs
   `../stories/**/*.stories.tsx`; addons a11y + vitest; `viteFinal`
-  aliases `@reely/*` → `src/`), `preview.tsx` (single global decorator
+  aliases `@playdeck/*` → `src/`), `preview.tsx` (single global decorator
   `withMockPlayer`; `a11y.test: 'error'`; **no autodocs, no docs
   addon**), `vitest.setup.ts` (determinism guard — asserts zero external
   requests per story).
@@ -43,7 +43,7 @@ instead of deriving from it).
   `createInitialPlayerState()`, `initialCapabilities()`,
   `PlayerController`.
 - Data-attribute contract emitted from `packages/react/src/index.tsx`:
-  `data-reely-part`, `data-state`, and `data-provider` (on
+  `data-playdeck-part`, `data-state`, and `data-provider` (on
   capability-gated interactive controls).
 - Docs are **greenfield** — no `*.mdx`, no autodocs anywhere.
 
@@ -54,10 +54,10 @@ instead of deriving from it).
   can't occur") — that is `support.ts`, not the inert mock adapter.
   Rebuild `support.ts` on core's exported factories/types so story state
   derives structurally from the contract. Reject alternatives: a new
-  `@reely/mock-controller` package is scaffolding for a non-problem
-  (YAGNI); exporting the test fixture from `@reely/react` grows the
+  `@playdeck/mock-controller` package is scaffolding for a non-problem
+  (YAGNI); exporting the test fixture from `@playdeck/react` grows the
   published surface and risks the bundle harness (#37). Upgrade path if
-  ever needed: a private `@reely/test-support` package — not now.
+  ever needed: a private `@playdeck/test-support` package — not now.
 - **Docs: autodocs + hand-written MDX overviews.** Per-component pages
   auto-generate from `argTypes` + JSDoc + stories (low-maintenance,
   always matches source). Cross-cutting content is hand-written MDX.
@@ -74,7 +74,7 @@ instead of deriving from it).
 
 Rewrite `apps/storybook/stories/support.ts`:
 
-- Import from `@reely/core`: `createInitialPlayerState`,
+- Import from `@playdeck/core`: `createInitialPlayerState`,
   `initialCapabilities`, and types `Availability`, `PlayerCapabilities`,
   `PlayerState`, `ProviderStatePatch`.
 - Thin `Availability` constructors (no re-declared literals):
@@ -122,7 +122,7 @@ For each transport primitive, via `meta.argTypes` +
 `parameters.docs.description.component` (rendered by autodocs):
 
 - Headless usage snippet (composition under `Player.Root`).
-- Data contract: `data-reely-part` value, `data-state` values,
+- Data contract: `data-playdeck-part` value, `data-state` values,
   `data-provider` presence.
 - a11y / keyboard notes.
 - Capability-gating rule (which `Availability` hides/disables it).
@@ -134,13 +134,13 @@ For each transport primitive, via `meta.argTypes` +
 - `stories/CapabilitiesMatrix.mdx` — table of component × `Availability`
   state → visible / hidden / disabled, keyed off the real capability
   names from core.
-- `stories/Contract.mdx` — `data-reely-part` / `data-state` /
+- `stories/Contract.mdx` — `data-playdeck-part` / `data-state` /
   `data-provider` reference + note that real playback lives in
   `apps/docs`.
 
 ### 6. Missing stories
 
-- Add a `PosterImage` story (has `data-reely-part`, visual states).
+- Add a `PosterImage` story (has `data-playdeck-part`, visual states).
 - Brief autodocs doc blocks for `Root`, `Viewport`, `Media` (structural).
 
 ## Testing & verification

@@ -81,7 +81,7 @@ export const SettingsMenu = ({
     <SettingsMenuContext.Provider value={value}>
       <div
         {...props}
-        data-reely-part="settings-menu-root"
+        data-playdeck-part="settings-menu-root"
         data-state={open ? 'open' : 'closed'}
         ref={rootRef}
         style={{ position: 'relative', ...style }}
@@ -107,7 +107,7 @@ export const SettingsMenuTrigger = ({
       aria-expanded={open}
       aria-haspopup="menu"
       aria-label={props['aria-label'] ?? 'Settings'}
-      data-reely-part="settings-menu-trigger"
+      data-playdeck-part="settings-menu-trigger"
       data-state={open ? 'open' : 'closed'}
       id={triggerId}
       onClick={(event) => {
@@ -188,8 +188,8 @@ export const SettingsMenuContent = ({
     <div
       {...props}
       aria-labelledby={triggerId}
-      data-reely-menu="open"
-      data-reely-part="settings-menu"
+      data-playdeck-menu="open"
+      data-playdeck-part="settings-menu"
       id={contentId}
       onKeyDown={(event) => {
         onKeyDown?.(event);
@@ -251,7 +251,7 @@ export const MenuItem = ({
   return (
     <button
       {...props}
-      data-reely-part="menu-item"
+      data-playdeck-part="menu-item"
       onClick={(event) => {
         onClick?.(event);
         if (event.defaultPrevented) return;
@@ -293,7 +293,7 @@ export const MenuRadioGroup = ({
   readonly onValueChange: (value: string) => void;
 }) => (
   <MenuRadioContext.Provider value={{ value, onValueChange }}>
-    <div {...props} data-reely-part="menu-radio-group" role="group">
+    <div {...props} data-playdeck-part="menu-radio-group" role="group">
       {children}
     </div>
   </MenuRadioContext.Provider>
@@ -313,7 +313,7 @@ export const MenuRadioItem = ({
     <button
       {...props}
       aria-checked={checked}
-      data-reely-part="menu-radio-item"
+      data-playdeck-part="menu-radio-item"
       data-state={checked ? 'checked' : 'unchecked'}
       onClick={(event) => {
         onClick?.(event);
@@ -326,7 +326,7 @@ export const MenuRadioItem = ({
       tabIndex={-1}
       type="button"
     >
-      <span aria-hidden data-reely-part="menu-radio-indicator">
+      <span aria-hidden data-playdeck-part="menu-radio-indicator">
         {checked ? <CheckIcon /> : null}
       </span>
       {children}

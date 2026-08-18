@@ -19,7 +19,7 @@ import {
   type ProviderStatePatch,
   type TextCue,
   type VimeoSource
-} from '@reely/core';
+} from '@playdeck/core';
 import { available } from '../src/adapter-values';
 import { createVimeoAttachment } from '../src/attachment';
 import { createVimeoBoundary } from '../src/boundary';
@@ -1101,7 +1101,7 @@ test('refreshes the discovered tracks when texttrackchange reports an unknown tr
 
 // --- captions: cue channel (#16) ---
 // Vimeo's `enableTextTrack(language, kind, showing)` fires `cuechange` without
-// drawing the cues itself when `showing` is false, so Reely can own rendering
+// drawing the cues itself when `showing` is false, so Playdeck can own rendering
 // and report `captionRendering: 'custom'`. Verified against the real embed:
 // with `showing: false` the paused frame is pixel-identical to no track at all.
 
@@ -1477,7 +1477,7 @@ test('forgets a track whose enable failed', async () => {
   expect(player.enableTextTrack).toHaveBeenCalledWith('en', 'subtitles', true);
 });
 
-test('clears the previous cue when Reely switches language', async () => {
+test('clears the previous cue when Playdeck switches language', async () => {
   const frTrack = {
     language: 'fr',
     kind: 'subtitles',
@@ -2522,7 +2522,7 @@ test('vimeo clears the dimensions on destroy', async () => {
 // Vimeo expresses a start as a `#t=` fragment and has no end equivalent at all,
 // so the adapter is the authority for both bounds: it seeks to the start itself
 // and watches `timeupdate` to decide when the end is reached. The contract is
-// the native provider's, resolved through `@reely/core`'s shared helper.
+// the native provider's, resolved through `@playdeck/core`'s shared helper.
 
 test('seeks to the start boundary once the player is ready', async () => {
   const { patches, sdk } = await setup({
@@ -2694,7 +2694,7 @@ test('does not restart-loop when the start boundary is past the duration', async
   expect(player.play).not.toHaveBeenCalled();
 });
 
-// The sanitisation table of `@reely/core`'s helper, asserted through what the
+// The sanitisation table of `@playdeck/core`'s helper, asserted through what the
 // adapter does rather than what it computed.
 test.each([
   ['an absent start', undefined],

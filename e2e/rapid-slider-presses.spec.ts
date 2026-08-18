@@ -77,10 +77,10 @@ type PressRecord = {
 declare global {
   interface Window {
     // Installed by `recordPresses`, read back by `presses` and `echoes`.
-    reelyPresses?: PressRecord[];
-    reelyEchoes?: number[];
+    playdeckPresses?: PressRecord[];
+    playdeckEchoes?: number[];
     // Installed by `underCongestion`, and its way back out.
-    reelyStopCongestion?: () => void;
+    playdeckStopCongestion?: () => void;
   }
 }
 
@@ -134,7 +134,7 @@ const underCongestion = async (
       setTimeout(turn, 0);
     };
     setTimeout(turn, 0);
-    window.reelyStopCongestion = () => {
+    window.playdeckStopCongestion = () => {
       stopped = true;
     };
   }, CONGESTION_BURN_MS);
@@ -144,9 +144,9 @@ const underCongestion = async (
     await gesture();
   } finally {
     stopped = await page.evaluate(() => {
-      if (window.reelyStopCongestion === undefined) return false;
-      window.reelyStopCongestion();
-      window.reelyStopCongestion = undefined;
+      if (window.playdeckStopCongestion === undefined) return false;
+      window.playdeckStopCongestion();
+      window.playdeckStopCongestion = undefined;
       return true;
     });
   }
@@ -197,12 +197,12 @@ const recordPresses = (
         throw new Error(`Nothing to record: ${selector}`);
       }
       const answers: number[] = [];
-      window.reelyPresses = [];
-      window.reelyEchoes = answers;
+      window.playdeckPresses = [];
+      window.playdeckEchoes = answers;
       window.addEventListener(
         'keydown',
         () => {
-          window.reelyPresses?.push({
+          window.playdeckPresses?.push({
             shown: Number(input.value),
             answered: answers.length
           });
@@ -213,17 +213,17 @@ const recordPresses = (
         answers.push(element[property]);
       });
     },
-    [`[data-reely-part="${part}"]`, echo.event, echo.of] as const
+    [`[data-playdeck-part="${part}"]`, echo.event, echo.of] as const
   );
 
 const presses = (page: Page): Promise<PressRecord[]> =>
-  page.evaluate(() => window.reelyPresses ?? []);
+  page.evaluate(() => window.playdeckPresses ?? []);
 
 const shown = async (page: Page): Promise<number[]> =>
   (await presses(page)).map((press) => press.shown);
 
 const echoes = (page: Page): Promise<number[]> =>
-  page.evaluate(() => window.reelyEchoes ?? []);
+  page.evaluate(() => window.playdeckEchoes ?? []);
 
 // The presses outran the echo: by the last of them the media element had
 // announced at most one answer to the ones before it. Without this a gesture

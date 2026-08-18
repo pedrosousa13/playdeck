@@ -7,12 +7,12 @@ export default defineConfig({
       external: [
         'react',
         'react/jsx-runtime',
-        '@reely/core',
-        '@reely/provider-hls',
-        '@reely/provider-native',
-        '@reely/provider-vimeo',
-        '@reely/provider-wistia',
-        '@reely/provider-youtube'
+        '@playdeck/core',
+        '@playdeck/provider-hls',
+        '@playdeck/provider-native',
+        '@playdeck/provider-vimeo',
+        '@playdeck/provider-wistia',
+        '@playdeck/provider-youtube'
       ]
     },
     sourcemap: true,

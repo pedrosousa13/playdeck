@@ -9,7 +9,7 @@ import {
   type ProviderEvent,
   type ProviderStateListener,
   type WistiaSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   available,
   providerEvent,

@@ -42,10 +42,10 @@ const staticKeys = staticClosure(entryKey);
 const isProviderEntry = (key) => {
   const name = manifest[key]?.name ?? '';
   return (
-    /(?:packages|@reely)\/provider-(?:native|hls|youtube|vimeo|wistia)/.test(
+    /(?:packages|@playdeck)\/provider-(?:native|hls|youtube|vimeo|wistia)/.test(
       key
     ) ||
-    /(?:packages|@reely)\/provider-(?:native|hls|youtube|vimeo|wistia)/.test(
+    /(?:packages|@playdeck)\/provider-(?:native|hls|youtube|vimeo|wistia)/.test(
       name
     )
   );

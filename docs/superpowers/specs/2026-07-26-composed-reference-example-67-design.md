@@ -51,7 +51,7 @@ that drift:
   switcher. This is what Playwright drives.
 
 **Known trap, resolved up front.** The mock decorator's `mockSource` is
-`mock://reely/video.mp4`, and its comment states that stories do not render
+`mock://playdeck/video.mp4`, and its comment states that stories do not render
 `Player.Media`. This composition does. Story 1 therefore overrides
 `rootProps.source` to the local `/tracer.mp4`: the media layer is real and
 local, no network, and the fake adapter still owns every bit of player state.
@@ -75,7 +75,7 @@ Inside `Player.Viewport`:
 
 ### Icons are supplied by the example, not by the primitives
 
-Every button receives an icon child from `@reely/react`'s icon exports
+Every button receives an icon child from `@playdeck/react`'s icon exports
 (`PlayIcon`, `PauseIcon`, `MutedIcon`, …). No text-label fallback is rendered
 anywhere in the example.
 
@@ -124,7 +124,7 @@ primitives' central promise being demonstrated, not a defect to paper over.
 
 ## Layout
 
-The layout CSS lives in the example, not in `@reely/react/theme.css`. The theme
+The layout CSS lives in the example, not in `@playdeck/react/theme.css`. The theme
 stylesheet is applied unmodified; #10's decisions and its 6 KB budget are
 untouched. The library stays unopinionated about layout, and the example
 documents one way to lay controls out.
@@ -142,10 +142,10 @@ scope here; if it still reads badly after this lands, it is a follow-up.
 ## Enforcing "public exports only"
 
 A `no-restricted-imports` block in `eslint.config.js`, scoped to
-`apps/storybook/stories/reference/**`. Allowed: `react`, `@reely/react`,
-`@reely/core`, the Storybook packages, and same-directory relative files.
+`apps/storybook/stories/reference/**`. Allowed: `react`, `@playdeck/react`,
+`@playdeck/core`, the Storybook packages, and same-directory relative files.
 Rejected: any `../` escape, any specifier containing `packages/`, and any
-`@reely/*/src/*` subpath.
+`@playdeck/*/src/*` subpath.
 
 This mirrors the `e2e/**` `no-restricted-syntax` block at `eslint.config.js:41`
 and runs inside the existing `static` gate, so a violation fails at authoring
@@ -158,7 +158,7 @@ presence of the key — a lint rule that has never been seen to fail is worth
 nothing.
 
 **Stated limitation, recorded in `Reference.mdx`.** Storybook aliases
-`@reely/react` to `packages/react/src/index.tsx` (`.storybook/main.ts:85`), so
+`@playdeck/react` to `packages/react/src/index.tsx` (`.storybook/main.ts:85`), so
 this rule proves specifier hygiene, not that the _packed_ entry exports what the
 example touches. That side is already covered: `attw` and `publint` in
 `test:packages`, plus `packages/react/test/theme.test.ts` asserting the exports
@@ -166,7 +166,7 @@ map.
 
 ## Exercised in CI
 
-- **Story tests.** Story 1 runs in `pnpm --filter @reely/storybook test`, with
+- **Story tests.** Story 1 runs in `pnpm --filter @playdeck/storybook test`, with
   axe on it globally.
 - **e2e.** A new `e2e/reference.spec.ts` drives story 2. The MP4 and HLS legs
   are in the blocking suite: activate, play, seek, mute, toggle captions,
@@ -179,7 +179,7 @@ map.
   in `vimeo`/`youtube`/`hls`, never in captions).
 
 - **Locators.** All lookups go through `e2e/locators.ts` and
-  `[data-reely-part=...]`, per #73. Note that adding controls to a shared
+  `[data-playdeck-part=...]`, per #73. Note that adding controls to a shared
   fixture is what broke five specs on WebKit only, so this spec adds its own
   story rather than extending `PlayerFixture`.
 
@@ -193,7 +193,7 @@ Red first, per the repo's practice.
   keyboard flow from the play button through the control row.
 - e2e: the flows listed above, on chromium/firefox/webkit.
 - Lint: the probe file proving the import rule rejects a `../` escape and a
-  `packages/` path, and accepts `@reely/react`.
+  `packages/` path, and accepts `@playdeck/react`.
 
 ## Acceptance criteria (from #67)
 
@@ -234,7 +234,7 @@ about composition.
 ## Verification
 
 ```sh
-pnpm --filter @reely/storybook test && pnpm test:e2e
+pnpm --filter @playdeck/storybook test && pnpm test:e2e
 ```
 
 Plus the full gate set, unpiped: `typecheck`, `lint`, `prettier --check` on

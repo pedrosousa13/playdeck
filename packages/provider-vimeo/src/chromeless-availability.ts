@@ -1,4 +1,4 @@
-import type { Availability, VimeoSource } from '@reely/core';
+import type { Availability, VimeoSource } from '@playdeck/core';
 import { available, providerCheck } from './adapter-values.js';
 
 // The probe races the embed's own load, and a verdict that arrives after the
@@ -162,7 +162,7 @@ export type VimeoChromelessAvailabilityDeps = {
 };
 
 // The chromeless-availability seam: whether this embed will hand its controls
-// over to Reely. Vimeo gates that on the owner's account tier and reports the
+// over to Playdeck. Vimeo gates that on the owner's account tier and reports the
 // tier nowhere in the player SDK, so the only way to know is the public oEmbed
 // record — one request, raced against the attach it informs.
 export type VimeoChromelessAvailability = {

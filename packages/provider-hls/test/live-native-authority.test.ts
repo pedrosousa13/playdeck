@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import type { ProviderStatePatch } from '@reely/core';
+import type { ProviderStatePatch } from '@playdeck/core';
 import { createHlsProvider } from '../src/index';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 

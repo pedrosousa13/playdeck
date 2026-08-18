@@ -215,7 +215,7 @@ test.each([
   // A disallowed character in the id breaks the path pattern itself.
   'https://fast.wistia.net/embed/iframe/oif-gmxnkb',
   // The media-file fall-through above is not a way in for junk: an extension
-  // Reely does not play leaves the recognised-host rule to fail it.
+  // Playdeck does not play leaves the recognised-host rule to fail it.
   'https://fast.wistia.net/embed/medias/oifkgmxnkb.avi'
 ])('rejects malformed provider strings: %s', (input) => {
   expect(detectSource(input)).toMatchObject({

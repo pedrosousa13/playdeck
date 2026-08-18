@@ -1,5 +1,5 @@
 ---
-'@reely/react': patch
+'@playdeck/react': patch
 ---
 
 `SettingsMenu`'s roving focus now skips menu items hidden with `display: none`.

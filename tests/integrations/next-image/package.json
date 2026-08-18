@@ -1,5 +1,5 @@
 {
-  "name": "@reely/integration-next-image",
+  "name": "@playdeck/integration-next-image",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
     "test:integration": "node --test harness.test.mjs && node test.mjs"
   },
   "dependencies": {
-    "@reely/react": "workspace:*",
+    "@playdeck/react": "workspace:*",
     "next": "16.2.11",
     "react": "19.2.8",
     "react-dom": "19.2.8"

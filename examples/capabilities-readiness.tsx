@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import { useEffect } from 'react';
 
 // Declaratively: `commandsReady` means a command issued now is accepted and

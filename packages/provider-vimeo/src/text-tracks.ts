@@ -7,8 +7,8 @@ import type {
   TextCue,
   TextTrack,
   TextTrackKind
-} from '@reely/core';
-import { notifySafely, textTrackLabel } from '@reely/core';
+} from '@playdeck/core';
+import { notifySafely, textTrackLabel } from '@playdeck/core';
 import {
   asRecord,
   available,
@@ -85,7 +85,7 @@ const vimeoTextTrackCandidates = (
 //      only signal that reflects a change made inside Vimeo's CC menu, so it
 //      outranks anything we remember — an earlier draft checked our own id
 //      first and, because that id is sticky, never consulted mode again once
-//      Reely had selected either sibling;
+//      Playdeck had selected either sibling;
 //   2. the id we last enabled ourselves, when it is one of the candidates —
 //      the fallback for an SDK build that does not mark the pair distinctly.
 // If neither applies the first candidate wins, as before.
@@ -110,7 +110,7 @@ const resolveActiveVimeoTextTrackId = (
 
 // Vimeo can either draw the cues itself or hand them over as `cuechange`
 // payloads, so the renderer mode picks the owner: 'custom' means we enabled
-// the track with `showing: false` and draw it in Reely's overlay, 'native'
+// the track with `showing: false` and draw it in Playdeck's overlay, 'native'
 // means Vimeo's in-iframe renderer draws it -- which is what 'provider'
 // reports, and the fallback for anything the overlay cannot render.
 const vimeoCaptionRendering = (
@@ -172,8 +172,8 @@ export type VimeoTextTracksDeps = {
 };
 
 // The tracks-and-captions seam: the discovered tracklist, the held selection,
-// the renderer mode that decides whether Vimeo or Reely's overlay draws the
-// cues, and the cue pipeline that feeds the overlay when it is Reely's turn.
+// the renderer mode that decides whether Vimeo or Playdeck's overlay draws the
+// cues, and the cue pipeline that feeds the overlay when it is Playdeck's turn.
 export type VimeoTextTracks = {
   readonly selectTextTrack: (id: string | null) => Promise<CommandResult>;
   readonly subscribeCues: (
