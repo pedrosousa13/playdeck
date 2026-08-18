@@ -116,8 +116,8 @@ Notes, per row:
   a tidy-up: a DRM-protected source (Widevine/FairPlay, an Enterprise/OTT video)
   needs that grant to reach `requestMediaKeySystemAccess` from inside the frame,
   and will not play. No Reely option turns it back on. There is no `sandbox`
-  attribute on this iframe at all — the origin isolation here is the
-  cross-origin frame itself, not a sandbox policy. Neither the missing
+  attribute on this iframe at all, and that absence is a weighed decision
+  rather than an oversight — see the sandbox bargain below. Neither the missing
   `encrypted-media` nor the absent `sandbox` changes which origin is reached;
   they are here because this document is where a reader decides what to permit
   this frame, and a DRM source that silently will not play is what an
@@ -641,6 +641,103 @@ calls a provider factory:
 So for a `Player.Root` consumer today, `fast.wistia.com` in `script-src` is not
 negotiable, while `www.youtube.com` is. That asymmetry is a gap in this
 provider's options surface rather than a property of Wistia's CDN.
+
+## The sandbox bargain
+
+The Vimeo embed is the only third-party frame in this repository that Reely
+builds itself (`packages/provider-vimeo/src/attachment.ts:307-318`, with the
+comment recording this decision at `:302-306`). YouTube's frame is constructed
+by the vendor's iframe API out of a `div`, and Wistia's by the vendor's custom
+element, so neither is Reely's to configure — which is exactly why this one is.
+On the frame it does own, Reely sets no `sandbox` attribute. No tracked file
+sets one on any element: the only other `sandbox` token `git grep` finds is the
+`sandbox;` CSP directive `next/image` needs for SVG
+(`tests/integrations/next-image/next.config.ts:7`), which is a different
+mechanism on a different surface. The absence is deliberate (#237), and
+it is recorded here rather than left to a commit message because this document
+is where a reader decides what to permit this frame.
+
+**What the embed can do today.** Everything a frame is allowed by default: run
+scripts, hold its own origin — `player.vimeo.com`, with that origin's cookies
+and storage — navigate the top-level page away, open popups, and submit forms.
+That is the standard privilege of any third-party embed rather than something
+Reely grants beyond the norm, and this audit found no evidence Vimeo does any
+of it. Both halves are load-bearing. The origin isolation on this frame is the
+cross-origin boundary itself, not a sandbox policy; finding no evidence of
+misuse is not a restriction, and if the embed's behaviour changed tomorrow
+nothing Reely ships would stop it.
+
+**Why the two restrictions that matter cannot be applied.** `allow-scripts` and
+`allow-same-origin` are both required for the `@vimeo/player` postMessage
+bridge to work at all, and that bridge is how every command this provider
+issues reaches the player. Drop `allow-same-origin` and the frame gets an
+opaque origin, so the messages it posts out arrive with an `event.origin` of
+`"null"` — and the SDK discards every inbound message whose origin is not a
+Vimeo host (`isVimeoUrl(event.origin)`, `@vimeo/player@2.30.4`'s
+`dist/player.js:1494`, against the host pattern at `:89-90`). The ready
+handshake never completes, `player.origin` is never narrowed off the `'*'` it
+starts at (`:1491`, `:1497-1498`), and every command posted through
+`postMessage` (`:775`) is addressed to a player that never answered. Drop
+`allow-scripts` and there is no player in the frame to answer in the first
+place. So the only sandbox this provider can carry is one that includes both —
+and a frame holding both can run arbitrary script and reach its own origin's
+storage, which is most of what the attribute exists to prevent. A sandbox
+including `allow-scripts allow-same-origin` is close to no sandbox.
+
+**What the residual gain actually is, and why it was not taken.** What such a
+sandbox could still withdraw is top-level navigation and form submission, and
+the embed appears to need neither. The gain is real and should not be waved
+away — navigating the host page out from under the user is the highest-impact
+thing a hostile embed could do, and it is the only item on the list above that
+a sandbox could actually take back. It is also the whole of the gain, and it is
+bought with a regression risk **no test in continuous integration covers**. The
+specs that drive the real Vimeo embed live in `e2e/vimeo-smoke.spec.ts`, every
+one of them tagged `@real` (`:21`, `:90`, `:105`, `:124`, `:189`), and
+`grepInvert` filters that tag out of every run that does not set
+`REELY_REAL_PROVIDERS` (`playwright.config.ts:15`). They are run by hand:
+`REELY_REAL_PROVIDERS=1 pnpm test:e2e -- --grep @real`
+(`e2e/vimeo-smoke.spec.ts:4-6`). A candidate sandbox value could not be proven
+by CI here — only by somebody remembering to run those five specs.
+
+A green manual run would not settle it either. Those five cover chromeless
+playback and caption cue text, the chromeless-controls probe on a free-plan and
+on a paid-plan video, the quality rungs, and cue suppression; they run under
+the `chromium`, `firefox` and `webkit` projects, all three configured from
+Playwright's Desktop device descriptors (`playwright.config.ts:49-63`). No spec
+exercises advertising, and no project is a mobile browser, so fullscreen on a
+phone is untested by construction. A sandbox value that silently broke the
+postMessage bridge, an ad slot, or mobile fullscreen would not surface as a red
+test. It would surface as a flaky embed in a consumer's production page, which
+is an expensive failure mode to buy a narrow gain with.
+
+DRM is the one item on the usual list of untested sandbox casualties that does
+not apply here, and folding it in would overstate the risk. DRM-protected
+playback is already withheld from this frame by the deliberately absent
+`encrypted-media` grant on the `allow` list — see the Vimeo row above — so it
+is not a capability a sandbox could regress. It is off already, by a different
+mechanism and for a different reason. Advertising and mobile fullscreen are the
+paths that are both live and uncovered.
+
+**This was measured, not defaulted into.** The alternative had a concrete
+shape: the value #237 proposed, `allow-scripts allow-same-origin
+allow-presentation allow-popups allow-popups-to-escape-sandbox`, which would
+have withdrawn top-level navigation and forms and nothing else. It was weighed
+against the cost of shipping it unverified and rejected on that comparison, not
+skipped. The consequence is not softened by that reasoning: a Vimeo source puts
+a frame on your page that can navigate the page away, and Reely does not
+prevent it. That is the bargain a Vimeo source makes on your page's behalf, and
+it is accepted, not overlooked — not a gap to close.
+
+**What would reopen it.** Any one of three, each checkable rather than a matter
+of taste:
+
+- **Vimeo documents a supported `sandbox` value for the embed.** The value
+  would then be the vendor's contract rather than this repository's guess, and
+  the verification objection above stops applying.
+- **The real embed gains in-CI coverage.** A candidate value could then be
+  verified rather than reasoned about, which is the whole of the objection.
+- **Evidence appears of an embed exercising top-level navigation.** The gain
+  stops being narrow, and the comparison above inverts.
 
 ## A note on `style-src`
 
