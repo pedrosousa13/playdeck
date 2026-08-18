@@ -31,13 +31,24 @@ export const isVimeoHash = (value: unknown): value is string =>
 export const isWistiaMediaId = (value: unknown): value is string =>
   isNonEmptyString(value) && /^[A-Za-z0-9]+$/.test(value);
 
-// The WHATWG URL parser strips U+0009, U+000A and U+000D before parsing, so a
-// scheme split by one of them is not the scheme read here: `java<TAB>script:`
-// yields no scheme at all, and the parser then resolves `javascript:`. A
-// well-formed URL carries none of the three, so any occurrence is rejected
-// outright rather than stripped, which keeps the value that plays identical to
-// the value that was validated (#219).
+// The WHATWG URL parser strips U+0009, U+000A and U+000D anywhere in a URL
+// before parsing, so a scheme split by one of them is not the scheme read
+// here: `java<TAB>script:` yields no scheme at all, and the parser then
+// resolves `javascript:`. A well-formed URL carries none of the three, so any
+// occurrence is rejected outright rather than stripped, which keeps the value
+// that plays identical to the value that was validated (#219).
 const parserStrippedWhitespace = /[\t\n\r]/;
+
+// Those three are what the parser strips anywhere; it also strips leading and
+// trailing C0 controls (U+0000 to U+001F) and spaces, which the scheme read
+// below is anchored past just the same: ` javascript:` names no scheme here
+// and the parser then resolves `javascript:` (#326). Refused at either edge
+// for the reason above rather than trimmed, so the whole set the parser
+// pre-processes is a value this library never carries.
+// An empty string needs no guard of its own: `charCodeAt` returns `NaN` there
+// and every comparison against it is false.
+const hasParserStrippedEdge = (url: string): boolean =>
+  url.charCodeAt(0) <= 0x20 || url.charCodeAt(url.length - 1) <= 0x20;
 
 const schemeOf = (url: string): string | undefined =>
   url.match(/^([a-z][a-z\d+.-]*):/i)?.[1]?.toLowerCase();
@@ -47,10 +58,13 @@ const schemeOf = (url: string): string | undefined =>
  * decision in the library, and it turns on two things: the URL must be
  * well-formed, and its scheme must be allowed for the source it belongs to.
  *
- * A URL carrying a raw tab, line feed or carriage return is refused as
- * malformed, whatever its apparent scheme, because the URL parser strips those
- * three before parsing and would read a different scheme than the one checked
- * here -- `java<TAB>script:` names no scheme at all yet loads as `javascript:`.
+ * A URL the parser would strip characters off before parsing is refused,
+ * whatever its apparent scheme, because the value it parses is not the value
+ * checked here. That is a raw tab, line feed or carriage return anywhere --
+ * `java<TAB>script:` names no scheme at all yet loads as `javascript:` -- and
+ * a C0 control (U+0000 to U+001F) or a space at either end, which the parser
+ * strips as well: ` javascript:` likewise names no scheme here and loads as
+ * `javascript:`.
  *
  * Of the schemes, `http:`, `https:` and the scheme-less forms --
  * protocol-relative, root-relative and relative paths -- are permitted for
@@ -67,6 +81,7 @@ export const isPermittedSourceUrl = (
   type: ResolvedPlayerSource['type'] | undefined
 ): boolean => {
   if (parserStrippedWhitespace.test(url)) return false;
+  if (hasParserStrippedEdge(url)) return false;
 
   const scheme = schemeOf(url);
   if (scheme === undefined) return true;
