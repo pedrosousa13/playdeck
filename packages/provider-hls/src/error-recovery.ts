@@ -1,4 +1,4 @@
-import type { PlayerError } from '@reely/core';
+import type { PlayerError } from '@playdeck/core';
 import type { HlsConstructorLike, HlsInstanceLike } from './adapter-values.js';
 
 const MAX_FATAL_NETWORK_RECOVERIES = 2;

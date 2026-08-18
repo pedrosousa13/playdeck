@@ -5,25 +5,25 @@ export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   resolve: {
     alias: {
-      '@reely/core': fileURLToPath(
+      '@playdeck/core': fileURLToPath(
         new URL('./packages/core/src/index.ts', import.meta.url)
       ),
-      '@reely/react': fileURLToPath(
+      '@playdeck/react': fileURLToPath(
         new URL('./packages/react/src/index.tsx', import.meta.url)
       ),
-      '@reely/provider-native': fileURLToPath(
+      '@playdeck/provider-native': fileURLToPath(
         new URL('./packages/provider-native/src/index.ts', import.meta.url)
       ),
-      '@reely/provider-hls': fileURLToPath(
+      '@playdeck/provider-hls': fileURLToPath(
         new URL('./packages/provider-hls/src/index.ts', import.meta.url)
       ),
-      '@reely/provider-youtube': fileURLToPath(
+      '@playdeck/provider-youtube': fileURLToPath(
         new URL('./packages/provider-youtube/src/index.ts', import.meta.url)
       ),
-      '@reely/provider-vimeo': fileURLToPath(
+      '@playdeck/provider-vimeo': fileURLToPath(
         new URL('./packages/provider-vimeo/src/index.ts', import.meta.url)
       ),
-      '@reely/provider-wistia': fileURLToPath(
+      '@playdeck/provider-wistia': fileURLToPath(
         new URL('./packages/provider-wistia/src/index.ts', import.meta.url)
       )
     }

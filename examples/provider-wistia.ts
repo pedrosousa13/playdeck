@@ -1,15 +1,15 @@
-import { PlayerController } from '@reely/core';
+import { PlayerController } from '@playdeck/core';
 import {
   API_READY_TIMEOUT_MS,
   createWistiaProvider,
   loadWistiaPlayer,
   resetWistiaPlayerLoader,
   SCRIPT_LOAD_TIMEOUT_MS
-} from '@reely/provider-wistia';
+} from '@playdeck/provider-wistia';
 import type {
   WistiaMountElement,
   WistiaScriptInjector
-} from '@reely/provider-wistia';
+} from '@playdeck/provider-wistia';
 
 declare const mount: WistiaMountElement;
 

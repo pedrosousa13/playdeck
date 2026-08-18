@@ -2,19 +2,19 @@
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { createVimeoProvider } from '@reely/provider-vimeo';
+import { createVimeoProvider } from '@playdeck/provider-vimeo';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 
 const harness = vi.hoisted(() => ({
   fakes: [] as Array<{
-    adapter: import('@reely/core').ProviderAdapter;
+    adapter: import('@playdeck/core').ProviderAdapter;
     counts: () => Record<string, number>;
-    emit: (patch: import('@reely/core').ProviderStatePatch) => void;
+    emit: (patch: import('@playdeck/core').ProviderStatePatch) => void;
   }>
 }));
 
-vi.mock('@reely/provider-vimeo', async () => {
+vi.mock('@playdeck/provider-vimeo', async () => {
   const { createFakeProvider } = await import('./fixtures/fake-provider');
   return {
     createVimeoProvider: vi.fn(() => {
@@ -52,7 +52,7 @@ test('loads the Vimeo adapter lazily against an embed mount with the source', as
     hash: 'abc123'
   });
   expect(mount).toBeInstanceOf(HTMLDivElement);
-  expect((mount as HTMLElement).dataset.reelyPart).toBe('media');
+  expect((mount as HTMLElement).dataset.playdeckPart).toBe('media');
   expect(document.querySelector('video')).toBeNull();
 });
 
@@ -77,7 +77,7 @@ test('sizes the Vimeo embed mount to fill its viewport by default', async () => 
     expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
   );
   const mount = document.querySelector<HTMLElement>(
-    '[data-reely-part="media"]'
+    '[data-playdeck-part="media"]'
   )!;
   expect(mount.style.position).toBe('relative');
   expect(mount.style.zIndex).toBe('0');
@@ -185,7 +185,7 @@ test('the loader rejects a Vimeo source without an embed mount', async () => {
 
 const emitVimeoReady = (
   fake: (typeof harness.fakes)[number],
-  overrides: Partial<import('@reely/core').PlayerState> = {}
+  overrides: Partial<import('@playdeck/core').PlayerState> = {}
 ) =>
   act(() => {
     fake.emit({
@@ -409,7 +409,7 @@ test('interaction loading keeps Vimeo sources dormant until the activation click
   );
 
   expect(mockedCreateVimeoProvider).not.toHaveBeenCalled();
-  expect(document.querySelector('[data-reely-part="media"]')).toBeNull();
+  expect(document.querySelector('[data-playdeck-part="media"]')).toBeNull();
 
   act(() => {
     screen.getByRole('button', { name: 'Play video' }).click();

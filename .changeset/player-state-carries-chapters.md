@@ -1,13 +1,13 @@
 ---
-'@reely/core': minor
-'@reely/provider-native': minor
-'@reely/provider-hls': minor
-'@reely/provider-vimeo': minor
-'@reely/provider-youtube': minor
-'@reely/provider-wistia': minor
+'@playdeck/core': minor
+'@playdeck/provider-native': minor
+'@playdeck/provider-hls': minor
+'@playdeck/provider-vimeo': minor
+'@playdeck/provider-youtube': minor
+'@playdeck/provider-wistia': minor
 ---
 
-Player state now carries chapters (#182). `@reely/core` exports a new `Chapter`
+Player state now carries chapters (#182). `@playdeck/core` exports a new `Chapter`
 type — `id`, `title`, `startTime` and a nullable `endTime` — and `PlayerState`
 gains a `chapters` collection, ordered by ascending `startTime` and frozen on
 publish the way the text-track collection already is. `PlayerCapabilities` gains
@@ -16,7 +16,7 @@ rather than going quiet: an empty collection means "no chapters here", and the
 capability is what says whether that is the provider's limit or the source's
 content.
 
-Reely publishes the vocabulary and does not draw it. There are no chapter
+Playdeck publishes the vocabulary and does not draw it. There are no chapter
 markers, no chapter labels, no new primitive and no new part name, and the seek
 slider is untouched. It already takes children and exposes its range through the
 underlying input's `min` and `max`, so a consumer maps a pointer position to a

@@ -1,6 +1,6 @@
 ---
-'@reely/core': minor
-'@reely/provider-wistia': minor
+'@playdeck/core': minor
+'@playdeck/provider-wistia': minor
 ---
 
 The Wistia provider's `poster` option now runs through the one shared URL
@@ -20,7 +20,7 @@ relative path, matching every other URL-bearing surface in the library. A
 poster that was accepted before (a well-formed `https:` URL) is written
 identically, byte for byte.
 
-Also exports `resolveNetworkPath` from `@reely/core` — the protocol-relative
+Also exports `resolveNetworkPath` from `@playdeck/core` — the protocol-relative
 normaliser the poster fix consumes, previously private to source detection.
 
 Lands as `minor`: every package is still at `0.0.0` with `first-prerelease`

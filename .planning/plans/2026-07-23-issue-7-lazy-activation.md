@@ -205,7 +205,7 @@ Run:
 
 ```sh
 pnpm exec vitest run packages/core/test/activation.test.ts packages/core/test/source.test.ts packages/core/test/autoplay.test.ts
-pnpm --filter @reely/core build
+pnpm --filter @playdeck/core build
 ```
 
 Expected: all core tests pass and the core package builds.
@@ -272,7 +272,7 @@ import type {
   ProviderAdapter,
   ProviderStateListener,
   ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 
 export const deferred = <Value>() => {
   let resolve!: (value: Value | PromiseLike<Value>) => void;
@@ -331,7 +331,7 @@ Create the initial `packages/react/test/activation.test.tsx`:
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import type { ProviderAdapter } from '@reely/core';
+import type { ProviderAdapter } from '@playdeck/core';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 import { createFakeProvider, deferred } from './fixtures/fake-provider';
@@ -416,7 +416,7 @@ test('eager loads after client mount and forwards preload', async () => {
   render(fixture({ loading: 'eager', preload: 'none' }));
 
   await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
-  expect(screen.getByLabelText('Reely media').getAttribute('preload')).toBe(
+  expect(screen.getByLabelText('Playdeck media').getAttribute('preload')).toBe(
     'none'
   );
   expect(fake.counts()).toMatchObject({ attachCount: 1, loadCount: 1 });
@@ -503,8 +503,8 @@ bindings do not exist.
 Create `packages/react/src/provider-loaders.ts`:
 
 ```ts
-import type { ProviderAdapter, ResolvedPlayerSource } from '@reely/core';
-import type { NativePlaybackOptions } from '@reely/provider-native';
+import type { ProviderAdapter, ResolvedPlayerSource } from '@playdeck/core';
+import type { NativePlaybackOptions } from '@playdeck/provider-native';
 
 export type ProviderLoaderRequest = {
   readonly source: ResolvedPlayerSource;
@@ -523,14 +523,14 @@ export const loadProvider = async ({
   if (!media) {
     throw new Error('The native provider requires a media mount.');
   }
-  const { createNativeProvider } = await import('@reely/provider-native');
+  const { createNativeProvider } = await import('@playdeck/provider-native');
   return createNativeProvider(media, nativeOptions);
 };
 ```
 
 Change the import in `packages/react/src/index.tsx` from a runtime
 `createNativeProvider` import to a type-only `NativePlaybackOptions` import.
-Keep `@reely/provider-native` external in the package Vite build so the
+Keep `@playdeck/provider-native` external in the package Vite build so the
 consumer build controls chunking.
 
 - [ ] **Step 4: Add the private activation hook**
@@ -544,8 +544,8 @@ import type {
   PlayerController,
   ResolvedPlayerSource,
   SourceDetectionResult
-} from '@reely/core';
-import type { NativePlaybackOptions } from '@reely/provider-native';
+} from '@playdeck/core';
+import type { NativePlaybackOptions } from '@playdeck/provider-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadProvider } from './provider-loaders';
 
@@ -734,8 +734,8 @@ Run serially:
 
 ```sh
 pnpm exec vitest run packages/react/test/activation.test.tsx
-pnpm --filter @reely/react test
-pnpm --filter @reely/react build
+pnpm --filter @playdeck/react test
+pnpm --filter @playdeck/react build
 ```
 
 Expected: eager, viewport, stale-loader, and all existing React tests pass;
@@ -807,11 +807,11 @@ const interactionFixture = (
 test('server-renders interaction control without media or loading work', () => {
   const markup = renderToString(interactionFixture());
 
-  expect(markup).toContain('data-reely-part="activation"');
+  expect(markup).toContain('data-playdeck-part="activation"');
   expect(markup).toContain('aria-label="Play video"');
-  expect(markup).toContain('data-reely-part="poster"');
+  expect(markup).toContain('data-playdeck-part="poster"');
   expect(markup).not.toContain('<video');
-  expect(markup).not.toContain('data-reely-part="loading-indicator"');
+  expect(markup).not.toContain('data-playdeck-part="loading-indicator"');
   expect(mockedLoadProvider).not.toHaveBeenCalled();
 });
 
@@ -823,7 +823,7 @@ test('one interaction click loads and queues user-origin playback', async () => 
 
   const activation = screen.getByRole('button', { name: 'Play video' });
   expect(activation.dataset.state).toBe('dormant');
-  expect(screen.queryByLabelText('Reely media')).toBeNull();
+  expect(screen.queryByLabelText('Playdeck media')).toBeNull();
   expect(mockedLoadProvider).not.toHaveBeenCalled();
 
   fireEvent.click(activation);
@@ -938,7 +938,7 @@ export const ActivationButton = ({
       {...props}
       aria-disabled={isLoading || undefined}
       aria-label={label}
-      data-reely-part="activation"
+      data-playdeck-part="activation"
       data-state={activation}
       onClick={(event) => {
         onClick?.(event);
@@ -990,7 +990,7 @@ export const LoadingIndicator = ({
     <div
       {...props}
       aria-live="polite"
-      data-reely-part="loading-indicator"
+      data-playdeck-part="loading-indicator"
       data-state={state}
       role="status"
       style={{
@@ -1085,9 +1085,9 @@ Run serially:
 
 ```sh
 pnpm exec vitest run packages/react/test/activation.test.tsx
-pnpm --filter @reely/react test
-pnpm --filter @reely/docs build
-pnpm --filter @reely/react build
+pnpm --filter @playdeck/react test
+pnpm --filter @playdeck/docs build
+pnpm --filter @playdeck/react build
 ```
 
 Expected: interaction, SSR, retry, existing React tests, docs build, and React
@@ -1155,7 +1155,7 @@ test('interaction activation makes no provider request before click', async ({
 Run:
 
 ```sh
-pnpm --filter @reely/docs build
+pnpm --filter @playdeck/docs build
 pnpm exec playwright test e2e/activation.spec.ts --project=chromium
 ```
 
@@ -1196,7 +1196,7 @@ filtering, delays, or test-only production branches.
 Run:
 
 ```sh
-pnpm --filter @reely/docs build
+pnpm --filter @playdeck/docs build
 pnpm exec playwright test e2e/activation.spec.ts
 ```
 
@@ -1237,7 +1237,7 @@ Create `tests/bundle/native-only/package.json`:
 
 ```json
 {
-  "name": "@reely/bundle-native-only",
+  "name": "@playdeck/bundle-native-only",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -1246,7 +1246,7 @@ Create `tests/bundle/native-only/package.json`:
     "test": "node test.mjs"
   },
   "dependencies": {
-    "@reely/react": "workspace:*",
+    "@playdeck/react": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -1266,7 +1266,7 @@ Create `tests/bundle/native-only/index.html`:
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Reely native-only bundle fixture</title>
+    <title>Playdeck native-only bundle fixture</title>
   </head>
   <body>
     <div id="root"></div>
@@ -1279,7 +1279,7 @@ Create `tests/bundle/native-only/src/main.tsx`:
 
 ```tsx
 import { createRoot } from 'react-dom/client';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const Fixture = () => (
   <Player.Root loading="interaction" source="/fixture.mp4">
@@ -1335,8 +1335,8 @@ visitStatic(entryKey);
 const isProviderEntry = (key) => {
   const name = manifest[key]?.name ?? '';
   return (
-    /(?:packages|@reely)\/provider-(?:native|hls|youtube|vimeo)/.test(key) ||
-    /(?:packages|@reely)\/provider-(?:native|hls|youtube|vimeo)/.test(name)
+    /(?:packages|@playdeck)\/provider-(?:native|hls|youtube|vimeo)/.test(key) ||
+    /(?:packages|@playdeck)\/provider-(?:native|hls|youtube|vimeo)/.test(name)
   );
 };
 const providerKeys = Object.keys(manifest).filter(isProviderEntry);
@@ -1418,7 +1418,7 @@ Add this workspace glob:
 Replace the root `test:bundle` placeholder with:
 
 ```json
-"test:bundle": "pnpm --filter @reely/core build && pnpm --filter @reely/provider-native build && pnpm --filter @reely/react build && pnpm --filter @reely/bundle-native-only build && pnpm --filter @reely/bundle-native-only test"
+"test:bundle": "pnpm --filter @playdeck/core build && pnpm --filter @playdeck/provider-native build && pnpm --filter @playdeck/react build && pnpm --filter @playdeck/bundle-native-only build && pnpm --filter @playdeck/bundle-native-only test"
 ```
 
 Run:

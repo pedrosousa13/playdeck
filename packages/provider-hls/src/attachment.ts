@@ -1,5 +1,5 @@
-import type { CommandResult, HlsSource, PlayerError } from '@reely/core';
-import type { NativeProviderAdapter } from '@reely/provider-native';
+import type { CommandResult, HlsSource, PlayerError } from '@playdeck/core';
+import type { NativeProviderAdapter } from '@playdeck/provider-native';
 import type {
   EmitProviderState,
   HlsConstructorLike,

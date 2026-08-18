@@ -59,7 +59,7 @@ keystroke and not by its tag:
   `controls.tsx`'s `nonTextInputTypes` list. An unknown or absent `type` counts
   as text entry, which fails safe: protecting typing is the point of the rule.
   An open menu (`[role="menu"]`, `[role="menubar"]`, `[role="listbox"]`,
-  `[data-reely-menu="open"]`) silences it the same way.
+  `[data-playdeck-menu="open"]`) silences it the same way.
 - **An activation target keeps `' '` and `Enter` and nothing else.** A
   `button`, `[role="button"]`, `a[href]`, `summary`, or an `<input>` of a type
   that acts on those two keys — `button`, `submit`, `reset`, `image`,
@@ -117,7 +117,7 @@ key resolve identically on every render and in every consumer.
   that cannot seek at all. `togglePlayback` is the exception, and it is not one
   this decision introduced: there is no playback capability to gate on, so
   Space and `k` are claimed on every provider.
-- **The rule is about range inputs, not about Reely's two sliders.** A consumer
+- **The rule is about range inputs, not about Playdeck's two sliders.** A consumer
   who puts their own `<input type="range">` inside `Player.Controls` gets the
   same treatment, and the same escape hatch. That is deliberate: a rule that
   named the library's own parts would be undiscoverable from outside them.

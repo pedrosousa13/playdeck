@@ -143,7 +143,9 @@ async function main() {
       .join(', ')}`
   );
 
-  const tarballDir = mkdtempSync(join(tmpdir(), 'reely-packaging-tarballs-'));
+  const tarballDir = mkdtempSync(
+    join(tmpdir(), 'playdeck-packaging-tarballs-')
+  );
   /** @type {string[]} */
   const failures = [];
 
@@ -237,7 +239,7 @@ async function main() {
  * @param {string} tarballDir
  */
 async function runFixture(packages, tarballDir) {
-  const fixtureDir = mkdtempSync(join(tmpdir(), 'reely-packaging-fixture-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'playdeck-packaging-fixture-'));
   try {
     cpSync(fixtureTemplate, fixtureDir, { recursive: true });
 
@@ -255,8 +257,8 @@ async function runFixture(packages, tarballDir) {
     Object.assign(manifest.dependencies, tarballSpecs);
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
-    // Packages depend on each other by workspace name (e.g. @reely/react
-    // depends on @reely/core). `pnpm pack` rewrites those to plain semver
+    // Packages depend on each other by workspace name (e.g. @playdeck/react
+    // depends on @playdeck/core). `pnpm pack` rewrites those to plain semver
     // ranges, which don't exist on the real registry. Force every internal
     // dependency, however deep, to resolve to the tarball being tested.
     const overridesYaml = [
@@ -326,7 +328,7 @@ async function smokeTest(distDir) {
     page.on('pageerror', (error) => pageErrors.push(error));
 
     await page.goto(`http://127.0.0.1:${address.port}`);
-    const media = page.locator('[data-reely-part="media"]');
+    const media = page.locator('[data-playdeck-part="media"]');
     await media.waitFor();
     const source = await media.locator('source').getAttribute('src');
     if (source !== '/fixture.mp4') {

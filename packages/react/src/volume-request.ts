@@ -1,4 +1,4 @@
-import type { PlayerController, PlayerState } from '@reely/core';
+import type { PlayerController, PlayerState } from '@playdeck/core';
 import {
   createCommandChain,
   requestAnswered,

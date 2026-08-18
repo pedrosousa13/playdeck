@@ -3,8 +3,8 @@ import type {
   Chapter,
   PlayerCapabilities,
   ProviderStatePatch
-} from '@reely/core';
-import { chaptersEqual, deriveChapters } from '@reely/core';
+} from '@playdeck/core';
+import { chaptersEqual, deriveChapters } from '@playdeck/core';
 import {
   available,
   noChapterSource,
@@ -51,7 +51,7 @@ export type VimeoChaptersDeps = {
 
 // The chapters seam: the published collection and the capability facet beside
 // it. Vimeo reports a start and a title per chapter and no end at all, so the
-// end times here are `@reely/core`'s derivation, exactly as they are on the
+// end times here are `@playdeck/core`'s derivation, exactly as they are on the
 // native path.
 export type VimeoChapters = {
   // Adopts the list read at attach, returning the patch fragment the

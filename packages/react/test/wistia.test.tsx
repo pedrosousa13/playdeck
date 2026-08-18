@@ -2,18 +2,18 @@
 
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { createWistiaProvider } from '@reely/provider-wistia';
+import { createWistiaProvider } from '@playdeck/provider-wistia';
 import * as Player from '../src/index';
 
 const harness = vi.hoisted(() => ({
   fakes: [] as Array<{
-    adapter: import('@reely/core').ProviderAdapter;
+    adapter: import('@playdeck/core').ProviderAdapter;
     counts: () => Record<string, number>;
-    emit: (patch: import('@reely/core').ProviderStatePatch) => void;
+    emit: (patch: import('@playdeck/core').ProviderStatePatch) => void;
   }>
 }));
 
-vi.mock('@reely/provider-wistia', async () => {
+vi.mock('@playdeck/provider-wistia', async () => {
   const { createFakeProvider } = await import('./fixtures/fake-provider');
   return {
     createWistiaProvider: vi.fn(() => {

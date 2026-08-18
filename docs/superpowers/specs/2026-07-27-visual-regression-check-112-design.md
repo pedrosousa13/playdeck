@@ -6,7 +6,7 @@
 
 Nothing in this repo checks that the player still _looks_ right. The 80 Storybook interaction tests assert behaviour and ARIA state; the 163 e2e tests assert geometry _numbers_ at two specific widths; `packages/react/test/theme.test.ts` reads `theme.css` as _text_. None of them render a composition and compare it to anything.
 
-The gap has a live example. `9f49541` added `container-type: inline-size` to `.reely-example`, which applies `contain: layout style inline-size` — a stacking context, and a containing block for absolutely-positioned descendants. Every overlay in the reference composition is absolutely positioned inside that box. All 163 e2e tests passed on three engines afterwards, and none of them could have seen a layer move.
+The gap has a live example. `9f49541` added `container-type: inline-size` to `.playdeck-example`, which applies `contain: layout style inline-size` — a stacking context, and a containing block for absolutely-positioned descendants. Every overlay in the reference composition is absolutely positioned inside that box. All 163 e2e tests passed on three engines afterwards, and none of them could have seen a layer move.
 
 #89 is the precedent: a control row that silently painted _below_ `Gestures`, invisible and unclickable, while every behavioural test stayed green.
 
@@ -104,7 +104,7 @@ Driven from Playwright against the real dev server (`playwright.config.ts` alrea
 
 The check is worth nothing until it has been watched to fail.
 
-- **Invariant layer, locally:** set the loading overlay's `z-index` to `0` → the paints-above assertion goes red. Remove `container-type: inline-size` from `.reely-example` → the 320px containment/volume-slider assertions go red. Both reverted, both outputs recorded in the PR body.
+- **Invariant layer, locally:** set the loading overlay's `z-index` to `0` → the paints-above assertion goes red. Remove `container-type: inline-size` from `.playdeck-example` → the 320px containment/volume-slider assertions go red. Both reverted, both outputs recorded in the PR body.
 - **Pixel layer:** cannot go red on macOS, because it does not run there. Proof is a deliberate-break commit pushed to the PR branch, the red CI run captured, then reverted. Recorded in the PR body the same way.
 
 ## Baselines

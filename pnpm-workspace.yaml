@@ -24,7 +24,7 @@ packages:
 # Storybook's glob, `nanoid` only under `postcss` and so everywhere `postcss`
 # reaches, and `js-yaml` only under @changesets/cli.
 # That paragraph is a reading of the graph at one moment, not a standing
-# property of this repo. It was false from #170, when @reely/provider-wistia
+# property of this repo. It was false from #170, when @playdeck/provider-wistia
 # arrived carrying `@wistia/wistia-player` in its `dependencies` -- which
 # dragged webpack, and so `postcss`, into a package that would have shipped --
 # until #266 dropped the vendor package for a CDN load. A floor in this file

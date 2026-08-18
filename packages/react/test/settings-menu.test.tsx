@@ -38,8 +38,8 @@ describe('SettingsMenu', () => {
     render(<Menu />);
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     const menu = screen.getByRole('menu');
-    expect(attr(menu, 'data-reely-menu')).toBe('open');
-    expect(attr(menu, 'data-reely-part')).toBe('settings-menu');
+    expect(attr(menu, 'data-playdeck-menu')).toBe('open');
+    expect(attr(menu, 'data-playdeck-part')).toBe('settings-menu');
     await waitFor(() =>
       expect(hasFocus(screen.getAllByRole('menuitem')[0])).toBe(true)
     );

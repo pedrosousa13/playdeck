@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 // A playback-rate menu built from the menu parts. `SettingsMenu` owns the open
 // state and returns focus to the trigger on every close path.

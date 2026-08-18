@@ -4,7 +4,7 @@ import type {
   ProviderAdapter,
   ProviderStateListener,
   ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 
 export const deferred = <Value>() => {
   let resolve!: (value: Value | PromiseLike<Value>) => void;

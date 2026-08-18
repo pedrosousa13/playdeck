@@ -3,7 +3,7 @@ import {
   type Availability,
   type PlayerCapabilities,
   type ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import type { MockPlayerParameters } from '../.storybook/mock-player';
 
 export const available: Availability = { status: 'available' };

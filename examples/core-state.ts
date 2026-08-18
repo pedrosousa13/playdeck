@@ -1,4 +1,4 @@
-import { createInitialPlayerState, textTrackLabel } from '@reely/core';
+import { createInitialPlayerState, textTrackLabel } from '@playdeck/core';
 
 // The state a controller starts from. Safe to render on a server, where no
 // provider exists yet — and the same state a test fixture should start from.

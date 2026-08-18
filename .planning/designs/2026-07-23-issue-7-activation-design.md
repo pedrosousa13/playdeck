@@ -1,7 +1,7 @@
 # Issue #7: Lazy Activation Design
 
 **Status:** Approved design  
-**Issue:** [#7 — Lazy activation strategies + provider loader registry](https://github.com/pedrosousa13/reely/issues/7)  
+**Issue:** [#7 — Lazy activation strategies + provider loader registry](https://github.com/pedrosousa13/playdeck/issues/7)  
 **Depends on:** #6, merged on `main`  
 **Followed by:** #19, using Storybook `10.5.3`
 
@@ -24,7 +24,7 @@ and keep provider packages outside inactive initial bundle graphs.
 - `Player.Root` is the deep module. Callers choose a strategy; Root hides
   observers, dynamic imports, mount coordination, generation tokens, queued
   playback, retry behavior, and cleanup.
-- The provider-loader seam is private to `@reely/react`. Tests use a fake
+- The provider-loader seam is private to `@playdeck/react`. Tests use a fake
   adapter at this internal seam, but no loader registry, mutation function, or
   test-only prop becomes public.
 - The framework-neutral core owns normalized activation state, provider
@@ -73,7 +73,7 @@ The visual interface consists of:
 `ActivationButton` is the single activation-overlay primitive. It renders a
 real `<button type="button">`, owns the overlay layer at z-index 30, and exposes:
 
-- `data-reely-part="activation"`
+- `data-playdeck-part="activation"`
 - `data-state="dormant" | "eligible" | "loading-provider" | "error"`
 - an accessible default label of `Play video`
 - an error-state default label of `Retry loading video`
@@ -95,7 +95,7 @@ On an activation error, clicking the same button retries the current source.
 - playback buffering: `data-state="buffering"`
 
 It renders a polite status only while one of those conditions is active and
-uses `data-reely-part="loading-indicator"`. Provider loading takes precedence
+uses `data-playdeck-part="loading-indicator"`. Provider loading takes precedence
 if both conditions are true. It accepts ordinary `<div>` presentation props
 and replacement children. It occupies the fixed status layer at z-index 30
 without accepting pointer input.
@@ -147,7 +147,7 @@ The operation:
 whose inputs are the detected source, the current provider mount, and native
 playback options. Its result is a `ProviderAdapter`.
 
-The native loader dynamically imports `@reely/provider-native`; the existing
+The native loader dynamically imports `@playdeck/provider-native`; the existing
 static import is removed from the React entry module. Other provider packages
 are not created or faked in production for this issue. Later provider issues
 add their adapters to the same private registry.
@@ -316,7 +316,7 @@ The placeholder `test:bundle` becomes a real Vite consumer fixture under
 
 The fixture:
 
-- consumes built `@reely/react` as a package;
+- consumes built `@playdeck/react` as a package;
 - walks the Vite manifest's initial static-import closure;
 - verifies provider adapters are outside that closure;
 - records browser script requests in interaction mode;
@@ -343,7 +343,7 @@ The docs app explains:
 Issue verification remains:
 
 ```sh
-pnpm --filter @reely/react test
+pnpm --filter @playdeck/react test
 pnpm test:e2e -- --grep activation
 pnpm test:bundle
 ```

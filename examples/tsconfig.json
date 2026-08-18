@@ -7,17 +7,23 @@
     // The docs examples are what a consumer copies, so they are checked against
     // the built declarations rather than package source: an example that only
     // compiles against `src` can still be wrong for someone who ran
-    // `pnpm add @reely/core`. Same reasoning as e2e/tsconfig.json.
+    // `pnpm add @playdeck/core`. Same reasoning as e2e/tsconfig.json.
     "paths": {
-      "@reely/core": ["../packages/core/dist/index.d.ts"],
-      "@reely/react": ["../packages/react/dist/index.d.ts"],
-      "@reely/provider-native": ["../packages/provider-native/dist/index.d.ts"],
-      "@reely/provider-hls": ["../packages/provider-hls/dist/index.d.ts"],
-      "@reely/provider-youtube": [
+      "@playdeck/core": ["../packages/core/dist/index.d.ts"],
+      "@playdeck/react": ["../packages/react/dist/index.d.ts"],
+      "@playdeck/provider-native": [
+        "../packages/provider-native/dist/index.d.ts"
+      ],
+      "@playdeck/provider-hls": ["../packages/provider-hls/dist/index.d.ts"],
+      "@playdeck/provider-youtube": [
         "../packages/provider-youtube/dist/index.d.ts"
       ],
-      "@reely/provider-vimeo": ["../packages/provider-vimeo/dist/index.d.ts"],
-      "@reely/provider-wistia": ["../packages/provider-wistia/dist/index.d.ts"]
+      "@playdeck/provider-vimeo": [
+        "../packages/provider-vimeo/dist/index.d.ts"
+      ],
+      "@playdeck/provider-wistia": [
+        "../packages/provider-wistia/dist/index.d.ts"
+      ]
     },
     "tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo/examples.tsbuildinfo"
   },

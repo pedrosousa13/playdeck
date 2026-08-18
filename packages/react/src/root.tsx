@@ -8,8 +8,8 @@ import {
   type MediaSessionBinding,
   type MediaSessionLike,
   type PlayerSource
-} from '@reely/core';
-import type { NativePlaybackOptions } from '@reely/provider-native';
+} from '@playdeck/core';
+import type { NativePlaybackOptions } from '@playdeck/provider-native';
 import {
   PlayerContext,
   PosterContext,
@@ -73,8 +73,8 @@ export type RootProps = NativePlaybackOptions &
     readonly children: ReactNode;
     /**
      * Let the provider draw its own controls. Unset and `false` both mean a
-     * chromeless player, which is where Reely's own composed `Player.Controls`
-     * belongs; `true` hands the surface to the provider and Reely draws nothing
+     * chromeless player, which is where Playdeck's own composed `Player.Controls`
+     * belongs; `true` hands the surface to the provider and Playdeck draws nothing
      * over it. Reaches Vimeo and YouTube through their embeds and native/HLS
      * through the video element's own `controls` attribute.
      */

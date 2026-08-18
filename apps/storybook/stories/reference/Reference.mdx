@@ -5,7 +5,7 @@ import { Meta } from '@storybook/addon-docs/blocks';
 # Reference example
 
 One composed player, in `stories/reference/`, assembled **only** from public
-`@reely/react` and `@reely/core` exports. It is the runnable proof behind
+`@playdeck/react` and `@playdeck/core` exports. It is the runnable proof behind
 criterion 8 of #1, and it is the artifact #32 points axe and its keyboard flows
 at.
 
@@ -14,14 +14,14 @@ two that drift:
 
 - **`Reference/Player → Composition`** — under the mock decorator, every
   capability dialed available, no media and no network. It runs in
-  `pnpm --filter @reely/storybook test` with axe at `test: 'error'`.
+  `pnpm --filter @playdeck/storybook test` with axe at `test: 'error'`.
 - **`Reference/Player → RealSources`** — tagged `real-playback` and `!test`, so
   the decorator steps aside and the story owns its own `Player.Root`. This is
   what `e2e/reference.spec.ts` drives.
 
 ## Icons are your job, not the library's
 
-Every button here receives an icon child from `@reely/react`'s icon exports.
+Every button here receives an icon child from `@playdeck/react`'s icon exports.
 The primitives keep their text fallbacks (`children ?? (isPlaying ? 'Pause' :
 'Play')`) and are unchanged by this example. Defaulting to icons would make
 every icon a static dependency of every button and undo the opt-in
@@ -33,7 +33,7 @@ from public parts, which is the thing being proved.
 
 ## Layout is your job too
 
-The layout CSS lives in this example, not in `@reely/react/theme.css`. The
+The layout CSS lives in this example, not in `@playdeck/react/theme.css`. The
 library stays unopinionated about layout; this example documents one way to lay
 a control row out — two rows, a wrapping button row, and the volume slider
 dropped below a 420px breakpoint so the composition stays usable at 320px.
@@ -66,7 +66,7 @@ Where a primitive sets geometry on itself, your `style` prop overrides it —
 see the `style` section of `Overview/Contract` for the one carve-out.
 
 The example itself imports no stylesheet beyond its own layout CSS — never
-`@reely/react/theme.css`, which is the headless point it is making. The
+`@playdeck/react/theme.css`, which is the headless point it is making. The
 toolbar's **Theme** toggle still applies to it like every other story: the
 mounting lives in `.storybook/theme.tsx`, outside the import rule below, so
 `Reference/Player` is themable without the example reaching for the theme
@@ -75,7 +75,7 @@ itself.
 ### Folding controls into the menu
 
 Below the breakpoint, PiP and AirPlay leave the button row and reappear as
-entries in the settings menu. None of that comes from the library. `@reely/react`
+entries in the settings menu. None of that comes from the library. `@playdeck/react`
 ships no folding, no overflow behaviour and no notion of control priority —
 where a control sits, whether it exists at all, and what it contains are your
 decisions, taken in your own layout. What follows is a composition pattern this
@@ -150,7 +150,7 @@ proved by `RealSources` and `e2e/reference.spec.ts` instead.
 
 `eslint.config.js` scopes a `no-restricted-imports` block to
 `stories/reference/**`. Rejected: any `../` escape, anything under
-`packages/`, any `@reely/*/src/*` subpath, the provider packages, and
+`packages/`, any `@playdeck/*/src/*` subpath, the provider packages, and
 `hls.js`. It runs in the existing `static` gate, so a violation fails at
 authoring time. Convention has already failed twice (#15, #73).
 
@@ -161,13 +161,13 @@ rule that has never been seen to fail is worth nothing.
 Two stated limitations:
 
 - **Specifier hygiene, not packed-entry coverage.** Storybook aliases
-  `@reely/react` to `packages/react/src/index.tsx`, so this rule cannot prove
+  `@playdeck/react` to `packages/react/src/index.tsx`, so this rule cannot prove
   the _published_ entry exports what the example touches. That side is covered
   where it belongs: `attw` and `publint` in `test:packages`, plus
   `packages/react/test/theme.test.ts` asserting the exports map.
 - **Not a dependency allowlist.** ESLint's group negation never un-matches a
   specifier containing a slash, so the allowlist form of this rule rejects
-  `@reely/react` itself. The denylist that works stops reaching into internals;
+  `@playdeck/react` itself. The denylist that works stops reaching into internals;
   it will not stop a brand-new third-party dependency being added.
 
 ## Capability gating, on display
@@ -219,7 +219,7 @@ for **every** story, primitive and composed — that is the authoring-time gate,
 and it is Chromium-only because `apps/storybook/vitest.config.ts` pins one
 browser instance. `e2e/a11y.spec.ts` adds `@axe-core/playwright` over the
 composed example's eight states in Chromium, Firefox and WebKit, scoped to
-`[data-reely-part="viewport"]` so Storybook's own iframe chrome can never enter
+`[data-playdeck-part="viewport"]` so Storybook's own iframe chrome can never enter
 a result.
 
 The eight states are six stories: `Composition` is genuinely both _paused_ and
@@ -242,7 +242,7 @@ mounted while idle — deliberately, so a screen reader announces the
 loading/buffering transition — but did so as a full-bleed
 `position: absolute; inset: 0; z-index: 30` box. Even empty and
 `pointer-events: none`, that geometry alone made axe unable to resolve a
-background colour for **any** text in **any** reely viewport, for every
+background colour for **any** text in **any** playdeck viewport, for every
 consumer. It now renders visually-hidden while idle and takes the full-bleed
 overlay only once there is something to show; its own tests live in
 `packages/react/test/activation.test.tsx`. `SettingsMenuContent`'s
@@ -254,11 +254,11 @@ to `tabIndex={0}`, so this example sets nothing.
 Axe runs its **default rule set**, not a narrower WCAG-tag subset — scoping
 with `withTags` would silently drop the best-practice rules, which is a
 suppression by another name. That choice has a cost worth stating plainly:
-`.include('[data-reely-part="viewport"]')` sets axe's context to the player
+`.include('[data-playdeck-part="viewport"]')` sets axe's context to the player
 subtree, so page-level rules (`bypass`, `region`, `landmark-one-main`,
 `page-has-heading-one`) never run against it — those are properties of
 Storybook's bare iframe document (no `<main>`, no `<h1>`, no landmarks), not of
-reely, and a consumer's real page owns them. A clean run here is a claim about
+playdeck, and a consumer's real page owns them. A clean run here is a claim about
 this subtree, not about a host page.
 
 Every state also asserts `results.incomplete` — axe's needs-review bucket —

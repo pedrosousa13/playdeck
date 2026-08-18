@@ -1,18 +1,18 @@
 {
   "workspace": [
     {
-      "name": "@reely/audit-fixture-development-only",
+      "name": "@playdeck/audit-fixture-development-only",
       "path": ".",
       "private": true
     },
     {
-      "name": "@reely/audit-fixture-internal",
+      "name": "@playdeck/audit-fixture-internal",
       "version": "0.0.0",
       "path": "./packages/internal",
       "private": true
     },
     {
-      "name": "@reely/audit-fixture-publishable",
+      "name": "@playdeck/audit-fixture-publishable",
       "version": "0.0.0",
       "path": "./packages/publishable",
       "private": false
@@ -20,7 +20,7 @@
   ],
   "prodTrees": [
     {
-      "name": "@reely/audit-fixture-publishable",
+      "name": "@playdeck/audit-fixture-publishable",
       "version": "0.0.0",
       "path": "./packages/publishable",
       "private": false,

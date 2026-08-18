@@ -1,5 +1,5 @@
 {
-  "name": "@reely/react",
+  "name": "@playdeck/react",
   "version": "0.0.0",
   "description": "Headless, composable React 19 media player primitives with capability-aware providers.",
   "keywords": [
@@ -14,14 +14,14 @@
     "accessibility"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/react#readme",
+  "homepage": "https://github.com/pedrosousa13/playdeck/tree/main/packages/react#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "url": "git+https://github.com/pedrosousa13/playdeck.git",
     "directory": "packages/react"
   },
   "bugs": {
-    "url": "https://github.com/pedrosousa13/reely/issues"
+    "url": "https://github.com/pedrosousa13/playdeck/issues"
   },
   "type": "module",
   "sideEffects": false,
@@ -50,12 +50,12 @@
     "provenance": true
   },
   "dependencies": {
-    "@reely/core": "workspace:^",
-    "@reely/provider-hls": "workspace:^",
-    "@reely/provider-native": "workspace:^",
-    "@reely/provider-vimeo": "workspace:^",
-    "@reely/provider-wistia": "workspace:^",
-    "@reely/provider-youtube": "workspace:^"
+    "@playdeck/core": "workspace:^",
+    "@playdeck/provider-hls": "workspace:^",
+    "@playdeck/provider-native": "workspace:^",
+    "@playdeck/provider-vimeo": "workspace:^",
+    "@playdeck/provider-wistia": "workspace:^",
+    "@playdeck/provider-youtube": "workspace:^"
   },
   "peerDependencies": {
     "react": ">=19 <20",

@@ -1,5 +1,5 @@
 ---
-'@reely/react': minor
+'@playdeck/react': minor
 ---
 
 `Player.Media`'s three return branches now state the same geometry, and state

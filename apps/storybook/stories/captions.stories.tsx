@@ -1,5 +1,5 @@
-import * as Player from '@reely/react';
-import type { ProviderStatePatch, TextCue, TextTrack } from '@reely/core';
+import * as Player from '@playdeck/react';
+import type { ProviderStatePatch, TextCue, TextTrack } from '@playdeck/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { CSSProperties } from 'react';
 import { expect } from 'storybook/test';
@@ -47,9 +47,9 @@ const meta = {
         component: [
           '`Player.Captions` overlays the active cues (driven by `state.textTracks`/`selectedTextTrackId` and the provider\'s cue events) when `state.captionRendering === "custom"`; it renders nothing otherwise, leaving native or provider-drawn captions alone.',
           '',
-          '**Contract** — `data-reely-part="captions"`, `data-state="custom"`; each cue is `data-reely-part="caption-cue"`, and its lines (the cue text split on `\\n`) are `data-reely-part="caption-line"`.',
+          '**Contract** — `data-playdeck-part="captions"`, `data-state="custom"`; each cue is `data-playdeck-part="caption-cue"`, and its lines (the cue text split on `\\n`) are `data-playdeck-part="caption-line"`.',
           '',
-          '**Theming** — CSS custom properties set on `Player.Captions` (or an ancestor) style the default cue box without overriding its structure: `--reely-caption-font-size` (default `1.05rem`), `--reely-caption-color` (default `#fff`), `--reely-caption-background` (default `rgba(0, 0, 0, 0.75)`), `--reely-caption-edge` (a `text-shadow` value, default `none`).',
+          '**Theming** — CSS custom properties set on `Player.Captions` (or an ancestor) style the default cue box without overriding its structure: `--playdeck-caption-font-size` (default `1.05rem`), `--playdeck-caption-color` (default `#fff`), `--playdeck-caption-background` (default `rgba(0, 0, 0, 0.75)`), `--playdeck-caption-edge` (a `text-shadow` value, default `none`).',
           '',
           "**`renderCue`** — a render-prop child replaces the default per-cue rendering entirely. The cue handed to it is normalized to its public shape (`id`/`startTime`/`endTime`/`text`), stripping any engine-only fields a provider's cue objects carry.",
           '',
@@ -81,7 +81,7 @@ export const OneLine: Story = {
   play: async ({ canvasElement, canvas }) => {
     await canvas.findByText('Hello, this is a caption.');
     const captions = canvasElement.querySelector(
-      '[data-reely-part="captions"]'
+      '[data-playdeck-part="captions"]'
     );
     await expect(captions).toHaveAttribute('data-state', 'custom');
     await expect(captions).toHaveTextContent('Hello, this is a caption.');
@@ -98,7 +98,7 @@ export const MultiLine: Story = {
   play: async ({ canvasElement, canvas }) => {
     await canvas.findByText('Line one');
     const lines = canvasElement.querySelectorAll(
-      '[data-reely-part="caption-line"]'
+      '[data-playdeck-part="caption-line"]'
     );
     await expect(lines).toHaveLength(2);
     await expect(lines[0]).toHaveTextContent('Line one');
@@ -119,7 +119,7 @@ export const LongText: Story = {
   play: async ({ canvasElement, canvas }) => {
     await canvas.findByText(longText);
     const cueBox = canvasElement.querySelector(
-      '[data-reely-part="caption-cue"]'
+      '[data-playdeck-part="caption-cue"]'
     );
     await expect(cueBox).not.toBeNull();
     // Count the rows the text actually occupies rather than comparing the cue
@@ -129,7 +129,7 @@ export const LongText: Story = {
     // here and 1 with `white-space: nowrap` forced onto the cue box. Ranging
     // over the cue box element instead does not discriminate: that reports
     // fragment rects, 4 wrapped against 2 unwrapped.
-    const text = cueBox!.querySelector('[data-reely-part="caption-line"]')
+    const text = cueBox!.querySelector('[data-playdeck-part="caption-line"]')
       ?.firstChild as Text;
     const range = document.createRange();
     range.selectNodeContents(text);
@@ -138,7 +138,7 @@ export const LongText: Story = {
     // wrapping inside it, which a row count alone cannot tell from a narrow
     // viewport.
     const viewportWidth = cueBox!
-      .closest('[data-reely-part="viewport"]')!
+      .closest('[data-playdeck-part="viewport"]')!
       .getBoundingClientRect().width;
     expect(cueBox!.getBoundingClientRect().width).toBeLessThanOrEqual(
       viewportWidth
@@ -153,10 +153,10 @@ export const HighContrast: Story = {
       <Player.Captions
         style={
           {
-            '--reely-caption-font-size': '1.6rem',
-            '--reely-caption-color': '#ffff00',
-            '--reely-caption-background': '#000000',
-            '--reely-caption-edge': 'none'
+            '--playdeck-caption-font-size': '1.6rem',
+            '--playdeck-caption-color': '#ffff00',
+            '--playdeck-caption-background': '#000000',
+            '--playdeck-caption-edge': 'none'
           } as CSSProperties
         }
       />
@@ -165,7 +165,7 @@ export const HighContrast: Story = {
   play: async ({ canvas }) => {
     const line = await canvas.findByText('High-contrast captions');
     const cueBox = line.closest(
-      '[data-reely-part="caption-cue"]'
+      '[data-playdeck-part="caption-cue"]'
     ) as HTMLElement;
     const style = getComputedStyle(cueBox);
     await expect(style.color).toBe('rgb(255, 255, 0)');
@@ -197,7 +197,7 @@ export const SafeArea: Story = {
   play: async ({ canvas }) => {
     const line = await canvas.findByText('Above the home indicator');
     const captions = line.closest(
-      '[data-reely-part="captions"]'
+      '[data-playdeck-part="captions"]'
     ) as HTMLElement;
     // The previous assertion compared the cue box against the stand-in strip
     // below the viewport, which the layout guarantees regardless of any

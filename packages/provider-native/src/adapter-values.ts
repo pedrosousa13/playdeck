@@ -8,7 +8,7 @@ import type {
   ProviderEventFor,
   ProviderStatePatch,
   TimeRange
-} from '@reely/core';
+} from '@playdeck/core';
 
 // Publishes a provider-state patch to every subscriber, optionally paired
 // with the provider event that caused it. Every seam takes this as its sink.

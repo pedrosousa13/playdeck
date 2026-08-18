@@ -65,7 +65,7 @@ export const Poster = ({ children, style, ...safeRest }: PosterProps) => {
     <div
       {...safeRest}
       aria-hidden="true"
-      data-reely-part="poster"
+      data-playdeck-part="poster"
       data-state={posterState}
       style={{
         ...posterOverlayStyle,
@@ -216,7 +216,7 @@ export const PosterImage = ({
     <img
       {...safeRest}
       alt=""
-      data-reely-part="poster-image"
+      data-playdeck-part="poster-image"
       ref={imageRef}
       data-state={posterImageState}
       decoding={decoding}
@@ -242,11 +242,11 @@ export const PosterImage = ({
         // wins it, and `style` in turn beats the theming-variable default.
         objectFit: (objectFit ??
           style?.objectFit ??
-          'var(--reely-poster-fit, cover)') as CSSProperties['objectFit'],
+          'var(--playdeck-poster-fit, cover)') as CSSProperties['objectFit'],
         objectPosition:
           objectPosition ??
           style?.objectPosition ??
-          'var(--reely-poster-position, center)'
+          'var(--playdeck-poster-position, center)'
       }}
       width={width}
     />

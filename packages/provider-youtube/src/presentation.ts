@@ -1,4 +1,4 @@
-import type { Availability, CommandResult } from '@reely/core';
+import type { Availability, CommandResult } from '@playdeck/core';
 import {
   available,
   browserUnavailable,

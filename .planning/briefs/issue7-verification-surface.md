@@ -6,7 +6,7 @@ Read-only task. Do not edit files, create commits, install dependencies, or chan
 
 Read:
 
-- GitHub issue #7 via `gh issue view 7 --repo pedrosousa13/reely`
+- GitHub issue #7 via `gh issue view 7 --repo pedrosousa13/playdeck`
 - Root scripts/configuration (`package.json`, `vitest.config.ts`, `playwright.config.ts`, `.github/workflows/ci.yml`)
 - Existing React/core/provider tests
 - Existing docs app and e2e fixtures

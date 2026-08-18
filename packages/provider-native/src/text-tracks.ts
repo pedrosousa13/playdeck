@@ -10,13 +10,13 @@ import type {
   TextTrack,
   TextTrackKind,
   TextTrackReadiness
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   chaptersEqual,
   deriveChapters,
   notifySafely,
   textTrackLabel
-} from '@reely/core';
+} from '@playdeck/core';
 import { available } from './adapter-values.js';
 
 // The `default` IDL attribute lives on HTMLTrackElement per spec, but engines

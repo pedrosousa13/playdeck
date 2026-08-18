@@ -7,7 +7,7 @@
 **Diagnosis.** Added a temporary `console.log` to `hangEndpointPlugin`'s
 `configureServer` and started `storybook dev` (both via `pnpm exec storybook
 dev --port 6006 --ci` from `apps/storybook`, and via `pnpm --filter
-@reely/storybook dev` from the repo root, with `node_modules/.vite` and
+@playdeck/storybook dev` from the repo root, with `node_modules/.vite` and
 `apps/storybook/node_modules/.cache` cleared for a genuinely cold start).
 `configureServer` fired exactly once at boot, and repeated `curl`/Playwright
 checks against the running server all showed the endpoint hanging correctly
@@ -16,7 +16,7 @@ could not reproduce the reported instant-404 through direct testing.
 
 However, comparing the reported 404 response headers
 (`Cache-Control: no-store`, `Vary: Origin`) against a deliberately-wrong path
-on my own server (`curl .../__reely/does-not-exist.png`) produced an
+on my own server (`curl .../__playdeck/does-not-exist.png`) produced an
 **identical** header set — i.e. those are the generic fallback-404 headers
 Vite's dev server core emits for any unmatched request, confirming the
 reviewer's request was, in their run, genuinely never reaching our plugin's
@@ -47,7 +47,7 @@ theoretical fix, I verified it directly (below).
 
 **Fix.** Added `apps/storybook/.storybook/middleware.js` (plain JS — this
 loader doesn't transform TypeScript) registering the same
-`/__reely/hang.png` never-respond handler directly on Storybook's top-level
+`/__playdeck/hang.png` never-respond handler directly on Storybook's top-level
 router. Kept `apps/storybook/src/hang-endpoint-plugin.ts` and its
 registration in `main.ts` unchanged, since `pnpm test:storybook` (the Vitest
 addon) builds its own Vite server straight from `viteFinal` and never goes
@@ -60,7 +60,7 @@ Removed the temporary diagnostic `console.log` before committing.
 1. Combined (both mechanisms), fresh `storybook dev`:
 
    ```
-   $ curl -s -o /dev/null --max-time 4 http://localhost:6006/__reely/hang.png; echo $?
+   $ curl -s -o /dev/null --max-time 4 http://localhost:6006/__playdeck/hang.png; echo $?
    28
    ```
 
@@ -75,7 +75,7 @@ Removed the temporary diagnostic `console.log` before committing.
    fresh:
 
    ```
-   $ curl -s -o /dev/null --max-time 4 http://localhost:6006/__reely/hang.png; echo $?
+   $ curl -s -o /dev/null --max-time 4 http://localhost:6006/__playdeck/hang.png; echo $?
    28
    data-state after >=1s: loading
    ```
@@ -116,17 +116,17 @@ rule exception was needed.
 
 ### Gates after both fixes
 
-| Command                                | Result                                                                                                                                                |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm test:storybook`                  | 12/12 pass                                                                                                                                            |
-| dev-mode curl (`--max-time 4`)         | exit `28` (genuine hang)                                                                                                                              |
-| dev-mode Playwright persistence check  | `data-state="loading"` held ≥1.2s                                                                                                                     |
-| `pnpm --filter @reely/storybook build` | exit 0                                                                                                                                                |
-| `pnpm format`                          | only the intended 3 story files + new `middleware.js` touched                                                                                         |
-| `pnpm format:check`                    | pass                                                                                                                                                  |
-| `pnpm lint`                            | pass (initially caught unused `_req`/`_res` params in `middleware.js`; fixed by dropping the param names, matching `hang-endpoint-plugin.ts`'s style) |
-| `pnpm typecheck`                       | pass, no output                                                                                                                                       |
-| `pnpm test` (root)                     | 244/244 passed                                                                                                                                        |
+| Command                                   | Result                                                                                                                                                |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm test:storybook`                     | 12/12 pass                                                                                                                                            |
+| dev-mode curl (`--max-time 4`)            | exit `28` (genuine hang)                                                                                                                              |
+| dev-mode Playwright persistence check     | `data-state="loading"` held ≥1.2s                                                                                                                     |
+| `pnpm --filter @playdeck/storybook build` | exit 0                                                                                                                                                |
+| `pnpm format`                             | only the intended 3 story files + new `middleware.js` touched                                                                                         |
+| `pnpm format:check`                       | pass                                                                                                                                                  |
+| `pnpm lint`                               | pass (initially caught unused `_req`/`_res` params in `middleware.js`; fixed by dropping the param names, matching `hang-endpoint-plugin.ts`'s style) |
+| `pnpm typecheck`                          | pass, no output                                                                                                                                       |
+| `pnpm test` (root)                        | 244/244 passed                                                                                                                                        |
 
 Commit: `26990c2 fix: hang endpoint in dev mode and add workbench chrome to stories`
 
@@ -152,7 +152,7 @@ export const Loading: Story = {
     // responds, not just that the state started out 'loading'.
     await new Promise((resolve) => setTimeout(resolve, 300));
     const image = canvasElement.querySelector(
-      '[data-reely-part="poster-image"]'
+      '[data-playdeck-part="poster-image"]'
     );
     await expect(image).toHaveAttribute('data-state', 'loading');
   }
@@ -220,7 +220,7 @@ Commit: `3667ff2 fix: assert Loading poster story holds data-state across a real
 ## What was implemented
 
 - `apps/storybook/src/hang-endpoint-plugin.ts` (new): a Vite plugin exposing
-  `/__reely/hang.png` via `configureServer` middleware that never responds and
+  `/__playdeck/hang.png` via `configureServer` middleware that never responds and
   never calls `next()`.
 - `apps/storybook/.storybook/main.ts` (modified): imports and registers
   `hangEndpointPlugin()` in the `plugins` array of the object passed to
@@ -264,7 +264,7 @@ first call**, before any timer/interval (`node_modules/.../dist/wait-for.js:97`,
 `posterImage('loading', canvasElement)` is satisfied at the very first,
 synchronous check — before the browser can complete any network round trip
 (success, 404, or otherwise) and dispatch `onError`/`onLoad`. This holds
-regardless of whether `/__reely/hang.png` hangs or 404s; the plugin cannot
+regardless of whether `/__playdeck/hang.png` hangs or 404s; the plugin cannot
 change this specific assertion's outcome.
 
 **Empirical confirmation that the plugin is still necessary:** I temporarily
@@ -312,7 +312,7 @@ including axe (`a11y.test: 'error'` in `preview.ts`) and the network guard
 | Diagnostic: `pnpm test:storybook` with 200ms delay added to `Loading`, no plugin | `Loading` fails, `data-state="error"` (proves endpoint necessity) — diagnostic reverted, not committed |
 | `pnpm test:storybook` (post-plugin, GREEN)                                       | 12 passed                                                                                              |
 | `pnpm test:storybook` (final confirmation after revert)                          | 12 passed                                                                                              |
-| `pnpm --filter @reely/storybook build`                                           | exit 0                                                                                                 |
+| `pnpm --filter @playdeck/storybook build`                                        | exit 0                                                                                                 |
 | `pnpm format`                                                                    | all unchanged                                                                                          |
 | `pnpm format:check`                                                              | pass                                                                                                   |
 | `pnpm lint`                                                                      | pass, no output                                                                                        |
@@ -378,7 +378,7 @@ story's scripted `patches` array:
 patches: [{ activation: 'ready', lifecycle: 'ready' }, { buffering: true }];
 ```
 
-This is a change only to the story file's `parameters.reely.scenario` data
+This is a change only to the story file's `parameters.playdeck.scenario` data
 (not to `packages/react/src` or to any Task 3 interface), consistent with the
 brief's own guidance: "if they fail, fix before proceeding... consult
 `packages/react/test/activation.test.tsx` mechanics first; do not modify

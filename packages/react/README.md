@@ -1,4 +1,4 @@
-# @reely/react
+# @playdeck/react
 
 Headless, composable React 19 media-player primitives with one API across
 native MP4/WebM, HLS, YouTube, Vimeo and Wistia. No CSS is imported by the
@@ -6,7 +6,7 @@ primitives, and every control is capability-gated: a control whose command the
 active provider cannot honour renders nothing rather than rendering disabled.
 
 ```sh
-pnpm add @reely/react
+pnpm add @playdeck/react
 ```
 
 React 19 is a peer dependency. Provider packages are pulled in as dependencies
@@ -18,7 +18,7 @@ or hls.js code in its initial graph, and makes no provider network requests.
 <!-- example:react-composition -->
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 export const Clip = () => (
   <Player.Root source="https://example.com/clip.mp4">
@@ -56,7 +56,7 @@ Optional stylesheet with the default look:
 <!-- example:ignore one import line; the theme.css subpath export and its presence in the tarball are gated by test/theme.test.ts -->
 
 ```ts
-import '@reely/react/theme.css';
+import '@playdeck/react/theme.css';
 ```
 
 ## Reading state and issuing commands
@@ -64,7 +64,7 @@ import '@reely/react/theme.css';
 <!-- example:react-hooks -->
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 // `usePlayerState` takes a selector and re-renders only when the selected
 // value changes — not on every time update.
@@ -114,7 +114,7 @@ disabled:
 <!-- example:react-overlays -->
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 // The overlay layers, in the order they stack inside a Viewport. Each renders
 // only when its own state says it should: no disabled-looking placeholders.
@@ -204,7 +204,7 @@ composes both from these.
 <!-- example:react-menus -->
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 // A playback-rate menu built from the menu parts. `SettingsMenu` owns the open
 // state and returns focus to the trigger on every close path.
@@ -279,7 +279,7 @@ import {
   SettingsIcon,
   VolumeHighIcon,
   VolumeLowIcon
-} from '@reely/react';
+} from '@playdeck/react';
 
 // Every icon is an optional named export that tree-shakes out when unused, so
 // importing one costs you only that one.
@@ -315,7 +315,7 @@ export const CustomPlayButton = () => (
 
 ## Styling
 
-Every primitive exposes `data-reely-part` (its stable name), `data-state` (its
+Every primitive exposes `data-playdeck-part` (its stable name), `data-state` (its
 derived state) and, on provider-bound controls, `data-provider`. Style and query
 against those rather than internal class names. Geometry a primitive sets on
 itself is a default your `style` prop overrides; state-derived properties are

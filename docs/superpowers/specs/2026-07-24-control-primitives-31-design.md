@@ -8,10 +8,10 @@ Add three optional, tree-shakeable primitives on top of #8's locked contract: an
 
 ## Contract inherited from #8 (do not break)
 
-- Stable `data-reely-part`, `data-state`, `data-provider` attributes + ARIA state.
+- Stable `data-playdeck-part`, `data-state`, `data-provider` attributes + ARIA state.
 - `className` / `style` / `ref` passthrough; `{...props}` spread; replaceable children.
 - Shared hit-target: `controlTargetStyle = { minWidth: 44, minHeight: 44 }` (`index.tsx:1160`).
-- Menu suppression hooks already exist: `isInOpenMenu` (`index.tsx:1535`) matches `role="menu"` / `data-reely-menu="open"`; an open menu already suppresses the keyboard shortcut handler.
+- Menu suppression hooks already exist: `isInOpenMenu` (`index.tsx:1535`) matches `role="menu"` / `data-playdeck-menu="open"`; an open menu already suppresses the keyboard shortcut handler.
 - Focus-restore pattern to mirror: `hadFocusWithin` + `gatedSignature` effect (`index.tsx:1587,1692-1698,1715-1729`).
 - `package.json` `sideEffects: false`; single `.` export; single-entry build (`vite.config.ts:6`) bundles only `src/index.tsx`.
 
@@ -26,9 +26,9 @@ Add three optional, tree-shakeable primitives on top of #8's locked contract: an
 
 Optional named exports; unused → tree-shaken.
 
-- `SettingsMenu` — context provider + `position:relative` wrapper. Owns `open` state and focus restoration. `data-reely-part="settings-menu-root"`.
-- `SettingsMenuTrigger` — `<button>`, `aria-haspopup="menu"`, `aria-expanded`, `aria-controls`, `SettingsIcon` default child, `controlTargetStyle`. Opens on click / Enter / Space / ArrowDown (ArrowDown focuses first item). `data-reely-part="settings-menu-trigger"`, `data-state={open?'open':'closed'}`.
-- `SettingsMenuContent` — `role="menu"`, `data-reely-part="settings-menu"`, `data-reely-menu={open?'open':'closed'}` (inherits shortcut suppression). Rendered only while open. Roving focus (ArrowUp/Down wrap, Home/End). **Escape closes → focus returns to trigger** (never `<body>`). Outside pointerdown closes **without** stealing focus. Type-ahead: out of scope (YAGNI).
+- `SettingsMenu` — context provider + `position:relative` wrapper. Owns `open` state and focus restoration. `data-playdeck-part="settings-menu-root"`.
+- `SettingsMenuTrigger` — `<button>`, `aria-haspopup="menu"`, `aria-expanded`, `aria-controls`, `SettingsIcon` default child, `controlTargetStyle`. Opens on click / Enter / Space / ArrowDown (ArrowDown focuses first item). `data-playdeck-part="settings-menu-trigger"`, `data-state={open?'open':'closed'}`.
+- `SettingsMenuContent` — `role="menu"`, `data-playdeck-part="settings-menu"`, `data-playdeck-menu={open?'open':'closed'}` (inherits shortcut suppression). Rendered only while open. Roving focus (ArrowUp/Down wrap, Home/End). **Escape closes → focus returns to trigger** (never `<body>`). Outside pointerdown closes **without** stealing focus. Type-ahead: out of scope (YAGNI).
 - `MenuItem` — `role="menuitem"`, roving `tabIndex`, `controlTargetStyle`, `onSelect` closes menu + restores focus to trigger.
 - `MenuRadioGroup` (`value`, `onValueChange`) — `role="group"` + context.
 - `MenuRadioItem` (`value`, children) — `role="menuitemradio"`, `aria-checked`, renders `CheckIcon` when selected, `controlTargetStyle`. Selecting fires `onValueChange`, closes menu, restores focus.
@@ -37,7 +37,7 @@ Focus rule (satisfies AC): on any close path (Escape, select, trigger re-toggle)
 
 ## 3. Gestures (headless — #9 owns visibility)
 
-Optional named export `<Player.Gestures>` — full-bleed layer inside `Viewport`, `data-reely-part="gestures"`, `position:absolute; inset:0`, z-index below `Controls`/`ActivationButton` and above `Media`/`Poster`.
+Optional named export `<Player.Gestures>` — full-bleed layer inside `Viewport`, `data-playdeck-part="gestures"`, `position:absolute; inset:0`, z-index below `Controls`/`ActivationButton` and above `Media`/`Poster`.
 
 Props:
 
@@ -67,7 +67,7 @@ Failing-first, semantic assertions only (state attrs / roles, not class names).
 ## Verification
 
 ```sh
-pnpm --filter @reely/react test && pnpm --filter @reely/bundle-native-only test && pnpm --filter storybook test
+pnpm --filter @playdeck/react test && pnpm --filter @playdeck/bundle-native-only test && pnpm --filter storybook test
 ```
 
 ## Out of scope

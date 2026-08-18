@@ -1,5 +1,5 @@
-import type { CommandResult } from '@reely/core';
-import type { NativeProviderAdapter } from '@reely/provider-native';
+import type { CommandResult } from '@playdeck/core';
+import type { NativeProviderAdapter } from '@playdeck/provider-native';
 import type { HlsEngineSelection } from './adapter-values.js';
 
 // The transport commands both engines delegate verbatim to the embedded

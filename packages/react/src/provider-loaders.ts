@@ -1,13 +1,13 @@
-import type { ProviderAdapter, ResolvedPlayerSource } from '@reely/core';
-import type { NativePlaybackOptions } from '@reely/provider-native';
-import type { VimeoProviderOptions } from '@reely/provider-vimeo';
-import type { WistiaProviderOptions } from '@reely/provider-wistia';
-import type { YouTubeProviderOptions } from '@reely/provider-youtube';
+import type { ProviderAdapter, ResolvedPlayerSource } from '@playdeck/core';
+import type { NativePlaybackOptions } from '@playdeck/provider-native';
+import type { VimeoProviderOptions } from '@playdeck/provider-vimeo';
+import type { WistiaProviderOptions } from '@playdeck/provider-wistia';
+import type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
 
 export type PlayerMediaMount = HTMLVideoElement | HTMLDivElement;
 
 /**
- * Options a single provider accepts that no Reely prop covers, keyed by
+ * Options a single provider accepts that no Playdeck prop covers, keyed by
  * provider. Wistia's embed carries presentation options -- a player colour, a
  * swatch, a poster -- that only that provider has. The native and HLS
  * providers wait on their own issues, so a missing key here is a deliberate
@@ -86,21 +86,22 @@ export const loadProvider = async ({
     if (!media || !(media instanceof HTMLVideoElement)) {
       throw new Error('The HLS provider requires a media mount.');
     }
-    const { createHlsProvider } = await import('@reely/provider-hls');
+    const { createHlsProvider } = await import('@playdeck/provider-hls');
     return createHlsProvider(media, source, nativeOptions);
   }
   if (source.type === 'video') {
     if (!media || !(media instanceof HTMLVideoElement)) {
       throw new Error('The native provider requires a media mount.');
     }
-    const { createNativeProvider } = await import('@reely/provider-native');
+    const { createNativeProvider } = await import('@playdeck/provider-native');
     return createNativeProvider(media, nativeOptions);
   }
   if (source.type === 'youtube') {
     if (!media) {
       throw new Error('The YouTube provider requires a media mount.');
     }
-    const { createYouTubeProvider } = await import('@reely/provider-youtube');
+    const { createYouTubeProvider } =
+      await import('@playdeck/provider-youtube');
     return createYouTubeProvider(
       media,
       source.videoId,
@@ -111,14 +112,14 @@ export const loadProvider = async ({
     if (!media) {
       throw new Error('The Vimeo provider requires a media mount.');
     }
-    const { createVimeoProvider } = await import('@reely/provider-vimeo');
+    const { createVimeoProvider } = await import('@playdeck/provider-vimeo');
     return createVimeoProvider(media, source, providerOptions?.vimeo);
   }
   if (source.type === 'wistia') {
     if (!media) {
       throw new Error('The Wistia provider requires a media mount.');
     }
-    const { createWistiaProvider } = await import('@reely/provider-wistia');
+    const { createWistiaProvider } = await import('@playdeck/provider-wistia');
     return createWistiaProvider(media, source, providerOptions?.wistia);
   }
   // Every known source type is handled above, so `source` narrows to `never`

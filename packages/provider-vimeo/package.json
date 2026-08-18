@@ -1,7 +1,7 @@
 {
-  "name": "@reely/provider-vimeo",
+  "name": "@playdeck/provider-vimeo",
   "version": "0.0.0",
-  "description": "Vimeo player SDK provider for Reely.",
+  "description": "Vimeo player SDK provider for Playdeck.",
   "keywords": [
     "media",
     "player",
@@ -9,14 +9,14 @@
     "vimeo"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/provider-vimeo#readme",
+  "homepage": "https://github.com/pedrosousa13/playdeck/tree/main/packages/provider-vimeo#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "url": "git+https://github.com/pedrosousa13/playdeck.git",
     "directory": "packages/provider-vimeo"
   },
   "bugs": {
-    "url": "https://github.com/pedrosousa13/reely/issues"
+    "url": "https://github.com/pedrosousa13/playdeck/issues"
   },
   "type": "module",
   "sideEffects": false,
@@ -43,7 +43,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@reely/core": "workspace:^",
+    "@playdeck/core": "workspace:^",
     "@vimeo/player": "2.30.4"
   },
   "scripts": {

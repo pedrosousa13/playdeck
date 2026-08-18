@@ -1,6 +1,6 @@
 ---
-'@reely/provider-wistia': minor
-'@reely/react': patch
+'@playdeck/provider-wistia': minor
+'@playdeck/react': patch
 ---
 
 The Wistia provider no longer depends on `@wistia/wistia-player`. It fetches
@@ -12,7 +12,7 @@ instead (#225).
 `dotenv-webpack@9.0.0` declares a non-optional `webpack` peer. Package managers
 that install peers automatically therefore pulled webpack and its whole tree
 (postcss, terser, enhanced-resolve, watchpack) into any install that reached
-this provider, for code that is never executed. `@reely/react` depends on this
+this provider, for code that is never executed. `@playdeck/react` depends on this
 package unconditionally, so the exposure was not opt-in. The workspace pins a
 postcss floor to keep that chain patched, but an override applies only to
 installs rooted at this workspace: a published tarball carries its own
@@ -68,8 +68,8 @@ genuinely re-fetches; concurrent players share one injection; and a page that
 already registered `<wistia-player>` by other means resolves off the registry
 without fetching or registering anything twice.
 
-**`@reely/react` consumers must act on this even though no React API changed.**
-`@reely/react` depends on this provider, so any page that can render a Wistia
+**`@playdeck/react` consumers must act on this even though no React API changed.**
+`@playdeck/react` depends on this provider, so any page that can render a Wistia
 source now needs `fast.wistia.com` in its `script-src` — a page with a strict
 CSP that does not add it will see Wistia sources fail to load where they
 previously worked, because the bundle used to arrive through the bundler rather

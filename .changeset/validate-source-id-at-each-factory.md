@@ -1,8 +1,8 @@
 ---
-'@reely/core': minor
-'@reely/provider-wistia': minor
-'@reely/provider-youtube': minor
-'@reely/provider-vimeo': minor
+'@playdeck/core': minor
+'@playdeck/provider-wistia': minor
+'@playdeck/provider-youtube': minor
+'@playdeck/provider-vimeo': minor
 ---
 
 Each provider factory now validates the id it is handed before it does
@@ -18,7 +18,7 @@ carried straight into a DOM attribute, an iframe src, or an SDK call.
 
 The fix is the same shape in all three packages: the id (and, for Vimeo, the
 hash, when one is present) is checked with a predicate now exported from
-`@reely/core` — `isWistiaMediaId`, `isYouTubeVideoId`, `isVimeoVideoId`,
+`@playdeck/core` — `isWistiaMediaId`, `isYouTubeVideoId`, `isVimeoVideoId`,
 `isVimeoHash` — before the factory builds anything. A value that fails is
 never carried to the vendor at all; the factory returns a rejected adapter
 instead, whose every method is a no-op and whose state immediately reports a

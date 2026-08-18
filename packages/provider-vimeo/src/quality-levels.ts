@@ -3,7 +3,7 @@ import type {
   CommandResult,
   PlayerQuality,
   ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   asRecord,
   available,
@@ -18,7 +18,7 @@ const stringField = (data: unknown, field: string): string | undefined => {
   return typeof value === 'string' ? value : undefined;
 };
 
-// Vimeo's rung ids are its own stable keys, so they double as the Reely id
+// Vimeo's rung ids are its own stable keys, so they double as the Playdeck id
 // under the `vimeo:` prefix the text tracks already use. `auto` is one of them,
 // but it is a mode rather than a rung: the state contract carries that as
 // `selectedQualityId: null`, the way it does for hls.js, so it is filtered out

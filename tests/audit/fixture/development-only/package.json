@@ -1,5 +1,5 @@
 {
-  "name": "@reely/audit-fixture-development-only",
+  "name": "@playdeck/audit-fixture-development-only",
   "private": true,
   "devDependencies": {
     "minimist": "0.0.8"

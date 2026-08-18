@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import type { Availability, VimeoSource } from '@reely/core';
+import type { Availability, VimeoSource } from '@playdeck/core';
 import {
   CHROMELESS_PROBE_TIMEOUT_MS,
   createVimeoChromelessAvailability,

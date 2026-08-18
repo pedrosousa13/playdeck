@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { ReactNode } from 'react';
@@ -11,7 +11,7 @@ const Frame = ({ children }: { readonly children: ReactNode }) => (
 
 const image = (root: HTMLElement): HTMLElement => {
   const el = root.querySelector<HTMLElement>(
-    '[data-reely-part="poster-image"]'
+    '[data-playdeck-part="poster-image"]'
   );
   if (!el) throw new Error('Expected a poster image in the story.');
   return el;
@@ -26,7 +26,7 @@ const meta = {
         component: [
           '`Player.PosterImage` renders the poster bitmap and tracks its own load lifecycle.',
           '',
-          '**Contract** — `data-reely-part="poster-image"`, `data-state="idle" | "loading" | "loaded" | "error"`.',
+          '**Contract** — `data-playdeck-part="poster-image"`, `data-state="idle" | "loading" | "loaded" | "error"`.',
           '',
           '**Capability** — not gated; state is driven purely by the image load.'
         ].join('\n')
@@ -54,7 +54,7 @@ export const Idle: Story = {
 };
 
 /**
- * The dev server holds `/__reely__/pending.png` open forever, so the image
+ * The dev server holds `/__playdeck__/pending.png` open forever, so the image
  * stays in `loading` deterministically. In a static Storybook build the URL
  * 404s and this story falls through to the error state instead.
  */
@@ -62,7 +62,7 @@ export const Loading: Story = {
   render: () => (
     <Frame>
       <Player.Poster>
-        <Player.PosterImage src="/__reely__/pending.png" />
+        <Player.PosterImage src="/__playdeck__/pending.png" />
       </Player.Poster>
     </Frame>
   ),
@@ -103,7 +103,7 @@ export const ErrorState: Story = {
   render: () => (
     <Frame>
       <Player.Poster>
-        <Player.PosterImage src="/__reely__/missing-poster.png" />
+        <Player.PosterImage src="/__playdeck__/missing-poster.png" />
       </Player.Poster>
     </Frame>
   ),

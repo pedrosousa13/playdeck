@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 // #174. The media's intrinsic aspect ratio is published onto the viewport as
-// `--reely-media-aspect-ratio`, written imperatively to the DOM node. It is
+// `--playdeck-media-aspect-ratio`, written imperatively to the DOM node. It is
 // deliberately NOT part of `PlayerState`: a state field would re-render every
 // consumer of that state on every source change and every dimension change,
 // for a value only CSS ever reads. The no-rerender test below is the one that
@@ -14,7 +14,7 @@ import {
   PlayerController,
   type MediaDimensions,
   type ProviderAdapter
-} from '@reely/core';
+} from '@playdeck/core';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 import { createFakeProvider } from './fixtures/fake-provider';
@@ -30,7 +30,7 @@ afterEach(() => {
   mockedLoadProvider.mockReset();
 });
 
-const PROPERTY = '--reely-media-aspect-ratio';
+const PROPERTY = '--playdeck-media-aspect-ratio';
 
 // A fake provider that also carries the optional dimension channel, and one
 // that deliberately does not — YouTube is the real adapter with no channel,
@@ -55,7 +55,7 @@ const measuringProvider = () => {
 };
 
 const viewport = (): HTMLElement =>
-  document.querySelector<HTMLElement>('[data-reely-part="viewport"]')!;
+  document.querySelector<HTMLElement>('[data-playdeck-part="viewport"]')!;
 
 const ratio = (): string => viewport().style.getPropertyValue(PROPERTY);
 

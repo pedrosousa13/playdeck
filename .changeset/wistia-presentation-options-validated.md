@@ -1,5 +1,5 @@
 ---
-'@reely/provider-wistia': patch
+'@playdeck/provider-wistia': patch
 ---
 
 The Wistia provider now checks `playerColor` and `poster` where it turns an

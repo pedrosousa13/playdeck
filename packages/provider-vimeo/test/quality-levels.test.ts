@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import type { ProviderStatePatch } from '@reely/core';
+import type { ProviderStatePatch } from '@playdeck/core';
 import {
   createVimeoQualityLevels,
   type VimeoQualityPlayer

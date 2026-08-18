@@ -1,13 +1,13 @@
 ---
-'@reely/core': minor
-'@reely/provider-native': minor
-'@reely/provider-hls': minor
-'@reely/provider-youtube': minor
-'@reely/provider-vimeo': minor
-'@reely/react': minor
+'@playdeck/core': minor
+'@playdeck/provider-native': minor
+'@playdeck/provider-hls': minor
+'@playdeck/provider-youtube': minor
+'@playdeck/provider-vimeo': minor
+'@playdeck/react': minor
 ---
 
-First Reely prerelease: composable React 19 media-player primitives with one
+First Playdeck prerelease: composable React 19 media-player primitives with one
 consistent API across native MP4/WebM, HLS (VOD and ordinary live), YouTube and
 Vimeo.
 
@@ -24,7 +24,7 @@ Vimeo.
   activation, transport controls, settings and captions menus, gestures, and
   the `usePlayerState` / `usePlayerActions` / `useActiveCues` hooks. No CSS is
   imported by the primitives.
-- **Captions** — hybrid rendering: Reely draws WebVTT cues itself for
+- **Captions** — hybrid rendering: Playdeck draws WebVTT cues itself for
   native/HLS and Vimeo, the browser draws them on request, and YouTube's embed
   draws its own. The effective mode is always inspectable. Vimeo reports
   `captionRendering: 'custom'`: the track is enabled with `showing: false` and
@@ -66,7 +66,7 @@ Vimeo.
   `unavailable` / `provider` until a route is announced, so
   `Player.AirPlayButton` no longer renders in Safari with no receiver on the
   network and no longer opens an empty picker (#71). The transition is live in
-  both directions, and `@reely/provider-hls` inherits it.
+  both directions, and `@playdeck/provider-hls` inherits it.
 - **Activation** — a queued user play is now always issued after the
   provider's `load()` has run (fixes #86); no API change.
 - **Layout escape hatch** — geometry a primitive sets on itself is a default
@@ -88,7 +88,7 @@ Vimeo.
   Chrome/Edge 99, Firefox 97 and Safari/iOS 15.4. That floor is set by
   `theme.css`'s `@layer`, not by the JavaScript, which needs nothing above
   Safari 14.1 — so a consumer who never imports the optional stylesheet is bound
-  only by the latter. `@reely/react`'s `test/theme.test.ts` freezes the
+  only by the latter. `@playdeck/react`'s `test/theme.test.ts` freezes the
   stylesheet's CSS feature inventory, so a newer feature fails the build instead
   of silently moving the number.
 
@@ -114,7 +114,7 @@ Vimeo.
   late then rendered exactly one transition stale until the next unrelated
   emit (#95). Listener errors are now isolated and rethrown on a fresh task, so
   they still reach uncaught-error handling instead of being swallowed. The
-  throw that surfaced this was Reely's own: Media Session position reporting
+  throw that surfaced this was Playdeck's own: Media Session position reporting
   passed `currentTime` straight through, and WebKit settles it a fraction past
   `duration` at the end of a clip, which the Media Session spec makes a
   `TypeError`. Position is now clamped to the media's own bounds.

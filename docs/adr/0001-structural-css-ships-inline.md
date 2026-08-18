@@ -1,6 +1,6 @@
 # Structural CSS ships inline, not as a stylesheet
 
-Reely could ship the geometry its primitives need — `position`, `inset`,
+Playdeck could ship the geometry its primitives need — `position`, `inset`,
 `z-index`, the media element filling its viewport — as a small `base.css`
 alongside the optional `theme.css`, the way most component libraries do. We set
 it inline on each primitive instead, and reserve stylesheets for appearance.
@@ -18,7 +18,7 @@ why #89 spreads static geometry _before_ `...style`, to keep that escape hatch
 open. A consumer on CSS modules or utility classes cannot restyle geometry with
 CSS at all. Where a structural value is one consumers plausibly want to change
 from a stylesheet, the mitigation is a custom-property default rather than a
-literal: `PosterImage` already reads `object-fit: var(--reely-poster-fit,
+literal: `PosterImage` already reads `object-fit: var(--playdeck-poster-fit,
 cover)`, which resolves through the cascade, so a consumer rule setting that
 token on any ancestor wins without importing anything.
 
@@ -37,7 +37,7 @@ read — is a different question, answered in
   though the primitive reads it with or without the stylesheet.
 - **`theme.css`** — appearance only: colour, radius, typography, spacing, and
   sizing that is an opinion rather than a requirement. It ships inside
-  `@layer reely`, so unlayered consumer CSS beats it.
+  `@layer playdeck`, so unlayered consumer CSS beats it.
 
 ## Consequences
 

@@ -1,4 +1,4 @@
-import { createHlsProvider } from '@reely/provider-hls';
+import { createHlsProvider } from '@playdeck/provider-hls';
 
 declare const videoElement: HTMLVideoElement;
 

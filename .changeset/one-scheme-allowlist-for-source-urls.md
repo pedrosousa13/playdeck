@@ -1,6 +1,6 @@
 ---
-'@reely/core': minor
-'@reely/react': minor
+'@playdeck/core': minor
+'@playdeck/react': minor
 ---
 
 One scheme allowlist now governs every source URL, and it is exported as

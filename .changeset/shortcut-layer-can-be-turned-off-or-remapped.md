@@ -1,5 +1,5 @@
 ---
-'@reely/react': minor
+'@playdeck/react': minor
 ---
 
 `Player.Controls` takes a `shortcuts` prop, and the media shortcut layer it has

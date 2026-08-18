@@ -1,4 +1,4 @@
-import type { CommandResult } from '@reely/core';
+import type { CommandResult } from '@playdeck/core';
 import {
   providerEvent,
   runWistiaCommand,

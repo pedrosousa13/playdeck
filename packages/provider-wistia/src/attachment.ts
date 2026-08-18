@@ -12,7 +12,7 @@ import {
   type PlayerLiveState,
   type ProviderStatePatch,
   type WistiaSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   asRecord,
   errorString,
@@ -69,7 +69,7 @@ export const API_READY_TIMEOUT_MS = 15_000;
 // embed-option notices with no counterpart to the native `progress`.
 //
 // Five seconds, which is half the shared at-edge tolerance in
-// `@reely/core`'s `deriveLiveState`: the published flag is then never more than
+// `@playdeck/core`'s `deriveLiveState`: the published flag is then never more than
 // half a window out of date, and a paused player costs twelve wake-ups a minute
 // doing nothing but arithmetic on two numbers it already has.
 export const LIVE_EDGE_POLL_MS = 5_000;
@@ -381,7 +381,7 @@ export const createWistiaAttachment = (
       setOption('swatch', options.swatch ? 'true' : 'false');
     }
     // This check applies the shared allowlist (`isPermittedSourceUrl`,
-    // `@reely/core`) rather than restating a rule of its own. That allowlist
+    // `@playdeck/core`) rather than restating a rule of its own. That allowlist
     // is the library's rule — the same one source detection and every other
     // consumer-supplied URL prop apply (#219, #236): it permits `http:`,
     // `https:` and the scheme-less forms and refuses `data:` and

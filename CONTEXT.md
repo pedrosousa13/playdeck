@@ -1,4 +1,4 @@
-# Reely
+# Playdeck
 
 A headless video player: React primitives over a framework-agnostic core, with
 provider adapters for native media, HLS, YouTube, Vimeo and Wistia. The
@@ -21,7 +21,7 @@ An exported React component a consumer composes into a player, such as
 _Avoid_: component, widget
 
 **Part**:
-A named element in the rendered DOM, identified by `data-reely-part`. One
+A named element in the rendered DOM, identified by `data-playdeck-part`. One
 primitive may render several — `ErrorDisplay` renders `error`, `error-message`
 and `error-retry` — so a part name is not a primitive's name.
 _Avoid_: element, node, slot
@@ -41,7 +41,7 @@ naming its kind. Distinct from the `<source>` elements the native provider
 renders.
 
 **Shared allowlist**:
-The one rule (`isPermittedSourceUrl` / `resolveNetworkPath`, `@reely/core`)
+The one rule (`isPermittedSourceUrl` / `resolveNetworkPath`, `@playdeck/core`)
 for whether a URL the library did not construct is carried forward: `http:`,
 `https:` and the scheme-less forms are permitted, `blob:` only for a `video`
 source, and everything else is refused. Governs source detection, every
@@ -122,7 +122,7 @@ _Avoid_: autoplay fallback, muted fallback
 ### Adapters
 
 See [ADR-0004](docs/adr/0004-cross-provider-options-live-on-root.md) for what
-makes a setting Reely's own prop rather than a key in one provider's option bag.
+makes a setting Playdeck's own prop rather than a key in one provider's option bag.
 
 **Seam**:
 A part of a provider adapter that exclusively owns one slice of the adapter's

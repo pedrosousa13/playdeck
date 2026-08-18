@@ -1,5 +1,5 @@
-import type { PlayerHandle, RootProps } from '@reely/react';
-import { Root } from '@reely/react';
+import type { PlayerHandle, RootProps } from '@playdeck/react';
+import { Root } from '@playdeck/react';
 import type { StoryContext } from '@storybook/react-vite';
 import { act, cleanup, render } from '@testing-library/react';
 import { createElement, useEffect, type RefObject } from 'react';
@@ -55,7 +55,7 @@ describe('withMockPlayer tag gate', () => {
 /** Never fetched: `Player.Root` commits no source unless something activates it. */
 const source: RootProps['source'] = {
   type: 'video',
-  sources: [{ src: 'mock://reely/video.mp4', mimeType: 'video/mp4' }]
+  sources: [{ src: 'mock://playdeck/video.mp4', mimeType: 'video/mp4' }]
 };
 
 /**

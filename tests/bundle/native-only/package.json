@@ -1,5 +1,5 @@
 {
-  "name": "@reely/bundle-native-only",
+  "name": "@playdeck/bundle-native-only",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
     "test": "node test.mjs"
   },
   "dependencies": {
-    "@reely/react": "workspace:*",
+    "@playdeck/react": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

@@ -19,7 +19,7 @@ let eslint: ESLint;
 
 beforeAll(async () => {
   eslint = new ESLint({ cwd: repoRoot });
-  await lintSpecifier('@reely/react');
+  await lintSpecifier('@playdeck/react');
 }, 60_000);
 
 const lintSpecifier = async (specifier: string): Promise<readonly string[]> => {
@@ -35,8 +35,8 @@ const lintSpecifier = async (specifier: string): Promise<readonly string[]> => {
 };
 
 const accepted = [
-  '@reely/react',
-  '@reely/core',
+  '@playdeck/react',
+  '@playdeck/core',
   'react',
   'react/jsx-runtime',
   '@storybook/react-vite',
@@ -49,10 +49,10 @@ const rejected = [
   '../support',
   '../../.storybook/mock-player',
   '../../../packages/react/theme.css',
-  '@reely/react/src/index',
+  '@playdeck/react/src/index',
   // Composing against a provider package is not composing against the
   // public React surface.
-  '@reely/provider-hls',
+  '@playdeck/provider-hls',
   'hls.js'
 ];
 

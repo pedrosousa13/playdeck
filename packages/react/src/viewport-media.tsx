@@ -1,4 +1,4 @@
-import { type detectSource } from '@reely/core';
+import { type detectSource } from '@playdeck/core';
 import {
   useCallback,
   useEffect,
@@ -58,12 +58,12 @@ const viewportStyle: CSSProperties = {
 };
 
 // The library's one output property, read by the consumer as
-// `aspect-ratio: var(--reely-media-aspect-ratio, 16 / 9)`. That fallback is
+// `aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9)`. That fallback is
 // why an unknown size removes the property rather than writing a zero or a
 // guess: only an absent property lets the consumer's own value apply, and
 // `0 / 0` is not something CSS can use. Every provider that measures nothing
 // usable therefore publishes `undefined` rather than a number pair.
-const MEDIA_ASPECT_RATIO_PROPERTY = '--reely-media-aspect-ratio';
+const MEDIA_ASPECT_RATIO_PROPERTY = '--playdeck-media-aspect-ratio';
 
 export const assignRef = <Value,>(
   ref: Ref<Value> | undefined,
@@ -126,7 +126,7 @@ export const Viewport = ({ children, ref, style, ...rest }: ViewportProps) => {
   return (
     <div
       {...rest}
-      data-reely-part="viewport"
+      data-playdeck-part="viewport"
       ref={mergedRef}
       style={{ ...viewportStyle, ...style }}
     >
@@ -202,10 +202,10 @@ export const Media = ({
 
   if (source.source.type === 'youtube') {
     // A plain mount for the YouTube iframe. The provider chrome inside the
-    // iframe is the single control layer; Reely renders nothing over it.
+    // iframe is the single control layer; Playdeck renders nothing over it.
     return (
       <div
-        data-reely-part="media"
+        data-playdeck-part="media"
         key={sourceKey(source)}
         ref={registerMedia}
         style={{ ...mediaStyle, ...style }}
@@ -215,11 +215,11 @@ export const Media = ({
 
   if (source.source.type === 'vimeo') {
     // A mount for the Vimeo iframe embed. When chromeless controls are
-    // plan-gated, Vimeo's own controls stay the single layer; Reely renders
+    // plan-gated, Vimeo's own controls stay the single layer; Playdeck renders
     // nothing over the embed.
     return (
       <div
-        data-reely-part="media"
+        data-playdeck-part="media"
         key={sourceKey(source)}
         ref={registerMedia}
         style={{ ...mediaStyle, ...style }}
@@ -230,11 +230,11 @@ export const Media = ({
   if (source.source.type === 'wistia') {
     // A mount for the `<wistia-player>` custom element the provider appends
     // into it. Unlike YouTube and Vimeo, the embed is chromeless by default —
-    // the provider switches every Wistia control off by name — so Reely's own
+    // the provider switches every Wistia control off by name — so Playdeck's own
     // controls are the layer, which is what `customControls: available` says.
     return (
       <div
-        data-reely-part="media"
+        data-playdeck-part="media"
         key={sourceKey(source)}
         ref={registerMedia}
         style={{ ...mediaStyle, ...style }}
@@ -277,13 +277,13 @@ export const Media = ({
     <video
       playsInline
       {...passthrough}
-      aria-label={ariaLabel ?? 'Reely media'}
+      aria-label={ariaLabel ?? 'Playdeck media'}
       // `Root`'s own `controls` prop, read as a DOM attribute rather than
       // through the provider-options bag YouTube and Vimeo use: a native
       // `<video>` already has its own chrome toggle, so the value needs no
       // re-attach to change it, only this attribute.
       controls={controls === true}
-      data-reely-part="media"
+      data-playdeck-part="media"
       key={sourceKey(source)}
       // A rejected `nativePoster` omits the attribute entirely -- the same
       // shared allowlist that gates a source URL, applied to this

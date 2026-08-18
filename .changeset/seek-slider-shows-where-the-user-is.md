@@ -1,5 +1,5 @@
 ---
-'@reely/react': patch
+'@playdeck/react': patch
 ---
 
 `SeekSlider` now shows the position the user last asked for until the media

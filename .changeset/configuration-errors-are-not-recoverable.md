@@ -1,6 +1,6 @@
 ---
-'@reely/core': minor
-'@reely/react': minor
+'@playdeck/core': minor
+'@playdeck/react': minor
 ---
 
 Every configuration error now reports `recoverable: false`, and both

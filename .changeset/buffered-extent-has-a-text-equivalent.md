@@ -1,13 +1,13 @@
 ---
-'@reely/react': patch
+'@playdeck/react': patch
 ---
 
 `SeekSlider` now states its buffered extent as text. The buffered geometry is
-drawn by CSS-positioned `[data-reely-part='seek-buffered-range']` elements under
+drawn by CSS-positioned `[data-playdeck-part='seek-buffered-range']` elements under
 an `aria-hidden` wrapper, so how much of the media had loaded was readable off
 the screen and nowhere else: `aria-valuetext` carries the playhead position
 only, and nothing in the DOM carried the rest (WCAG 2.2 AA 1.3.1). A visually
-hidden `[data-reely-part='seek-buffered-description']` now sits beside the
+hidden `[data-playdeck-part='seek-buffered-description']` now sits beside the
 geometry, referenced by the range control's `aria-describedby`, and reads
 `45% loaded`.
 

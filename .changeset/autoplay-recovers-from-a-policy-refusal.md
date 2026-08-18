@@ -1,6 +1,6 @@
 ---
-'@reely/core': minor
-'@reely/react': minor
+'@playdeck/core': minor
+'@playdeck/react': minor
 ---
 
 `AutoplayMode` gains a fourth member, `'audible-then-muted'`, and `PlayerState`

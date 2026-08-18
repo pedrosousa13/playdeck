@@ -5,7 +5,7 @@ import type { PluginOption } from 'vite';
 import { liveHlsFixture } from './live-playlist-plugin';
 
 /**
- * Serves `/__reely__/pending.png` by never responding, so a poster image can
+ * Serves `/__playdeck__/pending.png` by never responding, so a poster image can
  * stay in its `loading` state deterministically without touching the network.
  * Only available on dev servers (`storybook dev`, Vitest browser mode); in a
  * static build the URL 404s and the image falls through to `error`.
@@ -15,12 +15,12 @@ const pendingAssetPlugin = (): PluginOption => {
     // Intentionally never respond and never call next().
   };
   return {
-    name: 'reely-pending-asset',
+    name: 'playdeck-pending-asset',
     configureServer(server) {
-      server.middlewares.use('/__reely__/pending.png', hang);
+      server.middlewares.use('/__playdeck__/pending.png', hang);
     },
     configurePreviewServer(server) {
-      server.middlewares.use('/__reely__/pending.png', hang);
+      server.middlewares.use('/__playdeck__/pending.png', hang);
     }
   };
 };
@@ -55,40 +55,40 @@ const config: StorybookConfig = {
       ...viteConfig.resolve,
       alias: {
         ...viteConfig.resolve?.alias,
-        '@reely/core': fileURLToPath(
+        '@playdeck/core': fileURLToPath(
           new URL('../../../packages/core/src/index.ts', import.meta.url)
         ),
-        '@reely/provider-native': fileURLToPath(
+        '@playdeck/provider-native': fileURLToPath(
           new URL(
             '../../../packages/provider-native/src/index.ts',
             import.meta.url
           )
         ),
-        '@reely/provider-hls': fileURLToPath(
+        '@playdeck/provider-hls': fileURLToPath(
           new URL(
             '../../../packages/provider-hls/src/index.ts',
             import.meta.url
           )
         ),
-        '@reely/provider-youtube': fileURLToPath(
+        '@playdeck/provider-youtube': fileURLToPath(
           new URL(
             '../../../packages/provider-youtube/src/index.ts',
             import.meta.url
           )
         ),
-        '@reely/provider-vimeo': fileURLToPath(
+        '@playdeck/provider-vimeo': fileURLToPath(
           new URL(
             '../../../packages/provider-vimeo/src/index.ts',
             import.meta.url
           )
         ),
-        '@reely/provider-wistia': fileURLToPath(
+        '@playdeck/provider-wistia': fileURLToPath(
           new URL(
             '../../../packages/provider-wistia/src/index.ts',
             import.meta.url
           )
         ),
-        '@reely/react': fileURLToPath(
+        '@playdeck/react': fileURLToPath(
           new URL('../../../packages/react/src/index.tsx', import.meta.url)
         )
       }

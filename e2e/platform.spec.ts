@@ -67,7 +67,7 @@ const environmentExpectation = (page: Page): Promise<PresentationExpectation> =>
     return { fullscreen, pictureInPicture, airPlayCanBeAvailable };
   });
 
-// Simulates a receiver appearing on the network. reely does not check
+// Simulates a receiver appearing on the network. playdeck does not check
 // `isTrusted`, so a synthetic event exercises the same path a real one does —
 // which is what makes the live transition testable in a real engine at all.
 // Hardware verification of the real event still belongs to #30's device

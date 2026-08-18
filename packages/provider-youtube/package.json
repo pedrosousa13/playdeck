@@ -1,7 +1,7 @@
 {
-  "name": "@reely/provider-youtube",
+  "name": "@playdeck/provider-youtube",
   "version": "0.0.0",
-  "description": "YouTube IFrame Player API provider for Reely.",
+  "description": "YouTube IFrame Player API provider for Playdeck.",
   "keywords": [
     "media",
     "player",
@@ -9,14 +9,14 @@
     "youtube"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/provider-youtube#readme",
+  "homepage": "https://github.com/pedrosousa13/playdeck/tree/main/packages/provider-youtube#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "url": "git+https://github.com/pedrosousa13/playdeck.git",
     "directory": "packages/provider-youtube"
   },
   "bugs": {
-    "url": "https://github.com/pedrosousa13/reely/issues"
+    "url": "https://github.com/pedrosousa13/playdeck/issues"
   },
   "type": "module",
   "sideEffects": false,
@@ -43,7 +43,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@reely/core": "workspace:^"
+    "@playdeck/core": "workspace:^"
   },
   "scripts": {
     "build": "vite build && tsc -b",

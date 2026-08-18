@@ -1,22 +1,22 @@
 // @vitest-environment happy-dom
 
 import { expect, expectTypeOf, test, vi } from 'vitest';
-import type { ResolvedPlayerSource } from '@reely/core';
-import type { VimeoProviderOptions } from '@reely/provider-vimeo';
-import type { WistiaProviderOptions } from '@reely/provider-wistia';
-import type { YouTubeProviderOptions } from '@reely/provider-youtube';
+import type { ResolvedPlayerSource } from '@playdeck/core';
+import type { VimeoProviderOptions } from '@playdeck/provider-vimeo';
+import type { WistiaProviderOptions } from '@playdeck/provider-wistia';
+import type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
 import type { PlayerProviderOptions } from '../src/provider-loaders';
 import { loadProvider } from '../src/provider-loaders';
 
-vi.mock('@reely/provider-native', () => ({
+vi.mock('@playdeck/provider-native', () => ({
   createNativeProvider: vi.fn(() => ({ provider: 'native' }))
 }));
 
-vi.mock('@reely/provider-vimeo', () => ({
+vi.mock('@playdeck/provider-vimeo', () => ({
   createVimeoProvider: vi.fn(() => ({ provider: 'vimeo' }))
 }));
 
-vi.mock('@reely/provider-wistia', () => ({
+vi.mock('@playdeck/provider-wistia', () => ({
   createWistiaProvider: vi.fn(() => ({ provider: 'wistia' }))
 }));
 
@@ -62,7 +62,7 @@ test('the per-provider option bags are the shape the CSP document describes', ()
 });
 
 test('dispatches vimeo sources to the vimeo adapter with the mount and source', async () => {
-  const { createVimeoProvider } = await import('@reely/provider-vimeo');
+  const { createVimeoProvider } = await import('@playdeck/provider-vimeo');
   const media = document.createElement('div');
   const source = {
     type: 'vimeo',
@@ -89,7 +89,7 @@ test('rejects vimeo sources without a media mount', async () => {
 });
 
 test('dispatches wistia sources to the wistia adapter with the mount and source', async () => {
-  const { createWistiaProvider } = await import('@reely/provider-wistia');
+  const { createWistiaProvider } = await import('@playdeck/provider-wistia');
   const media = document.createElement('div');
   const source = {
     type: 'wistia',
@@ -105,7 +105,7 @@ test('dispatches wistia sources to the wistia adapter with the mount and source'
 });
 
 test('forwards the wistia option bag to the wistia adapter', async () => {
-  const { createWistiaProvider } = await import('@reely/provider-wistia');
+  const { createWistiaProvider } = await import('@playdeck/provider-wistia');
   const media = document.createElement('div');
   const source = {
     type: 'wistia',

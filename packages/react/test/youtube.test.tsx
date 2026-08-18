@@ -2,19 +2,19 @@
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { createYouTubeProvider } from '@reely/provider-youtube';
+import { createYouTubeProvider } from '@playdeck/provider-youtube';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 
 const harness = vi.hoisted(() => ({
   fakes: [] as Array<{
-    adapter: import('@reely/core').ProviderAdapter;
+    adapter: import('@playdeck/core').ProviderAdapter;
     counts: () => Record<string, number>;
-    emit: (patch: import('@reely/core').ProviderStatePatch) => void;
+    emit: (patch: import('@playdeck/core').ProviderStatePatch) => void;
   }>
 }));
 
-vi.mock('@reely/provider-youtube', async () => {
+vi.mock('@playdeck/provider-youtube', async () => {
   const { createFakeProvider } = await import('./fixtures/fake-provider');
   return {
     createYouTubeProvider: vi.fn(() => {
@@ -51,7 +51,7 @@ test('loads the YouTube adapter lazily against an embed mount', async () => {
   const [mount, videoId] = mockedCreateYouTubeProvider.mock.calls[0]!;
   expect(videoId).toBe('dQw4w9WgXcQ');
   expect(mount).toBeInstanceOf(HTMLDivElement);
-  expect((mount as HTMLElement).dataset.reelyPart).toBe('media');
+  expect((mount as HTMLElement).dataset.playdeckPart).toBe('media');
   expect(document.querySelector('video')).toBeNull();
 });
 
@@ -259,7 +259,7 @@ test('sizes the YouTube embed mount to fill its viewport by default', async () =
     expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
   );
   const mount = document.querySelector<HTMLElement>(
-    '[data-reely-part="media"]'
+    '[data-playdeck-part="media"]'
   )!;
   expect(mount.style.position).toBe('relative');
   expect(mount.style.zIndex).toBe('0');
@@ -280,7 +280,7 @@ test('the loader rejects a YouTube source without an embed mount', async () => {
 
 const emitYouTubeReady = (
   fake: (typeof harness.fakes)[number],
-  overrides: Partial<import('@reely/core').PlayerState> = {}
+  overrides: Partial<import('@playdeck/core').PlayerState> = {}
 ) =>
   act(() => {
     fake.emit({
@@ -383,7 +383,7 @@ test('skips the preference replay when the ready state already matches', async (
   );
 });
 
-test('renders no Reely control layer over a ready YouTube embed', async () => {
+test('renders no Playdeck control layer over a ready YouTube embed', async () => {
   render(
     <Player.Root
       loading="interaction"
@@ -424,19 +424,21 @@ test('renders no Reely control layer over a ready YouTube embed', async () => {
   });
 
   await waitFor(() => {
-    expect(document.querySelector('[data-reely-part="activation"]')).toBeNull();
+    expect(
+      document.querySelector('[data-playdeck-part="activation"]')
+    ).toBeNull();
   });
   // The live region persists (for announcements) but is idle and empty over a
   // ready embed — no active loading layer. Awaited rather than asserted
   // synchronously: the indicator holds a provider load for a 500ms minimum so
   // a fast load does not strobe it (#35), and this embed loads instantly.
   const loadingIndicator = document.querySelector(
-    '[data-reely-part="loading-indicator"]'
+    '[data-playdeck-part="loading-indicator"]'
   );
   await waitFor(
     () => expect(loadingIndicator?.getAttribute('data-state')).toBe('idle'),
     { timeout: 2_000 }
   );
   expect(loadingIndicator?.textContent).toBe('');
-  expect(document.querySelector('[data-reely-part="media"]')).not.toBeNull();
+  expect(document.querySelector('[data-playdeck-part="media"]')).not.toBeNull();
 });

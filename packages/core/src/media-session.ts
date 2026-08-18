@@ -9,7 +9,7 @@ import type { PlayerController } from './player-controller.js';
 // Media Session ownership arbitration.
 //
 // The Media Session API exposes exactly ONE `navigator.mediaSession` per
-// document. When a page hosts several Reely roots they must share that single
+// document. When a page hosts several Playdeck roots they must share that single
 // surface, so a coordinator arbitrates it: the most-recently-*playing* root
 // owns the metadata and action handlers. A root releases ownership when another
 // root starts playing, on teardown, or on unmount — and it NEVER clears
@@ -26,7 +26,7 @@ export type MediaSessionArtwork = {
   readonly type?: string;
 };
 
-// Explicit metadata supplied by the consumer. Reely never scrapes this from the
+// Explicit metadata supplied by the consumer. Playdeck never scrapes this from the
 // media source; a caller passes exactly what the lock screen should show.
 export type MediaMetadataInput = {
   readonly title?: string;

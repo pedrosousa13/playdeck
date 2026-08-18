@@ -16,7 +16,7 @@ import {
   type ProviderAdapter,
   type ProviderStateListener,
   type ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import * as Player from '../src/index';
 
 const ok = async (): Promise<CommandResult> => ({ ok: true });
@@ -104,13 +104,13 @@ afterEach(() => {
 describe('ErrorDisplay', () => {
   test('renders nothing when there is no error', () => {
     const { container } = renderWithPlayer(<Player.ErrorDisplay />);
-    expect(container.querySelector('[data-reely-part="error"]')).toBeNull();
+    expect(container.querySelector('[data-playdeck-part="error"]')).toBeNull();
   });
 
   test('renders the error message and category from PlayerState.error', () => {
     renderWithPlayer(<Player.ErrorDisplay />, errorState(recoverable));
     const surface = screen.getByRole('alert');
-    expect(attr(surface, 'data-reely-part')).toBe('error');
+    expect(attr(surface, 'data-playdeck-part')).toBe('error');
     expect(attr(surface, 'data-state')).toBe('network');
     expect(attr(surface, 'data-provider')).toBe('native');
     expect(surface.textContent).toContain('The network connection was lost.');

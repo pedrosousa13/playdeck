@@ -5,7 +5,7 @@ Audit, 2026-08-05.
 https://linear.app/side-projects-p/issue/SIDEPRO-222/audit-seekslider-and-time-against-what-a-full-control-bar-needs
 
 > **Correction, recorded because it matters.** This audit exists because a
-> design session claimed twice that Reely has no seek-bar or time-display
+> design session claimed twice that Playdeck has no seek-bar or time-display
 > primitive. Both claims were wrong. `Player.SeekSlider` and `Player.Time`
 > have existed since commit `a4a16c0` (2026-07-23), in
 > `packages/react/src/transport-controls.tsx:167` and `:246`. The error was
@@ -14,7 +14,7 @@ https://linear.app/side-projects-p/issue/SIDEPRO-222/audit-seekslider-and-time-a
 > artifact for these two primitives. Everything below assumes both
 > primitives exist, because they do.
 
-Reely ships `SeekSlider` and `Time`, and a reference composition already
+Playdeck ships `SeekSlider` and `Time`, and a reference composition already
 places them beside every other control
 (`apps/storybook/stories/reference/reference-player.tsx:409-455`). This audit
 reports what that composition covers, what `SeekSlider` and `Time` do on
@@ -56,7 +56,7 @@ repository.
   buffered-range parts (`packages/react/src/transport-controls.tsx:200-215`)
   carry only `position`, `left`, and `width` inline. `reference-player.tsx`'s
   `layoutCss` has no rule for either `seek-buffered` or `seek-buffered-range`
-  — its only two `data-reely-part` selectors target `time` and the menu
+  — its only two `data-playdeck-part` selectors target `time` and the menu
   items (`reference-player.tsx:89,121-122`). The styling for these parts
   exists only in `packages/react/theme.css:223-239`, which the reference
   deliberately does not import (`reference-player.tsx:16-19`). A viewer of
@@ -79,18 +79,18 @@ repository.
   already caused: a selector at specificity `(0,1,0)` lost to menu-item
   styling at `(0,2,0)`, leaving a duplicate entry visible at 768px.
 - **The volume slider is dropped, not folded, below 420px.**
-  `.reely-example-volume { display: none }` (`reference-player.tsx:189-191`)
+  `.playdeck-example-volume { display: none }` (`reference-player.tsx:189-191`)
   removes fine-grained volume control on a narrow player, leaving only mute.
 
 None of this argues for a different extension mechanism. Every gap above is
 a missing style, a missing default, or a missing documented pattern, inside
 the constraint `.out-of-scope/as-child.md` states: primitives render fixed
-elements, and children plus `data-reely-part`/`style` are the only extension
+elements, and children plus `data-playdeck-part`/`style` are the only extension
 points.
 
 ### Library CSS versus story-local CSS, quantified
 
-`@reely/react` contributes one inline style object to this bar:
+`@playdeck/react` contributes one inline style object to this bar:
 `{ minWidth: 44, minHeight: 44 }`, reused across `PlayButton`, `MuteButton`,
 and `VolumeSlider` (`packages/react/src/loading-error.tsx:301-304`), plus the
 equivalent `minHeight: 44` inline on `SeekSlider`'s wrapper and input
@@ -251,7 +251,7 @@ its controller-constructed initial value of `null`
 (`packages/core/src/player-controller.ts:62`) for the life of the session,
 live broadcast or not.
 
-Reely has no first-class notion of live or DVR seeking in its React
+Playdeck has no first-class notion of live or DVR seeking in its React
 primitives today. What exists is an incidental range-computation fallback,
 plus one adapter's optional signal that nothing downstream reads.
 
@@ -269,8 +269,8 @@ and `c`. It acts only when focus sits outside the slider.
 | `ArrowRight`/`ArrowLeft`, off the slider | ±5s seek                                    | `Controls` shortcut (`controls.tsx:113-122`)      |
 | `j`/`l`                                  | ∓10s / +10s seek                            | `Controls` shortcut (`controls.tsx:123-134`)      |
 | `ArrowRight`/`ArrowLeft`, on the slider  | ±1s (the input's `step`)                    | native range input (`transport-controls.tsx:218`) |
-| `Home`/`End`                             | jump to min/max of the seek window          | native range input, no Reely code                 |
-| `PageUp`/`PageDown`                      | an unspecified, engine-dependent "big step" | native range input, no Reely code                 |
+| `Home`/`End`                             | jump to min/max of the seek window          | native range input, no Playdeck code              |
+| `PageUp`/`PageDown`                      | an unspecified, engine-dependent "big step" | native range input, no Playdeck code              |
 | Space/`k`                                | play/pause toggle                           | `Controls` shortcut (`controls.tsx:104-112`)      |
 | `↑`/`↓`, off the slider                  | volume ±0.05                                | `Controls` shortcut (`controls.tsx:135-147`)      |
 | `↑`/`↓`, on a focused `VolumeSlider`     | ±0.05 (native `step`)                       | native range input (`transport-controls.tsx:130`) |
@@ -291,7 +291,7 @@ invisible for volume, because both steps happen to equal `0.05`.
 **What SIDEPRO-225 still needs to add, per this audit:**
 
 - A large-jump key for the seek slider. `PageUp`/`PageDown` today are
-  whatever the browser does, unowned by any Reely code.
+  whatever the browser does, unowned by any Playdeck code.
 - A stated relationship between the two seek granularities, 5s off the
   slider versus 1s on it, rather than an emergent side effect of two
   independent defaults.
@@ -304,7 +304,7 @@ invisible for volume, because both steps happen to equal `0.05`.
   Opting into `global` (`controls.tsx:42-49,192-198`, exercised by
   `controls.test.tsx:784-791`) attaches the same single-character shortcuts
   to `document`, active regardless of focus anywhere on the page. That
-  satisfies none of 2.1.4's three exceptions, and Reely ships no remap or
+  satisfies none of 2.1.4's three exceptions, and Playdeck ships no remap or
   turn-off alongside it.
 
 ## 7. Accessibility against WCAG 2.2 AA
@@ -346,7 +346,7 @@ pointer required (`transport-controls.tsx:167-240`). `Time` is a static
 
 ### 2.4.7 Focus Visible
 
-Passes. A generic rule targets every `[data-reely-part]` element with
+Passes. A generic rule targets every `[data-playdeck-part]` element with
 `:focus-visible`, setting a 2px white outline (`theme.css:199-202`),
 contrasting at roughly 21:1 against the default black backdrop. The rule is
 opt-in: the reference example does not import `theme.css`
@@ -370,16 +370,16 @@ color from the surrounding theme (`theme.css:151`), a composition concern.
 Non-text contrast fails for the seek slider's unfilled track, on the shipped
 default. `seek-buffered` is the visual track under the transparent-background
 native input (`theme.css:251-260`). Its default color,
-`--reely-color-track: rgb(255 255 255 / 0.3)` (`theme.css:230`), composites
+`--playdeck-color-track: rgb(255 255 255 / 0.3)` (`theme.css:230`), composites
 against the default `#000` backdrop (`theme.css:28,78`) to roughly 2.49:1,
 below the 3:1 floor 1.4.11 sets for a UI component's boundary. This is not
 exempt as user-agent-styled chrome: the shipped theme draws this element
 with an explicit author color.
 
 Everything else on the slider passes. The buffered range itself,
-`--reely-color-buffered: rgb(255 255 255 / 0.5)` (`theme.css:238`), composites
+`--playdeck-color-buffered: rgb(255 255 255 / 0.5)` (`theme.css:238`), composites
 to roughly 5.3:1. The accent color used for the thumb,
-`--reely-color-accent: #3ea6ff` (`theme.css:257`), contrasts at roughly
+`--playdeck-color-accent: #3ea6ff` (`theme.css:257`), contrasts at roughly
 8.1:1. `VolumeSlider`'s unfilled track carries no separately-colored element
 (`theme.css:251-260`), so whatever groove is visible is genuinely
 browser-drawn chrome, exempt under 1.4.11.

@@ -18,12 +18,12 @@ import { playButton } from './locators';
 // adapters. Run this by hand when either adapter changes.
 //
 // Tagged @real: nondeterministic, excluded from blocking runs. Run with
-//   REELY_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
+//   PLAYDECK_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
 
 type Range = { readonly start: number; readonly end: number };
 
 const buffered = (page: Page): Promise<readonly Range[]> =>
-  page.evaluate(() => window.reelyHandle?.getState().buffered ?? []);
+  page.evaluate(() => window.playdeckHandle?.getState().buffered ?? []);
 
 const startPlayback = async (page: Page, story: string): Promise<void> => {
   await page.goto(`/iframe.html?id=${story}&viewMode=story`);
@@ -33,10 +33,10 @@ const startPlayback = async (page: Page, story: string): Promise<void> => {
   });
   await activation.waitFor();
   await activation.click();
-  await page.evaluate(() => window.reelyHandle?.whenReady());
+  await page.evaluate(() => window.playdeckHandle?.whenReady());
   await page.evaluate(async () => {
-    await window.reelyHandle?.mute();
-    await window.reelyHandle?.play();
+    await window.playdeckHandle?.mute();
+    await window.playdeckHandle?.play();
   });
   await expect(playButton(page)).toHaveAttribute('data-state', 'playing', {
     timeout: 60_000
@@ -47,9 +47,9 @@ const startPlayback = async (page: Page, story: string): Promise<void> => {
 // fabricated one: it leaves a hole no honest reporter paints over.
 const seekAhead = async (page: Page): Promise<number> =>
   page.evaluate(async () => {
-    const duration = window.reelyHandle?.getState().duration ?? 0;
+    const duration = window.playdeckHandle?.getState().duration ?? 0;
     const target = duration * 0.7;
-    await window.reelyHandle?.seekTo(target);
+    await window.playdeckHandle?.seekTo(target);
     return target;
   });
 
@@ -88,14 +88,16 @@ test(
     await expect
       .poll(
         () =>
-          page.evaluate(() => window.reelyHandle?.getState().currentTime ?? 0),
+          page.evaluate(
+            () => window.playdeckHandle?.getState().currentTime ?? 0
+          ),
         { timeout: 30_000 }
       )
       .toBeGreaterThan(entered!.start + 3);
 
     const [held] = await buffered(page);
     const currentTime = await page.evaluate(
-      () => window.reelyHandle?.getState().currentTime ?? 0
+      () => window.playdeckHandle?.getState().currentTime ?? 0
     );
     expect(held!.start).toBeCloseTo(entered!.start, 1);
     expect(held!.end).toBeGreaterThan(currentTime);
@@ -135,7 +137,7 @@ test(
 
     const ranges = await buffered(page);
     const duration = await page.evaluate(
-      () => window.reelyHandle?.getState().duration ?? 0
+      () => window.playdeckHandle?.getState().duration ?? 0
     );
     ranges.forEach((range) => {
       expect(range.end).toBeGreaterThan(range.start);

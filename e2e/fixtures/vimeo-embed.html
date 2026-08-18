@@ -60,13 +60,13 @@
         // Every message the parent sends, in arrival order, for a spec to read
         // with `frame.evaluate`. `vimeo-seo-metadata.spec.ts` asserts on the
         // `appendVideoMetadata` the SDK sends here unasked.
-        window.reelyEmbedMessages = [];
+        window.playdeckEmbedMessages = [];
         window.addEventListener('message', (messageEvent) => {
           const data =
             typeof messageEvent.data === 'string'
               ? JSON.parse(messageEvent.data)
               : messageEvent.data;
-          window.reelyEmbedMessages.push(data);
+          window.playdeckEmbedMessages.push(data);
           if (!data || typeof data.method !== 'string') return;
           const method = data.method;
           const value = data.value;

@@ -44,7 +44,7 @@ export const Gestures = ({
   return (
     <div
       {...props}
-      data-reely-part="gestures"
+      data-playdeck-part="gestures"
       onPointerUp={(event) => {
         onPointerUp?.(event);
         if (event.defaultPrevented) return;

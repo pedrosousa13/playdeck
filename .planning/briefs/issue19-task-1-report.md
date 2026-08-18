@@ -32,7 +32,7 @@ allowBuilds:
 
 Rationale (per controller): esbuild's platform binary ships as an optional dependency (e.g. `@esbuild/darwin-arm64`); its postinstall only replaces a JS shim with the prebuilt binary for startup speed, so declining the build script is safe — esbuild still works, just via the (slightly slower) JS fallback path if the platform binary isn't otherwise present.
 
-After adding `esbuild: false`, `pnpm install` exited 0 with no build-script warnings. `pnpm --filter @reely/storybook build` (the storybook production build, which runs Vite/esbuild under the hood) succeeded and produced `apps/storybook/storybook-static/` — this is direct proof esbuild functions correctly without its postinstall build step, confirming the rationale. The `storybook build` was re-run again after later fixes (see below) and still succeeded cleanly.
+After adding `esbuild: false`, `pnpm install` exited 0 with no build-script warnings. `pnpm --filter @playdeck/storybook build` (the storybook production build, which runs Vite/esbuild under the hood) succeeded and produced `apps/storybook/storybook-static/` — this is direct proof esbuild functions correctly without its postinstall build step, confirming the rationale. The `storybook build` was re-run again after later fixes (see below) and still succeeded cleanly.
 
 ## Deviation from the brief: `paths` entry in `apps/storybook/tsconfig.json`
 
@@ -44,7 +44,7 @@ packages/react/src/poster.stories.tsx(1,37): error TS2307: Cannot find module '@
 
 **Root cause (diagnosed with `tsc --traceResolution`):** `poster.stories.tsx` is physically located inside `packages/react/src/`, but `@storybook/react-vite` is a `devDependency` only of `apps/storybook`. pnpm's non-hoisted (per-package) `node_modules` layout means `@storybook/react-vite` is only symlinked into `apps/storybook/node_modules/`, not into any ancestor directory of `packages/react/src/poster.stories.tsx` (`packages/react/node_modules`, `packages/node_modules`, and root `node_modules` all lack it — confirmed with `ls`).
 
-By contrast, the brief's own `import * as Player from '@reely/react'` in the same file resolves fine, but for a different, non-obvious reason: TypeScript's `bundler` resolution mode implements Node's **package self-reference** feature — climbing from the importing file to the nearest ancestor `package.json` whose `name` matches the specifier. `packages/react/package.json` is named `@reely/react`, so the self-reference resolves via its own `exports` map to `packages/react/dist/index.d.ts`, with no `node_modules` lookup at all. This mechanism only applies when the specifier equals the enclosing package's own name — it does not help `@storybook/react-vite`, which is a genuinely external dependency of a sibling app.
+By contrast, the brief's own `import * as Player from '@playdeck/react'` in the same file resolves fine, but for a different, non-obvious reason: TypeScript's `bundler` resolution mode implements Node's **package self-reference** feature — climbing from the importing file to the nearest ancestor `package.json` whose `name` matches the specifier. `packages/react/package.json` is named `@playdeck/react`, so the self-reference resolves via its own `exports` map to `packages/react/dist/index.d.ts`, with no `node_modules` lookup at all. This mechanism only applies when the specifier equals the enclosing package's own name — it does not help `@storybook/react-vite`, which is a genuinely external dependency of a sibling app.
 
 This means the brief's inline comment ("Stories … are type-checked by THIS project") does not hold as written for `@storybook/react-vite` imports under pnpm's default (non-hoisted) `node_modules`.
 
@@ -69,8 +69,8 @@ No `baseUrl` was needed (TypeScript 4.1+ resolves `paths` relative to the tsconf
 | #   | Command                                                              | Exit | Notes                                                                                                                                                                          |
 | --- | -------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1   | `pnpm install` (1st attempt)                                         | 1    | `ERR_PNPM_IGNORED_BUILDS: esbuild@0.28.1` — reported BLOCKED, awaited reviewed decision.                                                                                       |
-| 2   | `pnpm install` (2nd, after adding `esbuild: false` to `allowBuilds`) | 0    | No build-script warnings. Lockfile updated with new dev-dependency tree for `@reely/storybook`.                                                                                |
-| 3   | `pnpm --filter @reely/storybook build`                               | 0    | Emits `apps/storybook/storybook-static/`; confirms esbuild works without its postinstall.                                                                                      |
+| 2   | `pnpm install` (2nd, after adding `esbuild: false` to `allowBuilds`) | 0    | No build-script warnings. Lockfile updated with new dev-dependency tree for `@playdeck/storybook`.                                                                             |
+| 3   | `pnpm --filter @playdeck/storybook build`                            | 0    | Emits `apps/storybook/storybook-static/`; confirms esbuild works without its postinstall.                                                                                      |
 | 4   | `pnpm format`                                                        | 0    | No files rewritten (all already Prettier-formatted).                                                                                                                           |
 | 5   | `pnpm format:check`                                                  | 0    | "All matched files use Prettier code style!"                                                                                                                                   |
 | 6   | `pnpm lint`                                                          | 0    | No output — no violations.                                                                                                                                                     |
@@ -92,7 +92,7 @@ No `baseUrl` was needed (TypeScript 4.1+ resolves `paths` relative to the tsconf
 - `.gitignore` (modified — `storybook-static/` added)
 - `eslint.config.js` (modified — ignore pattern added)
 - `pnpm-workspace.yaml` (modified — `esbuild: false` added to `allowBuilds`; `sharp@0.34.5: true` unchanged)
-- `pnpm-lock.yaml` (modified — new dev-dependency entries resolved for `@reely/storybook`)
+- `pnpm-lock.yaml` (modified — new dev-dependency entries resolved for `@playdeck/storybook`)
 
 Commit: `4334ae7` — `feat: scaffold Storybook 10.5.3 workspace app with source aliases`
 

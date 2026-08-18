@@ -1,5 +1,5 @@
-import * as Player from '@reely/react';
-import type { PlayerError, ProviderStatePatch } from '@reely/core';
+import * as Player from '@playdeck/react';
+import type { PlayerError, ProviderStatePatch } from '@playdeck/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 
@@ -44,14 +44,14 @@ const meta = {
         component: [
           '`Player.ErrorDisplay` renders `PlayerState.error` with an accessible, capability-aware retry action. It renders nothing when `error` is `null`.',
           '',
-          '**Contract** — `role="alert"`, `data-reely-part="error"`, `data-state` (the error category), `data-provider`; `className`/`style`/`ref` pass through.',
+          '**Contract** — `role="alert"`, `data-playdeck-part="error"`, `data-state` (the error category), `data-provider`; `className`/`style`/`ref` pass through.',
           '',
           '**Capability-aware retry** — the retry action is present only when `error.recoverable` is `true`; it is absent (never disabled-but-visible) otherwise.',
           '',
           '**Custom rendering** — pass a render-prop child `({ error, retry }) => …`; `retry` is `null` when the error is not recoverable.',
           '',
           '```tsx',
-          'import * as Player from "@reely/react";',
+          'import * as Player from "@playdeck/react";',
           '',
           '<Player.Viewport>',
           '  <Player.Media />',
@@ -91,7 +91,7 @@ export const Retryable: Story = {
   parameters: { player: { state: errorState(network) } },
   play: async ({ canvas, userEvent }) => {
     const surface = await canvas.findByRole('alert');
-    await expect(surface).toHaveAttribute('data-reely-part', 'error');
+    await expect(surface).toHaveAttribute('data-playdeck-part', 'error');
     await expect(surface).toHaveAttribute('data-state', 'network');
     const retry = canvas.getByRole('button', { name: 'Retry' });
     await userEvent.click(retry);

@@ -1,10 +1,10 @@
 # Declared browser support floor, container-query reference example (#18)
 
-**Issue:** #18 (parent #1). Its acceptance criteria include "release notes list verified platforms and known limitations" — currently unwritable, because nothing in the repo states what Reely supports.
+**Issue:** #18 (parent #1). Its acceptance criteria include "release notes list verified platforms and known limitations" — currently unwritable, because nothing in the repo states what Playdeck supports.
 
 ## Goal
 
-Three things, found by asking whether Reely already ships modern CSS:
+Three things, found by asking whether Playdeck already ships modern CSS:
 
 1. **No declared support floor.** No `browserslist`, no `engines`, no prose. The release notes criterion cannot be met, and nothing stops a contributor raising the floor by accident.
 2. **The reference example's responsive rule is viewport-based** (`apps/storybook/stories/reference/reference-player.tsx:144`, `@media (max-width: 420px)`). A player's control row depends on the _player's_ width; embed a 320 px player in a wide page and the breakpoint never fires.
@@ -19,15 +19,15 @@ Taken from MDN's `browser-compat-data` at authoring time, not from memory:
 | `@layer`               | 99            | 97      | 15.4         | `theme.css` — **the binding constraint** |
 | `accent-color`         | 93            | 92      | 15.4         | `theme.css`                              |
 | `:where()`             | 88            | 78      | 14           | `theme.css`, 39 selectors                |
-| `IntersectionObserver` | 51            | 55      | 12.1         | `@reely/react` activation                |
-| private class fields   | 74            | 90      | 14.1         | `@reely/core` built output               |
-| `\|\|=`                | 85            | 79      | 14           | `@reely/core` built output               |
+| `IntersectionObserver` | 51            | 55      | 12.1         | `@playdeck/react` activation             |
+| private class fields   | 74            | 90      | 14.1         | `@playdeck/core` built output            |
+| `\|\|=`                | 85            | 79      | 14           | `@playdeck/core` built output            |
 
 **Chrome/Edge 99 · Firefox 97 · Safari and iOS Safari 15.4.**
 
 Two things are worth stating in the docs because they are counterintuitive. First, **CSS decides the floor, not JavaScript**: the built JS needs nothing newer than Safari 14.1, so a consumer who never imports `theme.css` is bound only by that. Second, `env()`, `forced-colors` and `prefers-reduced-motion` do **not** raise the floor even where support is later, because a media query that never matches simply does not apply — they are progressive enhancement, not requirements.
 
-`@reely/react` also declares `react` and `react-dom` `>=19 <20` as peers, which is a separate constraint and already stated.
+`@playdeck/react` also declares `react` and `react-dom` `>=19 <20` as peers, which is a separate constraint and already stated.
 
 ## 1. Declaration
 
@@ -62,9 +62,9 @@ Gating the **inventory** rather than a feature-to-version mapping is what keeps 
 
 ## 3. Container queries in the reference example
 
-`.reely-example` becomes a container (`container-type: inline-size`), and **one** rule moves from `@media (max-width: 420px)` to `@container (max-width: 420px)`: `.reely-example-volume { display: none }`.
+`.playdeck-example` becomes a container (`container-type: inline-size`), and **one** rule moves from `@media (max-width: 420px)` to `@container (max-width: 420px)`: `.playdeck-example-volume { display: none }`.
 
-The other three rules in that block stay on the viewport query, and the reason is a coupling worth stating rather than discovering later. `.reely-example { aspect-ratio: auto }` and its `:has(.reely-example-controls[hidden])` variant style the container **itself**, which cannot query itself. `.reely-example-controls { position: relative }` looks like a child rule, but the comment above it records that it is paired with `aspect-ratio: auto`: below the breakpoint the control row stops being an overlay and takes part in normal flow, which only works because the box has given up its fixed ratio. Driving those two from different queries lets them disagree — a narrow player inside a wide viewport would put the row in flow inside a box still locked to 16:9, which is the clipping #32 already measured at 35 px of lost controls.
+The other three rules in that block stay on the viewport query, and the reason is a coupling worth stating rather than discovering later. `.playdeck-example { aspect-ratio: auto }` and its `:has(.playdeck-example-controls[hidden])` variant style the container **itself**, which cannot query itself. `.playdeck-example-controls { position: relative }` looks like a child rule, but the comment above it records that it is paired with `aspect-ratio: auto`: below the breakpoint the control row stops being an overlay and takes part in normal flow, which only works because the box has given up its fixed ratio. Driving those two from different queries lets them disagree — a narrow player inside a wide viewport would put the row in flow inside a box still locked to 16:9, which is the clipping #32 already measured at 35 px of lost controls.
 
 So the split is narrower than "control-row rules move", and it is the correct decomposition: **which controls fit** is a question about the player's own width; **how the box lays out in the page, and whether its row is an overlay** is a question about the page. Only the first moves.
 

@@ -1,5 +1,5 @@
 ---
-'@reely/provider-youtube': minor
+'@playdeck/provider-youtube': minor
 ---
 
 The YouTube iframe API load now settles within a bounded time in every case,
@@ -41,7 +41,7 @@ deadline, so the outcome is a bounded rejection rather than a hang.
 loaders — for tests that need a clean load, not for app code.
 
 `minor`, because the package gains public module exports. Under 0.x this repo
-sends a package that grows its export surface on `minor` — `@reely/core` took
+sends a package that grows its export surface on `minor` — `@playdeck/core` took
 `minor` for gaining `deriveLiveState` while the providers that merely consumed
 it took `patch` — and `API_READY_TIMEOUT_MS` and `resetYouTubeIframeApiLoader`
 are two such exports. The behaviour change rides along and is not itself

@@ -6,7 +6,7 @@ import {
   type PlayerCapabilities,
   type PlayerError,
   type VimeoSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   asRecord,
   errorString,

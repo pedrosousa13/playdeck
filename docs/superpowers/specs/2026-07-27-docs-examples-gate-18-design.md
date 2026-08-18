@@ -27,7 +27,7 @@ Real `.ts`/`.tsx` files at the repo root, one per doc section, named by doc slug
 
 `examples/tsconfig.json` is a new project referenced from the root `tsconfig.json` — the same shape #109 gave `scripts/` and `tests/`, so `pnpm typecheck` picks the fixtures up with no second command to remember and no CI job to add.
 
-`@reely/*` resolves to `packages/*/dist/index.d.ts` through `paths`, with a project `reference` to each package — exactly what `e2e/tsconfig.json` does. `pnpm typecheck` is `tsc -b`, and every package tsconfig is `composite` + `emitDeclarationOnly`, so the build mode emits those declarations before the examples project is checked. No build step to add, and the fixtures are checked against **the type surface a consumer installs**, not against source. That is the whole point for a docs example: an example that only compiles against `src` can still be wrong for the person who ran `pnpm add @reely/core`.
+`@playdeck/*` resolves to `packages/*/dist/index.d.ts` through `paths`, with a project `reference` to each package — exactly what `e2e/tsconfig.json` does. `pnpm typecheck` is `tsc -b`, and every package tsconfig is `composite` + `emitDeclarationOnly`, so the build mode emits those declarations before the examples project is checked. No build step to add, and the fixtures are checked against **the type surface a consumer installs**, not against source. That is the whole point for a docs example: an example that only compiles against `src` can still be wrong for the person who ran `pnpm add @playdeck/core`.
 
 Fixtures are self-contained: every identifier they use is declared in the file. That is the point of the exercise, not an inconvenience of it.
 

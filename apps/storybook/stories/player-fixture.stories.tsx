@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
 declare global {
   interface Window {
-    reelyHandle?: Player.PlayerHandle;
+    playdeckHandle?: Player.PlayerHandle;
   }
 }
 
@@ -292,8 +292,8 @@ const PlayerFixture = ({
         defaultMuted={defaultMuted}
         loading={loading}
         mediaMetadata={{
-          title: 'Reely tracer',
-          artist: 'Reely',
+          title: 'Playdeck tracer',
+          artist: 'Playdeck',
           artwork: [
             { src: '/poster.svg', sizes: '1280x720', type: 'image/svg+xml' }
           ]
@@ -312,7 +312,7 @@ const PlayerFixture = ({
             : undefined
         }
         ref={(handle) => {
-          window.reelyHandle = handle ?? undefined;
+          window.playdeckHandle = handle ?? undefined;
         }}
         source={source}
       >
@@ -423,7 +423,7 @@ const meta: Meta<PlayerFixtureProps> = {
     docs: {
       description: {
         component:
-          'Reproduces the original `PlayerFixture` e2e contract as one named Storybook story per scenario: same testids, same `data-*` state attributes, same `window.reelyHandle`, and the same source-selection branching, driven by static story args instead of URL query parameters. Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`).'
+          'Reproduces the original `PlayerFixture` e2e contract as one named Storybook story per scenario: same testids, same `data-*` state attributes, same `window.playdeckHandle`, and the same source-selection branching, driven by static story args instead of URL query parameters. Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`).'
       }
     }
   },

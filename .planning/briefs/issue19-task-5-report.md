@@ -14,7 +14,7 @@ verifying each "reality" note against the actual code before writing:
    (Vite plugin, used by `pnpm test:storybook` since the Vitest addon builds
    its own Vite server) and `apps/storybook/.storybook/middleware.js`
    (Storybook's own dev-server middleware hook, used by `storybook dev`)
-   both serve `/__reely/hang.png` and never respond. Added a convention bullet
+   both serve `/__playdeck/hang.png` and never respond. Added a convention bullet
    naming both mechanisms and flagging the path as duplicated across three
    places (stories, plugin, middleware) that must stay in sync.
 2. **Shared workbench chrome.** Verified `viewportStyle` in all three story
@@ -29,7 +29,7 @@ verifying each "reality" note against the actual code before writing:
    outdated `[{ buffering: true }]`-only example.
 4. **rootProps re-declaration.** Verified every story needing non-default
    `rootProps` (in `activation.stories.tsx` and `loading-indicator.stories.tsx`)
-   repeats the full `rootProps` object in its own `parameters.reely` rather
+   repeats the full `rootProps` object in its own `parameters.playdeck` rather
    than relying on `meta.parameters` + story-level deep-merge. Added a
    one-line convention noting this is safer given Storybook's parameter
    merge semantics.

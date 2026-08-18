@@ -9,7 +9,7 @@ import {
   type ProviderEvent,
   type ProviderStateListener,
   type VimeoSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   available,
   providerEvent,
@@ -76,7 +76,7 @@ export type VimeoProviderOptions = {
    *
    * **The effect is page-wide, not per-embed.** The SDK's own opt-out is a
    * `window` global, so switching this on silences that handshake for every
-   * Vimeo embed on the page, including embeds Reely did not create.
+   * Vimeo embed on the page, including embeds Playdeck did not create.
    *
    * **It takes effect on the first Vimeo attach and holds for the life of the
    * page.** The SDK module is imported once and cached, and it reads the guard
@@ -85,7 +85,7 @@ export type VimeoProviderOptions = {
    * not another leaves the first attach in charge.
    *
    * A page that has already set the guard itself keeps its own value, in
-   * either direction — Reely never overwrites it.
+   * either direction — Playdeck never overwrites it.
    */
   readonly suppressSeoMetadata?: boolean;
 };
@@ -256,7 +256,7 @@ export const createVimeoProvider = (
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       // The SDK exposes remote-playback methods, but this adapter wires no
-      // command surface for them yet, so they are unavailable through Reely
+      // command surface for them yet, so they are unavailable through Playdeck
       // rather than forever "unknown".
       airPlay: { status: 'unavailable', reason: 'provider' },
       customControls: chromeless.customControlsAvailability()

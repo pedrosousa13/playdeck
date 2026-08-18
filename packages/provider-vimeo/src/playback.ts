@@ -4,7 +4,7 @@ import type {
   ProviderAdapter,
   ProviderStatePatch,
   TimeRange
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   available,
   numberField,

@@ -16,7 +16,7 @@ export type VimeoSdkQuality = {
 
 // What the SDK reports for a chapter: where it begins, what it is called, and
 // its 1-based position. No end time — the library derives that (`Chapter` in
-// `@reely/core`), which is why `index` is not published: the position in the
+// `@playdeck/core`), which is why `index` is not published: the position in the
 // derived collection already carries it.
 export type VimeoSdkChapter = {
   readonly startTime: number;
@@ -61,7 +61,7 @@ export type VimeoSdkPlayer = {
   getChapters: () => Promise<ReadonlyArray<VimeoSdkChapter>>;
   getTextTracks: () => Promise<ReadonlyArray<VimeoSdkTextTrack>>;
   // `showing: false` makes Vimeo fire `cuechange` without drawing the cues
-  // with its own in-iframe renderer, which is what lets Reely own caption
+  // with its own in-iframe renderer, which is what lets Playdeck own caption
   // rendering. Verified against the real chromeless embed: with `false` the
   // paused frame is pixel-identical to having no track enabled.
   enableTextTrack: (
@@ -101,7 +101,7 @@ const SEO_METADATA_GUARD = 'VimeoSeoMetadataAppended';
 
 // Suppression is one-way: this switches the guard on, and never off. A page
 // that already carries the global — set by consumer code, or by another copy
-// of the SDK — keeps whatever value it has, in either direction, so Reely
+// of the SDK — keeps whatever value it has, in either direction, so Playdeck
 // cannot undo a suppression somebody else asked for or force one they refused.
 const suppressSeoMetadata = (): void => {
   const globals = window as unknown as Record<string, unknown>;

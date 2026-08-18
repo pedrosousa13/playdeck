@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { expect, test, vi } from 'vitest';
-import type { ProviderEvent } from '@reely/core';
+import type { ProviderEvent } from '@playdeck/core';
 import { createNativeProvider } from '../src/index';
 
 const define = (target: object, key: string, value: unknown): void => {

@@ -6,7 +6,7 @@ Read-only task. Do not edit files, create commits, or change GitHub state.
 
 Read:
 
-- GitHub issue #7 via `gh issue view 7 --repo pedrosousa13/reely`
+- GitHub issue #7 via `gh issue view 7 --repo pedrosousa13/playdeck`
 - `packages/core/src/index.ts`
 - `packages/react/src/index.tsx`
 - `packages/provider-native/src/index.ts`

@@ -1,4 +1,4 @@
-import { createInitialPlayerState, type Availability } from '@reely/core';
+import { createInitialPlayerState, type Availability } from '@playdeck/core';
 import { describe, expect, it } from 'vitest';
 import { available, notReady, ready, unavailable } from './support';
 

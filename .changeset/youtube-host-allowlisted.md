@@ -1,5 +1,5 @@
 ---
-'@reely/provider-youtube': patch
+'@playdeck/provider-youtube': patch
 ---
 
 The YouTube provider now checks `host` where it resolves the option, rather

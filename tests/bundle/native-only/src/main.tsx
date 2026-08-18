@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const Fixture = () => (
   <Player.Root loading="interaction" source="/fixture.mp4">

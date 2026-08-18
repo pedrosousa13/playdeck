@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { available, ready } from './support';
@@ -47,7 +47,7 @@ const meta = {
     docs: {
       description: {
         component: [
-          '`Player.SettingsMenu` is an accessible menu primitive. The trigger sets `aria-haspopup="menu"`; the content is `role="menu"` with `data-reely-menu="open"`, which suppresses the player keyboard shortcuts while open.',
+          '`Player.SettingsMenu` is an accessible menu primitive. The trigger sets `aria-haspopup="menu"`; the content is `role="menu"` with `data-playdeck-menu="open"`, which suppresses the player keyboard shortcuts while open.',
           '',
           '**Focus** — opening moves focus to the first item; Escape, selecting an item, or re-toggling returns focus to the trigger (never `<body>`).',
           '',
@@ -96,7 +96,7 @@ export const Open: Story = {
     const trigger = await canvas.findByRole('button', { name: 'Settings' });
     await userEvent.click(trigger);
     const menu = await canvas.findByRole('menu');
-    await expect(menu).toHaveAttribute('data-reely-menu', 'open');
+    await expect(menu).toHaveAttribute('data-playdeck-menu', 'open');
     const first = canvas.getAllByRole('menuitemradio')[0];
     await expect(first).toHaveFocus();
   }

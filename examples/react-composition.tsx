@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 export const Clip = () => (
   <Player.Root source="https://example.com/clip.mp4">

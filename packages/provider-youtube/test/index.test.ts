@@ -20,7 +20,7 @@ import {
   PlayerController,
   type ProviderEvent,
   type ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   createYouTubeProvider,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
@@ -1405,7 +1405,7 @@ test('youtube declares command readiness only at onReady', async () => {
 
 // The mount is a bare <div> and the IFrame API exposes no intrinsic media
 // size, so there is nothing to measure. Absence is the contract: it is what
-// leaves `--reely-media-aspect-ratio` unset, so the consumer's own
+// leaves `--playdeck-media-aspect-ratio` unset, so the consumer's own
 // `var(…, 16 / 9)` fallback is the one that applies. A member returning
 // `undefined` forever would be a worse lie than not having one.
 test('youtube declares no dimension channel', async () => {
