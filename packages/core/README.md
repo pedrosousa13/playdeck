@@ -192,14 +192,18 @@ One scheme allowlist governs both paths, and `isPermittedSourceUrl` is it.
 and relative paths — are permitted; `blob:` is permitted only for a `video`
 source, which is how a `MediaSource` or a picked `File` is handed over.
 Everything else, `javascript:`, `data:` and `file:` included, is rejected,
-whether it arrives as a string or inside an explicit source object. A string
-carrying a raw tab, line feed or carriage return is rejected as malformed,
-because the URL parser strips those before parsing and would otherwise read a
-different scheme than the one validated. A protocol-relative URL resolves
-against `https:`, and the resolved source carries that resolution rather than
-the `//host/...` form — for a string and for every `src` inside an explicit
-source object alike. So a result's `source` may be a normalised copy of the
-object passed in; its `input` is always the caller's own object.
+whether it arrives as a string or inside an explicit source object, and however
+it is dressed up in the characters the URL parser removes before it parses. A
+URL carrying a raw tab, line feed or carriage return anywhere, or a C0 control
+(U+0000 to U+001F) or a space at either end, is rejected: the parser strips
+exactly those, so ` javascript:alert(1)` names no scheme to
+validate yet loads as `javascript:` all the same. Rejecting such a URL rather
+than trimming it keeps the value that plays identical to the value that was
+validated. A protocol-relative URL resolves against `https:`, and the resolved
+source carries that resolution rather than the `//host/...` form — for a string
+and for every `src` inside an explicit source object alike. So a result's
+`source` may be a normalised copy of the object passed in; its `input` is
+always the caller's own object.
 
 ## Starting state
 
