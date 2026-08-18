@@ -1,4 +1,8 @@
-import type { detectSource } from '@reely/core';
+import {
+  isPermittedSourceUrl,
+  resolveNetworkPath,
+  type detectSource
+} from '@reely/core';
 import {
   useCallback,
   useEffect,
@@ -162,6 +166,18 @@ const nativeMediaStyle: CSSProperties = {
   objectFit: 'contain'
 };
 
+// A rejected `nativePoster` omits the `poster` attribute entirely -- the same
+// shared allowlist that gates a source URL, applied to this consumer-supplied
+// prop rather than forked into a second scheme test (#236). `type: undefined`
+// because this is never the explicit-object `type: 'video'` path, so `blob:`
+// is refused here too.
+const permittedNativePoster = (
+  nativePoster: string | undefined
+): string | undefined =>
+  nativePoster !== undefined && isPermittedSourceUrl(nativePoster, undefined)
+    ? resolveNetworkPath(nativePoster)
+    : undefined;
+
 export const Media = ({
   nativePoster,
   ref,
@@ -256,6 +272,13 @@ export const Media = ({
     delete (passthrough as Record<string, unknown>)[excluded.toLowerCase()];
   }
 
+  // Filtered before the map, not inside it: a rejected entry's `key` (derived
+  // from its `src`) never needs computing, and the survivors' keys stay
+  // stable across renders that only add or remove a rejected entry (#236).
+  const permittedTextTracks = textTracks?.filter(({ src }) =>
+    isPermittedSourceUrl(src, undefined)
+  );
+
   return (
     <video
       playsInline
@@ -268,7 +291,7 @@ export const Media = ({
       controls={controls === true}
       data-reely-part="media"
       key={sourceKey(source)}
-      poster={nativePoster}
+      poster={permittedNativePoster(nativePoster)}
       preload={preload}
       ref={mediaRef}
       style={{ ...nativeMediaStyle, ...style }}
@@ -284,16 +307,18 @@ export const Media = ({
         : // The HLS provider owns the media source: the native engine assigns
           // the manifest URL and hls.js attaches Media Source Extensions.
           null}
-      {textTracks?.map(({ src, srcLang, label, kind, default: isDefault }) => (
-        <track
-          key={`${src}:${srcLang}`}
-          default={isDefault}
-          kind={kind ?? 'captions'}
-          label={label}
-          src={src}
-          srcLang={srcLang}
-        />
-      ))}
+      {permittedTextTracks?.map(
+        ({ src, srcLang, label, kind, default: isDefault }) => (
+          <track
+            key={`${src}:${srcLang}`}
+            default={isDefault}
+            kind={kind ?? 'captions'}
+            label={label}
+            src={resolveNetworkPath(src)}
+            srcLang={srcLang}
+          />
+        )
+      )}
     </video>
   );
 };

@@ -793,6 +793,62 @@ describe('Player.Media textTracks', () => {
     });
     expect(video.hasAttribute('texttracks')).toBe(false);
   });
+
+  test('renders no <track> for an entry whose src is rejected, keeping its siblings', () => {
+    const { video } = renderMedia({
+      textTracks: [
+        { src: 'javascript:alert(1)', srcLang: 'en', label: 'English' },
+        { src: '/captions/fr.vtt', srcLang: 'fr', label: 'French' }
+      ]
+    });
+    const tracks = video.querySelectorAll('track');
+    expect(tracks.length).toBe(1);
+    expect(tracks[0]?.getAttribute('src')).toBe('/captions/fr.vtt');
+    expect(tracks[0]?.getAttribute('srclang')).toBe('fr');
+  });
+
+  test('rejects unsafe textTracks src schemes and permits every safe form', () => {
+    const { video } = renderMedia({
+      textTracks: [
+        { src: 'javascript:alert(1)', srcLang: 'a', label: 'A' },
+        { src: 'data:text/vtt,x', srcLang: 'b', label: 'B' },
+        { src: 'file:///etc/passwd', srcLang: 'c', label: 'C' },
+        // No `type` reaches this site, so `blob:` -- permitted only for an
+        // explicit `type: 'video'` source -- is refused here too (#219, #236).
+        { src: 'blob:https://example.com/id', srcLang: 'd', label: 'D' },
+        // A raw tab in the scheme position defeats a naive scheme read;
+        // refused outright rather than reparsed (#219, #236).
+        { src: 'java\tscript:alert(1)', srcLang: 'e', label: 'E' },
+        { src: 'http://example.com/en.vtt', srcLang: 'f', label: 'F' },
+        { src: 'https://example.com/es.vtt', srcLang: 'g', label: 'G' },
+        { src: '//example.com/de.vtt', srcLang: 'h', label: 'H' },
+        { src: '/relative/ja.vtt', srcLang: 'i', label: 'I' }
+      ]
+    });
+    const tracks = Array.from(video.querySelectorAll('track'));
+    expect(tracks.map((track) => track.getAttribute('src'))).toEqual([
+      'http://example.com/en.vtt',
+      'https://example.com/es.vtt',
+      'https://example.com/de.vtt',
+      '/relative/ja.vtt'
+    ]);
+  });
+
+  test('drops every textTracks entry without throwing when all their src values are rejected', () => {
+    expect(() =>
+      renderMedia({
+        textTracks: [
+          { src: 'javascript:alert(1)', srcLang: 'en', label: 'English' }
+        ]
+      })
+    ).not.toThrow();
+    const { video } = renderMedia({
+      textTracks: [
+        { src: 'javascript:alert(1)', srcLang: 'en', label: 'English' }
+      ]
+    });
+    expect(video.querySelectorAll('track').length).toBe(0);
+  });
 });
 
 // Cue text and track labels are the two provider-supplied strings this package

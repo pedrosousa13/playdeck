@@ -1452,6 +1452,91 @@ test('tracks poster image request state and preserves its explicit image attribu
   expect(onError).toHaveBeenCalledOnce();
 });
 
+test('rejects an unsafe poster image src exactly as an absent prop, and permits every safe form', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container, rerender } = render(
+    <PosterImage src="javascript:alert(1)" />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  rerender(<PosterImage src="data:text/html,<script>1</script>" />);
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  rerender(<PosterImage src="file:///etc/passwd" />);
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  // A bare string carries no source `type`, so `blob:` -- permitted only for
+  // an explicit `type: 'video'` source -- is refused here too (#219, #236).
+  rerender(<PosterImage src="blob:https://example.com/id" />);
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  // A raw tab in the scheme position defeats a naive scheme read; refused
+  // outright rather than reparsed (#219, #236).
+  rerender(<PosterImage src={'java\tscript:alert(1)'} />);
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  rerender(<PosterImage src="http://example.com/poster.jpg" />);
+  expect(image.getAttribute('src')).toBe('http://example.com/poster.jpg');
+  expect(image.getAttribute('data-state')).toBe('loading');
+
+  rerender(<PosterImage src="https://example.com/poster.jpg" />);
+  expect(image.getAttribute('src')).toBe('https://example.com/poster.jpg');
+  expect(image.getAttribute('data-state')).toBe('loading');
+
+  rerender(<PosterImage src="//example.com/poster.jpg" />);
+  expect(image.getAttribute('src')).toBe('https://example.com/poster.jpg');
+
+  rerender(<PosterImage src="/relative/poster.jpg" />);
+  expect(image.getAttribute('src')).toBe('/relative/poster.jpg');
+});
+
+test('drops rejected srcSet candidates and keeps the surviving ones', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container, rerender } = render(
+    <PosterImage srcSet="javascript:alert(1) 1x, /good-2x.jpg 2x" />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
+  expect(image.getAttribute('data-state')).toBe('loading');
+
+  rerender(
+    <PosterImage srcSet="//example.com/wide.jpg 800w, /narrow.jpg 400w" />
+  );
+  expect(image.getAttribute('srcset')).toBe(
+    'https://example.com/wide.jpg 800w, /narrow.jpg 400w'
+  );
+
+  // Every candidate rejected: the srcset attribute is absent, not an empty
+  // string (an empty string is truthy-adjacent enough to be a trap) (#236).
+  rerender(<PosterImage srcSet="javascript:alert(1) 1x, blob:whatever 2x" />);
+  expect(image.getAttribute('srcset')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+});
+
+test('settles a poster image given only rejected src and srcSet in idle, and never validates sizes', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage
+      sizes="javascript:not-a-url-surface"
+      src="javascript:alert(1)"
+      srcSet="javascript:alert(2) 2x"
+    />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('srcset')).toBeNull();
+  // `sizes` carries media conditions and lengths, not a URL, and is passed
+  // through unmodified regardless of what it contains (#236).
+  expect(image.getAttribute('sizes')).toBe('javascript:not-a-url-surface');
+  expect(image.getAttribute('data-state')).toBe('idle');
+});
+
 test('resolves a cached poster image whose load fired before the handler attached', () => {
   const { PosterImage } = posterPrimitives;
   // Simulate the browser's cached-image path: the <img> is already complete
@@ -1872,6 +1957,46 @@ test('forwards nativePoster only to native videos and server-renders poster mark
   expect(markup).toContain('srcSet="/server-2x.jpg 2x"');
   expect(markup).toContain('sizes="100vw"');
   expect(markup).toContain('alt=""');
+});
+
+test('omits the poster attribute for a rejected nativePoster, and permits every safe form', () => {
+  const player = (nativePoster?: string) => (
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media nativePoster={nativePoster} />
+    </LegacyRoot>
+  );
+  const { rerender } = render(player('javascript:alert(1)'));
+  const media = () => screen.getByLabelText('Reely media');
+
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  rerender(player('data:text/html,<script>1</script>'));
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  rerender(player('file:///etc/passwd'));
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  rerender(player('blob:https://example.com/id'));
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  rerender(player('java\tscript:alert(1)'));
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  // Rejection never throws or disturbs the rest of the element: the media
+  // element mounted through every rejected value above (#236).
+  expect(media().tagName).toBe('VIDEO');
+
+  rerender(player('http://example.com/poster.jpg'));
+  expect(media().getAttribute('poster')).toBe('http://example.com/poster.jpg');
+
+  rerender(player('https://example.com/poster.jpg'));
+  expect(media().getAttribute('poster')).toBe('https://example.com/poster.jpg');
+
+  rerender(player('//example.com/poster.jpg'));
+  expect(media().getAttribute('poster')).toBe('https://example.com/poster.jpg');
+
+  rerender(player('/relative/poster.jpg'));
+  expect(media().getAttribute('poster')).toBe('/relative/poster.jpg');
 });
 
 test('forwards a ref, custom attributes, style, and aria-label to the native video', () => {

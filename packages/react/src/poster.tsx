@@ -1,3 +1,4 @@
+import { isPermittedSourceUrl, resolveNetworkPath } from '@reely/core';
 import {
   isValidElement,
   useEffect,
@@ -90,6 +91,45 @@ const initialPosterImageState = (
   srcSet?: string
 ): PosterImageState => (src || srcSet ? 'loading' : 'idle');
 
+// A rejected `src` is treated exactly as an absent one -- no request, no
+// `loading` state -- rather than as an error (#236). `type: undefined` because
+// a bare poster string, unlike an explicit source object, never carries a
+// `type: 'video'`, so `blob:` is refused here too.
+const permittedPosterSrc = (src: string | undefined): string | undefined =>
+  src !== undefined && isPermittedSourceUrl(src, undefined)
+    ? resolveNetworkPath(src)
+    : undefined;
+
+// `srcSet` is a comma-separated list of `url [descriptor]` candidates. This
+// splits on the comma rather than running a full HTML srcset parser, so a
+// candidate URL containing a literal comma splits wrongly and is dropped.
+// That is fail-closed and acceptable (#236). Each surviving candidate keeps
+// its descriptor and position; only its URL is resolved, exactly as at
+// `permittedPosterSrc`. An empty result is `undefined`, not `''` -- an empty
+// string is truthy-adjacent enough to be a trap.
+const permittedPosterSrcSet = (
+  srcSet: string | undefined
+): string | undefined => {
+  if (srcSet === undefined) return undefined;
+  const survivors = srcSet
+    .split(',')
+    .map((candidate) => candidate.trim())
+    .filter((candidate) => candidate.length > 0)
+    .flatMap((candidate) => {
+      const descriptorStart = candidate.search(/\s/);
+      const url =
+        descriptorStart === -1
+          ? candidate
+          : candidate.slice(0, descriptorStart);
+      const descriptor =
+        descriptorStart === -1 ? '' : candidate.slice(descriptorStart);
+      return isPermittedSourceUrl(url, undefined)
+        ? [`${resolveNetworkPath(url)}${descriptor}`]
+        : [];
+    });
+  return survivors.length > 0 ? survivors.join(', ') : undefined;
+};
+
 const posterImageStyle: CSSProperties = {
   display: 'block',
   width: '100%',
@@ -97,8 +137,8 @@ const posterImageStyle: CSSProperties = {
 };
 
 export const PosterImage = ({
-  src,
-  srcSet,
+  src: srcProp,
+  srcSet: srcSetProp,
   sizes,
   width,
   height,
@@ -112,6 +152,14 @@ export const PosterImage = ({
   style,
   ...safeRest
 }: PosterImageProps) => {
+  // Filtered before `posterRequestKey` and `initialPosterImageState`, which
+  // derive request identity and the initial state from `src`/`srcSet`
+  // truthiness -- a rejected pair filtered after them would land in
+  // `loading` and never resolve. Filtering first makes "a poster given only
+  // rejected values settles in idle" fall out of the existing state machine
+  // (#236).
+  const src = permittedPosterSrc(srcProp);
+  const srcSet = permittedPosterSrcSet(srcSetProp);
   const requestKey = posterRequestKey({ src, srcSet, sizes });
   const state = useRef<{
     key: string;
