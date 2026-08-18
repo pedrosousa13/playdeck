@@ -64,7 +64,12 @@ const chromelessAvailability = async (
   // Set the moment a response exists, whatever it turns out to say. A refused
   // status and a body that will not parse are both Vimeo answering, so the
   // `catch` below can tell a read that failed after the answer arrived from a
-  // request that never produced one at all (#235).
+  // request that never produced one at all (#235). That is what a cancel
+  // interrupting the body read reports: `responded` is already `true`, so the
+  // read failing there completes the probe. A read the deadline interrupts
+  // instead reports the opposite, incomplete and worth a notice — not because
+  // `responded` disagrees, but because `settleWithFallback`'s abort handler
+  // resolves the outer promise first, ahead of this function's own return.
   let responded = false;
   try {
     const response = await fetch(
@@ -109,7 +114,7 @@ const chromelessAvailability = async (
 // fact separates them — the deadline is the probe failing to get an answer,
 // while a cancel (and the supersede in `probe` below) is the caller taking the
 // question back, which is teardown and not worth a notice (#235).
-const settleWithFallback = (
+export const settleWithFallback = (
   request: Promise<VimeoChromelessProbe>,
   milliseconds: number,
   controller: AbortController
@@ -121,14 +126,26 @@ const settleWithFallback = (
       controller.signal.removeEventListener('abort', abandon);
       resolve(value);
     };
+    // The abort listener, and the only consumer of `timedOut`: fired by the
+    // deadline below and by `cancel()` (and the supersede in `probe`), never
+    // by the request itself rejecting, which `onRequestRejected` below
+    // settles on its own (#235).
     const abandon = (): void =>
       settle(timedOut ? incomplete : completed(providerCheck));
+    // A rejected request produced no answer at all -- unlike an abort, which
+    // withdraws a question that could still have been answered -- so it
+    // settles the same way the deadline does, incomplete, rather than reusing
+    // `abandon` and defaulting to `completed` the way this once did. Nothing
+    // rejects at the caller: `chromelessAvailability` catches its own
+    // failures today and this path is unreachable, but the fallback must mean
+    // what a rejection means if that ever stops holding (#235).
+    const onRequestRejected = (): void => settle(incomplete);
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort();
     }, milliseconds);
     controller.signal.addEventListener('abort', abandon);
-    request.then(settle, abandon);
+    request.then(settle, onRequestRejected);
   });
 
 export type VimeoChromelessAvailabilityDeps = {

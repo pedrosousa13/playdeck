@@ -710,7 +710,18 @@ test('reports a probe given up on at its deadline as a configuration notice', as
   expect(readyPatch(patches).capabilities).toMatchObject({
     customControls: { status: 'unknown', reason: 'provider-check' }
   });
-  expect(configurationNotices(patches)).toHaveLength(1);
+  // The whole patch, not a subset: a notice carries an error and nothing else,
+  // so it never moves the lifecycle, the activation, or command readiness.
+  expect(configurationNotices(patches)).toEqual([
+    {
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false,
+        message: expect.stringContaining('could not be completed')
+      }
+    }
+  ]);
 });
 
 test.each([
