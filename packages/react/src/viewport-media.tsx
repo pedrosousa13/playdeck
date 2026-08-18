@@ -1,8 +1,4 @@
-import {
-  isPermittedSourceUrl,
-  resolveNetworkPath,
-  type detectSource
-} from '@reely/core';
+import { type detectSource } from '@reely/core';
 import {
   useCallback,
   useEffect,
@@ -262,11 +258,20 @@ export const Media = ({
   }
 
   // Filtered before the map, not inside it: a rejected entry's `key` (derived
-  // from its `src`) never needs computing, and the survivors' keys stay
-  // stable across renders that only add or remove a rejected entry (#236).
-  const permittedTextTracks = textTracks?.filter(({ src }) =>
-    isPermittedSourceUrl(src, undefined)
-  );
+  // from its own un-resolved `src`) never needs computing, and the
+  // survivors' keys stay stable across renders that only add or remove a
+  // rejected entry (#236). Goes through `permittedUrl` (`permitted-url.ts`),
+  // this package's one check-then-resolve helper against the shared
+  // allowlist, rather than calling `isPermittedSourceUrl` and
+  // `resolveNetworkPath` separately here -- the exact duplication
+  // `permitted-url.ts` was extracted to end. It also guards a `src` that is
+  // `undefined` at runtime rather than throwing: the declared `string` type
+  // only binds a caller that is type-checked, and the #224 comment above
+  // records the same gap for untyped CMS data walking past a declared type.
+  const permittedTextTracks = textTracks?.flatMap((track) => {
+    const resolvedSrc = permittedUrl(track.src);
+    return resolvedSrc !== undefined ? [{ ...track, resolvedSrc }] : [];
+  });
 
   return (
     <video
@@ -301,13 +306,13 @@ export const Media = ({
           // the manifest URL and hls.js attaches Media Source Extensions.
           null}
       {permittedTextTracks?.map(
-        ({ src, srcLang, label, kind, default: isDefault }) => (
+        ({ src, srcLang, label, kind, default: isDefault, resolvedSrc }) => (
           <track
             key={`${src}:${srcLang}`}
             default={isDefault}
             kind={kind ?? 'captions'}
             label={label}
-            src={resolveNetworkPath(src)}
+            src={resolvedSrc}
             srcLang={srcLang}
           />
         )
