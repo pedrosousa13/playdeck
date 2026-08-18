@@ -43,6 +43,13 @@ const posterNotice: PlayerError = {
   message: 'The poster option was rejected, so no poster was applied.'
 };
 
+const providerFault: PlayerError = {
+  category: 'provider',
+  fatal: false,
+  recoverable: true,
+  message: 'The provider command failed.'
+};
+
 const fatalError: PlayerError = {
   category: 'decode',
   fatal: true,
@@ -197,14 +204,75 @@ test('a notice neither settles the ready waiters nor withdraws commands', async 
   await flushCommands();
 
   expect(settled).toBeUndefined();
-  expect(controller.getState().commandsReady).toBe(false);
 
   fake.emit({ lifecycle: 'ready', activation: 'ready', commandsReady: true });
   await flushCommands();
 
   expect(settled).toBe(true);
+
+  // The only moment the flag could be withdrawn is a notice arriving while
+  // commands stand, so the notice has to come after the declaration.
+  fake.emit({ error: posterNotice });
+
   expect(controller.getState()).toMatchObject({
     commandsReady: true,
     error: hostNotice
   });
+});
+
+test('drops the held notice when subscribing to the provider throws', () => {
+  const controller = new PlayerController();
+  const provider: ProviderAdapter = {
+    provider: 'native',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: (listener) => {
+      listener({ error: hostNotice });
+      throw new Error('The provider could not be subscribed to.');
+    }
+  };
+
+  controller.setProvider(provider);
+
+  expect(controller.getState().lifecycle).toBe('error');
+
+  // The provider is gone, so `setActivation` is permitted again — and it
+  // patches `error: null`, which is exactly where a still-held notice would
+  // resurface.
+  controller.setActivation({ activation: 'eligible' });
+
+  expect(controller.getState().error).toBeNull();
+});
+
+test('publishes the notice frozen and detached from the provider object', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+  const reported = { ...hostNotice };
+
+  fake.emit({ error: reported });
+  const published = controller.getState().error;
+  reported.message = 'Rewritten after the provider reported it.';
+
+  expect(Object.isFrozen(published)).toBe(true);
+  expect(published?.message).toBe(hostNotice.message);
+});
+
+test('holds the notice behind a standing non-fatal error until it clears', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  // Not only a fatal error keeps the slot: this is the shape
+  // `#applyAutoplayFailure` publishes when a play command reports a provider
+  // fault, and the notice waits behind it the same way.
+  fake.emit({ error: providerFault });
+  fake.emit({ error: hostNotice });
+
+  expect(controller.getState().error).toMatchObject(providerFault);
+
+  fake.emit({ error: null });
+
+  expect(controller.getState().error).toMatchObject(hostNotice);
 });

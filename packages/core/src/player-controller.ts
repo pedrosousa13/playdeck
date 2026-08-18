@@ -349,6 +349,10 @@ export class PlayerController {
       }
       this.#provider = undefined;
       destroyProviderSafely(provider);
+      // The third path a provider leaves by, and the notice goes with it here
+      // too: a provider may report one from inside `subscribe()` and then throw
+      // (#235).
+      this.#configurationNotice = undefined;
       // Cleared with the generation it belonged to, not left for the
       // generation check in `#consumePendingOrigin` to reject downstream: a
       // request outstanding against a generation that has moved on has nothing
@@ -756,7 +760,11 @@ export class PlayerController {
             this.#state.error?.category !== 'configuration'
             ? this.#state.error
             : autoplayConfigurationError()
-          : (patchedError ?? this.#configurationNotice ?? null)
+          : // A notice waits behind whatever the slot already holds, not only
+            // behind a fatal one: the `provider` error a refused autoplay
+            // attempt publishes keeps the slot too, and the notice becomes
+            // visible when it clears (#235).
+            (patchedError ?? this.#configurationNotice ?? null)
     };
     this.#setState(nextState);
   };
