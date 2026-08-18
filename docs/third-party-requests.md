@@ -644,20 +644,31 @@ provider's options surface rather than a property of Wistia's CDN.
 
 ## The sandbox bargain
 
-The Vimeo embed is the only third-party frame in this repository that Reely
-builds itself (`packages/provider-vimeo/src/attachment.ts:307-318`, with the
-comment recording this decision at `:302-306`). YouTube's frame is constructed
-by the vendor's iframe API out of a `div`, and Wistia's by the vendor's custom
-element, so neither is Reely's to configure — which is exactly why this one is.
-On the frame it does own, Reely sets no `sandbox` attribute. No tracked file
-sets one on any element: the only other `sandbox` token `git grep` finds is the
-`sandbox;` CSP directive `next/image` needs for SVG
-(`tests/integrations/next-image/next.config.ts:7`), which is a different
-mechanism on a different surface. The absence is deliberate (#237), and
-it is recorded here rather than left to a commit message because this document
-is where a reader decides what to permit this frame.
+Reely builds two of the three embed frames itself. The Vimeo one is
+`packages/provider-vimeo/src/attachment.ts:307-318`, with the comment recording
+this decision at `:302-306`. The YouTube one is
+`packages/provider-youtube/src/attachment.ts:192-239`, handed to the iframe API
+at `:246`, which adopts a frame that already exists instead of building one —
+the YouTube row above records that, and the comment at `:216-219` says why the
+frame is built there rather than left to the API. Only Wistia's frame is
+genuinely not Reely's to configure: that provider creates the vendor's custom
+element (`packages/provider-wistia/src/attachment.ts:339-341`), and whatever
+frame the element then makes is the vendor's.
 
-**What the embed can do today.** Everything a frame is allowed by default: run
+This section records the decision taken for the **Vimeo** frame. The YouTube
+frame's sandbox posture is not addressed here and is tracked separately in
+#321.
+
+On the Vimeo frame, Reely sets no `sandbox` attribute. No tracked file sets one
+on any element: `git grep sandbox` returns this document, the comment at
+`packages/provider-vimeo/src/attachment.ts:302-305` that points back at this
+section, and one unrelated hit — the `sandbox;` CSP directive `next/image`
+needs for SVG (`tests/integrations/next-image/next.config.ts:7`), a different
+mechanism on a different surface. The absence is deliberate (#237), and it is
+recorded here rather than left to a commit message because this document is
+where a reader decides what to permit this frame.
+
+What the embed can do today is everything a frame is allowed by default: run
 scripts, hold its own origin — `player.vimeo.com`, with that origin's cookies
 and storage — navigate the top-level page away, open popups, and submit forms.
 That is the standard privilege of any third-party embed rather than something
@@ -667,7 +678,7 @@ cross-origin boundary itself, not a sandbox policy; finding no evidence of
 misuse is not a restriction, and if the embed's behaviour changed tomorrow
 nothing Reely ships would stop it.
 
-**Why the two restrictions that matter cannot be applied.** `allow-scripts` and
+The two restrictions that would matter cannot be applied. `allow-scripts` and
 `allow-same-origin` are both required for the `@vimeo/player` postMessage
 bridge to work at all, and that bridge is how every command this provider
 issues reaches the player. Drop `allow-same-origin` and the frame gets an
@@ -679,22 +690,27 @@ handshake never completes, `player.origin` is never narrowed off the `'*'` it
 starts at (`:1491`, `:1497-1498`), and every command posted through
 `postMessage` (`:775`) is addressed to a player that never answered. Drop
 `allow-scripts` and there is no player in the frame to answer in the first
-place. So the only sandbox this provider can carry is one that includes both —
-and a frame holding both can run arbitrary script and reach its own origin's
-storage, which is most of what the attribute exists to prevent. A sandbox
-including `allow-scripts allow-same-origin` is close to no sandbox.
+place. That chain was confirmed by reading and not by running: the SDK lines
+are cited so they can be checked and can still drift, and the opaque-origin
+step is taken on the platform's terms rather than watched in a browser, because
+no sandboxed frame was ever loaded here — which is this section's own thesis
+rather than an exception to it, as the paragraphs below set out. So the only
+sandbox this provider can carry is one that includes both, and a frame holding
+both can run arbitrary script and reach its own origin's storage, which is most
+of what the attribute exists to prevent. A sandbox including `allow-scripts
+allow-same-origin` is close to no sandbox.
 
-**What the residual gain actually is, and why it was not taken.** What such a
-sandbox could still withdraw is top-level navigation and form submission, and
-the embed appears to need neither. The gain is real and should not be waved
-away — navigating the host page out from under the user is the highest-impact
-thing a hostile embed could do, and it is the only item on the list above that
-a sandbox could actually take back. It is also the whole of the gain, and it is
-bought with a regression risk **no test in continuous integration covers**. The
-specs that drive the real Vimeo embed live in `e2e/vimeo-smoke.spec.ts`, every
-one of them tagged `@real` (`:21`, `:90`, `:105`, `:124`, `:189`), and
-`grepInvert` filters that tag out of every run that does not set
-`REELY_REAL_PROVIDERS` (`playwright.config.ts:15`). They are run by hand:
+What such a sandbox could still withdraw is top-level navigation and form
+submission, and the embed appears to need neither. The gain is real and should
+not be waved away — navigating the host page out from under the user is the
+highest-impact thing a hostile embed could do, and the highest-impact thing on
+the list above that a sandbox could take back at all. It is also the whole of
+the gain, those two and nothing else, and it is bought with a regression risk
+**no test in continuous integration covers**. The specs that drive the real
+Vimeo embed live in `e2e/vimeo-smoke.spec.ts`, every one of them tagged `@real`
+(`:21`, `:90`, `:105`, `:124`, `:189`), and `grepInvert` filters that tag out
+of every run that does not set `REELY_REAL_PROVIDERS`
+(`playwright.config.ts:15`). They are run by hand:
 `REELY_REAL_PROVIDERS=1 pnpm test:e2e -- --grep @real`
 (`e2e/vimeo-smoke.spec.ts:4-6`). A candidate sandbox value could not be proven
 by CI here — only by somebody remembering to run those five specs.
@@ -718,7 +734,7 @@ is not a capability a sandbox could regress. It is off already, by a different
 mechanism and for a different reason. Advertising and mobile fullscreen are the
 paths that are both live and uncovered.
 
-**This was measured, not defaulted into.** The alternative had a concrete
+This was measured rather than defaulted into. The alternative had a concrete
 shape: the value #237 proposed, `allow-scripts allow-same-origin
 allow-presentation allow-popups allow-popups-to-escape-sandbox`, which would
 have withdrawn top-level navigation and forms and nothing else. It was weighed
@@ -728,8 +744,7 @@ a frame on your page that can navigate the page away, and Reely does not
 prevent it. That is the bargain a Vimeo source makes on your page's behalf, and
 it is accepted, not overlooked — not a gap to close.
 
-**What would reopen it.** Any one of three, each checkable rather than a matter
-of taste:
+Three things would reopen it, each checkable rather than a matter of taste:
 
 - **Vimeo documents a supported `sandbox` value for the embed.** The value
   would then be the vendor's contract rather than this repository's guess, and
