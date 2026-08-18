@@ -98,32 +98,29 @@ const EMBED_ORIGINS: readonly string[] = [
 // of reading either as a third host. An unrecognised origin falls back rather
 // than throwing — a misconfigured `host` must degrade to the safe embed, not
 // break the page — and `new URL()` rejecting a malformed or empty value is the
-// same answer. That degrade used to be silent; `hostRejected` below is what
-// makes it a reported `configuration` notice instead, published to every
-// subscriber by `createYouTubeProvider` (#235).
-const resolveHost = (host: string | undefined): string => {
-  if (host === undefined) return DEFAULT_HOST;
+// same answer. That degrade used to be silent; `rejected` below is what makes
+// it a reported `configuration` notice instead, published to every subscriber
+// by `createYouTubeProvider` (#235).
+//
+// Answers both the resolved host and whether `host` was rejected from the one
+// parse: a separate `hostRejected` used to re-run this exact shape — the same
+// `new URL(host)`, the same allowlist check, the same `catch` — to answer a
+// second question about the same value at the same construction site. `host`
+// still always answers with a value, silently defaulting when the input is
+// `undefined`; `rejected` is the fact beside it — `false` for `undefined`,
+// `true` for anything else that misses the allowlist — which is what tells
+// `createYouTubeProvider` whether the degrade above is worth a notice (#235).
+const resolveHost = (
+  host: string | undefined
+): { readonly host: string; readonly rejected: boolean } => {
+  if (host === undefined) return { host: DEFAULT_HOST, rejected: false };
   try {
     const { origin } = new URL(host);
-    return EMBED_ORIGINS.includes(origin) ? origin : DEFAULT_HOST;
+    return EMBED_ORIGINS.includes(origin)
+      ? { host: origin, rejected: false }
+      : { host: DEFAULT_HOST, rejected: true };
   } catch {
-    return DEFAULT_HOST;
-  }
-};
-
-// Whether `host` was supplied but not accepted — off the allowlist, or
-// `new URL()` rejects it. Kept separate from `resolveHost` rather than
-// folded into it: `resolveHost` always has to answer with a host, silently
-// defaulting when `host` is `undefined`, while this has to answer with a
-// fact (`undefined` is fine; everything else that misses the allowlist is
-// not), which is what tells `createYouTubeProvider` whether the degrade
-// above is worth a notice (#235).
-const hostRejected = (host: string | undefined): boolean => {
-  if (host === undefined) return false;
-  try {
-    return !EMBED_ORIGINS.includes(new URL(host).origin);
-  } catch {
-    return true;
+    return { host: DEFAULT_HOST, rejected: true };
   }
 };
 
@@ -228,11 +225,12 @@ export const createYouTubeProvider = (
 
   const listeners = new Set<ProviderStateListener>();
 
-  // Decided once, at construction, alongside `resolveHost` below — `host`
-  // does not change after that, so neither does whether it was rejected.
-  const hostNotice = hostRejected(options.host)
-    ? hostConfigurationNotice
-    : undefined;
+  // Decided once, at construction — `host` does not change after that, so
+  // neither does the resolved value or whether it was rejected.
+  const { host: resolvedHost, rejected: hostWasRejected } = resolveHost(
+    options.host
+  );
+  const hostNotice = hostWasRejected ? hostConfigurationNotice : undefined;
 
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
@@ -293,7 +291,7 @@ export const createYouTubeProvider = (
     emit,
     controls: options.controls,
     loop: options.loop,
-    host: resolveHost(options.host),
+    host: resolvedHost,
     boundary,
     loadIframeApi: options.loadIframeApi ?? loadYouTubeIframeApi,
     getCapabilities: playerCapabilities,
