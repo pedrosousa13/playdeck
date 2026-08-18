@@ -1,6 +1,6 @@
 {
   "name": "@playdeck/provider-hls",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "HLS provider for Playdeck, over hls.js or the browser’s native HLS.",
   "keywords": [
     "media",
