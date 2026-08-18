@@ -21,13 +21,13 @@ importers:
   packages/publishable:
     dependencies:
       cookie:
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 0.7.0
+        version: 0.7.0
 
 packages:
 
-  cookie@0.4.0:
-    resolution: {integrity: sha512-+Hp8fLp57wnUSt0tY0tHEXh4voZRDnoIrZPqlo3DPiI4y9lwg/jqx+1Om94/W6ZaPDOUbnjOt/99w66zk+l1Xg==}
+  cookie@0.7.0:
+    resolution: {integrity: sha512-qCf+V4dtlNhSRXGAZatc1TasyFO6GjohcOul807YOb5ik3+kQSnb4d7iajeCL8QHaJ4uZEjCgiCJerKXwdRVlQ==}
     engines: {node: '>= 0.6'}
 
   minimist@0.0.8:
@@ -38,7 +38,7 @@ packages:
 
 snapshots:
 
-  cookie@0.4.0: {}
+  cookie@0.7.0: {}
 
   minimist@0.0.8: {}
 
