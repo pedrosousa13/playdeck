@@ -452,6 +452,72 @@ test.each([
   }
 );
 
+// The fallback above used to be silent; it now also publishes a non-fatal
+// `configuration` notice, so a rejected `host` is observable rather than
+// merely safe (#235).
+test('does not publish a notice when host is unset', () => {
+  const { patches } = createAdapter('M7lc1UVf-VE');
+
+  expect(patches).toHaveLength(0);
+});
+
+test.each([
+  ['https://www.youtube.com'],
+  ['https://www.youtube-nocookie.com']
+] as const)('does not publish a notice for the %s host option', (host) => {
+  const { patches } = createAdapter('M7lc1UVf-VE', { host });
+
+  expect(patches).toHaveLength(0);
+});
+
+test.each([
+  ['an unrelated origin', 'https://videos.example.com'],
+  ['a lookalike origin', 'https://www.youtube.com.example.com'],
+  ['a malformed url', 'www.youtube.com'],
+  ['an empty string', '']
+] as const)(
+  'publishes a configuration notice when the host option is %s',
+  (_label, host) => {
+    const { patches } = createAdapter('M7lc1UVf-VE', { host });
+
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toMatchObject({
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false
+      }
+    });
+    // Not a state transition: only `error` is set.
+    expect(patches[0]?.lifecycle).toBeUndefined();
+    expect(patches[0]?.activation).toBeUndefined();
+    expect(patches[0]?.commandsReady).toBeUndefined();
+    // Names the option and the fallback, never the rejected value.
+    expect(patches[0]?.error?.message).toBe(
+      'The host option was rejected, so the default host was used.'
+    );
+    if (host) expect(patches[0]?.error?.message).not.toContain(host);
+  }
+);
+
+test('delivers the host notice to a subscriber that registers late', () => {
+  const fake = createFakeYouTube();
+  const mount = document.createElement('div');
+  document.body.appendChild(mount);
+  const provider = createYouTubeProvider(mount, 'M7lc1UVf-VE', {
+    host: 'https://videos.example.com',
+    loadIframeApi: () => Promise.resolve(fake.api)
+  });
+
+  const late: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => late.push(patch));
+
+  expect(late).toHaveLength(1);
+  expect(late[0]).toMatchObject({
+    error: { category: 'configuration', fatal: false, recoverable: false }
+  });
+});
+
 // Vimeo's own embed url sets `controls` the same way
 // (`provider-vimeo/src/attachment.ts:62`, `options.controls === true ? '1' :
 // '0'`): unset and `false` both mean chromeless. This pins YouTube to the
