@@ -15,10 +15,6 @@ const Frame = ({ children }: { readonly children: ReactNode }) => (
   </Player.Viewport>
 );
 
-const loadedPosterSrc = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#1d2733"/><circle cx="800" cy="450" r="180" fill="#3f8cff"/></svg>'
-)}`;
-
 const posterImage = (canvasElement: HTMLElement): HTMLElement => {
   const image = canvasElement.querySelector<HTMLElement>(
     '[data-reely-part="poster-image"]'
@@ -60,13 +56,17 @@ type Story = StoryObj<typeof meta>;
  * The same poster with the CSS from this page's **Styling** section applied.
  * Mounted as a `<style>` inside this story's own tree, so it is torn down with
  * the story and no other story on the page sees it.
+ *
+ * The `loaded` state needs a poster the image actually reaches `loaded` on;
+ * `isPermittedSourceUrl` refuses `data:` (#236), so this uses `/poster.svg`
+ * from this app's `staticDirs` instead of an inline data URI.
  */
 export const Styled: Story = {
   decorators: [withCss(partCss)],
   render: () => (
     <Frame>
       <Player.Poster>
-        <Player.PosterImage src={loadedPosterSrc} />
+        <Player.PosterImage src="/poster.svg" />
       </Player.Poster>
     </Frame>
   ),

@@ -9,10 +9,6 @@ const Frame = ({ children }: { readonly children: ReactNode }) => (
   </Player.Viewport>
 );
 
-const loadedSrc = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#1d2733"/></svg>'
-)}`;
-
 const image = (root: HTMLElement): HTMLElement => {
   const el = root.querySelector<HTMLElement>(
     '[data-reely-part="poster-image"]'
@@ -75,12 +71,17 @@ export const Loading: Story = {
   }
 };
 
-/** A data-URI poster resolves without any request leaving the page. */
+/**
+ * `isPermittedSourceUrl` refuses `data:` for a poster (#236), so a poster
+ * fixture has to be a real request now. `/poster.svg` is served from this
+ * app's `staticDirs`, and it resolves fast enough that the test's `waitFor`
+ * catches `loaded` deterministically.
+ */
 export const Loaded: Story = {
   render: () => (
     <Frame>
       <Player.Poster>
-        <Player.PosterImage src={loadedSrc} />
+        <Player.PosterImage src="/poster.svg" />
       </Player.Poster>
     </Frame>
   ),
@@ -91,13 +92,18 @@ export const Loaded: Story = {
   }
 };
 
-/** An unparsable data URI fails to decode without touching the network. */
+/**
+ * A root-relative path with no matching asset 404s in both the dev server
+ * and a static build, which is a request the image can fail deterministically
+ * -- `data:` would have been refused outright by `isPermittedSourceUrl` (#236)
+ * before the image ever got a URL to fail on.
+ */
 export const ErrorState: Story = {
   name: 'Error',
   render: () => (
     <Frame>
       <Player.Poster>
-        <Player.PosterImage src="data:image/png;base64,AAAA" />
+        <Player.PosterImage src="/__reely__/missing-poster.png" />
       </Player.Poster>
     </Frame>
   ),
