@@ -332,6 +332,100 @@ test('clears position state when the owning root is released', () => {
   expect(positionStates.at(-1)).toBeUndefined();
 });
 
+// Reads back the `artwork` array `toMediaMetadata` produced for a playing
+// root. The test environment (happy-dom) defines no global `MediaMetadata`,
+// same as every other test in this file, so this always exercises the
+// fallback `init` path -- the one a platform without `MediaMetadata` gets --
+// which is why that path needs no separate coverage (#236).
+const artworkOn = (
+  artwork: ReadonlyArray<{
+    readonly src: string;
+    readonly sizes?: string;
+    readonly type?: string;
+  }>
+): unknown => {
+  const { session } = createSession();
+  const coordinator = getMediaSessionCoordinator(session);
+  const controller = new PlayerController();
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+  bindMediaSession(controller, coordinator, { metadata: { artwork } });
+  emit({ playback: 'playing' });
+  return (session.metadata as { artwork: unknown } | null)?.artwork;
+};
+
+test.each([
+  ['javascript:', 'javascript:alert(1)'],
+  ['data:', 'data:text/html,<script>alert(1)</script>'],
+  ['file:', 'file:///etc/passwd'],
+  ['blob:', 'blob:https://example.com/uuid'],
+  ['whitespace-carrying', 'java\tscript:alert(1)']
+])('omits an artwork entry whose src is rejected (%s)', (_label, src) => {
+  expect(artworkOn([{ src }])).toEqual([]);
+});
+
+test.each([
+  ['http:', 'http://example.com/art.png', 'http://example.com/art.png'],
+  ['https:', 'https://example.com/art.png', 'https://example.com/art.png'],
+  ['protocol-relative', '//example.com/art.png', 'https://example.com/art.png'],
+  ['relative', '/art.png', '/art.png']
+])(
+  'keeps a permitted artwork entry with sizes and type untouched (%s)',
+  (_label, src, expectedSrc) => {
+    expect(artworkOn([{ src, sizes: '96x96', type: 'image/png' }])).toEqual([
+      { src: expectedSrc, sizes: '96x96', type: 'image/png' }
+    ]);
+  }
+);
+
+test('keeps every good artwork entry when one is rejected', () => {
+  expect(
+    artworkOn([
+      { src: 'javascript:alert(1)' },
+      { src: 'https://example.com/good.png' }
+    ])
+  ).toEqual([{ src: 'https://example.com/good.png' }]);
+});
+
+test('rejecting an artwork entry never throws', () => {
+  const { session } = createSession();
+  const coordinator = getMediaSessionCoordinator(session);
+  const controller = new PlayerController();
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+  bindMediaSession(controller, coordinator, {
+    metadata: { artwork: [{ src: 'javascript:alert(1)' }] }
+  });
+  expect(() => emit({ playback: 'playing' })).not.toThrow();
+});
+
+// `src` is typed `string`, but a cast, a spread or untyped CMS data walks
+// past that type same as anywhere else in the library (#224, #236) --
+// exercised here via an `as never` cast, since a type-checked caller can
+// never produce this shape itself.
+test.each([
+  ['undefined', undefined],
+  ['a number', 42]
+])(
+  'omits an artwork entry whose src is not a string (%s) without throwing',
+  (_label, src) => {
+    const { session } = createSession();
+    const coordinator = getMediaSessionCoordinator(session);
+    const controller = new PlayerController();
+    const { emit, provider } = createProvider();
+    controller.setProvider(provider);
+    bindMediaSession(controller, coordinator, {
+      metadata: {
+        artwork: [{ src }, { src: 'https://example.com/good.png' }] as never
+      }
+    });
+    expect(() => emit({ playback: 'playing' })).not.toThrow();
+    expect((session.metadata as { artwork: unknown } | null)?.artwork).toEqual([
+      { src: 'https://example.com/good.png' }
+    ]);
+  }
+);
+
 test('on() keeps a re-registered listener after a duplicated unsubscribe', () => {
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
