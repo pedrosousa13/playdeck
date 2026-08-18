@@ -27,10 +27,45 @@ const chromelessAccountTypes = new Set([
   'advanced'
 ]);
 
+// What a probe settled on, and whether it got to that answer or was stopped
+// short of one. The verdict is the whole answer for the capability; the flag
+// beside it is a separate fact, because `providerCheck` is the verdict on four
+// different outcomes and only one of them is the consumer's own environment
+// speaking (#235).
+export type VimeoChromelessProbe = {
+  readonly verdict: Availability;
+  // A verdict Vimeo reported completes the probe, and so does one this seam
+  // settled without asking: the two short circuits below, and an abandoned
+  // probe, which withdraws the question rather than failing to get an answer.
+  // Only a request that produced no response, and the deadline that gives up
+  // on one, are incomplete — and those are the two the attachment reports as a
+  // `configuration` notice, since a blocked or unreachable `vimeo.com` is
+  // something the consumer can act on where an unusable tier is not.
+  readonly completed: boolean;
+};
+
+const completed = (verdict: Availability): VimeoChromelessProbe => ({
+  verdict,
+  completed: true
+});
+
+// The one outcome worth a notice, and the same `providerCheck` verdict every
+// other unresolved outcome carries: nothing about the fall-back changes with
+// it (#235).
+const incomplete: VimeoChromelessProbe = {
+  verdict: providerCheck,
+  completed: false
+};
+
 const chromelessAvailability = async (
   source: Pick<VimeoSource, 'videoId' | 'hash'>,
   signal: AbortSignal
-): Promise<Availability> => {
+): Promise<VimeoChromelessProbe> => {
+  // Set the moment a response exists, whatever it turns out to say. A refused
+  // status and a body that will not parse are both Vimeo answering, so the
+  // `catch` below can tell a read that failed after the answer arrived from a
+  // request that never produced one at all (#235).
+  let responded = false;
   try {
     const response = await fetch(
       `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(
@@ -38,7 +73,8 @@ const chromelessAvailability = async (
       )}`,
       { signal }
     );
-    if (!response.ok) return providerCheck;
+    responded = true;
+    if (!response.ok) return completed(providerCheck);
     const data: unknown = await response.json();
     const accountType =
       typeof data === 'object' &&
@@ -47,13 +83,15 @@ const chromelessAvailability = async (
       typeof data.account_type === 'string'
         ? data.account_type
         : undefined;
-    if (!accountType) return providerCheck;
+    if (!accountType) return completed(providerCheck);
     if (planLimitedAccountTypes.has(accountType)) {
-      return { status: 'unavailable', reason: 'provider-plan' };
+      return completed({ status: 'unavailable', reason: 'provider-plan' });
     }
-    return chromelessAccountTypes.has(accountType) ? available : providerCheck;
+    return completed(
+      chromelessAccountTypes.has(accountType) ? available : providerCheck
+    );
   } catch {
-    return providerCheck;
+    return responded ? completed(providerCheck) : incomplete;
   }
 };
 
@@ -64,22 +102,33 @@ const chromelessAvailability = async (
 // having its answer ignored. An abort makes the request reject, which lands on
 // the fallback here the way any other failure does, so nothing rejects at the
 // caller.
-const settleWithFallback = <Value>(
-  promise: Promise<Value>,
-  fallback: Value,
+//
+// Which is exactly why the deadline has to be told apart from the cancel here
+// rather than downstream: both arrive as the same abort on the same signal,
+// and the fallback verdict they settle on is the same too. Only the completion
+// fact separates them — the deadline is the probe failing to get an answer,
+// while a cancel (and the supersede in `probe` below) is the caller taking the
+// question back, which is teardown and not worth a notice (#235).
+const settleWithFallback = (
+  request: Promise<VimeoChromelessProbe>,
   milliseconds: number,
   controller: AbortController
-): Promise<Value> =>
+): Promise<VimeoChromelessProbe> =>
   new Promise((resolve) => {
-    const settle = (value: Value): void => {
+    let timedOut = false;
+    const settle = (value: VimeoChromelessProbe): void => {
       clearTimeout(timer);
       controller.signal.removeEventListener('abort', abandon);
       resolve(value);
     };
-    const abandon = (): void => settle(fallback);
-    const timer = setTimeout(() => controller.abort(), milliseconds);
+    const abandon = (): void =>
+      settle(timedOut ? incomplete : completed(providerCheck));
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, milliseconds);
     controller.signal.addEventListener('abort', abandon);
-    promise.then(settle, abandon);
+    request.then(settle, abandon);
   });
 
 export type VimeoChromelessAvailabilityDeps = {
@@ -101,12 +150,15 @@ export type VimeoChromelessAvailabilityDeps = {
 // record — one request, raced against the attach it informs.
 export type VimeoChromelessAvailability = {
   // Starts the probe. The attachment seam starts it before the player's own
-  // ready settles, so the request is in flight while the embed loads.
-  readonly probe: () => Promise<Availability>;
+  // ready settles, so the request is in flight while the embed loads. Answers
+  // with the verdict and whether the probe completed, together: the caller
+  // needs both, and one settled probe is the only thing that knows either.
+  readonly probe: () => Promise<VimeoChromelessProbe>;
   // Records a probed verdict. Kept separate from `probe` so an attach that has
   // been superseded by the time its probe settles cannot overwrite the verdict
-  // a live one adopted.
-  readonly adopt: (verdict: Availability) => void;
+  // a live one adopted. Takes the whole probe result and reads the verdict off
+  // it, so the caller never has to take the pair apart to record half of it.
+  readonly adopt: (probe: VimeoChromelessProbe) => void;
   // Abandons the probe in flight: aborts its request and settles it on the
   // provisional verdict. The attachment calls this from its teardown, which
   // every path that discards a player already runs, so the request goes with
@@ -134,15 +186,14 @@ export const createVimeoChromelessAvailability = ({
       // An embed showing Vimeo's own chrome is never chromeless whatever
       // else was asked for.
       if (options.controls === true) {
-        return Promise.resolve<Availability>({
-          status: 'unavailable',
-          reason: 'provider'
-        });
+        return Promise.resolve(
+          completed({ status: 'unavailable', reason: 'provider' })
+        );
       }
       // Opt-in: without it, no request discloses the viewer to Vimeo before
       // anyone has asked for the capability.
       if (options.customControls !== true) {
-        return Promise.resolve<Availability>(providerCheck);
+        return Promise.resolve(completed(providerCheck));
       }
       // One request at a time, held here rather than in the caller's ordering:
       // a probe that starts while another is running abandons it, whether or
@@ -152,14 +203,13 @@ export const createVimeoChromelessAvailability = ({
       activeRequest = controller;
       return settleWithFallback(
         chromelessAvailability(source, controller.signal),
-        providerCheck,
         CHROMELESS_PROBE_TIMEOUT_MS,
         controller
       ).finally(() => {
         if (activeRequest === controller) activeRequest = undefined;
       });
     },
-    adopt: (verdict) => {
+    adopt: ({ verdict }) => {
       customControlsAvailability = verdict;
     },
     cancel: () => {
