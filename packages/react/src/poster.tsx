@@ -1,4 +1,3 @@
-import { isPermittedSourceUrl, resolveNetworkPath } from '@reely/core';
 import {
   isValidElement,
   useEffect,
@@ -9,6 +8,7 @@ import {
   type ImgHTMLAttributes,
   type ReactElement
 } from 'react';
+import { permittedUrl } from './permitted-url.js';
 import { usePosterState } from './player-context.js';
 
 export type PosterProps = ComponentPropsWithRef<'div'>;
@@ -91,22 +91,27 @@ const initialPosterImageState = (
   srcSet?: string
 ): PosterImageState => (src || srcSet ? 'loading' : 'idle');
 
-// A rejected `src` is treated exactly as an absent one -- no request, no
-// `loading` state -- rather than as an error (#236). `type: undefined` because
-// a bare poster string, unlike an explicit source object, never carries a
-// `type: 'video'`, so `blob:` is refused here too.
-const permittedPosterSrc = (src: string | undefined): string | undefined =>
-  src !== undefined && isPermittedSourceUrl(src, undefined)
-    ? resolveNetworkPath(src)
-    : undefined;
-
 // `srcSet` is a comma-separated list of `url [descriptor]` candidates. This
 // splits on the comma rather than running a full HTML srcset parser, so a
 // candidate URL containing a literal comma splits wrongly and is dropped.
-// That is fail-closed and acceptable (#236). Each surviving candidate keeps
-// its descriptor and position; only its URL is resolved, exactly as at
-// `permittedPosterSrc`. An empty result is `undefined`, not `''` -- an empty
-// string is truthy-adjacent enough to be a trap.
+// That is fail-closed and acceptable (#236).
+//
+// Each trimmed candidate -- its URL and any trailing descriptor together --
+// is passed to `permittedUrl` (`permitted-url.ts`), this package's one
+// check-then-resolve helper against the shared allowlist, as one string
+// rather than split apart first. `resolveNetworkPath` only ever rewrites a
+// leading `//`, so it leaves a trailing descriptor untouched, and a
+// descriptor's own leading space is not a scheme delimiter, so it cannot
+// forge one. Splitting the candidate first to isolate "the URL" would
+// instead search for the first whitespace character to find that split
+// point -- and a raw tab is whitespace, so `java<TAB>script:alert(1) 1x`
+// would truncate to the harmless-looking `java` before ever reaching the
+// scheme check, silently defeating it (#219, #236). Validating the whole
+// candidate closes that gap: the embedded tab is still there for
+// `isPermittedSourceUrl`'s own check to catch.
+//
+// An empty result is `undefined`, not `''` -- an empty string is
+// truthy-adjacent enough to be a trap.
 const permittedPosterSrcSet = (
   srcSet: string | undefined
 ): string | undefined => {
@@ -116,16 +121,8 @@ const permittedPosterSrcSet = (
     .map((candidate) => candidate.trim())
     .filter((candidate) => candidate.length > 0)
     .flatMap((candidate) => {
-      const descriptorStart = candidate.search(/\s/);
-      const url =
-        descriptorStart === -1
-          ? candidate
-          : candidate.slice(0, descriptorStart);
-      const descriptor =
-        descriptorStart === -1 ? '' : candidate.slice(descriptorStart);
-      return isPermittedSourceUrl(url, undefined)
-        ? [`${resolveNetworkPath(url)}${descriptor}`]
-        : [];
+      const resolved = permittedUrl(candidate);
+      return resolved !== undefined ? [resolved] : [];
     });
   return survivors.length > 0 ? survivors.join(', ') : undefined;
 };
@@ -157,8 +154,9 @@ export const PosterImage = ({
   // truthiness -- a rejected pair filtered after them would land in
   // `loading` and never resolve. Filtering first makes "a poster given only
   // rejected values settles in idle" fall out of the existing state machine
-  // (#236).
-  const src = permittedPosterSrc(srcProp);
+  // (#236). A bare poster string never carries a `type: 'video'`, so
+  // `permittedUrl`'s default `type: undefined` refuses `blob:` here too.
+  const src = permittedUrl(srcProp);
   const srcSet = permittedPosterSrcSet(srcSetProp);
   const requestKey = posterRequestKey({ src, srcSet, sizes });
   const state = useRef<{

@@ -11,6 +11,7 @@ import {
   type CSSProperties,
   type Ref
 } from 'react';
+import { permittedUrl } from './permitted-url.js';
 import { usePlayer } from './player-context.js';
 
 export type ViewportProps = ComponentPropsWithRef<'div'>;
@@ -166,18 +167,6 @@ const nativeMediaStyle: CSSProperties = {
   objectFit: 'contain'
 };
 
-// A rejected `nativePoster` omits the `poster` attribute entirely -- the same
-// shared allowlist that gates a source URL, applied to this consumer-supplied
-// prop rather than forked into a second scheme test (#236). `type: undefined`
-// because this is never the explicit-object `type: 'video'` path, so `blob:`
-// is refused here too.
-const permittedNativePoster = (
-  nativePoster: string | undefined
-): string | undefined =>
-  nativePoster !== undefined && isPermittedSourceUrl(nativePoster, undefined)
-    ? resolveNetworkPath(nativePoster)
-    : undefined;
-
 export const Media = ({
   nativePoster,
   ref,
@@ -291,7 +280,11 @@ export const Media = ({
       controls={controls === true}
       data-reely-part="media"
       key={sourceKey(source)}
-      poster={permittedNativePoster(nativePoster)}
+      // A rejected `nativePoster` omits the attribute entirely -- the same
+      // shared allowlist that gates a source URL, applied to this
+      // consumer-supplied prop through `permittedUrl` (`permitted-url.ts`)
+      // rather than forked into a second scheme test (#236).
+      poster={permittedUrl(nativePoster)}
       preload={preload}
       ref={mediaRef}
       style={{ ...nativeMediaStyle, ...style }}

@@ -1496,7 +1496,7 @@ test('rejects an unsafe poster image src exactly as an absent prop, and permits 
   expect(image.getAttribute('src')).toBe('/relative/poster.jpg');
 });
 
-test('drops rejected srcSet candidates and keeps the surviving ones', () => {
+test('drops rejected srcSet candidates and keeps the surviving ones, permitting every safe form', () => {
   const { PosterImage } = posterPrimitives;
   const { container, rerender } = render(
     <PosterImage srcSet="javascript:alert(1) 1x, /good-2x.jpg 2x" />
@@ -1504,6 +1504,33 @@ test('drops rejected srcSet candidates and keeps the surviving ones', () => {
   const image = container.querySelector('img')!;
   expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
   expect(image.getAttribute('data-state')).toBe('loading');
+
+  rerender(<PosterImage srcSet="file:///etc/passwd 1x, /good-2x.jpg 2x" />);
+  expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
+
+  // A raw tab in the scheme position defeats a naive scheme read; refused
+  // outright rather than reparsed (#219, #236).
+  rerender(
+    <PosterImage srcSet={'java\tscript:alert(1) 1x, /good-2x.jpg 2x'} />
+  );
+  expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
+
+  // A `data:` URI's syntax requires a comma before its payload, so splitting
+  // on the comma (rather than running a full srcset parser) breaks this
+  // single candidate into two pieces -- but both happen to carry a refused
+  // scheme (`data:` and `javascript:`), so the candidate still contributes
+  // no survivor. That is the fail-closed trade-off the comma split accepts
+  // (#236), demonstrated rather than merely asserted.
+  rerender(
+    <PosterImage srcSet="data:text/plain,javascript:evil 1x, /good-2x.jpg 2x" />
+  );
+  expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
+
+  rerender(<PosterImage srcSet="http://example.com/http.jpg 1x" />);
+  expect(image.getAttribute('srcset')).toBe('http://example.com/http.jpg 1x');
+
+  rerender(<PosterImage srcSet="https://example.com/https.jpg 1x" />);
+  expect(image.getAttribute('srcset')).toBe('https://example.com/https.jpg 1x');
 
   rerender(
     <PosterImage srcSet="//example.com/wide.jpg 800w, /narrow.jpg 400w" />
