@@ -399,6 +399,33 @@ test('rejecting an artwork entry never throws', () => {
   expect(() => emit({ playback: 'playing' })).not.toThrow();
 });
 
+// `src` is typed `string`, but a cast, a spread or untyped CMS data walks
+// past that type same as anywhere else in the library (#224, #236) --
+// exercised here via an `as never` cast, since a type-checked caller can
+// never produce this shape itself.
+test.each([
+  ['undefined', undefined],
+  ['a number', 42]
+])(
+  'omits an artwork entry whose src is not a string (%s) without throwing',
+  (_label, src) => {
+    const { session } = createSession();
+    const coordinator = getMediaSessionCoordinator(session);
+    const controller = new PlayerController();
+    const { emit, provider } = createProvider();
+    controller.setProvider(provider);
+    bindMediaSession(controller, coordinator, {
+      metadata: {
+        artwork: [{ src }, { src: 'https://example.com/good.png' }] as never
+      }
+    });
+    expect(() => emit({ playback: 'playing' })).not.toThrow();
+    expect((session.metadata as { artwork: unknown } | null)?.artwork).toEqual([
+      { src: 'https://example.com/good.png' }
+    ]);
+  }
+);
+
 test('on() keeps a re-registered listener after a duplicated unsubscribe', () => {
   const controller = new PlayerController();
   const { emit, provider } = createProvider();

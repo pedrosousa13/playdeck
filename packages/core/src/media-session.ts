@@ -134,12 +134,20 @@ const globalMediaMetadata = ():
 // entry's `src` is written through `resolveNetworkPath`, so a
 // protocol-relative artwork URL resolves the same way a source URL does; its
 // `sizes` and `type` are copied verbatim.
+//
+// `art.src` is typed `string`, but `MediaSessionArtwork` binds only a caller
+// that is type-checked -- a cast, a spread or untyped CMS data can hand this
+// a non-string or an absent `src`, and `isPermittedSourceUrl` calls
+// `.match` on its argument, which throws on anything else. The `typeof`
+// guard below treats that case as a rejection like any other, consistent
+// with every other consumer-supplied URL prop the allowlist governs:
+// rejection never throws, and the entry is simply omitted (#236).
 const permittedArtwork = (
   artwork: MediaMetadataInput['artwork']
 ): MediaSessionArtwork[] =>
   artwork
     ? artwork.flatMap((art) =>
-        isPermittedSourceUrl(art.src, undefined)
+        typeof art.src === 'string' && isPermittedSourceUrl(art.src, undefined)
           ? [{ ...art, src: resolveNetworkPath(art.src) }]
           : []
       )
