@@ -5,7 +5,8 @@ import {
   PlayerController,
   type PlayerError,
   type ProviderAdapter,
-  type ProviderStateListener
+  type ProviderStateListener,
+  type RefusedUrlSurface
 } from '../src/index';
 
 const createProvider = (provider: ProviderAdapter['provider'] = 'native') => {
@@ -261,7 +262,7 @@ test('publishes the notice frozen and detached from the provider object', () => 
 
 // #330: the five URL surfaces #320 routed through the shared allowlist are
 // consumer props, not provider options, so they reach the same slot through
-// `setRefusedUrl` rather than through a provider patch.
+// `reportRefusedUrl` rather than through a provider patch.
 test('publishes a refused consumer URL as a notice without moving the lifecycle', () => {
   const fake = createProvider();
   const controller = new PlayerController();
@@ -269,7 +270,7 @@ test('publishes a refused consumer URL as a notice without moving the lifecycle'
   fake.emit({ lifecycle: 'ready', activation: 'ready' });
   const before = controller.getState();
 
-  controller.setRefusedUrl('poster src', true);
+  controller.reportRefusedUrl('poster src');
 
   expect(controller.getState()).toMatchObject({
     lifecycle: before.lifecycle,
@@ -284,32 +285,45 @@ test('publishes a refused consumer URL as a notice without moving the lifecycle'
   expect(controller.getState().lifecycle).not.toBe('error');
 });
 
-test('names the refused surface in the notice and never the refused value', () => {
-  const surfaces = [
-    'poster src',
-    'poster srcSet',
-    'nativePoster',
-    'textTracks src',
-    'mediaSession artwork'
-  ] as const;
+// The whole message per surface, not a fragment of it. Asserting only the last
+// word of the key was weaker than the test's name: three of the five keys end
+// in `src`, so two surfaces could have shared one notice -- or had their
+// notices swapped -- with this green. `Record` typing makes the table
+// exhaustive, so a sixth surface added to `RefusedUrlSurface` fails to compile
+// until it has a message here, and walking all five pins that every surface has
+// a rank in `REFUSED_URL_SURFACE_RANK` (`safety.ts`): one missing from that list
+// would publish no notice at all.
+const REFUSED_URL_MESSAGES: Record<RefusedUrlSurface, string> = {
+  'poster src':
+    'The poster src URL was rejected, so no poster image was requested.',
+  'poster srcSet':
+    'A poster srcSet candidate URL was rejected, so that candidate was dropped.',
+  nativePoster:
+    'The nativePoster URL was rejected, so no poster attribute was set.',
+  'textTracks src':
+    'A textTracks src URL was rejected, so that text track was dropped.',
+  'mediaSession artwork':
+    'A mediaSession artwork src URL was rejected, so that artwork entry was dropped.'
+};
 
-  for (const surface of surfaces) {
+// The prop the operator has to go and fix is in the message; the value that
+// failed the check never is. `reportRefusedUrl` takes no URL at all, so an
+// attacker-controlled string has no route into an error that a monitor may log
+// or a page may render (#330).
+test.each(
+  Object.entries(REFUSED_URL_MESSAGES) as ReadonlyArray<
+    [RefusedUrlSurface, string]
+  >
+)(
+  'names the refused %s surface in the notice, and never the value',
+  (surface, message) => {
     const controller = new PlayerController();
-    controller.setRefusedUrl(surface, true);
-    const message = controller.getState().error?.message ?? '';
 
-    // The prop the operator has to go and fix has to be in the message, and
-    // the value that failed the check must never be -- `setRefusedUrl` takes no
-    // URL at all, so an attacker-controlled string has no route into an error
-    // that a monitor may log or a page may render (#330).
-    //
-    // Walking all five also pins that every surface has a rank in
-    // `REFUSED_URL_SURFACE_RANK` (`safety.ts`): one missing from that list would
-    // publish no notice at all and leave this message empty.
-    expect(message).toContain(surface.split(' ').at(-1));
-    expect(message).toMatch(/rejected/);
+    controller.reportRefusedUrl(surface);
+
+    expect(controller.getState().error?.message).toBe(message);
   }
-});
+);
 
 test('keeps a refused-URL notice through a provider attaching after it', () => {
   const controller = new PlayerController();
@@ -319,7 +333,7 @@ test('keeps a refused-URL notice through a provider attaching after it', () => {
   // mount effect, and the provider only attaches once its module has loaded.
   // A notice scoped to the provider the way `#configurationNotice` is would be
   // wiped by this attach before anything could observe it (#330).
-  controller.setRefusedUrl('poster src', true);
+  controller.reportRefusedUrl('poster src');
   const reported = controller.getState().error;
   controller.setProvider(fake.provider);
 
@@ -335,15 +349,15 @@ test('keeps a refused-URL notice through a provider attaching after it', () => {
 // cleaned the poisoned CMS field was left with a permanent `configuration`
 // error. A security notice that cannot be withdrawn is a false positive an
 // operator learns to ignore, which defeats the monitoring the issue exists to
-// add. `setRefusedUrl` is declarative for exactly this reason: every call site
-// knows the current answer each time it runs.
+// add. Disposing the registration is how a call site says the value it was
+// refusing is now permitted.
 test('withdraws the notice when the refused surface turns permitted', () => {
   const controller = new PlayerController();
 
-  controller.setRefusedUrl('poster src', true);
+  const release = controller.reportRefusedUrl('poster src');
   expect(controller.getState().error).not.toBeNull();
 
-  controller.setRefusedUrl('poster src', false);
+  release();
 
   expect(controller.getState().error).toBeNull();
 });
@@ -356,24 +370,69 @@ test('does not re-plant a withdrawn notice on a later setProvider', () => {
   const controller = new PlayerController();
   const fake = createProvider();
 
-  controller.setRefusedUrl('poster src', true);
-  controller.setRefusedUrl('poster src', false);
+  controller.reportRefusedUrl('poster src')();
   controller.setProvider(fake.provider);
 
   expect(controller.getState().error).toBeNull();
 });
 
-// Withdrawal is per surface, which is why the controller tracks a set of
-// refused surfaces rather than one notice: a poster whose `src` was fixed while
+// Withdrawal is per surface, which is why the controller tallies refusals by
+// surface rather than holding one notice: a poster whose `src` was fixed while
 // its `srcSet` is still poisoned has not stopped being poisoned.
 test('keeps the notice while another surface is still refused', () => {
   const controller = new PlayerController();
 
-  controller.setRefusedUrl('poster src', true);
-  controller.setRefusedUrl('poster srcSet', true);
-  controller.setRefusedUrl('poster src', false);
+  const releaseSrc = controller.reportRefusedUrl('poster src');
+  controller.reportRefusedUrl('poster srcSet');
+  releaseSrc();
 
   expect(controller.getState().error?.message).toContain('srcSet');
+});
+
+// The defect this pass fixes, at the controller. A refusal is keyed by a PROP
+// NAME, and several component instances can hold that same prop at once -- two
+// `PosterImage`s under one `Player.Root`, one poisoned and one not. With a
+// per-prop boolean the permitted sibling's report withdrew the poisoned one's
+// notice and the refusal went silent, which is exactly the A09 failure #330
+// exists to fix (#345). A registration is withdrawn only by the reporter that
+// made it.
+test('keeps the notice while a second reporter still refuses the same surface', () => {
+  const controller = new PlayerController();
+
+  const first = controller.reportRefusedUrl('poster src');
+  controller.reportRefusedUrl('poster src');
+  first();
+
+  expect(controller.getState().error?.message).toContain('poster src');
+});
+
+// The tally must come back to nothing once every reporter has gone, or a
+// surface that was refused once could never be cleared again -- the permanent
+// false positive from the other direction.
+test('withdraws the notice once every reporter of a surface has released', () => {
+  const controller = new PlayerController();
+
+  const first = controller.reportRefusedUrl('poster src');
+  const second = controller.reportRefusedUrl('poster src');
+  first();
+  second();
+
+  expect(controller.getState().error).toBeNull();
+});
+
+// A disposer is handed to callers who may run it twice -- React's strict-mode
+// double invoke, a consumer holding one past a `release()`. A second run must
+// not decrement a tally another live reporter owns, which would withdraw a
+// refusal that still stands (#330).
+test('a disposer run twice does not withdraw another reporter of the same surface', () => {
+  const controller = new PlayerController();
+
+  const first = controller.reportRefusedUrl('poster src');
+  controller.reportRefusedUrl('poster src');
+  first();
+  first();
+
+  expect(controller.getState().error?.message).toContain('poster src');
 });
 
 // The state has one error slot, so several surfaces refused at once need a
@@ -386,12 +445,12 @@ test('keeps the notice while another surface is still refused', () => {
 // the same notice every time (#330).
 test('publishes the highest-ranked refused surface whatever order the reports arrive in', () => {
   const forwards = new PlayerController();
-  forwards.setRefusedUrl('poster src', true);
-  forwards.setRefusedUrl('mediaSession artwork', true);
+  forwards.reportRefusedUrl('poster src');
+  forwards.reportRefusedUrl('mediaSession artwork');
 
   const backwards = new PlayerController();
-  backwards.setRefusedUrl('mediaSession artwork', true);
-  backwards.setRefusedUrl('poster src', true);
+  backwards.reportRefusedUrl('mediaSession artwork');
+  backwards.reportRefusedUrl('poster src');
 
   expect(forwards.getState().error?.message).toContain('poster src');
   expect(backwards.getState().error?.message).toBe(
@@ -400,23 +459,24 @@ test('publishes the highest-ranked refused surface whatever order the reports ar
 });
 
 // The five call sites are React effects and a media-session binding, all of
-// which re-run for reasons that have nothing to do with the refused value. A
-// call that changes nothing the single error slot can say therefore has to be
-// inert: `#applyPatch` alone would keep publishing the same notice, but it
+// which run for reasons that have nothing to do with the refused value. A
+// registration that changes nothing the single error slot can say therefore has
+// to be inert: `#applyPatch` alone would keep publishing the same notice, but it
 // rebuilds the snapshot and fans it out to every subscriber each time. Both
-// kinds of inert call are covered -- restating a refusal that already stands,
-// and adding a surface that ranks BELOW the one already published (#330).
+// kinds of inert registration are covered -- a second reporter joining a surface
+// that already stands, and a surface joining BELOW the one already published
+// (#330).
 test('a repeated refusal report neither renotifies nor rebuilds the state', () => {
   const controller = new PlayerController();
-  controller.setRefusedUrl('poster src', true);
+  controller.reportRefusedUrl('poster src');
   const published = controller.getState();
   const seen: unknown[] = [];
   const unsubscribe = controller.subscribe((state) => seen.push(state));
   // `subscribe` delivers the current state on registration.
   seen.length = 0;
 
-  controller.setRefusedUrl('poster src', true);
-  controller.setRefusedUrl('nativePoster', true);
+  controller.reportRefusedUrl('poster src');
+  controller.reportRefusedUrl('nativePoster');
 
   expect(seen).toEqual([]);
   expect(controller.getState()).toBe(published);
@@ -429,7 +489,7 @@ test('does not let a refused-URL notice displace a standing error', () => {
   controller.setProvider(fake.provider);
 
   fake.emit({ lifecycle: 'error', activation: 'error', error: fatalError });
-  controller.setRefusedUrl('poster src', true);
+  controller.reportRefusedUrl('poster src');
 
   expect(controller.getState()).toMatchObject({
     lifecycle: 'error',
@@ -446,7 +506,7 @@ test('a refused-URL notice published first masks a later provider notice (#332)'
   const fake = createProvider();
   const controller = new PlayerController();
 
-  controller.setRefusedUrl('poster src', true);
+  controller.reportRefusedUrl('poster src');
   const refused = controller.getState().error;
   controller.setProvider(fake.provider);
   fake.emit({ error: hostNotice });
@@ -464,7 +524,7 @@ test('a refused-URL notice published first masks a later provider notice (#332)'
 test('publishes the refused-URL notice frozen', () => {
   const controller = new PlayerController();
 
-  controller.setRefusedUrl('textTracks src', true);
+  controller.reportRefusedUrl('textTracks src');
 
   expect(Object.isFrozen(controller.getState().error)).toBe(true);
 });

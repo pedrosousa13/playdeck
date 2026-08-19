@@ -8,7 +8,7 @@ import {
   type Ref
 } from 'react';
 import { permittedUrl } from './permitted-url.js';
-import { usePlayer } from './player-context.js';
+import { useRefusedUrlReport, usePlayer } from './player-context.js';
 
 export type ViewportProps = ComponentPropsWithRef<'div'>;
 
@@ -204,17 +204,19 @@ export const Media = ({
     const resolvedSrc = permittedUrl(track.src);
     return resolvedSrc !== undefined ? [{ ...track, resolvedSrc }] : [];
   });
+  // `permittedTextTracks` is `undefined` exactly when `textTracks` is, and is a
+  // subset of it otherwise, so a shorter list is the only way a track can have
+  // been refused. Read through the optional chain rather than defaulted to a
+  // length of zero: with no `textTracks` at all there is nothing to have
+  // refused, so the guard already covers that case and a fallback would only
+  // state one that cannot arise.
   const textTrackRefused =
     textTracks !== undefined &&
-    (permittedTextTracks?.length ?? 0) < textTracks.length;
-  // In an effect, not in render: `setRefusedUrl` writes controller state and
-  // wakes its subscribers. Both surfaces are stated on every run, refused or
-  // not, so replacing a refused `nativePoster` or text track with a permitted
-  // one withdraws its notice. Restating an unchanged answer is inert (#330).
-  useEffect(() => {
-    controller.setRefusedUrl('nativePoster', nativePosterRefused);
-    controller.setRefusedUrl('textTracks src', textTrackRefused);
-  }, [controller, nativePosterRefused, textTrackRefused]);
+    permittedTextTracks?.length !== textTracks.length;
+  // One registration per surface, each standing only while THIS `Media` refuses
+  // that surface -- see `useRefusedUrlReport` (`player-context.ts`) (#330).
+  useRefusedUrlReport(controller, 'nativePoster', nativePosterRefused);
+  useRefusedUrlReport(controller, 'textTracks src', textTrackRefused);
   // Merge the consumer ref onto the internal registration inside one callback
   // ref (rather than Viewport's stable-callback + separate `[ref]` effect):
   // Media is committed-source-gated and mounts its <video> late, so a `[ref]`

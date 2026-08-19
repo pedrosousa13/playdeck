@@ -502,6 +502,75 @@ test('withdraws the artwork notice once setMetadata carries only permitted srcs'
   expect(controller.getState().error).toBeNull();
 });
 
+// Two roots on one document bind to the same coordinator, and a binding is one
+// reporter: the one whose artwork is clean must not be able to withdraw the
+// notice the poisoned one published. This is the media-session shape of the
+// sibling defect `keeps the notice while a second reporter still refuses the
+// same surface` (`configuration-notices.test.ts`) pins in the controller (#330).
+test('a second binding with permitted artwork does not withdraw the first notice', () => {
+  const { session } = createSession();
+  const coordinator = getMediaSessionCoordinator(session);
+  const controller = new PlayerController();
+  const { provider } = createProvider();
+  controller.setProvider(provider);
+
+  bindMediaSession(controller, coordinator, {
+    metadata: { artwork: [{ src: 'javascript:alert(1)' }] }
+  });
+  bindMediaSession(controller, coordinator, {
+    metadata: { artwork: [{ src: 'https://example.com/good.png' }] }
+  });
+
+  expect(controller.getState().error?.message).toContain('artwork');
+});
+
+// A binding that released and left its registration standing would leak: React
+// calls `release()` on every source change and unmount, so the tally would climb
+// with each bind/release pair and the notice could never come back down. The
+// cost is stated at `release()` in `media-session.ts` -- a poisoned artwork
+// field stops being reported once nothing is bound to report it (#330).
+test('withdraws the artwork notice when the binding is released', () => {
+  const { session } = createSession();
+  const coordinator = getMediaSessionCoordinator(session);
+  const controller = new PlayerController();
+  const { provider } = createProvider();
+  controller.setProvider(provider);
+  const binding = bindMediaSession(controller, coordinator, {
+    metadata: { artwork: [{ src: 'javascript:alert(1)' }] }
+  });
+
+  expect(controller.getState().error?.message).toContain('artwork');
+
+  binding.release();
+
+  expect(controller.getState().error).toBeNull();
+});
+
+// The binding holds ONE registration and swaps it only when the answer changes.
+// Tearing it down and re-making it per `setMetadata` would withdraw and
+// re-publish the notice at every call, waking every subscriber for a value that
+// did not move (#330).
+test('re-pushing the same poisoned artwork neither renotifies nor rebuilds the state', () => {
+  const { session } = createSession();
+  const coordinator = getMediaSessionCoordinator(session);
+  const controller = new PlayerController();
+  const { provider } = createProvider();
+  controller.setProvider(provider);
+  const binding = bindMediaSession(controller, coordinator, {
+    metadata: { artwork: [{ src: 'javascript:alert(1)' }] }
+  });
+  const published = controller.getState();
+  const seen: unknown[] = [];
+  const unsubscribe = controller.subscribe((state) => seen.push(state));
+  seen.length = 0;
+
+  binding.setMetadata({ artwork: [{ src: 'javascript:alert(1)' }] });
+
+  expect(seen).toEqual([]);
+  expect(controller.getState()).toBe(published);
+  unsubscribe();
+});
+
 test('on() keeps a re-registered listener after a duplicated unsubscribe', () => {
   const controller = new PlayerController();
   const { emit, provider } = createProvider();

@@ -220,11 +220,14 @@ export class PlayerController {
   // attach would otherwise flap the slot — and it is dropped with the provider
   // that reported it (#235).
   #configurationNotice: PlayerError | undefined;
-  // Every consumer-supplied URL surface whose CURRENT value the shared
-  // allowlist refuses — the live answer, not a log of what was once refused. A
-  // set rather than a single record because each of the five surfaces reports
-  // for itself: a poster whose `src` has been fixed while its `srcSet` is still
-  // poisoned is still refusing something (#330).
+  // How many reporters currently stand behind each refused surface — the live
+  // answer, not a log of what was once refused. Keyed by surface because the
+  // notice is chosen by surface, counted because a surface is a PROP NAME and
+  // several independent component instances can hold that same prop at once.
+  // A boolean per surface was the first shape and it was wrong: two
+  // `PosterImage`s under one `Player.Root` are two reporters, and the permitted
+  // one's report withdrew the poisoned one's notice, so half the render orders
+  // refused in total silence — the exact A09 failure #330 exists to fix (#345).
   //
   // Scoped to the controller rather than to a provider, unlike
   // `#configurationNotice`. That is not a difference in how long a rejection is
@@ -235,8 +238,12 @@ export class PlayerController {
   // ordering the poster renders and reports BEFORE the provider module has
   // finished loading, so a provider-scoped record would be wiped by the very
   // next attach, before anything could observe it.
-  #refusedUrlSurfaces = new Set<RefusedUrlSurface>();
-  // The notice `#refusedUrlSurfaces` currently publishes, cached rather than
+  //
+  // A surface with no standing reporter is deleted rather than left at zero, so
+  // the map's size is bounded by the number of surfaces actually refused right
+  // now and does not grow as component instances churn.
+  #refusedUrlReports = new Map<RefusedUrlSurface, number>();
+  // The notice `#refusedUrlReports` currently publishes, cached rather than
   // rebuilt at each read: the state carries it by reference, and a fresh object
   // per `#applyPatch` would make every unrelated patch look like a change of
   // error to a subscriber comparing identity. Resolved in `#applyPatch` and in
@@ -249,27 +256,58 @@ export class PlayerController {
   // would be, and this reports it without throwing, without touching the
   // lifecycle and without changing what renders (#320, #330).
   //
-  // Declarative — "this surface is/is not refused right now" — rather than a
-  // fire-once report, because a notice that could never be withdrawn was a
-  // permanent false positive: a consumer who replaced a poisoned CMS value with
-  // a good one kept the error forever, and an operator who cannot clear a
-  // security notice learns to ignore all of them, which is the A09 failure #330
-  // exists to fix. Every call site already knows the current answer each time it
-  // runs, so a setter fits them better than a report.
+  // A REGISTRATION, not a setter: the caller says "I am refusing this surface"
+  // and holds the returned disposer for as long as that stays true. The notice
+  // stands while any registration for any surface stands, so a refusal is
+  // withdrawn only by the reporter that made it — never by a sibling that
+  // happens to hold a permitted value for the same prop. A per-prop boolean
+  // could not express that, and the withdrawal it got wrong is not a rare one:
+  // two `PosterImage`s under one root is an ordinary responsive-poster tree.
+  //
+  // Withdrawable at all, rather than fire-once, because a notice that could
+  // never be cleared is a permanent false positive: a consumer who replaced a
+  // poisoned CMS value with a good one kept the error forever, and an operator
+  // who cannot clear a security notice learns to ignore all of them.
+  //
+  // The disposer shape is what makes the React call sites correct by
+  // construction — each is `return controller.reportRefusedUrl(surface)` from an
+  // effect, so the registration is per instance, is torn down on unmount and on
+  // the value turning permitted, and leaks nothing. See `useRefusedUrlReport`
+  // (`packages/react/src/player-context.ts`).
   //
   // Takes the surface, never the value — see `RefusedUrlSurface`.
-  setRefusedUrl = (surface: RefusedUrlSurface, refused: boolean): void => {
-    if (refused) this.#refusedUrlSurfaces.add(surface);
-    else this.#refusedUrlSurfaces.delete(surface);
-    const next = standingRefusedUrlNotice(this.#refusedUrlSurfaces);
-    // The one gate, and it covers both kinds of inert call: one that restates
-    // what the set already said, and a surface joining or leaving BELOW the one
-    // already published. Neither changes what the single error slot can say, and
-    // the five call sites are React effects and a media-session binding that
-    // re-run for reasons having nothing to do with the value — so an inert call
-    // has to stay free of a rebuilt snapshot and a fan-out to every subscriber.
-    // Compared by identity, which holds because `standingRefusedUrlNotice`
-    // returns one shared value per surface rather than a fresh object.
+  reportRefusedUrl = (surface: RefusedUrlSurface): (() => void) => {
+    this.#refusedUrlReports.set(
+      surface,
+      (this.#refusedUrlReports.get(surface) ?? 0) + 1
+    );
+    this.#resolveRefusedUrlNotice();
+    // Idempotent, because the disposer is handed to callers who may run it more
+    // than once — React's strict-mode double invoke, a consumer holding it past
+    // a `release()`. A second run must not decrement a count another live
+    // reporter owns, which would withdraw a refusal that still stands.
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      const standing = (this.#refusedUrlReports.get(surface) ?? 0) - 1;
+      if (standing > 0) this.#refusedUrlReports.set(surface, standing);
+      else this.#refusedUrlReports.delete(surface);
+      this.#resolveRefusedUrlNotice();
+    };
+  };
+
+  #resolveRefusedUrlNotice = (): void => {
+    const next = standingRefusedUrlNotice(this.#refusedUrlReports);
+    // The one gate, and it covers every inert registration: a second reporter
+    // joining a surface that already stands, and a surface joining or leaving
+    // BELOW the one already published. Neither changes what the single error
+    // slot can say, and the call sites are React effects and a media-session
+    // binding that run for reasons having nothing to do with the value — so an
+    // inert registration has to stay free of a rebuilt snapshot and a fan-out to
+    // every subscriber. Compared by identity, which holds because
+    // `standingRefusedUrlNotice` returns one shared value per surface rather
+    // than a fresh object.
     if (next === this.#refusedUrlNotice) return;
     const published = this.#refusedUrlNotice;
     this.#refusedUrlNotice = next;

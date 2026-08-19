@@ -10,7 +10,11 @@ import {
   type ReactElement
 } from 'react';
 import { permittedUrl } from './permitted-url.js';
-import { PlayerContext, usePosterState } from './player-context.js';
+import {
+  PlayerContext,
+  useRefusedUrlReport,
+  usePosterState
+} from './player-context.js';
 
 export type PosterProps = ComponentPropsWithRef<'div'>;
 
@@ -192,22 +196,13 @@ export const PosterImage = ({
   // root there is no controller to report to and the refusal stands silently,
   // exactly as it did before this change.
   const controller = useContext(PlayerContext)?.controller;
-  // In an effect, not in render: `setRefusedUrl` writes controller state and
-  // wakes its subscribers, which a render pass may not do. Both surfaces are
-  // stated on every run, refused or not, so a `src` that changes from a refused
-  // value to a permitted one withdraws its notice rather than leaving a
-  // permanent false positive standing. Restating an unchanged answer is inert,
-  // so re-running this costs nothing (#330).
-  //
-  // Not withdrawn on unmount, deliberately. `Player.Poster` stays mounted for
-  // the player's life and only hides itself, so an unmount is the consumer
-  // taking the poster out of the tree, not the poisoned field being cleaned --
-  // and the value is what the notice is about.
-  useEffect(() => {
-    if (!controller) return;
-    controller.setRefusedUrl('poster src', srcRefused);
-    controller.setRefusedUrl('poster srcSet', srcSetRefused);
-  }, [controller, srcRefused, srcSetRefused]);
+  // One registration per surface, each standing only while THIS poster refuses
+  // that surface -- see `useRefusedUrlReport` (`player-context.ts`) for why the
+  // registration is per instance and what it costs on unmount. Two calls rather
+  // than one effect covering both, so fixing the `src` cannot disturb the
+  // `srcSet` registration (#330).
+  useRefusedUrlReport(controller, 'poster src', srcRefused);
+  useRefusedUrlReport(controller, 'poster srcSet', srcSetRefused);
   const requestKey = posterRequestKey({ src, srcSet, sizes });
   const state = useRef<{
     key: string;

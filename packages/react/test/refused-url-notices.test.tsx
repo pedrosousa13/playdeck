@@ -21,11 +21,7 @@ import { createFakeProvider } from './fixtures/fake-provider';
 
 afterEach(cleanup);
 
-// `PosterImage` is not on the public `Player` namespace's declared surface;
-// `index.test.tsx` and `style-precedence.test.tsx` reach for it the same way.
-const posterPrimitives = Player as typeof Player & {
-  PosterImage: (props: { src?: string; srcSet?: string }) => React.ReactNode;
-};
+const { PosterImage } = Player;
 
 const renderWithPlayer = (ui: ReactNode) => {
   const handle = createRef<Player.PlayerHandle>();
@@ -48,7 +44,6 @@ const renderWithPlayer = (ui: ReactNode) => {
 };
 
 test('reports a refused poster src while rendering exactly as an absent prop', () => {
-  const { PosterImage } = posterPrimitives;
   const { container, controller, notice } = renderWithPlayer(
     <PosterImage src="javascript:alert(1)" />
   );
@@ -67,7 +62,6 @@ test('reports a refused poster src while rendering exactly as an absent prop', (
 });
 
 test('reports a refused poster srcSet candidate and keeps the survivors', () => {
-  const { PosterImage } = posterPrimitives;
   const { container, controller } = renderWithPlayer(
     <PosterImage srcSet="javascript:alert(1) 1x, /good-2x.jpg 2x" />
   );
@@ -79,7 +73,6 @@ test('reports a refused poster srcSet candidate and keeps the survivors', () => 
 });
 
 test('publishes nothing for a poster whose src and srcSet are permitted', () => {
-  const { PosterImage } = posterPrimitives;
   const { controller } = renderWithPlayer(
     <PosterImage src="/poster.jpg" srcSet="/poster-2x.jpg 2x" />
   );
@@ -91,7 +84,6 @@ test('publishes nothing for a poster whose src and srcSet are permitted', () => 
 // bare throughout -- so the report has to be optional, not a `usePlayer()`
 // that throws where the component used to work (#330).
 test('a poster outside Player.Root still refuses the value without throwing', () => {
-  const { PosterImage } = posterPrimitives;
   const { container } = render(<PosterImage src="javascript:alert(1)" />);
 
   expect(container.querySelector('img')!.getAttribute('src')).toBeNull();
@@ -131,7 +123,6 @@ test('reports a refused textTracks src while keeping the permitted tracks', () =
 // permanent false positive teaches an operator to ignore notices, which defeats
 // the A09 monitoring the issue exists to add.
 test('withdraws the poster notice once the refused src is replaced with a permitted one', () => {
-  const { PosterImage } = posterPrimitives;
   const { container, controller, notice, rerender } = renderWithPlayer(
     <PosterImage src="javascript:alert(1)" />
   );
@@ -163,6 +154,96 @@ test('withdraws the nativePoster notice once the refused value is replaced', () 
   expect(controller.getState().error?.message).toContain('nativePoster');
 
   rerender(<Player.Media nativePoster="/poster.jpg" />);
+
+  expect(controller.getState().error).toBeNull();
+});
+
+// Two `PosterImage`s under one `Player.Root` are two reporters, not one. A
+// refusal keyed by the PROP would let the permitted sibling's effect withdraw
+// the poisoned sibling's notice, and which one wins would come down to effect
+// order -- so one render order published and the other was silent. #330's rule
+// (#345) is that no refusal is silent, whatever else is on the page.
+test.each([
+  ['refused first', true],
+  ['permitted first', false]
+])(
+  'keeps a sibling poster refusal published when a permitted poster renders (%s)',
+  (_name, refusedFirst) => {
+    const { controller, notice } = renderWithPlayer(
+      refusedFirst ? (
+        <>
+          <PosterImage src="javascript:alert(1)" />
+          <PosterImage src="/ok.jpg" />
+        </>
+      ) : (
+        <>
+          <PosterImage src="/ok.jpg" />
+          <PosterImage src="javascript:alert(1)" />
+        </>
+      )
+    );
+
+    expect(controller.getState().error?.message).toContain('poster src');
+    expect(notice()?.textContent).toContain('poster src');
+  }
+);
+
+// Withdrawal is per reporter, so fixing one of two poisoned posters leaves the
+// other's refusal published. The other one is still real -- and a notice that
+// vanished because a DIFFERENT field was cleaned would tell an operator the
+// wrong thing about which field to go and look at (#330).
+test('keeps the notice when only one of two poisoned posters is fixed', () => {
+  const { controller, rerender } = renderWithPlayer(
+    <>
+      <PosterImage src="javascript:alert(1)" />
+      <PosterImage src="javascript:alert(2)" />
+    </>
+  );
+
+  rerender(
+    <>
+      <PosterImage src="/fixed.jpg" />
+      <PosterImage src="javascript:alert(2)" />
+    </>
+  );
+
+  expect(controller.getState().error?.message).toContain('poster src');
+});
+
+// Pins the unmount decision, which this pass reversed. The first pass left the
+// registration standing on unmount, reasoning that `Player.Poster` stays mounted
+// and merely hides; it does, so the ordinary flow never reaches this cleanup.
+// But a registration no live component owns can never be withdrawn, and a keyed
+// list remounting poisoned posters would pile them up with no route back to a
+// clear state. The accepted cost is exactly what this test asserts: take the
+// poisoned poster out of the tree and its notice goes with it. See
+// `useRefusedUrlReport` (`player-context.ts`) for the reasoning (#330).
+test('withdraws the notice when the only poster refusing a value unmounts', () => {
+  const { controller, notice, rerender } = renderWithPlayer(
+    <PosterImage src="javascript:alert(1)" />
+  );
+
+  expect(controller.getState().error?.message).toContain('poster src');
+
+  rerender(null);
+
+  expect(controller.getState().error).toBeNull();
+  expect(notice()).toBeNull();
+});
+
+// The churn guard. Mounting and unmounting a poisoned poster over and over must
+// leave the controller exactly where it started, not holding a tally that only
+// ever climbs -- which is what a registration leaked on unmount would build.
+test('comes back to no notice after poisoned posters mount and unmount repeatedly', () => {
+  const { controller, rerender } = renderWithPlayer(
+    <PosterImage src="javascript:alert(1)" />
+  );
+
+  for (let pass = 0; pass < 3; pass += 1) {
+    rerender(null);
+    rerender(<PosterImage src="javascript:alert(1)" />);
+  }
+  rerender(null);
 
   expect(controller.getState().error).toBeNull();
 });

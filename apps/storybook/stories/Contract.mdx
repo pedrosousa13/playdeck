@@ -29,9 +29,13 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   geometry, without stacking and without `role="alert"`, and a player that is
   still playing is never covered by one (#319). It carries the error category on
   `data-state` like `error` does, and it is in the DOM for a consumer to place
-  and for a monitoring system to read. It leaves the DOM again when the rejected
-  value is replaced with one the allowlist permits: a notice reports a rejection
-  that stands, not one that once happened (#330).
+  and for a monitoring system to read. A notice the library's own allowlist
+  published leaves the DOM again once nothing holds the rejected value — the
+  prop is fixed, or the component holding it goes away — because that kind of
+  notice reports a rejection that stands, not one that once happened (#330).
+  Notices from elsewhere are withdrawn on their own terms: a provider's goes
+  with its provider, and a configuration conflict's goes when the configuration
+  changes.
   A failure — including a non-fatal `provider`, `policy` or `unsupported` one —
   still renders `error` with its overlay and its retry.
 - **`data-state`** — the part's derived state (e.g. `paused`/`playing`,

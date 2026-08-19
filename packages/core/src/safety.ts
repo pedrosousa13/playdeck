@@ -70,8 +70,8 @@ export const autoplayConfigurationError = (): PlayerError =>
 //
 // Built once and shared rather than per call. A `PlayerError` is frozen and
 // these five carry nothing controller-specific, so one value per surface is
-// enough — and it lets `setRefusedUrl` decide by identity whether the published
-// notice actually changed, instead of comparing message text.
+// enough — and it lets `reportRefusedUrl` decide by identity whether the
+// published notice actually changed, instead of comparing message text.
 //
 // The array below is the tie-break: the state has one error slot, so several
 // surfaces refused at once publish the first of these that stands. Declaration
@@ -128,12 +128,14 @@ const REFUSED_URL_SURFACE_RANK = [
   'mediaSession artwork'
 ] as const satisfies readonly RefusedUrlSurface[];
 
-// The notice the given set of standing refusals publishes, or `undefined` when
-// nothing stands refused. Returning `undefined` rather than a notice for an
-// empty set is the whole point of #330's second pass: the notice says a refusal
-// stands right now, not that one once happened (#330).
+// The notice the standing refusal registrations publish, or `undefined` when
+// none stands. Returning `undefined` rather than a notice for an empty tally is
+// the whole point of #330's second pass: the notice says a refusal stands right
+// now, not that one once happened. Only membership is read — how many reporters
+// stand behind a surface is `PlayerController`'s bookkeeping, not this
+// function's business (#330).
 export const standingRefusedUrlNotice = (
-  refused: ReadonlySet<RefusedUrlSurface>
+  refused: ReadonlyMap<RefusedUrlSurface, unknown>
 ): PlayerError | undefined => {
   const surface = REFUSED_URL_SURFACE_RANK.find((candidate) =>
     refused.has(candidate)

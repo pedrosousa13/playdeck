@@ -31,7 +31,7 @@ export type PlayerError = {
 // left silent. Named for the prop the consumer wrote, because the prop is what
 // the operator has to go and fix.
 //
-// A closed union rather than a `string`, deliberately. `setRefusedUrl` is
+// A closed union rather than a `string`, deliberately. `reportRefusedUrl` is
 // reached from React components holding the value that was just refused, and a
 // free-form parameter is an open invitation to pass it along "for context" —
 // which would put attacker-controlled text into an error a monitor may log and
