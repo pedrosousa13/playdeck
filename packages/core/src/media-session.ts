@@ -153,6 +153,17 @@ const permittedArtwork = (
       )
     : [];
 
+// The detection half of the refusal above (#330). Kept apart from
+// `permittedArtwork` rather than folded into it because the two run in
+// different places: the filter runs inside the coordinator, which is shared by
+// every root on the document and holds no controller, while this runs in
+// `bindMediaSession`, which holds exactly one. Re-running the filter to count
+// its survivors costs a pass over an array of a handful of entries and keeps
+// one definition of "refused" rather than two that can drift.
+const hasRefusedArtwork = (metadata: MediaMetadataInput | null): boolean =>
+  metadata?.artwork !== undefined &&
+  permittedArtwork(metadata.artwork).length < metadata.artwork.length;
+
 const toMediaMetadata = (metadata: MediaMetadataInput): unknown => {
   const Ctor = globalMediaMetadata();
   const init = {
@@ -277,6 +288,30 @@ export const bindMediaSession = (
   coordinator: MediaSessionCoordinator,
   options: { readonly metadata?: MediaMetadataInput | null } = {}
 ): MediaSessionBinding => {
+  // Re-evaluated at every point metadata enters the binding, and evaluated
+  // whether or not this root ever owns the surface: the consumer's field is
+  // poisoned either way, and ownership is arbitration between roots, not a
+  // judgement on the value (#330).
+  //
+  // This binding is ONE reporter, so it holds at most one registration and
+  // swaps it only when the answer changes -- a `setMetadata` that carries the
+  // same poisoned list must not tear the registration down and re-make it,
+  // which would withdraw and re-publish the notice at every call. A cleaned
+  // list disposes the registration, which is how the notice is withdrawn.
+  let artworkReport: (() => void) | undefined;
+  const reportRefusedArtwork = (metadata: MediaMetadataInput | null): void => {
+    const refused = hasRefusedArtwork(metadata);
+    if (refused === (artworkReport !== undefined)) return;
+    if (refused)
+      artworkReport = controller.reportRefusedUrl('mediaSession artwork');
+    else {
+      artworkReport?.();
+      artworkReport = undefined;
+    }
+  };
+
+  reportRefusedArtwork(options.metadata ?? null);
+
   const root = coordinator.register({
     metadata: options.metadata ?? null,
     actions: {
@@ -317,8 +352,20 @@ export const bindMediaSession = (
   });
 
   return {
-    setMetadata: (metadata) => root.setMetadata(metadata),
+    setMetadata: (metadata) => {
+      reportRefusedArtwork(metadata);
+      root.setMetadata(metadata);
+    },
     release: () => {
+      // The registration goes with the reporter that made it. A binding that
+      // released and left its registration standing would leak: React calls
+      // `release()` on every source change and unmount, so the tally would climb
+      // with each bind/release pair and the notice could never be withdrawn
+      // again. The cost is that a poisoned artwork field stops being reported
+      // once nothing is bound to report it -- which is the same rule every other
+      // surface follows (#330).
+      artworkReport?.();
+      artworkReport = undefined;
       unsubscribe();
       root.release();
     }

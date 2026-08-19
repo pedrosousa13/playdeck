@@ -26,6 +26,25 @@ export type PlayerError = {
   readonly cause?: unknown;
 };
 
+// The consumer-supplied URL props the shared allowlist governs outside a
+// provider — the five surfaces #320 routed through `isPermittedSourceUrl` and
+// left silent. Named for the prop the consumer wrote, because the prop is what
+// the operator has to go and fix.
+//
+// A closed union rather than a `string`, deliberately. `reportRefusedUrl` is
+// reached from React components holding the value that was just refused, and a
+// free-form parameter is an open invitation to pass it along "for context" —
+// which would put attacker-controlled text into an error a monitor may log and
+// `ErrorDisplay` may render. The type makes that impossible rather than
+// discouraged, and the notice message is built in core from this key alone
+// (#330).
+export type RefusedUrlSurface =
+  | 'poster src'
+  | 'poster srcSet'
+  | 'nativePoster'
+  | 'textTracks src'
+  | 'mediaSession artwork';
+
 export type TextTrackKind = 'subtitles' | 'captions';
 export type TextTrackReadiness = 'idle' | 'loading' | 'loaded' | 'error';
 export type CaptionRendering = 'custom' | 'native' | 'provider' | 'unavailable';

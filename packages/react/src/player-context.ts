@@ -1,6 +1,7 @@
 import type {
   PlayerController,
   PlayerState,
+  RefusedUrlSurface,
   TextCue,
   detectSource
 } from '@playdeck/core';
@@ -8,6 +9,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -90,6 +92,45 @@ export const usePlayer = (): PlayerContextValue => {
 
 export const usePosterState = (): 'visible' | 'hidden' =>
   useContext(PosterContext);
+
+// Registers a standing refusal for as long as `refused` holds, and disposes it
+// when it stops holding, when the surface changes, or when the calling
+// component unmounts (#330). In an effect, not in render: `reportRefusedUrl`
+// writes controller state and wakes its subscribers, which a render pass may
+// not do.
+//
+// The registration is per calling INSTANCE, which is the whole point. Two
+// `PosterImage`s under one `Player.Root` hold the same prop name and are two
+// separate reporters, so the one holding a permitted `src` must not be able to
+// withdraw the notice the poisoned one published -- which is what a per-prop
+// setter would do, silently, in half the render orders.
+//
+// `controller` is optional because `PosterImage` renders outside `Player.Root`
+// too. There the refusal stands with nothing to report it to, exactly as it did
+// before #330.
+//
+// Withdrawn on unmount, deliberately, even though `Player.Poster` stays mounted
+// and merely hides -- so the ordinary flow never reaches this cleanup at all.
+// Leaving the registration standing would still be wrong: a consumer who does
+// conditionally render a poster would otherwise leave a registration no live
+// component owns, and a keyed list remounting poisoned posters would pile them
+// up with no way back to a clear state. The cost is real and accepted: take the
+// poisoned `PosterImage` out of the tree and its notice goes with it, so a
+// monitor sampling `PlayerState.error` after that point sees nothing. That is
+// the same rule the
+// value-turned-permitted withdrawal already follows -- a notice reports a
+// refusal that stands right now -- and it is pinned by `withdraws the notice
+// when the only poster refusing a value unmounts`.
+export const useRefusedUrlReport = (
+  controller: PlayerController | undefined,
+  surface: RefusedUrlSurface,
+  refused: boolean
+): void => {
+  useEffect(() => {
+    if (!controller || !refused) return;
+    return controller.reportRefusedUrl(surface);
+  }, [controller, refused, surface]);
+};
 
 const selectionsEqual = (left: unknown, right: unknown): boolean => {
   if (Object.is(left, right)) return true;

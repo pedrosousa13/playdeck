@@ -1,5 +1,6 @@
 import {
   isValidElement,
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -9,7 +10,11 @@ import {
   type ReactElement
 } from 'react';
 import { permittedUrl } from './permitted-url.js';
-import { usePosterState } from './player-context.js';
+import {
+  PlayerContext,
+  useRefusedUrlReport,
+  usePosterState
+} from './player-context.js';
 
 export type PosterProps = ComponentPropsWithRef<'div'>;
 
@@ -125,19 +130,29 @@ const initialPosterImageState = (
 //
 // An empty result is `undefined`, not `''` -- an empty string is
 // truthy-adjacent enough to be a trap.
+//
+// `refused` rides along rather than being recomputed by a second pass over the
+// list: the split is this function's own grammar (see above), and a caller
+// re-deriving "was anything dropped" would have to repeat it and could then
+// disagree with it. It is one flag for the whole list, not one per candidate --
+// the notice slot holds one notice, and an operator with a poisoned `srcSet`
+// has the same one field to go and clean either way (#330).
 const permittedPosterSrcSet = (
   srcSet: string | undefined
-): string | undefined => {
-  if (srcSet === undefined) return undefined;
-  const survivors = srcSet
+): { readonly value: string | undefined; readonly refused: boolean } => {
+  if (srcSet === undefined) return { value: undefined, refused: false };
+  const candidates = srcSet
     .split(',')
     .map((candidate) => candidate.trim())
-    .filter((candidate) => candidate.length > 0)
-    .flatMap((candidate) => {
-      const resolved = permittedUrl(candidate);
-      return resolved !== undefined ? [resolved] : [];
-    });
-  return survivors.length > 0 ? survivors.join(', ') : undefined;
+    .filter((candidate) => candidate.length > 0);
+  const survivors = candidates.flatMap((candidate) => {
+    const resolved = permittedUrl(candidate);
+    return resolved !== undefined ? [resolved] : [];
+  });
+  return {
+    value: survivors.length > 0 ? survivors.join(', ') : undefined,
+    refused: survivors.length < candidates.length
+  };
 };
 
 const posterImageStyle: CSSProperties = {
@@ -171,7 +186,23 @@ export const PosterImage = ({
   // `type` internally, which is what refuses `blob:` here too -- a bare
   // poster string never carries a `type: 'video'`.
   const src = permittedUrl(srcProp);
-  const srcSet = permittedPosterSrcSet(srcSetProp);
+  const { refused: srcSetRefused, value: srcSet } =
+    permittedPosterSrcSet(srcSetProp);
+  const srcRefused = srcProp !== undefined && src === undefined;
+  // Read straight off the context rather than through `usePlayer()`, which
+  // throws outside `Player.Root`. `PosterImage` is usable on its own -- it
+  // needs no player state to render an <img> -- and #330 is a detection fix,
+  // so it must not turn a standalone poster into a thrown error. Outside a
+  // root there is no controller to report to and the refusal stands silently,
+  // exactly as it did before #330.
+  const controller = useContext(PlayerContext)?.controller;
+  // One registration per surface, each standing only while THIS poster refuses
+  // that surface -- see `useRefusedUrlReport` (`player-context.ts`) for why the
+  // registration is per instance and what it costs on unmount. Two calls rather
+  // than one effect covering both, so fixing the `src` cannot disturb the
+  // `srcSet` registration (#330).
+  useRefusedUrlReport(controller, 'poster src', srcRefused);
+  useRefusedUrlReport(controller, 'poster srcSet', srcSetRefused);
   const requestKey = posterRequestKey({ src, srcSet, sizes });
   const state = useRef<{
     key: string;
