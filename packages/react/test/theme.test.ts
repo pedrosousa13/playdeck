@@ -170,6 +170,191 @@ describe('theme contract', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Non-text contrast (#190).
+//
+// WCAG 2.2 AA 1.4.11 puts a 3:1 floor under the visual boundary of a
+// user-interface component, and AA is a release gate for this library. The seek
+// slider's boundaries are painted from this file's own token defaults, so they
+// are checkable as arithmetic -- and they have to be. axe-core implements 1.4.3
+// (text only) and ships no 1.4.11 rule, and the composition the a11y suite
+// scans deliberately never mounts this stylesheet, so an axe run passes either
+// side of a regression here and reports nothing at all.
+//
+// Measured against the backdrop token alone. The control surface really sits
+// over a scrim over arbitrary video frames, so a translucent white part lands
+// *closer* to its surround over any brighter frame: these ratios are a ceiling,
+// not a typical case. Widening the target to a worst-case video ground is a
+// deliberate, recorded simplification of #190, not an oversight here.
+
+type Rgba = { red: number; green: number; blue: number; alpha: number };
+
+/**
+ * The default a token is read with, taken from the shipped file rather than
+ * restated here. That is the point: editing a default without editing the
+ * ratios below has to fail, or this check drifts away from what ships.
+ *
+ * Every `var()` read of a token has to agree on its fallback -- the backdrop is
+ * read by two rules -- so disagreement is itself a failure, and so is a token
+ * this file only declares, since a declaration would beat a consumer's
+ * inherited value and there would be no `var(name, default)` to find.
+ */
+const tokenDefault = (name: string): string => {
+  const reads = new RegExp(`var\\(\\s*${name}\\s*,\\s*`, 'g');
+  const defaults = new Set<string>();
+  for (
+    let read = reads.exec(withoutComments);
+    read !== null;
+    read = reads.exec(withoutComments)
+  ) {
+    // Scan to the `)` that closes this `var()`, so a nested `rgb(...)` in the
+    // fallback position is taken whole.
+    const start = read.index + read[0].length;
+    let depth = 1;
+    let end = start;
+    for (; end < withoutComments.length && depth > 0; end++) {
+      if (withoutComments[end] === '(') depth++;
+      else if (withoutComments[end] === ')') depth--;
+    }
+    defaults.add(withoutComments.slice(start, end - 1).trim());
+  }
+  if (defaults.size !== 1)
+    throw new Error(
+      `${name}: expected one fallback default in theme.css, found ${
+        defaults.size === 0 ? 'none' : [...defaults].join(' / ')
+      }`
+    );
+  return [...defaults][0];
+};
+
+const parseColor = (value: string): Rgba => {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value);
+  if (hex !== null) {
+    const digits = hex[1];
+    const channel = (index: number): number =>
+      digits.length === 3
+        ? Number.parseInt(digits[index].repeat(2), 16) / 255
+        : Number.parseInt(digits.slice(index * 2, index * 2 + 2), 16) / 255;
+    return { red: channel(0), green: channel(1), blue: channel(2), alpha: 1 };
+  }
+  const rgb = /^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\/\s*([\d.]+)\s*\)$/i.exec(
+    value
+  );
+  if (rgb !== null)
+    return {
+      red: Number(rgb[1]) / 255,
+      green: Number(rgb[2]) / 255,
+      blue: Number(rgb[3]) / 255,
+      alpha: Number(rgb[4])
+    };
+  throw new Error(`theme.css: cannot parse the colour default \`${value}\``);
+};
+
+/** Source-over composite of a translucent colour onto an opaque ground. */
+const over = (color: Rgba, ground: Rgba): Rgba => {
+  if (ground.alpha !== 1)
+    throw new Error('the ground colour must be opaque to composite against');
+  const blend = (top: number, bottom: number): number =>
+    top * color.alpha + bottom * (1 - color.alpha);
+  return {
+    red: blend(color.red, ground.red),
+    green: blend(color.green, ground.green),
+    blue: blend(color.blue, ground.blue),
+    alpha: 1
+  };
+};
+
+/** WCAG 2.x relative luminance. */
+const luminance = ({ red, green, blue }: Rgba): number => {
+  const linear = (channel: number): number =>
+    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue);
+};
+
+/** WCAG 2.x contrast ratio, `(L1 + 0.05) / (L2 + 0.05)`. */
+const contrast = (one: Rgba, other: Rgba): number => {
+  const [lighter, darker] = [luminance(one), luminance(other)].sort(
+    (a, b) => b - a
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+describe('slider non-text contrast', () => {
+  const backdrop = parseColor(tokenDefault('--playdeck-color-backdrop'));
+  const track = over(
+    parseColor(tokenDefault('--playdeck-color-track')),
+    backdrop
+  );
+  const buffered = over(
+    parseColor(tokenDefault('--playdeck-color-buffered')),
+    backdrop
+  );
+  const accent = over(
+    parseColor(tokenDefault('--playdeck-color-accent')),
+    backdrop
+  );
+
+  const ratios = {
+    'track vs backdrop': contrast(track, backdrop),
+    'buffered vs track': contrast(buffered, track),
+    'buffered vs backdrop': contrast(buffered, backdrop),
+    'accent vs backdrop': contrast(accent, backdrop),
+    'accent vs track': contrast(accent, track),
+    'accent vs buffered': contrast(accent, buffered)
+  };
+
+  // What is asserted, and what is not.
+  //
+  // The scrubbable track against the ground behind it, and the loaded range
+  // against the unfilled track, are the two boundaries a low-vision user needs
+  // to read off this control, and both hold under any resolution of the third.
+  //
+  // Neither accent boundary is asserted, and that is a stated limit of this
+  // check rather than a gap to be closed later. Both are arithmetically out of
+  // reach while the accent token stays `#3ea6ff`, whose relative luminance is
+  // 0.3552: a colour it clears 3:1 against has to sit at or below a luminance
+  // of 0.0851, and the floor above puts the track at or above 0.10 and the
+  // buffered range at or above 0.40. Raising the accent's own contrast against
+  // them is what the third target of #190 asked for, and it is unreachable from
+  // this side -- against opaque white, the brightest the buffered range could
+  // ever be, the accent still measures only 2.59:1.
+  //
+  // So they are measured and reported below at their real values (accent vs
+  // track 2.59:1, accent vs buffered 1.23:1), and moving either needs a
+  // maintainer decision about the accent token itself, recorded on #190.
+  const asserted = ['track vs backdrop', 'buffered vs track'] as const;
+
+  test('every asserted boundary clears the 3:1 floor', () => {
+    const belowFloor = asserted
+      .filter((boundary) => ratios[boundary] < 3)
+      .map(
+        (boundary) =>
+          `${boundary}: ${ratios[boundary].toFixed(4)}:1 is below the 3:1 floor`
+      );
+    expect(belowFloor).toEqual([]);
+  });
+
+  // Every ratio in one place, asserted rather than logged, so a reviewer checks
+  // the arithmetic instead of trusting it -- and so that moving a token default
+  // without restating what it does to each boundary cannot pass.
+  test('states the composited ratio of every slider boundary', () => {
+    const stated = Object.fromEntries(
+      Object.entries(ratios).map(([boundary, ratio]) => [
+        boundary,
+        `${ratio.toFixed(2)}:1`
+      ])
+    );
+    expect(stated).toEqual({
+      'track vs backdrop': '3.13:1',
+      'buffered vs track': '3.18:1',
+      'buffered vs backdrop': '9.96:1',
+      'accent vs backdrop': '8.10:1',
+      'accent vs track': '2.59:1',
+      'accent vs buffered': '1.23:1'
+    });
+  });
+});
+
 describe('headless import chain', () => {
   test('no primitive source file imports CSS', async () => {
     // The whole point of the separate entry: importing a primitive must never
