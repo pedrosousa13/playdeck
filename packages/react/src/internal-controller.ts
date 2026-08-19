@@ -18,13 +18,17 @@ import type { PlayerController } from '@playdeck/core';
  * beside it instead of the whole controller by default.
  *
  * `Symbol.for` and not `Symbol()`: the key is looked up from the global symbol
- * registry, so a caller that cannot import this module still reaches it by
- * naming the same string. `apps/storybook/.storybook/mock-player.tsx` is that
- * caller -- it imports the package entry, and this module is deliberately not
- * exported from `index.tsx` (the same way `permitted-url.ts` is not). The
- * registry is a plain runtime global, so the hatch works in a browser and not
- * only under a bundler that can resolve deep paths, which the 35 Storybook e2e
- * tests running through that decorator require.
+ * registry, so the hatch has exactly one name -- the string
+ * `'playdeck.internal.controller'` -- and that name is the whole of it. Grep it
+ * and every reader and every writer of the hatch is on screen at once, whether
+ * or not they import this module. `apps/storybook/.storybook/mock-player.tsx`
+ * is the caller that does not: it consumes `@playdeck/react` as a package, the
+ * way an outside consumer does, and this module is deliberately not exported
+ * from `index.tsx` (the same way `permitted-url.ts` is not). A `Symbol()` would
+ * force the alternative -- either that file reaches into this package's source
+ * tree, or the key becomes a published export -- and the published export
+ * surface staying exactly as it was is the point. Nothing here is in the
+ * `exports` map, so nothing here is API.
  *
  * Being a symbol keeps the key out of `Object.keys` and `JSON.stringify`, but
  * NOT out of object spread, which copies enumerable symbol keys -- measured,

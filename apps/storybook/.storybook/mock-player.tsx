@@ -176,16 +176,23 @@ export const useMockPlayer = (parameters: MockPlayerParameters) => {
     // Staging a fake provider is the one job that needs the controller itself,
     // and this is the one sanctioned way back to it.
     //
-    // The symbol is spelled out here rather than imported, because this file
-    // imports the package entry `@playdeck/react` and the module that owns the
-    // key (`packages/react/src/internal-controller.ts`) is internal to that
-    // package -- not exported from `index.tsx`, the same way `permitted-url.ts`
-    // is not. That is exactly why the key is a `Symbol.for`: the global symbol
-    // registry is reachable by name from anywhere at runtime, in the browser
-    // Storybook actually runs in, with no new published export and no build
-    // config. Change the string here and it silently reads `undefined`, so the
-    // two spellings are kept in step by `internal-controller.ts` naming this
-    // file and by the e2e suite that runs through this decorator.
+    // The symbol is spelled out rather than imported so that this file keeps
+    // consuming `@playdeck/react` through its package entry, the way an
+    // outside consumer does, instead of reaching into `packages/react/src/`
+    // for a module (`internal-controller.ts`) that entry deliberately does not
+    // export. That is a convention and not a rule here -- eslint.config.js
+    // scopes `no-restricted-imports` to `stories/reference/**`, so nothing
+    // would stop a deep import from this directory. It is what the global
+    // symbol registry buys: the hatch has one name, the string below, and
+    // naming it is the whole of reaching it -- no deep import here, no new
+    // published export there, and grepping the string puts both ends on
+    // screen.
+    //
+    // Misspell it and this reads `undefined` and the mock is never staged, so
+    // the story gets a player with no provider. `mock-player.contract.test.ts`
+    // catches that in the node suite rather than the e2e run: its `seekTo`
+    // cases drive a real `Player.Root` through this hook, and go red with
+    // `reason: 'not-ready'` -- measured by mangling the string, not assumed.
     const controller = (
       handleRef.current as unknown as Record<symbol, PlayerController> | null
     )?.[Symbol.for('playdeck.internal.controller')];
