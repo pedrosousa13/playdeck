@@ -18,7 +18,10 @@ defensible. Three things weigh against it.
 **The cover is already the answer.** The failure this was raised for — a paused
 first frame with no cover, no playback and no gesture that asked for either —
 was a real defect, and it is fixed. The poster now stays up because the frame
-writer defers while autoplay is configured and has not played. Once the cover
+writer defers on either of two counts: while autoplay is configured and has not
+played, and while a play command issued against the attached media has not been
+confirmed — which is what covers a refused `play()` where no autoplay was
+configured at all (#244). Once the cover
 survives the refusal, the viewer sees exactly what they saw before playback was
 attempted, which is the state the consumer designed. Adding a second behaviour
 on top would be solving a problem that no longer exists.

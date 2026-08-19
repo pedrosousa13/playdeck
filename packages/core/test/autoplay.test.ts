@@ -949,3 +949,51 @@ test('reads the reduced-motion query again for the next source', async () => {
   await vi.waitFor(() => expect(second.calls).toEqual(['play']));
   expect(queries).toEqual(['(prefers-reduced-motion: reduce)']);
 });
+
+// #244: `hasUnconfirmedPlayAttempt` answers `Root`'s first-frame poster writer,
+// and it has to mean "an attempt is still waiting on confirmation" rather than
+// "not playing since some play was issued". A record left standing past the
+// patch that confirms playback would answer for every later pause in the same
+// generation, and would swallow the `'started'` fall-through the writer's first
+// gate depends on.
+test('drops the play attempt once a patch confirms playback', async () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+
+  await controller.play();
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(true);
+
+  fake.emit({ playback: 'playing' }, playEvent);
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(false);
+
+  fake.emit({ playback: 'paused' });
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(false);
+});
+
+// The other half of the same rule, and the one #244 is filed for: nothing
+// confirmed this attempt, so the record stands for the rest of the generation.
+// A pause reported after the refusal must not clear it -- the media is still
+// sitting on the frame the refusal left paused, and the poster has to stay over
+// it however many patches arrive afterwards.
+test('keeps the play attempt standing when a refusal is followed by a pause', async () => {
+  const fake = createProvider({
+    play: async () => ({ ok: false, reason: 'blocked' })
+  });
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+
+  const result = await controller.play();
+  expect(result).toMatchObject({ ok: false });
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(true);
+
+  fake.emit({ playback: 'paused' });
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(true);
+
+  // Scoped to the generation: freshly attached media has no attempt of its own,
+  // and its first decoded frame must go back to hiding the poster unaided.
+  controller.setProvider(createProvider().provider);
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(false);
+});

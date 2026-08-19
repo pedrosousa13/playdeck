@@ -136,6 +136,21 @@ that was never configured, and from one a browser refused: nothing was asked of
 the provider at all.
 _Avoid_: skipped autoplay, disabled autoplay, cancelled autoplay
 
+**Unconfirmed play attempt**:
+A play command issued against the media attached now, for which playback has
+never reached `playing` — refused, faulted, or still in flight. Whatever issued
+it counts: the API, a `PlayButton` press, or autoplay's own attempt. It is
+bookkeeping about a command rather than a fact about the player, so it lives on
+the controller and not in player state: a refusal is reported to the caller that
+issued it and to nobody else, and the one reader is the first-frame poster
+writer, which must not uncover a frame a refusal left paused (#244). Dropped the
+moment a provider patch confirms playback, and scoped to the generation, so
+attaching a provider ends it. "Confirmed" here is the confirmation a Requested
+origin waits for — the provider reporting the change a command asked for — and
+not the published answer Echo names, which is why Echo's _Avoid_ list does not
+reach it.
+_Avoid_: play in progress, unacknowledged play
+
 ### Adapters
 
 See [ADR-0004](docs/adr/0004-cross-provider-options-live-on-root.md) for what

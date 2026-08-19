@@ -587,6 +587,15 @@ export class PlayerController {
   // Scoped to the generation, so attaching a provider clears it: the frame that
   // decodes for freshly attached media is not the one an earlier refusal left
   // paused, and it must keep hiding the poster on its own.
+  //
+  // The record is dropped in `#applyPatch` the moment a patch reports
+  // `'playing'`, so a viewer who pauses confirmed playback does not re-arm this
+  // — without that, it would answer "not playing since some play was issued"
+  // rather than what it is named for. The `playback` term stays because one
+  // command draws no such patch: a `play()` issued against media already
+  // playing, which leaves a record nothing clears. That record cannot cost
+  // anything, because playback confirmed in this generation means the poster is
+  // already hidden and the writer this answers only ever hides.
   hasUnconfirmedPlayAttempt = (): boolean =>
     this.#playAttemptGeneration === this.#generation &&
     this.#state.playback !== 'playing';
@@ -950,6 +959,14 @@ export class PlayerController {
             this.#refusedUrlNotice ??
             null)
     };
+    // A play command stops being unconfirmed here and nowhere else: the promise
+    // it returns resolving is not playback, a provider patch reporting
+    // `'playing'` is. Dropping the record at that transition keeps
+    // `hasUnconfirmedPlayAttempt` answering for the attempt it names rather than
+    // for every later pause in the same generation (#244).
+    if (nextState.playback === 'playing') {
+      this.#playAttemptGeneration = undefined;
+    }
     this.#setState(nextState);
   };
 

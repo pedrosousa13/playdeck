@@ -499,9 +499,10 @@ export const Root = ({
       // The controller answers it rather than `Root` counting its own calls,
       // because `Root` cannot see the calls that matter: `PlayButton` and every
       // `usePlayerActions` consumer reach `controller.play` straight from the
-      // context, never through this component. It answers false again once
-      // playback is confirmed, which leaves the `'started'` fall-through above
-      // reachable and unchanged.
+      // context, never through this component. It answers false again once a
+      // patch confirms playback -- the controller drops the record there, so a
+      // pause after confirmed playback does not re-arm it -- which leaves the
+      // `'started'` fall-through above reachable and unchanged.
       const onLoadedData = () => {
         const autoplayState = controller.getState().autoplay;
         if (
