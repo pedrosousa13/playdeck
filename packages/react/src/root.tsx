@@ -486,6 +486,23 @@ export const Root = ({
       // So the immediate call below for media that attaches already decodable
       // reads `'idle'` whatever the mode is, as does a `loadeddata` arriving
       // before the provider's `load()`.
+      //
+      // All of which is about an attempt autoplay is going to make. None of it
+      // can see one a *command* already made, and under `autoplay={false}` the
+      // gate above has no mode to read at all -- so a `play()` the browser
+      // refused with `NotAllowedError` left exactly the paused, uncovered frame
+      // described above, reached by a command instead of by autoplay (#244).
+      // Hence the second gate, on the same allow-list terms as the first: a
+      // command was issued for this media and playback never confirmed, so
+      // defer, refused or merely still in flight.
+      //
+      // The controller answers it rather than `Root` counting its own calls,
+      // because `Root` cannot see the calls that matter: `PlayButton` and every
+      // `usePlayerActions` consumer reach `controller.play` straight from the
+      // context, never through this component. It answers false again once a
+      // patch confirms playback -- the controller drops the record there, so a
+      // pause after confirmed playback does not re-arm it -- which leaves the
+      // `'started'` fall-through above reachable and unchanged.
       const onLoadedData = () => {
         const autoplayState = controller.getState().autoplay;
         if (
@@ -494,6 +511,7 @@ export const Root = ({
         ) {
           return;
         }
+        if (controller.hasUnconfirmedPlayAttempt()) return;
         if (
           currentMedia.current === media &&
           providerSourceTransition.current === attachedSourceTransition

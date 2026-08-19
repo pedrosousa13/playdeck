@@ -1116,6 +1116,11 @@ test('hands back only the declared PlayerHandle surface through the ref', () => 
   // controller member gets looked at, and this is the one that proved a member
   // can arrive between the narrowing and the fix.
   expect(surface.reportRefusedUrl).toBeUndefined();
+  // The second member to arrive after the narrowing (#244), and the same
+  // judgement: `Root`'s first-frame poster writer asks the controller whether a
+  // play command is still waiting on confirmation, which is bookkeeping about a
+  // command and not a player command a consumer issues.
+  expect(surface.hasUnconfirmedPlayAttempt).toBeUndefined();
   expect(surface.playWithOrigin).toBeUndefined();
   expect(surface.pauseWithOrigin).toBeUndefined();
   expect(surface.togglePlaybackWithOrigin).toBeUndefined();
@@ -2011,6 +2016,155 @@ test('keeps the poster visible when cached media attaches under refused autoplay
       .getByText('Cached blocked poster')
       .parentElement?.getAttribute('data-state')
   ).toBe('visible');
+});
+
+// #244: the #242 gate keys on the configured autoplay *mode*, so it is inert
+// for `autoplay={false}`. A programmatic `play()` can be refused with
+// `NotAllowedError` exactly as an autoplay attempt can, and the media still
+// decodes a frame afterwards. This probes whether that refusal leaves the same
+// paused, uncovered first frame #242 fixed.
+test('keeps the poster visible when a frame decodes after a refused programmatic play', async () => {
+  const { Poster } = posterPrimitives;
+  const handle = createRef<Player.PlayerHandle>();
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, 'play')
+    .mockRejectedValue(
+      new DOMException('Playback blocked.', 'NotAllowedError')
+    );
+  render(
+    <LegacyRoot autoplay={false} ref={handle} source="/refused.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Refused play poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+
+  confirmMetadataReady(media);
+  const result = await act(async () => handle.current?.play());
+
+  // The refusal was issued and observed: the command failed, and playback never
+  // reached `'playing'`, so nothing hid the poster on the way here.
+  expect(play).toHaveBeenCalledOnce();
+  expect(result).toMatchObject({ ok: false });
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(screen.getByRole('button').dataset.autoplayState).toBe('idle');
+  expect(
+    screen
+      .getByText('Refused play poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+
+  fireEvent.loadedData(media);
+
+  // Playback is still `'paused'`, so the `playing` subscription -- the only
+  // other writer that hides the poster -- cannot have run: whatever the poster
+  // reads now was written by the `loadeddata` handler.
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(
+    screen
+      .getByText('Refused play poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+});
+
+// #244, arriving as a race: `loadeddata` can land while the `play()` promise is
+// still in flight. The frame is paused for the same reason it is in the test
+// above -- the refusal is simply not told yet -- and hiding the poster on the
+// decode leaves the rejection that follows with no way to put the cover back.
+test('keeps the poster visible when a frame decodes while a refused play is still in flight', async () => {
+  const { Poster } = posterPrimitives;
+  const handle = createRef<Player.PlayerHandle>();
+  let refuse!: (reason: unknown) => void;
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockReturnValue(
+    new Promise<void>((_, reject) => {
+      refuse = reject;
+    })
+  );
+  render(
+    <LegacyRoot autoplay={false} ref={handle} source="/in-flight.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>In-flight play poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const posterState = (): string | null | undefined =>
+    screen
+      .getByText('In-flight play poster')
+      .parentElement?.getAttribute('data-state');
+
+  confirmMetadataReady(media);
+  const attempt = handle.current!.play();
+
+  // The decode lands first, with the command unsettled: nothing yet says the
+  // frame will ever play, so nothing may uncover it.
+  fireEvent.loadedData(media);
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
+
+  refuse(new DOMException('Playback blocked.', 'NotAllowedError'));
+  const result = await act(async () => attempt);
+
+  expect(result).toMatchObject({ ok: false });
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
+});
+
+// #244 names two triggers, and the two tests above drive only the ref handle.
+// This is the other one, and the one a viewer actually reaches: a `PlayButton`
+// press goes to `togglePlaybackWithOrigin` on the controller it reads from
+// context, so it never passes through `Root` at all. The path is the reason the
+// controller answers the gate rather than `Root` counting its own calls, and
+// nothing pinned that the press records an attempt the way the handle does.
+test('keeps the poster visible when a frame decodes after a refused PlayButton press', async () => {
+  const { Poster } = posterPrimitives;
+  const handle = createRef<Player.PlayerHandle>();
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, 'play')
+    .mockRejectedValue(
+      new DOMException('Playback blocked.', 'NotAllowedError')
+    );
+  render(
+    <LegacyRoot autoplay={false} ref={handle} source="/refused-press.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Refused press poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const posterState = (): string | null | undefined =>
+    screen
+      .getByText('Refused press poster')
+      .parentElement?.getAttribute('data-state');
+
+  confirmMetadataReady(media);
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+  });
+
+  expect(play).toHaveBeenCalledOnce();
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
+
+  fireEvent.loadedData(media);
+
+  // Playback never left `'paused'`, so the `playing` subscription cannot have
+  // written anything: the poster's state here is the `loadeddata` handler's.
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
 });
 
 // The constraint #311 is most likely to break silently, and nothing in the

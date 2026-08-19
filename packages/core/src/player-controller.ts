@@ -200,6 +200,11 @@ export class PlayerController {
   #hasAutoplayConfigurationError = false;
   #autoplayConfigurationRevision = 0;
   #autoplayAttemptGeneration: number | undefined;
+  // The generation a play command was last issued for, whatever asked for it —
+  // the API, a user gesture, or autoplay's own attempt. Recorded at the issue
+  // rather than at the settlement, so an attempt still in flight counts as one:
+  // see `hasUnconfirmedPlayAttempt` (#244).
+  #playAttemptGeneration: number | undefined;
   // Set once the muted retry of `'audible-then-muted'` is issued, and read at
   // the moment the attempt turns into `'started'`. The state flag cannot be
   // written from here directly: playback is confirmed by a provider patch, not
@@ -565,6 +570,39 @@ export class PlayerController {
 
   getState = (): PlayerState => this.#state;
 
+  // Whether a play command was issued against the media attached now and
+  // playback never reached `'playing'` — refused, faulted, or still in flight.
+  //
+  // Not a `PlayerState` field, deliberately. A refused command is reported to
+  // the caller that issued it and to nobody else: `playback` stays `'paused'`,
+  // `autoplay` stays `'idle'` and no error is set, which is the behaviour
+  // `keeps confirmed paused state when the media play command rejects` pins. So
+  // this is bookkeeping about a command, not a fact about the player, and the
+  // one thing that needs it is `Root`'s first-frame poster writer — which must
+  // know that *something asked to play* before it uncovers a frame that a
+  // refusal left paused (#244). Putting it in the state snapshot instead would
+  // publish an attempt counter to every consumer and every subscriber, to
+  // change what exactly one internal reader does.
+  //
+  // Scoped to the generation, so attaching a provider clears it: the frame that
+  // decodes for freshly attached media is not the one an earlier refusal left
+  // paused, and it must keep hiding the poster on its own.
+  //
+  // The record is dropped in `#applyPatch` by any patch that leaves playback at
+  // `'playing'` — not only by the one that first reports it — so a viewer who
+  // pauses confirmed playback does not re-arm this; without that, it would
+  // answer "not playing since some play was issued" rather than what it is
+  // named for. The `playback` term covers the window before such a patch lands:
+  // a `play()` issued against media already playing draws none of its own, so
+  // its record stands until an unrelated one arrives, and the term is what
+  // answers false meanwhile. Should playback drop to `'paused'` inside that
+  // window instead, the record does answer true, and that cannot cost anything:
+  // playback confirmed in this generation means the poster is already hidden,
+  // and the writer this answers only ever hides.
+  hasUnconfirmedPlayAttempt = (): boolean =>
+    this.#playAttemptGeneration === this.#generation &&
+    this.#state.playback !== 'playing';
+
   // Resolves `true` once the provider declares that a command issued now will
   // land and stick, and `false` once an attempt that existed is abandoned —
   // detach, swap, or a fatal error. Never rejects, and never hangs on an
@@ -924,6 +962,14 @@ export class PlayerController {
             this.#refusedUrlNotice ??
             null)
     };
+    // A play command stops being unconfirmed here and nowhere else: the promise
+    // it returns resolving is not playback, a provider patch reporting
+    // `'playing'` is. Dropping the record at that transition keeps
+    // `hasUnconfirmedPlayAttempt` answering for the attempt it names rather than
+    // for every later pause in the same generation (#244).
+    if (nextState.playback === 'playing') {
+      this.#playAttemptGeneration = undefined;
+    }
     this.#setState(nextState);
   };
 
@@ -1169,16 +1215,22 @@ export class PlayerController {
     mode === this.#autoplayMode &&
     !this.#hasAutoplayConfigurationError;
 
+  // The one funnel every play command passes through — `playWithOrigin` for the
+  // API and for user gestures, `#attemptAutoplay` and `#recoverMutedAutoplay`
+  // for autoplay's own — so recording the attempt here records all of them, and
+  // records it before the command is even issued.
   #playWithOrigin = (
     provider: ProviderAdapter,
     generation: number,
     origin: PlayerEventOrigin
-  ): Promise<CommandResult> =>
-    this.#commandWithOrigin(
+  ): Promise<CommandResult> => {
+    this.#playAttemptGeneration = generation;
+    return this.#commandWithOrigin(
       provider,
       { kind: 'playback', generation, origin, playback: 'playing' },
       'play'
     );
+  };
 
   #pauseWithOrigin = (
     provider: ProviderAdapter,
