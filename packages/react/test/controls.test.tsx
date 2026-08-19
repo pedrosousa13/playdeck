@@ -1356,6 +1356,81 @@ describe('Time', () => {
     });
     expect(screen.getByText('-1:10')).toBeDefined();
   });
+
+  test('renders no duration on an untimed source', () => {
+    const { container } = renderWithPlayer(<Player.Time type="duration" />, {
+      currentTime: 42,
+      duration: null
+    });
+    const time = container.querySelector('[data-playdeck-part="time"]')!;
+    // `0:00` here reads as a zero-length video (#248). The element stays, so
+    // `data-state` is still the signal a consumer composes a `LIVE` badge off.
+    expect(time.textContent).toBe('');
+    expect(attr(time, 'data-state')).toBe('untimed');
+    expect(attr(time, 'data-time-type')).toBe('duration');
+  });
+
+  test('renders no remaining time on a live stream', () => {
+    // An infinite duration is what a live HLS stream publishes, and it is
+    // untimed by the same rule a null one is.
+    const { container } = renderWithPlayer(<Player.Time type="remaining" />, {
+      currentTime: 42,
+      duration: Number.POSITIVE_INFINITY
+    });
+    const time = container.querySelector('[data-playdeck-part="time"]')!;
+    expect(time.textContent).toBe('');
+    expect(attr(time, 'data-state')).toBe('untimed');
+  });
+
+  test('still formats the elapsed time on an untimed source', () => {
+    renderWithPlayer(<Player.Time />, { currentTime: 75, duration: null });
+    const time = screen.getByText('1:15');
+    expect(attr(time, 'data-state')).toBe('untimed');
+    expect(attr(time, 'datetime')).toBe('PT75S');
+  });
+
+  test('claims no machine-readable seconds on an untimed source', () => {
+    // `PT0S` is the same zero-duration claim as the text, for a reader that
+    // parses rather than looks.
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 42, duration: null }
+    );
+    for (const time of container.querySelectorAll(
+      '[data-playdeck-part="time"]'
+    )) {
+      expect(time.hasAttribute('datetime')).toBe(false);
+    }
+  });
+
+  test('carries the machine-readable seconds on a timed source', () => {
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 30, duration: 100 }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.textContent).toBe('1:40');
+    expect(attr(duration ?? null, 'datetime')).toBe('PT100S');
+    expect(remaining?.textContent).toBe('-1:10');
+    expect(attr(remaining ?? null, 'datetime')).toBe('PT70S');
+  });
+
+  test('renders consumer children on an untimed source', () => {
+    renderWithPlayer(<Player.Time type="duration">LIVE</Player.Time>, {
+      currentTime: 42,
+      duration: null
+    });
+    const time = screen.getByText('LIVE');
+    expect(attr(time, 'data-state')).toBe('untimed');
+  });
 });
 
 describe('FullscreenButton', () => {

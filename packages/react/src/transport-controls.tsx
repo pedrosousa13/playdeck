@@ -476,24 +476,46 @@ export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
     provider: state.provider
   }));
   const hasDuration = typeof duration === 'number' && Number.isFinite(duration);
+  // `null` for a total this source does not have — a live stream, or one whose
+  // duration has not arrived. `0` was the defect (#248): `formatTime(0)` renders
+  // `0:00`, and a viewer reads a zero-length video rather than an untimed one.
+  // `current` never reaches it, because `currentTime` means the same thing on a
+  // live source as on a VOD one.
   const seconds =
     type === 'duration'
       ? hasDuration
         ? duration
-        : 0
+        : null
       : type === 'remaining'
         ? hasDuration
           ? Math.max(0, duration - currentTime)
-          : 0
+          : null
         : currentTime;
-  const formatted = formatTime(seconds);
+  // Nothing, rather than a substitute. `data-state="untimed"` below is the
+  // signal, and a consumer composes a `LIVE` badge or any other presentation
+  // off it in their own layout — the same line
+  // `.out-of-scope/default-presentation-on-blocked-autoplay.md` draws for a
+  // refused autoplay: publish the state, do not materialise a presentation
+  // inside someone else's design.
+  const formatted = seconds === null ? '' : formatTime(seconds);
   const display =
-    type === 'remaining' && seconds > 0 ? `-${formatted}` : formatted;
+    seconds !== null && type === 'remaining' && seconds > 0
+      ? `-${formatted}`
+      : formatted;
 
   return (
     <time
       {...props}
-      dateTime={`PT${Math.max(0, Math.floor(seconds))}S`}
+      // Omitted rather than `PT0S`, which is the same zero-duration claim the
+      // text made, in the form a machine reads. That leaves a `<time>` carrying
+      // neither a `datetime` nor a parseable time — invalid by the letter of the
+      // element's rule, and deliberately so: an absent attribute states nothing,
+      // and the only conformant alternative is to state something false. Absence
+      // over a zero is how this library reports the unmeasured elsewhere
+      // (ADR-0002, `bufferedShare` above).
+      dateTime={
+        seconds === null ? undefined : `PT${Math.max(0, Math.floor(seconds))}S`
+      }
       data-provider={provider ?? undefined}
       data-playdeck-part="time"
       data-state={hasDuration ? 'timed' : 'untimed'}
