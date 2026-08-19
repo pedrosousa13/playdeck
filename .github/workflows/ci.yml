@@ -165,6 +165,14 @@ jobs:
   # pnpm@10.34.5 in package.json: pnpm 11's SQLite store index failed this job
   # with `[ERR_SQLITE_ERROR] attempt to write a readonly database`, and 10.34.5
   # predates that index entirely.
+  #
+  # That root pin does not reach the fixture install, which is the half of this
+  # that was never true: the fixture is copied to an OS temp directory, where
+  # corepack finds no manifest above it and falls back to whatever pnpm is
+  # latest that day. `tests/packaging/fixture/package.json` therefore repeats
+  # the same `packageManager`, and that is also what keeps the fixture's
+  # committed lockfile replayed rather than re-resolved under a newer
+  # `lockfileVersion`. See #336.
   package:
     runs-on: ubuntu-latest
     timeout-minutes: 30
