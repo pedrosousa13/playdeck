@@ -20,7 +20,7 @@
     "test:bundle": "turbo run build --filter=@playdeck/bundle-native-only && pnpm --filter @playdeck/bundle-native-only test",
     "test:docs": "node --test scripts/docs-examples.test.mjs",
     "test:audit": "node scripts/audit.mjs",
-    "test:audit-unit": "node --test scripts/audit.test.mjs scripts/workspace-packages.test.mjs",
+    "test:audit-unit": "node --test scripts/audit.test.mjs scripts/packaging-fixture.test.mjs scripts/workspace-packages.test.mjs",
     "docs:examples": "node scripts/docs-examples.mjs",
     "docs:check": "node scripts/docs-examples.mjs --check",
     "build": "turbo run build",
@@ -52,6 +52,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.65.0",
     "vite": "8.1.5",
-    "vitest": "4.1.10"
+    "vitest": "4.1.10",
+    "yaml": "2.9.0"
   }
 }

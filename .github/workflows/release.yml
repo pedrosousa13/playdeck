@@ -31,28 +31,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # `pnpm test:packages` runs `scripts/verify-packaging.mjs`, which is the one
-  # place in this repository that resolves dependencies with no lockfile, no
-  # release cooldown and no advisory floor, and then executes what it resolved
-  # (`:242` writes the fixture into an OS temp directory, so the root
-  # `pnpm-workspace.yaml` stops governing it; `:264-271` synthesises a workspace
-  # file carrying only the tarball overrides; `:274` installs with
-  # `--no-frozen-lockfile`; `:277` runs the build). It is a deliberate job of its
-  # own, and NOT a step in `release` below, because in the same job it would run
-  # on the same runner and the same filesystem as `pnpm publish -r`, minutes
-  # before the tarballs are packed. A compromise upstream of `vite`, `react` or
-  # `@vitejs/plugin-react` -- inside the 24-hour window `minimumReleaseAge: 1440`
-  # exists to close, and which this install escapes -- would then be able to
-  # tamper with what gets published, under a provenance attestation that would
-  # vouch for the result. See #336, which also carries the remaining work: the
-  # install itself is still unpinned, this only moves it away from the token.
+  # `pnpm test:packages` runs `scripts/verify-packaging.mjs`, which installs the
+  # packed tarballs into a fixture it copies to an OS temp directory (`:291`)
+  # and then executes what it resolved (`:335` runs the build). Because the
+  # fixture leaves the repository, the root `pnpm-workspace.yaml` no longer
+  # applies to it, and until #336 that made this the one install in the pipeline
+  # governed by no lockfile, no release cooldown and no advisory floor.
   #
-  # The cost of the split, stated rather than glossed: `release` builds its own
-  # tarballs, so this job proves the packaging of an equivalent build rather than
-  # of the exact bytes that ship. That is a real weakening of the comment below
-  # about the attestation covering artifacts this run verified, and it is
-  # accepted because the alternative is running an unpinned install next to the
-  # publish. Closing #336's remaining steps removes the tradeoff entirely.
+  # It is governed now. `:309` writes the root workspace file itself into the
+  # temp directory -- floors, `minimumReleaseAge`, its exclusions and all, minus
+  # the member globs -- rather than a file carrying only the tarball overrides.
+  # `:318` still installs with `--no-frozen-lockfile`, which it has to: the
+  # `@playdeck/*` specs are `file:` paths into a per-run temp directory and
+  # carry the version under test, so no committed lockfile can ever satisfy
+  # `--frozen-lockfile` exactly. Everything else replays
+  # `tests/packaging/fixture/pnpm-lock.yaml`, and `:320` fails the run if any of
+  # it did not.
+  #
+  # What still resolves fresh, stated rather than glossed: the packed tarballs'
+  # own registry dependencies. `hls.js` and `@vimeo/player` are exact-pinned in
+  # the packages' manifests, but their transitive closure is not, and no
+  # lockfile generated without the tarballs can carry it. Those resolutions are
+  # under the cooldown and the floors now, which is what `minimumReleaseAge`
+  # exists for, but they are not pinned.
+  #
+  # That residue is why this stays a deliberate job of its own, and NOT a step
+  # in `release` below: in the same job it would run on the same runner and the
+  # same filesystem as `pnpm publish -r`, minutes before the tarballs are
+  # packed, and a compromise inside the 24-hour window would be able to tamper
+  # with what gets published under a provenance attestation that would vouch for
+  # the result.
+  #
+  # The cost of the split: `release` builds its own tarballs, so this job proves
+  # the packaging of an equivalent build rather than of the exact bytes that
+  # ship. That is a real weakening of the comment below about the attestation
+  # covering artifacts this run verified, and it is accepted because the
+  # alternative is running the remaining resolution next to the publish.
   package-verify:
     if: github.repository == 'pedrosousa13/playdeck'
     runs-on: ubuntu-latest
