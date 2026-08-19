@@ -588,14 +588,17 @@ export class PlayerController {
   // decodes for freshly attached media is not the one an earlier refusal left
   // paused, and it must keep hiding the poster on its own.
   //
-  // The record is dropped in `#applyPatch` the moment a patch reports
-  // `'playing'`, so a viewer who pauses confirmed playback does not re-arm this
-  // — without that, it would answer "not playing since some play was issued"
-  // rather than what it is named for. The `playback` term stays because one
-  // command draws no such patch: a `play()` issued against media already
-  // playing, which leaves a record nothing clears. That record cannot cost
-  // anything, because playback confirmed in this generation means the poster is
-  // already hidden and the writer this answers only ever hides.
+  // The record is dropped in `#applyPatch` by any patch that leaves playback at
+  // `'playing'` — not only by the one that first reports it — so a viewer who
+  // pauses confirmed playback does not re-arm this; without that, it would
+  // answer "not playing since some play was issued" rather than what it is
+  // named for. The `playback` term covers the window before such a patch lands:
+  // a `play()` issued against media already playing draws none of its own, so
+  // its record stands until an unrelated one arrives, and the term is what
+  // answers false meanwhile. Should playback drop to `'paused'` inside that
+  // window instead, the record does answer true, and that cannot cost anything:
+  // playback confirmed in this generation means the poster is already hidden,
+  // and the writer this answers only ever hides.
   hasUnconfirmedPlayAttempt = (): boolean =>
     this.#playAttemptGeneration === this.#generation &&
     this.#state.playback !== 'playing';

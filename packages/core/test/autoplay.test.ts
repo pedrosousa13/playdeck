@@ -965,9 +965,12 @@ test('drops the play attempt once a patch confirms playback', async () => {
   await controller.play();
   expect(controller.hasUnconfirmedPlayAttempt()).toBe(true);
 
+  // Nothing is asserted between these two emits on purpose: while playback
+  // reads `'playing'` the predicate answers false on its own term whether or
+  // not the record was dropped, so an assertion there would pin nothing. The
+  // pause is what tells the two apart, and the assertion after it is what pins
+  // the drop.
   fake.emit({ playback: 'playing' }, playEvent);
-  expect(controller.hasUnconfirmedPlayAttempt()).toBe(false);
-
   fake.emit({ playback: 'paused' });
   expect(controller.hasUnconfirmedPlayAttempt()).toBe(false);
 });
