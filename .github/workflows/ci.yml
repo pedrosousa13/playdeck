@@ -17,15 +17,27 @@ concurrency:
 
 # Measured wall times on a healthy run (2026-08-19): audit 21s, unit 35s,
 # static 54s, visual 57s, storybook 64s, package 113s, e2e firefox 160s,
-# chromium 162s, webkit 232s. The timeouts below are several times those, so
-# they never fire on a slow-but-working run.
+# chromium 162s, webkit 232s. These are whole-job times, install step
+# included. The timeouts below are several times those, so they never fire on
+# a run that is merely slow.
+#
+# The one part that does not respect those figures is `playwright install`,
+# whose apt half has a long tail — see .github/actions/playwright-install. That
+# is what the step-level bound there is for.
 #
 # They exist for the failure mode that actually happened: six jobs sat on
 # `playwright install --with-deps`, which shells out to apt and blocks
 # indefinitely rather than failing, for two hours. Without an explicit
 # `timeout-minutes` a job inherits GitHub's six-hour default, so a wedged
-# runner reads as "still running" for most of a working day. A red X in
-# fifteen minutes is the whole point.
+# runner reads as "still running" for most of a working day. A job that goes
+# red on its own is the whole point.
+#
+# These job timeouts are the outermost of three limits and the one that should
+# never fire. The install runs through `.github/actions/playwright-install`,
+# which bounds it, samples what apt is doing while it runs, and prints a
+# post-mortem if the bound fires. That action states the bound and how it was
+# sized, so the number is not repeated here; the `timeout-minutes` on the four
+# steps below sits between the two. See #352.
 
 jobs:
   static:
@@ -114,9 +126,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` installs the browser's OS packages, which a hosted
-      # runner image does not carry for every engine.
-      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: ${{ matrix.browser }}
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=${{ matrix.browser }}
@@ -145,9 +158,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` installs the browser's OS packages, which a hosted
-      # runner image does not carry for every engine.
-      - run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: chromium
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=visual
@@ -191,9 +205,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` installs the browser's OS packages, which a hosted
-      # runner image does not carry for every engine.
-      - run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: chromium
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
       # and hit that cache instead of rebuilding from scratch.
@@ -218,9 +233,13 @@ jobs:
   # documents the gap. The `hls-paths` job that gated the macOS run went with
   # it, having nothing left to gate.
 
+  # 25 rather than 20: the install step is bounded at 22 minutes (see
+  # .github/actions/playwright-install), and a 20-minute job cap left no room
+  # above it. This job's own install measured 690s on a successful run, so 20
+  # was tight for it regardless.
   storybook:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: corepack enable
@@ -236,8 +255,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` installs the browser's OS packages, which a hosted
-      # runner image does not carry for every engine.
-      - run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: chromium
       - run: pnpm --filter @playdeck/storybook build
       - run: pnpm test:storybook
