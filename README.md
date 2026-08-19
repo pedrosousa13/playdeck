@@ -96,6 +96,19 @@ Packaging is verified against real tarballs (`pnpm test:packages`), bundle
 budgets are enforced (`pnpm test:budgets`), and a Next.js integration is built
 and driven in a browser (`pnpm test:integrations`).
 
+`pnpm test:packages` installs those tarballs into a fixture it copies to a temp
+directory, and replays `tests/packaging/fixture/pnpm-lock.yaml` there so that
+install is pinned like every other one in the pipeline (#336). That lockfile is
+generated and committed, and the run fails naming the packages it re-resolved
+if the two have drifted. Regenerate it after changing the fixture's
+dependencies, or after a root advisory floor moves one of them:
+
+```sh
+node scripts/verify-packaging.mjs --update-fixture-lockfile
+```
+
+Then commit the lockfile.
+
 The `@real` e2e tests talk to live YouTube, Vimeo and Wistia. They never run in
 CI, and there is no scheduled run either (#118): YouTube will not serve video to
 a runner's datacenter IP, so the result reported its opinion of that IP rather

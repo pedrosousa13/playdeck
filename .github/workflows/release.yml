@@ -31,22 +31,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # `pnpm test:packages` runs `scripts/verify-packaging.mjs`, which installs the
-  # packed tarballs into a fixture it copies to an OS temp directory (`:291`)
-  # and then executes what it resolved (`:335` runs the build). Because the
+  # `pnpm test:packages` runs `scripts/verify-packaging.mjs`, whose `runFixture`
+  # copies the fixture to an OS temp directory, installs the packed tarballs
+  # into it and then executes what it resolved by building it. Because the
   # fixture leaves the repository, the root `pnpm-workspace.yaml` no longer
   # applies to it, and until #336 that made this the one install in the pipeline
   # governed by no lockfile, no release cooldown and no advisory floor.
   #
-  # It is governed now. `:309` writes the root workspace file itself into the
-  # temp directory -- floors, `minimumReleaseAge`, its exclusions and all, minus
-  # the member globs -- rather than a file carrying only the tarball overrides.
-  # `:318` still installs with `--no-frozen-lockfile`, which it has to: the
-  # `@playdeck/*` specs are `file:` paths into a per-run temp directory and
-  # carry the version under test, so no committed lockfile can ever satisfy
-  # `--frozen-lockfile` exactly. Everything else replays
-  # `tests/packaging/fixture/pnpm-lock.yaml`, and `:320` fails the run if any of
-  # it did not.
+  # It is governed now. `writeFixtureWorkspace` writes the root workspace file
+  # itself into the temp directory -- floors, `minimumReleaseAge`, its
+  # exclusions and all, minus the member globs -- rather than a file carrying
+  # only the tarball overrides. The install stays `--no-frozen-lockfile`,
+  # because the `@playdeck/*` specs are per-run `file:` temp paths no committed
+  # lockfile can satisfy; `reresolvedPackages` in
+  # `scripts/packaging-fixture.mjs` is where that is stated in full, and is what
+  # fails the run if anything else stopped replaying
+  # `tests/packaging/fixture/pnpm-lock.yaml`.
+  #
+  # Anchored on those symbol names rather than on line numbers deliberately:
+  # this comment cited five line numbers into that script and every one of them
+  # had rotted before #336 closed.
   #
   # What still resolves fresh, stated rather than glossed: the packed tarballs'
   # own registry dependencies. `hls.js` and `@vimeo/player` are exact-pinned in

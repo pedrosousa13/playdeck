@@ -215,3 +215,17 @@ What the audit report calls a reachable advisory, against `not shipped` for one
 it prints and tolerates. A critical in the linting toolchain is not shipped; a
 low under a published package's `dependencies` is.
 _Avoid_: production, runtime
+
+**Governed**:
+An install the root `pnpm-workspace.yaml` reaches — its advisory floors, its
+`minimumReleaseAge` cooldown and that cooldown's exclusions. The packaging
+fixture installs outside the repository, so the root file travels into the temp
+directory with it rather than the fixture being an exception (#336).
+_Avoid_: audited, protected, safe
+
+**Replayed**:
+An install that reuses a committed lockfile's resolutions instead of resolving
+afresh from the registry. `reresolvedPackages` compares the two lockfiles
+afterwards, so replay is proven per run rather than assumed of the flag that
+asked for it.
+_Avoid_: frozen, cached, pinned
