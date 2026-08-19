@@ -13,7 +13,6 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   type Availability,
   type CommandResult,
-  PlayerController,
   type PlayerCapabilities,
   type PlayerEventOrigin,
   type ProviderAdapter,
@@ -21,6 +20,10 @@ import {
   type ProviderStateListener,
   type ProviderStatePatch
 } from '@playdeck/core';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 
 const available: Availability = { status: 'available' };
@@ -72,7 +75,9 @@ const renderWithPlayer = (ui: ReactNode, initial?: ProviderStatePatch) => {
       {ui}
     </Player.Root>
   );
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
   const mock = createMockAdapter();
   act(() => {
     controller.setProvider(mock.adapter);

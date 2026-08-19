@@ -3,7 +3,10 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { createRef, type ReactNode } from 'react';
 import { afterEach, expect, test } from 'vitest';
-import { PlayerController } from '@playdeck/core';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 import { createFakeProvider } from './fixtures/fake-provider';
 
@@ -38,7 +41,9 @@ const renderWithPlayer = (ui: ReactNode) => {
   return {
     ...utils,
     rerender: (next: ReactNode) => utils.rerender(wrap(next)),
-    controller: handle.current as unknown as PlayerController,
+    controller: (handle.current as unknown as InternalControllerAccess)[
+      INTERNAL_CONTROLLER
+    ],
     notice: () => utils.container.querySelector('[data-playdeck-part="notice"]')
   };
 };

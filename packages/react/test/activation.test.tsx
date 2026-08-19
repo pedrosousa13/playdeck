@@ -18,6 +18,10 @@ import {
   type ProviderStateListener
 } from '@playdeck/core';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 import { useActivation } from '../src/use-activation';
@@ -2109,7 +2113,9 @@ test('retries an installed provider error with one queued user play', async () =
   render(interactionFixture({ ref: handle }));
 
   const button = screen.getByRole('button', { name: 'Play video' });
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
   const playWithOrigin = vi.spyOn(controller, 'playWithOrigin');
   button.focus();
   fireEvent.click(button);
@@ -2234,17 +2240,24 @@ test('usePlayerActions() reaches the same activateFromInteraction binding', asyn
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
 });
 
-// The mock-player decorator casts this same handle back to
-// `PlayerController` to reach `setProvider` directly
-// (apps/storybook/.storybook/mock-player.tsx:178, its `as PlayerController`
-// cast, reaching `:184`'s `controller.setProvider`), which is how a story
-// stages its provider. Composing the handle from the controller plus
-// `activateFromInteraction` must not lose that escape hatch.
-test('the ref handle still exposes the provider-facing setProvider escape hatch', () => {
+// The mock-player decorator (apps/storybook/.storybook/mock-player.tsx) reads
+// `INTERNAL_CONTROLLER` off this same handle to reach `setProvider`, which is
+// how a story stages its provider. This used to read "the ref handle still
+// exposes the provider-facing setProvider escape hatch" and asserted
+// `setProvider` sat on the handle directly -- the #328 leak, since every
+// consumer got it too. `setProvider` must stay off the declared surface and
+// stay reachable through the symbol, and the two halves belong in one test:
+// splitting them lets a change satisfy either alone.
+test('reaches setProvider through the internal symbol, never off the handle', () => {
   const handle = createRef<Player.PlayerHandle>();
   render(fixture({ ref: handle }));
 
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
+  expect(
+    (handle.current as unknown as Record<string, unknown>).setProvider
+  ).toBeUndefined();
   expect(controller.setProvider).toBeTypeOf('function');
   const adapter: ProviderAdapter = {
     provider: 'native',

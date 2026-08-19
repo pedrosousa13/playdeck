@@ -171,9 +171,31 @@ export const useMockPlayer = (parameters: MockPlayerParameters) => {
       !dimensions
     )
       return;
-    // Player.Root's imperative handle is its PlayerController; the cast opens
-    // the provider-facing surface (setProvider) that PlayerHandle omits.
-    const controller = handleRef.current as PlayerController | null;
+    // The handle carries exactly what `PlayerHandle` declares, and
+    // `setProvider`/`configureAutoplay` are deliberately not on it (#328).
+    // Staging a fake provider is the one job that needs the controller itself,
+    // and this is the one sanctioned way back to it.
+    //
+    // The symbol is spelled out rather than imported so that this file keeps
+    // consuming `@playdeck/react` through its package entry, the way an
+    // outside consumer does, instead of reaching into `packages/react/src/`
+    // for a module (`internal-controller.ts`) that entry deliberately does not
+    // export. That is a convention and not a rule here -- eslint.config.js
+    // scopes `no-restricted-imports` to `stories/reference/**`, so nothing
+    // would stop a deep import from this directory. It is what the global
+    // symbol registry buys: the hatch has one name, the string below, and
+    // naming it is the whole of reaching it -- no deep import here, no new
+    // published export there, and grepping the string puts both ends on
+    // screen.
+    //
+    // Misspell it and this reads `undefined` and the mock is never staged, so
+    // the story gets a player with no provider. `mock-player.contract.test.ts`
+    // catches that in the node suite rather than the e2e run: its `seekTo`
+    // cases drive a real `Player.Root` through this hook, and go red with
+    // `reason: 'not-ready'` -- measured by mangling the string, not assumed.
+    const controller = (
+      handleRef.current as unknown as Record<symbol, PlayerController> | null
+    )?.[Symbol.for('playdeck.internal.controller')];
     if (!controller) return;
     const mock = createMockAdapter(
       playResult ?? { ok: true },
