@@ -229,7 +229,8 @@ _Avoid_: public, released
 **Reachable**:
 An advisory whose resolved version appears in the transitive `dependencies`
 closure of at least one publishable package. What the audit gate turns on.
-Severity is a separate label and gates nothing.
+Severity is a separate label and gates nothing. A floored package fails the same
+gate on its own.
 _Avoid_: affected, vulnerable
 
 **Shipped**:
@@ -237,6 +238,16 @@ What the audit report calls a reachable advisory, against `not shipped` for one
 it prints and tolerates. A critical in the linting toolchain is not shipped; a
 low under a published package's `dependencies` is.
 _Avoid_: production, runtime
+
+**Floored**:
+A package in a publishable package's `dependencies` closure that an `overrides`
+entry in the root `pnpm-workspace.yaml` resolves — holding it to a version range,
+or replacing it outright with an alias, a tarball or a workspace link. The audit
+gate fails on one whether or not any advisory is reachable, and prints it as
+`FLOORED`: the entry governs this workspace but is written into no published
+`package.json`, so it rewrites the graph the gate measures while a consumer
+resolves something the gate never saw (#335).
+_Avoid_: overridden, pinned
 
 **Governed**:
 An install the root `pnpm-workspace.yaml` reaches — its advisory floors, its
