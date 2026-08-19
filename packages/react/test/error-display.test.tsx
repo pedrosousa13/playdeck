@@ -180,6 +180,158 @@ describe('ErrorDisplay', () => {
   });
 });
 
+// #319. A Notice is a non-fatal `configuration` error a provider publishes to
+// report a value it rejected, while the fall-back it degraded to stands
+// unchanged (see CONTEXT.md, and `noticeIn` at
+// `packages/core/src/player-controller.ts:76-82`, whose predicate this mirrors).
+// Nothing stopped working, so covering a playing video with a full-bleed
+// `role="alert"` that carries no retry — `configuration` is always
+// `recoverable: false` (#198) — reports a failure that did not happen.
+//
+// The gate is notice-ness and NOT `fatal`. `fatal: false` also covers
+// `toProviderError` (`provider`, `recoverable: true`), Wistia's `policy`
+// refusal and its `unsupported` refusal, all of which are real failures that
+// must keep the overlay and, where offered, the retry.
+describe('ErrorDisplay and a non-fatal configuration notice', () => {
+  const notice: PlayerError = {
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    message: 'The host option was rejected, so the default host was used.'
+  };
+
+  // A notice never drives the error lifecycle, so it arrives on a player that
+  // is otherwise working. Reproducing that here rather than reusing
+  // `errorState` is the point: `errorState` pins `lifecycle: 'error'`, which is
+  // the state a notice is defined as staying out of.
+  const noticeState: ProviderStatePatch = {
+    lifecycle: 'ready',
+    error: notice
+  };
+
+  test('paints no overlay over a working player', () => {
+    const { container } = renderWithPlayer(
+      <Player.ErrorDisplay />,
+      noticeState
+    );
+    expect(container.querySelector('[data-playdeck-part="error"]')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('is still reachable at its own part, so an operator can read it', () => {
+    const { container } = renderWithPlayer(
+      <Player.ErrorDisplay />,
+      noticeState
+    );
+    const surface = container.querySelector('[data-playdeck-part="notice"]');
+    expect(surface).not.toBeNull();
+    expect(surface?.textContent).toContain('The host option was rejected');
+    expect(attr(surface, 'data-state')).toBe('configuration');
+  });
+
+  test('gives the notice part no geometry of its own', () => {
+    const { container } = renderWithPlayer(
+      <Player.ErrorDisplay />,
+      noticeState
+    );
+    const surface = container.querySelector('[data-playdeck-part="notice"]');
+    // Nothing is rendered you did not compose. Asserted as the absence of the
+    // attribute rather than as empty `style.*` reads: happy-dom does not
+    // implement the `inset` shorthand on `CSSStyleDeclaration`, so reading it
+    // back tests the DOM library rather than this component. No attribute is
+    // also the stronger claim — it cannot pass while some other property is
+    // being set inline.
+    expect(surface?.hasAttribute('style')).toBe(false);
+  });
+
+  test('lets a consumer place the notice with their own style prop', () => {
+    const { container } = renderWithPlayer(
+      <Player.ErrorDisplay style={{ position: 'absolute', top: 0 }} />,
+      noticeState
+    );
+    const surface = container.querySelector(
+      '[data-playdeck-part="notice"]'
+    ) as HTMLElement | null;
+    expect(surface?.style.position).toBe('absolute');
+  });
+
+  test.each([
+    {
+      error: {
+        category: 'provider',
+        fatal: false,
+        recoverable: true,
+        message: 'The provider command failed.'
+      } as PlayerError,
+      subject: 'a non-fatal provider failure'
+    },
+    {
+      error: {
+        category: 'policy',
+        fatal: false,
+        recoverable: false,
+        message: 'Playback was refused by policy.'
+      } as PlayerError,
+      subject: 'a non-fatal policy refusal'
+    },
+    {
+      error: {
+        category: 'unsupported',
+        fatal: false,
+        recoverable: false,
+        message: 'That option is not supported here.'
+      } as PlayerError,
+      subject: 'a non-fatal unsupported refusal'
+    }
+  ])('still paints the overlay for $subject', ({ error }) => {
+    renderWithPlayer(<Player.ErrorDisplay />, errorState(error));
+    const surface = screen.getByRole('alert');
+    expect(attr(surface, 'data-playdeck-part')).toBe('error');
+  });
+
+  // The clause that is easy to drop. `useActivation` publishes a
+  // `configuration` error with `activation: 'error'` for `loading="interaction"`
+  // with autoplay (`use-activation.ts:458-463`) and for viewport activation
+  // without a `Player.Viewport` (`:477-480`). Both mean the player will never
+  // load, so both are failures however non-fatal the record is — and without
+  // this the consumer would see a dead player and no error at all, which is the
+  // defect #319 exists to remove rather than to relocate.
+  test.each([
+    { message: 'Interaction loading cannot be used with autoplay.' },
+    { message: 'Viewport activation requires Player.Viewport.' }
+  ])(
+    'paints the overlay for a configuration error that killed activation: $message',
+    ({ message }) => {
+      renderWithPlayer(
+        <Player.ErrorDisplay />,
+        errorState({
+          category: 'configuration',
+          fatal: false,
+          recoverable: false,
+          message
+        })
+      );
+      const surface = screen.getByRole('alert');
+      expect(attr(surface, 'data-playdeck-part')).toBe('error');
+      expect(attr(surface, 'data-state')).toBe('configuration');
+    }
+  );
+
+  test('keeps the retry a recoverable non-fatal provider failure offers', () => {
+    const { spies } = renderWithPlayer(
+      <Player.ErrorDisplay />,
+      errorState({
+        category: 'provider',
+        fatal: false,
+        recoverable: true,
+        message: 'The provider command failed.'
+      })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(spies.retry).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('ErrorDisplay and ActivationButton', () => {
   // Both read `error.recoverable` and nothing else, so the two can never offer
   // and refuse the same retry at once again (#198).
