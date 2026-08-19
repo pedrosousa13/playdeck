@@ -81,6 +81,30 @@ const noticeIn = (patch: ProviderStatePatch): PlayerError | undefined =>
     ? patch.error
     : undefined;
 
+// Read at the decision point rather than subscribed to, and read off
+// `globalThis` rather than off a DOM lib core does not compile against: an
+// environment with no `matchMedia` — server rendering, a worker, an older
+// engine — simply does not match, and autoplay proceeds as it did before #311.
+// A media query that never matches does not apply, so nothing here raises the
+// browser-support floor.
+//
+// No `MediaQueryList` subscription, deliberately. This would be the codebase's
+// first, and the case does not need one: a viewer who turns reduced motion *on*
+// mid-session is honoured by every player that has not yet decided, and one who
+// turns it *off* does not get video retroactively starting at them, which is
+// the better of the two behaviours anyway (#311).
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+const prefersReducedMotion = (): boolean => {
+  const scope = globalThis as {
+    matchMedia?: (query: string) => { matches: boolean };
+  };
+  return (
+    typeof scope.matchMedia === 'function' &&
+    scope.matchMedia(REDUCED_MOTION_QUERY).matches
+  );
+};
+
 const notReady: Availability = freezeAvailability({
   status: 'unknown',
   reason: 'not-ready'
@@ -155,6 +179,7 @@ export class PlayerController {
   #generation = 0;
   #autoplayMode: AutoplayMode = false;
   #autoplayControlledMuted: boolean | undefined;
+  #autoplayIgnoreReducedMotion = false;
   #captionRenderer: 'custom' | 'native' = 'custom';
   #hasAutoplayConfigurationError = false;
   #autoplayConfigurationRevision = 0;
@@ -184,14 +209,21 @@ export class PlayerController {
     mode: AutoplayMode,
     options: AutoplayConfigurationOptions = {}
   ): void => {
+    // Normalized to a boolean before it is compared, unlike `controlledMuted`:
+    // an absent opt-out and an explicit `false` mean the same thing, so treating
+    // them as different values here would re-run the configuration for nothing
+    // (#311).
+    const ignoreReducedMotion = options.ignoreReducedMotion ?? false;
     if (
       mode === this.#autoplayMode &&
-      options.controlledMuted === this.#autoplayControlledMuted
+      options.controlledMuted === this.#autoplayControlledMuted &&
+      ignoreReducedMotion === this.#autoplayIgnoreReducedMotion
     )
       return;
     const hadConfigurationError = this.#hasAutoplayConfigurationError;
     this.#autoplayMode = mode;
     this.#autoplayControlledMuted = options.controlledMuted;
+    this.#autoplayIgnoreReducedMotion = ignoreReducedMotion;
     this.#hasAutoplayConfigurationError =
       mode === 'muted' && options.controlledMuted === false;
     this.#autoplayConfigurationRevision += 1;
@@ -797,6 +829,22 @@ export class PlayerController {
     const mode = this.#autoplayMode;
     const revision = this.#autoplayConfigurationRevision;
     this.#autoplayAttemptGeneration = generation;
+    // The attempt is declined; the mode stays configured. Clearing the mode
+    // instead would be the same defect as #242: the poster gate reads the
+    // configured mode as an allow-list (`react/src/root.tsx:487-501`), so a
+    // player with no mode uncovers its first frame on `loadeddata` — a paused
+    // still image with no cover over it and no gesture that put it there. The
+    // decision therefore belongs here, at the one place an attempt is made, and
+    // nowhere near `configureAutoplay` (#311).
+    //
+    // Below every other guard rather than above them, deliberately: a player
+    // that would not have autoplayed anyway must keep reporting why it did not,
+    // so `'suppressed'` never stands in for a mode that was never set, for the
+    // configuration error, or for an activation that never got there.
+    if (!this.#autoplayIgnoreReducedMotion && prefersReducedMotion()) {
+      this.#applyPatch({ autoplay: 'suppressed' });
+      return;
+    }
     this.#autoplayRecoveryPending = false;
     this.#applyPatch({ autoplay: 'attempting' });
     if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))

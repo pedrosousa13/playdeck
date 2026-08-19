@@ -78,6 +78,11 @@ export type AutoplayMode = false | 'muted' | 'audible' | 'audible-then-muted';
 
 export type AutoplayConfigurationOptions = {
   readonly controlledMuted?: boolean;
+  // Opts out of the `prefers-reduced-motion: reduce` suppression, so a
+  // configured autoplay is attempted whatever the viewer asked for. Named for
+  // what it does rather than for the case it enables, so a consumer reading the
+  // call site sees a deliberate accessibility trade-off (#311).
+  readonly ignoreReducedMotion?: boolean;
 };
 
 export type Availability =
@@ -155,7 +160,15 @@ export type PlayerState = {
   readonly playbackRate: number;
   readonly fullscreen: boolean;
   readonly pictureInPicture: boolean;
-  readonly autoplay: 'idle' | 'attempting' | 'started' | 'blocked' | 'failed';
+  // `'suppressed'` means configured but deliberately not attempted, because the
+  // viewer matches `prefers-reduced-motion: reduce` and the player was not told
+  // to ignore it. It is a member of its own because `'idle'` already covers "no
+  // autoplay configured", so without it a consumer cannot tell a suppressed
+  // autoplay from one that never existed. The mode stays configured through it
+  // — only the attempt is declined — so everything reading the mode, the poster
+  // gate included, behaves as it does for an attempt still to come (#311).
+  readonly autoplay:
+    'idle' | 'attempting' | 'started' | 'blocked' | 'failed' | 'suppressed';
   // True only where `autoplay` is `'started'` because an audible attempt was
   // refused by policy and the muted retry of `'audible-then-muted'` is what
   // played. It is what tells a deliberate muted autoplay apart from a recovered

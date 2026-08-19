@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import {
   PlayerController,
   type AutoplayMode,
@@ -70,6 +70,22 @@ const deferred = <Value>() => {
 };
 
 const flushCommands = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+// This file runs in the node environment, so `matchMedia` is absent unless a
+// test puts one there — which is the "no `matchMedia`" case of #311, and the
+// reason every other test in this file keeps attempting autoplay unchanged.
+const stubReducedMotion = (matches: boolean): string[] => {
+  const queries: string[] = [];
+  vi.stubGlobal('matchMedia', (query: string) => {
+    queries.push(query);
+    return { matches };
+  });
+  return queries;
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 test('does not attempt autoplay when it is disabled', () => {
   const mode: AutoplayMode = false;
@@ -802,4 +818,100 @@ test('issues no muted-autoplay play before load either', async () => {
   expect(eager.calls.indexOf('play')).toBeGreaterThan(
     eager.calls.indexOf('load')
   );
+});
+
+test('suppresses the autoplay attempt when the viewer asked for reduced motion', async () => {
+  const queries = stubReducedMotion(true);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await flushCommands();
+
+  expect(queries).toEqual(['(prefers-reduced-motion: reduce)']);
+  expect(fake.calls).toEqual([]);
+  expect(controller.getState()).toMatchObject({
+    autoplay: 'suppressed',
+    autoplayRecovered: false,
+    error: null
+  });
+});
+
+test('suppresses a muted autoplay before it mutes anything', async () => {
+  stubReducedMotion(true);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('muted');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await flushCommands();
+
+  expect(fake.calls).toEqual([]);
+  expect(controller.getState().autoplay).toBe('suppressed');
+});
+
+test('attempts autoplay under reduced motion when the consumer opts out', async () => {
+  stubReducedMotion(true);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible', { ignoreReducedMotion: true });
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+
+  fake.emit({ playback: 'playing' }, playEvent);
+  expect(controller.getState().autoplay).toBe('started');
+});
+
+test('attempts autoplay where the reduced-motion query does not match', async () => {
+  stubReducedMotion(false);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+  expect(controller.getState().autoplay).toBe('attempting');
+});
+
+// The support floor is not raised by this: a media query that never matches
+// simply does not apply, so an environment with no `matchMedia` at all — server
+// rendering included — autoplays exactly as it did before #311.
+test('attempts autoplay where matchMedia is unavailable', async () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+});
+
+// The preference is read once per decision, not subscribed to. A player that
+// has already decided keeps its decision; the next source reads the query
+// again, which is what makes a mid-session change reach the players that have
+// yet to decide (#311).
+test('reads the reduced-motion query again for the next source', async () => {
+  const queries = stubReducedMotion(true);
+  const first = createProvider();
+  const second = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(first.provider);
+  first.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await flushCommands();
+  expect(controller.getState().autoplay).toBe('suppressed');
+
+  vi.unstubAllGlobals();
+  stubReducedMotion(false);
+  controller.setProvider(second.provider);
+  second.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+
+  await vi.waitFor(() => expect(second.calls).toEqual(['play']));
+  expect(queries).toEqual(['(prefers-reduced-motion: reduce)']);
 });
