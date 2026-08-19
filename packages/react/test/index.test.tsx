@@ -2013,6 +2013,107 @@ test('keeps the poster visible when cached media attaches under refused autoplay
   ).toBe('visible');
 });
 
+// #244: the #242 gate keys on the configured autoplay *mode*, so it is inert
+// for `autoplay={false}`. A programmatic `play()` can be refused with
+// `NotAllowedError` exactly as an autoplay attempt can, and the media still
+// decodes a frame afterwards. This probes whether that refusal leaves the same
+// paused, uncovered first frame #242 fixed.
+test('keeps the poster visible when a frame decodes after a refused programmatic play', async () => {
+  const { Poster } = posterPrimitives;
+  const handle = createRef<Player.PlayerHandle>();
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, 'play')
+    .mockRejectedValue(
+      new DOMException('Playback blocked.', 'NotAllowedError')
+    );
+  render(
+    <LegacyRoot autoplay={false} ref={handle} source="/refused.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Refused play poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+
+  confirmMetadataReady(media);
+  const result = await act(async () => handle.current?.play());
+
+  // The refusal was issued and observed: the command failed, and playback never
+  // reached `'playing'`, so nothing hid the poster on the way here.
+  expect(play).toHaveBeenCalledOnce();
+  expect(result).toMatchObject({ ok: false });
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(screen.getByRole('button').dataset.autoplayState).toBe('idle');
+  expect(
+    screen
+      .getByText('Refused play poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+
+  fireEvent.loadedData(media);
+
+  // Playback is still `'paused'`, so the `playing` subscription -- the only
+  // other writer that hides the poster -- cannot have run: whatever the poster
+  // reads now was written by the `loadeddata` handler.
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(
+    screen
+      .getByText('Refused play poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+});
+
+// #244, arriving as a race: `loadeddata` can land while the `play()` promise is
+// still in flight. The frame is paused for the same reason it is in the test
+// above -- the refusal is simply not told yet -- and hiding the poster on the
+// decode leaves the rejection that follows with no way to put the cover back.
+test('keeps the poster visible when a frame decodes while a refused play is still in flight', async () => {
+  const { Poster } = posterPrimitives;
+  const handle = createRef<Player.PlayerHandle>();
+  let refuse!: (reason: unknown) => void;
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockReturnValue(
+    new Promise<void>((_, reject) => {
+      refuse = reject;
+    })
+  );
+  render(
+    <LegacyRoot autoplay={false} ref={handle} source="/in-flight.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>In-flight play poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const posterState = (): string | null | undefined =>
+    screen
+      .getByText('In-flight play poster')
+      .parentElement?.getAttribute('data-state');
+
+  confirmMetadataReady(media);
+  const attempt = handle.current!.play();
+
+  // The decode lands first, with the command unsettled: nothing yet says the
+  // frame will ever play, so nothing may uncover it.
+  fireEvent.loadedData(media);
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
+
+  refuse(new DOMException('Playback blocked.', 'NotAllowedError'));
+  const result = await act(async () => attempt);
+
+  expect(result).toMatchObject({ ok: false });
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
+});
+
 // The constraint #311 is most likely to break silently, and nothing in the
 // gate below names `'suppressed'`. The poster stays up because the `autoplay`
 // prop reaches `Root` un-cleared and because the `loadeddata` gate early-returns
