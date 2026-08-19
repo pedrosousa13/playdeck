@@ -1315,6 +1315,19 @@ describe('SeekSlider', () => {
   });
 });
 
+// Compile-time guard: `TimeProps['ref']` is `Ref<HTMLElement>` rather than
+// `Ref<HTMLTimeElement>`, because the untimed state renders a `<span>` (#248)
+// and TypeScript cannot catch the swap on its own -- `HTMLSpanElement` declares
+// no member `HTMLElement` does not, so `HTMLTimeElement` is structurally
+// assignable to it. The widening must cost a consumer nothing, so every ref
+// shape written against the old declaration has to keep assigning.
+const verifyTimeRefStaysAssignable = (): Player.TimeProps[] => [
+  { ref: createRef<HTMLTimeElement>() },
+  { ref: (element: HTMLTimeElement | null) => void element },
+  { ref: createRef<HTMLElement>() },
+  { ref: null }
+];
+
 describe('Time', () => {
   test('formats the current time by default', () => {
     renderWithPlayer(<Player.Time />, { currentTime: 75, duration: 100 });
@@ -1473,6 +1486,32 @@ describe('Time', () => {
     });
     const time = screen.getByText('LIVE');
     expect(attr(time, 'data-state')).toBe('untimed');
+  });
+
+  test('keeps a consumer dateTime out of the DOM on an untimed source', () => {
+    // The library owns the attribute in both states. On the `<time>` it wins by
+    // ordering; the `<span>` writes none, so an unstripped consumer value would
+    // reach the DOM and restate the zero-duration claim #248 removed, in the
+    // form a machine parses rather than the one a viewer reads.
+    const { container } = renderWithPlayer(
+      <Player.Time dateTime="PT30S" type="duration" />,
+      { currentTime: 42, duration: null }
+    );
+    const time = container.querySelector('[data-playdeck-part="time"]')!;
+    expect(time.tagName).toBe('SPAN');
+    expect(time.hasAttribute('datetime')).toBe(false);
+  });
+
+  test('hands the untimed span back through a ref', () => {
+    const ref = createRef<HTMLElement>();
+    const { container } = renderWithPlayer(
+      <Player.Time ref={ref} type="duration" />,
+      { currentTime: 42, duration: null }
+    );
+    expect(ref.current).toBe(
+      container.querySelector('[data-playdeck-part="time"]')
+    );
+    expect(verifyTimeRefStaysAssignable).toBeTypeOf('function');
   });
 });
 

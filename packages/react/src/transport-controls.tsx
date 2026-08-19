@@ -15,7 +15,8 @@ import {
   useId,
   useState,
   useSyncExternalStore,
-  type ComponentPropsWithRef
+  type ComponentPropsWithRef,
+  type Ref
 } from 'react';
 
 const formatTime = (totalSeconds: number): string => {
@@ -465,11 +466,28 @@ export const SeekSlider = ({
   );
 };
 
-export type TimeProps = ComponentPropsWithRef<'time'> & {
+// `ref` is widened past `HTMLTimeElement` because the element is not fixed: the
+// untimed branch below renders a `<span>`, so a ref declared as a `<time>` was
+// handed something that is not one. TypeScript could not catch it —
+// `HTMLSpanElement` declares no member `HTMLElement` does not, so
+// `HTMLTimeElement` is structurally assignable to it and the swap type-checked
+// silently while `ref.current.dateTime` read `undefined` at runtime. The
+// declared surface has to be honest about what it hands back, on #356's
+// reasoning. Nothing a consumer writes breaks: property covariance and
+// parameter bivariance keep both `useRef<HTMLTimeElement>(null)` and
+// `(el: HTMLTimeElement | null) => void` assignable. What goes is `.dateTime`
+// autocomplete off the ref — the one member this component does not guarantee.
+export type TimeProps = Omit<ComponentPropsWithRef<'time'>, 'ref'> & {
+  readonly ref?: Ref<HTMLElement>;
   readonly type?: 'current' | 'duration' | 'remaining';
 };
 
-export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
+export const Time = ({
+  children,
+  ref,
+  type = 'current',
+  ...props
+}: TimeProps) => {
   const { currentTime, duration, provider } = usePlayerState((state) => ({
     currentTime: state.currentTime,
     duration: state.duration,
@@ -512,9 +530,18 @@ export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
   // matching in this state — the part attribute is the documented hook, not the
   // tag name.
   if (seconds === null) {
+    // The library owns `datetime` in both states. The `<time>` below writes its
+    // own after the spread and so always outranked a consumer's, but a `<span>`
+    // writes none, so an unstripped `dateTime` prop would reach the DOM here and
+    // restate — in the form a machine parses — the zero-duration claim the text
+    // has just stopped making.
+    const untimedProps = { ...props };
+    delete untimedProps.dateTime;
+
     return (
       <span
-        {...props}
+        {...untimedProps}
+        ref={ref}
         data-provider={provider ?? undefined}
         data-playdeck-part="time"
         data-state="untimed"
@@ -532,6 +559,12 @@ export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
   return (
     <time
       {...props}
+      // Narrowed back for this branch only. `Ref<HTMLElement>` is a declaration
+      // about what a holder may rely on, not about what arrives: here the
+      // element is a `<time>`, so an `HTMLTimeElement` is what the ref receives.
+      // The cast writes a subtype into a wider slot, which is the safe
+      // direction; TypeScript refuses it only because a ref object is mutable.
+      ref={ref as Ref<HTMLTimeElement>}
       dateTime={`PT${Math.max(0, Math.floor(seconds))}S`}
       data-provider={provider ?? undefined}
       data-playdeck-part="time"

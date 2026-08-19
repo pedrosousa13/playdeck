@@ -50,8 +50,19 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   it carries `data-state="untimed"` alongside on such a source.
   The element itself is a `<span>` in that state rather than a `<time>` — there
   is no time to mark up, and an emptied `<time>` would carry neither a
-  `datetime` nor a parseable time. It carries every attribute below either way,
-  so select on `[data-playdeck-part='time']` rather than on the element type.
+  `datetime` nor a parseable time. The swap is keyed on the source being
+  untimed, not on the text coming out empty: `<Player.Time type="duration">LIVE</Player.Time>`
+  on a live source is a `<span>` that displays something. Every attribute the
+  part carries survives it — `data-playdeck-part`, `data-state`,
+  `data-time-type` and `data-provider` — so select on
+  `[data-playdeck-part='time']` rather than on the element type. `datetime` is
+  the library's in both states: it is absent on the `<span>`, and a `dateTime`
+  prop is dropped there rather than passed through.
+  Because `duration` is `null` until metadata arrives on nearly every source, a
+  `duration` or `remaining` instance normally starts as a `<span>` and is
+  **replaced** by a `<time>` when metadata lands, rather than re-rendering in
+  place — so a CSS transition, focus, or a `MutationObserver` a consumer has put
+  on that node resets at that moment.
 - **`data-state`** — the part's derived state (e.g. `paused`/`playing`,
   `muted`/`unmuted`, `idle`/`ready`, `loading`/`loaded`/`error`,
   `global`/`scoped`, `timed`/`untimed` on `time`, the error category on `error`,
@@ -69,6 +80,12 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   on the structural/activation parts (`viewport`, `poster`, `poster-image`,
   `media`, `activation`, `loading-indicator`), which don't read provider
   state and so avoid re-rendering when it changes.
+- **`data-time-type`** — which of the three times the part reads, `current`,
+  `duration` or `remaining`, mirroring `Time`'s `type` prop. Only on `time`,
+  where several instances usually sit side by side and are otherwise
+  indistinguishable to a selector. It survives the `<span>`/`<time>` swap above,
+  so `[data-playdeck-part='time'][data-time-type='duration']` addresses the same
+  instance in both states.
 - **`data-buffering`** — `"true"` while a stall has been admitted, `"false"`
   otherwise. Only on `seek-slider`. Debounced: a stall must persist 500ms
   before it is admitted, and once admitted it is held 500ms, so a short

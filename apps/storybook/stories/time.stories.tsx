@@ -21,7 +21,7 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-playdeck-part="time"`, `data-state="timed" | "untimed"`, and `data-provider="<provider>"`. A `<time>` element, or a `<span>` where it displays nothing, so select on the part rather than the tag.',
+          '**Contract** — renders `data-playdeck-part="time"`, `data-state="timed" | "untimed"`, and `data-provider="<provider>"`. A `<time>` element — or a `<span>` where `type="duration"` or `type="remaining"` has no duration to mark up, as above, which is keyed on the source rather than on the text being empty: `<Player.Time type="duration">LIVE</Player.Time>` on a live source is a `<span>` that displays something. Select on the part rather than the tag.',
           '',
           '**Accessibility** — text content; not an interactive control.',
           '',
