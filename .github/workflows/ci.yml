@@ -15,9 +15,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Measured wall times on a healthy run (2026-08-19): audit 21s, unit 35s,
+# static 54s, visual 57s, storybook 64s, package 113s, e2e firefox 160s,
+# chromium 162s, webkit 232s. The timeouts below are several times those, so
+# they never fire on a slow-but-working run.
+#
+# They exist for the failure mode that actually happened: six jobs sat on
+# `playwright install --with-deps`, which shells out to apt and blocks
+# indefinitely rather than failing, for two hours. Without an explicit
+# `timeout-minutes` a job inherits GitHub's six-hour default, so a wedged
+# runner reads as "still running" for most of a working day. A red X in
+# fifteen minutes is the whole point.
+
 jobs:
   static:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: corepack enable
@@ -45,6 +58,7 @@ jobs:
   # package's own runtime tree. See scripts/audit.mjs.
   audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: corepack enable
@@ -57,6 +71,7 @@ jobs:
 
   unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: corepack enable
@@ -75,6 +90,7 @@ jobs:
   # e2e/a11y-media.spec.ts for the full rationale.
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -113,6 +129,7 @@ jobs:
   # spec run everywhere.
   visual:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: corepack enable
@@ -150,6 +167,7 @@ jobs:
   # predates that index entirely.
   package:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: corepack enable
@@ -194,6 +212,7 @@ jobs:
 
   storybook:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: corepack enable
