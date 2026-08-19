@@ -119,6 +119,13 @@ the muted retry behind it played. Reported next to the `started` autoplay a
 recovery does not change, and reachable from the `audible-then-muted` mode only.
 _Avoid_: autoplay fallback, muted fallback
 
+**Suppressed autoplay**:
+An autoplay that stays configured and is deliberately never attempted, because
+the viewer matches `prefers-reduced-motion: reduce`. Distinct from an autoplay
+that was never configured, and from one a browser refused: nothing was asked of
+the provider at all.
+_Avoid_: skipped autoplay, disabled autoplay, cancelled autoplay
+
 ### Adapters
 
 See [ADR-0004](docs/adr/0004-cross-provider-options-live-on-root.md) for what

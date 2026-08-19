@@ -83,6 +83,19 @@ export type RootProps = NativePlaybackOptions &
     readonly mediaMetadata?: MediaMetadataInput | null;
     readonly defaultPlaybackRate?: number;
     readonly defaultVolume?: number;
+    /**
+     * Attempt `autoplay` even where the viewer matches
+     * `prefers-reduced-motion: reduce`. Playdeck otherwise starts no playback of
+     * its own for such a viewer: an `eager` or `viewport` autoplay is declined
+     * at the attempt, the player reaches `autoplay: 'suppressed'`, and the
+     * poster stays over the frame exactly as it does for a refused attempt.
+     *
+     * Defaults to `false`, and named for what it does rather than for the case
+     * it enables, so a call site setting it reads as the deliberate
+     * accessibility trade-off it is. Where `matchMedia` is unavailable the query
+     * cannot match and this prop changes nothing.
+     */
+    readonly ignoreReducedMotion?: boolean;
     readonly muted?: boolean;
     readonly onMutedChange?: (muted: boolean) => void;
     readonly onPlaybackRateChange?: (playbackRate: number) => void;
@@ -120,6 +133,7 @@ export const Root = ({
   defaultPlaybackRate = 1,
   defaultVolume = 1,
   endTime,
+  ignoreReducedMotion = false,
   loadMargin = '200px 0px',
   loadThreshold = 0,
   loading = 'viewport',
@@ -162,7 +176,11 @@ export const Root = ({
   const mutedChangeCallback = useRef(onMutedChange);
   const volumeChangeCallback = useRef(onVolumeChange);
   const playbackRateChangeCallback = useRef(onPlaybackRateChange);
-  const autoplayConfiguration = useRef({ autoplay, muted });
+  const autoplayConfiguration = useRef({
+    autoplay,
+    ignoreReducedMotion,
+    muted
+  });
   const pendingMuted = useRef<Reconciliation<boolean> | undefined>(undefined);
   const pendingVolume = useRef<Reconciliation<number> | undefined>(undefined);
   const pendingPlaybackRate = useRef<Reconciliation<number> | undefined>(
@@ -192,7 +210,7 @@ export const Root = ({
   mutedChangeCallback.current = onMutedChange;
   volumeChangeCallback.current = onVolumeChange;
   playbackRateChangeCallback.current = onPlaybackRateChange;
-  autoplayConfiguration.current = { autoplay, muted };
+  autoplayConfiguration.current = { autoplay, ignoreReducedMotion, muted };
   mediaMetadataSeed.current = mediaMetadata;
   /* eslint-enable react-hooks/refs */
 
@@ -377,7 +395,8 @@ export const Root = ({
       }
       ensurePreferenceSubscription();
       controller.configureAutoplay(autoplayConfiguration.current.autoplay, {
-        controlledMuted: autoplayConfiguration.current.muted
+        controlledMuted: autoplayConfiguration.current.muted,
+        ignoreReducedMotion: autoplayConfiguration.current.ignoreReducedMotion
       });
       if (!(media instanceof HTMLVideoElement)) {
         // Embed mounts have no seedable element properties, so replay the
@@ -460,8 +479,8 @@ export const Root = ({
       // keep hiding on the first frame. The attempt provably cannot have begun
       // this early -- `useActivation` prepares the media
       // (`use-activation.ts:627`) before `setProvider` (`:652`), and
-      // `#synchronizeAutoplay` (`player-controller.ts:631-651`) declines to
-      // apply `'attempting'` until there is a provider and a ready activation.
+      // `#synchronizeAutoplay` in `player-controller.ts` declines to apply
+      // `'attempting'` until there is a provider and a ready activation.
       // So the immediate call below for media that attaches already decodable
       // reads `'idle'` whatever the mode is, as does a `loadeddata` arriving
       // before the provider's `load()`.
@@ -617,8 +636,11 @@ export const Root = ({
   }, [controller, detachPreparedMedia]);
 
   useEffect(() => {
-    controller.configureAutoplay(autoplay, { controlledMuted: muted });
-  }, [autoplay, controller, muted]);
+    controller.configureAutoplay(autoplay, {
+      controlledMuted: muted,
+      ignoreReducedMotion
+    });
+  }, [autoplay, controller, ignoreReducedMotion, muted]);
 
   useEffect(() => {
     controller.setCaptionRenderer(captionRenderer ?? 'custom');

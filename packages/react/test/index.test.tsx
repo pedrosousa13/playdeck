@@ -144,6 +144,13 @@ const verifyProviderOptionExclusions = (): Player.PlayerProviderOptions[] => [
   { wistia: { endTime: 20 } }
 ];
 
+// The preference is an OS setting no test environment exposes, so the query is
+// stubbed rather than driven: what matters is that the controller reads it at
+// the moment it decides whether to attempt (#311).
+const stubReducedMotion = (matches: boolean): void => {
+  vi.stubGlobal('matchMedia', () => ({ matches }));
+};
+
 const confirmMetadataReady = (media: HTMLVideoElement): void => {
   Object.defineProperty(media, 'readyState', {
     configurable: true,
@@ -753,6 +760,60 @@ test.each([
 
   await waitFor(() =>
     expect(screen.getByRole('button').dataset.autoplayState).toBe(state)
+  );
+});
+
+// Both strategies, because the rule #311 settled on is "Playdeck never starts
+// playback on its own when the viewer asked for reduced motion" -- not "not
+// below the fold". `'interaction'` is the third strategy and cannot appear
+// here: it rejects autoplay as a configuration error before anything attaches
+// (`use-activation.ts:98`).
+test.each([['eager'], ['viewport']] as const)(
+  'suppresses %s autoplay when the viewer asked for reduced motion',
+  async (loading) => {
+    stubReducedMotion(true);
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockResolvedValue(undefined);
+    render(
+      <Player.Root autoplay="audible" loading={loading} source="/reduced.mp4">
+        <Player.Viewport>
+          <Player.Media />
+        </Player.Viewport>
+        <Player.PlayButton />
+      </Player.Root>
+    );
+
+    confirmMetadataReady(screen.getByLabelText('Playdeck media'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button').dataset.autoplayState).toBe(
+        'suppressed'
+      )
+    );
+    expect(play).not.toHaveBeenCalled();
+  }
+);
+
+test('attempts autoplay under reduced motion once the consumer opts out', async () => {
+  stubReducedMotion(true);
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+    this: HTMLMediaElement
+  ) {
+    this.dispatchEvent(new Event('play'));
+    return Promise.resolve();
+  });
+  render(
+    <LegacyRoot autoplay="audible" ignoreReducedMotion source="/opted-out.mp4">
+      <Player.Media />
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+
+  confirmMetadataReady(screen.getByLabelText('Playdeck media'));
+
+  await waitFor(() =>
+    expect(screen.getByRole('button').dataset.autoplayState).toBe('started')
   );
 });
 
@@ -1811,6 +1872,49 @@ test('keeps the poster visible when cached media attaches under refused autoplay
       .parentElement?.getAttribute('data-state')
   ).toBe('visible');
 });
+
+// The constraint #311 is most likely to break silently, and nothing in the
+// gate below names `'suppressed'`. The poster stays up because the `autoplay`
+// prop reaches `Root` un-cleared and because the `loadeddata` gate early-returns
+// on every autoplay state that is not `'started'` -- a suppression falls through
+// it the way a refusal does. Pass `autoplay={false}` under reduced motion, or
+// narrow that early return to the states it means, and the gate opens on a
+// paused first frame -- #242, with a different cause. This is the test that
+// fails when either half goes.
+test.each([['eager'], ['viewport']] as const)(
+  'keeps the poster visible when a frame decodes under %s suppressed autoplay',
+  async (loading) => {
+    stubReducedMotion(true);
+    const { Poster } = posterPrimitives;
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    render(
+      <Player.Root autoplay="audible" loading={loading} source="/reduced.mp4">
+        <Player.Viewport>
+          <Player.Media />
+          <Poster>
+            <span>Suppressed autoplay poster</span>
+          </Poster>
+        </Player.Viewport>
+        <Player.PlayButton />
+      </Player.Root>
+    );
+    const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+
+    confirmMetadataReady(media);
+    await waitFor(() =>
+      expect(screen.getByRole('button').dataset.autoplayState).toBe(
+        'suppressed'
+      )
+    );
+    fireEvent.loadedData(media);
+
+    expect(
+      screen
+        .getByText('Suppressed autoplay poster')
+        .parentElement?.getAttribute('data-state')
+    ).toBe('visible');
+  }
+);
 
 test('keeps the poster visible while the muted autoplay retry is in flight', async () => {
   const { Poster } = posterPrimitives;

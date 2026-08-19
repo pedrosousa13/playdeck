@@ -81,6 +81,44 @@ const noticeIn = (patch: ProviderStatePatch): PlayerError | undefined =>
     ? patch.error
     : undefined;
 
+// Read at the decision point rather than subscribed to, and read off
+// `globalThis` rather than off a DOM lib core does not compile against: an
+// environment with no `matchMedia` — server rendering, a worker, an older
+// engine — simply does not match, and autoplay proceeds as it did before #311.
+// A media query that never matches does not apply, so nothing here raises the
+// browser-support floor.
+//
+// No `MediaQueryList` subscription, deliberately. This would be the codebase's
+// first, and the case does not need one: a viewer who turns reduced motion *on*
+// mid-session is honoured by every player that has not yet decided, and one who
+// turns it *off* does not get video retroactively starting at them, which is
+// the better of the two behaviours anyway (#311).
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+// Only an exact `true` suppresses, and a `matchMedia` that throws or answers
+// with something other than a `MediaQueryList` is treated as not matching —
+// the same outcome as an absent one, which is the documented behaviour for
+// every environment that cannot answer the query.
+//
+// Not defensiveness for its own sake: `#synchronizeAutoplay` runs with no `try`
+// around it, so a throw out of here escaped the autoplay decision entirely and
+// surfaced as a player-level `provider` error — `lifecycle: 'error'` and no
+// playback, a broken player rather than an unsuppressed one. A host page that
+// patches `matchMedia` (a polyfill, a test harness, a browser extension) is
+// ordinary, and a reduced-motion check must never be the thing that takes a
+// player down (#311).
+const prefersReducedMotion = (): boolean => {
+  const scope = globalThis as {
+    matchMedia?: (query: string) => { matches?: unknown } | undefined;
+  };
+  if (typeof scope.matchMedia !== 'function') return false;
+  try {
+    return scope.matchMedia(REDUCED_MOTION_QUERY)?.matches === true;
+  } catch {
+    return false;
+  }
+};
+
 const notReady: Availability = freezeAvailability({
   status: 'unknown',
   reason: 'not-ready'
@@ -155,6 +193,7 @@ export class PlayerController {
   #generation = 0;
   #autoplayMode: AutoplayMode = false;
   #autoplayControlledMuted: boolean | undefined;
+  #autoplayIgnoreReducedMotion = false;
   #captionRenderer: 'custom' | 'native' = 'custom';
   #hasAutoplayConfigurationError = false;
   #autoplayConfigurationRevision = 0;
@@ -184,14 +223,21 @@ export class PlayerController {
     mode: AutoplayMode,
     options: AutoplayConfigurationOptions = {}
   ): void => {
+    // Normalized to a boolean before it is compared, unlike `controlledMuted`:
+    // an absent opt-out and an explicit `false` mean the same thing, so treating
+    // them as different values here would re-run the configuration for nothing
+    // (#311).
+    const ignoreReducedMotion = options.ignoreReducedMotion ?? false;
     if (
       mode === this.#autoplayMode &&
-      options.controlledMuted === this.#autoplayControlledMuted
+      options.controlledMuted === this.#autoplayControlledMuted &&
+      ignoreReducedMotion === this.#autoplayIgnoreReducedMotion
     )
       return;
     const hadConfigurationError = this.#hasAutoplayConfigurationError;
     this.#autoplayMode = mode;
     this.#autoplayControlledMuted = options.controlledMuted;
+    this.#autoplayIgnoreReducedMotion = ignoreReducedMotion;
     this.#hasAutoplayConfigurationError =
       mode === 'muted' && options.controlledMuted === false;
     this.#autoplayConfigurationRevision += 1;
@@ -797,6 +843,31 @@ export class PlayerController {
     const mode = this.#autoplayMode;
     const revision = this.#autoplayConfigurationRevision;
     this.#autoplayAttemptGeneration = generation;
+    // The attempt is declined here, at the one place an attempt is made, and
+    // nowhere near `configureAutoplay` — because what keeps the poster over the
+    // frame through a suppression is not this field at all, and is not a check
+    // for `'suppressed'` anywhere. Two things upstream in React do it, and both
+    // are silent about the states they cover: `Root`'s `loadeddata` gate reads
+    // the `autoplay` *prop*, so that prop must keep arriving un-cleared; and
+    // that gate early-returns on every autoplay state that is not `'started'`
+    // rather than naming the ones it covers, so `'suppressed'` keeps the poster
+    // up by falling through it, exactly as `'idle'` and `'blocked'` do.
+    //
+    // Implement suppression by having a consumer or `Root` pass
+    // `autoplay={false}`, or teach that early return to enumerate states, and
+    // the gate opens on a paused first frame with no cover over it and no
+    // gesture that put it there — #242, arriving by a different route. What
+    // guards the pair is the react test `keeps the poster visible when a frame
+    // decodes under %s suppressed autoplay` (#311).
+    //
+    // Below every other guard rather than above them, deliberately: a player
+    // that would not have autoplayed anyway must keep reporting why it did not,
+    // so `'suppressed'` never stands in for a mode that was never set, for the
+    // configuration error, or for an activation that never got there.
+    if (!this.#autoplayIgnoreReducedMotion && prefersReducedMotion()) {
+      this.#applyPatch({ autoplay: 'suppressed' });
+      return;
+    }
     this.#autoplayRecoveryPending = false;
     this.#applyPatch({ autoplay: 'attempting' });
     if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
