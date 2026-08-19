@@ -480,7 +480,8 @@ export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
   // duration has not arrived. `0` was the defect (#248): `formatTime(0)` renders
   // `0:00`, and a viewer reads a zero-length video rather than an untimed one.
   // `current` never reaches it, because `currentTime` means the same thing on a
-  // live source as on a VOD one.
+  // live source as on a VOD one, so a `current` instance is always the `<time>`
+  // below.
   const seconds =
     type === 'duration'
       ? hasDuration
@@ -491,31 +492,47 @@ export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
           ? Math.max(0, duration - currentTime)
           : null
         : currentTime;
-  // Nothing, rather than a substitute. `data-state="untimed"` below is the
-  // signal, and a consumer composes a `LIVE` badge or any other presentation
-  // off it in their own layout — the same line
-  // `.out-of-scope/default-presentation-on-blocked-autoplay.md` draws for a
-  // refused autoplay: publish the state, do not materialise a presentation
-  // inside someone else's design.
-  const formatted = seconds === null ? '' : formatTime(seconds);
+
+  // Not a `<time>`: there is no time here to mark up. Keeping the element and
+  // emptying it would leave a `<time>` with neither a `datetime` nor parseable
+  // time-string content, which its own rule forbids, and the `PT0S` that would
+  // make it conformant is the same zero-duration claim the text just stopped
+  // making. ADR-0002 rules that an unknown measurement removes the published
+  // property rather than publishing a zero or an empty value; that ADR governs a
+  // CSS custom property rather than an element, but it is the shape this file
+  // already keeps for something it has not measured — `bufferedShare` returns
+  // `null` rather than `0`, and `SeekSlider` then leaves the
+  // `seek-buffered-description` element out instead of rendering an empty one.
+  //
+  // Every hook is repeated onto the `<span>`, because they are the whole
+  // affordance: `data-state="untimed"` is what a consumer hangs a `LIVE` badge,
+  // an em dash or an elapsed-time fallback off, in their own layout rather than
+  // one this library materialises inside their design. The known cost is a
+  // consumer selector written `time[data-playdeck-part="time"]`, which stops
+  // matching in this state — the part attribute is the documented hook, not the
+  // tag name.
+  if (seconds === null) {
+    return (
+      <span
+        {...props}
+        data-provider={provider ?? undefined}
+        data-playdeck-part="time"
+        data-state="untimed"
+        data-time-type={type}
+      >
+        {children}
+      </span>
+    );
+  }
+
+  const formatted = formatTime(seconds);
   const display =
-    seconds !== null && type === 'remaining' && seconds > 0
-      ? `-${formatted}`
-      : formatted;
+    type === 'remaining' && seconds > 0 ? `-${formatted}` : formatted;
 
   return (
     <time
       {...props}
-      // Omitted rather than `PT0S`, which is the same zero-duration claim the
-      // text made, in the form a machine reads. That leaves a `<time>` carrying
-      // neither a `datetime` nor a parseable time — invalid by the letter of the
-      // element's rule, and deliberately so: an absent attribute states nothing,
-      // and the only conformant alternative is to state something false. Absence
-      // over a zero is how this library reports the unmeasured elsewhere
-      // (ADR-0002, `bufferedShare` above).
-      dateTime={
-        seconds === null ? undefined : `PT${Math.max(0, Math.floor(seconds))}S`
-      }
+      dateTime={`PT${Math.max(0, Math.floor(seconds))}S`}
       data-provider={provider ?? undefined}
       data-playdeck-part="time"
       data-state={hasDuration ? 'timed' : 'untimed'}

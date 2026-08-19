@@ -38,9 +38,24 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   changes.
   A failure — including a non-fatal `provider`, `policy` or `unsupported` one —
   still renders `error` with its overlay and its retry.
+- **`time` shows nothing where the source has no duration.** `data-state` on
+  the `time` part is `timed` or `untimed`, and a source is untimed wherever its
+  duration is not a finite number — a live stream, or one whose duration has not
+  arrived yet. `type="duration"` and `type="remaining"` render empty text there
+  rather than `0:00`, which reads as a zero-length video (#248). Nothing is
+  substituted for it: a `LIVE` badge, an em dash or an elapsed-time fallback is
+  a consumer's to compose off `[data-state='untimed']` in their own layout, or
+  to pass as `children`. `type="current"` is unaffected, because `currentTime`
+  means the same thing on a live source as on a VOD one; it keeps counting, and
+  it carries `data-state="untimed"` alongside on such a source.
+  The element itself is a `<span>` in that state rather than a `<time>` — there
+  is no time to mark up, and an emptied `<time>` would carry neither a
+  `datetime` nor a parseable time. It carries every attribute below either way,
+  so select on `[data-playdeck-part='time']` rather than on the element type.
 - **`data-state`** — the part's derived state (e.g. `paused`/`playing`,
   `muted`/`unmuted`, `idle`/`ready`, `loading`/`loaded`/`error`,
-  `global`/`scoped`, the error category on `error`, or the activation state).
+  `global`/`scoped`, `timed`/`untimed` on `time`, the error category on `error`,
+  or the activation state).
   Absent where the part has no observable state: `airplay-button` opens a
   system picker, and Playdeck does not currently surface an active-route flag, so
   it exposes no `data-state` rather than a value that never changes. That is
@@ -377,7 +392,8 @@ the deterministic story test run (tagged `!test`).
 
 Each primitive renders fixed element types, and that is a decision rather than
 an omission: `PlayButton` renders a `<button>`, `Viewport` a `<div>`, `Time` a
-`<time>`. No prop swaps those elements for others.
+`<time>` — or a `<span>` where it has no time to mark up, as above. No prop
+swaps those elements for others.
 
 Where a primitive hands over what goes inside one, it does so through an
 explicit, typed prop rather than a general substitution mechanism:

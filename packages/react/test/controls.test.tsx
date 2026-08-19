@@ -1357,41 +1357,60 @@ describe('Time', () => {
     expect(screen.getByText('-1:10')).toBeDefined();
   });
 
-  test('renders no duration on an untimed source', () => {
-    const { container } = renderWithPlayer(<Player.Time type="duration" />, {
-      currentTime: 42,
-      duration: null
-    });
-    const time = container.querySelector('[data-playdeck-part="time"]')!;
-    // `0:00` here reads as a zero-length video (#248). The element stays, so
-    // `data-state` is still the signal a consumer composes a `LIVE` badge off.
-    expect(time.textContent).toBe('');
-    expect(attr(time, 'data-state')).toBe('untimed');
-    expect(attr(time, 'data-time-type')).toBe('duration');
+  test('renders no duration and no remaining time on an untimed source', () => {
+    // `0:00` here reads as a zero-length video (#248). The part stays in the
+    // DOM, so `data-state` is still the signal a consumer composes a `LIVE`
+    // badge off, and every other hook has to survive with it.
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 42, duration: null, provider: 'native' }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.textContent).toBe('');
+    expect(attr(duration ?? null, 'data-state')).toBe('untimed');
+    expect(attr(duration ?? null, 'data-time-type')).toBe('duration');
+    expect(attr(duration ?? null, 'data-provider')).toBe('native');
+    expect(remaining?.textContent).toBe('');
+    expect(attr(remaining ?? null, 'data-state')).toBe('untimed');
+    expect(attr(remaining ?? null, 'data-time-type')).toBe('remaining');
+    expect(attr(remaining ?? null, 'data-provider')).toBe('native');
   });
 
-  test('renders no remaining time on a live stream', () => {
+  test('renders no duration and no remaining time on a live stream', () => {
     // An infinite duration is what a live HLS stream publishes, and it is
     // untimed by the same rule a null one is.
-    const { container } = renderWithPlayer(<Player.Time type="remaining" />, {
-      currentTime: 42,
-      duration: Number.POSITIVE_INFINITY
-    });
-    const time = container.querySelector('[data-playdeck-part="time"]')!;
-    expect(time.textContent).toBe('');
-    expect(attr(time, 'data-state')).toBe('untimed');
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 42, duration: Number.POSITIVE_INFINITY }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.textContent).toBe('');
+    expect(attr(duration ?? null, 'data-state')).toBe('untimed');
+    expect(remaining?.textContent).toBe('');
+    expect(attr(remaining ?? null, 'data-state')).toBe('untimed');
   });
 
   test('still formats the elapsed time on an untimed source', () => {
     renderWithPlayer(<Player.Time />, { currentTime: 75, duration: null });
     const time = screen.getByText('1:15');
+    expect(time.tagName).toBe('TIME');
     expect(attr(time, 'data-state')).toBe('untimed');
     expect(attr(time, 'datetime')).toBe('PT75S');
   });
 
-  test('claims no machine-readable seconds on an untimed source', () => {
-    // `PT0S` is the same zero-duration claim as the text, for a reader that
-    // parses rather than looks.
+  test('renders a span rather than an empty time on an untimed source', () => {
+    // A `<time>` with neither a `datetime` nor a parseable time is not a time
+    // at all, and `PT0S` would restate the zero the text stopped claiming.
     const { container } = renderWithPlayer(
       <>
         <Player.Time type="duration" />
@@ -1402,6 +1421,7 @@ describe('Time', () => {
     for (const time of container.querySelectorAll(
       '[data-playdeck-part="time"]'
     )) {
+      expect(time.tagName).toBe('SPAN');
       expect(time.hasAttribute('datetime')).toBe(false);
     }
   });
@@ -1417,10 +1437,33 @@ describe('Time', () => {
     const [duration, remaining] = [
       ...container.querySelectorAll('[data-playdeck-part="time"]')
     ];
+    expect(duration?.tagName).toBe('TIME');
     expect(duration?.textContent).toBe('1:40');
     expect(attr(duration ?? null, 'datetime')).toBe('PT100S');
+    expect(remaining?.tagName).toBe('TIME');
     expect(remaining?.textContent).toBe('-1:10');
     expect(attr(remaining ?? null, 'datetime')).toBe('PT70S');
+  });
+
+  test('still times a genuine zero-second source', () => {
+    // A finite `0` is a measurement, not a missing one, so `0:00` is the
+    // truth here and the element stays a `<time>`.
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 0, duration: 0 }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.tagName).toBe('TIME');
+    expect(duration?.textContent).toBe('0:00');
+    expect(attr(duration ?? null, 'data-state')).toBe('timed');
+    expect(attr(duration ?? null, 'datetime')).toBe('PT0S');
+    expect(remaining?.textContent).toBe('0:00');
+    expect(attr(remaining ?? null, 'data-state')).toBe('timed');
   });
 
   test('renders consumer children on an untimed source', () => {
