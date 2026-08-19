@@ -16,6 +16,11 @@ export const media = (page: Page) =>
 export const seekSliderInput = (page: Page) =>
   page.locator('[data-playdeck-part="seek-slider-input"]');
 
+// The buffered layer is `aria-hidden`, so it has no role and no name: the part
+// attribute is the only handle on it, which is exactly what the contract says.
+export const seekBufferedRange = (page: Page) =>
+  page.locator('[data-playdeck-part="seek-buffered-range"]');
+
 // `VolumeSlider` puts the part on the range control itself, so there is no
 // `volume-slider-input` to pair with `seek-slider-input`: the seek control is a
 // wrapper element around its input, and this one is the input.
