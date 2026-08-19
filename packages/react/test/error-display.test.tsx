@@ -11,12 +11,15 @@ import { createRef, type ReactNode } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   type CommandResult,
-  PlayerController,
   type PlayerError,
   type ProviderAdapter,
   type ProviderStateListener,
   type ProviderStatePatch
 } from '@playdeck/core';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 
 const ok = async (): Promise<CommandResult> => ({ ok: true });
@@ -54,7 +57,9 @@ const renderWithPlayer = (ui: ReactNode, initial?: ProviderStatePatch) => {
       {ui}
     </Player.Root>
   );
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
   const mock = createMockAdapter();
   act(() => {
     controller.setProvider(mock.adapter);

@@ -171,9 +171,24 @@ export const useMockPlayer = (parameters: MockPlayerParameters) => {
       !dimensions
     )
       return;
-    // Player.Root's imperative handle is its PlayerController; the cast opens
-    // the provider-facing surface (setProvider) that PlayerHandle omits.
-    const controller = handleRef.current as PlayerController | null;
+    // The handle carries exactly what `PlayerHandle` declares, and
+    // `setProvider`/`configureAutoplay` are deliberately not on it (#328).
+    // Staging a fake provider is the one job that needs the controller itself,
+    // and this is the one sanctioned way back to it.
+    //
+    // The symbol is spelled out here rather than imported, because this file
+    // imports the package entry `@playdeck/react` and the module that owns the
+    // key (`packages/react/src/internal-controller.ts`) is internal to that
+    // package -- not exported from `index.tsx`, the same way `permitted-url.ts`
+    // is not. That is exactly why the key is a `Symbol.for`: the global symbol
+    // registry is reachable by name from anywhere at runtime, in the browser
+    // Storybook actually runs in, with no new published export and no build
+    // config. Change the string here and it silently reads `undefined`, so the
+    // two spellings are kept in step by `internal-controller.ts` naming this
+    // file and by the e2e suite that runs through this decorator.
+    const controller = (
+      handleRef.current as unknown as Record<symbol, PlayerController> | null
+    )?.[Symbol.for('playdeck.internal.controller')];
     if (!controller) return;
     const mock = createMockAdapter(
       playResult ?? { ok: true },

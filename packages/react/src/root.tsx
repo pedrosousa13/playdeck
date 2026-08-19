@@ -10,6 +10,7 @@ import {
   type PlayerSource
 } from '@playdeck/core';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
+import { INTERNAL_CONTROLLER } from './internal-controller.js';
 import {
   collectPlayerActions,
   PlayerContext,
@@ -612,14 +613,37 @@ export const Root = ({
   // widening `PlayerController` itself, as it is an activation concern the
   // controller has no concept of. Guarded by index.test.tsx's "hands back only
   // the declared PlayerHandle surface through the ref".
+  //
+  // `INTERNAL_CONTROLLER` is the one deliberate exception: the Storybook
+  // mock-player decorator and this package's test render helpers stage a fake
+  // provider, which needs the controller itself. It is a registered symbol
+  // (`internal-controller.ts` says why), named rather than stumbled into.
+  //
+  // Defined rather than written as a `[INTERNAL_CONTROLLER]: controller`
+  // property in the literal, because `Object.defineProperty` defaults to
+  // non-enumerable and a plain symbol property does not. Object spread copies
+  // enumerable *symbol* keys -- unlike `Object.keys` and `JSON.stringify`,
+  // which drop symbols outright -- so a first-party wrapper narrowing the
+  // handle with `{...ref.current}` before handing it to a vendor overlay, the
+  // exact shape #328's failure scenario describes, would otherwise hand over
+  // the whole controller with it. Pinned by index.test.tsx's "keeps the
+  // internal controller hatch out of every enumeration of the handle".
   useImperativeHandle(
     ref,
-    () => ({
-      getState: controller.getState,
-      subscribe: controller.subscribe,
-      on: controller.on,
-      ...collectPlayerActions(controller, activation.activateFromInteraction)
-    }),
+    () =>
+      Object.defineProperty(
+        {
+          getState: controller.getState,
+          subscribe: controller.subscribe,
+          on: controller.on,
+          ...collectPlayerActions(
+            controller,
+            activation.activateFromInteraction
+          )
+        },
+        INTERNAL_CONTROLLER,
+        { value: controller }
+      ),
     [activation.activateFromInteraction, controller]
   );
   const registerActivationMedia = activation.registerMedia;

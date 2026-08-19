@@ -21,6 +21,10 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { PlayerController, type ProviderAdapter } from '@playdeck/core';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 
 vi.mock('../src/provider-loaders', async () => {
@@ -72,6 +76,15 @@ class ImmediateIntersectionObserver implements IntersectionObserver {
 beforeEach(() => {
   vi.stubGlobal('IntersectionObserver', ImmediateIntersectionObserver);
 });
+
+// The controller the ref's handle carries, for the optimistic-request tests
+// that spy on a command to count what `Root`'s controlled-prop effects sent.
+// The handle is a fresh object holding the controller's methods, not the
+// controller (#328), so a spy installed on the handle would replace a property
+// nothing calls and count zero. The controller is the object those effects
+// reach for, so it is the object to watch; see internal-controller.ts.
+const controllerOf = (handle: Player.PlayerHandle | null): PlayerController =>
+  (handle as unknown as InternalControllerAccess)[INTERNAL_CONTROLLER];
 
 const LegacyRoot = ({ loading = 'eager', ...props }: Player.RootProps) => (
   <Player.Root {...props} loading={loading} />
@@ -395,8 +408,8 @@ test('supersedes a delayed muted confirmation after a rapid controlled reversal'
   );
   const { rerender } = render(player(false));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const mute = vi.spyOn(handle.current!, 'mute');
-  const unmute = vi.spyOn(handle.current!, 'unmute');
+  const mute = vi.spyOn(controllerOf(handle.current), 'mute');
+  const unmute = vi.spyOn(controllerOf(handle.current), 'unmute');
 
   rerender(player(true));
   rerender(player(false));
@@ -430,7 +443,7 @@ test('supersedes a delayed volume confirmation after a rapid controlled reversal
   );
   const { rerender } = render(player(0.7));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const setVolume = vi.spyOn(handle.current!, 'setVolume');
+  const setVolume = vi.spyOn(controllerOf(handle.current), 'setVolume');
 
   rerender(player(0.2));
   rerender(player(0.7));
@@ -463,7 +476,10 @@ test('supersedes a delayed rate confirmation after a rapid controlled reversal',
   );
   const { rerender } = render(player(1.25));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const setPlaybackRate = vi.spyOn(handle.current!, 'setPlaybackRate');
+  const setPlaybackRate = vi.spyOn(
+    controllerOf(handle.current),
+    'setPlaybackRate'
+  );
 
   rerender(player(2));
   rerender(player(1.25));
@@ -501,7 +517,7 @@ test('clears retired volume targets when queued confirmations coalesce to the la
   );
   const { rerender } = render(player(0.7));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const setVolume = vi.spyOn(handle.current!, 'setVolume');
+  const setVolume = vi.spyOn(controllerOf(handle.current), 'setVolume');
 
   rerender(player(0.2));
   rerender(player(0.5));
@@ -541,7 +557,10 @@ test('clears repeated retired rate targets after the latest active confirmation'
   );
   const { rerender } = render(player(1));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const setPlaybackRate = vi.spyOn(handle.current!, 'setPlaybackRate');
+  const setPlaybackRate = vi.spyOn(
+    controllerOf(handle.current),
+    'setPlaybackRate'
+  );
 
   rerender(player(2));
   rerender(player(1));
@@ -583,8 +602,8 @@ test('clears retired muted targets when a reversal confirmation coalesces to cur
   );
   const { rerender } = render(player(false));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const mute = vi.spyOn(handle.current!, 'mute');
-  const unmute = vi.spyOn(handle.current!, 'unmute');
+  const mute = vi.spyOn(controllerOf(handle.current), 'mute');
+  const unmute = vi.spyOn(controllerOf(handle.current), 'unmute');
 
   rerender(player(true));
   rerender(player(false));
@@ -1090,6 +1109,13 @@ test('hands back only the declared PlayerHandle surface through the ref', () => 
   expect(surface.subscribeDimensions).toBeUndefined();
   expect(surface.subscribeCues).toBeUndefined();
   expect(surface.getActiveCues).toBeUndefined();
+  // Landed after this test was first written (#330) and correctly left out of
+  // `PlayerHandle`: publishing a refused-URL notice is the React layer's job,
+  // not a consumer command. Named here because the `Object.keys` equality
+  // above already covers it -- the point of this block is that each new
+  // controller member gets looked at, and this is the one that proved a member
+  // can arrive between the narrowing and the fix.
+  expect(surface.reportRefusedUrl).toBeUndefined();
   expect(surface.playWithOrigin).toBeUndefined();
   expect(surface.pauseWithOrigin).toBeUndefined();
   expect(surface.togglePlaybackWithOrigin).toBeUndefined();
@@ -1098,11 +1124,17 @@ test('hands back only the declared PlayerHandle surface through the ref', () => 
   expect(handle.current).not.toBeInstanceOf(PlayerController);
 });
 
-test('keeps the imperative handle backed by the full PlayerController', () => {
-  // The Storybook mock-player decorator (apps/storybook/.storybook/
-  // mock-player.tsx) casts PlayerHandle to PlayerController to reach the
-  // provider-facing surface (setProvider, configureAutoplay). This pins that
-  // invariant: the handle must remain the controller instance itself.
+test('reaches the live controller through the internal symbol hatch', () => {
+  // The one deliberate way back to the provider-facing surface the handle no
+  // longer carries (#328). The Storybook mock-player decorator
+  // (apps/storybook/.storybook/mock-player.tsx) and this package's test render
+  // helpers stage a provider through it; a registered `Symbol.for` key rather
+  // than a new package export, so the hatch is greppable by its one name and
+  // costs no published surface. This used to read "keeps the imperative handle
+  // backed by the full PlayerController" and asserted the handle *was* the
+  // controller -- the leak itself, since the whole controller then rode along
+  // for every consumer. The hatch must resolve to the real, live controller:
+  // an unrelated instance would satisfy the type and drive nothing.
   const handle = createRef<Player.PlayerHandle>();
   render(
     <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
@@ -1110,8 +1142,14 @@ test('keeps the imperative handle backed by the full PlayerController', () => {
     </Player.Root>
   );
 
-  expect(handle.current).toBeInstanceOf(PlayerController);
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
+
+  expect(controller).toBeInstanceOf(PlayerController);
+  // Same object the handle's own members are plucked from, so commands sent
+  // through the hatch and through the declared surface hit one player.
+  expect(controller.play).toBe(handle.current?.play);
   const adapter: ProviderAdapter = {
     provider: 'native',
     attach: () => undefined,
@@ -1127,6 +1165,44 @@ test('keeps the imperative handle backed by the full PlayerController', () => {
     controller.setProvider(undefined);
   });
   expect(controller.getState().activation).toBe('dormant');
+});
+
+test('keeps the internal controller hatch out of every enumeration of the handle', () => {
+  // The hatch is a symbol key so that it is invisible to the ways code walks
+  // an object: a consumer logging, serializing or copying the handle must not
+  // find a whole `PlayerController` hanging off it, and "the declared surface
+  // is all that is enumerable" is the claim this issue is really about (#328).
+  // Being a symbol buys two of the three: `Object.keys` and `JSON.stringify`
+  // drop symbol keys outright, and would still drop them if someone
+  // "simplified" the property back into the object literal. Object spread does
+  // NOT -- it copies enumerable symbol keys, measured, which is why `Root`
+  // defines the key with `Object.defineProperty` (non-enumerable by default)
+  // instead. Spread is the one that matters most: a wrapper that narrows the
+  // handle with `{...ref.current}` before passing it on is precisely #328's
+  // failure scenario, and it would have carried the controller across.
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
+      {null}
+    </Player.Root>
+  );
+  const surface = handle.current as unknown as Record<string, unknown>;
+
+  expect(Object.keys(surface)).not.toContain('controller');
+  expect(JSON.stringify(surface)).toBe('{}');
+  expect(Object.getOwnPropertySymbols({ ...surface })).toEqual([]);
+  expect(
+    Object.values(surface).every((value) => typeof value === 'function')
+  ).toBe(true);
+  expect(
+    Object.entries(surface).some(
+      ([, value]) => value instanceof PlayerController
+    )
+  ).toBe(false);
+
+  // ...and the hatch is genuinely there to be found by anything that names the
+  // symbol, so the assertions above are about visibility, not absence.
+  expect(Object.getOwnPropertySymbols(surface)).toEqual([INTERNAL_CONTROLLER]);
 });
 
 test('throws a clear error when player hooks are used outside Root', () => {

@@ -21,7 +21,11 @@ import {
 } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { PlayerController, type ProviderStatePatch } from '@playdeck/core';
+import type { ProviderStatePatch } from '@playdeck/core';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 import { createFakeProvider, deferred } from './fixtures/fake-provider';
@@ -55,7 +59,9 @@ const renderWithProvider = (
       {ui}
     </Player.Root>
   );
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
   const fake = createFakeProvider();
   act(() => {
     controller.setProvider(fake.adapter);

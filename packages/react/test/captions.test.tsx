@@ -5,7 +5,6 @@ import { createRef, type ReactNode } from 'react';
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
-  PlayerController,
   type Availability,
   type CommandResult,
   type PlayerCapabilities,
@@ -15,6 +14,10 @@ import {
   type TextCue,
   type TextTrack
 } from '@playdeck/core';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 
 const ok = async () => ({ ok: true as const });
@@ -61,7 +64,9 @@ const renderWithPlayer = (ui: ReactNode) => {
       {ui}
     </Player.Root>
   );
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
   const mock = createMockAdapter();
   act(() => {
     controller.setProvider(mock.adapter);
@@ -282,7 +287,10 @@ describe('Player.Root captionRenderer', () => {
       setCaptionRenderer
     };
     const attachProvider = (instance: Player.PlayerHandle | null) => {
-      (instance as unknown as PlayerController | null)?.setProvider(adapter);
+      if (!instance) return;
+      (instance as unknown as InternalControllerAccess)[
+        INTERNAL_CONTROLLER
+      ].setProvider(adapter);
     };
     const utils = render(
       <Player.Root
@@ -357,7 +365,9 @@ describe('Player.Root captionRenderer', () => {
         {null}
       </Player.Root>
     );
-    const controller = handle.current as unknown as PlayerController;
+    const controller = (handle.current as unknown as InternalControllerAccess)[
+      INTERNAL_CONTROLLER
+    ];
     act(() => {
       controller.setProvider(adapter);
     });
