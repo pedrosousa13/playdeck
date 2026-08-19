@@ -31,12 +31,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # `pnpm test:packages` runs `scripts/verify-packaging.mjs`, which is the one
+  # place in this repository that resolves dependencies with no lockfile, no
+  # release cooldown and no advisory floor, and then executes what it resolved
+  # (`:242` writes the fixture into an OS temp directory, so the root
+  # `pnpm-workspace.yaml` stops governing it; `:264-271` synthesises a workspace
+  # file carrying only the tarball overrides; `:274` installs with
+  # `--no-frozen-lockfile`; `:277` runs the build). It is a deliberate job of its
+  # own, and NOT a step in `release` below, because in the same job it would run
+  # on the same runner and the same filesystem as `pnpm publish -r`, minutes
+  # before the tarballs are packed. A compromise upstream of `vite`, `react` or
+  # `@vitejs/plugin-react` -- inside the 24-hour window `minimumReleaseAge: 1440`
+  # exists to close, and which this install escapes -- would then be able to
+  # tamper with what gets published, under a provenance attestation that would
+  # vouch for the result. See #336, which also carries the remaining work: the
+  # install itself is still unpinned, this only moves it away from the token.
+  #
+  # The cost of the split, stated rather than glossed: `release` builds its own
+  # tarballs, so this job proves the packaging of an equivalent build rather than
+  # of the exact bytes that ship. That is a real weakening of the comment below
+  # about the attestation covering artifacts this run verified, and it is
+  # accepted because the alternative is running an unpinned install next to the
+  # publish. Closing #336's remaining steps removes the tradeoff entirely.
+  package-verify:
+    if: github.repository == 'pedrosousa13/playdeck'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `verify-packaging.mjs` drives a real browser for its smoke test.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test:packages
+
   release:
     # A fork gets its own copy of this file, its own Actions tab and its own
     # dispatch button. It does not get `NPM_TOKEN`, so a publish from one would
     # fail rather than succeed -- but it would still build and pack under this
     # repo's package names, so refuse outright instead.
     if: github.repository == 'pedrosousa13/playdeck'
+    needs: package-verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -71,6 +112,13 @@ jobs:
       # `format:check`, `lint`, `docs:check` and the browser suites say
       # something about the source and already ran on `main` in `ci.yml`.
       #
+      # Every install these gates run on is `--frozen-lockfile`, and none of
+      # them resolves a dependency this repository does not pin -- which is what
+      # keeps them here rather than in `package-verify` above. `test:bundle` and
+      # `test:integrations` build `tests/bundle/*` and `tests/integrations/*`,
+      # both globbed by `pnpm-workspace.yaml`, so the root lockfile and the
+      # advisory floors govern them.
+      #
       # typecheck first: it is `tsc -b`, and it emits the declaration files the
       # packages ship and the later checks read.
       - run: pnpm typecheck
@@ -84,7 +132,8 @@ jobs:
       # of times a year, so the cache would be cold on almost every run.
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm build
-      - run: pnpm test:packages
+      # `test:packages` is deliberately absent: it runs in `package-verify`
+      # above, which this job `needs:`. Do not add it back here.
       - run: pnpm test:budgets
       - run: pnpm test:bundle
       - run: pnpm test:integrations
