@@ -22,8 +22,8 @@
  *   Color        --playdeck-color-surface       rgb(0 0 0 / 0.72)
  *                --playdeck-color-on-surface    #fff
  *                --playdeck-color-accent        #3ea6ff
- *                --playdeck-color-track         rgb(255 255 255 / 0.3)
- *                --playdeck-color-buffered      rgb(255 255 255 / 0.5)
+ *                --playdeck-color-track         rgb(255 255 255 / 0.36)
+ *                --playdeck-color-buffered      rgb(255 255 255 / 0.7)
  *                --playdeck-color-focus         #fff
  *                --playdeck-color-backdrop      #000
  *   Typography   --playdeck-font-family         system-ui stack
@@ -227,7 +227,7 @@
     block-size: var(--playdeck-slider-thickness, 0.25rem);
     translate: 0 -50%;
     border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
-    background-color: var(--playdeck-color-track, rgb(255 255 255 / 0.3));
+    background-color: var(--playdeck-color-track, rgb(255 255 255 / 0.36));
     pointer-events: none;
   }
 
@@ -235,7 +235,7 @@
     position: absolute;
     inset-block: 0;
     border-radius: inherit;
-    background-color: var(--playdeck-color-buffered, rgb(255 255 255 / 0.5));
+    background-color: var(--playdeck-color-buffered, rgb(255 255 255 / 0.7));
   }
 
   /* A stall the 500ms debounce has admitted (#35). Motion-free on purpose: a
