@@ -31,13 +31,58 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    # A fork gets its own copy of this file, its own Actions tab and its own
-    # dispatch button. It does not get `NPM_TOKEN`, so a publish from one would
-    # fail rather than succeed -- but it would still build and pack under this
-    # repo's package names, so refuse outright instead.
+  # `pnpm test:packages` runs `scripts/verify-packaging.mjs`, which is the one
+  # place in this repository that resolves dependencies with no lockfile, no
+  # release cooldown and no advisory floor, and then executes what it resolved
+  # (`:242` writes the fixture into an OS temp directory, so the root
+  # `pnpm-workspace.yaml` stops governing it; `:264-271` synthesises a workspace
+  # file carrying only the tarball overrides; `:274` installs with
+  # `--no-frozen-lockfile`; `:277` runs the build). It is a deliberate job of its
+  # own, and NOT a step in `release` below, because in the same job it would run
+  # on the same runner and the same filesystem as `pnpm publish -r`, minutes
+  # before the tarballs are packed. A compromise upstream of `vite`, `react` or
+  # `@vitejs/plugin-react` -- inside the 24-hour window `minimumReleaseAge: 1440`
+  # exists to close, and which this install escapes -- would then be able to
+  # tamper with what gets published, under a provenance attestation that would
+  # vouch for the result. See #336, which also carries the remaining work: the
+  # install itself is still unpinned, this only moves it away from the token.
+  #
+  # The cost of the split, stated rather than glossed: `release` builds its own
+  # tarballs, so this job proves the packaging of an equivalent build rather than
+  # of the exact bytes that ship. That is a real weakening of the comment below
+  # about the attestation covering artifacts this run verified, and it is
+  # accepted because the alternative is running an unpinned install next to the
+  # publish. Closing #336's remaining steps removes the tradeoff entirely.
+  package-verify:
     if: github.repository == 'pedrosousa13/playdeck'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `verify-packaging.mjs` drives a real browser for its smoke test.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test:packages
+
+  release:
+    # A fork gets its own copy of this file, its own Actions tab and its own
+    # dispatch button. Under trusted publishing a fork cannot succeed anyway --
+    # the OIDC claim carries the repository, and npm matches it against the
+    # publisher configured for each package -- but it would still build and pack
+    # under this repo's package names, so refuse outright instead of relying on
+    # the registry to say no.
+    if: github.repository == 'pedrosousa13/playdeck'
+    needs: package-verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       # Provenance is not optional-with-a-warning. Without this permission npm
@@ -50,26 +95,52 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
+          # >= 22.14.0 is a trusted-publishing requirement, not just a floor
+          # this repo picked. `22` resolves to the latest 22.x on the runner
+          # image, which is well past it.
           node-version: 22
           cache: pnpm
-          # This is the whole of the registry auth setup, and it is not
-          # decorative. `registry-url` makes setup-node write
-          # `$RUNNER_TEMP/.npmrc` holding
-          # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`, and export
-          # `NPM_CONFIG_USERCONFIG` pointing at it. pnpm honours that variable
-          # and expands `${...}` in a *user-level* npmrc, which is the only
-          # route that works here: pnpm 10 deliberately refuses to expand
-          # environment variables in registry credentials that come from a
-          # project `.npmrc`, so the same line written into the repo root would
-          # be ignored with a warning and the publish would fail unauthenticated.
-          registry-url: https://registry.npmjs.org
+          # No `registry-url`, deliberately, and this is the subtle half of the
+          # OIDC switch. It makes setup-node write `$RUNNER_TEMP/.npmrc` holding
+          # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` and point
+          # `NPM_CONFIG_USERCONFIG` at it. With no `NODE_AUTH_TOKEN` in the
+          # environment that placeholder is unresolved, and `pnpm publish`
+          # copies the file into its pack directory before spawning npm -- so a
+          # literal `${NODE_AUTH_TOKEN}` can reach the registry as a bearer
+          # token and fail the publish that OIDC would otherwise have carried.
+          # pnpm 10.17 added a guard that treats an unresolved placeholder as
+          # empty; not writing the file at all does not depend on that guard.
+          # npm defaults to registry.npmjs.org, so nothing is lost.
       - run: pnpm install --frozen-lockfile
+
+      # Trusted publishing needs npm >= 11.5.1, and `node-version: 22` ships
+      # npm 10.x. This is the step most easily left out, because nothing else in
+      # the workflow depends on the npm version -- and without it the publish
+      # fails unauthenticated rather than falling back to anything.
+      #
+      # It reaches the publish because `pnpm publish` does not talk to the
+      # registry itself: it packs, then spawns `npm publish <tarball>` through
+      # `runNpm(npmPath, ...)`, which resolves the binary from PATH
+      # (`const npm = npmPath ?? "npm"`). So the npm upgraded here is the npm
+      # that performs the publish and mints the OIDC token. pnpm needs no
+      # trusted-publishing support of its own, and 10.34.5 has none.
+      - run: npm install -g npm@latest
+      # Printed, not assumed: a version below 11.5.1 here is the difference
+      # between a working publish and an unauthenticated one.
+      - run: npm --version
 
       # The gates, in the same job as the publish rather than as a separate
       # workflow, so the attestation covers artifacts this run actually
       # verified. These are the checks that say something about what ships;
       # `format:check`, `lint`, `docs:check` and the browser suites say
       # something about the source and already ran on `main` in `ci.yml`.
+      #
+      # Every install these gates run on is `--frozen-lockfile`, and none of
+      # them resolves a dependency this repository does not pin -- which is what
+      # keeps them here rather than in `package-verify` above. `test:bundle` and
+      # `test:integrations` build `tests/bundle/*` and `tests/integrations/*`,
+      # both globbed by `pnpm-workspace.yaml`, so the root lockfile and the
+      # advisory floors govern them.
       #
       # typecheck first: it is `tsc -b`, and it emits the declaration files the
       # packages ship and the later checks read.
@@ -84,7 +155,8 @@ jobs:
       # of times a year, so the cache would be cold on almost every run.
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm build
-      - run: pnpm test:packages
+      # `test:packages` is deliberately absent: it runs in `package-verify`
+      # above, which this job `needs:`. Do not add it back here.
       - run: pnpm test:budgets
       - run: pnpm test:bundle
       - run: pnpm test:integrations
@@ -119,17 +191,21 @@ jobs:
       # exact version is not already on the registry. The seven come out of the
       # manifests; nothing here names them.
       #
-      # The dry run gets the token too. It cannot publish -- npm never calls
-      # libnpmpublish under `--dry-run` -- and running it authenticated is the
-      # point: a misconfigured token is the likeliest way a first publish fails,
-      # and an unauthenticated dry run would prove nothing about it.
+      # Neither step carries a registry credential any more. Authentication is
+      # trusted publishing over OIDC: npm exchanges the `id-token` granted above
+      # for a short-lived registry token at publish time, against the trusted
+      # publisher configured on each of the seven packages
+      # (`pedrosousa13` / `playdeck` / `release.yml`, no environment).
+      #
+      # **The dry run cannot prove any of that.** npm never calls libnpmpublish
+      # under `--dry-run`, so it never requests an OIDC token -- established on
+      # #229, where an authenticated dry run passed and told us nothing. Under
+      # the old token this step was still worth running authenticated; now it
+      # proves strictly less, and only a real publish exercises the credential
+      # path. It is kept because it still packs and resolves every package.
       - name: Publish (dry run)
         if: inputs.dry_run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: pnpm publish -r --access public --provenance --no-git-checks --dry-run
       - name: Publish
         if: inputs.dry_run == false
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: pnpm publish -r --access public --provenance --no-git-checks
