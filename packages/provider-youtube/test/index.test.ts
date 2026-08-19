@@ -24,6 +24,7 @@ import {
 import {
   createYouTubeProvider,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
+  PLAYER_READY_TIMEOUT_MS,
   type YouTubeIframeApi,
   type YouTubePlayer,
   type YouTubePlayerOptions,
@@ -1850,4 +1851,82 @@ test('a throwing subscriber does not starve the subscribers behind it', async ()
     playback: 'playing',
     currentTime: 12
   });
+});
+
+// --- attach deadline (#327) ---
+
+// Distinct from the loader's `API_READY_TIMEOUT_MS`, which bounds the iframe
+// API *script* initialising, and from `PLAYBACK_CONFIRMATION_TIMEOUT_MS`, which
+// bounds a play command. Neither covers the player never becoming ready, which
+// is the ordinary shape of a blocked embed: a page CSP without
+// `frame-src www.youtube-nocookie.com`, an extension or DNS blocking the frame,
+// a captive portal, or a vendor frame that loads but never posts back.
+//
+// Wistia already ships exactly this backstop and says why at
+// `provider-wistia/src/attachment.ts:45-58`. Before this, YouTube and Vimeo
+// silently inherited an unbounded wait.
+test('reports an error when the player never becomes ready', async () => {
+  vi.useFakeTimers();
+  const { patches, provider } = createAdapter();
+  await provider.attach();
+  await provider.load();
+
+  // The frame exists and the constructor ran; `onReady` simply never arrives.
+  expect(patches.at(-1)).toMatchObject({ lifecycle: 'loading' });
+
+  await vi.advanceTimersByTimeAsync(PLAYER_READY_TIMEOUT_MS);
+
+  expect(patches.at(-1)).toMatchObject({
+    lifecycle: 'error',
+    activation: 'error',
+    error: {
+      category: 'provider',
+      recoverable: true
+    }
+  });
+  // The message has to name the embed rather than the API, because the
+  // actionable cause is nearly always the consumer's own CSP.
+  expect(String(patches.at(-1)?.error?.message)).toMatch(/embed|frame|ready/i);
+});
+
+// Asserted on the timer count rather than on the absence of an error patch.
+// The callback also guards on `ready`, so an outcome assertion passes whether
+// or not the timer was cleared and proves nothing about the clearing -- checked
+// by removing each protection in turn, and the outcome test survived both. This
+// one fails the moment `clearReadyDeadline()` leaves `onReady`.
+test('clears the deadline when the player becomes ready', async () => {
+  vi.useFakeTimers();
+  const { fake, patches, provider } = createAdapter();
+  await provider.attach();
+  await provider.load();
+  const armed = vi.getTimerCount();
+  fake.players[0]!.fireReady();
+
+  expect(vi.getTimerCount()).toBeLessThan(armed);
+
+  const afterReady = patches.length;
+  await vi.advanceTimersByTimeAsync(PLAYER_READY_TIMEOUT_MS * 2);
+  // And the outcome the clearing exists to protect: a ready player is never
+  // knocked into an error state by its own backstop firing late.
+  expect(patches.slice(afterReady)).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+});
+
+test('leaves nothing pending after destroy', async () => {
+  vi.useFakeTimers();
+  const { patches, provider } = createAdapter();
+  await provider.attach();
+  await provider.load();
+  expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+  await provider.destroy();
+
+  // A destroyed adapter holds no timer at all, so the deadline cannot outlive
+  // the player it was armed for.
+  expect(vi.getTimerCount()).toBe(0);
+
+  const afterDestroy = patches.length;
+  await vi.advanceTimersByTimeAsync(PLAYER_READY_TIMEOUT_MS * 2);
+  expect(patches.slice(afterDestroy)).toHaveLength(0);
 });

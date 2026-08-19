@@ -21,7 +21,10 @@ import {
   type VimeoSource
 } from '@playdeck/core';
 import { available } from '../src/adapter-values';
-import { createVimeoAttachment } from '../src/attachment';
+import {
+  createVimeoAttachment,
+  PLAYER_READY_TIMEOUT_MS
+} from '../src/attachment';
 import { createVimeoBoundary } from '../src/boundary';
 import { createVimeoChapters } from '../src/chapters';
 import {
@@ -2242,6 +2245,59 @@ test('vimeo declares command readiness before player.ready() resolves', async ()
   );
 
   releaseReady();
+});
+
+// --- attach deadline (#327) ---
+
+// The other half of the test above. Declaring command readiness early is right,
+// and it is not a substitute for bounding the wait: before this, an iframe that
+// never posted back left the adapter in `loading` with `error: null` for ever,
+// so neither `ErrorDisplay` nor `ActivationButton` engaged -- both gate on
+// `activation === 'error'`. Wistia already shipped exactly this backstop
+// (`provider-wistia/src/attachment.ts:45-58`); Vimeo and YouTube inherited an
+// unbounded wait.
+//
+// The triggering condition is ordinary: a page CSP without
+// `frame-src player.vimeo.com`, an extension or DNS blocking the frame, or a
+// captive portal.
+test('vimeo reports an error when player.ready() never resolves', async () => {
+  vi.useFakeTimers();
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk({
+    ready: () => new Promise<void>(() => undefined)
+  });
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource);
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  void provider.load();
+  await vi.advanceTimersByTimeAsync(PLAYER_READY_TIMEOUT_MS);
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      activation: 'error',
+      error: expect.objectContaining({ category: 'provider' })
+    })
+  );
+});
+
+// Asserted on the timer, not on the absence of an error patch. Once
+// `player.ready()` resolves the promise is settled, so a late rejection from
+// the deadline is a no-op by the promise contract -- an outcome assertion here
+// passes whether or not `withDeadline` clears its timer, which was checked by
+// removing the `clearTimeout` and watching the outcome test still pass. What
+// the clearing actually buys is not leaving a timer pending for fifteen
+// seconds after every successful attach, so that is what is pinned.
+test('vimeo leaves no deadline pending once the player is ready', async () => {
+  vi.useFakeTimers();
+  const pendingBefore = vi.getTimerCount();
+  await setup();
+
+  expect(vi.getTimerCount()).toBeLessThanOrEqual(pendingBefore);
 });
 
 // --- quality (#82) ---

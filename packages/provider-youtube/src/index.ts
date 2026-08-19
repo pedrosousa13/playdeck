@@ -29,6 +29,7 @@ export {
 } from './loader.js';
 
 export { PLAYBACK_CONFIRMATION_TIMEOUT_MS } from './playback.js';
+export { PLAYER_READY_TIMEOUT_MS } from './attachment.js';
 
 export type YouTubeProviderOptions = {
   /**
