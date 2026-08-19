@@ -1,7 +1,7 @@
 ### Issue #336: the packaging harness runs an unpinned install, in the publishing job
 
-**P0.** Step 1 has landed in #348; Steps 2–4 remain. This is the highest-priority item in the v1 contract (#344), criterion 14.
-Read the escalation comment on #336 before starting — the issue body's impact
+**P0.** Step 1 has landed in #348; Steps 2–4 remain. This is the highest-priority
+item in the v1 contract (#344), criterion 14. Read the escalation comment on #336 before starting — the issue body's impact
 bound was written before the first release and is wrong in a way that changes
 what this work is for.
 
@@ -48,20 +48,16 @@ attestation that would then vouch for the result.
 
 - [x] **Step 1 — split the job. Done in #348.** `pnpm test:packages` now runs in
       a `package-verify` job with `contents: read`, no `id-token`, no
-      `registry-url` and no secret, which `release` depends on.
-
-      This brief originally said to move four steps. That was wrong, and the
-          correction is worth keeping: `git grep` for an unpinned install returns
-          exactly one hit — `verify-packaging.mjs:274` — and `tests/bundle/*` and
-          `tests/integrations/*` are both globbed by `pnpm-workspace.yaml`, so the
-          root lockfile and the advisory floors already govern them. Only
-          `test:packages` needed to move; `test:budgets`, `test:bundle` and
-          `test:integrations` stay in `release`, where they keep the attestation
-          meaningful.
-
-          The cost is recorded in the workflow: `release` builds its own tarballs,
-          so `package-verify` proves the packaging of an equivalent build rather
-          than of the exact bytes that ship. Steps 2–4 remove that tradeoff.
+      `registry-url` and no secret, which `release` depends on. This brief
+      originally said to move four steps, which was wrong: `git grep` for an
+      unpinned install returns exactly one hit (`verify-packaging.mjs:274`), and
+      `tests/bundle/*` and `tests/integrations/*` are both globbed by
+      `pnpm-workspace.yaml`, so the root lockfile and the advisory floors already
+      govern them. Only `test:packages` moved; `test:budgets`, `test:bundle` and
+      `test:integrations` stay in `release`, where they keep the attestation
+      meaningful. The cost is recorded in the workflow: `release` builds its own
+      tarballs, so `package-verify` proves the packaging of an equivalent build
+      rather than of the exact bytes that ship. Steps 2–4 remove that tradeoff.
 
 - [ ] **Step 2 — commit a lockfile for the fixture.** The issue establishes the
       flag is a convenience, not a constraint: the tarball paths are
@@ -106,9 +102,11 @@ attestation that would then vouch for the result.
 - #343, the move to OIDC. It removes the token; this removes the adjacency. They
   are independent and either can land first.
 
-## Do not dispatch Release while this is open
+## Do not dispatch Release until #348 lands
 
-Stated in the escalation comment and repeated here because it is the operational
-consequence: the workflow is `workflow_dispatch`-only, so nothing fires it by
-accident, but a deliberate dispatch before Step 1 lands runs the unpinned install
-in the publishing job again.
+The workflow is `workflow_dispatch`-only, so nothing fires it by accident, but a
+deliberate dispatch before #348 merges runs the unpinned install in the
+publishing job again. Once it has merged, Release is safe to dispatch: the
+install is still unpinned, but it no longer shares a job with the token or with
+the step that packs the tarballs. Steps 2–4 are then ordinary hardening rather
+than an operational hold.
