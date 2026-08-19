@@ -480,6 +480,28 @@ test('reports a refused artwork src handed to setMetadata after binding', () => 
   expect(controller.getState().error?.message).toContain('artwork');
 });
 
+// `setMetadata` reports the permitted case as well as the refused one, so a
+// consumer who cleans the poisoned artwork field and pushes the metadata again
+// gets the notice withdrawn. Reporting only the refused case would leave the
+// notice standing for the controller's life, which is the false positive #330's
+// second pass removes.
+test('withdraws the artwork notice once setMetadata carries only permitted srcs', () => {
+  const { session } = createSession();
+  const coordinator = getMediaSessionCoordinator(session);
+  const controller = new PlayerController();
+  const { provider } = createProvider();
+  controller.setProvider(provider);
+  const binding = bindMediaSession(controller, coordinator, {
+    metadata: { artwork: [{ src: 'javascript:alert(1)' }] }
+  });
+
+  expect(controller.getState().error?.message).toContain('artwork');
+
+  binding.setMetadata({ artwork: [{ src: 'https://example.com/good.png' }] });
+
+  expect(controller.getState().error).toBeNull();
+});
+
 test('on() keeps a re-registered listener after a duplicated unsubscribe', () => {
   const controller = new PlayerController();
   const { emit, provider } = createProvider();

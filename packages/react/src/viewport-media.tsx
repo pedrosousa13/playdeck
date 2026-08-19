@@ -207,12 +207,13 @@ export const Media = ({
   const textTrackRefused =
     textTracks !== undefined &&
     (permittedTextTracks?.length ?? 0) < textTracks.length;
-  // In an effect, not in render: `reportRefusedUrl` writes controller state and
-  // wakes its subscribers. The controller holds only the first report, so
-  // re-running this is inert (#330).
+  // In an effect, not in render: `setRefusedUrl` writes controller state and
+  // wakes its subscribers. Both surfaces are stated on every run, refused or
+  // not, so replacing a refused `nativePoster` or text track with a permitted
+  // one withdraws its notice. Restating an unchanged answer is inert (#330).
   useEffect(() => {
-    if (nativePosterRefused) controller.reportRefusedUrl('nativePoster');
-    if (textTrackRefused) controller.reportRefusedUrl('textTracks src');
+    controller.setRefusedUrl('nativePoster', nativePosterRefused);
+    controller.setRefusedUrl('textTracks src', textTrackRefused);
   }, [controller, nativePosterRefused, textTrackRefused]);
   // Merge the consumer ref onto the internal registration inside one callback
   // ref (rather than Viewport's stable-callback + separate `[ref]` effect):

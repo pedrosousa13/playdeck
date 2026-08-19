@@ -288,15 +288,21 @@ export const bindMediaSession = (
   coordinator: MediaSessionCoordinator,
   options: { readonly metadata?: MediaMetadataInput | null } = {}
 ): MediaSessionBinding => {
-  // Reported at every point metadata enters the binding, and reported whether
-  // or not this root ever owns the surface: the consumer's field is poisoned
+  // Stated at every point metadata enters the binding, and stated whether or
+  // not this root ever owns the surface: the consumer's field is poisoned
   // either way, and ownership is arbitration between roots, not a judgement on
-  // the value (#330). The controller holds only the first report, so the
-  // repetition across `setMetadata` calls costs nothing.
+  // the value (#330). Stated for permitted metadata too, which is what lets a
+  // `setMetadata` carrying a cleaned artwork list withdraw a standing notice --
+  // and restating an unchanged answer costs nothing, so the repetition across
+  // `setMetadata` calls is free.
+  //
+  // Not withdrawn by `release()`, deliberately. A release is this root handing
+  // the media session back, not the consumer's artwork field being cleaned.
   const reportRefusedArtwork = (metadata: MediaMetadataInput | null): void => {
-    if (hasRefusedArtwork(metadata)) {
-      controller.reportRefusedUrl('mediaSession artwork');
-    }
+    controller.setRefusedUrl(
+      'mediaSession artwork',
+      hasRefusedArtwork(metadata)
+    );
   };
 
   reportRefusedArtwork(options.metadata ?? null);

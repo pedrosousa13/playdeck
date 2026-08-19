@@ -192,13 +192,21 @@ export const PosterImage = ({
   // root there is no controller to report to and the refusal stands silently,
   // exactly as it did before this change.
   const controller = useContext(PlayerContext)?.controller;
-  // In an effect, not in render: `reportRefusedUrl` writes controller state and
-  // wakes its subscribers, which a render pass may not do. The controller holds
-  // only the first report, so re-running this is inert (#330).
+  // In an effect, not in render: `setRefusedUrl` writes controller state and
+  // wakes its subscribers, which a render pass may not do. Both surfaces are
+  // stated on every run, refused or not, so a `src` that changes from a refused
+  // value to a permitted one withdraws its notice rather than leaving a
+  // permanent false positive standing. Restating an unchanged answer is inert,
+  // so re-running this costs nothing (#330).
+  //
+  // Not withdrawn on unmount, deliberately. `Player.Poster` stays mounted for
+  // the player's life and only hides itself, so an unmount is the consumer
+  // taking the poster out of the tree, not the poisoned field being cleaned --
+  // and the value is what the notice is about.
   useEffect(() => {
     if (!controller) return;
-    if (srcRefused) controller.reportRefusedUrl('poster src');
-    if (srcSetRefused) controller.reportRefusedUrl('poster srcSet');
+    controller.setRefusedUrl('poster src', srcRefused);
+    controller.setRefusedUrl('poster srcSet', srcSetRefused);
   }, [controller, srcRefused, srcSetRefused]);
   const requestKey = posterRequestKey({ src, srcSet, sizes });
   const state = useRef<{

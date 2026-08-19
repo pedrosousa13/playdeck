@@ -155,8 +155,9 @@ _Avoid_: broadcast, notify loop
 A non-fatal `configuration` error published to report a consumer-supplied value
 that was rejected, while the fall-back behaviour it degraded to stands
 unchanged. A provider reports one through a state patch; a consumer-supplied URL
-prop the shared allowlist refuses is reported by `reportRefusedUrl`, which names
-the prop and never the value. Held as controller state and surfaced on
+prop the shared allowlist refuses is reported by `setRefusedUrl`, which names the
+prop and never the value, and which withdraws the notice again once that prop
+holds a permitted value. Held as controller state and surfaced on
 `PlayerState.error` like any other error, but never a failure: it never masks a
 standing error, and it never drives a transition into the error lifecycle.
 _Avoid_: warning, soft error

@@ -22,12 +22,16 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   slashes above only group related names — `captions` / `captions-button` /
   `captions-announcer` spans two primitives.
 - **`notice` has no default appearance, deliberately.** A Notice is a non-fatal
-  `configuration` error reporting a value a provider rejected while the
-  fall-back it degraded to stands unchanged — nothing stopped working. So
-  `ErrorDisplay` renders it without geometry, without stacking and without
-  `role="alert"`, and a player that is still playing is never covered by one
-  (#319). It carries the error category on `data-state` like `error` does, and
-  it is in the DOM for a consumer to place and for a monitoring system to read.
+  `configuration` error reporting a consumer-supplied value that was rejected —
+  an option a provider refused, or a URL prop the library's own allowlist
+  refused with no provider involved — while the fall-back it degraded to stands
+  unchanged; nothing stopped working. So `ErrorDisplay` renders it without
+  geometry, without stacking and without `role="alert"`, and a player that is
+  still playing is never covered by one (#319). It carries the error category on
+  `data-state` like `error` does, and it is in the DOM for a consumer to place
+  and for a monitoring system to read. It leaves the DOM again when the rejected
+  value is replaced with one the allowlist permits: a notice reports a rejection
+  that stands, not one that once happened (#330).
   A failure — including a non-fatal `provider`, `policy` or `unsupported` one —
   still renders `error` with its overlay and its retry.
 - **`data-state`** — the part's derived state (e.g. `paused`/`playing`,
