@@ -222,32 +222,45 @@ export const useActiveCues = (): readonly TextCue[] => {
   );
 };
 
+// The one place the action surface is spelled out. `usePlayerActions` reads it
+// through the context; `Root` (`root.tsx`'s `useImperativeHandle`) cannot --
+// it is the provider, so its own context is not yet readable when it builds
+// the ref handle -- and calls this directly instead. Two hand-written lists
+// would drift, and the ref's list drifting is how members leak back out.
+// Every `PlayerController` member here is an arrow-function class field
+// (`player-controller.ts`), so plucking one onto a fresh object keeps its
+// binding and needs no `.bind`.
+export const collectPlayerActions = (
+  controller: PlayerController,
+  activateFromInteraction: ActivationBindings['activateFromInteraction']
+): PlayerActions => ({
+  activateFromInteraction,
+  play: controller.play,
+  pause: controller.pause,
+  togglePlayback: controller.togglePlayback,
+  seekTo: controller.seekTo,
+  seekBy: controller.seekBy,
+  selectQuality: controller.selectQuality,
+  mute: controller.mute,
+  unmute: controller.unmute,
+  toggleMuted: controller.toggleMuted,
+  setVolume: controller.setVolume,
+  setPlaybackRate: controller.setPlaybackRate,
+  selectTextTrack: controller.selectTextTrack,
+  setCaptionRenderer: controller.setCaptionRenderer,
+  requestFullscreen: controller.requestFullscreen,
+  exitFullscreen: controller.exitFullscreen,
+  requestPictureInPicture: controller.requestPictureInPicture,
+  exitPictureInPicture: controller.exitPictureInPicture,
+  showAirPlayPicker: controller.showAirPlayPicker,
+  retry: controller.retry,
+  whenReady: controller.whenReady
+});
+
 export const usePlayerActions = (): PlayerActions => {
   const { activateFromInteraction, controller } = usePlayer();
   return useMemo(
-    () => ({
-      activateFromInteraction,
-      play: controller.play,
-      pause: controller.pause,
-      togglePlayback: controller.togglePlayback,
-      seekTo: controller.seekTo,
-      seekBy: controller.seekBy,
-      selectQuality: controller.selectQuality,
-      mute: controller.mute,
-      unmute: controller.unmute,
-      toggleMuted: controller.toggleMuted,
-      setVolume: controller.setVolume,
-      setPlaybackRate: controller.setPlaybackRate,
-      selectTextTrack: controller.selectTextTrack,
-      setCaptionRenderer: controller.setCaptionRenderer,
-      requestFullscreen: controller.requestFullscreen,
-      exitFullscreen: controller.exitFullscreen,
-      requestPictureInPicture: controller.requestPictureInPicture,
-      exitPictureInPicture: controller.exitPictureInPicture,
-      showAirPlayPicker: controller.showAirPlayPicker,
-      retry: controller.retry,
-      whenReady: controller.whenReady
-    }),
+    () => collectPlayerActions(controller, activateFromInteraction),
     [activateFromInteraction, controller]
   );
 };

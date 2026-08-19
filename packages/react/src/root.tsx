@@ -11,6 +11,7 @@ import {
 } from '@playdeck/core';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
 import {
+  collectPlayerActions,
   PlayerContext,
   PosterContext,
   type PlayerHandle
@@ -596,20 +597,29 @@ export const Root = ({
     source: detectedSource
   });
 
-  // The handle is still the controller instance -- `Object.assign` mutates
-  // and returns it rather than spreading into a copy -- so the Storybook
-  // mock-player decorator and the off-screen-pause contract test, which both
-  // cast this same ref back to `PlayerController` to reach `setProvider`/
-  // `configureAutoplay` directly, keep resolving against the real controller.
-  // `activateFromInteraction` is an activation concern `useActivation` owns,
-  // not a controller method, so it joins the instance here rather than
-  // widening `PlayerController`'s own surface.
+  // The handle is a fresh object carrying exactly what `PlayerHandle`
+  // declares, never the controller instance. `Object.assign(controller, ...)`
+  // used to stand here, and it mutates and returns its target, so the ref
+  // handed out the whole `PlayerController` -- `setProvider`, `setActivation`,
+  // `configureAutoplay` and the `*WithOrigin` commands included. The narrowing
+  // was a TypeScript fiction one cast wide open, which let anyone holding the
+  // ref swap the provider out from under the player (#328).
+  //
+  // The three read members are named here; the rest come from
+  // `player-context.ts`'s `collectPlayerActions`, the single list
+  // `usePlayerActions` also builds from, so the two surfaces cannot drift.
+  // `activateFromInteraction` rides along from `useActivation` rather than
+  // widening `PlayerController` itself, as it is an activation concern the
+  // controller has no concept of. Guarded by index.test.tsx's "hands back only
+  // the declared PlayerHandle surface through the ref".
   useImperativeHandle(
     ref,
-    () =>
-      Object.assign(controller, {
-        activateFromInteraction: activation.activateFromInteraction
-      }),
+    () => ({
+      getState: controller.getState,
+      subscribe: controller.subscribe,
+      on: controller.on,
+      ...collectPlayerActions(controller, activation.activateFromInteraction)
+    }),
     [activation.activateFromInteraction, controller]
   );
   const registerActivationMedia = activation.registerMedia;

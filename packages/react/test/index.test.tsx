@@ -1034,6 +1034,70 @@ test('exposes stable actions and a ref handle backed by the Root controller', ()
   expect(verifyProviderOptionExclusions).toBeTypeOf('function');
 });
 
+test('hands back only the declared PlayerHandle surface through the ref', () => {
+  // #328: the handle used to BE the controller instance -- `Object.assign`
+  // mutates and returns its target -- so `PlayerHandle`'s narrowing lived in
+  // the type system alone and every provider-facing method was reachable at
+  // runtime by anyone holding the ref. This pins the runtime surface to the
+  // declared one, member by member, so a regression fails loudly rather than
+  // silently re-widening the public API.
+  const declaredMembers = [
+    'getState',
+    'subscribe',
+    'on',
+    'activateFromInteraction',
+    'play',
+    'pause',
+    'togglePlayback',
+    'seekTo',
+    'seekBy',
+    'selectQuality',
+    'mute',
+    'unmute',
+    'toggleMuted',
+    'setVolume',
+    'setPlaybackRate',
+    'selectTextTrack',
+    'setCaptionRenderer',
+    'requestFullscreen',
+    'exitFullscreen',
+    'requestPictureInPicture',
+    'exitPictureInPicture',
+    'showAirPlayPicker',
+    'retry',
+    'whenReady'
+  ];
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
+      {null}
+    </Player.Root>
+  );
+  const surface = handle.current as unknown as Record<string, unknown>;
+
+  expect(surface).toBeDefined();
+  for (const member of declaredMembers) {
+    expect(surface[member]).toBeTypeOf('function');
+  }
+  expect(Object.keys(surface).sort()).toEqual([...declaredMembers].sort());
+
+  // The provider-facing surface, asserted absent one member at a time: a set
+  // comparison would report a single opaque diff, and each of these is its own
+  // escalation from "drive the player" to "swap what the player is playing".
+  expect(surface.setProvider).toBeUndefined();
+  expect(surface.setActivation).toBeUndefined();
+  expect(surface.configureAutoplay).toBeUndefined();
+  expect(surface.subscribeDimensions).toBeUndefined();
+  expect(surface.subscribeCues).toBeUndefined();
+  expect(surface.getActiveCues).toBeUndefined();
+  expect(surface.playWithOrigin).toBeUndefined();
+  expect(surface.pauseWithOrigin).toBeUndefined();
+  expect(surface.togglePlaybackWithOrigin).toBeUndefined();
+  expect(surface.seekToWithOrigin).toBeUndefined();
+  expect(surface.seekByWithOrigin).toBeUndefined();
+  expect(handle.current).not.toBeInstanceOf(PlayerController);
+});
+
 test('keeps the imperative handle backed by the full PlayerController', () => {
   // The Storybook mock-player decorator (apps/storybook/.storybook/
   // mock-player.tsx) casts PlayerHandle to PlayerController to reach the
