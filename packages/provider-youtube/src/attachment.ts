@@ -18,6 +18,25 @@ import type { YouTubeTimeUpdates } from './time-updates.js';
 // already exists.
 type YouTubePlayerVars = Readonly<Record<string, string | number>>;
 
+// How long the player is given to answer the constructor with `onReady` before
+// the attach is reported as failed (#327).
+//
+// Distinct from two deadlines that already exist and do not cover this.
+// `API_READY_TIMEOUT_MS` (`loader.ts`) bounds the iframe API *script*
+// initialising, and `PLAYBACK_CONFIRMATION_TIMEOUT_MS` (`playback.ts`) bounds a
+// play command. Neither fires when the script loaded, the constructor ran, and
+// the frame then never posted back — which is the ordinary shape of a blocked
+// embed: a page CSP without `frame-src www.youtube-nocookie.com`, an extension
+// or DNS blocking the frame, or a captive portal. Without this the adapter sits
+// in `loading` for ever with `error: null`, so neither `ErrorDisplay` nor
+// `ActivationButton` engages -- both gate on `activation === 'error'` -- and
+// every `whenReady()` call adds a promise that never settles.
+//
+// Fifteen seconds, matching Wistia's `API_READY_TIMEOUT_MS` and chosen the same
+// way: a "that is never coming" backstop rather than a performance budget, so
+// a slow connection is never reported as a failure.
+export const PLAYER_READY_TIMEOUT_MS = 15_000;
+
 // The url the pre-built iframe carries into the document. `host` is already one
 // of the two allowlisted origins (`index.ts`'s `resolveHost`) and `videoId` has
 // already passed `isYouTubeVideoId`, so neither can move this url off YouTube;
@@ -117,6 +136,16 @@ export const createYouTubeAttachment = (
   let generation = 0;
   let player: YouTubePlayer | undefined;
   let playerTarget: HTMLIFrameElement | undefined;
+  let readyDeadline: ReturnType<typeof setTimeout> | undefined;
+
+  // Cleared the moment the player answers, so a normal attach leaves nothing
+  // pending and a ready player can never be knocked into an error state by its
+  // own backstop firing late.
+  const clearReadyDeadline = (): void => {
+    if (readyDeadline === undefined) return;
+    clearTimeout(readyDeadline);
+    readyDeadline = undefined;
+  };
 
   const getIframe = (): HTMLIFrameElement | undefined => {
     try {
@@ -159,6 +188,7 @@ export const createYouTubeAttachment = (
   };
 
   const teardownPlayer = (): void => {
+    clearReadyDeadline();
     playback.settlePendingPlays({ ok: false, reason: 'not-ready' });
     // A retry recreates the player, so cached caption state must not leak
     // into the new session's capabilities before its own onApiChange fires.
@@ -243,9 +273,31 @@ export const createYouTubeAttachment = (
     // query alone, so `host`, `videoId` and the player vars above are carried
     // by the url and are not repeated here. Only the events are the
     // constructor's to wire.
+    // Armed after the constructor rather than before `loadIframeApi`: the
+    // script load has its own deadline, and starting this one there would
+    // charge a slow CDN against the player's budget.
+    readyDeadline = setTimeout(() => {
+      readyDeadline = undefined;
+      if (destroyed || forGeneration !== generation || ready) return;
+      emit({
+        lifecycle: 'error',
+        activation: 'error',
+        error: {
+          category: 'provider',
+          fatal: false,
+          // The embed can come back on a retry -- a CSP is deploy-time, but a
+          // blocked frame is often an extension or a captive portal.
+          recoverable: true,
+          message:
+            'The YouTube player did not become ready. Its embed may be blocked by the page CSP, an extension or the network.'
+        }
+      });
+    }, PLAYER_READY_TIMEOUT_MS);
+
     player = new api.Player(target, {
       events: {
         onReady: () => {
+          clearReadyDeadline();
           if (destroyed || forGeneration !== generation) return;
           ready = true;
           // The captions module's own discovery signal (onApiChange) is

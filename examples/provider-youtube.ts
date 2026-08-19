@@ -2,6 +2,7 @@ import { PlayerController } from '@playdeck/core';
 import {
   API_READY_TIMEOUT_MS,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
+  PLAYER_READY_TIMEOUT_MS,
   createYouTubeProvider,
   loadYouTubeIframeApi,
   resetYouTubeIframeApiLoader
@@ -30,3 +31,11 @@ export const apiReadyTimeout = API_READY_TIMEOUT_MS; // 15000
 // How long a play command waits for YouTube to confirm playback started before
 // it is reported as blocked, rather than resolving a promise that never lands.
 export const confirmationTimeout = PLAYBACK_CONFIRMATION_TIMEOUT_MS; // 3000
+
+// How long the *player* is given to answer the constructor with `onReady`,
+// which the two deadlines above do not cover: one bounds the script, the other
+// bounds a play command. A page CSP without `frame-src
+// www.youtube-nocookie.com`, a blocking extension or a captive portal leaves
+// the frame present and silent, and without this the player waits for ever
+// with no error to render (#327).
+export const playerReadyTimeout = PLAYER_READY_TIMEOUT_MS; // 15000
