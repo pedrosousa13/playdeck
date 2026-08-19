@@ -7,8 +7,8 @@ import type {
   ProviderStateListener,
   ProviderStatePatch,
   TextCue
-} from '@reely/core';
-import { Root, type PlayerHandle, type RootProps } from '@reely/react';
+} from '@playdeck/core';
+import { Root, type PlayerHandle, type RootProps } from '@playdeck/react';
 import type { Decorator } from '@storybook/react-vite';
 import { useEffect, useRef, type ReactNode } from 'react';
 
@@ -36,7 +36,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
  *   real track.
  * - `dimensions` — intrinsic media size published through the fake provider's
  *   dimension channel after mount, so a story can drive
- *   `--reely-media-aspect-ratio` on the viewport without real media. Omit it
+ *   `--playdeck-media-aspect-ratio` on the viewport without real media. Omit it
  *   to leave the property unwritten, which is the `var()` fallback case.
  * - `rootProps` — overrides for the `Player.Root` the decorator renders.
  *   Use the `autoplay` knob above rather than `rootProps.autoplay`: the Root
@@ -59,7 +59,7 @@ export type MockPlayerParameters = {
  */
 const mockSource: RootProps['source'] = {
   type: 'video',
-  sources: [{ src: 'mock://reely/video.mp4', mimeType: 'video/mp4' }]
+  sources: [{ src: 'mock://playdeck/video.mp4', mimeType: 'video/mp4' }]
 };
 
 /**

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import type {
   MediaDimensions,
   ProviderAdapter,
@@ -8,7 +8,7 @@ import type {
   ProviderStateListener,
   ProviderStatePatch,
   WistiaSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   API_READY_TIMEOUT_MS,
   createWistiaProvider,
@@ -95,6 +95,14 @@ const readyPatch = (patches: ProviderStatePatch[]): ProviderStatePatch => {
   expect(patch).toBeDefined();
   return patch!;
 };
+
+// Every non-fatal `configuration` notice among the patches a setup collected,
+// in emission order — filtered out from the lifecycle patches (`ready`, live
+// updates, dimensions) that share the same `patches` array.
+const configurationNotices = (
+  patches: ProviderStatePatch[]
+): ProviderStatePatch[] =>
+  patches.filter((patch) => patch.error?.category === 'configuration');
 
 const lastEvent = (events: ProviderEvent[]): ProviderEvent => {
   const event = events.at(-1);
@@ -352,6 +360,34 @@ test.each([
   expect(element(result).getAttribute('player-color')).toBeNull();
 });
 
+// The drop above used to be silent; it now also publishes a non-fatal
+// `configuration` notice, so a rejected `playerColor` is observable rather
+// than merely safe (#235).
+test('publishes a configuration notice when playerColor fails isHexColor', async () => {
+  const result = await setup({ options: { playerColor: 'red' } });
+
+  const notices = configurationNotices(result.patches);
+  expect(notices).toHaveLength(1);
+  const [notice] = notices;
+  expect(notice).toMatchObject({
+    error: { category: 'configuration', fatal: false, recoverable: false }
+  });
+  // Not a state transition: only `error` is set.
+  expect(notice?.lifecycle).toBeUndefined();
+  expect(notice?.activation).toBeUndefined();
+  expect(notice?.commandsReady).toBeUndefined();
+  // Names the option and what was expected, never the rejected value.
+  expect(notice?.error?.message).toBe(
+    'The playerColor option was rejected: expected a CSS hex colour.'
+  );
+  expect(notice?.error?.message).not.toContain('red');
+});
+
+test('does not publish a notice for a valid playerColor', async () => {
+  const result = await setup({ options: { playerColor: '#ff0000' } });
+  expect(configurationNotices(result.patches)).toHaveLength(0);
+});
+
 test('sets swatch as a boolean-string attribute', async () => {
   const result = await setup({ options: { swatch: false } });
   expect(element(result).getAttribute('swatch')).toBe('false');
@@ -366,7 +402,7 @@ test('sets the poster as an attribute', async () => {
   );
 });
 
-// The shared allowlist (`isPermittedSourceUrl`, `@reely/core`) is genuinely
+// The shared allowlist (`isPermittedSourceUrl`, `@playdeck/core`) is genuinely
 // more permissive than the old Wistia-local `https:`-only check, and the
 // value written is the caller's own string verbatim — never a reparsed one —
 // with the single documented exception of the protocol-relative substitution.
@@ -377,8 +413,7 @@ test.each([
   ['an unparseable string', 'not a url'],
   ['an empty string', ''],
   ['a scheme-prefixed relative path', 'https:poster.png'],
-  ['a scheme-prefixed single-slash path', 'https:/example.test/poster.png'],
-  ['an https: URL padded with whitespace', ' https://example.test/poster.png ']
+  ['a scheme-prefixed single-slash path', 'https:/example.test/poster.png']
 ])('accepts and writes a poster that is %s', async (_form, poster) => {
   const result = await setup({ options: { poster } });
   expect(element(result).getAttribute('poster')).toBe(poster);
@@ -406,15 +441,51 @@ test.each([
   [
     'a blob: URL',
     'blob:https://example.test/9f1c9c9e-0000-4000-8000-000000000000'
-  ]
+  ],
+  // A space or a C0 control at either end is refused by the shared allowlist
+  // whatever the scheme reads as, because the URL parser strips those before
+  // parsing and the value written would not be the value validated (#326).
+  ['an https: URL padded with whitespace', ' https://example.test/poster.png ']
 ])('drops a poster that is %s', async (_form, poster) => {
   const result = await setup({ options: { poster } });
   expect(element(result).getAttribute('poster')).toBeNull();
 });
 
+// The drop above used to be silent; it now also publishes a non-fatal
+// `configuration` notice, so a rejected `poster` is observable rather than
+// merely safe (#235).
+test('publishes a configuration notice when poster fails isPermittedSourceUrl', async () => {
+  const result = await setup({
+    options: { poster: 'javascript:alert(1)' }
+  });
+
+  const notices = configurationNotices(result.patches);
+  expect(notices).toHaveLength(1);
+  const [notice] = notices;
+  expect(notice).toMatchObject({
+    error: { category: 'configuration', fatal: false, recoverable: false }
+  });
+  expect(notice?.lifecycle).toBeUndefined();
+  expect(notice?.activation).toBeUndefined();
+  expect(notice?.commandsReady).toBeUndefined();
+  expect(notice?.error?.message).toBe(
+    'The poster option was rejected: expected a permitted source URL.'
+  );
+  expect(notice?.error?.message).not.toContain('javascript:alert(1)');
+});
+
+test('does not publish a notice for a valid poster', async () => {
+  const result = await setup({
+    options: { poster: 'https://example.test/poster.png' }
+  });
+  expect(configurationNotices(result.patches)).toHaveLength(0);
+});
+
 // One bad presentation option must not fail playback: the drop is silent and
-// the rest of the attach runs, so the player still reaches ready.
-test('reaches ready with the dropped presentation options unset', async () => {
+// the rest of the attach runs, so the player still reaches ready. Both
+// rejections are reported (#235): the controller's first-wins behaviour is
+// Task 1's, so at the provider level each rejection emits its own notice.
+test('reaches ready with the dropped presentation options unset, and publishes a notice for each rejection', async () => {
   const result = await setup({
     options: { playerColor: 'red', poster: 'javascript:alert(1)' }
   });
@@ -422,6 +493,15 @@ test('reaches ready with the dropped presentation options unset', async () => {
   expect(player.getAttribute('player-color')).toBeNull();
   expect(player.getAttribute('poster')).toBeNull();
   expect(readyPatch(result.patches)).toMatchObject({ lifecycle: 'ready' });
+
+  const notices = configurationNotices(result.patches);
+  expect(notices).toHaveLength(2);
+  expect(notices[0]?.error?.message).toBe(
+    'The playerColor option was rejected: expected a CSS hex colour.'
+  );
+  expect(notices[1]?.error?.message).toBe(
+    'The poster option was rejected: expected a permitted source URL.'
+  );
 });
 
 test('sets transparent letterbox as a boolean-string attribute', async () => {
@@ -436,6 +516,8 @@ test('leaves the presentation attributes unset when the options are omitted', as
   expect(player.getAttribute('swatch')).toBeNull();
   expect(player.getAttribute('poster')).toBeNull();
   expect(player.getAttribute('transparent-letterbox')).toBeNull();
+  // An omitted option is not a rejection: no notice either.
+  expect(configurationNotices(result.patches)).toHaveLength(0);
 });
 
 test('seeds the embed muted state from the mount preference', async () => {
@@ -537,6 +619,7 @@ test('reports the whole capability record it can justify', async () => {
     setPlaybackRate: { status: 'available' },
     selectQuality: { status: 'unavailable', reason: 'provider' },
     selectTextTrack: { status: 'unavailable', reason: 'provider' },
+    chapters: { status: 'unavailable', reason: 'provider' },
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'unavailable', reason: 'provider' },
     airPlay: { status: 'unavailable', reason: 'provider' },
@@ -1613,4 +1696,93 @@ test('takes the handle from the property the element actually exposes', async ()
 
   const viaLegacy = await setup({ fake: { apiProperty: 'wistiaApi' } });
   expect(readyPatch(viaLegacy.patches).lifecycle).toBe('ready');
+});
+
+// Wistia's chapters ship as an inbound embed-option plugin: the embedder
+// supplies the list, and no documented read-back accessor exists. So the
+// collection stays empty and the capability says the provider cannot report
+// them, exactly as YouTube's does (#182).
+test('reports chapters as unavailable for the provider', async () => {
+  const { patches } = await setup();
+
+  expect(readyPatch(patches).capabilities?.chapters).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+  expect(readyPatch(patches).chapters).toBeUndefined();
+});
+
+// --- subscriber isolation (#233) ---
+
+// The deliberate throws below are rethrown on a fresh task so they still reach
+// uncaught-error handling; captured rather than run, which is what keeps them
+// from landing in the runner as an unhandled error.
+const captureRethrows = (): unknown[] => {
+  const errors: unknown[] = [];
+  const real = globalThis.queueMicrotask;
+  // Wrapped rather than replaced: the fixtures schedule microtasks of their
+  // own, and swallowing those would stall the very load these tests drive.
+  globalThis.queueMicrotask = (task: () => void) =>
+    real(() => {
+      try {
+        task();
+      } catch (error) {
+        errors.push(error);
+      }
+    });
+  onTestFinished(() => {
+    globalThis.queueMicrotask = real;
+  });
+  return errors;
+};
+
+// Subscribed ahead of the recorder, unlike `setup`, because the thrower has to
+// come first for the fan-out behind it to be the thing under test.
+const setupBehindAThrowingSubscriber = async (): Promise<{
+  readonly provider: ReturnType<typeof createWistiaProvider>;
+  readonly patches: ProviderStatePatch[];
+  readonly dimensions: Array<MediaDimensions | undefined>;
+}> => {
+  const mount = document.createElement('div') as WistiaMountElement;
+  document.body.appendChild(mount);
+  const sdk = installFakeWistiaPlayer({});
+  sdkState.load = sdk.load;
+  const provider = createWistiaProvider(mount, source);
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  provider.subscribeDimensions?.(() => {
+    throw new Error('dimension listener blew up');
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+  const dimensions: Array<MediaDimensions | undefined> = [];
+  provider.subscribeDimensions?.((next) => dimensions.push(next));
+  await provider.attach();
+  await provider.load();
+  return { provider, patches, dimensions };
+};
+
+// #95 and its second consequence at once (#233). The start path emits inside
+// its own try, so a bare `Set.forEach` both starved every subscriber behind
+// the thrower and handed the throw to the load's catch — which mapped a
+// consumer's rendering bug through `loadFailure` into a provider load error.
+test('a throwing subscriber does not starve the subscribers behind it', async () => {
+  captureRethrows();
+
+  const { patches } = await setupBehindAThrowingSubscriber();
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+  expect(readyPatch(patches).activation).toBe('ready');
+});
+
+// The dimension channel is its own set, iterated the same way.
+test('a throwing dimension listener does not starve the listeners behind it', async () => {
+  captureRethrows();
+
+  const { dimensions } = await setupBehindAThrowingSubscriber();
+
+  expect(dimensions.at(-1)).toEqual({ width: 1920, height: 1080 });
 });

@@ -4,7 +4,7 @@
    four wants a different affordance. The button positions itself (absolutely,
    inset 0, z-index 30), so this only paints. */
 
-[data-reely-part='activation'] {
+[data-playdeck-part='activation'] {
   display: grid;
   place-items: center;
   border: 0;
@@ -16,19 +16,19 @@
 
 /* The resting state: a press here starts activation. One of the two states a
    press acts on at all — `error` below is the other. */
-[data-reely-part='activation'][data-state='dormant']:hover {
+[data-playdeck-part='activation'][data-state='dormant']:hover {
   background: rgb(11 14 19 / 40%);
 }
 
 /* Activation is committed and the provider is on its way. Pressing again does
    nothing from here, so stop inviting it. */
-[data-reely-part='activation'][data-state='eligible'] {
+[data-playdeck-part='activation'][data-state='eligible'] {
   opacity: 0.6;
   cursor: default;
 }
 
 /* Mid-load, and `aria-disabled`: it must not look pressable. */
-[data-reely-part='activation'][data-state='loading-provider'] {
+[data-playdeck-part='activation'][data-state='loading-provider'] {
   cursor: progress;
 }
 
@@ -38,10 +38,10 @@
    reports as not recoverable — every configuration error among them — which
    reads "Play", is `aria-disabled`, and says so through that rather than
    through colour. */
-[data-reely-part='activation'][data-state='error'] {
+[data-playdeck-part='activation'][data-state='error'] {
   background: rgb(63 18 18 / 85%);
 }
 
-[data-reely-part='activation'][data-state='error']:hover {
+[data-playdeck-part='activation'][data-state='error']:hover {
   background: rgb(90 26 26 / 85%);
 }

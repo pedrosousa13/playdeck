@@ -6,8 +6,9 @@ import type {
   MediaDimensions,
   ProviderAdapter,
   ProviderStateListener
-} from '@reely/core';
+} from '@playdeck/core';
 import { createNativeProvider } from '../src/index';
+import { captureRethrows } from './fixtures/capture-rethrows';
 
 type ContractAdapter = {
   provider: ProviderAdapter;
@@ -990,4 +991,61 @@ test('native stops observing resize after destroy', async () => {
   resize(1920, 1080);
 
   expect(seen).toHaveLength(afterDestroy);
+});
+
+// --- subscriber isolation (#233) ---
+
+const throwingListener = (): (() => never) => () => {
+  throw new Error('subscriber blew up');
+};
+
+// #95, reached through the provider's own fan-out rather than the controller's
+// (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
+// registered behind the thrower missed that notification — and the throw
+// escaped into whatever called `emit`, here the adapter's own `attach`.
+test('a throwing subscriber does not starve the subscribers behind it', () => {
+  captureRethrows();
+  const media = document.createElement('video');
+  const provider = createNativeProvider(media);
+  provider.subscribe(throwingListener());
+  const after = vi.fn();
+  provider.subscribe(after);
+
+  expect(() => provider.attach()).not.toThrow();
+
+  expect(after).toHaveBeenCalled();
+});
+
+// Isolated is not the same as silenced: the error is rethrown on a fresh task,
+// so a consumer's broken listener still reaches the page's uncaught-error
+// handling instead of disappearing into the adapter.
+test('a throwing subscriber still surfaces its error asynchronously', async () => {
+  const media = document.createElement('video');
+  const provider = createNativeProvider(media);
+  provider.attach();
+  // Subscribed after attach, and the rethrows captured after that, so exactly
+  // one emit — the `playing` below — is on trial here.
+  provider.subscribe(throwingListener());
+  const rethrows = captureRethrows();
+
+  media.dispatchEvent(new Event('playing'));
+  await Promise.resolve();
+
+  expect(rethrows).toEqual([
+    expect.objectContaining({ message: 'subscriber blew up' })
+  ]);
+});
+
+// The dimension channel is its own set, iterated the same way.
+test('a throwing dimension listener does not starve the listeners behind it', () => {
+  captureRethrows();
+  const { media } = videoWithDimensions(1080, 1920);
+  const provider = createNativeProvider(media);
+  provider.subscribeDimensions?.(throwingListener());
+  const seen = collectDimensions(provider);
+
+  provider.attach();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(seen.at(-1)).toEqual({ width: 1080, height: 1920 });
 });

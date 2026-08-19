@@ -72,7 +72,7 @@ const handleLive: Connect.NextHandleFunction = (request, response, next) => {
 // `vite preview` server, so the fixture is available to Playwright (which drives
 // the preview build) and to local `vite dev`.
 export const liveHlsFixture = (): Plugin => ({
-  name: 'reely-live-hls-fixture',
+  name: 'playdeck-live-hls-fixture',
   configureServer(server: ViteDevServer) {
     server.middlewares.use(handleLive);
   },

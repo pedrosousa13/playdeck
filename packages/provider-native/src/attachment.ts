@@ -3,8 +3,8 @@ import type {
   PlayerCapabilities,
   PlayerLiveState,
   ProviderStatePatch
-} from '@reely/core';
-import { deriveLiveState, liveStateEqual } from '@reely/core';
+} from '@playdeck/core';
+import { deriveLiveState, liveStateEqual, notifySafely } from '@playdeck/core';
 import {
   HAVE_METADATA,
   providerEvent,
@@ -80,7 +80,9 @@ export const createNativeAttachment = (
       height > 0
         ? { width, height }
         : undefined;
-    dimensionListeners.forEach((listener) => listener(dimensions));
+    dimensionListeners.forEach((listener) =>
+      notifySafely(listener, dimensions)
+    );
   };
 
   // Liveness from the element's own signals only: the *raw* duration, which is
@@ -306,7 +308,9 @@ export const createNativeAttachment = (
       clearStateListeners();
       // Announced before the set is dropped: whatever this element measured
       // stops being true the moment the provider lets go of it.
-      dimensionListeners.forEach((listener) => listener(undefined));
+      dimensionListeners.forEach((listener) =>
+        notifySafely(listener, undefined)
+      );
       dimensionListeners.clear();
     },
     isDestroyed: () => destroyed,

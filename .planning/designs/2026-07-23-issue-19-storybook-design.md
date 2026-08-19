@@ -1,7 +1,7 @@
 # Issue #19: Storybook Workbench + Story-Based Component Tests Design
 
 **Status:** Approved design
-**Issue:** [#19 — Storybook workbench + story-based component tests](https://github.com/pedrosousa13/reely/issues/19)
+**Issue:** [#19 — Storybook workbench + story-based component tests](https://github.com/pedrosousa13/playdeck/issues/19)
 **Depends on:** #6 and #7, both merged on `main` (`0aba39a`)
 **Storybook version:** `10.5.3` exact, verified as stable `latest` on npm for
 `storybook`, `@storybook/react-vite`, `@storybook/addon-vitest`, and
@@ -25,10 +25,10 @@ Two governing rules from the issue:
 
 ## Placement
 
-- New workspace app `apps/storybook`, private package `@reely/storybook`.
+- New workspace app `apps/storybook`, private package `@playdeck/storybook`.
   All Storybook, vitest-browser, and axe dependencies live in its
-  `devDependencies`. Published packages (`@reely/core`,
-  `@reely/provider-native`, `@reely/react`) are untouched: no new
+  `devDependencies`. Published packages (`@playdeck/core`,
+  `@playdeck/provider-native`, `@playdeck/react`) are untouched: no new
   dependencies, `files: ["dist"]` unchanged, bundle checks stay green.
 - Stories are colocated with components:
   `packages/react/src/*.stories.tsx`, globbed from the app's `main.ts`
@@ -46,7 +46,7 @@ The provider-loader seam (`packages/react/src/provider-loaders.ts`) stays
 private, exactly as the #7 design requires. The Storybook app's Vite config
 (`viteFinal` in `main.ts`) substitutes it with
 `apps/storybook/src/mock-provider-loader.ts` via a Vite alias, and aliases
-`@reely/react`, `@reely/core`, and `@reely/provider-native` to package
+`@playdeck/react`, `@playdeck/core`, and `@playdeck/provider-native` to package
 source, mirroring the root `vitest.config.ts`. Because the substitution is
 at the Vite level, it applies identically in `storybook dev`,
 `storybook build`, and the vitest browser-mode test run (the addon reuses
@@ -72,7 +72,7 @@ The store records the live fake-provider handle so `play` functions can
 ### Decorator
 
 `withMockController` (in `apps/storybook/src/`) reads
-`parameters.reely = { rootProps, scenario }`:
+`parameters.playdeck = { rootProps, scenario }`:
 
 - resets the scenario store before render (stories stay independent),
 - wraps the story in `<Player.Root {...rootProps}>` with a stable inline
@@ -99,7 +99,7 @@ One story per meaningful state, colocated in `packages/react/src/`:
 - `poster.stories.tsx` — `Player.Poster` + `Player.PosterImage`:
   - `idle`: no `src`/`srcSet`.
   - `loading`: `src` pointing at a same-origin hanging endpoint
-    (`/__reely/hang.png`) served by a tiny shared Vite middleware plugin —
+    (`/__playdeck/hang.png`) served by a tiny shared Vite middleware plugin —
     the request never completes, so `data-state="loading"` holds
     deterministically with zero external requests.
   - `loaded`: inline data-URI image (instant, memory-only).
@@ -141,7 +141,7 @@ hosting is out of scope; only build success is required.)
 
 - `apps/storybook` scripts: `dev` (`storybook dev`), `build`
   (`storybook build`), `test` (`vitest run` with the app config).
-- Root `test:storybook`: `pnpm --filter @reely/storybook test`.
+- Root `test:storybook`: `pnpm --filter @playdeck/storybook test`.
 - Root `pnpm build` (`pnpm -r --if-present run build`) picks up the app's
   `build` automatically, so the existing CI `pnpm build` step satisfies
   "`storybook build` succeeds in CI" with no extra step.
@@ -158,9 +158,9 @@ hosting is out of scope; only build success is required.)
 
 - stories live next to their component (`packages/react/src/*.stories.tsx`),
 - one story per meaningful state,
-- how `parameters.reely` scenarios dial `PlayerState`,
+- how `parameters.playdeck` scenarios dial `PlayerState`,
 - the play-function pattern with a pointer to the reference story,
-- how to run (`pnpm --filter @reely/storybook dev`, `pnpm test:storybook`),
+- how to run (`pnpm --filter @playdeck/storybook dev`, `pnpm test:storybook`),
 - the no-network rule and the a11y gate.
 
 ## Dependency policy

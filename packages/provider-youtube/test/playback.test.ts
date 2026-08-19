@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import type { ProviderStatePatch } from '@reely/core';
+import type { ProviderStatePatch } from '@playdeck/core';
 import { playerStates } from '../src/adapter-values';
 import { createYouTubeBoundary } from '../src/boundary';
 import {

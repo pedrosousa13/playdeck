@@ -1,4 +1,4 @@
-import type { PlayerProvider, TimeRange } from '@reely/core';
+import type { PlayerProvider, TimeRange } from '@playdeck/core';
 import {
   controlTargetStyle,
   useLoadingPresentation,
@@ -52,7 +52,7 @@ export const PlayButton = ({
       aria-pressed={isPlaying}
       data-autoplay-state={autoplay}
       data-provider={provider ?? undefined}
-      data-reely-part="play-button"
+      data-playdeck-part="play-button"
       data-state={playback}
       onClick={(event) => {
         onClick?.(event);
@@ -90,7 +90,7 @@ export const MuteButton = ({
       aria-label={muted ? 'Unmute' : 'Mute'}
       aria-pressed={muted}
       data-provider={provider ?? undefined}
-      data-reely-part="mute-button"
+      data-playdeck-part="mute-button"
       data-state={muted ? 'muted' : 'unmuted'}
       onClick={(event) => {
         onClick?.(event);
@@ -145,7 +145,7 @@ export const VolumeSlider = ({
       aria-label={ariaLabel ?? 'Volume'}
       aria-valuetext={`${percent}%`}
       data-provider={provider ?? undefined}
-      data-reely-part="volume-slider"
+      data-playdeck-part="volume-slider"
       data-state={muted ? 'muted' : 'unmuted'}
       max={1}
       min={0}
@@ -285,7 +285,14 @@ const useSeekPreview = (
       // `seekTo` never rejects: the controller catches a throwing adapter into
       // an `ok: false` result. `Root` makes exactly one controller and keeps it
       // for its lifetime, so the one captured here stays this player's.
-      command: (time) => controller.seekTo(time),
+      //
+      // Origin-tagged, as `PlayButton` tags its own command: every change that
+      // reaches here is a person scrubbing, and the `'provider'` the adapter
+      // stamps the resulting `seeking`/`seeked` with says only who reported it
+      // (#186). Not every seek from this control comes through here — ADR-0005
+      // gives the arrow keys to the shortcut layer, which prevents the input's
+      // default and tags its own seek `'user'` from there.
+      command: (time) => controller.seekToWithOrigin(time, 'user'),
       onDrained: (ok) => {
         setSettling(false);
         // A failed seek has no reported time coming, so it reconciles at once.
@@ -400,15 +407,15 @@ export const SeekSlider = ({
       {...props}
       data-buffering={stalled ? 'true' : 'false'}
       data-provider={provider ?? undefined}
-      data-reely-part="seek-slider"
+      data-playdeck-part="seek-slider"
       data-state={window ? 'ready' : 'idle'}
       style={{ position: 'relative', minHeight: 44, ...style }}
     >
-      <div aria-hidden="true" data-reely-part="seek-buffered">
+      <div aria-hidden="true" data-playdeck-part="seek-buffered">
         {window
           ? buffered.map((range, index) => (
               <div
-                data-reely-part="seek-buffered-range"
+                data-playdeck-part="seek-buffered-range"
                 key={`${range.start}:${range.end}:${index}`}
                 style={{
                   position: 'absolute',
@@ -432,7 +439,7 @@ export const SeekSlider = ({
               : formatTime(value)
             : 'Unavailable'
         }
-        data-reely-part="seek-slider-input"
+        data-playdeck-part="seek-slider-input"
         max={max}
         min={min}
         onChange={(event) => {
@@ -446,7 +453,7 @@ export const SeekSlider = ({
       />
       {share === null ? null : (
         <span
-          data-reely-part="seek-buffered-description"
+          data-playdeck-part="seek-buffered-description"
           id={descriptionId}
           style={visuallyHiddenStyle}
         >
@@ -488,7 +495,7 @@ export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
       {...props}
       dateTime={`PT${Math.max(0, Math.floor(seconds))}S`}
       data-provider={provider ?? undefined}
-      data-reely-part="time"
+      data-playdeck-part="time"
       data-state={hasDuration ? 'timed' : 'untimed'}
       data-time-type={type}
     >

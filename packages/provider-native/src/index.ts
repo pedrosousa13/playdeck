@@ -3,7 +3,8 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStateListener
-} from '@reely/core';
+} from '@playdeck/core';
+import { notifySafely } from '@playdeck/core';
 import { createNativeAttachment } from './attachment.js';
 import { available } from './adapter-values.js';
 import {
@@ -48,7 +49,8 @@ export const createNativeProvider = (
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   const playback = createNativePlayback(media, options, {
     emit,
@@ -76,6 +78,7 @@ export const createNativeProvider = (
       // arrived.
       selectQuality: { status: 'unavailable', reason: 'source' },
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      chapters: textTracks.chaptersAvailability(),
       fullscreen: presentation.fullscreenAvailability(),
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: presentation.airPlayAvailability(),

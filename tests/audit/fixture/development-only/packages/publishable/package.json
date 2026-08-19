@@ -1,5 +1,5 @@
 {
-  "name": "@reely/audit-fixture-publishable",
+  "name": "@playdeck/audit-fixture-publishable",
   "version": "0.0.0",
   "dependencies": {
     "ms": "2.1.3"

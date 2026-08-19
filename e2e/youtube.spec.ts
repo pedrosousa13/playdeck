@@ -17,20 +17,14 @@ const isYouTubeUrl = (url: URL): boolean =>
 
 // A deterministic stand-in for https://www.youtube.com/iframe_api. It mirrors
 // the parts of the real API the adapter relies on: the window-level ready
-// callback, an element-replacing iframe, and asynchronous state confirmation.
+// callback, the adoption of the iframe it is handed rather than one it builds,
+// and asynchronous state confirmation.
 const fakeIframeApi = `
   window.YT = {
     PlayerState: {
       UNSTARTED: -1, ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5
     },
-    Player: function (element, config) {
-      const iframe = document.createElement('iframe');
-      iframe.src =
-        (config.host || 'https://www.youtube.com') +
-        '/embed/' + config.videoId + '?enablejsapi=1';
-      iframe.width = config.width || '640';
-      iframe.height = config.height || '390';
-      element.replaceWith(iframe);
+    Player: function (iframe, config) {
       let state = -1;
       const target = {};
       const events = config.events || {};
@@ -139,14 +133,20 @@ test('youtube one interaction click loads the provider and queues playback', asy
   await expect(play).toBeVisible();
   await expect(play).toHaveAttribute('data-state', 'playing');
   await expect(activationButton).toBeHidden();
-  const iframe = page.locator('[data-reely-part="media"] iframe');
+  const iframe = page.locator('[data-playdeck-part="media"] iframe');
   await expect(iframe).toHaveAttribute(
     'src',
     /^https:\/\/www\.youtube-nocookie\.com\/embed\//
   );
+  await expect(iframe).toHaveAttribute(
+    'referrerpolicy',
+    'strict-origin-when-cross-origin'
+  );
   const overlayParts = await page
     .getByTestId('viewport')
-    .locator('[data-reely-part="activation"], [data-reely-part="controls"]')
+    .locator(
+      '[data-playdeck-part="activation"], [data-playdeck-part="controls"]'
+    )
     .count();
   expect(overlayParts).toBe(0);
 });
@@ -164,7 +164,9 @@ test('youtube docs example stays dormant while the native fixture is used', asyn
     exact: true
   });
   await expect(activationButton).toBeVisible();
-  await expect(page.getByLabel('Reely media', { exact: true })).toHaveCount(1);
+  await expect(page.getByLabel('Playdeck media', { exact: true })).toHaveCount(
+    1
+  );
   expect(youtubeRequests).toEqual([]);
 
   await activationButton.click();

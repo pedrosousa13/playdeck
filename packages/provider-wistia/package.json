@@ -1,7 +1,7 @@
 {
-  "name": "@reely/provider-wistia",
-  "version": "0.0.0",
-  "description": "Wistia player SDK provider for Reely.",
+  "name": "@playdeck/provider-wistia",
+  "version": "0.1.0",
+  "description": "Wistia player SDK provider for Playdeck.",
   "keywords": [
     "media",
     "player",
@@ -9,14 +9,14 @@
     "wistia"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/provider-wistia#readme",
+  "homepage": "https://github.com/pedrosousa13/playdeck/tree/main/packages/provider-wistia#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "url": "git+https://github.com/pedrosousa13/playdeck.git",
     "directory": "packages/provider-wistia"
   },
   "bugs": {
-    "url": "https://github.com/pedrosousa13/reely/issues"
+    "url": "https://github.com/pedrosousa13/playdeck/issues"
   },
   "type": "module",
   "sideEffects": false,
@@ -43,7 +43,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@reely/core": "workspace:^"
+    "@playdeck/core": "workspace:^"
   },
   "scripts": {
     "build": "vite build && tsc -b",

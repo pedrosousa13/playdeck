@@ -3,7 +3,7 @@ import type {
   CommandResult,
   PlayerQuality,
   ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import type {
   EmitProviderState,
   HlsInstanceLike,

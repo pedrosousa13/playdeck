@@ -1,7 +1,7 @@
 {
-  "name": "@reely/core",
-  "version": "0.0.0",
-  "description": "Framework-neutral player state, commands, events and provider contract for Reely.",
+  "name": "@playdeck/core",
+  "version": "0.1.0",
+  "description": "Framework-neutral player state, commands, events and provider contract for Playdeck.",
   "keywords": [
     "media",
     "player",
@@ -10,14 +10,14 @@
     "headless"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/core#readme",
+  "homepage": "https://github.com/pedrosousa13/playdeck/tree/main/packages/core#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "url": "git+https://github.com/pedrosousa13/playdeck.git",
     "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/pedrosousa13/reely/issues"
+    "url": "https://github.com/pedrosousa13/playdeck/issues"
   },
   "type": "module",
   "sideEffects": false,

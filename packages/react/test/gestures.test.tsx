@@ -12,10 +12,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   type CommandResult,
   PlayerController,
+  type PlayerEventOrigin,
   type ProviderAdapter,
+  type ProviderEvent,
   type ProviderStateListener,
   type ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import * as Player from '../src/index';
 
 const ok = async (): Promise<CommandResult> => ({ ok: true });
@@ -49,7 +51,8 @@ const createMockAdapter = () => {
   return {
     adapter,
     spies,
-    emit: (patch: ProviderStatePatch) => listeners.forEach((l) => l(patch))
+    emit: (patch: ProviderStatePatch, event?: ProviderEvent) =>
+      listeners.forEach((l) => l(patch, event))
   };
 };
 
@@ -66,7 +69,13 @@ const renderGestures = (ui: React.ReactNode) => {
     controller.setProvider(mock.adapter);
     mock.emit({ lifecycle: 'ready', activation: 'ready', provider: 'native' });
   });
-  return { ...utils, spies: mock.spies };
+  return {
+    ...utils,
+    controller,
+    spies: mock.spies,
+    emit: (patch: ProviderStatePatch, event?: ProviderEvent) =>
+      act(() => mock.emit(patch, event))
+  };
 };
 
 // Fire a tap at a given clientX by dispatching pointerup on the gesture layer.
@@ -98,7 +107,7 @@ afterEach(() => {
 });
 
 const getLayer = () =>
-  document.querySelector('[data-reely-part="gestures"]') as HTMLElement;
+  document.querySelector('[data-playdeck-part="gestures"]') as HTMLElement;
 
 describe('Gestures', () => {
   test('single tap toggles controls and never toggles playback', () => {
@@ -128,6 +137,33 @@ describe('Gestures', () => {
     tapAt(layer, 150);
     expect(spies.seekBy).toHaveBeenCalledWith(10);
     expect(onSeek).toHaveBeenCalledWith('forward', 10);
+  });
+
+  // A double tap is a person seeking, exactly as a scrubber drag is, so the
+  // seek it asks for carries the same origin (#186).
+  test('labels a double-tap seek as a user seek', () => {
+    const { controller, emit } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures seekOffset={10} />
+      </Player.Viewport>
+    );
+    const origins: PlayerEventOrigin[] = [];
+    controller.on('seeking', (event) => origins.push(event.origin));
+    controller.on('seeked', (event) => origins.push(event.origin));
+    const layer = getLayer();
+
+    tapAt(layer, 150);
+    tapAt(layer, 150);
+    emit(
+      { seeking: true },
+      { type: 'seeking', detail: { currentTime: 10 }, origin: 'provider' }
+    );
+    emit(
+      { seeking: false, currentTime: 10 },
+      { type: 'seeked', detail: { currentTime: 10 }, origin: 'provider' }
+    );
+
+    expect(origins).toEqual(['user', 'user']);
   });
 
   test('double tap on the left half seeks backward', () => {

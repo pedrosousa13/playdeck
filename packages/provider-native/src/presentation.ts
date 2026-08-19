@@ -2,7 +2,7 @@ import type {
   Availability,
   CommandResult,
   PlayerCapabilities
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   available,
   HAVE_METADATA,

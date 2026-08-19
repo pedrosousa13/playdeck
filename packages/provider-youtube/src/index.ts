@@ -1,12 +1,13 @@
 import {
   isYouTubeVideoId,
+  notifySafely,
   type CommandResult,
   type PlayerCapabilities,
   type PlayerError,
   type ProviderAdapter,
   type ProviderEvent,
   type ProviderStateListener
-} from '@reely/core';
+} from '@playdeck/core';
 import { providerEvent, readyCapabilities } from './adapter-values.js';
 import { createYouTubeAttachment } from './attachment.js';
 import { createYouTubeBoundary } from './boundary.js';
@@ -84,10 +85,10 @@ const EMBED_ORIGINS: readonly string[] = [
   DEFAULT_HOST
 ];
 
-// `host` reaches the iframe API as the origin the embed is built from
-// (`attachment.ts:146`, `host,` passed to `new api.Player`), so an origin
-// unrelated to YouTube would both relocate the iframe and receive the page's
-// own origin in the `origin` player var. It is checked here, where the default
+// `host` is the origin the embed url is built from (`attachment.ts:193`,
+// `host` passed to `youTubeEmbedUrl`), so an origin unrelated to YouTube would
+// both relocate the iframe and receive the page's own origin in the `origin`
+// player var that url carries. It is checked here, where the default
 // is applied — the provider factory every consumer of this package passes
 // through, not only those coming via `Player.Root` — so the default and the
 // override flow through one decision.
@@ -97,15 +98,42 @@ const EMBED_ORIGINS: readonly string[] = [
 // of reading either as a third host. An unrecognised origin falls back rather
 // than throwing — a misconfigured `host` must degrade to the safe embed, not
 // break the page — and `new URL()` rejecting a malformed or empty value is the
-// same answer.
-const resolveHost = (host: string | undefined): string => {
-  if (host === undefined) return DEFAULT_HOST;
+// same answer. That degrade used to be silent; `rejected` below is what makes
+// it a reported `configuration` notice instead, published to every subscriber
+// by `createYouTubeProvider` (#235).
+//
+// Answers both the resolved host and whether `host` was rejected from the one
+// parse: a separate `hostRejected` used to re-run this exact shape — the same
+// `new URL(host)`, the same allowlist check, the same `catch` — to answer a
+// second question about the same value at the same construction site. `host`
+// still always answers with a value, silently defaulting when the input is
+// `undefined`; `rejected` is the fact beside it — `false` for `undefined`,
+// `true` for anything else that misses the allowlist — which is what tells
+// `createYouTubeProvider` whether the degrade above is worth a notice (#235).
+const resolveHost = (
+  host: string | undefined
+): { readonly host: string; readonly rejected: boolean } => {
+  if (host === undefined) return { host: DEFAULT_HOST, rejected: false };
   try {
     const { origin } = new URL(host);
-    return EMBED_ORIGINS.includes(origin) ? origin : DEFAULT_HOST;
+    return EMBED_ORIGINS.includes(origin)
+      ? { host: origin, rejected: false }
+      : { host: DEFAULT_HOST, rejected: true };
   } catch {
-    return DEFAULT_HOST;
+    return { host: DEFAULT_HOST, rejected: true };
   }
+};
+
+// What a rejected `host` publishes. Never `recoverable`: the fix is a
+// different `host` value, so a retry would just replay the same rejection
+// (#198). Names the option rather than echoing the rejected value, which is
+// exactly what a misconfigured `host` would have disclosed the page to
+// (`attachment.ts:193`'s `origin` player var).
+const hostConfigurationNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  message: 'The host option was rejected, so the default host was used.'
 };
 
 type YouTubeCommand =
@@ -157,6 +185,10 @@ const createRejectedYouTubeProvider = (): YouTubeProviderAdapter => {
     attach: () => undefined,
     load: () => undefined,
     destroy: () => undefined,
+    // Called straight rather than through `notifySafely`: this is the one call
+    // a `subscribe` makes at registration, on the subscriber's own stack, and
+    // not a fan-out — only the emits after registration are the emitter's to
+    // isolate (#233).
     subscribe: (listener) => {
       listener(
         {
@@ -193,10 +225,18 @@ export const createYouTubeProvider = (
 
   const listeners = new Set<ProviderStateListener>();
 
+  // Decided once, at construction — `host` does not change after that, so
+  // neither does the resolved value or whether it was rejected.
+  const { host: resolvedHost, rejected: hostWasRejected } = resolveHost(
+    options.host
+  );
+  const hostNotice = hostWasRejected ? hostConfigurationNotice : undefined;
+
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   // The poll is where the window is enforced and the window drives the poll,
   // so one of the two has to reach the other lazily; the seams below reach
@@ -251,7 +291,7 @@ export const createYouTubeProvider = (
     emit,
     controls: options.controls,
     loop: options.loop,
-    host: resolveHost(options.host),
+    host: resolvedHost,
     boundary,
     loadIframeApi: options.loadIframeApi ?? loadYouTubeIframeApi,
     getCapabilities: playerCapabilities,
@@ -269,6 +309,13 @@ export const createYouTubeProvider = (
     destroy: attachment.destroy,
     subscribe: (listener) => {
       listeners.add(listener);
+      // Called straight rather than through `notifySafely`, for the same
+      // reason `createRejectedYouTubeProvider`'s `subscribe` is: this is the
+      // one call a `subscribe` makes at registration, on the subscriber's own
+      // stack, and not a fan-out (#233). Run on every registration, not once
+      // at construction, so a subscriber that registers after this one still
+      // sees the notice (#235).
+      if (hostNotice) listener({ error: hostNotice });
       return () => listeners.delete(listener);
     },
     play: playback.play,

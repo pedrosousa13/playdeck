@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { withCss } from '../.storybook/theme';
@@ -24,9 +24,9 @@ const meta = {
     docs: {
       description: {
         component: [
-          '`Player.Viewport` is the box every other part is laid into, and the node the library writes `--reely-media-aspect-ratio` onto once a provider has measured its media.',
+          '`Player.Viewport` is the box every other part is laid into, and the node the library writes `--playdeck-media-aspect-ratio` onto once a provider has measured its media.',
           '',
-          '**Contract** — renders `data-reely-part="viewport"`. The custom property is written imperatively and is *absent* until something is measured, which is what lets a consumer rule supply its own fallback:',
+          '**Contract** — renders `data-playdeck-part="viewport"`. The custom property is written imperatively and is *absent* until something is measured, which is what lets a consumer rule supply its own fallback:',
           '```css',
           aspectRatioCss.trim(),
           '```'
@@ -43,7 +43,7 @@ type Story = StoryObj<typeof meta>;
 
 const viewport = (canvasElement: HTMLElement): HTMLElement => {
   const node = canvasElement.querySelector<HTMLElement>(
-    '[data-reely-part="viewport"]'
+    '[data-playdeck-part="viewport"]'
   );
   if (!node) throw new Error('No viewport part rendered.');
   return node;
@@ -61,7 +61,7 @@ export const UnmeasuredFallback: Story = {
     // Absent, not empty-valued: the inline style carries no such property at
     // all, which is the precondition for `var()` reaching its fallback.
     await expect(
-      node.style.getPropertyValue('--reely-media-aspect-ratio')
+      node.style.getPropertyValue('--playdeck-media-aspect-ratio')
     ).toBe('');
     // The assertion the whole rule exists for, and the one only a real browser
     // can make: the computed `aspect-ratio` resolved to the fallback.
@@ -80,7 +80,7 @@ export const MeasuredRatio: Story = {
     const node = viewport(canvasElement);
 
     await expect(
-      node.style.getPropertyValue('--reely-media-aspect-ratio')
+      node.style.getPropertyValue('--playdeck-media-aspect-ratio')
     ).toBe('360 / 640');
     await expect(globalThis.getComputedStyle(node).aspectRatio).toBe(
       '360 / 640'

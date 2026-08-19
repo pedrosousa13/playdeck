@@ -1,6 +1,6 @@
 # Cross-provider options live on Root, not in a per-provider bag
 
-Reely reaches a provider's own settings through one prop: `Root`'s
+Playdeck reaches a provider's own settings through one prop: `Root`'s
 `providerOptions`, one bag per provider
 (`packages/react/src/provider-loaders.ts`'s `PlayerProviderOptions`). Wistia's
 player colour goes in the `wistia` bag, YouTube's embed host in the `youtube`
@@ -42,7 +42,7 @@ code is written rather than at the point the video renders wrong.
 
 ## The boundary
 
-- **Reely-level, a prop on `Root`** — every provider has an answer to it. The
+- **Playdeck-level, a prop on `Root`** — every provider has an answer to it. The
   answers may arrive by different mechanisms — an embed URL parameter for Vimeo
   and YouTube, a DOM attribute for native and HLS — but no provider is silent
   about the concept. `controls` is one. So is `loop`, below.
@@ -53,7 +53,7 @@ code is written rather than at the point the video renders wrong.
   option the rest have no notion of is still per-provider, and it belongs in both
   bags.
 
-**`loop` is Reely-level by this boundary, and SIDEPRO-210 made it behave as
+**`loop` is Playdeck-level by this boundary, and SIDEPRO-210 made it behave as
 though it is.** It was already a `Root` prop, and every provider has an answer
 to it: Wistia's implements it by setting `endVideoBehavior`
 (`provider-wistia/src/attachment.ts`'s `if (options.loop === true)`), Vimeo's
@@ -63,7 +63,7 @@ the attribute. But it used to reach native and HLS only, because it travelled
 inside `NativePlaybackOptions`, which `loadProvider` hands to those two
 providers and to no others — so `loop: true` on a Vimeo or YouTube source was
 the same silent no-op this decision exists to prevent, arrived at from the
-opposite direction: a Reely-level prop that fans out to some providers instead
+opposite direction: a Playdeck-level prop that fans out to some providers instead
 of a per-provider key that a consumer forgets. It now takes the `controls`
 route as well: `resolvedProviderOptions` folds it into the active provider's own
 bag, and `PlayerProviderOptions` omits it from all three, so
@@ -77,7 +77,7 @@ provider's bag by `resolvedProviderOptions`, and omitted from all three bags in
 
 ## Consequences
 
-- A new Reely-level option is work in every provider rather than in one. Ship the
+- A new Playdeck-level option is work in every provider rather than in one. Ship the
   prop without an answer for some provider and it is a silent no-op on that
   provider — the failure the boundary exists to prevent, now inside the library
   instead of in a consumer's option bag.
@@ -89,6 +89,14 @@ provider's bag by `resolvedProviderOptions`, and omitted from all three bags in
   double home survives, and the only spelling that works there is the spelling
   this ADR calls wrong. Closing it is a fold in `resolvedProviderOptions` and an
   `Omit` in the bag, in that order.
+- Autoplay's `'audible-then-muted'` mode is the second instance, and it is unpaid
+  too. #306 put the value on `Root`'s `autoplay` prop, where a policy refusal of
+  the audible attempt is what triggers the muted retry. Wistia never reports one:
+  `player.play()` is synchronous and returns nothing, so `runWistiaCommand`
+  resolves successfully whatever the browser did, and no refusal reaches the
+  controller to retry from. The mode is therefore `'audible'` on a
+  `<wistia-player>` — the prop compiles, the retry never runs. Closing it is a
+  refusal check in the Wistia adapter's play command.
 - The fan-out is not uniform, and a consumer can observe that. Folding `controls`
   into a bag makes a change to it look like a provider-option change, which
   re-attaches a Vimeo or YouTube embed — it must, the value being baked into the

@@ -1,10 +1,10 @@
 import type { Decorator } from '@storybook/react-vite';
-// Read as text, not injected. A plain `import '@reely/react/theme.css'`
+// Read as text, not injected. A plain `import '@playdeck/react/theme.css'`
 // attaches it to the whole Storybook preview -- every story renders in the same
 // document, and the stories that do assert computed styles assume unthemed
 // values -- so the theme is mounted per story below and torn down with it.
 //
-// Imported by path rather than as `@reely/react/theme.css?inline`, because Vite
+// Imported by path rather than as `@playdeck/react/theme.css?inline`, because Vite
 // cannot carry a query through the package exports map. The published entry is
 // covered where it belongs: packages/react/test/theme.test.ts asserts the
 // exports and files entries, and publint/attw check the tarball.

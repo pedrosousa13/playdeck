@@ -108,6 +108,7 @@ test('publishes the frozen airPlay capability patch from the provider', () => {
     setPlaybackRate: { status: 'available' },
     selectQuality: { status: 'unknown', reason: 'provider-check' },
     selectTextTrack: { status: 'unavailable', reason: 'source' },
+    chapters: { status: 'unavailable', reason: 'source' },
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'available' },
     airPlay: { status: 'unavailable', reason: 'browser' },

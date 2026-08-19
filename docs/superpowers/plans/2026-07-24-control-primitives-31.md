@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add three optional, tree-shakeable primitives to `@reely/react` — a built-in icon set, an accessible `SettingsMenu` (with radio option groups), and headless viewport `Gestures` — on top of #8's locked styling/accessibility contract.
+**Goal:** Add three optional, tree-shakeable primitives to `@playdeck/react` — a built-in icon set, an accessible `SettingsMenu` (with radio option groups), and headless viewport `Gestures` — on top of #8's locked styling/accessibility contract.
 
 **Architecture:** Icons live in a new pure module `packages/react/src/icons.tsx`, re-exported from `index.tsx` so the single-entry build reaches them and they tree-shake (`sideEffects:false`). `SettingsMenu` and `Gestures` are added to `index.tsx` (they need module-local helpers `controlTargetStyle`, `isNativeActivationTarget`, `usePlayer`). All three are opt-in named exports — nothing is forced into the required render path; controls keep their text fallbacks.
 
@@ -16,8 +16,8 @@
 - Semantic tests only: assert roles, ARIA state, and `data-*` attributes — never implementation class names.
 - All pointer targets ≥ 44×44 CSS px via the shared `controlTargetStyle = { minWidth: 44, minHeight: 44 }` (`packages/react/src/index.tsx:1160`).
 - Focus is never lost to `<body>`: on every menu close path, focus returns to the trigger.
-- Menu content sets `role="menu"` + `data-reely-menu="open"` to inherit #8's shortcut suppression (`isInOpenMenu`, `packages/react/src/index.tsx:1535`).
-- `data-reely-part` naming: kebab-case, matches existing parts.
+- Menu content sets `role="menu"` + `data-playdeck-menu="open"` to inherit #8's shortcut suppression (`isInOpenMenu`, `packages/react/src/index.tsx:1535`).
+- `data-playdeck-part` naming: kebab-case, matches existing parts.
 - Tests are failing-first (TDD): write the test, watch it fail, implement, watch it pass, commit.
 
 ---
@@ -76,7 +76,7 @@ describe('icons', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @reely/react exec vitest run test/icons.test.tsx`
+Run: `pnpm --filter @playdeck/react exec vitest run test/icons.test.tsx`
 Expected: FAIL — cannot resolve `../src/icons` / `Player.SettingsIcon` undefined.
 
 - [ ] **Step 3: Create the icons module**
@@ -200,7 +200,7 @@ export * from './icons.js';
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `pnpm --filter @reely/react exec vitest run test/icons.test.tsx`
+Run: `pnpm --filter @playdeck/react exec vitest run test/icons.test.tsx`
 Expected: PASS (3 tests).
 
 - [ ] **Step 6: Commit**
@@ -229,7 +229,7 @@ Note the entry render tree and how `test.mjs` reads `.vite/manifest.json` + the 
 
 - [ ] **Step 2: Add a used icon to the fixture render**
 
-In `tests/bundle/native-only/src/main.tsx`, add `PlayIcon` to the existing `import * as Player from '@reely/react'` usage — render it inside the existing `ActivationButton` (or alongside it). Example (adapt to the actual JSX already present):
+In `tests/bundle/native-only/src/main.tsx`, add `PlayIcon` to the existing `import * as Player from '@playdeck/react'` usage — render it inside the existing `ActivationButton` (or alongside it). Example (adapt to the actual JSX already present):
 
 ```tsx
 <Player.ActivationButton>
@@ -265,12 +265,12 @@ Adapt `staticClosure`, `entryChunk`, `distDir`, and `join` to the identifiers al
 
 - [ ] **Step 4: Run to verify it fails first (before the main.tsx render is built)**
 
-Run: `pnpm --filter @reely/bundle-native-only test`
+Run: `pnpm --filter @playdeck/bundle-native-only test`
 Expected: FAIL on the `ReplayIcon` assertion only if a stray import exists, OR FAIL on `PlayIcon` present until the build picks up the new render. If both assertions already pass, deliberately break by temporarily importing `ReplayIcon` in `main.tsx`, re-run, confirm the unused-shakes-out assertion fails, then remove it — this proves the assertion has teeth.
 
 - [ ] **Step 5: Run to verify it passes**
 
-Run: `pnpm --filter @reely/bundle-native-only test`
+Run: `pnpm --filter @playdeck/bundle-native-only test`
 Expected: PASS — `PlayIcon` path present, `ReplayIcon` path absent.
 
 - [ ] **Step 6: Commit**
@@ -341,8 +341,8 @@ describe('SettingsMenu', () => {
     render(<Menu />);
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     const menu = screen.getByRole('menu');
-    expect(attr(menu, 'data-reely-menu')).toBe('open');
-    expect(attr(menu, 'data-reely-part')).toBe('settings-menu');
+    expect(attr(menu, 'data-playdeck-menu')).toBe('open');
+    expect(attr(menu, 'data-playdeck-part')).toBe('settings-menu');
     await waitFor(() =>
       expect(screen.getAllByRole('menuitem')[0]).toHaveFocus()
     );
@@ -419,7 +419,7 @@ describe('SettingsMenu', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @reely/react exec vitest run test/settings-menu.test.tsx`
+Run: `pnpm --filter @playdeck/react exec vitest run test/settings-menu.test.tsx`
 Expected: FAIL — `Player.SettingsMenu` etc. undefined.
 
 - [ ] **Step 3: Add `useId` to the React import**
@@ -486,7 +486,7 @@ export const SettingsMenu = ({
     <SettingsMenuContext.Provider value={value}>
       <div
         {...props}
-        data-reely-part="settings-menu-root"
+        data-playdeck-part="settings-menu-root"
         data-state={open ? 'open' : 'closed'}
         ref={rootRef}
         style={{ position: 'relative', ...style }}
@@ -512,7 +512,7 @@ export const SettingsMenuTrigger = ({
       aria-expanded={open}
       aria-haspopup="menu"
       aria-label={props['aria-label'] ?? 'Settings'}
-      data-reely-part="settings-menu-trigger"
+      data-playdeck-part="settings-menu-trigger"
       data-state={open ? 'open' : 'closed'}
       id={triggerId}
       onClick={(event) => {
@@ -580,8 +580,8 @@ export const SettingsMenuContent = ({
     <div
       {...props}
       aria-labelledby={triggerId}
-      data-reely-menu="open"
-      data-reely-part="settings-menu"
+      data-playdeck-menu="open"
+      data-playdeck-part="settings-menu"
       id={contentId}
       onKeyDown={(event) => {
         onKeyDown?.(event);
@@ -637,7 +637,7 @@ export const MenuItem = ({
   return (
     <button
       {...props}
-      data-reely-part="menu-item"
+      data-playdeck-part="menu-item"
       onClick={(event) => {
         onClick?.(event);
         if (event.defaultPrevented) return;
@@ -657,12 +657,12 @@ export const MenuItem = ({
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `pnpm --filter @reely/react exec vitest run test/settings-menu.test.tsx`
+Run: `pnpm --filter @playdeck/react exec vitest run test/settings-menu.test.tsx`
 Expected: PASS (7 tests).
 
 - [ ] **Step 6: Run the full react suite to check no regression**
 
-Run: `pnpm --filter @reely/react test`
+Run: `pnpm --filter @playdeck/react test`
 Expected: PASS (existing `controls.test.tsx` menu-suppression tests still green).
 
 - [ ] **Step 7: Commit**
@@ -744,7 +744,7 @@ describe('MenuRadioGroup', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @reely/react exec vitest run test/settings-menu.test.tsx -t MenuRadioGroup`
+Run: `pnpm --filter @playdeck/react exec vitest run test/settings-menu.test.tsx -t MenuRadioGroup`
 Expected: FAIL — `Player.MenuRadioGroup` undefined.
 
 - [ ] **Step 3: Implement radio group + item**
@@ -777,7 +777,7 @@ export const MenuRadioGroup = ({
   readonly onValueChange: (value: string) => void;
 }) => (
   <MenuRadioContext.Provider value={{ value, onValueChange }}>
-    <div {...props} data-reely-part="menu-radio-group" role="group">
+    <div {...props} data-playdeck-part="menu-radio-group" role="group">
       {children}
     </div>
   </MenuRadioContext.Provider>
@@ -797,7 +797,7 @@ export const MenuRadioItem = ({
     <button
       {...props}
       aria-checked={checked}
-      data-reely-part="menu-radio-item"
+      data-playdeck-part="menu-radio-item"
       data-state={checked ? 'checked' : 'unchecked'}
       onClick={(event) => {
         onClick?.(event);
@@ -810,7 +810,7 @@ export const MenuRadioItem = ({
       tabIndex={-1}
       type="button"
     >
-      <span aria-hidden data-reely-part="menu-radio-indicator">
+      <span aria-hidden data-playdeck-part="menu-radio-indicator">
         {checked ? <CheckIcon /> : null}
       </span>
       {children}
@@ -821,7 +821,7 @@ export const MenuRadioItem = ({
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @reely/react exec vitest run test/settings-menu.test.tsx`
+Run: `pnpm --filter @playdeck/react exec vitest run test/settings-menu.test.tsx`
 Expected: PASS (all menu tests including the two new radio tests).
 
 - [ ] **Step 5: Commit**
@@ -870,7 +870,7 @@ import {
   type ProviderAdapter,
   type ProviderStateListener,
   type ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import * as Player from '../src/index';
 
 const ok = async (): Promise<CommandResult> => ({ ok: true });
@@ -943,7 +943,7 @@ afterEach(() => {
 });
 
 const getLayer = () =>
-  document.querySelector('[data-reely-part="gestures"]') as HTMLElement;
+  document.querySelector('[data-playdeck-part="gestures"]') as HTMLElement;
 
 describe('Gestures', () => {
   test('single tap toggles controls and never toggles playback', () => {
@@ -1023,7 +1023,7 @@ describe('Gestures', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @reely/react exec vitest run test/gestures.test.tsx`
+Run: `pnpm --filter @playdeck/react exec vitest run test/gestures.test.tsx`
 Expected: FAIL — `Player.Gestures` undefined.
 
 - [ ] **Step 3: Implement `Gestures`**
@@ -1066,7 +1066,7 @@ export const Gestures = ({
   return (
     <div
       {...props}
-      data-reely-part="gestures"
+      data-playdeck-part="gestures"
       onPointerUp={(event) => {
         onPointerUp?.(event);
         if (event.defaultPrevented) return;
@@ -1102,7 +1102,7 @@ export const Gestures = ({
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @reely/react exec vitest run test/gestures.test.tsx`
+Run: `pnpm --filter @playdeck/react exec vitest run test/gestures.test.tsx`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
@@ -1134,7 +1134,7 @@ Confirm the `meta` shape (`title`, `component`, docs description, `render`), `pa
 Create `apps/storybook/stories/settings-menu.stories.tsx`:
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { available, ready } from './support';
@@ -1178,7 +1178,7 @@ const meta = {
     docs: {
       description: {
         component: [
-          '`Player.SettingsMenu` is an accessible menu primitive. The trigger sets `aria-haspopup="menu"`; the content is `role="menu"` with `data-reely-menu="open"`, which suppresses the player keyboard shortcuts while open.',
+          '`Player.SettingsMenu` is an accessible menu primitive. The trigger sets `aria-haspopup="menu"`; the content is `role="menu"` with `data-playdeck-menu="open"`, which suppresses the player keyboard shortcuts while open.',
           '',
           '**Focus** — opening moves focus to the first item; Escape, selecting an item, or re-toggling returns focus to the trigger (never `<body>`).',
           '',
@@ -1213,7 +1213,7 @@ export const Open: Story = {
     const trigger = canvas.getByRole('button', { name: 'Settings' });
     await userEvent.click(trigger);
     const menu = canvas.getByRole('menu');
-    await expect(menu).toHaveAttribute('data-reely-menu', 'open');
+    await expect(menu).toHaveAttribute('data-playdeck-menu', 'open');
     const first = canvas.getAllByRole('menuitemradio')[0];
     await expect(first).toHaveFocus();
   }
@@ -1254,7 +1254,7 @@ export const SelectingOptionChecksIt: Story = {
 Create `apps/storybook/stories/gestures.stories.tsx`:
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { available, ready } from './support';
@@ -1332,17 +1332,17 @@ git commit -m "Add SettingsMenu + Gestures stories with custom-icon docs (#31)"
 
 - [ ] **Step 1: Typecheck + lint the package**
 
-Run: `pnpm --filter @reely/react typecheck && pnpm --filter @reely/react lint`
+Run: `pnpm --filter @playdeck/react typecheck && pnpm --filter @playdeck/react lint`
 Expected: PASS. Fix any `import` ordering / `readonly` / exhaustive-deps issues surfaced (the repo lints strictly).
 
 - [ ] **Step 2: Full react unit suite**
 
-Run: `pnpm --filter @reely/react test`
+Run: `pnpm --filter @playdeck/react test`
 Expected: PASS — icons, settings-menu, gestures, and pre-existing suites all green.
 
 - [ ] **Step 3: Bundle tree-shake harness**
 
-Run: `pnpm --filter @reely/bundle-native-only test`
+Run: `pnpm --filter @playdeck/bundle-native-only test`
 Expected: PASS — used icon present, unused icon path absent.
 
 - [ ] **Step 4: Story tests**

@@ -1,7 +1,14 @@
 // @vitest-environment happy-dom
 // @vitest-environment-options { "settings": { "disableIframePageLoading": true } }
 
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  expect,
+  onTestFinished,
+  test,
+  vi
+} from 'vitest';
 import {
   detectSource,
   type MediaDimensions,
@@ -12,17 +19,21 @@ import {
   type ProviderStatePatch,
   type TextCue,
   type VimeoSource
-} from '@reely/core';
+} from '@playdeck/core';
 import { available } from '../src/adapter-values';
 import { createVimeoAttachment } from '../src/attachment';
 import { createVimeoBoundary } from '../src/boundary';
-import { createVimeoChromelessAvailability } from '../src/chromeless-availability';
+import { createVimeoChapters } from '../src/chapters';
+import {
+  CHROMELESS_PROBE_TIMEOUT_MS,
+  createVimeoChromelessAvailability
+} from '../src/chromeless-availability';
 import {
   createVimeoProvider,
   type VimeoMountElement,
   type VimeoProviderOptions
 } from '../src/index';
-import type { VimeoSdkQuality } from '../src/loader';
+import type { VimeoSdkChapter, VimeoSdkQuality } from '../src/loader';
 import { createVimeoPlayback } from '../src/playback';
 import { createVimeoPresentation } from '../src/presentation';
 import { createVimeoQualityLevels } from '../src/quality-levels';
@@ -295,6 +306,12 @@ const attachWithoutValidation = async (
     getCapabilities: playerCapabilities
   });
 
+  const chapters = createVimeoChapters({
+    emit: noopEmit,
+    isStale: (player) => attachment.isStale(player),
+    getCapabilities: playerCapabilities
+  });
+
   const textTracks = createVimeoTextTracks({
     emit: noopEmit,
     isStale: (player) => attachment.isStale(player),
@@ -310,6 +327,7 @@ const attachWithoutValidation = async (
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: qualityLevels.selectQualityAvailability(),
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      chapters: chapters.chaptersAvailability(),
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: { status: 'unavailable', reason: 'provider' },
@@ -326,6 +344,7 @@ const attachWithoutValidation = async (
     presentation,
     qualityLevels,
     textTracks,
+    chapters,
     clearStateListeners: () => undefined
   });
 
@@ -547,7 +566,8 @@ test('reports provider-plan when chromeless controls require an unavailable plan
     customControls: { status: 'unavailable', reason: 'provider-plan' }
   });
   expect(fetchMock).toHaveBeenCalledWith(
-    'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871'
+    'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871',
+    { signal: expect.any(AbortSignal) }
   );
 });
 
@@ -561,7 +581,8 @@ test('resolves the plan for unlisted videos through the hashed watch URL', async
     customControls: { status: 'unavailable', reason: 'provider-plan' }
   });
   expect(fetchMock).toHaveBeenCalledWith(
-    'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871%2Fabc123'
+    'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871%2Fabc123',
+    { signal: expect.any(AbortSignal) }
   );
 });
 
@@ -608,6 +629,162 @@ test('keeps Vimeo controls as the single layer when requested', async () => {
   });
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+// --- the chromeless probe that never completed (#235) ---
+//
+// `customControls` reports `unknown` on four different outcomes, and on one of
+// them the reason is the consumer's own environment — a Content-Security-Policy
+// that refuses `vimeo.com` is the likeliest — which is a thing they can act on
+// only if it is reported. The other three are Vimeo answering, and stay silent.
+
+const configurationNotices = (
+  patches: ProviderStatePatch[]
+): ProviderStatePatch[] =>
+  patches.filter((patch) => patch.error?.category === 'configuration');
+
+test('reports a chromeless probe that never reached Vimeo as a configuration notice', async () => {
+  fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+  const { patches } = await setup({ options: { customControls: true } });
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    customControls: { status: 'unknown', reason: 'provider-check' }
+  });
+  // The whole patch, not a subset: a notice carries an error and nothing else,
+  // so it never moves the lifecycle, the activation, or command readiness.
+  expect(configurationNotices(patches)).toEqual([
+    {
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false,
+        message: expect.stringContaining('could not be completed')
+      }
+    }
+  ]);
+});
+
+test('keeps the ready state and its lifecycle intact behind that notice', async () => {
+  fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+  const { patches } = await setup({ options: { customControls: true } });
+  expect(readyPatch(patches)).toMatchObject({
+    lifecycle: 'ready',
+    activation: 'ready'
+  });
+  expect(readyPatch(patches).error).toBeUndefined();
+  expect(patches.some((patch) => patch.lifecycle === 'error')).toBe(false);
+});
+
+test('the notice repeats neither the request url nor what the failure said', async () => {
+  fetchMock.mockRejectedValue(
+    new TypeError(
+      "Refused to connect to 'https://vimeo.com/api/oembed.json?url=x' because it violates the Content Security Policy directive"
+    )
+  );
+  const { patches } = await setup({ options: { customControls: true } });
+  const [notice] = configurationNotices(patches);
+  expect(notice?.error?.message).not.toContain('vimeo.com');
+  expect(notice?.error?.message).not.toContain('Content Security Policy');
+  expect(notice?.error?.cause).toBeUndefined();
+});
+
+test('reports a probe given up on at its deadline as a configuration notice', async () => {
+  vi.useFakeTimers();
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  fetchMock.mockImplementation(() => new Promise(() => undefined));
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+
+  const provider = createVimeoProvider(mount, publicSource, {
+    customControls: true
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  const loading = provider.load();
+  await vi.advanceTimersByTimeAsync(CHROMELESS_PROBE_TIMEOUT_MS);
+  await loading;
+
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    customControls: { status: 'unknown', reason: 'provider-check' }
+  });
+  // The whole patch, not a subset: a notice carries an error and nothing else,
+  // so it never moves the lifecycle, the activation, or command readiness.
+  expect(configurationNotices(patches)).toEqual([
+    {
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false,
+        message: expect.stringContaining('could not be completed')
+      }
+    }
+  ]);
+});
+
+test.each([
+  ['a refused request', (): Response => new Response('nope', { status: 404 })],
+  ['a body that is not JSON', (): Response => new Response('<html>')],
+  [
+    'a record naming no tier',
+    (): Response => Response.json({ video_id: 76979871 })
+  ],
+  ['an unrecognized tier', (): Response => oembedResponse('future_tier')]
+])('reports no notice when Vimeo answered with %s', async (_form, response) => {
+  fetchMock.mockResolvedValue(response());
+  const { patches } = await setup({ options: { customControls: true } });
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    customControls: { status: 'unknown', reason: 'provider-check' }
+  });
+  expect(configurationNotices(patches)).toEqual([]);
+});
+
+test.each(['pro', 'basic'])(
+  'reports no notice for the tier %s Vimeo resolved',
+  async (accountType) => {
+    fetchMock.mockResolvedValue(oembedResponse(accountType));
+    const { patches } = await setup({ options: { customControls: true } });
+    expect(configurationNotices(patches)).toEqual([]);
+  }
+);
+
+// The attachment cancels the probe from its teardown, which every path that
+// discards a player runs — an ordinary unmount included. A notice there would
+// fire on the way out of a page that never had a problem.
+test('reports no notice when teardown abandons a probe still in flight', async () => {
+  fetchMock.mockImplementation(() => new Promise(() => undefined));
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+
+  const provider = createVimeoProvider(mount, publicSource, {
+    customControls: true
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  const loading = provider.load();
+  await flushMicrotasks();
+  await provider.destroy();
+  await loading;
+
+  expect(configurationNotices(patches)).toEqual([]);
+});
+
+test.each([
+  ['Vimeo draws its own controls', { controls: true }],
+  ['custom controls were not requested', {}]
+])(
+  'sends no request and reports no notice when %s',
+  async (_form, options: VimeoProviderOptions) => {
+    const { patches } = await setup({ options });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(configurationNotices(patches)).toEqual([]);
+  }
+);
 
 test('honors an explicit Do-Not-Track opt-out', async () => {
   const result = await setup({ options: { dnt: false } });
@@ -924,7 +1101,7 @@ test('refreshes the discovered tracks when texttrackchange reports an unknown tr
 
 // --- captions: cue channel (#16) ---
 // Vimeo's `enableTextTrack(language, kind, showing)` fires `cuechange` without
-// drawing the cues itself when `showing` is false, so Reely can own rendering
+// drawing the cues itself when `showing` is false, so Playdeck can own rendering
 // and report `captionRendering: 'custom'`. Verified against the real embed:
 // with `showing: false` the paused frame is pixel-identical to no track at all.
 
@@ -1300,7 +1477,7 @@ test('forgets a track whose enable failed', async () => {
   expect(player.enableTextTrack).toHaveBeenCalledWith('en', 'subtitles', true);
 });
 
-test('clears the previous cue when Reely switches language', async () => {
+test('clears the previous cue when Playdeck switches language', async () => {
   const frTrack = {
     language: 'fr',
     kind: 'subtitles',
@@ -1812,6 +1989,65 @@ test('a chromeless verdict from a superseded attach cannot overwrite the live on
   });
 });
 
+test('destroy aborts a probe whose request is still in flight', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+
+  const signals: AbortSignal[] = [];
+  fetchMock.mockImplementation((_url: string, init: RequestInit) => {
+    signals.push(init.signal!);
+    return new Promise(() => undefined);
+  });
+
+  const provider = createVimeoProvider(mount, publicSource, {
+    customControls: true
+  });
+  await provider.attach();
+  const loading = provider.load();
+  await flushMicrotasks();
+  expect(signals).toHaveLength(1);
+
+  await provider.destroy();
+  expect(signals[0]!.aborted).toBe(true);
+  await loading;
+});
+
+test('retry aborts the superseded probe before issuing its own', async () => {
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+
+  // What the previous request's signal read as each time a new one was
+  // issued — the ordering the retry has to hold, not merely that both
+  // requests ended up cancelled.
+  const previouslyAborted: boolean[] = [];
+  const signals: AbortSignal[] = [];
+  fetchMock.mockImplementation((_url: string, init: RequestInit) => {
+    previouslyAborted.push(signals.at(-1)?.aborted ?? false);
+    signals.push(init.signal!);
+    return new Promise(() => undefined);
+  });
+
+  const provider = createVimeoProvider(mount, publicSource, {
+    customControls: true
+  });
+  await provider.attach();
+  const loading = provider.load();
+  await flushMicrotasks();
+  expect(signals).toHaveLength(1);
+
+  const retrying = provider.retry();
+  await flushMicrotasks();
+  expect(signals).toHaveLength(2);
+  expect(previouslyAborted).toEqual([false, true]);
+
+  await provider.destroy();
+  await Promise.all([loading, retrying]);
+});
+
 test('destroy tears down the SDK player, removes the iframe, and silences events', async () => {
   const { mount, patches, provider, sdk } = await setup();
   const player = sdk.instances[0]!;
@@ -2286,7 +2522,7 @@ test('vimeo clears the dimensions on destroy', async () => {
 // Vimeo expresses a start as a `#t=` fragment and has no end equivalent at all,
 // so the adapter is the authority for both bounds: it seeks to the start itself
 // and watches `timeupdate` to decide when the end is reached. The contract is
-// the native provider's, resolved through `@reely/core`'s shared helper.
+// the native provider's, resolved through `@playdeck/core`'s shared helper.
 
 test('seeks to the start boundary once the player is ready', async () => {
   const { patches, sdk } = await setup({
@@ -2458,7 +2694,7 @@ test('does not restart-loop when the start boundary is past the duration', async
   expect(player.play).not.toHaveBeenCalled();
 });
 
-// The sanitisation table of `@reely/core`'s helper, asserted through what the
+// The sanitisation table of `@playdeck/core`'s helper, asserted through what the
 // adapter does rather than what it computed.
 test.each([
   ['an absent start', undefined],
@@ -2612,4 +2848,271 @@ test('pins the liveness gap: no patch ever carries a live key (#187)', async () 
     expect.objectContaining({ playback: 'playing' })
   );
   expect(patches.filter((patch) => 'live' in patch)).toEqual([]);
+});
+
+// Vimeo is the one embed provider that reports chapters: the SDK has a chapter
+// list, a current-chapter accessor and a change event. End times are still the
+// library's own derivation -- the SDK reports a start and a title and nothing
+// else (#182).
+const introAndBody: ReadonlyArray<VimeoSdkChapter> = [
+  { startTime: 30, title: 'Body', index: 2 },
+  { startTime: 0, title: 'Intro', index: 1 }
+];
+
+test('publishes the chapters the SDK reports, ordered and closed by the duration', async () => {
+  const { patches } = await setup({
+    fake: { chapters: introAndBody, duration: 90 }
+  });
+
+  const ready = readyPatch(patches);
+  expect(ready.chapters).toEqual([
+    { id: 'vimeo:1', title: 'Intro', startTime: 0, endTime: 30 },
+    { id: 'vimeo:2', title: 'Body', startTime: 30, endTime: 90 }
+  ]);
+  expect(ready.capabilities?.chapters).toEqual({ status: 'available' });
+});
+
+test('leaves the last Vimeo chapter open when the duration is unknown', async () => {
+  const { patches } = await setup({
+    fake: {
+      chapters: introAndBody,
+      getDuration: () => Promise.reject(new Error('no duration'))
+    }
+  });
+
+  expect(
+    (
+      readyPatch(patches).chapters as ReadonlyArray<{ endTime: number | null }>
+    ).at(-1)?.endTime
+  ).toBeNull();
+});
+
+test('reports an empty chapter collection for a video that has none', async () => {
+  const { patches } = await setup();
+
+  const ready = readyPatch(patches);
+  expect(ready.chapters).toEqual([]);
+  expect(ready.capabilities?.chapters).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
+test('refreshes the chapter list from the chapterchange event rather than polling', async () => {
+  const { patches, sdk } = await setup({ fake: { duration: 90 } });
+  const player = sdk.instances[0]!;
+  patches.length = 0;
+
+  player.setChapters(introAndBody);
+  player.emit('chapterchange', { startTime: 0, title: 'Intro', index: 1 });
+  await flushMicrotasks();
+
+  const merged = patches.reduce<ProviderStatePatch>(
+    (accumulated, patch) => ({ ...accumulated, ...patch }),
+    {}
+  );
+  expect(merged.chapters).toEqual([
+    { id: 'vimeo:1', title: 'Intro', startTime: 0, endTime: 30 },
+    { id: 'vimeo:2', title: 'Body', startTime: 30, endTime: 90 }
+  ]);
+  expect(merged.capabilities?.chapters).toEqual({ status: 'available' });
+  expect(player.getChapters).toHaveBeenCalledTimes(2);
+});
+
+test('a chapterchange that changes nothing publishes nothing', async () => {
+  const { patches, sdk } = await setup({
+    fake: { chapters: introAndBody, duration: 90 }
+  });
+  const player = sdk.instances[0]!;
+  patches.length = 0;
+
+  player.emit('chapterchange', { startTime: 30, title: 'Body', index: 2 });
+  await flushMicrotasks();
+
+  expect(patches).toEqual([]);
+});
+
+// An embed that does not implement `getChapters` still answers it, and the
+// answer resolves rather than rejects — `null` is what the e2e fixture's
+// catch-all sends back. Trusting that shape threw a TypeError out of the attach
+// path and put activation on `error` (#182).
+const unlistedChapterAnswers: ReadonlyArray<readonly [string, unknown]> = [
+  ['null', null],
+  ['a non-list', { chapters: [] }]
+];
+
+for (const [label, answer] of unlistedChapterAnswers) {
+  test(`stays ready when the embed answers getChapters with ${label}`, async () => {
+    const { patches } = await setup({
+      fake: {
+        duration: 90,
+        getChapters: () =>
+          Promise.resolve(answer as ReadonlyArray<VimeoSdkChapter>)
+      }
+    });
+
+    const ready = readyPatch(patches);
+    expect(ready.activation).toBe('ready');
+    expect(ready.chapters).toEqual([]);
+    expect(ready.capabilities?.chapters).toEqual({
+      status: 'unavailable',
+      reason: 'source'
+    });
+  });
+}
+
+test('drops chapter entries the SDK reports without a start or a title', async () => {
+  const { patches } = await setup({
+    fake: {
+      duration: 90,
+      chapters: [
+        { startTime: 0, title: 'Intro', index: 1 },
+        { title: 'No start', index: 2 } as unknown as VimeoSdkChapter,
+        { startTime: 60, index: 3 } as unknown as VimeoSdkChapter
+      ]
+    }
+  });
+
+  const ready = readyPatch(patches);
+  expect(ready.activation).toBe('ready');
+  expect(ready.chapters).toEqual([
+    { id: 'vimeo:1', title: 'Intro', startTime: 0, endTime: 90 }
+  ]);
+  expect(ready.capabilities?.chapters).toEqual({ status: 'available' });
+});
+
+test('stays ready when a chapterchange answers with a non-list', async () => {
+  const { patches, sdk } = await setup({
+    fake: { chapters: introAndBody, duration: 90 }
+  });
+  const player = sdk.instances[0]!;
+  patches.length = 0;
+
+  player.setChapters(null as unknown as ReadonlyArray<VimeoSdkChapter>);
+  player.emit('chapterchange', { startTime: 0, title: 'Intro', index: 1 });
+  await flushMicrotasks();
+
+  const merged = patches.reduce<ProviderStatePatch>(
+    (accumulated, patch) => ({ ...accumulated, ...patch }),
+    {}
+  );
+  expect(merged.chapters).toEqual([]);
+  expect(merged.capabilities?.chapters).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
+// --- subscriber isolation (#233) ---
+
+// The deliberate throws below are rethrown on a fresh task so they still reach
+// uncaught-error handling; captured rather than run, which is what keeps them
+// from landing in the runner as an unhandled error.
+const captureRethrows = (): unknown[] => {
+  const errors: unknown[] = [];
+  const real = globalThis.queueMicrotask;
+  // Wrapped rather than replaced: the fixtures schedule microtasks of their
+  // own, and swallowing those would stall the very load these tests drive.
+  globalThis.queueMicrotask = (task: () => void) =>
+    real(() => {
+      try {
+        task();
+      } catch (error) {
+        errors.push(error);
+      }
+    });
+  onTestFinished(() => {
+    globalThis.queueMicrotask = real;
+  });
+  return errors;
+};
+
+// #95, reached through the adapter's own fan-out rather than the controller's
+// (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
+// behind the thrower missed that notification — and the throw escaped back
+// into the caller of `emit`, which on this path is the Vimeo SDK's own event
+// dispatch.
+test('a throwing subscriber does not starve the subscribers behind it', async () => {
+  const { sdk, provider } = await setup();
+  captureRethrows();
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  const after = vi.fn();
+  provider.subscribe(after);
+
+  expect(() =>
+    sdk.instances[0]!.emit('play', { duration: 60, percent: 0, seconds: 0 })
+  ).not.toThrow();
+
+  expect(after.mock.calls.at(-1)?.[0]).toMatchObject({ playback: 'playing' });
+});
+
+// The second half of #95, and the one that misattributes the defect: the start
+// path emits inside its own try, so a subscriber throwing there was caught by
+// the load's catch and mapped through `loadFailure` — reporting a consumer's
+// rendering bug to the user as "The Vimeo player could not load".
+test('a throwing subscriber is not reported as a Vimeo load failure', async () => {
+  captureRethrows();
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource);
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  const patches: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  await provider.load();
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+  expect(readyPatch(patches).activation).toBe('ready');
+});
+
+// The dimension channel is its own set, iterated the same way.
+test('a throwing dimension listener does not starve the listeners behind it', async () => {
+  const { sdk, provider } = await setup();
+  captureRethrows();
+  provider.subscribeDimensions?.(() => {
+    throw new Error('dimension listener blew up');
+  });
+  const seen: Array<MediaDimensions | undefined> = [];
+  provider.subscribeDimensions?.((next) => seen.push(next));
+
+  expect(() =>
+    sdk.instances[0]!.emit('resize', { videoWidth: 1920, videoHeight: 1080 })
+  ).not.toThrow();
+
+  expect(seen.at(-1)).toEqual({ width: 1920, height: 1080 });
+});
+
+// As is the cue channel.
+test('a throwing cue listener does not starve the listeners behind it', async () => {
+  const { sdk, provider } = await setup({
+    fake: {
+      textTracks: [
+        { label: 'English', language: 'en', kind: 'captions', mode: 'disabled' }
+      ]
+    }
+  });
+  await provider.selectTextTrack?.('vimeo:captions:en');
+  captureRethrows();
+  provider.subscribeCues?.(() => {
+    throw new Error('cue listener blew up');
+  });
+  const cueFrames: Array<readonly TextCue[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+
+  expect(() =>
+    sdk.instances[0]!.emit('cuechange', {
+      cues: [{ text: 'Hello', startTime: 1, endTime: 2 }]
+    })
+  ).not.toThrow();
+
+  expect(cueFrames.at(-1)).toMatchObject([{ text: 'Hello' }]);
 });

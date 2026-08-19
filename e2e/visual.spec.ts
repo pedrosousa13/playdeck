@@ -16,7 +16,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const story = (id: string): string => `/iframe.html?id=${id}&viewMode=story`;
 
-const part = (name: string): string => `[data-reely-part="${name}"]`;
+const part = (name: string): string => `[data-playdeck-part="${name}"]`;
 
 type Box = { x: number; y: number; width: number; height: number };
 
@@ -134,7 +134,7 @@ test('the caption cue paints above the control row', async ({ page }) => {
   // has already had once.
   expect(await paintsAtItsCentre(page, part('caption-cue'))).toBe(true);
 
-  const player = await boxOf(page, '.reely-example');
+  const player = await boxOf(page, '.playdeck-example');
   for (const name of ['poster', 'gestures', 'captions', 'controls']) {
     expect(
       covers(player, await boxOf(page, part(name))),
@@ -157,7 +157,7 @@ test('the settings menu paints above the control row it opens from', async ({
     .locator(`${part('settings-menu-trigger')}[aria-label="Settings"]`)
     .click();
   await expect(page.locator(part('settings-menu'))).toHaveAttribute(
-    'data-reely-menu',
+    'data-playdeck-menu',
     'open'
   );
 
@@ -178,19 +178,19 @@ test('a 320px container keeps every layer inside the player', async ({
   page
 }) => {
   // #111's case, and the reason this spec exists. `container-type: inline-size`
-  // makes `.reely-example` a containing block for every absolutely-positioned
+  // makes `.playdeck-example` a containing block for every absolutely-positioned
   // overlay in it and gives it its own stacking context. All 163 e2e tests
   // passed when that landed and none of them could see a layer move.
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(story('reference-player--composition'));
-  // `#storybook-root`, not `.reely-example`: the story injects its stylesheet
+  // `#storybook-root`, not `.playdeck-example`: the story injects its stylesheet
   // from the body, so a rule added here loses to it on document order at equal
   // specificity (measured — the player stayed 768px). Constraining the
   // container is also what an embed in a narrow column actually does.
   await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
   await expect(page.locator(part('controls'))).toBeVisible();
 
-  const player = await boxOf(page, '.reely-example');
+  const player = await boxOf(page, '.playdeck-example');
   expect(player.width).toBeLessThanOrEqual(320);
 
   // The container query fires on the player's width while the viewport stays
@@ -198,7 +198,7 @@ test('a 320px container keeps every layer inside the player', async ({
   // this proves structurally.
   await expect(page.locator(part('volume-slider'))).toBeHidden();
 
-  expect(await overflowOf(page, '.reely-example')).toBeLessThanOrEqual(0);
+  expect(await overflowOf(page, '.playdeck-example')).toBeLessThanOrEqual(0);
   expect(await overflowOf(page, part('controls'))).toBeLessThanOrEqual(0);
   expect(await paintsAtItsCentre(page, part('controls'))).toBe(true);
   for (const name of ['poster', 'gestures', 'controls']) {
@@ -212,7 +212,7 @@ test('a 320px container keeps every layer inside the player', async ({
   // the box is still ratio-locked and the row is eating the poster.
   expect(
     await page.evaluate(() => {
-      const el = document.querySelector('[data-reely-part="controls"]');
+      const el = document.querySelector('[data-playdeck-part="controls"]');
       if (el === null) throw new Error('no control row');
       return getComputedStyle(el).position;
     })
@@ -226,7 +226,7 @@ test('the idle and error states hand the whole player to their overlay', async (
   await page.goto(story('reference-player--idle'));
   await expect(page.locator(part('activation'))).toBeVisible();
 
-  const idlePlayer = await boxOf(page, '.reely-example');
+  const idlePlayer = await boxOf(page, '.playdeck-example');
   expect(covers(await boxOf(page, part('activation')), idlePlayer)).toBe(true);
   // Above `Poster` and `Gestures`, which is what makes it clickable at all.
   expect(await paintsAtItsCentre(page, part('activation'))).toBe(true);
@@ -237,7 +237,7 @@ test('the idle and error states hand the whole player to their overlay', async (
   await page.goto(story('reference-player--error-state'));
   await expect(page.locator(part('error'))).toBeVisible();
 
-  const errorPlayer = await boxOf(page, '.reely-example');
+  const errorPlayer = await boxOf(page, '.playdeck-example');
   expect(covers(await boxOf(page, part('error')), errorPlayer)).toBe(true);
   expect(await paintsAtItsCentre(page, part('error'))).toBe(true);
   await expect(page.locator(part('controls'))).toBeHidden();
@@ -353,7 +353,7 @@ test('a non-recoverable error surface covers the viewport without a retry afford
 test('the themed control row lays out with theme.css mounted', async ({
   page
 }) => {
-  // The only story that mounts `@reely/react/theme.css`. Deliberately not
+  // The only story that mounts `@playdeck/react/theme.css`. Deliberately not
   // asserting a background colour: measured, the themed row resolves
   // `rgba(0, 0, 0, 0)` — the theme styles the controls, not the bar.
   await page.goto(story('theme-theme--default'));
@@ -408,7 +408,7 @@ test.describe('reference example baselines', () => {
   test('idle', async ({ page }) => {
     await page.goto(story('reference-player--idle'));
     await expect(page.locator(part('activation'))).toBeVisible();
-    await expect(page.locator('.reely-example')).toHaveScreenshot(
+    await expect(page.locator('.playdeck-example')).toHaveScreenshot(
       'reference-idle.png',
       shot
     );
@@ -417,7 +417,7 @@ test.describe('reference example baselines', () => {
   test('composition', async ({ page }) => {
     await page.goto(story('reference-player--composition'));
     await expect(page.locator(part('caption-cue'))).toBeVisible();
-    await expect(page.locator('.reely-example')).toHaveScreenshot(
+    await expect(page.locator('.playdeck-example')).toHaveScreenshot(
       'reference-composition.png',
       shot
     );
@@ -430,10 +430,10 @@ test.describe('reference example baselines', () => {
       .locator(`${part('settings-menu-trigger')}[aria-label="Settings"]`)
       .click();
     await expect(page.locator(part('settings-menu'))).toHaveAttribute(
-      'data-reely-menu',
+      'data-playdeck-menu',
       'open'
     );
-    await expect(page.locator('.reely-example')).toHaveScreenshot(
+    await expect(page.locator('.playdeck-example')).toHaveScreenshot(
       'reference-menu-open.png',
       shot
     );
@@ -444,7 +444,7 @@ test.describe('reference example baselines', () => {
     await page.goto(story('reference-player--composition'));
     await page.addStyleTag({ content: '#storybook-root { width: 320px; }' });
     await expect(page.locator(part('volume-slider'))).toBeHidden();
-    await expect(page.locator('.reely-example')).toHaveScreenshot(
+    await expect(page.locator('.playdeck-example')).toHaveScreenshot(
       'reference-narrow.png',
       shot
     );
@@ -453,7 +453,7 @@ test.describe('reference example baselines', () => {
   test('error state', async ({ page }) => {
     await page.goto(story('reference-player--error-state'));
     await expect(page.locator(part('error'))).toBeVisible();
-    await expect(page.locator('.reely-example')).toHaveScreenshot(
+    await expect(page.locator('.playdeck-example')).toHaveScreenshot(
       'reference-error.png',
       shot
     );

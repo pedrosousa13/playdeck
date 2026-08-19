@@ -1,7 +1,7 @@
 {
-  "name": "@reely/provider-hls",
-  "version": "0.0.0",
-  "description": "HLS provider for Reely, over hls.js or the browser’s native HLS.",
+  "name": "@playdeck/provider-hls",
+  "version": "0.1.0",
+  "description": "HLS provider for Playdeck, over hls.js or the browser’s native HLS.",
   "keywords": [
     "media",
     "player",
@@ -10,14 +10,14 @@
     "hls.js"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/provider-hls#readme",
+  "homepage": "https://github.com/pedrosousa13/playdeck/tree/main/packages/provider-hls#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "url": "git+https://github.com/pedrosousa13/playdeck.git",
     "directory": "packages/provider-hls"
   },
   "bugs": {
-    "url": "https://github.com/pedrosousa13/reely/issues"
+    "url": "https://github.com/pedrosousa13/playdeck/issues"
   },
   "type": "module",
   "sideEffects": false,
@@ -44,8 +44,8 @@
     "provenance": true
   },
   "dependencies": {
-    "@reely/core": "workspace:^",
-    "@reely/provider-native": "workspace:^",
+    "@playdeck/core": "workspace:^",
+    "@playdeck/provider-native": "workspace:^",
     "hls.js": "1.6.16"
   },
   "scripts": {

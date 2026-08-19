@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-// The `data-reely-part` bullet in Contract.mdx reads as the catalogue of parts
+// The `data-playdeck-part` bullet in Contract.mdx reads as the catalogue of parts
 // -- the section around it says to style and query against these attributes --
 // and nothing checked it, so it drifted: the captions-rendering, settings-menu
 // and gestures families landed as primitives and never reached the page (#178).
@@ -43,7 +43,7 @@ const sources = await Promise.all(
     })
 );
 
-const literalPart = /data-reely-part="([^"]+)"/g;
+const literalPart = /data-playdeck-part="([^"]+)"/g;
 
 // Every part value the primitives emit.
 const emitted = new Set(
@@ -58,23 +58,23 @@ const page = await readFile(new URL('./Contract.mdx', import.meta.url), 'utf8');
 // in it: the sentences after the list name parts (`error-retry`) and primitives
 // (`ErrorDisplay`) in the same backticks, so backticks alone would read a
 // primitive's name as a part and let a real omission hide behind a mention.
-const bullet = /^- \*\*`data-reely-part`\*\*[\s\S]*?(?=^- \*\*)/m.exec(
+const bullet = /^- \*\*`data-playdeck-part`\*\*[\s\S]*?(?=^- \*\*)/m.exec(
   page
 )?.[0];
 if (bullet === undefined) {
-  throw new Error('Contract.mdx has no `data-reely-part` bullet to check.');
+  throw new Error('Contract.mdx has no `data-playdeck-part` bullet to check.');
 }
 const list = /\(([^)]*)\)/.exec(bullet)?.[1];
 if (list === undefined) {
   throw new Error(
-    'The `data-reely-part` bullet names no parenthesised list of parts.'
+    'The `data-playdeck-part` bullet names no parenthesised list of parts.'
   );
 }
 const documented = new Set(
   [...list.matchAll(/`([^`]+)`/g)].map(([, part]) => part)
 );
 
-describe('the data-reely-part list is the whole contract', () => {
+describe('the data-playdeck-part list is the whole contract', () => {
   it('derives a non-empty set from each side', () => {
     // Guards against a vacuous pass if either derivation ever breaks: an empty
     // `emitted` makes "the page names every part" trivially true, and an empty
@@ -85,16 +85,16 @@ describe('the data-reely-part list is the whole contract', () => {
     ).toBeGreaterThan(0);
     expect(
       documented.size,
-      'No parts were read out of the data-reely-part bullet in Contract.mdx -- the bullet or list regex broke, which says nothing about the contract.'
+      'No parts were read out of the data-playdeck-part bullet in Contract.mdx -- the bullet or list regex broke, which says nothing about the contract.'
     ).toBeGreaterThan(0);
   });
 
   it('every part value in the source is a plain string literal', () => {
-    // `emitted` can only read `data-reely-part="..."`, so rather than guess at
+    // `emitted` can only read `data-playdeck-part="..."`, so rather than guess at
     // the ways an emission could be written instead, this counts. Every
     // occurrence of the string in the sources must be claimed by a
     // literal-attribute match, which catches the forms that would otherwise go
-    // unread -- an object or spread (`{...{'data-reely-part': x}}`), a computed
+    // unread -- an object or spread (`{...{'data-playdeck-part': x}}`), a computed
     // JSX value. And a captured value holding `${` is an interpolated template
     // literal, which does match but names no part, so it is rejected too.
     //
@@ -102,19 +102,19 @@ describe('the data-reely-part list is the whole contract', () => {
     // these files at all -- an attribute name assembled from fragments, or one
     // set from a package this scan does not read.
     const unreadable = sources.flatMap(({ file, source }) => {
-      const occurrences = source.split('data-reely-part').length - 1;
+      const occurrences = source.split('data-playdeck-part').length - 1;
       const literals = [...source.matchAll(literalPart)];
       return [
         ...(literals.length < occurrences
           ? [
-              `packages/react/src/${file} writes data-reely-part ${occurrences - literals.length} time(s) in a form other than a string-literal attribute, which this gate cannot read.`
+              `packages/react/src/${file} writes data-playdeck-part ${occurrences - literals.length} time(s) in a form other than a string-literal attribute, which this gate cannot read.`
             ]
           : []),
         ...literals
           .filter(([, part]) => part.includes('${'))
           .map(
             ([, part]) =>
-              `packages/react/src/${file} interpolates data-reely-part="${part}", which is a template literal rather than a part name.`
+              `packages/react/src/${file} interpolates data-playdeck-part="${part}", which is a template literal rather than a part name.`
           )
       ];
     });
@@ -127,7 +127,7 @@ describe('the data-reely-part list is the whole contract', () => {
       .sort()
       .map(
         (part) =>
-          `\`${part}\` is emitted by a primitive in packages/react/src but missing from the data-reely-part list in Contract.mdx.`
+          `\`${part}\` is emitted by a primitive in packages/react/src but missing from the data-playdeck-part list in Contract.mdx.`
       );
     expect(undocumented).toEqual([]);
   });
@@ -140,7 +140,7 @@ describe('the data-reely-part list is the whole contract', () => {
       .sort()
       .map(
         (part) =>
-          `\`${part}\` is listed in the data-reely-part list in Contract.mdx but no primitive in packages/react/src emits it.`
+          `\`${part}\` is listed in the data-playdeck-part list in Contract.mdx but no primitive in packages/react/src emits it.`
       );
     expect(phantom).toEqual([]);
   });

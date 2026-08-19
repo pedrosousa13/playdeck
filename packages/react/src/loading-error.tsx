@@ -1,4 +1,4 @@
-import type { PlayerError } from '@reely/core';
+import type { PlayerError } from '@playdeck/core';
 import { usePlayer, usePlayerState } from './player-context.js';
 import {
   useEffect,
@@ -41,7 +41,7 @@ export const ActivationButton = ({
   const isError = activation === 'error';
   const isLoading = activation === 'loading-provider';
   // Retryability is the state's to state, through `recoverable` (see
-  // `PlayerError` in @reely/core), and is never re-derived from the error's
+  // `PlayerError` in @playdeck/core), and is never re-derived from the error's
   // category here (#198): a notice that says nothing about retrying must not
   // disable this control. An activation error carrying no error record says
   // nothing either, so it stays retryable, as it always was.
@@ -53,7 +53,7 @@ export const ActivationButton = ({
       {...props}
       aria-disabled={isDisabled || undefined}
       aria-label={label}
-      data-reely-part="activation"
+      data-playdeck-part="activation"
       data-state={activation}
       onClick={(event) => {
         onClick?.(event);
@@ -211,7 +211,7 @@ export const LoadingIndicator = ({
     <div
       {...props}
       aria-live="polite"
-      data-reely-part="loading-indicator"
+      data-playdeck-part="loading-indicator"
       data-state={active ?? 'idle'}
       role="status"
       // The *branch* is state-derived and stays the primitive's; the contents
@@ -266,7 +266,7 @@ export const ErrorDisplay = ({
   const { controller } = usePlayer();
   if (!error) return null;
   // `recoverable` is the state-level signal that a retry is worth offering (see
-  // `PlayerError` in @reely/core), and `ActivationButton` reads the same one.
+  // `PlayerError` in @playdeck/core), and `ActivationButton` reads the same one.
   // Absent — not disabled — when it does not hold (issue #34 capability rule).
   const retry = error.recoverable
     ? () => {
@@ -278,7 +278,7 @@ export const ErrorDisplay = ({
     <div
       {...props}
       data-provider={provider ?? undefined}
-      data-reely-part="error"
+      data-playdeck-part="error"
       data-state={error.category}
       role="alert"
       style={{ ...errorOverlayStyle, ...style }}
@@ -287,10 +287,10 @@ export const ErrorDisplay = ({
         children({ error, retry })
       ) : (
         <>
-          <p data-reely-part="error-message">{error.message}</p>
+          <p data-playdeck-part="error-message">{error.message}</p>
           {retry && (
             <button
-              data-reely-part="error-retry"
+              data-playdeck-part="error-retry"
               onClick={retry}
               style={controlTargetStyle}
               type="button"

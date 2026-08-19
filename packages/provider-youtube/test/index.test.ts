@@ -1,7 +1,26 @@
 // @vitest-environment happy-dom
+// @vitest-environment-options { "settings": { "navigation": { "disableChildFrameNavigation": true } } }
+//
+// This suite stays offline, and the option above is what now keeps it so. The
+// adapter builds the embed iframe itself and gives it a real `src`, and
+// happy-dom loads an iframe's page as soon as the element is connected — so
+// every attach here would otherwise reach youtube-nocookie.com over the
+// network. With child-frame navigation disabled the frame keeps its url and
+// fetches nothing, so the url stays assertable and no request leaves. Before
+// the iframe was the adapter's, the fake's `data-embed-src` is what kept this
+// promise; the promise is the same one.
+//
+// `provider-vimeo/test/index.test.ts` buys the same guarantee with
+// `disableIframePageLoading`, which happy-dom deprecates in favour of this
+// setting and which logs a `NotSupportedError` per frame rather than staying
+// quiet. Same intent, newer spelling.
 
-import { afterEach, expect, test, vi } from 'vitest';
-import type { ProviderEvent, ProviderStatePatch } from '@reely/core';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
+import {
+  PlayerController,
+  type ProviderEvent,
+  type ProviderStatePatch
+} from '@playdeck/core';
 import {
   createYouTubeProvider,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
@@ -29,7 +48,6 @@ type FakeCaptionTrack = {
 };
 
 type FakePlayerHarness = {
-  readonly element: HTMLElement;
   readonly iframe: HTMLIFrameElement;
   readonly options: YouTubePlayerOptions;
   readonly player: YouTubePlayer;
@@ -51,18 +69,16 @@ type FakePlayerHarness = {
 
 const createFakeYouTube = () => {
   const players: FakePlayerHarness[] = [];
+  // Handed an iframe that already exists, the real API adopts it rather than
+  // building one of its own, and answers it from `getIframe()`. Everything
+  // about the embed — its host, its video and its player vars — is on the
+  // `src` the caller wrote, so this fake reads nothing from `options` but the
+  // events.
   const Player = function (
-    element: HTMLElement,
+    iframe: HTMLIFrameElement,
     options: YouTubePlayerOptions
   ) {
-    const iframe = document.createElement('iframe');
-    // A real src would make happy-dom fetch the embed; keep the suite offline.
-    iframe.dataset.embedSrc = `${options.host ?? 'https://www.youtube.com'}/embed/${
-      options.videoId ?? ''
-    }`;
-    element.replaceWith(iframe);
     const harness: FakePlayerHarness = {
-      element,
       iframe,
       options,
       state: playerStates.UNSTARTED,
@@ -156,6 +172,15 @@ const createFakeYouTube = () => {
     players
   };
 };
+
+// Where the embed is described now: the adapter builds the iframe, so its host,
+// its video and every player var are on the url it carries into the document
+// rather than in the options the constructor is called with.
+const embedUrl = (harness: FakePlayerHarness): URL =>
+  new URL(harness.iframe.src);
+
+const embedVars = (harness: FakePlayerHarness): Record<string, string> =>
+  Object.fromEntries(embedUrl(harness).searchParams);
 
 const createAdapter = (
   videoId = 'dQw4w9WgXcQ',
@@ -268,19 +293,19 @@ test('a valid video id still constructs the player exactly as before, unaffected
   await provider.load();
 
   expect(fake.players).toHaveLength(1);
-  expect(fake.players[0]!.options).toMatchObject({
-    host: 'https://www.youtube-nocookie.com',
-    videoId: 'M7lc1UVf-VE',
-    width: '100%',
-    height: '100%',
-    playerVars: expect.objectContaining({
-      autoplay: 0,
-      controls: 0,
-      loop: 0,
-      playsinline: 1,
-      rel: 0
-    })
+  const harness = fake.players[0]!;
+  expect(embedUrl(harness).origin).toBe('https://www.youtube-nocookie.com');
+  expect(embedUrl(harness).pathname).toBe('/embed/M7lc1UVf-VE');
+  expect(embedVars(harness)).toMatchObject({
+    enablejsapi: '1',
+    autoplay: '0',
+    controls: '0',
+    loop: '0',
+    playsinline: '1',
+    rel: '0'
   });
+  expect(harness.iframe.getAttribute('width')).toBe('100%');
+  expect(harness.iframe.getAttribute('height')).toBe('100%');
 });
 
 test('youtube adapter conforms to lifecycle and event-confirmed playback', async () => {
@@ -316,19 +341,44 @@ test('creates the player against the privacy-enhanced host without autoplay', as
   await provider.load();
 
   const harness = fake.players[0]!;
-  expect(harness.options.host).toBe('https://www.youtube-nocookie.com');
-  expect(harness.options.videoId).toBe('M7lc1UVf-VE');
-  expect(harness.options.playerVars).toMatchObject({
-    autoplay: 0,
+  expect(embedUrl(harness).origin).toBe('https://www.youtube-nocookie.com');
+  expect(embedUrl(harness).pathname).toBe('/embed/M7lc1UVf-VE');
+  expect(embedVars(harness)).toMatchObject({
+    autoplay: '0',
     origin: window.location.origin,
-    playsinline: 1
+    playsinline: '1'
   });
   expect(mount.contains(harness.iframe)).toBe(true);
 });
 
+// The `Referer` header goes out with the iframe's very first request, so the
+// policy has to be on the element before it is in the document: an attribute
+// written afterwards changes nothing about a request already sent. That
+// ordering is the whole point of building the iframe here rather than letting
+// the iframe API build one.
+test('declares the referrer policy before the embed iframe enters the document', async () => {
+  const { fake, mount, provider } = createAdapter('M7lc1UVf-VE');
+  const policiesAtAppend: (string | null)[] = [];
+  const append = mount.appendChild.bind(mount);
+  mount.appendChild = (<T extends Node>(node: T): T => {
+    policiesAtAppend.push(
+      node instanceof Element ? node.getAttribute('referrerpolicy') : null
+    );
+    return append(node);
+  }) as typeof mount.appendChild;
+
+  await provider.attach();
+  await provider.load();
+
+  expect(policiesAtAppend).toEqual(['strict-origin-when-cross-origin']);
+  expect(fake.players[0]!.iframe.getAttribute('referrerpolicy')).toBe(
+    'strict-origin-when-cross-origin'
+  );
+});
+
 // `host` decides the origin the embed iframe is built from, so only the two
-// origins YouTube serves that embed from are honoured. These two are handed to
-// the iframe API unchanged.
+// origins YouTube serves that embed from are honoured. These two are written
+// into the embed url unchanged.
 test.each([
   ['https://www.youtube.com'],
   ['https://www.youtube-nocookie.com']
@@ -339,11 +389,11 @@ test.each([
   await provider.load();
 
   const harness = fake.players[0]!;
-  expect(harness.options.host).toBe(host);
+  expect(embedUrl(harness).origin).toBe(host);
   // The `origin` player var is the embedding page's own origin for an accepted
   // `host` as much as for a rejected one: it is the origin YouTube validates
   // postMessage against, and it never tracks `host` in either direction.
-  expect(harness.options.playerVars).toMatchObject({
+  expect(embedVars(harness)).toMatchObject({
     origin: window.location.origin
   });
 });
@@ -366,8 +416,8 @@ test.each([
     await provider.load();
 
     const harness = fake.players[0]!;
-    expect(harness.options.host).toBe(expected);
-    expect(harness.options.playerVars).toMatchObject({
+    expect(embedUrl(harness).origin).toBe(expected);
+    expect(embedVars(harness)).toMatchObject({
       origin: window.location.origin
     });
   }
@@ -392,26 +442,92 @@ test.each([
     await provider.load();
 
     const harness = fake.players[0]!;
-    expect(harness.options.host).toBe('https://www.youtube-nocookie.com');
+    expect(embedUrl(harness).origin).toBe('https://www.youtube-nocookie.com');
     // The `origin` player var is the embedding page's own origin, not the
     // host — it is what a wrong `host` would have disclosed the page to. It
     // never carries the rejected value.
-    expect(harness.options.playerVars).toMatchObject({
+    expect(embedVars(harness)).toMatchObject({
       origin: window.location.origin
     });
   }
 );
+
+// The fallback above used to be silent; it now also publishes a non-fatal
+// `configuration` notice, so a rejected `host` is observable rather than
+// merely safe (#235).
+test('does not publish a notice when host is unset', () => {
+  const { patches } = createAdapter('M7lc1UVf-VE');
+
+  expect(patches).toHaveLength(0);
+});
+
+test.each([
+  ['https://www.youtube.com'],
+  ['https://www.youtube-nocookie.com']
+] as const)('does not publish a notice for the %s host option', (host) => {
+  const { patches } = createAdapter('M7lc1UVf-VE', { host });
+
+  expect(patches).toHaveLength(0);
+});
+
+test.each([
+  ['an unrelated origin', 'https://videos.example.com'],
+  ['a lookalike origin', 'https://www.youtube.com.example.com'],
+  ['a malformed url', 'www.youtube.com'],
+  ['an empty string', '']
+] as const)(
+  'publishes a configuration notice when the host option is %s',
+  (_label, host) => {
+    const { patches } = createAdapter('M7lc1UVf-VE', { host });
+
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toMatchObject({
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false
+      }
+    });
+    // Not a state transition: only `error` is set.
+    expect(patches[0]?.lifecycle).toBeUndefined();
+    expect(patches[0]?.activation).toBeUndefined();
+    expect(patches[0]?.commandsReady).toBeUndefined();
+    // Names the option and the fallback, never the rejected value.
+    expect(patches[0]?.error?.message).toBe(
+      'The host option was rejected, so the default host was used.'
+    );
+    if (host) expect(patches[0]?.error?.message).not.toContain(host);
+  }
+);
+
+test('delivers the host notice to a subscriber that registers late', () => {
+  const fake = createFakeYouTube();
+  const mount = document.createElement('div');
+  document.body.appendChild(mount);
+  const provider = createYouTubeProvider(mount, 'M7lc1UVf-VE', {
+    host: 'https://videos.example.com',
+    loadIframeApi: () => Promise.resolve(fake.api)
+  });
+
+  const late: ProviderStatePatch[] = [];
+  provider.subscribe((patch) => late.push(patch));
+
+  expect(late).toHaveLength(1);
+  expect(late[0]).toMatchObject({
+    error: { category: 'configuration', fatal: false, recoverable: false }
+  });
+});
 
 // Vimeo's own embed url sets `controls` the same way
 // (`provider-vimeo/src/attachment.ts:62`, `options.controls === true ? '1' :
 // '0'`): unset and `false` both mean chromeless. This pins YouTube to the
 // same polarity so the two cannot drift.
 test.each([
-  ['unset', undefined, 0],
-  ['false', false, 0],
-  ['true', true, 1]
+  ['unset', undefined, '0'],
+  ['false', false, '0'],
+  ['true', true, '1']
 ] as const)(
-  'sets playerVars.controls to the expected value when the controls option is %s',
+  'sets the controls player var to the expected value when the controls option is %s',
   async (_label, controls, expected) => {
     const { fake, provider } = createAdapter('M7lc1UVf-VE', { controls });
 
@@ -419,7 +535,7 @@ test.each([
     await provider.load();
 
     const harness = fake.players[0]!;
-    expect(harness.options.playerVars).toMatchObject({ controls: expected });
+    expect(embedVars(harness)).toMatchObject({ controls: expected });
   }
 );
 
@@ -439,9 +555,9 @@ test.each([
     await provider.attach();
     await provider.load();
 
-    const { playerVars } = fake.players[0]!.options;
-    expect(playerVars).toMatchObject({ loop: 0 });
-    expect(playerVars).not.toHaveProperty('playlist');
+    const vars = embedVars(fake.players[0]!);
+    expect(vars).toMatchObject({ loop: '0' });
+    expect(vars).not.toHaveProperty('playlist');
   }
 );
 
@@ -451,8 +567,8 @@ test('loops a single video by naming it as its own playlist', async () => {
   await provider.attach();
   await provider.load();
 
-  expect(fake.players[0]!.options.playerVars).toMatchObject({
-    loop: 1,
+  expect(embedVars(fake.players[0]!)).toMatchObject({
+    loop: '1',
     playlist: 'M7lc1UVf-VE'
   });
 });
@@ -503,6 +619,7 @@ test('maps player ready onto confirmed state and honest capabilities', async () 
         setPlaybackRate: { status: 'available' },
         selectQuality: { status: 'unavailable', reason: 'provider' },
         selectTextTrack: { status: 'unavailable', reason: 'source' },
+        chapters: { status: 'unavailable', reason: 'provider' },
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
@@ -1288,7 +1405,7 @@ test('youtube declares command readiness only at onReady', async () => {
 
 // The mount is a bare <div> and the IFrame API exposes no intrinsic media
 // size, so there is nothing to measure. Absence is the contract: it is what
-// leaves `--reely-media-aspect-ratio` unset, so the consumer's own
+// leaves `--playdeck-media-aspect-ratio` unset, so the consumer's own
 // `var(…, 16 / 9)` fallback is the one that applies. A member returning
 // `undefined` forever would be a worse lie than not having one.
 test('youtube declares no dimension channel', async () => {
@@ -1341,9 +1458,9 @@ test('writes the whole-second start player var as a load hint', async () => {
   await provider.attach();
   await provider.load();
 
-  const { playerVars } = fake.players[0]!.options;
-  expect(playerVars).toMatchObject({ start: 12 });
-  expect(playerVars).not.toHaveProperty('end');
+  const vars = embedVars(fake.players[0]!);
+  expect(vars).toMatchObject({ start: '12' });
+  expect(vars).not.toHaveProperty('end');
 });
 
 test('publishes one ended patch at the end boundary and pauses the player', async () => {
@@ -1480,7 +1597,7 @@ test.each([
     const { harness } = await readyAdapter('M7lc1UVf-VE', { startTime });
 
     expect(harness.player.seekTo).not.toHaveBeenCalled();
-    expect(harness.options.playerVars).not.toHaveProperty('start');
+    expect(embedVars(harness)).not.toHaveProperty('start');
   }
 );
 
@@ -1665,4 +1782,72 @@ test('pins the liveness gap: no patch ever carries a live key (#187)', async () 
     expect.objectContaining({ playback: 'playing' })
   );
   expect(patches.filter((patch) => 'live' in patch)).toEqual([]);
+});
+
+// The IFrame Player API documents no chapter method and no chapter event, and
+// the Data API's video resource carries no chapter property either. That is a
+// published fact rather than an omission: the collection stays empty, the
+// capability says why, and no command rejects over it (#182).
+test('reports chapters as unavailable for the provider without failing a command', async () => {
+  const controller = new PlayerController();
+  const { fake, provider } = createAdapter();
+  controller.setProvider(provider);
+  await provider.attach();
+  await provider.load();
+  fake.players[0]!.fireReady();
+
+  expect(controller.getState().chapters).toEqual([]);
+  expect(controller.getState().capabilities.chapters).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+  expect(controller.getState().error).toBeNull();
+  expect(await controller.seekTo(10)).toEqual({ ok: true });
+});
+
+// --- subscriber isolation (#233) ---
+
+// The deliberate throw below is rethrown on a fresh task so it still reaches
+// uncaught-error handling; captured rather than run, which is what keeps it
+// from landing in the runner as an unhandled error.
+const captureRethrows = (): unknown[] => {
+  const errors: unknown[] = [];
+  const real = globalThis.queueMicrotask;
+  // Wrapped rather than replaced: the fake player applies its command effects
+  // on a later microtask, and swallowing those would stall this suite.
+  globalThis.queueMicrotask = (task: () => void) =>
+    real(() => {
+      try {
+        task();
+      } catch (error) {
+        errors.push(error);
+      }
+    });
+  onTestFinished(() => {
+    globalThis.queueMicrotask = real;
+  });
+  return errors;
+};
+
+// #95, reached through the adapter's own fan-out rather than the controller's
+// (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
+// behind the thrower missed that notification — and the throw escaped back
+// into the caller of `emit`, which on this path is the iframe API's own event
+// dispatch.
+test('a throwing subscriber does not starve the subscribers behind it', async () => {
+  const { harness, provider } = await readyAdapter();
+  captureRethrows();
+  provider.subscribe(() => {
+    throw new Error('subscriber blew up');
+  });
+  const after = vi.fn();
+  provider.subscribe(after);
+
+  harness.currentTime = 12;
+  expect(() => harness.fireStateChange(playerStates.PLAYING)).not.toThrow();
+
+  expect(after.mock.calls.at(-1)?.[0]).toMatchObject({
+    playback: 'playing',
+    currentTime: 12
+  });
 });

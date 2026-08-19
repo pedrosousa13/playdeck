@@ -4,7 +4,7 @@
 
 **Goal:** Stand up Storybook 10.5.3 as an `apps/storybook` workspace app whose colocated stories all run as Vitest browser-mode tests with axe checks, driven by a mock controller decorator over the private provider-loader seam.
 
-**Architecture:** A private `@reely/storybook` app owns all Storybook config and dependencies. Its Vite config aliases `@reely/*` packages to source and regex-aliases the private `provider-loaders` module to a mock loader backed by the existing `createFakeProvider` fixture. Stories live in `packages/react/src/*.stories.tsx` and render real `Player.Root` wiring via a global decorator.
+**Architecture:** A private `@playdeck/storybook` app owns all Storybook config and dependencies. Its Vite config aliases `@playdeck/*` packages to source and regex-aliases the private `provider-loaders` module to a mock loader backed by the existing `createFakeProvider` fixture. Stories live in `packages/react/src/*.stories.tsx` and render real `Player.Root` wiring via a global decorator.
 
 **Tech Stack:** Storybook 10.5.3 (`@storybook/react-vite`, `addon-vitest`, `addon-a11y`), Vitest 4.1.10 browser mode with `@vitest/browser-playwright` (Chromium), Vite 8.1.5, React 19.2.8.
 
@@ -14,8 +14,8 @@
 
 - Every Storybook package pinned **exact `10.5.3`**; vitest packages exact `4.1.10`; `@playwright/test` exact `1.61.1`; vite `8.1.5`; react/react-dom `19.2.8`.
 - pnpm `allowBuilds` in `pnpm-workspace.yaml` stays exactly `sharp@0.34.5`. If `pnpm install` warns about a new dependency wanting install scripts, STOP and surface it as a decision — do not add to the allowlist.
-- Published packages (`@reely/core`, `@reely/provider-native`, `@reely/react`) get **no new dependencies** and no manifest changes beyond tsconfig excludes.
-- No public API additions to `@reely/react`. The provider-loader seam stays private.
+- Published packages (`@playdeck/core`, `@playdeck/provider-native`, `@playdeck/react`) get **no new dependencies** and no manifest changes beyond tsconfig excludes.
+- No public API additions to `@playdeck/react`. The provider-loader seam stays private.
 - No attribution, co-author, generated-by, or reaction-prompt footers in commits, PRs, or comments.
 - Work only in the `.worktrees/issue-19-storybook` worktree on branch `issue-19-storybook`. Never commit to `main`.
 - Run pnpm install/build/typecheck, Vitest, and Playwright commands **serially** within the worktree.
@@ -41,7 +41,7 @@
 
 **Interfaces:**
 
-- Produces: workspace package `@reely/storybook` with scripts `dev`, `build`; Storybook config with `@reely/*` → source aliases that Tasks 2–4 extend; stories glob `packages/react/src/**/*.stories.tsx`.
+- Produces: workspace package `@playdeck/storybook` with scripts `dev`, `build`; Storybook config with `@playdeck/*` → source aliases that Tasks 2–4 extend; stories glob `packages/react/src/**/*.stories.tsx`.
 
 - [ ] **Step 1: Create the app package manifest**
 
@@ -49,7 +49,7 @@
 
 ```json
 {
-  "name": "@reely/storybook",
+  "name": "@playdeck/storybook",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -60,9 +60,9 @@
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
-    "@reely/core": "workspace:*",
-    "@reely/provider-native": "workspace:*",
-    "@reely/react": "workspace:*",
+    "@playdeck/core": "workspace:*",
+    "@playdeck/provider-native": "workspace:*",
+    "@playdeck/react": "workspace:*",
     "@storybook/addon-a11y": "10.5.3",
     "@storybook/addon-vitest": "10.5.3",
     "@storybook/react-vite": "10.5.3",
@@ -97,15 +97,15 @@ const config: StorybookConfig = {
       resolve: {
         alias: [
           {
-            find: '@reely/react',
+            find: '@playdeck/react',
             replacement: fromRepoRoot('packages/react/src/index.tsx')
           },
           {
-            find: '@reely/core',
+            find: '@playdeck/core',
             replacement: fromRepoRoot('packages/core/src/index.ts')
           },
           {
-            find: '@reely/provider-native',
+            find: '@playdeck/provider-native',
             replacement: fromRepoRoot('packages/provider-native/src/index.ts')
           }
         ]
@@ -162,7 +162,7 @@ export default preview;
 }
 ```
 
-(`src/` and `vitest.config.ts` do not exist yet — a non-matching include pattern is not an error. Stories and the fake-provider fixture are type-checked by THIS project; `@reely/*` imports resolve to built declarations via project references, exactly like `apps/docs`.)
+(`src/` and `vitest.config.ts` do not exist yet — a non-matching include pattern is not an error. Stories and the fake-provider fixture are type-checked by THIS project; `@playdeck/*` imports resolve to built declarations via project references, exactly like `apps/docs`.)
 
 In `packages/react/tsconfig.json` add an exclude so the library build never emits story declarations:
 
@@ -204,7 +204,7 @@ In `eslint.config.js`, add to the `ignores` array:
 
 ```tsx
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const meta = {
   title: 'Player/PosterImage',
@@ -223,7 +223,7 @@ Run (serially):
 
 ```sh
 pnpm install
-pnpm --filter @reely/storybook build
+pnpm --filter @playdeck/storybook build
 ```
 
 Expected: install succeeds with **no** new build-script warnings (if any appear, STOP — reviewed decision required); `storybook build` exits 0 and emits `apps/storybook/storybook-static/`. If Storybook errors on the `stories` glob or aliases, fix the config — do not relax the pins.
@@ -334,7 +334,7 @@ afterEach(() => {
 Root `package.json`, after `"test:integrations"`:
 
 ```json
-    "test:storybook": "pnpm --filter @reely/storybook test",
+    "test:storybook": "pnpm --filter @playdeck/storybook test",
 ```
 
 (keep JSON key order alphabetical-ish with existing style; place next to the other `test:*` scripts.)
@@ -379,7 +379,7 @@ git commit -m "feat: run stories as Vitest browser tests with axe and network gu
 **Interfaces:**
 
 - Consumes: `createFakeProvider` from `packages/react/test/fixtures/fake-provider.ts`; `loadProvider` call-signature from `packages/react/src/provider-loaders.ts` (loader receives `{ source, media, nativeOptions }`, returns `Promise<ProviderAdapter>`).
-- Produces: `setScenario(scenario: MockScenario)`, `getFakeProviderHandle()`, `MockScenario` type; story parameter contract `parameters.reely = { rootProps?, scenario? }`; global decorator `withMockController`.
+- Produces: `setScenario(scenario: MockScenario)`, `getFakeProviderHandle()`, `MockScenario` type; story parameter contract `parameters.playdeck = { rootProps?, scenario? }`; global decorator `withMockController`.
 
 **Read first:** `packages/react/test/activation.test.tsx` (how the fake adapter drives activation) and the spec's "Mock controller decorator" section.
 
@@ -390,7 +390,7 @@ git commit -m "feat: run stories as Vitest browser tests with axe and network gu
 ```tsx
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const viewportStyle = { width: 320, height: 180 } as const;
 
@@ -398,7 +398,7 @@ const meta = {
   title: 'Player/ActivationButton',
   component: Player.ActivationButton,
   parameters: {
-    reely: { rootProps: { loading: 'interaction' } }
+    playdeck: { rootProps: { loading: 'interaction' } }
   },
   render: () => (
     <Player.Viewport style={viewportStyle}>
@@ -442,7 +442,7 @@ export const Eligible: Story = {
 
 export const LoadingProvider: Story = {
   parameters: {
-    reely: {
+    playdeck: {
       rootProps: { loading: 'interaction' },
       scenario: { kind: 'pending' }
     }
@@ -465,7 +465,7 @@ export const LoadingProvider: Story = {
 
 export const ErrorState: Story = {
   parameters: {
-    reely: {
+    playdeck: {
       rootProps: { loading: 'interaction' },
       scenario: { kind: 'reject' }
     }
@@ -483,12 +483,12 @@ export const ErrorState: Story = {
 
 /**
  * Reference play-function interaction pattern for later issues:
- * arrange via `parameters.reely`, act with `userEvent`, assert the
+ * arrange via `parameters.playdeck`, act with `userEvent`, assert the
  * state transition on the part's `data-state` attribute.
  */
 export const ActivatesOnClick: Story = {
   parameters: {
-    reely: {
+    playdeck: {
       rootProps: { loading: 'interaction' },
       scenario: { kind: 'pending' }
     }
@@ -521,7 +521,7 @@ Expected: the new activation stories FAIL (no decorator wraps them in `Player.Ro
 `apps/storybook/src/mock-provider-loader.ts`:
 
 ```ts
-import type { ProviderAdapter, ProviderStatePatch } from '@reely/core';
+import type { ProviderAdapter, ProviderStatePatch } from '@playdeck/core';
 import { createFakeProvider } from '../../../packages/react/test/fixtures/fake-provider';
 
 export type MockScenario =
@@ -588,25 +588,29 @@ export const loadProvider = async (_request: {
 ```tsx
 import type { ComponentProps } from 'react';
 import type { Decorator } from '@storybook/react-vite';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import { setScenario, type MockScenario } from './mock-provider-loader';
 
 type RootProps = Partial<Omit<ComponentProps<typeof Player.Root>, 'children'>>;
 
-export type ReelyParameters = {
+export type PlaydeckParameters = {
   readonly rootProps?: RootProps;
   readonly scenario?: MockScenario;
 };
 
 export const withMockController: Decorator = (Story, context) => {
-  const reely = (context.parameters.reely ?? {}) as ReelyParameters;
+  const playdeck = (context.parameters.playdeck ?? {}) as PlaydeckParameters;
   // Render-phase reset is safe: Root's activation work runs in effects,
   // strictly after this decorator body.
-  setScenario(reely.scenario ?? { kind: 'resolve' });
+  setScenario(playdeck.scenario ?? { kind: 'resolve' });
   return (
     // preload="none" keeps the browser from fetching the fake source once
     // Media renders <source> children; the fake adapter never calls load().
-    <Player.Root source="/media/sample.mp4" preload="none" {...reely.rootProps}>
+    <Player.Root
+      source="/media/sample.mp4"
+      preload="none"
+      {...playdeck.rootProps}
+    >
       <Story />
     </Player.Root>
   );
@@ -653,7 +657,7 @@ Expected: ALL stories pass, including Task 1's `Idle` (now also wrapped in Root 
 - [ ] **Step 7: Verify the static build still succeeds**
 
 ```sh
-pnpm --filter @reely/storybook build
+pnpm --filter @playdeck/storybook build
 ```
 
 Expected: exit 0.
@@ -680,8 +684,8 @@ git commit -m "feat: add mock controller decorator and activation stories"
 
 **Interfaces:**
 
-- Consumes: `parameters.reely` contract and `MockScenario` from Task 3; `afterEach` network guard from Task 2.
-- Produces: `/__reely/hang.png` same-origin endpoint that never responds (dev server + vitest browser server).
+- Consumes: `parameters.playdeck` contract and `MockScenario` from Task 3; `afterEach` network guard from Task 2.
+- Produces: `/__playdeck/hang.png` same-origin endpoint that never responds (dev server + vitest browser server).
 
 - [ ] **Step 1: Write the failing stories**
 
@@ -690,13 +694,13 @@ Replace `packages/react/src/poster.stories.tsx` with:
 ```tsx
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor, within } from 'storybook/test';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const viewportStyle = { width: 320, height: 180 } as const;
 
 // A same-origin endpoint (served by the Storybook app's Vite middleware)
 // that never responds: the image stays in `loading` forever.
-const HANGING_SRC = '/__reely/hang.png';
+const HANGING_SRC = '/__playdeck/hang.png';
 
 // 2x1 blue SVG — loads instantly from memory, no network.
 const LOADED_SRC = `data:image/svg+xml,${encodeURIComponent(
@@ -709,7 +713,7 @@ const BROKEN_SRC = 'data:image/png;base64,broken';
 const posterImage = (state: string, canvasElement: HTMLElement) =>
   waitFor(async () => {
     const image = canvasElement.querySelector(
-      '[data-reely-part="poster-image"]'
+      '[data-playdeck-part="poster-image"]'
     );
     await expect(image).toHaveAttribute('data-state', state);
   });
@@ -780,7 +784,7 @@ Create `packages/react/src/loading-indicator.stories.tsx`:
 ```tsx
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor, within } from 'storybook/test';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const viewportStyle = { width: 320, height: 180 } as const;
 
@@ -802,7 +806,7 @@ type Story = StoryObj<typeof meta>;
 // interaction needed.
 export const LoadingProviderState: Story = {
   parameters: {
-    reely: { rootProps: { loading: 'eager' }, scenario: { kind: 'pending' } }
+    playdeck: { rootProps: { loading: 'eager' }, scenario: { kind: 'pending' } }
   },
   play: async ({ canvasElement }) => {
     await waitFor(async () => {
@@ -817,7 +821,7 @@ export const LoadingProviderState: Story = {
 // Resolve, then a scripted buffering patch after the provider is ready.
 export const BufferingState: Story = {
   parameters: {
-    reely: {
+    playdeck: {
       rootProps: { loading: 'eager' },
       scenario: { kind: 'resolve', patches: [{ buffering: true }] }
     }
@@ -839,7 +843,7 @@ export const BufferingState: Story = {
 pnpm test:storybook
 ```
 
-Expected: `Loading` FAILS (the `/__reely/hang.png` request 404s instantly, so `data-state` becomes `error`, not `loading`). The loading-indicator stories should pass already (they only need Task 3 machinery) — if they fail, fix before proceeding. All other poster stories pass.
+Expected: `Loading` FAILS (the `/__playdeck/hang.png` request 404s instantly, so `data-state` becomes `error`, not `loading`). The loading-indicator stories should pass already (they only need Task 3 machinery) — if they fail, fix before proceeding. All other poster stories pass.
 
 - [ ] **Step 3: Implement the hanging endpoint plugin**
 
@@ -851,9 +855,9 @@ import type { Plugin } from 'vite';
 // Serves a same-origin image URL that never responds, so poster stories can
 // hold `data-state="loading"` deterministically without external requests.
 export const hangEndpointPlugin = (): Plugin => ({
-  name: 'reely-hang-endpoint',
+  name: 'playdeck-hang-endpoint',
   configureServer(server) {
-    server.middlewares.use('/__reely/hang.png', () => {
+    server.middlewares.use('/__playdeck/hang.png', () => {
       // Intentionally never respond and never call next().
     });
   }
@@ -879,7 +883,7 @@ Expected: ALL stories pass, including `Loading`, with axe checks and the network
 - [ ] **Step 5: Verify the static build and dev-mode spot check**
 
 ```sh
-pnpm --filter @reely/storybook build
+pnpm --filter @playdeck/storybook build
 ```
 
 Expected: exit 0. (Dev-mode HITL review happens at final review; the vitest run already exercises every story in a real browser.)
@@ -911,17 +915,17 @@ git commit -m "feat: add poster and loading-indicator stories with hanging endpo
 `apps/storybook/README.md`:
 
 ````markdown
-# @reely/storybook
+# @playdeck/storybook
 
-Component workbench and story-based test runner for `@reely/react`.
+Component workbench and story-based test runner for `@playdeck/react`.
 
 ## Commands
 
-| Command                              | What it does                                   |
-| ------------------------------------ | ---------------------------------------------- |
-| `pnpm --filter @reely/storybook dev` | Storybook dev server on port 6006              |
-| `pnpm test:storybook` (root)         | Runs every story as a Chromium Vitest test     |
-| `pnpm build` (root)                  | Includes the static `storybook build` CI check |
+| Command                                 | What it does                                   |
+| --------------------------------------- | ---------------------------------------------- |
+| `pnpm --filter @playdeck/storybook dev` | Storybook dev server on port 6006              |
+| `pnpm test:storybook` (root)            | Runs every story as a Chromium Vitest test     |
+| `pnpm build` (root)                     | Includes the static `storybook build` CI check |
 
 ## Conventions
 
@@ -932,11 +936,11 @@ Component workbench and story-based test runner for `@reely/react`.
   check (`a11y.test = 'error'`). A story's `play` function is its
   interaction test — see `ActivatesOnClick` in
   `packages/react/src/activation.stories.tsx` for the reference pattern:
-  arrange via `parameters.reely`, act with `userEvent`, assert on
+  arrange via `parameters.playdeck`, act with `userEvent`, assert on
   `data-state`.
 - **No real media, no network.** A global `afterEach` fails any story test
   that touches an external origin or the fake media source. Use data-URI
-  images; use `/__reely/hang.png` for perpetual-loading states.
+  images; use `/__playdeck/hang.png` for perpetual-loading states.
 
 ## Dialing player state
 
@@ -946,7 +950,7 @@ tests use). Control it per story:
 
 ```ts
 parameters: {
-  reely: {
+  playdeck: {
     rootProps: { loading: 'interaction' },   // any Player.Root props
     scenario: { kind: 'pending' }            // provider-load scenario
   }

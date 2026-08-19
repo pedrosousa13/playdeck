@@ -1,4 +1,4 @@
-import type { CommandResult, PlayerCapabilities } from '@reely/core';
+import type { CommandResult, PlayerCapabilities } from '@playdeck/core';
 import {
   loadFailure,
   preReadyCapabilities,
@@ -11,6 +11,34 @@ import type { YouTubePlayback } from './playback.js';
 import type { YouTubePresentation } from './presentation.js';
 import type { YouTubeTextTracks } from './text-tracks.js';
 import type { YouTubeTimeUpdates } from './time-updates.js';
+
+// The player vars the adapter sets. They reach the embed as query parameters
+// on the iframe's own url rather than as constructor options: the iframe API
+// reads neither `videoId` nor `playerVars` when it is handed a frame that
+// already exists.
+type YouTubePlayerVars = Readonly<Record<string, string | number>>;
+
+// The url the pre-built iframe carries into the document. `host` is already one
+// of the two allowlisted origins (`index.ts`'s `resolveHost`) and `videoId` has
+// already passed `isYouTubeVideoId`, so neither can move this url off YouTube;
+// both are still written through the URL API rather than concatenated into it.
+const youTubeEmbedUrl = (
+  host: string,
+  videoId: string,
+  playerVars: YouTubePlayerVars
+): string => {
+  const url = new URL('/embed/', host);
+  url.pathname = `${url.pathname}${encodeURIComponent(videoId)}`;
+  // The API drives this frame over postMessage, and the embed only listens for
+  // that when its own url asks it to. The `<div>` path had the API write this
+  // var itself; on this one it is ours to write, and the player never becomes
+  // ready without it.
+  url.searchParams.set('enablejsapi', '1');
+  for (const [key, value] of Object.entries(playerVars)) {
+    url.searchParams.set(key, String(value));
+  }
+  return url.href;
+};
 
 export type YouTubeAttachmentDeps = {
   readonly emit: EmitProviderState;
@@ -43,9 +71,9 @@ export type YouTubeAttachmentDeps = {
 // The attachment seam: the adapter's binding to its iframe player — attach,
 // the iframe API load, player construction with every seam's event wiring,
 // teardown, and the retry that replaces one player with the next. Owns the
-// attached/destroyed/ready flags, the player and the element it replaced, and
-// the start generation that makes a superseded player's events inert. Exposes
-// the player guards every other seam depends on.
+// attached/destroyed/ready flags, the player and the iframe it was built on,
+// and the start generation that makes a superseded player's events inert.
+// Exposes the player guards every other seam depends on.
 export type YouTubeAttachment = {
   readonly attach: () => void;
   readonly load: () => Promise<void>;
@@ -88,7 +116,7 @@ export const createYouTubeAttachment = (
   let ready = false;
   let generation = 0;
   let player: YouTubePlayer | undefined;
-  let playerTarget: HTMLElement | undefined;
+  let playerTarget: HTMLIFrameElement | undefined;
 
   const getIframe = (): HTMLIFrameElement | undefined => {
     try {
@@ -161,37 +189,61 @@ export const createYouTubeAttachment = (
     // Google recommends declaring the embedding origin when the JS API is
     // active so the player can validate postMessage targets.
     const embedOrigin = ownerDocument.defaultView?.location?.origin;
-    const target = ownerDocument.createElement('div');
+    const target = ownerDocument.createElement('iframe');
+    target.src = youTubeEmbedUrl(host, videoId, {
+      autoplay: 0,
+      // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:72`):
+      // unset and `false` both mean chromeless.
+      controls: controls === true ? 1 : 0,
+      // `loop` alone is a documented no-op on a single-video embed: YouTube
+      // loops a playlist, so the one video has to name itself as its own
+      // single-entry playlist for the loop var to mean anything. The two
+      // vars are set together or not at all.
+      loop: loop === true ? 1 : 0,
+      ...(loop === true ? { playlist: videoId } : {}),
+      // A load hint, so the embed does not load from zero and seek away
+      // visibly. No `end` counterpart: it is whole-second too, its
+      // interaction with the loop + playlist pair above is undocumented, and
+      // it is not known to publish the state change the adapter needs — so
+      // the end boundary is enforced from the poll instead (#214).
+      ...(boundary.startPlayerVar === undefined
+        ? {}
+        : { start: boundary.startPlayerVar }),
+      playsinline: 1,
+      rel: 0,
+      ...(embedOrigin ? { origin: embedOrigin } : {})
+    });
+    // The `Referer` leaves with this frame's first request, so the policy has
+    // to be here before the element is, which is why the frame is built here
+    // rather than left to the API. Vimeo's embed already declares the same one
+    // (`provider-vimeo/src/attachment.ts:272`).
+    target.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    // The rest is the attribute set the iframe API writes onto the frame it
+    // builds on the `<div>` path, restated verbatim so this frame is granted
+    // neither more nor less than that one was. Narrowing the `allow` list is a
+    // separate decision with its own capability consequences (#221).
+    target.setAttribute(
+      'allow',
+      'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+    );
+    target.setAttribute('allowfullscreen', '');
+    // The API replaces this with the video's own title once the player is
+    // ready, on this path as on the other one; until then it is the frame's
+    // accessible name.
+    target.setAttribute('title', 'YouTube video player');
+    target.setAttribute('width', '100%');
+    target.setAttribute('height', '100%');
+    // The API's own frame carries `frameBorder="0"`; this is that, spelled the
+    // way the Vimeo embed spells it (`provider-vimeo/src/attachment.ts:277`).
+    target.style.border = '0';
     mount.appendChild(target);
     playerTarget = target;
+    // Handed a frame that already exists, the API adopts it instead of building
+    // one: it takes the embed's origin from this `src` and leaves the url's
+    // query alone, so `host`, `videoId` and the player vars above are carried
+    // by the url and are not repeated here. Only the events are the
+    // constructor's to wire.
     player = new api.Player(target, {
-      host,
-      videoId,
-      width: '100%',
-      height: '100%',
-      playerVars: {
-        autoplay: 0,
-        // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:62`):
-        // unset and `false` both mean chromeless.
-        controls: controls === true ? 1 : 0,
-        // `loop` alone is a documented no-op on a single-video embed: YouTube
-        // loops a playlist, so the one video has to name itself as its own
-        // single-entry playlist for the loop var to mean anything. The two
-        // vars are set together or not at all.
-        loop: loop === true ? 1 : 0,
-        ...(loop === true ? { playlist: videoId } : {}),
-        // A load hint, so the embed does not load from zero and seek away
-        // visibly. No `end` counterpart: it is whole-second too, its
-        // interaction with the loop + playlist pair above is undocumented, and
-        // it is not known to publish the state change the adapter needs — so
-        // the end boundary is enforced from the poll instead (#214).
-        ...(boundary.startPlayerVar === undefined
-          ? {}
-          : { start: boundary.startPlayerVar }),
-        playsinline: 1,
-        rel: 0,
-        ...(embedOrigin ? { origin: embedOrigin } : {})
-      },
       events: {
         onReady: () => {
           if (destroyed || forGeneration !== generation) return;

@@ -4,7 +4,7 @@
 
 **Goal:** Make Storybook the single front-facing surface — real-video playback stories alongside the existing mock states, docs, and tests — and retire `apps/docs`, without weakening the deterministic (zero-network) mock story suite.
 
-**Architecture:** Real-playback stories are tagged `['real-playback', '!test']` so the addon-vitest run (which enforces zero external requests) skips them; a guard test proves no leak. The global mock decorator passes such stories through untouched. The live-HLS Vite plugin and static fixtures move into Storybook. A `Fixtures/PlayerFixture` story reproduces the docs fixture's testid/`window.reelyHandle`/arg contract so Playwright e2e retargets from `apps/docs` to `storybook dev`. `apps/docs` is deleted LAST, only after the retargeted e2e is green.
+**Architecture:** Real-playback stories are tagged `['real-playback', '!test']` so the addon-vitest run (which enforces zero external requests) skips them; a guard test proves no leak. The global mock decorator passes such stories through untouched. The live-HLS Vite plugin and static fixtures move into Storybook. A `Fixtures/PlayerFixture` story reproduces the docs fixture's testid/`window.playdeckHandle`/arg contract so Playwright e2e retargets from `apps/docs` to `storybook dev`. `apps/docs` is deleted LAST, only after the retargeted e2e is green.
 
 **Tech Stack:** Storybook 10.5.3 (`@storybook/react-vite`), Vitest 4.1.10 browser mode, Playwright 1.61.1, Vite 8, React 19, TypeScript, pnpm workspaces, Turborepo.
 
@@ -12,15 +12,15 @@
 
 - Real-playback stories MUST carry both tags `'real-playback'` and `'!test'`. A story tagged `real-playback` without `!test` is a defect (it would enter the zero-network suite and flake).
 - The mock story suite (existing per-primitive stories, `support.ts`, the drift guard, `vitest.setup.ts`) MUST stay unchanged in behavior and stay zero-network. `test:storybook` file/test counts for the MOCK stories must not drop.
-- Storybook/addons/Vite plugins are devDependencies of the private `@reely/storybook` app only. Published packages unaffected; `pnpm test:bundle`/`test:packages` stay green. The pnpm build allowlist stays exactly `sharp@0.34.5`.
-- e2e specs keep every existing `page.route(...)` interception, `window.reelyHandle` probe, testid, and assertion — ONLY the navigation target (`page.goto`) and the webServer change. Behavior asserted must not weaken.
-- `apps/docs` / `@reely/docs` deletion happens ONLY in the final task, ONLY after the retargeted e2e is green.
+- Storybook/addons/Vite plugins are devDependencies of the private `@playdeck/storybook` app only. Published packages unaffected; `pnpm test:bundle`/`test:packages` stay green. The pnpm build allowlist stays exactly `sharp@0.34.5`.
+- e2e specs keep every existing `page.route(...)` interception, `window.playdeckHandle` probe, testid, and assertion — ONLY the navigation target (`page.goto`) and the webServer change. Behavior asserted must not weaken.
+- `apps/docs` / `@playdeck/docs` deletion happens ONLY in the final task, ONLY after the retargeted e2e is green.
 - No attribution / co-author / generated-by / reaction-prompt footers anywhere.
 
 **Execution setup (before Task 1, via `superpowers:using-git-worktrees`):**
 
 - Worktree `.worktrees/issue-50-storybook-consolidation`, branch `issue-50-storybook-consolidation`, off `main` @ `6375ccc`.
-- `pnpm install --frozen-lockfile`; confirm clean baseline: `pnpm --filter @reely/storybook test` and `pnpm typecheck` green.
+- `pnpm install --frozen-lockfile`; confirm clean baseline: `pnpm --filter @playdeck/storybook test` and `pnpm typecheck` green.
 - Run all pnpm/playwright commands serially within the worktree.
 
 ---
@@ -118,7 +118,7 @@ export const withMockPlayer: Decorator = (Story, context) => {
 
 - [ ] **Step 5: Verify mock suite unchanged**
 
-Run: `pnpm --filter @reely/storybook test`
+Run: `pnpm --filter @playdeck/storybook test`
 Expected: PASS, same file/test counts as baseline (12 files / 42 tests) — no real stories exist yet, so the gate never triggers.
 
 Run: `pnpm typecheck`
@@ -198,7 +198,7 @@ const config: StorybookConfig = {
 Run (in the worktree):
 
 ```bash
-pnpm --filter @reely/storybook dev --ci -p 4173 > /tmp/sb50.log 2>&1 &
+pnpm --filter @playdeck/storybook dev --ci -p 4173 > /tmp/sb50.log 2>&1 &
 sleep 12
 curl -s -o /dev/null -w "tracer.mp4 %{http_code}\n" http://127.0.0.1:4173/tracer.mp4
 curl -s -o /dev/null -w "hls master %{http_code}\n" http://127.0.0.1:4173/hls/master.m3u8
@@ -211,7 +211,7 @@ Expected: `tracer.mp4 200`, `hls master 200`, live playlist `200` with `#EXTM3U`
 
 - [ ] **Step 5: Mock suite + typecheck still green**
 
-Run: `pnpm --filter @reely/storybook test && pnpm typecheck`
+Run: `pnpm --filter @playdeck/storybook test && pnpm typecheck`
 Expected: PASS (staticDirs/plugin don't affect the mock stories).
 
 - [ ] **Step 6: Commit**
@@ -233,14 +233,14 @@ Add watchable real-video stories, excluded from the deterministic suite.
 
 **Interfaces:**
 
-- Consumes: `Player.*` from `@reely/react`; the fixtures from Task 2; sources `/tracer.mp4`, `{ type: 'hls', src: '/hls/master.m3u8', engine }`, `{ type: 'hls', src: '/live/index.m3u8', engine }`, `https://www.youtube.com/watch?v=M7lc1UVf-VE`, `https://vimeo.com/76979871`.
+- Consumes: `Player.*` from `@playdeck/react`; the fixtures from Task 2; sources `/tracer.mp4`, `{ type: 'hls', src: '/hls/master.m3u8', engine }`, `{ type: 'hls', src: '/live/index.m3u8', engine }`, `https://www.youtube.com/watch?v=M7lc1UVf-VE`, `https://vimeo.com/76979871`.
 
 - [ ] **Step 1: Write the stories**
 
 Create `apps/storybook/stories/real-playback.stories.tsx`. `meta` carries the opt-out tags; each story renders a real `Player.Root` with `loading="interaction"` (click-to-load, avoids autoplay-policy noise). Provide a small reusable frame.
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
 
@@ -353,12 +353,12 @@ Expected: PASS — the file now contains `'real-playback'` AND `'!test'`.
 
 - [ ] **Step 3: Deterministic suite excludes them**
 
-Run: `pnpm --filter @reely/storybook test`
+Run: `pnpm --filter @playdeck/storybook test`
 Expected: PASS, mock file/test counts UNCHANGED (12/42) — the real stories are tagged `!test` and never run here. If the count rises or a network-guard failure appears, the `!test` tag isn't taking effect — stop and report.
 
 - [ ] **Step 4: Visual check (controller will drive this)**
 
-Report DONE_WITH_CONCERNS noting the stories need a live `storybook dev` visual confirmation (the controller screenshots native/HLS/live/YouTube/Vimeo playback). Build check: `pnpm --filter @reely/storybook build` exit 0.
+Report DONE_WITH_CONCERNS noting the stories need a live `storybook dev` visual confirmation (the controller screenshots native/HLS/live/YouTube/Vimeo playback). Build check: `pnpm --filter @playdeck/storybook build` exit 0.
 
 - [ ] **Step 5: Commit**
 
@@ -382,11 +382,11 @@ Reproduce the `apps/docs` `PlayerFixture` contract as a Storybook story so e2e c
 - `tags: ['real-playback', '!test']`, `title: 'Fixtures/PlayerFixture'`, one primary story `Default` (id `fixtures-playerfixture--default`).
 - **Arg-driven source selection** mirroring the docs `URLSearchParams` logic (lines ~11-68 of `main.tsx`): args `source` (`hls|live|vimeo|vimeo-unlisted|https://…|undefined→/tracer.mp4`), `engine` (`native|hls.js|auto`), `activationSource` (`youtube|external`), `autoplay`, `loading`, `preload`, `defaultMuted`, `airplay`, `sourceChange`. Storybook injects `?args=key:val;…` into the story's args — read them in `render`/`args` and map to `Player.Root` props exactly as `main.tsx` does.
 - **Same testids/DOM** the specs assert: `data-testid` `viewport`, `youtube-example`, `presentation-capabilities` (+ `fullscreen-toggle`, `pip-toggle`, `airplay-picker`), `live-panel` (+ `live-indicator`, `live-time`, `live-seek-back`, `live-seek-edge`), `hls-engine`, `error-category`, plus the `data-*` state attributes those panels expose.
-- **`window.reelyHandle`** set to the `Player.Root` handle via ref (docs `main.tsx` line ~268), so specs' imperative probes work.
+- **`window.playdeckHandle`** set to the `Player.Root` handle via ref (docs `main.tsx` line ~268), so specs' imperative probes work.
 
 - [ ] **Step 1: Read the reference and port**
 
-Read `apps/docs/src/main.tsx` in full. Port the `PlayerFixture` (+ `YouTubeExample`, `presentation-capabilities`, `live-panel` sub-surfaces) into a single Storybook story `Default`, replacing `URLSearchParams` reads with Storybook `args`. Keep the doc prose OUT (only the interactive fixture surfaces the specs touch). Set `window.reelyHandle` in an effect from the Root ref.
+Read `apps/docs/src/main.tsx` in full. Port the `PlayerFixture` (+ `YouTubeExample`, `presentation-capabilities`, `live-panel` sub-surfaces) into a single Storybook story `Default`, replacing `URLSearchParams` reads with Storybook `args`. Keep the doc prose OUT (only the interactive fixture surfaces the specs touch). Set `window.playdeckHandle` in an effect from the Root ref.
 
 Because the arg→prop mapping is the crux, define an explicit `argTypes` for each arg and a `render(args)` that builds the `Player.Root` source/props from `args` using the SAME branching as `main.tsx`. Do not change the branching logic — only the input (args instead of query string).
 
@@ -395,7 +395,7 @@ Because the arg→prop mapping is the crux, define an explicit `argTypes` for ea
 Confirm the story loads at `/iframe.html?id=fixtures-playerfixture--default&viewMode=story` and that args flow through, e.g.:
 
 ```bash
-pnpm --filter @reely/storybook dev --ci -p 4173 > /tmp/sb50b.log 2>&1 &
+pnpm --filter @playdeck/storybook dev --ci -p 4173 > /tmp/sb50b.log 2>&1 &
 sleep 12
 curl -s -o /dev/null -w "fixture story %{http_code}\n" "http://127.0.0.1:4173/iframe.html?id=fixtures-playerfixture--default&viewMode=story"
 lsof -ti:4173 | xargs kill 2>/dev/null
@@ -405,7 +405,7 @@ Expected: `200`. (Full behavior is verified by the retargeted e2e in Task 5.)
 
 - [ ] **Step 3: Deterministic suite unaffected**
 
-Run: `pnpm --filter @reely/storybook test`
+Run: `pnpm --filter @playdeck/storybook test`
 Expected: PASS, mock counts unchanged (fixture is `!test`).
 
 Run: `pnpm typecheck` — PASS.
@@ -451,7 +451,7 @@ In `playwright.config.ts`, replace the `webServer.command` (keep `url`, `baseURL
 ```ts
   webServer: {
     command:
-      'pnpm --filter @reely/storybook exec storybook dev --ci --no-open -p 4173 --host 127.0.0.1',
+      'pnpm --filter @playdeck/storybook exec storybook dev --ci --no-open -p 4173 --host 127.0.0.1',
     url: 'http://127.0.0.1:4173/iframe.html?id=fixtures-playerfixture--default&viewMode=story',
     gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
     reuseExistingServer: !process.env.CI
@@ -462,7 +462,7 @@ In `playwright.config.ts`, replace the `webServer.command` (keep `url`, `baseURL
 
 - [ ] **Step 2: Rewrite the gotos**
 
-Apply the rewrite map above to each spec — change ONLY the `goto` string. Leave every `page.route(...)`, `window.reelyHandle`, testid, `data-*`, and engine-chunk assertion exactly as-is. For the HLS engine-chunk assertion (`hls.spec.ts` expects a `/assets/hls-*.js` chunk), verify the chunk path under `storybook dev`; if the dev-server serves the hls.js chunk at a different path than `/assets/hls-*.js`, update THAT assertion to match the real path (and note it) — do not delete the assertion.
+Apply the rewrite map above to each spec — change ONLY the `goto` string. Leave every `page.route(...)`, `window.playdeckHandle`, testid, `data-*`, and engine-chunk assertion exactly as-is. For the HLS engine-chunk assertion (`hls.spec.ts` expects a `/assets/hls-*.js` chunk), verify the chunk path under `storybook dev`; if the dev-server serves the hls.js chunk at a different path than `/assets/hls-*.js`, update THAT assertion to match the real path (and note it) — do not delete the assertion.
 
 - [ ] **Step 3: Run the non-`@real` e2e locally**
 
@@ -495,11 +495,11 @@ In root `package.json`, change:
     "test:e2e": "playwright test",
 ```
 
-(The Playwright `webServer` now starts `storybook dev`; no pre-build needed. `storybook dev` aliases `@reely/*` to source, same as the old docs preview.)
+(The Playwright `webServer` now starts `storybook dev`; no pre-build needed. `storybook dev` aliases `@playdeck/*` to source, same as the old docs preview.)
 
 - [ ] **Step 2: Move the CI path filter**
 
-In `.github/workflows/ci.yml`, the `hls-paths` job's path filter that greps `apps/docs/` must become `apps/storybook/` (the e2e now depends on Storybook). Read the job (~line 97-118) and update the path pattern; leave the rest of the gating logic intact. Verify no other job references `@reely/docs` build outputs for e2e.
+In `.github/workflows/ci.yml`, the `hls-paths` job's path filter that greps `apps/docs/` must become `apps/storybook/` (the e2e now depends on Storybook). Read the job (~line 97-118) and update the path pattern; leave the rest of the gating logic intact. Verify no other job references `@playdeck/docs` build outputs for e2e.
 
 - [ ] **Step 3: Full gate (local)**
 
@@ -530,7 +530,7 @@ Delete the now-redundant app. ONLY after Task 5–6 e2e is green.
 
 - [ ] **Step 1: Confirm no remaining references**
 
-Run: `grep -rn "@reely/docs\|apps/docs" --include='*.ts' --include='*.tsx' --include='*.json' --include='*.yml' --include='*.mjs' . | grep -v node_modules | grep -v '\.planning/'`
+Run: `grep -rn "@playdeck/docs\|apps/docs" --include='*.ts' --include='*.tsx' --include='*.json' --include='*.yml' --include='*.mjs' . | grep -v node_modules | grep -v '\.planning/'`
 Expected: no hits outside `apps/docs/` itself. If any remain (e.g. a stray script or CI reference), resolve them before deleting.
 
 - [ ] **Step 2: Delete the app**
@@ -547,7 +547,7 @@ Run serially:
 pnpm install && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:packages && pnpm test:bundle && pnpm test:integrations && pnpm test:storybook && pnpm test:e2e
 ```
 
-Expected: all green. `pnpm build` no longer builds `@reely/docs`; `test:e2e` runs against Storybook.
+Expected: all green. `pnpm build` no longer builds `@playdeck/docs`; `test:e2e` runs against Storybook.
 
 - [ ] **Step 4: Commit**
 

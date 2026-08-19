@@ -12,6 +12,13 @@ export type YouTubePlayerEventHandlers = {
 };
 
 export type YouTubePlayerOptions = {
+  // The API reads none of the five below when the element it is given is an
+  // iframe that already exists: it takes the embed from that frame's `src`
+  // instead. The adapter only ever hands it such a frame (`attachment.ts`), so
+  // it sets none of them and the events are all that travels through here.
+  // They stay declared because the API still accepts them on the `<div>` path
+  // this adapter does not take, and because this type is public: an injected
+  // `loadIframeApi` fake may name them.
   readonly host?: string;
   readonly videoId?: string;
   readonly width?: string;
@@ -49,8 +56,11 @@ export type YouTubePlayer = {
   setOption: (module: string, option: string, value: unknown) => void;
 };
 
+// Typed to the element the adapter passes rather than to every element the API
+// accepts: it also takes a `<div>` (or an element id) and builds the iframe
+// itself, which is the path this adapter deliberately does not take.
 export type YouTubePlayerConstructor = new (
-  element: HTMLElement,
+  element: HTMLIFrameElement,
   options: YouTubePlayerOptions
 ) => YouTubePlayer;
 

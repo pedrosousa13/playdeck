@@ -45,7 +45,7 @@ Two consequences worth knowing:
   promises a verdict is coming; on a machine that never sees a receiver the
   event never fires, and a consumer gating UI on it would wait forever.
 
-`@reely/provider-hls` delegates to the native provider, so HLS inherits all of
+`@playdeck/provider-hls` delegates to the native provider, so HLS inherits all of
 this. The command itself is unchanged: `showAirPlayPicker()` still forwards to
 WebKit whenever the API exists and policy permits, so a consumer driving it
 directly is not blocked by the capability — the capability governs what
@@ -58,7 +58,10 @@ composed by the consumer instead — see the **Reference example**, whose settin
 menu builds a playback-rate group and a quality group over
 `Player.SettingsMenu`/`Player.MenuRadioGroup`, each gated on its own capability.
 `selectQuality`'s ladder comes from `PlayerState.qualities` — see below for
-which providers populate it. `customControls` gates no shipped control.
+which providers populate it. `chapters` gates no shipped control either: it says
+whether the provider can report the divisions in `PlayerState.chapters` at all,
+and a consumer composes its own markers over `Player.SeekSlider`, which already
+takes children. `customControls` gates no shipped control.
 
 ## `commandsReady`: when a command will actually land
 
@@ -82,7 +85,7 @@ accepts commands while `activation` is still `loading-provider`.
 {/* example:capabilities-readiness */}
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import { useEffect } from 'react';
 
 // Declaratively: `commandsReady` means a command issued now is accepted and
@@ -192,7 +195,7 @@ bandwidth or viewport ceiling: the argument is discarded, not clamped.
 
 Publishing the list anyway would put rungs in the menu that cannot be chosen, so
 the capability stays `unavailable` and `qualities` stays empty. The full
-measurement is on [#82](https://github.com/pedrosousa13/reely/issues/82).
+measurement is on [#82](https://github.com/pedrosousa13/playdeck/issues/82).
 
 **Wistia has no ladder to publish.** Aurora offers a coarse `videoQuality()`
 setter and `quality-min` / `quality-max` attributes, but nothing that enumerates

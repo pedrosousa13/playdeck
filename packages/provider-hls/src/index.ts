@@ -7,12 +7,12 @@ import type {
   ProviderEvent,
   ProviderStateListener,
   ProviderStatePatch
-} from '@reely/core';
-import { deriveLiveState, liveStateEqual } from '@reely/core';
+} from '@playdeck/core';
+import { deriveLiveState, liveStateEqual, notifySafely } from '@playdeck/core';
 import {
   createNativeProvider,
   type NativePlaybackOptions
-} from '@reely/provider-native';
+} from '@playdeck/provider-native';
 import {
   readMediaRanges,
   unsupportedSelection,
@@ -45,12 +45,12 @@ export type HlsProviderOptions = NativePlaybackOptions & {
   readonly loadHls?: HlsModuleLoader;
 };
 
-// The liveness derivation lives in `@reely/core`, so every adapter shares one
+// The liveness derivation lives in `@playdeck/core`, so every adapter shares one
 // copy. Re-exported here because it is part of this package's documented
 // surface: a custom HLS adapter reaches for it from the package it is
 // extending.
 export { deriveLiveState };
-export type { LiveDerivationInput } from '@reely/core';
+export type { LiveDerivationInput } from '@playdeck/core';
 
 const NATIVE_HLS_MIME = 'application/vnd.apple.mpegurl';
 const MSE_TEST_CODEC = 'video/mp4; codecs="avc1.42E01E,mp4a.40.2"';
@@ -164,7 +164,7 @@ export const createHlsProvider = (
 
   const emit = (patch: ProviderStatePatch, event?: ProviderEvent): void => {
     if (attachment.isDestroyed()) return;
-    listeners.forEach((listener) => listener(patch, event));
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
   };
 
   const decorateCapabilities = (

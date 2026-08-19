@@ -1,5 +1,5 @@
-import { PlayerController } from '@reely/core';
-import { createNativeProvider } from '@reely/provider-native';
+import { PlayerController } from '@playdeck/core';
+import { createNativeProvider } from '@playdeck/provider-native';
 
 declare const videoElement: HTMLVideoElement;
 

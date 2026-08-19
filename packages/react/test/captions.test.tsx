@@ -14,7 +14,7 @@ import {
   type ProviderStatePatch,
   type TextCue,
   type TextTrack
-} from '@reely/core';
+} from '@playdeck/core';
 import * as Player from '../src/index';
 
 const ok = async () => ({ ok: true as const });
@@ -87,6 +87,7 @@ const withSelectTextTrack = (status: Availability): PlayerCapabilities => ({
   setPlaybackRate: notReadyAvailability,
   selectQuality: notReadyAvailability,
   selectTextTrack: status,
+  chapters: notReadyAvailability,
   fullscreen: notReadyAvailability,
   pictureInPicture: notReadyAvailability,
   airPlay: notReadyAvailability,
@@ -150,7 +151,7 @@ describe('Player.Captions', () => {
     );
     emitState({ captionRendering: 'custom' });
     emitCues([{ id: 'c1', startTime: 0, endTime: 1, text: 'hello there' }]);
-    const overlay = container.querySelector('[data-reely-part="captions"]');
+    const overlay = container.querySelector('[data-playdeck-part="captions"]');
     expect(overlay).not.toBeNull();
     expect(overlay?.getAttribute('data-state')).toBe('custom');
     expect(overlay?.textContent).toBe('hello there');
@@ -164,7 +165,7 @@ describe('Player.Captions', () => {
       );
       emitState({ captionRendering: mode });
       emitCues([{ id: 'c1', startTime: 0, endTime: 1, text: 'hello there' }]);
-      expect(container.querySelector('[data-reely-part="captions"]')).toBe(
+      expect(container.querySelector('[data-playdeck-part="captions"]')).toBe(
         null
       );
     }
@@ -179,7 +180,7 @@ describe('Player.Captions', () => {
       { id: 'c1', startTime: 0, endTime: 1, text: 'line one\nline two' }
     ]);
     const lines = container.querySelectorAll(
-      '[data-reely-part="caption-line"]'
+      '[data-playdeck-part="caption-line"]'
     );
     expect(lines.length).toBe(2);
     expect(lines[0]?.textContent).toBe('line one');
@@ -228,7 +229,7 @@ describe('Player.Captions', () => {
     );
     emitState({ captionRendering: 'custom' });
     emitCues([{ id: 'c1', startTime: 0, endTime: 1, text: 'hello there' }]);
-    const overlay = container.querySelector('[data-reely-part="captions"]');
+    const overlay = container.querySelector('[data-playdeck-part="captions"]');
     expect(overlay?.hasAttribute('aria-live')).toBe(false);
   });
 
@@ -242,7 +243,9 @@ describe('Player.Captions', () => {
       { id: 'c2', startTime: 1, endTime: 2, text: '' },
       { id: 'c3', startTime: 2, endTime: 3, text: 'real cue' }
     ]);
-    const cues = container.querySelectorAll('[data-reely-part="caption-cue"]');
+    const cues = container.querySelectorAll(
+      '[data-playdeck-part="caption-cue"]'
+    );
     expect(cues.length).toBe(1);
     expect(cues[0]?.textContent).toBe('real cue');
   });
@@ -257,7 +260,7 @@ describe('Player.Captions', () => {
       />
     );
     emitState({ captionRendering: 'custom' });
-    const overlay = container.querySelector('[data-reely-part="captions"]');
+    const overlay = container.querySelector('[data-playdeck-part="captions"]');
     expect(overlay?.classList.contains('my-captions')).toBe(true);
     expect((overlay as HTMLElement | null)?.style.color).toBe('red');
     expect(ref.current).toBe(overlay);
@@ -365,9 +368,9 @@ describe('Player.Root captionRenderer', () => {
 describe('Player.CaptionsButton', () => {
   test('renders nothing when the selectTextTrack capability is not available', () => {
     const { container } = renderWithPlayer(<Player.CaptionsButton />);
-    expect(container.querySelector('[data-reely-part="captions-button"]')).toBe(
-      null
-    );
+    expect(
+      container.querySelector('[data-playdeck-part="captions-button"]')
+    ).toBe(null);
   });
 
   test('data-state reflects on/off from selectedTextTrackId', () => {
@@ -380,7 +383,7 @@ describe('Player.CaptionsButton', () => {
       selectedTextTrackId: null
     });
     const button = container.querySelector(
-      '[data-reely-part="captions-button"]'
+      '[data-playdeck-part="captions-button"]'
     );
     expect(button?.getAttribute('data-state')).toBe('off');
     expect(button?.getAttribute('aria-pressed')).toBe('false');
@@ -404,7 +407,7 @@ describe('Player.CaptionsButton', () => {
       selectedTextTrackId: 'en'
     });
     const button = container.querySelector(
-      '[data-reely-part="captions-button"]'
+      '[data-playdeck-part="captions-button"]'
     ) as HTMLButtonElement;
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith(null);
@@ -420,7 +423,7 @@ describe('Player.CaptionsButton', () => {
       selectedTextTrackId: null
     });
     const button = container.querySelector(
-      '[data-reely-part="captions-button"]'
+      '[data-playdeck-part="captions-button"]'
     ) as HTMLButtonElement;
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith('en');
@@ -436,7 +439,7 @@ describe('Player.CaptionsButton', () => {
       selectedTextTrackId: 'es'
     });
     const button = container.querySelector(
-      '[data-reely-part="captions-button"]'
+      '[data-playdeck-part="captions-button"]'
     ) as HTMLButtonElement;
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith(null);
@@ -455,7 +458,7 @@ describe('Player.CaptionsButton', () => {
       selectedTextTrackId: 'es'
     });
     const button = container.querySelector(
-      '[data-reely-part="captions-button"]'
+      '[data-playdeck-part="captions-button"]'
     ) as HTMLButtonElement;
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith(null);
@@ -470,7 +473,7 @@ describe('Player.CaptionsButton', () => {
 
 describe('Player.CaptionsButton announcer', () => {
   const announcerText = (container: HTMLElement) =>
-    container.querySelector('[data-reely-part="captions-announcer"]')
+    container.querySelector('[data-playdeck-part="captions-announcer"]')
       ?.textContent;
 
   test('announces "<label> captions on" once when a track becomes selected', () => {
@@ -523,7 +526,7 @@ describe('Player.CaptionsButton announcer', () => {
     );
     emitState({ capabilities: withSelectTextTrack(available) });
     const announcer = container.querySelector(
-      '[data-reely-part="captions-announcer"]'
+      '[data-playdeck-part="captions-announcer"]'
     );
     expect(announcer?.getAttribute('aria-live')).toBe('polite');
   });
@@ -543,7 +546,7 @@ describe('captions toggle memory is player-scoped', () => {
       selectedTextTrackId: 'fr'
     });
     const button = container.querySelector(
-      '[data-reely-part="captions-button"]'
+      '[data-playdeck-part="captions-button"]'
     ) as HTMLButtonElement;
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith(null);
@@ -560,7 +563,7 @@ describe('captions toggle memory is player-scoped', () => {
       </Player.Root>
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'c' });
@@ -580,7 +583,7 @@ describe('captions toggle memory is player-scoped', () => {
       selectedTextTrackId: 'fr'
     });
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'c' });
@@ -597,7 +600,7 @@ describe('captions toggle memory is player-scoped', () => {
     );
     fireEvent.click(
       container.querySelector(
-        '[data-reely-part="captions-button"]'
+        '[data-playdeck-part="captions-button"]'
       ) as HTMLButtonElement
     );
     expect(selectTextTrack).toHaveBeenLastCalledWith('fr');
@@ -622,7 +625,7 @@ describe('captions toggle memory is player-scoped', () => {
     );
     fireEvent.click(
       container.querySelector(
-        '[data-reely-part="captions-button"]'
+        '[data-playdeck-part="captions-button"]'
       ) as HTMLButtonElement
     );
     expect(selectTextTrack).toHaveBeenLastCalledWith('fr');
@@ -642,7 +645,7 @@ describe('Player.Controls captions shortcut', () => {
       selectedTextTrackId: 'en'
     });
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'c' });
@@ -661,7 +664,7 @@ describe('Player.Controls captions shortcut', () => {
       selectedTextTrackId: null
     });
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'C' });
@@ -680,7 +683,7 @@ describe('Player.Controls captions shortcut', () => {
       selectedTextTrackId: null
     });
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'c' });
@@ -792,6 +795,62 @@ describe('Player.Media textTracks', () => {
     });
     expect(video.hasAttribute('texttracks')).toBe(false);
   });
+
+  test('renders no <track> for an entry whose src is rejected, keeping its siblings', () => {
+    const { video } = renderMedia({
+      textTracks: [
+        { src: 'javascript:alert(1)', srcLang: 'en', label: 'English' },
+        { src: '/captions/fr.vtt', srcLang: 'fr', label: 'French' }
+      ]
+    });
+    const tracks = video.querySelectorAll('track');
+    expect(tracks.length).toBe(1);
+    expect(tracks[0]?.getAttribute('src')).toBe('/captions/fr.vtt');
+    expect(tracks[0]?.getAttribute('srclang')).toBe('fr');
+  });
+
+  test('rejects unsafe textTracks src schemes and permits every safe form', () => {
+    const { video } = renderMedia({
+      textTracks: [
+        { src: 'javascript:alert(1)', srcLang: 'a', label: 'A' },
+        { src: 'data:text/vtt,x', srcLang: 'b', label: 'B' },
+        { src: 'file:///etc/passwd', srcLang: 'c', label: 'C' },
+        // No `type` reaches this site, so `blob:` -- permitted only for an
+        // explicit `type: 'video'` source -- is refused here too (#219, #236).
+        { src: 'blob:https://example.com/id', srcLang: 'd', label: 'D' },
+        // A raw tab in the scheme position defeats a naive scheme read;
+        // refused outright rather than reparsed (#219, #236).
+        { src: 'java\tscript:alert(1)', srcLang: 'e', label: 'E' },
+        { src: 'http://example.com/en.vtt', srcLang: 'f', label: 'F' },
+        { src: 'https://example.com/es.vtt', srcLang: 'g', label: 'G' },
+        { src: '//example.com/de.vtt', srcLang: 'h', label: 'H' },
+        { src: '/relative/ja.vtt', srcLang: 'i', label: 'I' }
+      ]
+    });
+    const tracks = Array.from(video.querySelectorAll('track'));
+    expect(tracks.map((track) => track.getAttribute('src'))).toEqual([
+      'http://example.com/en.vtt',
+      'https://example.com/es.vtt',
+      'https://example.com/de.vtt',
+      '/relative/ja.vtt'
+    ]);
+  });
+
+  test('drops every textTracks entry without throwing when all their src values are rejected', () => {
+    expect(() =>
+      renderMedia({
+        textTracks: [
+          { src: 'javascript:alert(1)', srcLang: 'en', label: 'English' }
+        ]
+      })
+    ).not.toThrow();
+    const { video } = renderMedia({
+      textTracks: [
+        { src: 'javascript:alert(1)', srcLang: 'en', label: 'English' }
+      ]
+    });
+    expect(video.querySelectorAll('track').length).toBe(0);
+  });
 });
 
 // Cue text and track labels are the two provider-supplied strings this package
@@ -807,7 +866,7 @@ describe('provider-supplied strings never render as markup', () => {
     );
     emitState({ captionRendering: 'custom' });
     emitCues([{ id: 'c1', startTime: 0, endTime: 1, text: injection }]);
-    const cue = container.querySelector('[data-reely-part="caption-cue"]');
+    const cue = container.querySelector('[data-playdeck-part="caption-cue"]');
     expect(cue?.textContent).toBe(injection);
     expect(cue?.querySelector('img, b')).toBe(null);
   });
@@ -821,7 +880,7 @@ describe('provider-supplied strings never render as markup', () => {
     });
     fireEvent.click(
       container.querySelector(
-        '[data-reely-part="settings-menu-trigger"]'
+        '[data-playdeck-part="settings-menu-trigger"]'
       ) as HTMLButtonElement
     );
     const item = Array.from(
@@ -842,10 +901,75 @@ describe('provider-supplied strings never render as markup', () => {
     });
     emitState({ selectedTextTrackId: 'en' });
     const announcer = container.querySelector(
-      '[data-reely-part="captions-announcer"]'
+      '[data-playdeck-part="captions-announcer"]'
     );
     expect(announcer?.textContent).toBe(`${injection} captions on`);
     expect(announcer?.querySelector('img, b')).toBe(null);
+  });
+});
+
+// #182: chapters are published as their own collection, so a source carrying a
+// chapters track beside a captions track has exactly one track in `textTracks`.
+// The provider half of that is tested against the media element's track list;
+// this is the same claim at the layer a consumer sees it — nothing the captions
+// menu lists, and nothing the captions toggle can resolve to, comes from
+// chapters.
+describe('a source carrying both a chapters track and a captions track', () => {
+  const ChapterProbe = () => {
+    const chapters = Player.usePlayerState((state) => state.chapters);
+    return (
+      <div data-testid="chapters">{chapters.map((c) => c.title).join('|')}</div>
+    );
+  };
+
+  const renderWithBothCollections = (ui: ReactNode) => {
+    const utils = renderWithPlayer(
+      <>
+        <ChapterProbe />
+        {ui}
+      </>
+    );
+    utils.emitState({
+      capabilities: { ...withSelectTextTrack(available), chapters: available },
+      chapters: [
+        { id: 'c1', title: 'Introduction', startTime: 0, endTime: 30 },
+        { id: 'c2', title: 'The build', startTime: 30, endTime: 90 }
+      ],
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: null
+    });
+    // The chapters really did arrive: the assertions below say the captions
+    // controls ignore them, which means nothing unless they are there to ignore.
+    expect(utils.getByTestId('chapters').textContent).toBe(
+      'Introduction|The build'
+    );
+    return utils;
+  };
+
+  test('the captions menu lists only the captions track', () => {
+    const { container } = renderWithBothCollections(<Player.CaptionsMenu />);
+    fireEvent.click(
+      container.querySelector(
+        '[data-playdeck-part="settings-menu-trigger"]'
+      ) as HTMLButtonElement
+    );
+    const items = Array.from(
+      container.querySelectorAll('[role="menuitemradio"]')
+    );
+    expect(items.map((item) => item.textContent)).toEqual(['Off', 'English']);
+  });
+
+  test('the captions button toggle resolves only to the captions track', () => {
+    const { container, selectTextTrack } = renderWithBothCollections(
+      <Player.CaptionsButton />
+    );
+    fireEvent.click(
+      container.querySelector(
+        '[data-playdeck-part="captions-button"]'
+      ) as HTMLButtonElement
+    );
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+    expect(selectTextTrack).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -857,7 +981,7 @@ describe('Player.CaptionsMenu', () => {
       textTracks: []
     });
     expect(
-      container.querySelector('[data-reely-part="settings-menu-root"]')
+      container.querySelector('[data-playdeck-part="settings-menu-root"]')
     ).toBe(null);
   });
 
@@ -869,7 +993,7 @@ describe('Player.CaptionsMenu', () => {
       selectedTextTrackId: 'en'
     });
     const trigger = container.querySelector(
-      '[data-reely-part="settings-menu-trigger"]'
+      '[data-playdeck-part="settings-menu-trigger"]'
     ) as HTMLButtonElement;
     fireEvent.click(trigger);
     const items = Array.from(
@@ -899,7 +1023,7 @@ describe('Player.CaptionsMenu', () => {
     });
     fireEvent.click(
       container.querySelector(
-        '[data-reely-part="settings-menu-trigger"]'
+        '[data-playdeck-part="settings-menu-trigger"]'
       ) as HTMLButtonElement
     );
     const spanish = Array.from(
@@ -920,7 +1044,7 @@ describe('Player.CaptionsMenu', () => {
     });
     fireEvent.click(
       container.querySelector(
-        '[data-reely-part="settings-menu-trigger"]'
+        '[data-playdeck-part="settings-menu-trigger"]'
       ) as HTMLButtonElement
     );
     const off = Array.from(
@@ -943,11 +1067,11 @@ describe('Player.CaptionsMenu', () => {
     });
     fireEvent.click(
       container.querySelector(
-        '[data-reely-part="settings-menu-trigger"]'
+        '[data-playdeck-part="settings-menu-trigger"]'
       ) as HTMLButtonElement
     );
     const content = container.querySelector(
-      '[data-reely-part="settings-menu"]'
+      '[data-playdeck-part="settings-menu"]'
     ) as HTMLDivElement;
     expect(content.tabIndex).toBe(0);
   });

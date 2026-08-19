@@ -1,4 +1,4 @@
-# Reely
+# Playdeck
 
 A performant, composable, accessible React 19 media player with
 capability-aware providers.
@@ -12,7 +12,7 @@ present and disabled.
 <!-- example:quickstart -->
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 // One API across MP4/WebM, HLS, YouTube, Vimeo and Wistia: the source decides
 // which provider loads, and nothing else changes.
@@ -35,17 +35,17 @@ export const Clip = () => (
 
 ## Packages
 
-| Package                                                | What it is                                                    |
-| ------------------------------------------------------ | ------------------------------------------------------------- |
-| [`@reely/react`](packages/react)                       | The React primitives. Start here.                             |
-| [`@reely/core`](packages/core)                         | Framework-neutral state, commands, events, provider contract. |
-| [`@reely/provider-native`](packages/provider-native)   | `HTMLMediaElement`: progressive files and native HLS.         |
-| [`@reely/provider-hls`](packages/provider-hls)         | HLS via hls.js, or the browser's own, chosen per environment. |
-| [`@reely/provider-youtube`](packages/provider-youtube) | YouTube IFrame Player API.                                    |
-| [`@reely/provider-vimeo`](packages/provider-vimeo)     | Vimeo player SDK.                                             |
-| [`@reely/provider-wistia`](packages/provider-wistia)   | Wistia's Aurora `<wistia-player>` element.                    |
+| Package                                                   | What it is                                                    |
+| --------------------------------------------------------- | ------------------------------------------------------------- |
+| [`@playdeck/react`](packages/react)                       | The React primitives. Start here.                             |
+| [`@playdeck/core`](packages/core)                         | Framework-neutral state, commands, events, provider contract. |
+| [`@playdeck/provider-native`](packages/provider-native)   | `HTMLMediaElement`: progressive files and native HLS.         |
+| [`@playdeck/provider-hls`](packages/provider-hls)         | HLS via hls.js, or the browser's own, chosen per environment. |
+| [`@playdeck/provider-youtube`](packages/provider-youtube) | YouTube IFrame Player API.                                    |
+| [`@playdeck/provider-vimeo`](packages/provider-vimeo)     | Vimeo player SDK.                                             |
+| [`@playdeck/provider-wistia`](packages/provider-wistia)   | Wistia's Aurora `<wistia-player>` element.                    |
 
-Only `@reely/react` needs installing: it depends on the rest and loads each
+Only `@playdeck/react` needs installing: it depends on the rest and loads each
 provider lazily, once source detection says the active source needs it. A
 consumer playing MP4 ships no YouTube, Vimeo, Wistia or hls.js code in its
 initial graph.
@@ -70,7 +70,7 @@ The Storybook workbench is the documentation, with every primitive staged
 against a mock provider plus real-playback stories:
 
 ```sh
-pnpm --filter @reely/storybook dev
+pnpm --filter @playdeck/storybook dev
 ```
 
 **Overview/Introduction**, **Overview/Contract** (the data-attribute and `style`
@@ -104,7 +104,7 @@ they run on the same goodwill, so they go the same way. Run them by hand when
 you touch a provider adapter:
 
 ```sh
-REELY_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
+PLAYDECK_REAL_PROVIDERS=1 pnpm test:e2e --project=chromium --grep @real
 ```
 
 `e2e/visual.spec.ts` runs in its own `visual` Playwright project (chromium
@@ -128,6 +128,29 @@ when the refresh workflow is not dispatchable — GitHub only offers
 `workflow_dispatch` for workflows already on the default branch, so a workflow
 file added on a branch cannot be run until it has merged once.
 
+## Releasing
+
+A release is cut by hand, from `main`, with `release.yml`. There is no push
+trigger: the version bump lands as an ordinary pull request first, and
+dispatching the workflow is the separate, deliberate act that publishes it.
+
+```sh
+gh workflow run release.yml --ref main -f dry_run=true   # resolve and pack only
+gh workflow run release.yml --ref main -f dry_run=false  # publish
+```
+
+`dry_run` defaults to true, so an accidental dispatch cannot publish. Either way
+the job runs `typecheck`, `test`, `test:audit`, `build`, `test:packages`,
+`test:budgets`, `test:bundle` and `test:integrations` before it goes near the
+registry, so the provenance attestation covers artifacts that run actually
+checked.
+
+The publish is `pnpm publish -r`, never `npm publish`: the packages depend on
+each other through pnpm's `workspace:^` protocol, and only pnpm rewrites that to
+a real version range when it packs. `-r` takes every workspace package that is
+not `private` and whose version is not already on the registry, so the set comes
+from the manifests and no name is listed in the workflow.
+
 ## Browser support
 
 | Browser     | Minimum |
@@ -137,7 +160,7 @@ file added on a branch cannot be run until it has merged once.
 | Safari, iOS | 15.4    |
 
 The floor is set by **CSS, not JavaScript**: `theme.css` uses `@layer`, which is
-the newest feature anything in Reely requires. The built JavaScript needs nothing
+the newest feature anything in Playdeck requires. The built JavaScript needs nothing
 above Safari 14.1, so a consumer who never imports the optional stylesheet is
 bound only by that.
 

@@ -1,13 +1,13 @@
-# @reely/provider-wistia
+# @playdeck/provider-wistia
 
-The Wistia provider for [Reely](https://github.com/pedrosousa13/reely), over
+The Wistia provider for [Playdeck](https://github.com/pedrosousa13/playdeck), over
 Wistia's Aurora `<wistia-player>` element.
 
 ```sh
-pnpm add @reely/provider-wistia
+pnpm add @playdeck/provider-wistia
 ```
 
-`@reely/react` loads this for you when the source resolves to `wistia`. The
+`@playdeck/react` loads this for you when the source resolves to `wistia`. The
 player bundle is fetched from `https://fast.wistia.com/player.js` on the first
 attach — Aurora's own entry point, not the legacy `E-v1.js` shim, so there is
 still no `window._wq`. This package does **not** depend on
@@ -25,18 +25,18 @@ see `WistiaPlayerApi` and `WistiaPlayerAttribute` below.
 <!-- example:provider-wistia -->
 
 ```ts
-import { PlayerController } from '@reely/core';
+import { PlayerController } from '@playdeck/core';
 import {
   API_READY_TIMEOUT_MS,
   createWistiaProvider,
   loadWistiaPlayer,
   resetWistiaPlayerLoader,
   SCRIPT_LOAD_TIMEOUT_MS
-} from '@reely/provider-wistia';
+} from '@playdeck/provider-wistia';
 import type {
   WistiaMountElement,
   WistiaScriptInjector
-} from '@reely/provider-wistia';
+} from '@playdeck/provider-wistia';
 
 declare const mount: WistiaMountElement;
 
@@ -87,7 +87,7 @@ export const scriptLoadTimeout = SCRIPT_LOAD_TIMEOUT_MS; // 15000
 
 <!-- /example -->
 
-The embed is chromeless by default (`controls: false`) so Reely's own controls
+The embed is chromeless by default (`controls: false`) so Playdeck's own controls
 are the only ones on screen, and `dnt` is on unless you turn it off. See
 [Third-party requests and CSP](../../docs/third-party-requests.md) for the full
 origins list and what a page's CSP has to allow.
@@ -166,7 +166,7 @@ origins list and what a page's CSP has to allow.
   number leaves the edge unknown, which reports as at the edge. The published
   `live` value changes or nothing is published — an unchanged one produces no
   patch. `duration` is left as Wistia reports it while live, which is where this
-  adapter differs from `@reely/provider-hls`.
+  adapter differs from `@playdeck/provider-hls`.
 - **The at-edge flag stays current while the player is paused.** It is
   recomputed on every `time-update` while the player runs, and Wistia stops
   dispatching that event the moment it pauses — so a paused live stream would
@@ -233,7 +233,11 @@ origins list and what a page's CSP has to allow.
   handle exposes no buffered ranges, so the adapter reports nothing rather than
   a guess. `buffering` stays `false` for the same reason.
 - **Cue timings, chapters and analytics are not reported.** They are outside
-  this adapter's playback core.
+  this adapter's playback core. Wistia's chapters are an inbound embed-option
+  plugin — the embedder supplies the list — and no documented read-back accessor
+  exists, so `PlayerState.chapters` stays empty and `capabilities.chapters`
+  reports `{ status: 'unavailable', reason: 'provider' }` rather than leaving a
+  consumer to guess.
 
 ## License
 

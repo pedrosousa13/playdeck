@@ -2,7 +2,7 @@ import {
   PlayerController,
   bindMediaSession,
   getMediaSessionCoordinator
-} from '@reely/core';
+} from '@playdeck/core';
 
 declare const controller: PlayerController;
 

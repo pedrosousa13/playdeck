@@ -1,6 +1,7 @@
 import {
   isVimeoHash,
   isVimeoVideoId,
+  notifySafely,
   type CommandResult,
   type PlayerCapabilities,
   type PlayerError,
@@ -8,7 +9,7 @@ import {
   type ProviderEvent,
   type ProviderStateListener,
   type VimeoSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   available,
   providerEvent,
@@ -16,6 +17,7 @@ import {
 } from './adapter-values.js';
 import { createVimeoAttachment } from './attachment.js';
 import { createVimeoBoundary } from './boundary.js';
+import { createVimeoChapters } from './chapters.js';
 import { createVimeoChromelessAvailability } from './chromeless-availability.js';
 import { createVimeoPlayback } from './playback.js';
 import { createVimeoPresentation } from './presentation.js';
@@ -25,6 +27,7 @@ import { createVimeoTextTracks } from './text-tracks.js';
 export type { VimeoMountElement } from './adapter-values.js';
 export { loadVimeoSdk, resetVimeoSdkLoader } from './loader.js';
 export type {
+  VimeoSdkChapter,
   VimeoSdkConstructor,
   VimeoSdkEventListener,
   VimeoSdkLoadOptions,
@@ -73,7 +76,7 @@ export type VimeoProviderOptions = {
    *
    * **The effect is page-wide, not per-embed.** The SDK's own opt-out is a
    * `window` global, so switching this on silences that handshake for every
-   * Vimeo embed on the page, including embeds Reely did not create.
+   * Vimeo embed on the page, including embeds Playdeck did not create.
    *
    * **It takes effect on the first Vimeo attach and holds for the life of the
    * page.** The SDK module is imported once and cached, and it reads the guard
@@ -82,7 +85,7 @@ export type VimeoProviderOptions = {
    * not another leaves the first attach in charge.
    *
    * A page that has already set the guard itself keeps its own value, in
-   * either direction — Reely never overwrites it.
+   * either direction — Playdeck never overwrites it.
    */
   readonly suppressSeoMetadata?: boolean;
 };
@@ -142,6 +145,10 @@ const createRejectedVimeoProvider = (): VimeoProviderAdapter => {
     attach: () => undefined,
     load: () => undefined,
     destroy: () => undefined,
+    // Called straight rather than through `notifySafely`: this is the one call
+    // a `subscribe` makes at registration, on the subscriber's own stack, and
+    // not a fan-out — only the emits after registration are the emitter's to
+    // isolate (#233). Same for `subscribeDimensions` below.
     subscribe: (listener) => {
       listener(
         {
@@ -195,7 +202,8 @@ export const createVimeoProvider = (
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   const chromeless = createVimeoChromelessAvailability({ source, options });
 
@@ -220,6 +228,12 @@ export const createVimeoProvider = (
     getCapabilities: playerCapabilities
   });
 
+  const chapters = createVimeoChapters({
+    emit,
+    isStale: (player) => attachment.isStale(player),
+    getCapabilities: playerCapabilities
+  });
+
   const textTracks = createVimeoTextTracks({
     emit,
     isStale: (player) => attachment.isStale(player),
@@ -238,10 +252,11 @@ export const createVimeoProvider = (
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: qualityLevels.selectQualityAvailability(),
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      chapters: chapters.chaptersAvailability(),
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       // The SDK exposes remote-playback methods, but this adapter wires no
-      // command surface for them yet, so they are unavailable through Reely
+      // command surface for them yet, so they are unavailable through Playdeck
       // rather than forever "unknown".
       airPlay: { status: 'unavailable', reason: 'provider' },
       customControls: chromeless.customControlsAvailability()
@@ -257,6 +272,7 @@ export const createVimeoProvider = (
     presentation,
     qualityLevels,
     textTracks,
+    chapters,
     clearStateListeners: () => listeners.clear()
   });
 

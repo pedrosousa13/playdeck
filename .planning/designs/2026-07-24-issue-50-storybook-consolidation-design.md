@@ -33,7 +33,7 @@ zero-network suite.
   `?engine=native|hls.js`, `?activationSource=youtube|external`,
   `?autoplay`, `?loading`, `?preload`, `?defaultMuted`, `?airplay=demo`,
   `?sourceChange=external`. Default source `/tracer.mp4`.
-- **e2e contract the fixture exposes:** `window.reelyHandle` (global
+- **e2e contract the fixture exposes:** `window.playdeckHandle` (global
   `PlayerHandle`), testids `viewport`, `youtube-example`,
   `presentation-capabilities` (+ `fullscreen-toggle`, `pip-toggle`,
   `airplay-picker`), `live-panel` (+ `live-indicator`, `live-time`,
@@ -49,23 +49,23 @@ zero-network suite.
   Hooks BOTH `configureServer` and `configurePreviewServer` — same
   dual-hook pattern as Storybook's existing `pendingAssetPlugin`.
 - **`apps/docs/vite.config.ts`** — `plugins: [react(), liveHlsFixture()]`,
-  aliases all six `@reely/*` to `packages/*/src`.
+  aliases all six `@playdeck/*` to `packages/*/src`.
 - **`playwright.config.ts`** — `baseURL http://127.0.0.1:4173`, 3 browser
   projects; `webServer.command = vite preview apps/docs --host … --port
 4173 --strictPort` (serves the docs preview build);
-  `grepInvert: /@real/` unless `REELY_REAL_PROVIDERS=1`. All `page.goto`
+  `grepInvert: /@real/` unless `PLAYDECK_REAL_PROVIDERS=1`. All `page.goto`
   use root-relative paths. 11 specs: `native-mp4`, `autoplay`,
   `activation`, `poster`, `platform`, `hls`, `live`, `youtube`,
   `youtube-real` (`@real`), `vimeo`, `vimeo-smoke` (`@real`).
 - **Storybook current:** `preview.tsx` global `withMockPlayer` decorator
   - `tags: ['autodocs']` + `a11y.test: 'error'`. `main.ts` viteFinal
-    aliases `@reely/*` to source + `pendingAssetPlugin`. No `!test` opt-out
+    aliases `@playdeck/*` to source + `pendingAssetPlugin`. No `!test` opt-out
     tag exists yet.
-- **Root/CI:** `test:e2e = turbo run build --filter=@reely/docs &&
+- **Root/CI:** `test:e2e = turbo run build --filter=@playdeck/docs &&
 playwright test`. `ci.yml`: `e2e` matrix job runs `test:e2e`;
   `hls-paths` job path-filters on `apps/docs/`; `hls-native-webkit`
   (macOS) runs `test:e2e --project=webkit --grep hls`; `storybook` job
-  builds+tests storybook. `@reely/docs`/`apps/docs` referenced only in
+  builds+tests storybook. `@playdeck/docs`/`apps/docs` referenced only in
   `apps/docs/`, root `package.json` (`test:e2e`), and `ci.yml`
   (`hls-paths` filter) — contained retirement surface.
 
@@ -88,7 +88,7 @@ playwright test`. `ci.yml`: `e2e` matrix job runs `test:e2e`;
   already ran against source-aliased builds.
 - **Recreate `PlayerFixture` as a story, mapping query→args.** A single
   `Fixtures/PlayerFixture` story reproduces the docs fixture's testids +
-  `window.reelyHandle` + arg-driven source selection, so specs retarget by
+  `window.playdeckHandle` + arg-driven source selection, so specs retarget by
   rewriting `goto('/?source=hls&engine=hls.js')` →
   `goto('/iframe.html?id=fixtures-playerfixture--default&viewMode=story&args=source:hls;engine:hls.js')`.
 - **Delete `apps/docs` LAST**, only after retargeted e2e is green in CI
@@ -134,7 +134,7 @@ each rendering a real `Player.Root` (no mock decorator):
 - Reads source/engine/loading/autoplay/etc. from **story args** (Storybook
   maps `?args=…` into the render context), mirroring the docs
   `URLSearchParams` mapping.
-- Exposes the same testids and sets `window.reelyHandle` via the Root ref.
+- Exposes the same testids and sets `window.playdeckHandle` via the Root ref.
 - The `YouTubeExample`, `presentation-capabilities`, and `live-panel`
   sub-surfaces the specs assert against are reproduced as needed (may be
   separate arg-selected stories if cleaner than one mega-fixture).
@@ -145,12 +145,12 @@ each rendering a real `Player.Root` (no mock decorator):
   `127.0.0.1:4173` (`--ci`, `--no-open`); `baseURL` unchanged
   (127.0.0.1:4173). Keep `grepInvert: /@real/` gating.
 - Rewrite each spec's `page.goto(...)` to the `/iframe.html?id=…&args=…`
-  fixture URL. Keep every `page.route(...)`, `window.reelyHandle` probe,
+  fixture URL. Keep every `page.route(...)`, `window.playdeckHandle` probe,
   testid, and engine-chunk assertion — only the navigation target changes.
   (HLS chunk assertion `/assets/hls-*.js` must still hold under
   `storybook dev` — verify the chunk name/pattern; adjust the assertion if
   the dev-server chunk path differs.)
-- Root `package.json`: `test:e2e` → drop `turbo build --filter=@reely/docs`
+- Root `package.json`: `test:e2e` → drop `turbo build --filter=@playdeck/docs`
   (the webServer now runs storybook dev). Keep `playwright test`.
 - `ci.yml`: `hls-paths` path filter `apps/docs/` → `apps/storybook/`;
   `e2e`/`hls-native-webkit` jobs pick up the new webServer automatically;
@@ -160,7 +160,7 @@ each rendering a real `Player.Root` (no mock decorator):
 ### F. Retire apps/docs (final task)
 
 - Remove `apps/docs/` entirely (app, fixtures now in storybook, vite
-  config, plugin copy). Remove `@reely/docs` from workspace. Confirm no
+  config, plugin copy). Remove `@playdeck/docs` from workspace. Confirm no
   dangling references (`turbo.json` generic build task needs no change).
 - Only after e2e is green against Storybook in CI.
 
@@ -190,14 +190,14 @@ each rendering a real `Player.Root` (no mock decorator):
 3. Real-playback showcase stories (native/HLS/live/YouTube/Vimeo), tagged
    `real-playback`+`!test`. Verify they render + play in `storybook dev`;
    `test:storybook` still green (excluded).
-4. `Fixtures/PlayerFixture` story — testids + `window.reelyHandle` +
+4. `Fixtures/PlayerFixture` story — testids + `window.playdeckHandle` +
    arg-driven sources reproducing the docs fixture contract.
 5. Retarget Playwright: `webServer` → `storybook dev`; rewrite every spec
    `goto` to the fixture iframe URL; keep routes/asserts. `test:e2e` green
    locally (non-`@real`).
 6. Update `test:e2e` script + `ci.yml` (`hls-paths` path filter). Full
    gate green.
-7. Delete `apps/docs` + `@reely/docs`; confirm no dangling refs; full gate
+7. Delete `apps/docs` + `@playdeck/docs`; confirm no dangling refs; full gate
    - `storybook build` green. (Only after Task 5–6 e2e green.)
 
 ## Out of scope

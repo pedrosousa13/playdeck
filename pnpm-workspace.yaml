@@ -3,23 +3,46 @@ packages:
   - apps/*
   - tests/bundle/*
   - tests/integrations/*
-# Advisories in transitive development dependencies, none of which reach a
-# published package: `brace-expansion` arrives under eslint's minimatch,
-# `postcss`/`sharp` under the Next.js build in tests/integrations, and
-# `nanoid` under vite's postcss in the dev toolchain. They are
-# pinned forward here rather than left for `pnpm audit` to keep reporting --
-# the alternative is re-triaging the same five findings on every run.
-# The two floors SIDEPRO-221 raised name the advisory behind them, so a later
-# reader can tell when an entry has outlived its reason. `sharp` predates that
-# and carries no such record:
+# Advisories pinned forward here rather than left for `pnpm audit` to keep
+# reporting -- the alternative is re-triaging the same findings on every run.
+# Every floor names the advisory behind it, so a later reader can tell when an
+# entry has outlived its reason. Six entries cover five advisories, because
+# js-yaml takes one entry per major for the reason given below:
 #   brace-expansion >=5.0.9  GHSA-rgw5-rvv9-x895 (high, DoS)
 #   postcss         >=8.5.23 GHSA-fxqj-rqcc-2cmp (moderate, sourceMappingURL)
+#   sharp           >=0.35.0 GHSA-f88m-g3jw-g9cj (high, libvips CVEs)
 #   nanoid          >=3.3.17 GHSA-2v37-7h3g-55p8 (high, infinite loop on zero size)
 #   js-yaml         >=3.15.1 GHSA-5p4m-2wfm-xmqj (high, quadratic CPU in !!omap)
 #   js-yaml         >=4.3.1  GHSA-5p4m-2wfm-xmqj (same advisory, 4.x range)
+# None of the five reaches a publishable package as the graph resolves today.
+# Publishable means the manifest does not set `private`, and nothing else --
+# scripts/workspace-packages.mjs holds that definition, and it is not the
+# directory a package sits in: tests/integrations/next-image declares `next`
+# under `dependencies`, and `postcss`, `sharp` and `nanoid` all arrive through
+# it, but it is private and ships nowhere. `postcss` also arrives under `vite`
+# and under Storybook's webpack, `brace-expansion` under eslint's minimatch and
+# Storybook's glob, `nanoid` only under `postcss` and so everywhere `postcss`
+# reaches, and `js-yaml` only under @changesets/cli.
+# That paragraph is a reading of the graph at one moment, not a standing
+# property of this repo. It was false from #170, when @playdeck/provider-wistia
+# arrived carrying `@wistia/wistia-player` in its `dependencies` -- which
+# dragged webpack, and so `postcss`, into a package that would have shipped --
+# until #266 dropped the vendor package for a CDN load. A floor in this file
+# cannot travel to a consumer, so anything published in that window would have
+# carried the advisory with no way for a consumer to patch it, and this block
+# said none.
+# `scripts/audit.mjs` recomputes the reachability on every CI run, from each
+# publishable package's own `dependencies`, and fails on any advisory it can
+# reach at any severity; `pnpm test:audit` is what answers the question.
+# `sharp` carried no advisory identifier until the one above was added here.
+# The floor came in with #107, which recorded a count of findings and no
+# identifier, so what it was raised for is not recoverable. It was established
+# by removal instead: without the floor `sharp` resolves to 0.34.5 and
+# `pnpm test:audit` reports GHSA-f88m-g3jw-g9cj, so the floor stays with that
+# named -- the reason it has now, not necessarily the one it was raised for.
 # js-yaml needs one entry per major: the advisory covers 3.x and 4.x with
 # separate patched versions, and a single `<4.3.1` selector would drag 3.x
-# across a major boundary. It reaches us only under @changesets/cli.
+# across a major boundary.
 # `nanoid` carries a ceiling for the same reason: unbounded, it resolves to
 # 6.x, which is ESM-only and requires Node >=22 -- below our 20.19 floor.
 overrides:
@@ -31,6 +54,19 @@ overrides:
   js-yaml@4: '>=4.3.1 <5'
 allowBuilds:
   esbuild@0.28.1: true
+# A 24-hour hold, in minutes, before a newly published version is eligible to
+# resolve. It covers the window an audit gate cannot: a maintainer-compromise
+# release carries no advisory yet, so `pnpm audit` has nothing to report and
+# only time separates us from it. The two controls are complements.
+# A frozen-lockfile install replays resolutions that already happened and is
+# unaffected, so the cost falls on dependency-update work rather than on CI.
+# The entries below are exempt from the hold. Unlike the override floors
+# above, they name no reason: all five arrived with the workspace bootstrap
+# (#20), before any cooldown existed to be excluded from, so there is no
+# record of why each was chosen and no way to tell when one has outlived its
+# reason. They are kept as they are here -- re-triaging them is its own
+# decision. A new entry should name the version it unblocks and why.
+minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - '@vitejs/plugin-react@6.0.4'
   - react-dom@19.2.8

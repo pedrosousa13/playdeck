@@ -26,10 +26,10 @@ const selectorLists = [...withoutComments.matchAll(/([^{}]+)\{/g)]
   .filter((selector) => selector.length > 0 && !selector.startsWith('@'));
 
 describe('theme contract', () => {
-  test('every rule lives inside the reely cascade layer', () => {
+  test('every rule lives inside the playdeck cascade layer', () => {
     // Unlayered consumer CSS beats layered CSS whatever its specificity, so the
     // layer is what lets a consumer override without `!important`.
-    expect(withoutComments).toMatch(/@layer\s+reely\s*\{/);
+    expect(withoutComments).toMatch(/@layer\s+playdeck\s*\{/);
 
     // Nothing may sit outside the layer block. Walk braces and assert every
     // declaration block is nested within it.
@@ -129,12 +129,14 @@ describe('theme contract', () => {
     // exactly one -- which is the shape that silently drops a single control's
     // hover tint, the very failure this test exists to catch.
     const buttonRules = selectorLists.filter((selector) =>
-      buttonParts.some((part) => selector.includes(`data-reely-part='${part}'`))
+      buttonParts.some((part) =>
+        selector.includes(`data-playdeck-part='${part}'`)
+      )
     );
     expect(buttonRules.length).toBeGreaterThan(0);
     const missing = buttonRules.flatMap((rule) =>
       buttonParts
-        .filter((part) => !rule.includes(`data-reely-part='${part}'`))
+        .filter((part) => !rule.includes(`data-playdeck-part='${part}'`))
         .map((part) => `${part} missing from: ${rule.replace(/\s+/g, ' ')}`)
     );
     expect(missing).toEqual([]);
@@ -155,7 +157,7 @@ describe('theme contract', () => {
     expect(withoutComments).toMatch(/@media\s*\(\s*forced-colors\s*:\s*active/);
   });
 
-  test('is reachable as @reely/react/theme.css and shipped in the tarball', async () => {
+  test('is reachable as @playdeck/react/theme.css and shipped in the tarball', async () => {
     const manifest = JSON.parse(
       await readFile(new URL('../package.json', import.meta.url), 'utf8')
     ) as {

@@ -6,7 +6,7 @@ import { Meta } from '@storybook/addon-docs/blocks';
 
 Every primitive exposes a stable styling/testing contract via data attributes.
 
-- **`data-reely-part`** — the stable name of a part: one named element in the
+- **`data-playdeck-part`** — the stable name of a part: one named element in the
   rendered DOM (`play-button`, `mute-button`, `volume-slider`, `seek-slider` /
   `seek-slider-input` / `seek-buffered` / `seek-buffered-range` /
   `seek-buffered-description`, `fullscreen-button`, `pip-button`,
@@ -25,10 +25,10 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   `muted`/`unmuted`, `idle`/`ready`, `loading`/`loaded`/`error`,
   `global`/`scoped`, the error category on `error`, or the activation state).
   Absent where the part has no observable state: `airplay-button` opens a
-  system picker, and Reely does not currently surface an active-route flag, so
+  system picker, and Playdeck does not currently surface an active-route flag, so
   it exposes no `data-state` rather than a value that never changes. That is
   today's behaviour rather than a permanent guarantee — WebKit can report an
-  active wireless route, and Reely has deferred plumbing it.
+  active wireless route, and Playdeck has deferred plumbing it.
 - **`data-provider`** — carries the active provider name, or is absent when
   no provider is attached. By design it appears only on the provider-bound
   control parts (`play-button`, `mute-button`, `volume-slider`,
@@ -68,10 +68,10 @@ refused autoplay:
 
 ```css
 /* Styling a part: a button.
-   `data-reely-part` is the hook and `data-state` is the primitive's output, so
+   `data-playdeck-part` is the hook and `data-state` is the primitive's output, so
    the pressed look needs no class name, no wrapper and no JavaScript. */
 
-[data-reely-part='play-button'] {
+[data-playdeck-part='play-button'] {
   display: grid;
   place-items: center;
   border: 0;
@@ -82,23 +82,23 @@ refused autoplay:
   cursor: pointer;
 }
 
-[data-reely-part='play-button']:hover {
+[data-playdeck-part='play-button']:hover {
   background: #1d2939;
 }
 
-[data-reely-part='play-button']:focus-visible {
+[data-playdeck-part='play-button']:focus-visible {
   outline: 2px solid #7aa7ff;
   outline-offset: 2px;
 }
 
 /* Playing, so the button now offers "Pause". */
-[data-reely-part='play-button'][data-state='playing'] {
+[data-playdeck-part='play-button'][data-state='playing'] {
   background: #2e5aac;
 }
 
 /* Autoplay was refused by the browser: draw attention to the one control that
    can start playback, because nothing else will. */
-[data-reely-part='play-button'][data-autoplay-state='blocked'] {
+[data-playdeck-part='play-button'][data-autoplay-state='blocked'] {
   outline: 2px solid #f2b53d;
   outline-offset: 2px;
 }
@@ -121,12 +121,12 @@ buffered geometry, and `data-buffering` is a second axis beside `data-state`:
    the part name rather than a tag selector — the part is the contract, the
    element type is the primitive's business. */
 
-[data-reely-part='seek-slider'] {
+[data-playdeck-part='seek-slider'] {
   display: flex;
   align-items: center;
 }
 
-[data-reely-part='seek-slider-input'] {
+[data-playdeck-part='seek-slider-input'] {
   position: relative;
   z-index: 1;
   margin: 0;
@@ -134,7 +134,7 @@ buffered geometry, and `data-buffering` is a second axis beside `data-state`:
   accent-color: #7aa7ff;
 }
 
-[data-reely-part='seek-buffered'] {
+[data-playdeck-part='seek-buffered'] {
   position: absolute;
   inset-inline: 0;
   height: 4px;
@@ -144,7 +144,7 @@ buffered geometry, and `data-buffering` is a second axis beside `data-state`:
 
 /* The ranges are placed by the primitive — `position`, `left` and `width` are
    inline and state-derived — so only the paint is left to do here. */
-[data-reely-part='seek-buffered-range'] {
+[data-playdeck-part='seek-buffered-range'] {
   top: 0;
   height: 100%;
   border-radius: inherit;
@@ -153,14 +153,14 @@ buffered geometry, and `data-buffering` is a second axis beside `data-state`:
 
 /* No seek window yet — a live edge, or a duration nobody knows. Say so rather
    than showing a scrubber that cannot move. */
-[data-reely-part='seek-slider'][data-state='idle'] {
+[data-playdeck-part='seek-slider'][data-state='idle'] {
   opacity: 0.5;
 }
 
 /* A stall that outlasted the debounce. A separate axis from `data-state`,
    which reports whether a seek window exists and does not move during one. */
-[data-reely-part='seek-slider'][data-buffering='true']
-  [data-reely-part='seek-buffered'] {
+[data-playdeck-part='seek-slider'][data-buffering='true']
+  [data-playdeck-part='seek-buffered'] {
   background: #6b4a12;
 }
 ```
@@ -180,11 +180,11 @@ and the `visibility`; the appearance is yours:
    be beaten from a stylesheet, so restating any of it here would be dead CSS
    rather than a conflict (ADR-0001). A stylesheet paints, and that is all. */
 
-[data-reely-part='poster'] {
+[data-playdeck-part='poster'] {
   background: #0b0e13;
 }
 
-[data-reely-part='poster-image'] {
+[data-playdeck-part='poster-image'] {
   opacity: 0;
   transition: opacity 200ms ease;
 }
@@ -193,12 +193,12 @@ and the `visibility`; the appearance is yours:
    decoded rather than flashing in half-painted. An image that fails to load
    never reaches `loaded`, so it never fades in: the state machine hides it,
    and `[data-state='error']` needs no rule of its own to do that. */
-[data-reely-part='poster-image'][data-state='loaded'] {
+[data-playdeck-part='poster-image'][data-state='loaded'] {
   opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-reely-part='poster-image'] {
+  [data-playdeck-part='poster-image'] {
     transition: none;
   }
 }
@@ -220,7 +220,7 @@ unmounts at `ready` rather than wearing it:
    four wants a different affordance. The button positions itself (absolutely,
    inset 0, z-index 30), so this only paints. */
 
-[data-reely-part='activation'] {
+[data-playdeck-part='activation'] {
   display: grid;
   place-items: center;
   border: 0;
@@ -232,19 +232,19 @@ unmounts at `ready` rather than wearing it:
 
 /* The resting state: a press here starts activation. One of the two states a
    press acts on at all — `error` below is the other. */
-[data-reely-part='activation'][data-state='dormant']:hover {
+[data-playdeck-part='activation'][data-state='dormant']:hover {
   background: rgb(11 14 19 / 40%);
 }
 
 /* Activation is committed and the provider is on its way. Pressing again does
    nothing from here, so stop inviting it. */
-[data-reely-part='activation'][data-state='eligible'] {
+[data-playdeck-part='activation'][data-state='eligible'] {
   opacity: 0.6;
   cursor: default;
 }
 
 /* Mid-load, and `aria-disabled`: it must not look pressable. */
-[data-reely-part='activation'][data-state='loading-provider'] {
+[data-playdeck-part='activation'][data-state='loading-provider'] {
   cursor: progress;
 }
 
@@ -254,37 +254,37 @@ unmounts at `ready` rather than wearing it:
    reports as not recoverable — every configuration error among them — which
    reads "Play", is `aria-disabled`, and says so through that rather than
    through colour. */
-[data-reely-part='activation'][data-state='error'] {
+[data-playdeck-part='activation'][data-state='error'] {
   background: rgb(63 18 18 / 85%);
 }
 
-[data-reely-part='activation'][data-state='error']:hover {
+[data-playdeck-part='activation'][data-state='error']:hover {
   background: rgb(90 26 26 / 85%);
 }
 ```
 
 {/* /example */}
 
-None of this is `@reely/react/theme.css`, which is a whole opinion you can take
+None of this is `@playdeck/react/theme.css`, which is a whole opinion you can take
 or leave. These are the smallest rules that make one part look deliberate.
 
 ## The media's aspect ratio
 
 One more output, and the only one that is not an attribute. When the active
-provider can measure the media it is playing, Reely writes that media's own
+provider can measure the media it is playing, Playdeck writes that media's own
 ratio onto the `viewport` part as a custom property — for a vertical clip,
-`--reely-media-aspect-ratio: 1080 / 1920`.
+`--playdeck-media-aspect-ratio: 1080 / 1920`.
 
 It runs the opposite way to a theme token. A token is a value you set and a
 primitive reads; this one the library writes and you read, which makes it a
-sibling of `data-state` rather than of anything in `theme.css`. Reely never
+sibling of `data-state` rather than of anything in `theme.css`. Playdeck never
 applies it to anything, so opting in is one rule of your own:
 
 {/* example:css-media-aspect-ratio */}
 
 ```css
 /* Reading a value the library writes.
-   `--reely-media-aspect-ratio` is an output, not a token: Reely sets it on the
+   `--playdeck-media-aspect-ratio` is an output, not a token: Playdeck sets it on the
    viewport part once a provider has measured its media, and this one rule is
    what opts in to it. Nothing in the library reads it back, so without a rule
    like this the player is shaped by whatever you already sized it to.
@@ -294,8 +294,8 @@ applies it to anything, so opting in is one rule of your own:
    arrived — because the property is absent then rather than zero. Pick a value
    you are happy to render, and size the box's width yourself as usual. */
 
-[data-reely-part='viewport'] {
-  aspect-ratio: var(--reely-media-aspect-ratio, 16 / 9);
+[data-playdeck-part='viewport'] {
+  aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9);
 }
 ```
 
@@ -306,14 +306,14 @@ a 16:9 one, so you can see one rule produce two shapes.
 
 Which providers measure, and what from:
 
-| Provider | Reports the ratio                                                                                                                      |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| native   | Yes — the media's own `videoWidth`/`videoHeight`, once metadata has loaded and again whenever the frame size changes under it.         |
-| hls      | Yes, on both engines. The picture is drawn into the same `<video>` the native provider drives, so the measurement is the native one.   |
-| vimeo    | Yes — the size the Vimeo SDK reports, once the embed is ready and again when it changes.                                               |
-| youtube  | **No.** The IFrame API exposes no intrinsic size, and what Reely mounts for it is not a media element, so there is nothing to measure. |
+| Provider | Reports the ratio                                                                                                                         |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| native   | Yes — the media's own `videoWidth`/`videoHeight`, once metadata has loaded and again whenever the frame size changes under it.            |
+| hls      | Yes, on both engines. The picture is drawn into the same `<video>` the native provider drives, so the measurement is the native one.      |
+| vimeo    | Yes — the size the Vimeo SDK reports, once the embed is ready and again when it changes.                                                  |
+| youtube  | **No.** The IFrame API exposes no intrinsic size, and what Playdeck mounts for it is not a media element, so there is nothing to measure. |
 
-Reely does not guess a ratio it cannot measure, and does not read one out of a
+Playdeck does not guess a ratio it cannot measure, and does not read one out of a
 source URL — a `/shorts/` path is not a measurement. A consumer who knows they
 are rendering a Short can set the property themselves.
 
@@ -343,8 +343,8 @@ Where that collides with a `style` prop you pass, the rule is:
   for every source. The test is mechanical: if the value comes from player
   state, it is not yours to override.
 - **An explicit prop beats `style`.** `PosterImage` takes `objectFit` and
-  `objectPosition` props whose defaults are the `--reely-poster-fit` and
-  `--reely-poster-position` theming variables. Precedence runs prop →
+  `objectPosition` props whose defaults are the `--playdeck-poster-fit` and
+  `--playdeck-poster-position` theming variables. Precedence runs prop →
   `style` → variable default.
 
 Overriding a primitive's geometry is allowed, not recommended: the overlays'
@@ -380,7 +380,7 @@ What you extend otherwise:
   `SeekSlider`'s `inputProps`, `PosterImage`'s `objectFit` and
   `objectPosition`. `style` follows the precedence rules above.
 
-The part attributes work the other way round: `data-reely-part` and
+The part attributes work the other way round: `data-playdeck-part` and
 `data-state` are spread after your props, so they are the primitive's output —
 yours to read from CSS and tests, not to set.
 

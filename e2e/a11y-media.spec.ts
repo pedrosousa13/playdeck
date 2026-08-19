@@ -10,7 +10,7 @@ import {
 
 declare global {
   interface Window {
-    __reelyAnnouncements: string[];
+    __playdeckAnnouncements: string[];
   }
 }
 
@@ -193,7 +193,7 @@ test('live regions announce state transitions only, never time updates or cues',
   // arriving for the first time. A mutation can only ever be shaped one way
   // or the other, never both.
   await page.evaluate(() => {
-    window.__reelyAnnouncements = [];
+    window.__playdeckAnnouncements = [];
     const selector = '[aria-live], [role="status"], [role="alert"]';
     const regionsWithin = (node: Node): Element[] => {
       if (node.nodeType !== Node.ELEMENT_NODE) return [];
@@ -208,14 +208,14 @@ test('live regions announce state transitions only, never time updates or cues',
             : (record.target as Element)
         )?.closest(selector);
         if (ancestor) {
-          window.__reelyAnnouncements.push(
-            `${ancestor.getAttribute('data-reely-part')}: ${ancestor.textContent ?? ''}`
+          window.__playdeckAnnouncements.push(
+            `${ancestor.getAttribute('data-playdeck-part')}: ${ancestor.textContent ?? ''}`
           );
         }
         for (const added of record.addedNodes) {
           for (const region of regionsWithin(added)) {
-            window.__reelyAnnouncements.push(
-              `${region.getAttribute('data-reely-part')}: ${region.textContent ?? ''}`
+            window.__playdeckAnnouncements.push(
+              `${region.getAttribute('data-playdeck-part')}: ${region.textContent ?? ''}`
             );
           }
         }
@@ -265,7 +265,9 @@ test('live regions announce state transitions only, never time updates or cues',
     )
     .toBe(true);
 
-  const duringPlayback = await page.evaluate(() => window.__reelyAnnouncements);
+  const duringPlayback = await page.evaluate(
+    () => window.__playdeckAnnouncements
+  );
 
   // `LoadingIndicator`'s `'loading-provider'` → idle transition is the one
   // legitimate announcement that can land in this window. It used to complete
@@ -300,12 +302,12 @@ test('live regions announce state transitions only, never time updates or cues',
   // but measured over the captions click alone rather than over the whole test.
   // Without this it would also have to carry the idle transition excused above.
   await page.evaluate(() => {
-    window.__reelyAnnouncements = [];
+    window.__playdeckAnnouncements = [];
   });
   await captionsButton(page).click();
   await expect(captionsButton(page)).toHaveAttribute('data-state', 'off');
 
   await expect
-    .poll(() => page.evaluate(() => window.__reelyAnnouncements))
+    .poll(() => page.evaluate(() => window.__playdeckAnnouncements))
     .toEqual(['captions-announcer: Captions off']);
 });

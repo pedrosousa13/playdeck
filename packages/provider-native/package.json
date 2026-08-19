@@ -1,7 +1,7 @@
 {
-  "name": "@reely/provider-native",
-  "version": "0.0.0",
-  "description": "HTMLMediaElement provider for Reely: progressive files and native HLS.",
+  "name": "@playdeck/provider-native",
+  "version": "0.1.0",
+  "description": "HTMLMediaElement provider for Playdeck: progressive files and native HLS.",
   "keywords": [
     "media",
     "player",
@@ -10,14 +10,14 @@
     "hls"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/pedrosousa13/reely/tree/main/packages/provider-native#readme",
+  "homepage": "https://github.com/pedrosousa13/playdeck/tree/main/packages/provider-native#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pedrosousa13/reely.git",
+    "url": "git+https://github.com/pedrosousa13/playdeck.git",
     "directory": "packages/provider-native"
   },
   "bugs": {
-    "url": "https://github.com/pedrosousa13/reely/issues"
+    "url": "https://github.com/pedrosousa13/playdeck/issues"
   },
   "type": "module",
   "sideEffects": false,
@@ -44,7 +44,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@reely/core": "workspace:^"
+    "@playdeck/core": "workspace:^"
   },
   "scripts": {
     "build": "vite build && tsc -b",

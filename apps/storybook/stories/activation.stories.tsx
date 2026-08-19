@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { MockPlayerParameters } from '../.storybook/mock-player';
@@ -15,7 +15,7 @@ const overlayState = (
 
 const part = (root: HTMLElement, name: string): HTMLElement => {
   const element = root.querySelector<HTMLElement>(
-    `[data-reely-part="${name}"]`
+    `[data-playdeck-part="${name}"]`
   );
   if (!element) throw new Error(`Expected a ${name} part in the story.`);
   return element;
@@ -30,7 +30,7 @@ const meta = {
         component: [
           '`Player.ActivationButton` triggers pre-provider activation (`dormant`/`eligible`/`loading-provider`/`error`).',
           '',
-          '**Contract** — `data-reely-part="activation"`, `data-state="<activation>"`.',
+          '**Contract** — `data-playdeck-part="activation"`, `data-state="<activation>"`.',
           '',
           '**Retryability** — in `error` the button offers a retry only when `error.recoverable` is `true`; otherwise it is `aria-disabled` and refuses activation. It reads that one flag, never the error category, which is the same signal `ErrorDisplay` reads for its own retry action.',
           '',
@@ -40,7 +40,7 @@ const meta = {
           '',
           '**Accessibility** — native `<button>`, keyboard-operable. The accessible name comes from `aria-label` (default `Play video`, or `Retry loading video` where the error in state reports itself recoverable), never from `children`, so a decorative child is safe.',
           '',
-          '**Styling** — plain CSS against the part, one selector per `data-state`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
+          '**Styling** — plain CSS against the part, one selector per `data-state`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer playdeck` the whole theme lives in:',
           '```css',
           partCss.trim(),
           '```'
@@ -166,7 +166,7 @@ export const Styled: Story = {
 // page and pinned by `docs:check`, and it teaches painting a full-bleed
 // overlay — sizing it would change the lesson.
 const sizedCss = `
-[data-reely-part='activation'] {
+[data-playdeck-part='activation'] {
   width: 96px;
   height: 96px;
   border-radius: 50%;

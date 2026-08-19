@@ -9,8 +9,8 @@
 
 **Interfaces:**
 
-- Consumes: `parameters.reely` contract and `MockScenario` from Task 3; `afterEach` network guard from Task 2.
-- Produces: `/__reely/hang.png` same-origin endpoint that never responds (dev server + vitest browser server).
+- Consumes: `parameters.playdeck` contract and `MockScenario` from Task 3; `afterEach` network guard from Task 2.
+- Produces: `/__playdeck/hang.png` same-origin endpoint that never responds (dev server + vitest browser server).
 
 - [ ] **Step 1: Write the failing stories**
 
@@ -19,13 +19,13 @@ Replace `packages/react/src/poster.stories.tsx` with:
 ```tsx
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor, within } from 'storybook/test';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const viewportStyle = { width: 320, height: 180 } as const;
 
 // A same-origin endpoint (served by the Storybook app's Vite middleware)
 // that never responds: the image stays in `loading` forever.
-const HANGING_SRC = '/__reely/hang.png';
+const HANGING_SRC = '/__playdeck/hang.png';
 
 // 2x1 blue SVG — loads instantly from memory, no network.
 const LOADED_SRC = `data:image/svg+xml,${encodeURIComponent(
@@ -38,7 +38,7 @@ const BROKEN_SRC = 'data:image/png;base64,broken';
 const posterImage = (state: string, canvasElement: HTMLElement) =>
   waitFor(async () => {
     const image = canvasElement.querySelector(
-      '[data-reely-part="poster-image"]'
+      '[data-playdeck-part="poster-image"]'
     );
     await expect(image).toHaveAttribute('data-state', state);
   });
@@ -109,7 +109,7 @@ Create `packages/react/src/loading-indicator.stories.tsx`:
 ```tsx
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor, within } from 'storybook/test';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 
 const viewportStyle = { width: 320, height: 180 } as const;
 
@@ -131,7 +131,7 @@ type Story = StoryObj<typeof meta>;
 // interaction needed.
 export const LoadingProviderState: Story = {
   parameters: {
-    reely: { rootProps: { loading: 'eager' }, scenario: { kind: 'pending' } }
+    playdeck: { rootProps: { loading: 'eager' }, scenario: { kind: 'pending' } }
   },
   play: async ({ canvasElement }) => {
     await waitFor(async () => {
@@ -146,7 +146,7 @@ export const LoadingProviderState: Story = {
 // Resolve, then a scripted buffering patch after the provider is ready.
 export const BufferingState: Story = {
   parameters: {
-    reely: {
+    playdeck: {
       rootProps: { loading: 'eager' },
       scenario: { kind: 'resolve', patches: [{ buffering: true }] }
     }
@@ -168,7 +168,7 @@ export const BufferingState: Story = {
 pnpm test:storybook
 ```
 
-Expected: `Loading` FAILS (the `/__reely/hang.png` request 404s instantly, so `data-state` becomes `error`, not `loading`). The loading-indicator stories should pass already (they only need Task 3 machinery) — if they fail, fix before proceeding. All other poster stories pass.
+Expected: `Loading` FAILS (the `/__playdeck/hang.png` request 404s instantly, so `data-state` becomes `error`, not `loading`). The loading-indicator stories should pass already (they only need Task 3 machinery) — if they fail, fix before proceeding. All other poster stories pass.
 
 - [ ] **Step 3: Implement the hanging endpoint plugin**
 
@@ -180,9 +180,9 @@ import type { Plugin } from 'vite';
 // Serves a same-origin image URL that never responds, so poster stories can
 // hold `data-state="loading"` deterministically without external requests.
 export const hangEndpointPlugin = (): Plugin => ({
-  name: 'reely-hang-endpoint',
+  name: 'playdeck-hang-endpoint',
   configureServer(server) {
-    server.middlewares.use('/__reely/hang.png', () => {
+    server.middlewares.use('/__playdeck/hang.png', () => {
       // Intentionally never respond and never call next().
     });
   }
@@ -208,7 +208,7 @@ Expected: ALL stories pass, including `Loading`, with axe checks and the network
 - [ ] **Step 5: Verify the static build and dev-mode spot check**
 
 ```sh
-pnpm --filter @reely/storybook build
+pnpm --filter @playdeck/storybook build
 ```
 
 Expected: exit 0. (Dev-mode HITL review happens at final review; the vitest run already exercises every story in a real browser.)

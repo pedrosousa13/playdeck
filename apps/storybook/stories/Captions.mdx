@@ -4,7 +4,7 @@ import { Meta } from '@storybook/addon-docs/blocks';
 
 # Captions
 
-Reely's caption system is a hybrid: by default Reely draws WebVTT cues itself,
+Playdeck's caption system is a hybrid: by default Playdeck draws WebVTT cues itself,
 but hands drawing off to the browser or an embedding provider whenever they
 own it instead. `PlayerState.captionRendering` always reports the mode that is
 **actually in effect** — the combination of what was requested and what the
@@ -14,10 +14,10 @@ attached provider is capable of — never merely what was asked for.
 
 `captionRendering` is one of four values:
 
-- **`custom`** (default) — Reely renders the active WebVTT cues itself, in
-  `Player.Captions`. Fully styleable via the `--reely-caption-*` CSS custom
-  properties (`--reely-caption-font-size`, `--reely-caption-color`,
-  `--reely-caption-background`, `--reely-caption-edge`) or replaceable
+- **`custom`** (default) — Playdeck renders the active WebVTT cues itself, in
+  `Player.Captions`. Fully styleable via the `--playdeck-caption-*` CSS custom
+  properties (`--playdeck-caption-font-size`, `--playdeck-caption-color`,
+  `--playdeck-caption-background`, `--playdeck-caption-edge`) or replaceable
   per-cue with the `renderCue` render prop — see the `Player/Captions` story
   docs for the full contract.
 - **`native`** — opt in with `<Player.Root captionRenderer="native">`. The
@@ -27,7 +27,7 @@ attached provider is capable of — never merely what was asked for.
   nothing for the browser to draw, so the effective mode falls back to
   `custom` (harmless, since there are also no cues to draw there either).
 - **`provider`** — an embedding provider draws the captions inside its own
-  iframe. Reely reports the effective mode honestly: it exposes the track list
+  iframe. Playdeck reports the effective mode honestly: it exposes the track list
   and language selection but renders no overlay, because the embed is the one
   drawing. (Cues may still reach `useActiveCues` in this mode where the
   provider supplies them — useful for a transcript — but nothing draws them.)
@@ -41,20 +41,20 @@ fires `cuechange` without Vimeo's own renderer drawing — so Vimeo runs as
 source. Setting `captionRenderer="native"` on a Vimeo source gives drawing back
 to Vimeo, and the effective mode becomes `provider`.
 
-**Vimeo caveat — the one case Reely cannot detect.** If a Vimeo embed falls
+**Vimeo caveat — the one case Playdeck cannot detect.** If a Vimeo embed falls
 back to **native playback** (no Vimeo player UI at all), Vimeo's docs say the
 platform's native renderer draws captions regardless of the `showing` flag. The
 overlay would then be a second set of captions. The SDK exposes no way to ask
-whether that is happening, and Reely does not guess: `captionRendering` will
+whether that is happening, and Playdeck does not guess: `captionRendering` will
 still say `custom`. If you know your embed hits that path, pass
 `captionRenderer="native"` and let Vimeo own the drawing. Everywhere else —
-including the chromeless embed Reely builds by default — `showing: false` is
+including the chromeless embed Playdeck builds by default — `showing: false` is
 confirmed against the real embed to suppress Vimeo's renderer.
 
 **Vimeo caveat — tracks that share a language _and_ a kind.** Vimeo's
 `texttrackchange` event reports a language and a kind, never an id or an index,
 so two tracks matching on both (a plain and a forced-narrative English subtitle
-track, say) cannot be told apart from the event alone. Whenever the pair is ambiguous Reely re-reads the
+track, say) cannot be told apart from the event alone. Whenever the pair is ambiguous Playdeck re-reads the
 track list and takes the one the SDK marks as showing, since that is the only
 signal that reflects a change made in Vimeo's own CC menu. Only if no sibling
 is marked does it fall back to the track it last enabled itself, and then to
@@ -101,13 +101,13 @@ Caption cues are visual media content, not announcements — cue text never
 enters an `aria-live` region, since a screen reader would otherwise read out
 the entire film as it plays. `Player.CaptionsButton` announces only the
 _control_ change, once per transition, in its own polite live region
-(`data-reely-part="captions-announcer"`): `"<label> captions on"` or
+(`data-playdeck-part="captions-announcer"`): `"<label> captions on"` or
 `"Captions off"`. The `C` keyboard shortcut toggles captions the same way the
 button does, restoring the last-selected track.
 
 ## Author responsibilities
 
-Reely provides the mechanics: discovery, selection, rendering, and styling of
+Playdeck provides the mechanics: discovery, selection, rendering, and styling of
 caption tracks. It does not — and cannot — provide the caption content
 itself. Shipping captions that are inaccurate, out of sync, mislabeled, or
 otherwise non-conformant does not satisfy accessibility requirements just

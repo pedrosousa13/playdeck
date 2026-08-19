@@ -1,4 +1,4 @@
-import type { TextCue, TextTrack } from '@reely/core';
+import type { TextCue, TextTrack } from '@playdeck/core';
 import { CaptionsIcon } from './icons.js';
 import { controlTargetStyle, visuallyHiddenStyle } from './loading-error.js';
 import { useActiveCues, usePlayer, usePlayerState } from './player-context.js';
@@ -23,10 +23,10 @@ export type CaptionsProps = Omit<ComponentPropsWithRef<'div'>, 'children'> & {
 // User-themeable CSS custom properties consumed by the default cue text box
 // below. Set these on `Player.Captions` (or an ancestor) to theme the
 // overlay without overriding its structure:
-//   --reely-caption-font-size  - cue text font size (default: 1.05rem)
-//   --reely-caption-color      - cue text color (default: #fff)
-//   --reely-caption-background - cue text box background (default: rgba(0, 0, 0, 0.75))
-//   --reely-caption-edge       - cue text edge, a text-shadow value (default: none)
+//   --playdeck-caption-font-size  - cue text font size (default: 1.05rem)
+//   --playdeck-caption-color      - cue text color (default: #fff)
+//   --playdeck-caption-background - cue text box background (default: rgba(0, 0, 0, 0.75))
+//   --playdeck-caption-edge       - cue text edge, a text-shadow value (default: none)
 const captionsOverlayStyle: CSSProperties = {
   position: 'absolute',
   left: 0,
@@ -44,10 +44,10 @@ const captionsOverlayStyle: CSSProperties = {
 };
 
 const captionCueBoxStyle: CSSProperties = {
-  fontSize: 'var(--reely-caption-font-size, 1.05rem)',
-  color: 'var(--reely-caption-color, #fff)',
-  backgroundColor: 'var(--reely-caption-background, rgba(0, 0, 0, 0.75))',
-  textShadow: 'var(--reely-caption-edge, none)',
+  fontSize: 'var(--playdeck-caption-font-size, 1.05rem)',
+  color: 'var(--playdeck-caption-color, #fff)',
+  backgroundColor: 'var(--playdeck-caption-background, rgba(0, 0, 0, 0.75))',
+  textShadow: 'var(--playdeck-caption-edge, none)',
   padding: '0.15em 0.4em',
   borderRadius: '0.2em'
 };
@@ -66,7 +66,7 @@ const isRenderableCue = (cue: TextCue): boolean =>
 
 const defaultCueRenderer = (cue: TextCue): ReactNode =>
   cue.text.split('\n').map((line, index) => (
-    <div data-reely-part="caption-line" key={index}>
+    <div data-playdeck-part="caption-line" key={index}>
       {line}
     </div>
   ));
@@ -79,7 +79,7 @@ export const Captions = ({ renderCue, style, ...props }: CaptionsProps) => {
   return (
     <div
       {...props}
-      data-reely-part="captions"
+      data-playdeck-part="captions"
       data-state="custom"
       style={{ ...captionsOverlayStyle, ...style }}
     >
@@ -87,7 +87,7 @@ export const Captions = ({ renderCue, style, ...props }: CaptionsProps) => {
         const normalized = normalizeCue(cue);
         return (
           <div
-            data-reely-part="caption-cue"
+            data-playdeck-part="caption-cue"
             key={`${normalized.id ?? ''}:${normalized.startTime}:${normalized.endTime}:${index}`}
             style={renderCue ? undefined : captionCueBoxStyle}
           >
@@ -156,7 +156,7 @@ export const CaptionsButton = ({
         aria-label={on ? 'Disable captions' : 'Enable captions'}
         aria-pressed={on}
         data-provider={provider ?? undefined}
-        data-reely-part="captions-button"
+        data-playdeck-part="captions-button"
         data-state={on ? 'on' : 'off'}
         onClick={(event) => {
           onClick?.(event);
@@ -177,7 +177,7 @@ export const CaptionsButton = ({
           "Captions off"); cue text must never enter a live region. */}
       <div
         aria-live="polite"
-        data-reely-part="captions-announcer"
+        data-playdeck-part="captions-announcer"
         style={visuallyHiddenStyle}
       >
         {announcementText}

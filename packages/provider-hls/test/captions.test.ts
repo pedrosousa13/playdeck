@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createHlsProvider, type HlsSubtitleTrackLike } from '../src/index';
+import { captureRethrows } from './fixtures/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 import {
   createFakeTrack,
@@ -136,7 +137,7 @@ test('discovers embedded WebVTT tracks on the native HLS engine and honors the d
       language: 'en',
       id: 't1',
       default: true,
-      hasCues: true
+      cues: [{}]
     }
   ]);
 
@@ -265,7 +266,7 @@ test('keeps native caption state out of the hls.js engine path so hls.js is the 
       language: 'en',
       id: 'sidecar',
       default: true,
-      hasCues: true
+      cues: [{}]
     }
   ]);
 
@@ -506,4 +507,81 @@ test('setCaptionRenderer accepts native but honestly keeps reporting custom rend
   provider.setCaptionRenderer?.('custom');
 
   expect(latest(patches).captionRendering).toBe('custom');
+});
+
+// HLS carries no chapters concept of its own on either engine: chapters come
+// off the media element's own track list, which the native adapter under this
+// one already reads. What this guards is that the hls.js engine's caption
+// stripping does not take them with it -- chapters are not caption state, and
+// hls.js has nothing of its own to publish in their place (#182).
+const chapterTrack = (cues: readonly unknown[] | null): FakeTrackInit => ({
+  kind: 'chapters',
+  label: 'Chapters',
+  language: null,
+  id: 'ch1',
+  cues
+});
+
+test('publishes chapters from a chapters track on the native HLS engine', async () => {
+  const { provider, patches, tracks } = mountNativeEngineHls([
+    chapterTrack(null)
+  ]);
+
+  await provider.attach();
+  const track = tracks[0];
+  if (track)
+    track.cues = [
+      { id: 'c1', startTime: 0, endTime: 1, text: 'Intro' },
+      { id: 'c2', startTime: 30, endTime: 31, text: 'Body' }
+    ];
+  track?.dispatch('cuechange');
+
+  expect(latest(patches).chapters).toEqual([
+    { id: 'c1', title: 'Intro', startTime: 0, endTime: 30 },
+    { id: 'c2', title: 'Body', startTime: 30, endTime: null }
+  ]);
+});
+
+test('keeps sidecar chapters on the hls.js engine, which strips only caption state', async () => {
+  const { patches } = await mountHlsEngineHlsWithSidecarTracks([
+    chapterTrack([{ id: 'c1', startTime: 0, endTime: 1, text: 'Intro' }])
+  ]);
+
+  const last = latest(patches);
+  expect(last.textTracks).toBeUndefined();
+  expect(last.chapters).toEqual([
+    { id: 'c1', title: 'Intro', startTime: 0, endTime: null }
+  ]);
+  expect(last.capabilities).toMatchObject({
+    chapters: { status: 'available' }
+  });
+});
+
+// --- subscriber isolation (#233) ---
+
+// The cue channel is its own listener set, fanned out the same way the state
+// channel is. The deliberate throw is rethrown on a fresh task, so it is
+// captured rather than left to the runner's unhandled-error handling.
+test('a throwing cue listener does not starve the listeners behind it', async () => {
+  captureRethrows();
+  const { provider, media, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: true, type: 'SUBTITLES' }
+  ]);
+  provider.subscribeCues?.(() => {
+    throw new Error('cue listener blew up');
+  });
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+
+  media.currentTime = 1.5;
+  expect(() =>
+    hls.emitCuesParsed([
+      { id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }
+    ])
+  ).not.toThrow();
+
+  expect(cueFrames.at(-1)).toEqual([
+    { id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }
+  ]);
 });

@@ -1,4 +1,4 @@
-import { deriveLiveState } from '@reely/provider-hls';
+import { deriveLiveState } from '@playdeck/provider-hls';
 
 // Liveness is derived from what the stream reports — never from the URL or a
 // filename. `isLiveHint` is hls.js's own answer where it has one; the native

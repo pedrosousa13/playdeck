@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import type { PlayerError } from '@reely/core';
+import type { PlayerError } from '@playdeck/core';
 import { createHlsErrorRecovery } from '../src/error-recovery';
 
 const errorTypes = {

@@ -3,16 +3,16 @@ import { playButton } from './locators';
 
 // Real-provider smoke tests: tagged @real so they never block CI (see
 // grepInvert in playwright.config.ts). Run with:
-//   REELY_REAL_PROVIDERS=1 pnpm test:e2e -- --grep @real
+//   PLAYDECK_REAL_PROVIDERS=1 pnpm test:e2e -- --grep @real
 
 type CapabilityName = keyof ReturnType<
-  NonNullable<Window['reelyHandle']>['getState']
+  NonNullable<Window['playdeckHandle']>['getState']
 >['capabilities'];
 
 const capability = (page: Page, name: CapabilityName) =>
   page.evaluate(
     (capabilityName) =>
-      window.reelyHandle?.getState().capabilities[capabilityName],
+      window.playdeckHandle?.getState().capabilities[capabilityName],
     name
   );
 
@@ -31,7 +31,7 @@ test(
     await activation.waitFor();
     await activation.click();
 
-    const iframe = page.locator('[data-reely-part="media"] iframe');
+    const iframe = page.locator('[data-playdeck-part="media"] iframe');
     await expect(iframe).toHaveAttribute(
       'src',
       /^https:\/\/player\.vimeo\.com\/video\/76979871\?/
@@ -45,26 +45,28 @@ test(
       .poll(() => capability(page, 'selectTextTrack'), { timeout: 30_000 })
       .toEqual({ status: 'available' });
     const selection = await page.evaluate(() =>
-      window.reelyHandle?.selectTextTrack('vimeo:en')
+      window.playdeckHandle?.selectTextTrack('vimeo:en')
     );
     expect(selection).toMatchObject({ ok: true });
 
     // #16: Vimeo hands its cues over rather than drawing them, so the whole
     // chain has to work on the real embed — `cuechange` fires with the track
     // enabled `showing: false`, the payload's markup normalizes to plain text,
-    // and the result reaches Reely's own overlay. Asserting on the overlay
+    // and the result reaches Playdeck's own overlay. Asserting on the overlay
     // covers all three at once, and avoids a second Vimeo Player instance
     // competing with the adapter for ownership of the same track.
     await expect
       .poll(
         () =>
-          page.evaluate(() => window.reelyHandle?.getState().captionRendering),
+          page.evaluate(
+            () => window.playdeckHandle?.getState().captionRendering
+          ),
         { timeout: 30_000 }
       )
       .toBe('custom');
-    await page.evaluate(() => window.reelyHandle?.seekTo(10));
+    await page.evaluate(() => window.playdeckHandle?.seekTo(10));
 
-    const cues = page.locator('[data-reely-part="caption-cue"]');
+    const cues = page.locator('[data-playdeck-part="caption-cue"]');
     await expect(cues.first()).toHaveText(/\S/, { timeout: 30_000 });
     // Normalization ran: neither a WebVTT tag nor Vimeo's U+21B5 line
     // separator survives into what the viewer reads. Only `<` is checked, not
@@ -115,12 +117,12 @@ test(
   }
 );
 
-// #82: the ids Reely publishes are Vimeo's own rung keys under a prefix, and
+// #82: the ids Playdeck publishes are Vimeo's own rung keys under a prefix, and
 // the SDK never settles a `setQuality` for an id it did not offer — so an id
 // that drifts out of shape does not fail, it hangs. Every published rung is
 // therefore round-tripped through the live player, not just the first one.
 test(
-  'every quality rung Reely publishes is one the live Vimeo player accepts',
+  'every quality rung Playdeck publishes is one the live Vimeo player accepts',
   { tag: '@real' },
   async ({ page }) => {
     test.setTimeout(180_000);
@@ -137,7 +139,7 @@ test(
       .toEqual({ status: 'available' });
 
     const qualities = await page.evaluate(
-      () => window.reelyHandle?.getState().qualities ?? []
+      () => window.playdeckHandle?.getState().qualities ?? []
     );
     // 76979871 carries a real ladder, and `auto` is not part of it: it is a
     // mode, reported as `selectedQualityId: null`.
@@ -145,38 +147,38 @@ test(
     expect(qualities.map((quality) => quality.id)).not.toContain('vimeo:auto');
     expect(
       await page.evaluate(
-        () => window.reelyHandle?.getState().selectedQualityId
+        () => window.playdeckHandle?.getState().selectedQualityId
       )
     ).toBeNull();
 
     for (const quality of qualities) {
       expect(
         await page.evaluate(
-          (id) => window.reelyHandle?.selectQuality(id),
+          (id) => window.playdeckHandle?.selectQuality(id),
           quality.id
         )
       ).toMatchObject({ ok: true });
       expect(
         await page.evaluate(
-          () => window.reelyHandle?.getState().selectedQualityId
+          () => window.playdeckHandle?.getState().selectedQualityId
         )
       ).toBe(quality.id);
     }
 
     // And back to adaptive, which is a rung the SDK has to accept under a name
-    // Reely never publishes.
+    // Playdeck never publishes.
     expect(
-      await page.evaluate(() => window.reelyHandle?.selectQuality(null))
+      await page.evaluate(() => window.playdeckHandle?.selectQuality(null))
     ).toMatchObject({ ok: true });
     expect(
       await page.evaluate(
-        () => window.reelyHandle?.getState().selectedQualityId
+        () => window.playdeckHandle?.getState().selectedQualityId
       )
     ).toBeNull();
   }
 );
 
-// #62: Reely's Vimeo captions rest entirely on one empirical guarantee —
+// #62: Playdeck's Vimeo captions rest entirely on one empirical guarantee —
 // `enableTextTrack(language, kind, false)` makes Vimeo fire `cuechange` WITHOUT
 // drawing the cues itself. If that ever changed, every Vimeo consumer would see
 // two sets of captions and nothing in the suite would notice: the cue text
@@ -200,24 +202,26 @@ test(
     await expect
       .poll(() => capability(page, 'selectTextTrack'), { timeout: 30_000 })
       .toEqual({ status: 'available' });
-    await page.evaluate(() => window.reelyHandle?.selectTextTrack('vimeo:en'));
+    await page.evaluate(() =>
+      window.playdeckHandle?.selectTextTrack('vimeo:en')
+    );
 
-    const frame = page.locator('[data-reely-part="media"] iframe');
-    const cues = page.locator('[data-reely-part="caption-cue"]');
-    await page.evaluate(() => window.reelyHandle?.seekTo(10));
+    const frame = page.locator('[data-playdeck-part="media"] iframe');
+    const cues = page.locator('[data-playdeck-part="caption-cue"]');
+    await page.evaluate(() => window.playdeckHandle?.seekTo(10));
     await expect(cues.first()).toHaveText(/\S/, { timeout: 30_000 });
-    await page.evaluate(() => window.reelyHandle?.pause());
+    await page.evaluate(() => window.playdeckHandle?.pause());
     // A paused frame takes a beat to be the frame on screen.
     await page.waitForTimeout(2_000);
 
-    // Reely's own overlay sits ON TOP of the iframe, so an element screenshot
+    // Playdeck's own overlay sits ON TOP of the iframe, so an element screenshot
     // captures it too — and then the two frames differ because of OUR cues, not
     // Vimeo's. Measured: without this, the comparison passes even when custom
     // mode is forced to enable with showing: true, which is precisely the
     // regression the test exists to catch. Hidden via a stylesheet rather than
     // an inline style, which React would overwrite on the next cue render.
     await page.addStyleTag({
-      content: '[data-reely-part="captions"] { display: none !important; }'
+      content: '[data-playdeck-part="captions"] { display: none !important; }'
     });
     await page.waitForTimeout(500);
     const custom = await frame.screenshot();
@@ -231,7 +235,9 @@ test(
     // whether Vimeo draws the cue. Re-seeking instead made the comparison
     // vacuous — measured, the frames differed on jitter alone and the test
     // passed even with custom mode forced to showing: true.
-    await page.evaluate(() => window.reelyHandle?.setCaptionRenderer('native'));
+    await page.evaluate(() =>
+      window.playdeckHandle?.setCaptionRenderer('native')
+    );
 
     // Poll the pixels, not the state: setCaptionRenderer emits
     // `captionRendering` synchronously, so polling that would satisfy on the
@@ -245,7 +251,9 @@ test(
       )
       .toBe(true);
     expect(
-      await page.evaluate(() => window.reelyHandle?.getState().captionRendering)
+      await page.evaluate(
+        () => window.playdeckHandle?.getState().captionRendering
+      )
     ).toBe('provider');
   }
 );

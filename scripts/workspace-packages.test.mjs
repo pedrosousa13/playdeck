@@ -8,16 +8,16 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 test('keeps the workspace projects that are not private', () => {
   assert.deepEqual(
     selectPublishable([
-      { name: 'reely', path: '/w', private: true },
+      { name: 'playdeck', path: '/w', private: true },
       {
-        name: '@reely/core',
+        name: '@playdeck/core',
         version: '0.0.0',
         path: '/w/packages/core',
         private: false
       },
-      { name: '@reely/storybook', path: '/w/apps/storybook', private: true }
+      { name: '@playdeck/storybook', path: '/w/apps/storybook', private: true }
     ]).map((entry) => entry.name),
-    ['@reely/core']
+    ['@playdeck/core']
   );
 });
 
@@ -47,7 +47,7 @@ test('refuses a listing with nothing publishable in it', () => {
   // An empty result is never a legitimate answer here: it means the discovery
   // command changed shape, and every caller would then silently check nothing.
   assert.throws(
-    () => selectPublishable([{ name: 'reely', path: '/w', private: true }]),
+    () => selectPublishable([{ name: 'playdeck', path: '/w', private: true }]),
     /No publishable workspace packages were discovered/
   );
 });

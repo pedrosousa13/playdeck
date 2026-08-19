@@ -16,8 +16,8 @@ import {
   type CommandResult,
   type ProviderAdapter,
   type ProviderStateListener
-} from '@reely/core';
-import type { NativePlaybackOptions } from '@reely/provider-native';
+} from '@playdeck/core';
+import type { NativePlaybackOptions } from '@playdeck/provider-native';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 import { useActivation } from '../src/use-activation';
@@ -220,7 +220,7 @@ test('eager loads after client mount and forwards preload', async () => {
   render(fixture({ loading: 'eager', preload: 'none' }));
 
   await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
-  expect(screen.getByLabelText('Reely media').getAttribute('preload')).toBe(
+  expect(screen.getByLabelText('Playdeck media').getAttribute('preload')).toBe(
     'none'
   );
   await vi.waitFor(() =>
@@ -1133,7 +1133,7 @@ test('Viewport runs a consumer callback-ref cleanup on unmount', () => {
     </Player.Root>
   );
   expect(consumerRef).toHaveBeenCalledWith(
-    document.querySelector('[data-reely-part="viewport"]')
+    document.querySelector('[data-playdeck-part="viewport"]')
   );
 
   unmount();
@@ -1165,13 +1165,13 @@ test('Viewport composes callback-ref replacement cleanup and object-ref clearing
   rerender(player(secondRef));
   expect(firstCleanup).toHaveBeenCalledOnce();
   expect(secondRef).toHaveBeenCalledWith(
-    document.querySelector('[data-reely-part="viewport"]')
+    document.querySelector('[data-playdeck-part="viewport"]')
   );
 
   rerender(player(objectRef));
   expect(secondCleanup).toHaveBeenCalledOnce();
   expect(objectRef.current).toBe(
-    document.querySelector('[data-reely-part="viewport"]')
+    document.querySelector('[data-playdeck-part="viewport"]')
   );
 
   unmount();
@@ -1479,13 +1479,13 @@ test('incompatible autoplay commit ignores a rejecting interaction loader', asyn
 test('server-renders interaction control without media or loading work', () => {
   const markup = renderToString(interactionFixture());
 
-  expect(markup).toContain('data-reely-part="activation"');
+  expect(markup).toContain('data-playdeck-part="activation"');
   expect(markup).toContain('aria-label="Play video"');
-  expect(markup).toContain('data-reely-part="poster"');
+  expect(markup).toContain('data-playdeck-part="poster"');
   expect(markup).not.toContain('<video');
   // The live region ships (empty/idle) so buffering can be announced later,
   // but no loading work has started and nothing is announced.
-  expect(markup).toContain('data-reely-part="loading-indicator"');
+  expect(markup).toContain('data-playdeck-part="loading-indicator"');
   expect(markup).toContain('data-state="idle"');
   expect(markup).not.toContain('Loading video');
   expect(markup).not.toContain('Buffering');
@@ -1500,7 +1500,7 @@ test('one interaction click loads and queues user-origin playback', async () => 
 
   const activation = screen.getByRole('button', { name: 'Play video' });
   expect(activation.dataset.state).toBe('dormant');
-  expect(screen.queryByLabelText('Reely media')).toBeNull();
+  expect(screen.queryByLabelText('Playdeck media')).toBeNull();
   expect(mockedLoadProvider).not.toHaveBeenCalled();
 
   fireEvent.click(activation);

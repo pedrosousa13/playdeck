@@ -24,7 +24,7 @@ provider — SIDEPRO-188 (native, first), SIDEPRO-189 (HLS), SIDEPRO-190
 
 Nothing changed in the measurement above — what changed is the decision. The
 maintainer accepted the cost the original closing weighed: the `@real` suite
-runs only manually now (`REELY_REAL_PROVIDERS=1 pnpm test:e2e
+runs only manually now (`PLAYDECK_REAL_PROVIDERS=1 pnpm test:e2e
 --project=chromium --grep @real`), and that manual run is a hard gate on this
 work, not a formality.
 

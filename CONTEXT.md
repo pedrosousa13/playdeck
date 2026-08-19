@@ -1,4 +1,4 @@
-# Reely
+# Playdeck
 
 A headless video player: React primitives over a framework-agnostic core, with
 provider adapters for native media, HLS, YouTube, Vimeo and Wistia. The
@@ -21,7 +21,7 @@ An exported React component a consumer composes into a player, such as
 _Avoid_: component, widget
 
 **Part**:
-A named element in the rendered DOM, identified by `data-reely-part`. One
+A named element in the rendered DOM, identified by `data-playdeck-part`. One
 primitive may render several — `ErrorDisplay` renders `error`, `error-message`
 and `error-retry` — so a part name is not a primitive's name.
 _Avoid_: element, node, slot
@@ -39,6 +39,15 @@ _Avoid_: engine, backend, player
 What a consumer asks the player to play: a URL string, or a resolved descriptor
 naming its kind. Distinct from the `<source>` elements the native provider
 renders.
+
+**Shared allowlist**:
+The one rule (`isPermittedSourceUrl` / `resolveNetworkPath`, `@playdeck/core`)
+for whether a URL the library did not construct is carried forward: `http:`,
+`https:` and the scheme-less forms are permitted, `blob:` only for a `video`
+source, and everything else is refused. Governs source detection, every
+consumer-supplied URL prop and provider option alike (#219, #236). A refused
+value is treated exactly as if the prop were absent — never a throw.
+_Avoid_: whitelist, sanitise, safe URL
 
 **Shortcut layer**:
 The media keys `Player.Controls` owns. One binding maps keys to one action —
@@ -68,6 +77,21 @@ that control's own domain sets, and so releases it. A request nothing echoes is
 released by its deadline instead.
 _Avoid_: confirmation, acknowledgement
 
+**Requested origin**:
+Where a command the library issued came from — a control a person operated, an
+untagged public command, an autoplay attempt. Held from the moment the command
+is issued until the provider reports the change that confirms it, and used in
+place of the `provider` an adapter stamps every report of its own with. Distinct
+from a requested value: this is who asked, not what for.
+_Avoid_: source, trigger, cause
+
+**Chapter**:
+One named division of a video's timeline, published as an ordered collection on
+player state beside a capability that says whether the provider can report any
+at all. No provider reports where a chapter ends, so every end is derived: each
+chapter ends where the next begins, and the last where the media does.
+_Avoid_: segment, marker, cue point
+
 ### Loading
 
 **Activation**:
@@ -89,10 +113,16 @@ The source whose media element may mount, because its activation identity
 matches the one activation committed to.
 _Avoid_: eligible media
 
+**Recovered autoplay**:
+Playback that started only because the audible attempt was refused by policy and
+the muted retry behind it played. Reported next to the `started` autoplay a
+recovery does not change, and reachable from the `audible-then-muted` mode only.
+_Avoid_: autoplay fallback, muted fallback
+
 ### Adapters
 
 See [ADR-0004](docs/adr/0004-cross-provider-options-live-on-root.md) for what
-makes a setting Reely's own prop rather than a key in one provider's option bag.
+makes a setting Playdeck's own prop rather than a key in one provider's option bag.
 
 **Seam**:
 A part of a provider adapter that exclusively owns one slice of the adapter's
@@ -106,6 +136,21 @@ _Avoid_: layer, subsystem
 An adapter's binding to its media element — attach, load, listener wiring and
 teardown. Not Lifecycle, which is what the player state reports.
 _Avoid_: adapter lifecycle, setup
+
+**Fan-out**:
+One emit delivered to every listener in a subscriber set — state, dimensions or
+cues. Isolating a listener that throws is the emitter's duty, not the
+subscriber's: the rest of the set is owed that notification. Not the single call
+a `subscribe` makes at registration, which runs on the subscriber's own stack.
+_Avoid_: broadcast, notify loop
+
+**Notice**:
+A non-fatal `configuration` error a provider publishes to report a value it
+rejected, while the fall-back behaviour it degraded to stands unchanged. Held
+as controller state and surfaced on `PlayerState.error` like any other error,
+but never a failure: it never masks a standing error, and it never drives a
+transition into the error lifecycle.
+_Avoid_: warning, soft error
 
 **Aurora**:
 Wistia's current player generation — the `<wistia-player>` custom element the

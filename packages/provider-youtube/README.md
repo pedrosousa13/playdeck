@@ -1,25 +1,25 @@
-# @reely/provider-youtube
+# @playdeck/provider-youtube
 
-The YouTube provider for [Reely](https://github.com/pedrosousa13/reely), over
+The YouTube provider for [Playdeck](https://github.com/pedrosousa13/playdeck), over
 the IFrame Player API.
 
 ```sh
-pnpm add @reely/provider-youtube
+pnpm add @playdeck/provider-youtube
 ```
 
-`@reely/react` loads this for you when the source resolves to `youtube`.
+`@playdeck/react` loads this for you when the source resolves to `youtube`.
 
 <!-- example:provider-youtube -->
 
 ```ts
-import { PlayerController } from '@reely/core';
+import { PlayerController } from '@playdeck/core';
 import {
   API_READY_TIMEOUT_MS,
   PLAYBACK_CONFIRMATION_TIMEOUT_MS,
   createYouTubeProvider,
   loadYouTubeIframeApi,
   resetYouTubeIframeApiLoader
-} from '@reely/provider-youtube';
+} from '@playdeck/provider-youtube';
 
 declare const mount: HTMLElement;
 
@@ -90,6 +90,10 @@ origins list and what a page's CSP has to allow.
   undocumented `captions` module, so it follows community-observed conventions
   rather than a published contract.
 - **`pictureInPicture` is `unavailable`**: the embed owns its own video element.
+- **Chapters are never reported.** The IFrame Player API documents no chapter
+  method and no chapter event, and the Data API's video resource has no chapter
+  property, so `chapters` stays empty and `capabilities.chapters` reports
+  `unavailable` / `provider`. No command fails over it.
 - **`live` is never reported.** The IFrame Player API surface this adapter
   declares (`src/loader.ts`) carries no liveness member, and nothing else the
   API offers separates a broadcast from a video on demand: on a live stream

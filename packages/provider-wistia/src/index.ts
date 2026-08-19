@@ -1,5 +1,6 @@
 import {
   isWistiaMediaId,
+  notifySafely,
   type Availability,
   type CommandResult,
   type PlayerCapabilities,
@@ -8,7 +9,7 @@ import {
   type ProviderEvent,
   type ProviderStateListener,
   type WistiaSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   available,
   providerEvent,
@@ -136,6 +137,10 @@ const createRejectedWistiaProvider = (): WistiaProviderAdapter => {
     attach: () => undefined,
     load: () => undefined,
     destroy: () => undefined,
+    // Called straight rather than through `notifySafely`: this is the one call
+    // a `subscribe` makes at registration, on the subscriber's own stack, and
+    // not a fan-out — only the emits after registration are the emitter's to
+    // isolate (#233). Same for `subscribeDimensions` below.
     subscribe: (listener) => {
       listener(
         {
@@ -178,7 +183,8 @@ export const createWistiaProvider = (
   const emit = (
     patch: Parameters<ProviderStateListener>[0],
     event?: ProviderEvent
-  ): void => listeners.forEach((listener) => listener(patch, event));
+  ): void =>
+    listeners.forEach((listener) => notifySafely(listener, patch, event));
 
   // Resolved once, from the raw options, and consulted by the playback seam on
   // every time report, seek and restart.
@@ -208,6 +214,9 @@ export const createWistiaProvider = (
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: outOfScope,
       selectTextTrack: outOfScope,
+      // Wistia's chapters are an inbound embed-option plugin: the embedder
+      // supplies the list, and no documented read-back accessor exists (#182).
+      chapters: outOfScope,
       // `PublicApi.requestFullscreen()` / `cancelFullscreen()`.
       fullscreen: available,
       pictureInPicture: outOfScope,

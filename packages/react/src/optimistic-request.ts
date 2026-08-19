@@ -1,4 +1,4 @@
-import type { CommandResult } from '@reely/core';
+import type { CommandResult } from '@playdeck/core';
 
 // The optimistic-request policy the sliders share: the value the user last
 // asked for, held until the published state answers for it, and the command

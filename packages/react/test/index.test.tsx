@@ -19,12 +19,12 @@ import {
 import type * as React from 'react';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { PlayerController, type ProviderAdapter } from '@reely/core';
-import type { NativePlaybackOptions } from '@reely/provider-native';
+import { PlayerController, type ProviderAdapter } from '@playdeck/core';
+import type { NativePlaybackOptions } from '@playdeck/provider-native';
 import * as Player from '../src/index';
 
 vi.mock('../src/provider-loaders', async () => {
-  const { createNativeProvider } = await import('@reely/provider-native');
+  const { createNativeProvider } = await import('@playdeck/provider-native');
   return {
     // Keep legacy provider assertions synchronous; activation.test.tsx covers
     // the real Promise boundary and the loader's real async contract directly.
@@ -177,7 +177,7 @@ test('exposes playback preferences without accepting a playing prop', () => {
     </LegacyRoot>
   );
 
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(media.muted).toBe(true);
   expect(media.volume).toBe(0.4);
   expect(media.playbackRate).toBe(1.5);
@@ -210,7 +210,7 @@ test('keeps provider preferences and autoplay active after StrictMode effect rep
       </LegacyRoot>
     </StrictMode>
   );
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
   expect(handle.current?.getState().provider).toBe('native');
   media.volume = 0.2;
@@ -233,13 +233,13 @@ test('does not assign invalid controlled numeric preferences during media regist
     </LegacyRoot>
   );
   const { rerender } = render(player('/first.mp4'));
-  const firstMedia = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const firstMedia = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
   expect(firstMedia.volume).toBe(1);
   expect(firstMedia.playbackRate).toBe(1);
   rerender(player('/second.mp4'));
 
-  const replacement = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const replacement = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(replacement).not.toBe(firstMedia);
   expect(replacement.volume).toBe(1);
   expect(replacement.playbackRate).toBe(1);
@@ -256,13 +256,13 @@ test('clamps finite default volume and skips an invalid default rate on replacem
     </LegacyRoot>
   );
   const { rerender } = render(player('/first.mp4'));
-  const firstMedia = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const firstMedia = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
   expect(firstMedia.volume).toBe(0);
   expect(firstMedia.playbackRate).toBe(1);
   rerender(player('/second.mp4'));
 
-  const replacement = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const replacement = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(replacement).not.toBe(firstMedia);
   expect(replacement.volume).toBe(0);
   expect(replacement.playbackRate).toBe(1);
@@ -290,7 +290,7 @@ test.each([
         <Player.Media />
       </LegacyRoot>
     );
-    const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+    const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
     expect(setter).toHaveBeenCalledWith(value);
     expect(handle.current?.getState().provider).toBe('native');
@@ -316,7 +316,7 @@ test('seeds default preferences once and retains confirmed values across media r
   const { rerender } = render(
     player('/first.mp4', { muted: true, volume: 0.4, playbackRate: 1.5 })
   );
-  const firstMedia = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const firstMedia = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
   rerender(
     player('/first.mp4', { muted: false, volume: 0.8, playbackRate: 2 })
@@ -334,7 +334,7 @@ test('seeds default preferences once and retains confirmed values across media r
     player('/second.mp4', { muted: false, volume: 0.8, playbackRate: 2 })
   );
 
-  const replacement = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const replacement = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(replacement).not.toBe(firstMedia);
   expect(replacement.muted).toBe(false);
   expect(replacement.volume).toBe(0.6);
@@ -359,7 +359,7 @@ test('reconciles controlled preferences without reporting prop-driven confirmati
     </LegacyRoot>
   );
   const { rerender } = render(player(false, 0.7, 1.25));
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
   rerender(player(true, 0.3, 1.75));
   expect(media.muted).toBe(true);
@@ -387,7 +387,7 @@ test('supersedes a delayed muted confirmation after a rapid controlled reversal'
     </LegacyRoot>
   );
   const { rerender } = render(player(false));
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   const mute = vi.spyOn(handle.current!, 'mute');
   const unmute = vi.spyOn(handle.current!, 'unmute');
 
@@ -422,7 +422,7 @@ test('supersedes a delayed volume confirmation after a rapid controlled reversal
     </LegacyRoot>
   );
   const { rerender } = render(player(0.7));
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   const setVolume = vi.spyOn(handle.current!, 'setVolume');
 
   rerender(player(0.2));
@@ -455,7 +455,7 @@ test('supersedes a delayed rate confirmation after a rapid controlled reversal',
     </LegacyRoot>
   );
   const { rerender } = render(player(1.25));
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   const setPlaybackRate = vi.spyOn(handle.current!, 'setPlaybackRate');
 
   rerender(player(2));
@@ -477,7 +477,7 @@ test('supersedes a delayed rate confirmation after a rapid controlled reversal',
 test('clears retired volume targets when queued confirmations coalesce to the latest value', () => {
   const callbackMediaValues: number[] = [];
   const onVolumeChange = vi.fn((value: number) => {
-    const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+    const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
     callbackMediaValues.push(media.volume);
     expect(value).toBe(media.volume);
   });
@@ -493,7 +493,7 @@ test('clears retired volume targets when queued confirmations coalesce to the la
     </LegacyRoot>
   );
   const { rerender } = render(player(0.7));
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   const setVolume = vi.spyOn(handle.current!, 'setVolume');
 
   rerender(player(0.2));
@@ -517,7 +517,7 @@ test('clears retired volume targets when queued confirmations coalesce to the la
 test('clears repeated retired rate targets after the latest active confirmation', () => {
   const callbackMediaValues: number[] = [];
   const onPlaybackRateChange = vi.fn((value: number) => {
-    const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+    const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
     callbackMediaValues.push(media.playbackRate);
     expect(value).toBe(media.playbackRate);
   });
@@ -533,7 +533,7 @@ test('clears repeated retired rate targets after the latest active confirmation'
     </LegacyRoot>
   );
   const { rerender } = render(player(1));
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   const setPlaybackRate = vi.spyOn(handle.current!, 'setPlaybackRate');
 
   rerender(player(2));
@@ -559,7 +559,7 @@ test('clears repeated retired rate targets after the latest active confirmation'
 test('clears retired muted targets when a reversal confirmation coalesces to current', () => {
   const callbackMediaValues: boolean[] = [];
   const onMutedChange = vi.fn((value: boolean) => {
-    const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+    const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
     callbackMediaValues.push(media.muted);
     expect(value).toBe(media.muted);
   });
@@ -575,7 +575,7 @@ test('clears retired muted targets when a reversal confirmation coalesces to cur
     </LegacyRoot>
   );
   const { rerender } = render(player(false));
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   const mute = vi.spyOn(handle.current!, 'mute');
   const unmute = vi.spyOn(handle.current!, 'unmute');
 
@@ -603,17 +603,17 @@ test('reports confirmed controlled conflicts before restoring controlled values'
   const mediaAtVolumeCallback: number[] = [];
   const mediaAtRateCallback: number[] = [];
   const onMutedChange = vi.fn((value: boolean) => {
-    const confirmed = screen.getByLabelText<HTMLVideoElement>('Reely media');
+    const confirmed = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
     mediaAtMutedCallback.push(confirmed.muted);
     expect(value).toBe(confirmed.muted);
   });
   const onVolumeChange = vi.fn((value: number) => {
-    const confirmed = screen.getByLabelText<HTMLVideoElement>('Reely media');
+    const confirmed = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
     mediaAtVolumeCallback.push(confirmed.volume);
     expect(value).toBe(confirmed.volume);
   });
   const onPlaybackRateChange = vi.fn((value: number) => {
-    const confirmed = screen.getByLabelText<HTMLVideoElement>('Reely media');
+    const confirmed = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
     mediaAtRateCallback.push(confirmed.playbackRate);
     expect(value).toBe(confirmed.playbackRate);
   });
@@ -630,7 +630,7 @@ test('reports confirmed controlled conflicts before restoring controlled values'
       <Player.Media />
     </LegacyRoot>
   );
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
   media.muted = true;
   media.volume = 0.2;
@@ -666,7 +666,7 @@ test('keeps autoplay disabled by default', () => {
     </LegacyRoot>
   );
 
-  confirmMetadataReady(screen.getByLabelText('Reely media'));
+  confirmMetadataReady(screen.getByLabelText('Playdeck media'));
 
   expect(play).not.toHaveBeenCalled();
   expect(
@@ -694,7 +694,7 @@ test('mutes before autoplay and reports attempting then confirmed started', asyn
       <Player.PlayButton />
     </LegacyRoot>
   );
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
   confirmMetadataReady(media);
   // Awaited rather than asserted synchronously: autoplay is deferred until the
@@ -729,7 +729,7 @@ test('attempts audible autoplay without muting', async () => {
     </LegacyRoot>
   );
 
-  confirmMetadataReady(screen.getByLabelText('Reely media'));
+  confirmMetadataReady(screen.getByLabelText('Playdeck media'));
 
   await waitFor(() =>
     expect(screen.getByRole('button').dataset.autoplayState).toBe('started')
@@ -749,7 +749,7 @@ test.each([
     </LegacyRoot>
   );
 
-  confirmMetadataReady(screen.getByLabelText('Reely media'));
+  confirmMetadataReady(screen.getByLabelText('Playdeck media'));
 
   await waitFor(() =>
     expect(screen.getByRole('button').dataset.autoplayState).toBe(state)
@@ -775,7 +775,7 @@ test('keeps blocked autoplay focusable and retries only from a user-origin click
     </LegacyRoot>
   );
   handle.current?.on('play', (event) => origins.push(event.origin));
-  confirmMetadataReady(screen.getByLabelText('Reely media'));
+  confirmMetadataReady(screen.getByLabelText('Playdeck media'));
   await waitFor(() =>
     expect(screen.getByRole('button').dataset.autoplayState).toBe('blocked')
   );
@@ -806,7 +806,7 @@ test('reports the controlled-unmuted conflict without trying muted autoplay', ()
     </LegacyRoot>
   );
 
-  confirmMetadataReady(screen.getByLabelText('Reely media'));
+  confirmMetadataReady(screen.getByLabelText('Playdeck media'));
 
   expect(screen.getByRole('button').dataset.autoplayState).toBe('failed');
   expect(handle.current?.getState().error?.category).toBe('configuration');
@@ -859,7 +859,7 @@ test('renders every explicit video source in order with its MIME type', () => {
   );
 
   const sources = screen
-    .getByLabelText('Reely media')
+    .getByLabelText('Playdeck media')
     .querySelectorAll('source');
   expect(
     Array.from(sources, (source) => ({
@@ -881,14 +881,14 @@ test('remounts media and resets confirmed playing state after a transition to HL
     </LegacyRoot>
   );
   const { rerender } = render(player('/tracer.mp4'));
-  const media = screen.getByLabelText('Reely media');
+  const media = screen.getByLabelText('Playdeck media');
 
   fireEvent.play(media);
   expect(screen.getByRole('button', { name: 'Pause' })).toBeDefined();
 
   rerender(player(source));
 
-  const remounted = screen.getByLabelText('Reely media');
+  const remounted = screen.getByLabelText('Playdeck media');
   expect(remounted).not.toBe(media);
   expect(remounted.querySelectorAll('source')).toHaveLength(0);
   expect(
@@ -904,7 +904,7 @@ test('renders hls sources as a bare video mount with quality actions exposed', (
     </LegacyRoot>
   );
 
-  const media = screen.getByLabelText('Reely media');
+  const media = screen.getByLabelText('Playdeck media');
   expect(media.querySelectorAll('source')).toHaveLength(0);
   expect(media.getAttribute('poster')).toBe('/poster.jpg');
   expect(typeof handle.current?.selectQuality).toBe('function');
@@ -923,14 +923,14 @@ test.each([
       </LegacyRoot>
     );
     const { rerender } = render(player('/tracer.mp4'));
-    const media = screen.getByLabelText('Reely media');
+    const media = screen.getByLabelText('Playdeck media');
 
     fireEvent.play(media);
     expect(screen.getByRole('button', { name: 'Pause' })).toBeDefined();
 
     rerender(player(source));
 
-    expect(screen.queryByLabelText('Reely media')).toBeNull();
+    expect(screen.queryByLabelText('Playdeck media')).toBeNull();
     expect(
       screen.getByRole('button', { name: 'Play' }).getAttribute('data-state')
     ).toBe('paused');
@@ -1026,7 +1026,7 @@ test('reads the same controller state through PlayerHandle and usePlayerState', 
     </LegacyRoot>
   );
 
-  fireEvent.play(screen.getByLabelText('Reely media'));
+  fireEvent.play(screen.getByLabelText('Playdeck media'));
 
   expect(screen.getByTestId('selected-playback').textContent).toBe('playing');
   expect(handle.current?.getState().playback).toBe('playing');
@@ -1048,7 +1048,7 @@ test('does not rerender a selector when an unrelated confirmed state changes', (
   );
   const initialRenders = renderSpy.mock.calls.length;
 
-  fireEvent.play(screen.getByLabelText('Reely media'));
+  fireEvent.play(screen.getByLabelText('Playdeck media'));
 
   expect(renderSpy).toHaveBeenCalledTimes(initialRenders);
 });
@@ -1071,7 +1071,7 @@ test('caches an object selector and isolates it from unrelated state changes', (
   );
   const initialRenders = renderSpy.mock.calls.length;
 
-  fireEvent.play(screen.getByLabelText('Reely media'));
+  fireEvent.play(screen.getByLabelText('Playdeck media'));
 
   expect(screen.getByText('1')).toBeDefined();
   expect(renderSpy).toHaveBeenCalledTimes(initialRenders);
@@ -1091,7 +1091,7 @@ test('observes changes to enumerable symbol-key selector values', () => {
       <Volume />
     </LegacyRoot>
   );
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   media.volume = 0.4;
 
   fireEvent.volumeChange(media);
@@ -1137,7 +1137,7 @@ test('passes loop and playback boundaries from Root to the native adapter', asyn
       <Player.Media />
     </LegacyRoot>
   );
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
   fireEvent.loadedMetadata(media);
   expect(media.currentTime).toBe(3);
@@ -1172,7 +1172,7 @@ test('replaces the provider once when native playback options change', async () 
     </LegacyRoot>
   );
   const { rerender } = render(player(0));
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   confirmMetadataReady(media);
   await waitFor(() => expect(play).toHaveBeenCalledOnce());
   await waitFor(() => expect(load).toHaveBeenCalledOnce());
@@ -1243,7 +1243,7 @@ test('destroys the previous native adapter and ignores its stale events on sourc
     </LegacyRoot>
   );
   const { rerender } = render(player('/first.mp4'));
-  const previousMedia = screen.getByLabelText('Reely media');
+  const previousMedia = screen.getByLabelText('Playdeck media');
 
   rerender(player('/second.mp4'));
   expect(removeEventListener).toHaveBeenCalledWith(
@@ -1251,7 +1251,7 @@ test('destroys the previous native adapter and ignores its stale events on sourc
     expect.any(Function)
   );
   await Promise.resolve();
-  const currentMedia = screen.getByLabelText('Reely media');
+  const currentMedia = screen.getByLabelText('Playdeck media');
   expect(currentMedia).not.toBe(previousMedia);
 
   fireEvent.play(previousMedia);
@@ -1320,15 +1320,15 @@ test('renders opaque custom and native picture posters in the decorative layer',
     </Player.Root>
   );
 
-  const viewport = container.querySelector('[data-reely-part="viewport"]');
-  const poster = container.querySelector('[data-reely-part="poster"]');
-  const media = screen.getByLabelText('Reely media');
+  const viewport = container.querySelector('[data-playdeck-part="viewport"]');
+  const poster = container.querySelector('[data-playdeck-part="poster"]');
+  const media = screen.getByLabelText('Playdeck media');
   const picture = container.querySelector('picture[data-native-picture]');
 
   expect(renderSpy).toHaveBeenCalledExactlyOnceWith(marker);
   expect((viewport as HTMLElement).style.position).toBe('relative');
   expect((viewport as HTMLElement).style.overflow).toBe('hidden');
-  expect(media.getAttribute('data-reely-part')).toBe('media');
+  expect(media.getAttribute('data-playdeck-part')).toBe('media');
   expect(media.style.position).toBe('relative');
   expect(media.style.zIndex).toBe('0');
   expect(poster?.getAttribute('aria-hidden')).toBe('true');
@@ -1399,16 +1399,16 @@ test('tracks poster image request state and preserves its explicit image attribu
   const image = container.querySelector('img')!;
 
   expect(image.getAttribute('alt')).toBe('');
-  expect(image.getAttribute('data-reely-part')).toBe('poster-image');
+  expect(image.getAttribute('data-playdeck-part')).toBe('poster-image');
   expect(image.getAttribute('data-state')).toBe('idle');
   expect(image.style).toMatchObject({
     display: 'block',
     width: '100%',
     height: '100%'
   });
-  expect(image.style.objectFit).toBe('var(--reely-poster-fit, cover)');
+  expect(image.style.objectFit).toBe('var(--playdeck-poster-fit, cover)');
   expect(image.style.objectPosition).toBe(
-    'var(--reely-poster-position, center)'
+    'var(--playdeck-poster-position, center)'
   );
 
   rerender(
@@ -1450,6 +1450,118 @@ test('tracks poster image request state and preserves its explicit image attribu
   fireEvent.error(image);
   expect(image.getAttribute('data-state')).toBe('error');
   expect(onError).toHaveBeenCalledOnce();
+});
+
+test('rejects an unsafe poster image src exactly as an absent prop, and permits every safe form', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container, rerender } = render(
+    <PosterImage src="javascript:alert(1)" />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  rerender(<PosterImage src="data:text/html,<script>1</script>" />);
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  rerender(<PosterImage src="file:///etc/passwd" />);
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  // A bare string carries no source `type`, so `blob:` -- permitted only for
+  // an explicit `type: 'video'` source -- is refused here too (#219, #236).
+  rerender(<PosterImage src="blob:https://example.com/id" />);
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  // A raw tab in the scheme position defeats a naive scheme read; refused
+  // outright rather than reparsed (#219, #236).
+  rerender(<PosterImage src={'java\tscript:alert(1)'} />);
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+
+  rerender(<PosterImage src="http://example.com/poster.jpg" />);
+  expect(image.getAttribute('src')).toBe('http://example.com/poster.jpg');
+  expect(image.getAttribute('data-state')).toBe('loading');
+
+  rerender(<PosterImage src="https://example.com/poster.jpg" />);
+  expect(image.getAttribute('src')).toBe('https://example.com/poster.jpg');
+  expect(image.getAttribute('data-state')).toBe('loading');
+
+  rerender(<PosterImage src="//example.com/poster.jpg" />);
+  expect(image.getAttribute('src')).toBe('https://example.com/poster.jpg');
+
+  rerender(<PosterImage src="/relative/poster.jpg" />);
+  expect(image.getAttribute('src')).toBe('/relative/poster.jpg');
+});
+
+test('drops rejected srcSet candidates and keeps the surviving ones, permitting every safe form', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container, rerender } = render(
+    <PosterImage srcSet="javascript:alert(1) 1x, /good-2x.jpg 2x" />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
+  expect(image.getAttribute('data-state')).toBe('loading');
+
+  rerender(<PosterImage srcSet="file:///etc/passwd 1x, /good-2x.jpg 2x" />);
+  expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
+
+  // A raw tab in the scheme position defeats a naive scheme read; refused
+  // outright rather than reparsed (#219, #236).
+  rerender(
+    <PosterImage srcSet={'java\tscript:alert(1) 1x, /good-2x.jpg 2x'} />
+  );
+  expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
+
+  // A `data:` URI's syntax requires a comma before its payload, so splitting
+  // on the comma (rather than running a full srcset parser) breaks this
+  // single candidate into two pieces -- but both happen to carry a refused
+  // scheme (`data:` and `javascript:`), so the candidate still contributes
+  // no survivor. That is the fail-closed trade-off the comma split accepts
+  // (#236), demonstrated rather than merely asserted.
+  rerender(
+    <PosterImage srcSet="data:text/plain,javascript:evil 1x, /good-2x.jpg 2x" />
+  );
+  expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
+
+  rerender(<PosterImage srcSet="http://example.com/http.jpg 1x" />);
+  expect(image.getAttribute('srcset')).toBe('http://example.com/http.jpg 1x');
+
+  rerender(<PosterImage srcSet="https://example.com/https.jpg 1x" />);
+  expect(image.getAttribute('srcset')).toBe('https://example.com/https.jpg 1x');
+
+  rerender(
+    <PosterImage srcSet="//example.com/wide.jpg 800w, /narrow.jpg 400w" />
+  );
+  expect(image.getAttribute('srcset')).toBe(
+    'https://example.com/wide.jpg 800w, /narrow.jpg 400w'
+  );
+
+  // Every candidate rejected: the srcset attribute is absent, not an empty
+  // string (an empty string is truthy-adjacent enough to be a trap) (#236).
+  rerender(<PosterImage srcSet="javascript:alert(1) 1x, blob:whatever 2x" />);
+  expect(image.getAttribute('srcset')).toBeNull();
+  expect(image.getAttribute('data-state')).toBe('idle');
+});
+
+test('settles a poster image given only rejected src and srcSet in idle, and never validates sizes', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage
+      sizes="javascript:not-a-url-surface"
+      src="javascript:alert(1)"
+      srcSet="javascript:alert(2) 2x"
+    />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('src')).toBeNull();
+  expect(image.getAttribute('srcset')).toBeNull();
+  // `sizes` carries media conditions and lengths, not a URL, and is passed
+  // through unmodified regardless of what it contains (#236).
+  expect(image.getAttribute('sizes')).toBe('javascript:not-a-url-surface');
+  expect(image.getAttribute('data-state')).toBe('idle');
 });
 
 test('resolves a cached poster image whose load fired before the handler attached', () => {
@@ -1504,7 +1616,7 @@ test('hides the poster only for confirmed playback or the current media frame', 
     </Player.Root>
   );
   const { rerender } = render(player('/first.mp4'));
-  const firstMedia = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const firstMedia = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   const poster = screen.getByText('Poster').parentElement!;
 
   expect(poster.getAttribute('data-state')).toBe('visible');
@@ -1515,7 +1627,7 @@ test('hides the poster only for confirmed playback or the current media frame', 
   expect(poster.getAttribute('data-state')).toBe('hidden');
 
   rerender(player('/second.mp4'));
-  const secondMedia = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const secondMedia = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(poster.getAttribute('data-state')).toBe('visible');
   fireEvent.loadedData(firstMedia);
   expect(poster.getAttribute('data-state')).toBe('visible');
@@ -1536,12 +1648,12 @@ test('detached media loadeddata cannot hide the poster', () => {
     </Player.Root>
   );
   const { rerender } = render(player(true));
-  const detachedMedia = screen.getByLabelText('Reely media');
+  const detachedMedia = screen.getByLabelText('Playdeck media');
   const poster = screen.getByText('Detached media poster').parentElement!;
   expect(poster.getAttribute('data-state')).toBe('visible');
 
   rerender(player(false));
-  expect(screen.queryByLabelText('Reely media')).toBeNull();
+  expect(screen.queryByLabelText('Playdeck media')).toBeNull();
   fireEvent.loadedData(detachedMedia);
 
   expect(poster.getAttribute('data-state')).toBe('visible');
@@ -1562,7 +1674,7 @@ test('shows the poster synchronously for every A to B to A source transition', (
   const { rerender } = render(player('/first.mp4'));
   const poster = screen.getByText('Transition poster').parentElement!;
 
-  fireEvent.loadedData(screen.getByLabelText('Reely media'));
+  fireEvent.loadedData(screen.getByLabelText('Playdeck media'));
   expect(poster.getAttribute('data-state')).toBe('hidden');
 
   rerender(player('/second.mp4'));
@@ -1570,7 +1682,7 @@ test('shows the poster synchronously for every A to B to A source transition', (
 
   rerender(player('/first.mp4'));
   expect(poster.getAttribute('data-state')).toBe('visible');
-  fireEvent.loadedData(screen.getByLabelText('Reely media'));
+  fireEvent.loadedData(screen.getByLabelText('Playdeck media'));
   expect(poster.getAttribute('data-state')).toBe('hidden');
 });
 
@@ -1599,7 +1711,8 @@ test('keeps the committed poster lifecycle through an abandoned source render', 
     </Player.Root>
   );
   const { rerender } = render(player('/first.mp4'));
-  const committedMedia = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const committedMedia =
+    screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   const poster = screen.getByText('Concurrent poster').parentElement!;
 
   await act(async () => {
@@ -1608,7 +1721,7 @@ test('keeps the committed poster lifecycle through an abandoned source render', 
 
   expect(attemptedSecondSource).toBe(true);
   expect(screen.queryByText('Suspended source')).toBeNull();
-  expect(screen.getByLabelText('Reely media')).toBe(committedMedia);
+  expect(screen.getByLabelText('Playdeck media')).toBe(committedMedia);
   fireEvent.loadedData(committedMedia);
   expect(poster.getAttribute('data-state')).toBe('hidden');
 
@@ -1654,7 +1767,7 @@ test('keeps the poster visible when a frame decodes after refused autoplay', asy
       <Player.PlayButton />
     </LegacyRoot>
   );
-  const media = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
 
   confirmMetadataReady(media);
   await waitFor(() =>
@@ -1687,7 +1800,7 @@ test('keeps the poster visible when cached media attaches under refused autoplay
     </LegacyRoot>
   );
 
-  fireEvent.loadedMetadata(screen.getByLabelText('Reely media'));
+  fireEvent.loadedMetadata(screen.getByLabelText('Playdeck media'));
   await waitFor(() =>
     expect(screen.getByRole('button').dataset.autoplayState).toBe('blocked')
   );
@@ -1697,6 +1810,81 @@ test('keeps the poster visible when cached media attaches under refused autoplay
       .getByText('Cached blocked poster')
       .parentElement?.getAttribute('data-state')
   ).toBe('visible');
+});
+
+test('keeps the poster visible while the muted autoplay retry is in flight', async () => {
+  const { Poster } = posterPrimitives;
+  let playCalls = 0;
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => {
+    playCalls += 1;
+    return playCalls === 1
+      ? Promise.reject(new DOMException('Playback blocked.', 'NotAllowedError'))
+      : new Promise<void>(() => undefined);
+  });
+  render(
+    <LegacyRoot autoplay="audible-then-muted" source="/recovering.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Recovering autoplay poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+
+  confirmMetadataReady(media);
+  await waitFor(() => expect(playCalls).toBe(2));
+  fireEvent.loadedData(media);
+
+  expect(screen.getByRole('button').dataset.autoplayState).toBe('attempting');
+  expect(
+    screen
+      .getByText('Recovering autoplay poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+});
+
+test('hides the poster when the muted autoplay retry starts playback', async () => {
+  const { Poster } = posterPrimitives;
+  let playCalls = 0;
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+    this: HTMLMediaElement
+  ) {
+    playCalls += 1;
+    if (playCalls === 1) {
+      return Promise.reject(
+        new DOMException('Playback blocked.', 'NotAllowedError')
+      );
+    }
+    this.dispatchEvent(new Event('play'));
+    return Promise.resolve();
+  });
+  render(
+    <LegacyRoot autoplay="audible-then-muted" source="/recovered.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Recovered autoplay poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+
+  confirmMetadataReady(
+    screen.getByLabelText<HTMLVideoElement>('Playdeck media')
+  );
+
+  await waitFor(() =>
+    expect(
+      screen
+        .getByText('Recovered autoplay poster')
+        .parentElement?.getAttribute('data-state')
+    ).toBe('hidden')
+  );
+  expect(screen.getByRole('button').dataset.autoplayState).toBe('started');
 });
 
 test('hides the poster when autoplay confirms playback', async () => {
@@ -1719,7 +1907,9 @@ test('hides the poster when autoplay confirms playback', async () => {
     </LegacyRoot>
   );
 
-  confirmMetadataReady(screen.getByLabelText<HTMLVideoElement>('Reely media'));
+  confirmMetadataReady(
+    screen.getByLabelText<HTMLVideoElement>('Playdeck media')
+  );
 
   await waitFor(() =>
     expect(
@@ -1745,7 +1935,7 @@ test('keeps poster lifecycle listeners correct through StrictMode replay', () =>
     </StrictMode>
   );
 
-  fireEvent.loadedData(screen.getByLabelText('Reely media'));
+  fireEvent.loadedData(screen.getByLabelText('Playdeck media'));
   expect(
     screen.getByText('Strict poster').parentElement?.getAttribute('data-state')
   ).toBe('hidden');
@@ -1763,21 +1953,21 @@ test('forwards nativePoster only to native videos and server-renders poster mark
   );
   const { rerender } = render(player('/clip.mp4', '/fallback.jpg'));
 
-  expect(screen.getByLabelText('Reely media').getAttribute('poster')).toBe(
+  expect(screen.getByLabelText('Playdeck media').getAttribute('poster')).toBe(
     '/fallback.jpg'
   );
   rerender(player('/clip.mp4', '/updated.jpg'));
-  expect(screen.getByLabelText('Reely media').getAttribute('poster')).toBe(
+  expect(screen.getByLabelText('Playdeck media').getAttribute('poster')).toBe(
     '/updated.jpg'
   );
   rerender(player({ type: 'hls', src: '/master.m3u8' }, '/fallback.jpg'));
-  expect(screen.getByLabelText('Reely media').getAttribute('poster')).toBe(
+  expect(screen.getByLabelText('Playdeck media').getAttribute('poster')).toBe(
     '/fallback.jpg'
   );
   rerender(
     player({ type: 'youtube', videoId: 'dQw4w9WgXcQ' }, '/fallback.jpg')
   );
-  expect(screen.queryByLabelText('Reely media')).toBeNull();
+  expect(screen.queryByLabelText('Playdeck media')).toBeNull();
 
   const markup = renderToString(
     <Player.Root source="/server.mp4">
@@ -1793,12 +1983,52 @@ test('forwards nativePoster only to native videos and server-renders poster mark
       </Player.Viewport>
     </Player.Root>
   );
-  expect(markup).toContain('data-reely-part="viewport"');
-  expect(markup).toContain('data-reely-part="poster"');
-  expect(markup).toContain('data-reely-part="poster-image"');
+  expect(markup).toContain('data-playdeck-part="viewport"');
+  expect(markup).toContain('data-playdeck-part="poster"');
+  expect(markup).toContain('data-playdeck-part="poster-image"');
   expect(markup).toContain('srcSet="/server-2x.jpg 2x"');
   expect(markup).toContain('sizes="100vw"');
   expect(markup).toContain('alt=""');
+});
+
+test('omits the poster attribute for a rejected nativePoster, and permits every safe form', () => {
+  const player = (nativePoster?: string) => (
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media nativePoster={nativePoster} />
+    </LegacyRoot>
+  );
+  const { rerender } = render(player('javascript:alert(1)'));
+  const media = () => screen.getByLabelText('Playdeck media');
+
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  rerender(player('data:text/html,<script>1</script>'));
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  rerender(player('file:///etc/passwd'));
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  rerender(player('blob:https://example.com/id'));
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  rerender(player('java\tscript:alert(1)'));
+  expect(media().hasAttribute('poster')).toBe(false);
+
+  // Rejection never throws or disturbs the rest of the element: the media
+  // element mounted through every rejected value above (#236).
+  expect(media().tagName).toBe('VIDEO');
+
+  rerender(player('http://example.com/poster.jpg'));
+  expect(media().getAttribute('poster')).toBe('http://example.com/poster.jpg');
+
+  rerender(player('https://example.com/poster.jpg'));
+  expect(media().getAttribute('poster')).toBe('https://example.com/poster.jpg');
+
+  rerender(player('//example.com/poster.jpg'));
+  expect(media().getAttribute('poster')).toBe('https://example.com/poster.jpg');
+
+  rerender(player('/relative/poster.jpg'));
+  expect(media().getAttribute('poster')).toBe('/relative/poster.jpg');
 });
 
 test('forwards a ref, custom attributes, style, and aria-label to the native video', () => {
@@ -1822,7 +2052,7 @@ test('forwards a ref, custom attributes, style, and aria-label to the native vid
   expect(video.id).toBe('hero');
   expect(video.style.opacity).toBe('0.5');
   // Library-owned attributes remain intact alongside the passthrough.
-  expect(video.getAttribute('data-reely-part')).toBe('media');
+  expect(video.getAttribute('data-playdeck-part')).toBe('media');
 });
 
 test('strips the excluded video attributes that reach Media through a spread', () => {
@@ -1866,7 +2096,7 @@ test('strips the excluded video attributes that reach Media through a spread', (
   expect(atAttach).toEqual([
     { autoplayAttribute: false, muted: false, mutedAttribute: false }
   ]);
-  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const video = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(video.hasAttribute('src')).toBe(false);
   expect(video.hasAttribute('autoplay')).toBe(false);
   expect(video.muted).toBe(false);
@@ -1893,7 +2123,7 @@ test('strips the excluded attributes spelled the way the DOM spells them', () =>
     </LegacyRoot>
   );
 
-  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const video = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(video.hasAttribute('autoplay')).toBe(false);
 });
 
@@ -1912,7 +2142,7 @@ test('forwards props outside the excluded list alongside a smuggled one', () => 
     </LegacyRoot>
   );
 
-  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const video = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(video.className).toBe('hero-video');
   expect(video.dataset.analytics).toBe('hero');
   expect(video.getAttribute('crossorigin')).toBe('anonymous');
@@ -1929,7 +2159,7 @@ test('renders the controls attribute on the native video when controls is true',
     </LegacyRoot>
   );
 
-  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const video = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(video.controls).toBe(true);
 });
 
@@ -1940,7 +2170,7 @@ test('omits the controls attribute on the native video when controls is unset', 
     </LegacyRoot>
   );
 
-  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const video = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   expect(video.controls).toBe(false);
 });
 
@@ -1954,7 +2184,7 @@ test('toggles the video controls attribute across a re-render without re-attachi
     </LegacyRoot>
   );
   const { rerender } = render(player(true));
-  const video = screen.getByLabelText<HTMLVideoElement>('Reely media');
+  const video = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   await waitFor(() => expect(load).toHaveBeenCalledOnce());
   expect(video.controls).toBe(true);
   load.mockClear();
@@ -1979,7 +2209,7 @@ test('sizes the native video to fill its viewport and letterbox by default', () 
     </LegacyRoot>
   );
 
-  const video = screen.getByLabelText('Reely media');
+  const video = screen.getByLabelText('Playdeck media');
   expect(video.style.position).toBe('relative');
   expect(video.style.zIndex).toBe('0');
   // Inline-level by default, which would hang a descender gap below the frame.
@@ -2023,7 +2253,7 @@ test('forwards a ref to the poster container', () => {
       <span>Poster</span>
     </Poster>
   );
-  expect(ref.current?.getAttribute('data-reely-part')).toBe('poster');
+  expect(ref.current?.getAttribute('data-playdeck-part')).toBe('poster');
 });
 
 test('tolerates an inline callback ref through unrelated parent re-renders', () => {

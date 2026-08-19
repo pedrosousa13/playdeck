@@ -20,9 +20,9 @@ const rect = async (locator: Locator): Promise<Rectangle> =>
 // Scoped to the fixture player: the docs page also mounts the YouTube example.
 const viewport = (page: Page) => page.getByTestId('viewport');
 const poster = (page: Page) =>
-  viewport(page).locator('[data-reely-part="poster"]');
+  viewport(page).locator('[data-playdeck-part="poster"]');
 const posterImage = (page: Page) =>
-  page.locator('[data-reely-part="poster-image"]');
+  page.locator('[data-playdeck-part="poster-image"]');
 
 // JS/JSX/TS/TSX are policed by the AST-based no-restricted-syntax rule in
 // eslint.config.js instead: ESLint operates on nodes, and comments are not

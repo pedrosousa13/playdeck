@@ -1,10 +1,10 @@
-import type { PlayerQuality } from '@reely/core';
-import * as Player from '@reely/react';
+import type { PlayerQuality } from '@playdeck/core';
+import * as Player from '@playdeck/react';
 import { useState, type ReactElement } from 'react';
 
 /**
  * The reference composition: one player assembled only from public
- * `@reely/react` / `@reely/core` exports. It is the runnable proof behind
+ * `@playdeck/react` / `@playdeck/core` exports. It is the runnable proof behind
  * criterion 8 of #1, and the artifact #32 points axe and its keyboard flows at.
  *
  * Icons are supplied here, by the consumer, and never defaulted by the
@@ -13,7 +13,7 @@ import { useState, type ReactElement } from 'react';
  * children.
  */
 
-// Layout only. `@reely/react/theme.css` is deliberately not mounted: the only
+// Layout only. `@playdeck/react/theme.css` is deliberately not mounted: the only
 // per-story way to mount it reaches into `packages/`, which this directory may
 // not do, and a plain side-effect import would leak the theme into every other
 // story's document.
@@ -27,19 +27,19 @@ const layoutCss = `
    treatment as a narrow phone, which a viewport media query cannot express.
 
    The container is this wrapper, not the player. An element is never matched
-   by its own container query, so with container-type on .reely-example the box
+   by its own container query, so with container-type on .playdeck-example the box
    could not restyle itself — which is how aspect-ratio ended up stranded on a
    viewport media query while the rules it is paired with fired on the
    container (#114). The cqw unit below needs an ancestor container for the
    same reason. max-width lives here so container width and player width are
    the same number at every viewport; on the player it would leave the
    container measuring the full page above 768px. */
-.reely-example-frame {
+.playdeck-example-frame {
   width: 100%;
   max-width: 48rem;
   container-type: inline-size;
 }
-.reely-example {
+.playdeck-example {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -49,14 +49,14 @@ const layoutCss = `
   font-family: system-ui, sans-serif;
 }
 /* The standard [hidden] reset, and it needs !important here rather than by
-   habit: reely's overlay primitives carry their own inline display (Captions
+   habit: playdeck's overlay primitives carry their own inline display (Captions
    is display: flex from captionsOverlayStyle), and a non-important stylesheet
    rule cannot beat an inline one. Without this, hidden is inert on exactly
    the parts #89 needs it on. */
-.reely-example [hidden] {
+.playdeck-example [hidden] {
   display: none !important;
 }
-.reely-example-controls {
+.playdeck-example-controls {
   position: absolute;
   inset: auto 0 0 0;
   z-index: 20;
@@ -71,27 +71,27 @@ const layoutCss = `
      darkest stop, just consistent across the whole bar instead of fading. */
   background: rgb(4, 6, 10);
 }
-.reely-example-row {
+.playdeck-example-row {
   display: flex;
   align-items: center;
   gap: 0.25rem;
 }
-.reely-example-row-buttons {
+.playdeck-example-row-buttons {
   flex-wrap: wrap;
 }
-.reely-example-scrubber {
+.playdeck-example-scrubber {
   flex: 1 1 auto;
   min-width: 0;
 }
-.reely-example-spacer {
+.playdeck-example-spacer {
   flex: 1 1 auto;
 }
-.reely-example [data-reely-part='time'] {
+.playdeck-example [data-playdeck-part='time'] {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;
 }
-.reely-example button {
+.playdeck-example button {
   flex: 0 0 auto;
   background: transparent;
   border: none;
@@ -100,10 +100,10 @@ const layoutCss = `
   cursor: pointer;
   font-size: 1.125rem;
 }
-.reely-example button:hover {
+.playdeck-example button:hover {
   background: rgba(232, 237, 244, 0.16);
 }
-.reely-example-menu {
+.playdeck-example-menu {
   position: absolute;
   bottom: calc(100% + 0.25rem);
   right: 0;
@@ -118,8 +118,8 @@ const layoutCss = `
   display: flex;
   flex-direction: column;
 }
-.reely-example-menu [data-reely-part='menu-radio-item'],
-.reely-example-menu [data-reely-part='menu-item'] {
+.playdeck-example-menu [data-playdeck-part='menu-radio-item'],
+.playdeck-example-menu [data-playdeck-part='menu-item'] {
   justify-content: flex-start;
   display: flex;
   align-items: center;
@@ -127,7 +127,7 @@ const layoutCss = `
   font-size: 0.875rem;
   text-align: left;
 }
-.reely-example-error {
+.playdeck-example-error {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -169,27 +169,27 @@ const layoutCss = `
    inherited inset: auto 0 0 0 nets to zero displacement on a
    relatively-positioned box — while keeping z-index effective.
 
-   No :has(.reely-example-controls[hidden]) guard any more. It existed because
+   No :has(.playdeck-example-controls[hidden]) guard any more. It existed because
    aspect-ratio: auto collapsed the box to zero height in the states where #89
    hides the row (pre-activation, and while an error surface owns the
    viewport), taking the full-bleed overlay down with it — measured as an
    activation button that could not be clicked. min-height holds the box open
    in exactly those states, so there is nothing left to guard. */
 @container (max-width: 420px) {
-  .reely-example {
+  .playdeck-example {
     aspect-ratio: auto;
     min-height: 56.25cqw;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
   }
-  .reely-example-controls {
+  .playdeck-example-controls {
     position: relative;
   }
-  .reely-example-volume {
+  .playdeck-example-volume {
     display: none;
   }
-  .reely-example-fold {
+  .playdeck-example-fold {
     display: none;
   }
 }
@@ -200,10 +200,10 @@ const layoutCss = `
 
    Written as a descendant selector to match the specificity of the menu item
    styling above, which sets display: flex at (0,2,0). A bare
-   .reely-example-menu-fold is (0,1,0) and silently loses to it — measured, as
+   .playdeck-example-menu-fold is (0,1,0) and silently loses to it — measured, as
    a PiP entry that stayed visible next to the PiP button at 768px. */
 @container (min-width: 421px) {
-  .reely-example-menu .reely-example-menu-fold {
+  .playdeck-example-menu .playdeck-example-menu-fold {
     display: none;
   }
 }
@@ -261,7 +261,7 @@ const ExampleSettingsMenu = (): ReactElement | null => {
       <Player.SettingsMenuTrigger>
         <Player.SettingsIcon />
       </Player.SettingsMenuTrigger>
-      <Player.SettingsMenuContent className="reely-example-menu">
+      <Player.SettingsMenuContent className="playdeck-example-menu">
         {showRates ? (
           <Player.MenuRadioGroup
             aria-label="Playback speed"
@@ -302,7 +302,7 @@ const ExampleSettingsMenu = (): ReactElement | null => {
             buttons. */}
         {showPip ? (
           <Player.MenuItem
-            className="reely-example-menu-fold"
+            className="playdeck-example-menu-fold"
             onSelect={() => {
               void (state.pictureInPicture
                 ? actions.exitPictureInPicture()
@@ -319,7 +319,7 @@ const ExampleSettingsMenu = (): ReactElement | null => {
         ) : null}
         {showAirPlay ? (
           <Player.MenuItem
-            className="reely-example-menu-fold"
+            className="playdeck-example-menu-fold"
             onSelect={() => {
               void actions.showAirPlayPicker();
             }}
@@ -383,8 +383,8 @@ export const ReferencePlayer = ({
   return (
     <>
       <style>{layoutCss}</style>
-      <div className="reely-example-frame">
-        <Player.Viewport className="reely-example">
+      <div className="playdeck-example-frame">
+        <Player.Viewport className="playdeck-example">
           <Player.Poster>
             <Player.PosterImage
               alt=""
@@ -396,7 +396,7 @@ export const ReferencePlayer = ({
           <Player.LoadingIndicator />
           {/* The default child is a literal "Retry" text button; the example
               renders icons everywhere, so it supplies the render prop. */}
-          <Player.ErrorDisplay className="reely-example-error">
+          <Player.ErrorDisplay className="playdeck-example-error">
             {({ error, retry }) => (
               <>
                 <p>{error.message}</p>
@@ -416,26 +416,26 @@ export const ReferencePlayer = ({
           </Player.ActivationButton>
           <Player.Controls
             aria-label="Video player controls"
-            className="reely-example-controls"
+            className="playdeck-example-controls"
             global={globalShortcuts}
             hidden={overlayOwnsViewport}
           >
-            <div className="reely-example-row">
+            <div className="playdeck-example-row">
               <Player.Time type="current" />
-              <div className="reely-example-scrubber">
+              <div className="playdeck-example-scrubber">
                 <Player.SeekSlider />
               </div>
               <Player.Time type="duration" />
             </div>
-            <div className="reely-example-row reely-example-row-buttons">
+            <div className="playdeck-example-row playdeck-example-row-buttons">
               <Player.PlayButton>
                 {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
               </Player.PlayButton>
               <Player.MuteButton>
                 {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
               </Player.MuteButton>
-              <Player.VolumeSlider className="reely-example-volume" />
-              <span className="reely-example-spacer" />
+              <Player.VolumeSlider className="playdeck-example-volume" />
+              <span className="playdeck-example-spacer" />
               <Player.CaptionsButton>
                 <Player.CaptionsIcon />
               </Player.CaptionsButton>
@@ -443,14 +443,14 @@ export const ReferencePlayer = ({
                   CaptionsIcon, not a text label. */}
               <Player.CaptionsMenu />
               <ExampleSettingsMenu />
-              <Player.PipButton className="reely-example-fold">
+              <Player.PipButton className="playdeck-example-fold">
                 {state.pictureInPicture ? (
                   <Player.PipExitIcon />
                 ) : (
                   <Player.PipEnterIcon />
                 )}
               </Player.PipButton>
-              <Player.AirPlayButton className="reely-example-fold">
+              <Player.AirPlayButton className="playdeck-example-fold">
                 <Player.AirPlayIcon />
               </Player.AirPlayButton>
               <Player.FullscreenButton>

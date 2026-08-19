@@ -70,7 +70,7 @@ describe('controller dimension channel', () => {
 
   // The specific defect this channel exists to prevent: a ratio outliving the
   // source it measured is worse than no ratio at all, because the consumer's
-  // `var(--reely-media-aspect-ratio, 16 / 9)` fallback stops applying.
+  // `var(--playdeck-media-aspect-ratio, 16 / 9)` fallback stops applying.
   test('clears the ratio when a new provider is set', () => {
     const controller = new PlayerController();
     const first = publishingAdapter();

@@ -1,13 +1,13 @@
 # `asChild` / element substitution
 
-Reely's primitives render fixed elements. `ActivationButton` always renders a
+Playdeck's primitives render fixed elements. `ActivationButton` always renders a
 `<button>`, and the other controls follow the same shape. There is no `asChild`
 prop, no `render` prop, and no other way to substitute the element a primitive
 renders.
 
 Children are the extension point. You can put anything inside a control — an
 icon, an image, a design-system component — and you can reach any rendered
-element through its `data-reely-part` attribute or the `style` prop. What you
+element through its `data-playdeck-part` attribute or the `style` prop. What you
 cannot do is make some other component _be_ the control.
 
 ## Why this is out of scope
@@ -42,7 +42,7 @@ have to answer.
   <MyIcon />
 </Player.PlayButton>
 
-// [data-reely-part='play-button'] { … }
+// [data-playdeck-part='play-button'] { … }
 
 // Not supported: substituting the element.
 <Player.PlayButton asChild>

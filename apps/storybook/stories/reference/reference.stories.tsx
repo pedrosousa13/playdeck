@@ -3,7 +3,7 @@ import {
   type Availability,
   type ProviderStatePatch,
   type TextTrack
-} from '@reely/core';
+} from '@playdeck/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import {
@@ -76,7 +76,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'One composed player, assembled only from public `@reely/react` exports — the runnable proof behind criterion 8 of #1. See the Reference docs page for what it does and does not prove.'
+          'One composed player, assembled only from public `@playdeck/react` exports — the runnable proof behind criterion 8 of #1. See the Reference docs page for what it does and does not prove.'
       }
     }
   }
@@ -144,9 +144,9 @@ export const Composition: Story = {
     const controls = canvas.getByRole('group', {
       name: 'Video player controls'
     });
-    await expect(controls.querySelectorAll('.reely-example-row')).toHaveLength(
-      2
-    );
+    await expect(
+      controls.querySelectorAll('.playdeck-example-row')
+    ).toHaveLength(2);
   }
 };
 
@@ -157,7 +157,7 @@ export const SettingsMenuSelection: Story = {
     await userEvent.click(trigger);
 
     const menu = await canvas.findByRole('menu');
-    await expect(menu).toHaveAttribute('data-reely-menu', 'open');
+    await expect(menu).toHaveAttribute('data-playdeck-menu', 'open');
     // Named groups rather than text headings: role="menu" only admits
     // menuitem/menuitemradio/group children.
     await expect(
@@ -486,14 +486,14 @@ export const LiveRegionInventory: Story = {
       ...canvasElement.querySelectorAll(
         '[aria-live], [role="status"], [role="alert"]'
       )
-    ].map((node) => node.getAttribute('data-reely-part'));
+    ].map((node) => node.getAttribute('data-playdeck-part'));
 
     await expect(regions).toEqual(['loading-indicator', 'captions-announcer']);
 
     // The two elements whose content changes continuously during playback.
     for (const part of ['time', 'captions']) {
       const nodes = canvasElement.querySelectorAll(
-        `[data-reely-part="${part}"]`
+        `[data-playdeck-part="${part}"]`
       );
       // The composition renders two `time` elements (current and duration) and
       // one `captions` container; an empty NodeList would make this loop a

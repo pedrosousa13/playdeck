@@ -1,11 +1,12 @@
 import {
   createTimeBoundary,
+  notifySafely,
   type CommandResult,
   type MediaDimensions,
   type PlayerCapabilities,
   type PlayerError,
   type VimeoSource
-} from '@reely/core';
+} from '@playdeck/core';
 import {
   asRecord,
   errorString,
@@ -16,8 +17,10 @@ import {
   type VimeoMountElement
 } from './adapter-values.js';
 import type { VimeoChromelessAvailability } from './chromeless-availability.js';
+import type { VimeoChapters } from './chapters.js';
 import {
   loadVimeoSdk,
+  type VimeoSdkChapter,
   type VimeoSdkPlayer,
   type VimeoSdkQuality,
   type VimeoSdkTextTrack
@@ -43,6 +46,22 @@ const loadFailure = (cause: unknown): PlayerError => {
       errorString(cause, 'message') || 'The Vimeo player could not load.',
     cause
   };
+};
+
+// What a chromeless probe that never completed publishes. Non-fatal: the
+// capability falls back to `unknown`, which the consumer already handles, and
+// the rest of the embed is untouched. Never `recoverable`: a retry re-runs the
+// same request against the same environment and gets the same nothing (#198).
+// Names neither the url it asked for nor what came back — the likeliest cause
+// is the embedding page's own Content-Security-Policy refusing `vimeo.com`,
+// and a notice that echoed the refusal back would only repeat what the page
+// already decided (#235).
+const chromelessProbeConfigurationNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  message:
+    'The chromeless-capability check could not be completed, so the customControls capability is reported as unknown.'
 };
 
 // The fields of the host's options the embed url carries, read when the embed
@@ -87,7 +106,10 @@ export type VimeoAttachmentDeps = {
   readonly options: VimeoAttachmentOptions;
   // The host's capabilities snapshot, for the state published on ready.
   readonly getCapabilities: () => PlayerCapabilities;
-  readonly chromeless: Pick<VimeoChromelessAvailability, 'probe' | 'adopt'>;
+  readonly chromeless: Pick<
+    VimeoChromelessAvailability,
+    'probe' | 'adopt' | 'cancel'
+  >;
   readonly playback: Pick<VimeoPlayback, 'adopt' | 'handlers'>;
   readonly presentation: Pick<VimeoPresentation, 'handlers'>;
   readonly qualityLevels: Pick<VimeoQualityLevels, 'adopt' | 'handlers'>;
@@ -95,6 +117,7 @@ export type VimeoAttachmentDeps = {
     VimeoTextTracks,
     'adopt' | 'handlers' | 'reset' | 'clearCueListeners'
   >;
+  readonly chapters: Pick<VimeoChapters, 'adopt' | 'handlers' | 'reset'>;
   // Drops the host's provider-state subscribers on destroy.
   readonly clearStateListeners: () => void;
 };
@@ -131,6 +154,7 @@ export const createVimeoAttachment = (
     presentation,
     qualityLevels,
     textTracks,
+    chapters,
     clearStateListeners
   }: VimeoAttachmentDeps
 ): VimeoAttachment => {
@@ -157,7 +181,9 @@ export const createVimeoAttachment = (
         ? { width, height }
         : undefined;
     activeDimensions = dimensions;
-    dimensionListeners.forEach((listener) => listener(dimensions));
+    dimensionListeners.forEach((listener) =>
+      notifySafely(listener, dimensions)
+    );
   };
 
   const clearDimensions = (): void => {
@@ -171,6 +197,13 @@ export const createVimeoAttachment = (
     (player !== undefined && player !== activePlayer);
 
   const teardown = (): void => {
+    // First, and unconditionally: the probe's request is the one thing here
+    // that would go on running by itself, and nothing below holds a handle on
+    // it. Every caller either has already moved the generation on or is a
+    // failed attach, so no verdict it could still bring back would be adopted
+    // — and an embed on its way out must stop talking to Vimeo, not merely
+    // have its answer ignored.
+    chromeless.cancel();
     const player = activePlayer;
     const iframe = activeIframe;
     activePlayer = undefined;
@@ -180,6 +213,7 @@ export const createVimeoAttachment = (
     // answer, or never answer, and until it does a leftover ratio describes a
     // video that is no longer there.
     textTracks.reset();
+    chapters.reset();
     clearDimensions();
     if (player) {
       try {
@@ -226,6 +260,7 @@ export const createVimeoAttachment = (
     on('fullscreenchange', presentation.handlers.onFullscreenChange);
     on('enterpictureinpicture', presentation.handlers.onEnterPictureInPicture);
     on('leavepictureinpicture', presentation.handlers.onLeavePictureInPicture);
+    on('chapterchange', () => chapters.handlers.onChapterChange(player));
     on('cuechange', textTracks.handlers.onCueChange);
     on('texttrackchange', (data) =>
       textTracks.handlers.onTextTrackChange(player, data)
@@ -264,6 +299,11 @@ export const createVimeoAttachment = (
         suppressSeoMetadata: options.suppressSeoMetadata
       });
       if (isStale(thisGeneration)) return { ok: true };
+      // No `sandbox` here, and that is a decision rather than an omission: the
+      // SDK's postMessage bridge needs `allow-scripts allow-same-origin`, and a
+      // sandbox carrying both is close to none (#237). The reasoning, and what
+      // would reopen it, are in docs/third-party-requests.md, under
+      // "The Vimeo sandbox bargain".
       const iframe = mount.ownerDocument.createElement('iframe');
       iframe.src = vimeoEmbedUrl(source, options, mount.muted);
       iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
@@ -293,8 +333,9 @@ export const createVimeoAttachment = (
         initialVolume,
         initialPlaybackRate,
         initialTracks,
+        initialChapters,
         initialQualities,
-        chromelessVerdict,
+        chromelessProbeResult,
         initialWidth,
         initialHeight
       ] = await Promise.all([
@@ -305,6 +346,12 @@ export const createVimeoAttachment = (
         player
           .getTextTracks()
           .catch((): ReadonlyArray<VimeoSdkTextTrack> => []),
+        // A video without chapters answers with an empty list. An embed that
+        // does not implement the method may reject, but it may just as well
+        // resolve with something that is not a list at all — the chapters seam
+        // coerces the answer, so this `catch` covers only the rejection. All of
+        // it publishes the same empty collection, and none of it fails attach.
+        player.getChapters().catch((): ReadonlyArray<VimeoSdkChapter> => []),
         player.getQualities().catch((): ReadonlyArray<VimeoSdkQuality> => []),
         chromelessProbe,
         // An embed that does not answer these leaves the size unknown, which
@@ -316,8 +363,17 @@ export const createVimeoAttachment = (
       if (isStale(thisGeneration, player)) return { ok: true };
       emitDimensions(initialWidth, initialHeight);
       const textTrackPatch = textTracks.adopt(player, initialTracks);
+      const chapterPatch = chapters.adopt(initialChapters, initialDuration);
       const qualityPatch = qualityLevels.adopt(initialQualities);
-      chromeless.adopt(chromelessVerdict);
+      chromeless.adopt(chromelessProbeResult);
+      // A probe that never reached Vimeo leaves `customControls` reporting
+      // `unknown` in the ready patch below with nothing to say why, and the
+      // reason is likelier to be the embedding page's own policy than
+      // anything Vimeo did. A probe Vimeo answered says nothing here: the
+      // consumer has no move to make against an unusable tier (#235).
+      if (!chromelessProbeResult.completed) {
+        emit({ error: chromelessProbeConfigurationNotice });
+      }
       const playbackPatch = playback.adopt(player, {
         duration: initialDuration,
         muted: initialMuted,
@@ -333,6 +389,7 @@ export const createVimeoAttachment = (
           seeking: false,
           ...playbackPatch,
           ...textTrackPatch,
+          ...chapterPatch,
           ...qualityPatch,
           capabilities: getCapabilities()
         },

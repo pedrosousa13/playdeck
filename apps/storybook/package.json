@@ -1,6 +1,6 @@
 {
-  "name": "@reely/storybook",
-  "version": "0.0.0",
+  "name": "@playdeck/storybook",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,12 +9,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@reely/react": "workspace:*",
+    "@playdeck/react": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@reely/core": "workspace:*",
+    "@playdeck/core": "workspace:*",
     "@storybook/addon-a11y": "10.5.3",
     "@storybook/addon-docs": "10.5.3",
     "@storybook/addon-vitest": "10.5.3",

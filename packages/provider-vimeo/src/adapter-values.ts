@@ -6,7 +6,7 @@ import type {
   ProviderEvent,
   ProviderEventFor,
   ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 
 // The element a Vimeo player mounts into. A consumer may set the media-ish
 // properties on it before attach, and the adapter pushes them into the embed
@@ -45,6 +45,10 @@ export const available: Availability = { status: 'available' };
 export const providerCheck: Availability = {
   status: 'unknown',
   reason: 'provider-check'
+};
+export const noChapterSource: Availability = {
+  status: 'unavailable',
+  reason: 'source'
 };
 
 export const errorString = (cause: unknown, property: 'message' | 'name') => {

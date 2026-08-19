@@ -1,8 +1,8 @@
 {
-  "name": "reely",
+  "name": "playdeck",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.34.5",
+  "packageManager": "pnpm@10.34.5+sha512.a4ee05f2f73658255bd6a89859c065a45c28a57daefae2c893a168ee2b73168c37b91e83e57ea67654ad03f03031746430e8bce38e362e042605fb8abc80192e",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
@@ -13,11 +13,11 @@
     "typecheck": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "test:e2e": "playwright test",
-    "test:storybook": "pnpm --filter @reely/storybook test",
-    "test:integrations": "turbo run build --filter=@reely/integration-next-image && pnpm --filter @reely/integration-next-image test:integration",
+    "test:storybook": "pnpm --filter @playdeck/storybook test",
+    "test:integrations": "turbo run build --filter=@playdeck/integration-next-image && pnpm --filter @playdeck/integration-next-image test:integration",
     "test:packages": "node scripts/verify-packaging.mjs",
     "test:budgets": "node scripts/check-bundle-budgets.mjs",
-    "test:bundle": "turbo run build --filter=@reely/bundle-native-only && pnpm --filter @reely/bundle-native-only test",
+    "test:bundle": "turbo run build --filter=@playdeck/bundle-native-only && pnpm --filter @playdeck/bundle-native-only test",
     "test:docs": "node --test scripts/docs-examples.test.mjs",
     "test:audit": "node scripts/audit.mjs",
     "test:audit-unit": "node --test scripts/audit.test.mjs scripts/workspace-packages.test.mjs",

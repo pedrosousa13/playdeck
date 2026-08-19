@@ -1,10 +1,10 @@
-import { createTimeBoundary, type TimeBoundary } from '@reely/core';
+import { createTimeBoundary, type TimeBoundary } from '@playdeck/core';
 
 // The `[startTime, endTime]` window seam. Aurora expresses a start as the
 // `current-time` attribute and nothing at all as an end, so the end boundary is
 // adapter-enforced: this seam decides what each time report means and the
 // playback seam performs the seek, pause and publication it asks for. The
-// sanitisation itself is `@reely/core`'s, shared with the YouTube and Vimeo
+// sanitisation itself is `@playdeck/core`'s, shared with the YouTube and Vimeo
 // ports so that one prop cannot mean three things.
 //
 // The state is two flags. `ended` is what the boundary pause has to be told
@@ -68,7 +68,7 @@ export type WistiaBoundary = {
   // What the player's own `ended` means. Answers the position to correct to,
   // or `undefined` to publish the end as before — in which case it latches
   // `hasEnded`, so the next `play()` replays the window. Whether there is
-  // anything to correct is `@reely/core`'s shared gate, where the reasoning
+  // anything to correct is `@playdeck/core`'s shared gate, where the reasoning
   // and the declared divergence from native both live.
   readonly reviewEnded: (duration: number | null) => number | undefined;
   // Where `play()` has to seek before resuming, or `undefined` to just resume.

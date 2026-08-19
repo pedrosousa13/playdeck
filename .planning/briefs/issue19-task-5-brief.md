@@ -14,17 +14,17 @@
 `apps/storybook/README.md`:
 
 ````markdown
-# @reely/storybook
+# @playdeck/storybook
 
-Component workbench and story-based test runner for `@reely/react`.
+Component workbench and story-based test runner for `@playdeck/react`.
 
 ## Commands
 
-| Command                              | What it does                                   |
-| ------------------------------------ | ---------------------------------------------- |
-| `pnpm --filter @reely/storybook dev` | Storybook dev server on port 6006              |
-| `pnpm test:storybook` (root)         | Runs every story as a Chromium Vitest test     |
-| `pnpm build` (root)                  | Includes the static `storybook build` CI check |
+| Command                                 | What it does                                   |
+| --------------------------------------- | ---------------------------------------------- |
+| `pnpm --filter @playdeck/storybook dev` | Storybook dev server on port 6006              |
+| `pnpm test:storybook` (root)            | Runs every story as a Chromium Vitest test     |
+| `pnpm build` (root)                     | Includes the static `storybook build` CI check |
 
 ## Conventions
 
@@ -35,11 +35,11 @@ Component workbench and story-based test runner for `@reely/react`.
   check (`a11y.test = 'error'`). A story's `play` function is its
   interaction test — see `ActivatesOnClick` in
   `packages/react/src/activation.stories.tsx` for the reference pattern:
-  arrange via `parameters.reely`, act with `userEvent`, assert on
+  arrange via `parameters.playdeck`, act with `userEvent`, assert on
   `data-state`.
 - **No real media, no network.** A global `afterEach` fails any story test
   that touches an external origin or the fake media source. Use data-URI
-  images; use `/__reely/hang.png` for perpetual-loading states.
+  images; use `/__playdeck/hang.png` for perpetual-loading states.
 
 ## Dialing player state
 
@@ -49,7 +49,7 @@ tests use). Control it per story:
 
 ```ts
 parameters: {
-  reely: {
+  playdeck: {
     rootProps: { loading: 'interaction' },   // any Player.Root props
     scenario: { kind: 'pending' }            // provider-load scenario
   }

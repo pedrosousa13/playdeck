@@ -6,7 +6,7 @@ import type {
   ProviderEvent,
   ProviderEventFor,
   ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 
 // The element a Wistia player mounts into. A consumer may set the media-ish
 // properties on it before attach, and the adapter pushes them into the embed

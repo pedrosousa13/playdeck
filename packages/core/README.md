@@ -1,15 +1,15 @@
-# @reely/core
+# @playdeck/core
 
 Framework-neutral player state, commands, events and the provider contract that
-[Reely](https://github.com/pedrosousa13/reely) is built on. No DOM rendering, no
+[Playdeck](https://github.com/pedrosousa13/playdeck) is built on. No DOM rendering, no
 React, no provider SDKs.
 
 Use it directly if you are wiring a player into something other than React, or
 writing a provider adapter. If you are building UI in React, use
-[`@reely/react`](../react), which owns a controller for you.
+[`@playdeck/react`](../react), which owns a controller for you.
 
 ```sh
-pnpm add @reely/core
+pnpm add @playdeck/core
 ```
 
 ## What it gives you
@@ -17,8 +17,8 @@ pnpm add @reely/core
 <!-- example:core-quickstart -->
 
 ```ts
-import { PlayerController, detectSource } from '@reely/core';
-import { createNativeProvider } from '@reely/provider-native';
+import { PlayerController, detectSource } from '@playdeck/core';
+import { createNativeProvider } from '@playdeck/provider-native';
 
 declare const videoElement: HTMLVideoElement;
 
@@ -76,9 +76,12 @@ out when a command will land; `activation` is not a substitute for either.
 | `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.            |
 | `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                    |
 | `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                             |
+| `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                 |
 | `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                |
 | `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                                    |
 | `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                |
+| `deriveChapters`             | The published `Chapter` collection, given what a provider reports and the media duration — end times included. |
+| `chaptersEqual`              | Whether two chapter collections say the same thing — what an adapter checks before publishing a change.        |
 | `isYouTubeVideoId`           | Whether a value is a well-formed YouTube video id — what `createYouTubeProvider` validates a direct call with. |
 | `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id — what `createVimeoProvider` validates a direct call with.     |
 | `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash — what `createVimeoProvider` validates a direct call with. |
@@ -89,8 +92,9 @@ out when a command will land; `activation` is not a substitute for either.
 State and contract: `PlayerState`, `PlayerCapabilities`, `Availability`,
 `CommandResult`, `CommandFailureReason`, `PlaybackState`, `PlayerProvider`,
 `PlayerQuality`, `TimeRange`, `TextTrack`, `TextTrackKind`,
-`TextTrackReadiness`, `TextCue`, `CaptionRendering`, `PlayerLiveState`,
-`PlayerError`, `PlayerErrorCategory`, `PreProviderActivation`.
+`TextTrackReadiness`, `TextCue`, `CaptionRendering`, `Chapter`, `ChapterInput`,
+`PlayerLiveState`, `PlayerError`, `PlayerErrorCategory`,
+`PreProviderActivation`.
 
 Events: `PlayerEvent`, `PlayerEventType`, `PlayerEventDetailMap`,
 `PlayerEventFor`, `PlayerEventOrigin`.
@@ -132,7 +136,7 @@ import {
   isWistiaMediaId,
   isYouTubeVideoId,
   resolveNetworkPath
-} from '@reely/core';
+} from '@playdeck/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
 const vimeo = detectSource('https://vimeo.com/76979871?h=8272103f6e');
@@ -188,14 +192,18 @@ One scheme allowlist governs both paths, and `isPermittedSourceUrl` is it.
 and relative paths — are permitted; `blob:` is permitted only for a `video`
 source, which is how a `MediaSource` or a picked `File` is handed over.
 Everything else, `javascript:`, `data:` and `file:` included, is rejected,
-whether it arrives as a string or inside an explicit source object. A string
-carrying a raw tab, line feed or carriage return is rejected as malformed,
-because the URL parser strips those before parsing and would otherwise read a
-different scheme than the one validated. A protocol-relative URL resolves
-against `https:`, and the resolved source carries that resolution rather than
-the `//host/...` form — for a string and for every `src` inside an explicit
-source object alike. So a result's `source` may be a normalised copy of the
-object passed in; its `input` is always the caller's own object.
+whether it arrives as a string or inside an explicit source object, and however
+it is dressed up in the characters the URL parser removes before it parses. A
+URL carrying a raw tab, line feed or carriage return anywhere, or a C0 control
+(U+0000 to U+001F) or a space at either end, is rejected: the parser strips
+exactly those, so ` javascript:alert(1)` names no scheme to
+validate yet loads as `javascript:` all the same. Rejecting such a URL rather
+than trimming it keeps the value that plays identical to the value that was
+validated. A protocol-relative URL resolves against `https:`, and the resolved
+source carries that resolution rather than the `//host/...` form — for a string
+and for every `src` inside an explicit source object alike. So a result's
+`source` may be a normalised copy of the object passed in; its `input` is
+always the caller's own object.
 
 ## Starting state
 
@@ -205,7 +213,7 @@ render on a server, and what a test fixture should begin with.
 <!-- example:core-state -->
 
 ```ts
-import { createInitialPlayerState, textTrackLabel } from '@reely/core';
+import { createInitialPlayerState, textTrackLabel } from '@playdeck/core';
 
 // The state a controller starts from. Safe to render on a server, where no
 // provider exists yet — and the same state a test fixture should start from.
@@ -237,7 +245,7 @@ the same way.
 <!-- example:core-time-boundary -->
 
 ```ts
-import { createTimeBoundary } from '@reely/core';
+import { createTimeBoundary } from '@playdeck/core';
 
 // The `[startTime, endTime]` window a provider plays inside, sanitised once.
 // A start that is absent, non-positive or non-finite is no start; an end that
@@ -282,7 +290,7 @@ number of its own.
 <!-- example:core-live-state -->
 
 ```ts
-import { deriveLiveState, liveStateEqual } from '@reely/core';
+import { deriveLiveState, liveStateEqual } from '@playdeck/core';
 
 // Liveness comes from what the provider reports — never from the URL, the id
 // or a filename. `isLiveHint` is the provider's own answer where it has one;
@@ -318,6 +326,110 @@ Providers that cannot determine liveness leave `live` as `null`. That is not
 "this is on-demand" — it is "nobody has said", and a control should render
 neither claim until one arrives.
 
+## Chapters
+
+`PlayerState.chapters` is the named divisions of the current video, ordered by
+`startTime`, and `capabilities.chapters` says whether the provider can report
+any at all — an empty collection means "none here", not "this provider cannot
+tell you". Playdeck publishes the vocabulary and draws none of it: a consumer maps
+a chapter to a position on the seek slider, which already takes children.
+
+`deriveChapters` is the one derivation every adapter publishes through, so a
+chapter means the same thing whichever one reported it.
+
+<!-- example:core-chapters -->
+
+```ts
+import { chaptersEqual, deriveChapters } from '@playdeck/core';
+
+// A provider reports where a chapter begins and what it is called. Nothing
+// reports where one ends, so `deriveChapters` is what decides: the list is
+// ordered by `startTime`, and each chapter ends where the next one begins.
+export const chapters = deriveChapters(
+  [
+    { id: 'ch2', title: 'The build', startTime: 132 },
+    { id: 'ch1', title: 'Introduction', startTime: 0 }
+  ],
+  248
+);
+
+// -> 132. The last chapter takes the media duration, so this reads 248.
+export const firstEnd = chapters[0]?.endTime;
+
+// An unknown or endless duration leaves the last chapter open. `null`, never
+// `Infinity`: an end nobody knows must not read as one somebody does.
+export const openEnded = deriveChapters(
+  [{ id: 'ch1', title: 'Live', startTime: 0 }],
+  null
+).at(-1)?.endTime;
+
+// An adapter publishes `chapters` only when the collection changes — a
+// duration report that moves nothing publishes nothing. This is that test.
+export const closed = !chaptersEqual(
+  chapters,
+  deriveChapters([{ id: 'ch1', title: 'Introduction', startTime: 0 }], null)
+);
+```
+
+<!-- /example -->
+
+## Notifying subscribers
+
+`notifySafely()` is how a provider adapter notifies one of its own listeners.
+An adapter's `subscribe` accepts any number of subscribers and promises each of
+them every notification, so no single listener may abandon an emit — and a
+listener that throws must not be reported as a provider failure (#233).
+
+<!-- example:core-notify-safely -->
+
+```ts
+import {
+  notifySafely,
+  type ProviderEvent,
+  type ProviderStatePatch,
+  type ProviderStateListener
+} from '@playdeck/core';
+
+// What a provider adapter owes the subscribers it fans out to. `Set.forEach`
+// stops at the first throw, so one broken listener would abandon the emit:
+// every listener registered behind it misses that notification, and the throw
+// escapes back into whatever called the emit — often a vendor SDK's own event
+// dispatch, or the adapter's start path, where it would be reported as a
+// provider load failure rather than as the consumer's bug it is.
+const listeners = new Set<ProviderStateListener>();
+
+export const subscribe = (listener: ProviderStateListener): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+// Isolated, not silenced: a listener that throws has its error rethrown on a
+// fresh task, so it still reaches the page's uncaught-error handling the way a
+// listener throwing at top level would.
+export const emit = (
+  patch: ProviderStatePatch,
+  event?: ProviderEvent
+): void => {
+  listeners.forEach((listener) => notifySafely(listener, patch, event));
+};
+
+subscribe(() => {
+  throw new Error('a subscriber defect');
+});
+const seen: string[] = [];
+subscribe((patch) => {
+  seen.push(patch.lifecycle ?? 'unchanged');
+});
+
+emit({ lifecycle: 'ready' });
+
+console.log(seen); // ['ready'] — the subscriber behind the thrower still ran
+```
+
+<!-- /example -->
+
 ## Media Session
 
 One coordinator per `MediaSession`, so several players on a page arbitrate
@@ -332,7 +444,7 @@ import {
   PlayerController,
   bindMediaSession,
   getMediaSessionCoordinator
-} from '@reely/core';
+} from '@playdeck/core';
 
 declare const controller: PlayerController;
 

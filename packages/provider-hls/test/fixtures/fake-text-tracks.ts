@@ -10,7 +10,9 @@ export type FakeTrackInit = {
   readonly language: string | null;
   readonly id?: string;
   readonly default?: boolean;
-  readonly hasCues?: boolean;
+  // The cues the track arrives with. A track whose WebVTT has not been fetched
+  // yet has none at all, which is `null`.
+  readonly cues?: readonly unknown[] | null;
 };
 
 export type FakeTrack = {
@@ -20,7 +22,7 @@ export type FakeTrack = {
   id: string;
   default?: boolean;
   mode: string;
-  cues: { length: number } | null;
+  cues: readonly unknown[] | null;
   activeCues: readonly unknown[] | null;
   addEventListener: (type: string, listener: () => void) => void;
   removeEventListener: (type: string, listener: () => void) => void;
@@ -52,7 +54,7 @@ export const createFakeTrack = (
       mode = value;
       onModeChange?.();
     },
-    cues: init.hasCues ? { length: 1 } : null,
+    cues: init.cues ?? null,
     activeCues: null,
     addEventListener: (type, listener) => {
       const set = listeners.get(type) ?? new Set<() => void>();

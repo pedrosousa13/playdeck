@@ -1,4 +1,4 @@
-import { createTimeBoundary } from '@reely/core';
+import { createTimeBoundary } from '@playdeck/core';
 
 // The `[startTime, endTime]` window a provider plays inside, sanitised once.
 // A start that is absent, non-positive or non-finite is no start; an end that

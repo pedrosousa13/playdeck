@@ -1,4 +1,4 @@
-import type { PlayerHandle } from '@reely/react';
+import type { PlayerHandle } from '@playdeck/react';
 
 // `player-fixture.stories.tsx` publishes the story's handle on the window, and
 // the specs drive it from `page.evaluate`. Declaring it once, as the real
@@ -9,6 +9,6 @@ import type { PlayerHandle } from '@reely/react';
 // into whichever one it saw first.
 declare global {
   interface Window {
-    reelyHandle?: PlayerHandle;
+    playdeckHandle?: PlayerHandle;
   }
 }

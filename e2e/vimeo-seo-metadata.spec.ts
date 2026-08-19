@@ -6,7 +6,7 @@ declare global {
   interface Window {
     // Recorded by `fixtures/vimeo-embed.html`: every message the parent posted
     // to the stub embed, in arrival order.
-    reelyEmbedMessages?: unknown[];
+    playdeckEmbedMessages?: unknown[];
     // The Vimeo SDK's own guard for its SEO-metadata handshake. Declared here
     // because these specs pre-set it on the page the way a consumer's own code
     // or a second copy of the SDK would.
@@ -31,7 +31,7 @@ const routeVimeoEmbed = async (page: Page): Promise<void> => {
 // A path segment and a query the SDK could only know by reading
 // `window.location.href` off the embedding page.
 const story = (id: string): string =>
-  `/iframe.html?id=fixtures-playerfixture--${id}&viewMode=story&reelyProbe=leak-me`;
+  `/iframe.html?id=fixtures-playerfixture--${id}&viewMode=story&playdeckProbe=leak-me`;
 
 const embedFrame = (page: Page): Frame | undefined =>
   page
@@ -44,7 +44,7 @@ const embedMessages = async (page: Page): Promise<EmbedMessage[]> => {
   const frame = embedFrame(page);
   if (!frame) return [];
   return frame.evaluate(
-    () => (window.reelyEmbedMessages ?? []) as EmbedMessage[]
+    () => (window.playdeckEmbedMessages ?? []) as EmbedMessage[]
   );
 };
 
@@ -58,7 +58,9 @@ const appendedMetadata = async (page: Page): Promise<unknown> =>
 // from, so a metadata message that is going to arrive has arrived by now.
 const settleAfterReady = async (page: Page): Promise<void> => {
   await expect
-    .poll(() => page.evaluate(() => window.reelyHandle?.getState().activation))
+    .poll(() =>
+      page.evaluate(() => window.playdeckHandle?.getState().activation)
+    )
     .toBe('ready');
   await expect
     .poll(async () =>
@@ -78,7 +80,7 @@ test('the Vimeo SDK sends the embedding page url to the embed by default', async
 
   const href = await page.evaluate(() => window.location.href);
   expect(href).toContain('/iframe.html');
-  expect(href).toContain('reelyProbe=leak-me');
+  expect(href).toContain('playdeckProbe=leak-me');
   await expect.poll(() => appendedMetadata(page)).toBe(href);
 });
 
@@ -98,21 +100,21 @@ test('suppressSeoMetadata leaves the rest of the Vimeo path alone', async ({
   await routeVimeoEmbed(page);
   await page.goto(story('vimeo-suppress-seo-metadata'));
 
-  const iframe = page.locator('[data-reely-part="media"] iframe');
+  const iframe = page.locator('[data-playdeck-part="media"] iframe');
   await expect(iframe).toHaveAttribute(
     'src',
     /^https:\/\/player\.vimeo\.com\/video\/76979871\?/
   );
   await settleAfterReady(page);
 
-  await page.evaluate(() => window.reelyHandle?.play());
+  await page.evaluate(() => window.playdeckHandle?.play());
   await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
 });
 
-// The guard belongs to the page, not to Reely. `false` is a value the page
+// The guard belongs to the page, not to Playdeck. `false` is a value the page
 // really set, not an absent one: the SDK reads the guard with a truthiness
 // check (`player.js:996`), so a pre-set `false` means the handshake installs —
-// and Reely turning that into `true` would be exactly the clobber the option
+// and Playdeck turning that into `true` would be exactly the clobber the option
 // is forbidden to make.
 for (const suppress of [true, false] as const) {
   const storyId = suppress ? 'vimeo-suppress-seo-metadata' : 'vimeo-viewport';
@@ -144,7 +146,7 @@ for (const suppress of [true, false] as const) {
     await page.goto(story(storyId));
     await settleAfterReady(page);
 
-    // Reely left the `false` alone, so the SDK installed its listener and sent
+    // Playdeck left the `false` alone, so the SDK installed its listener and sent
     // the url — the observable proof that nothing overwrote the page's value.
     const href = await page.evaluate(() => window.location.href);
     await expect.poll(() => appendedMetadata(page)).toBe(href);

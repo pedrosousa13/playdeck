@@ -1,26 +1,26 @@
-# @reely/provider-vimeo
+# @playdeck/provider-vimeo
 
-The Vimeo provider for [Reely](https://github.com/pedrosousa13/reely), over the
+The Vimeo provider for [Playdeck](https://github.com/pedrosousa13/playdeck), over the
 `@vimeo/player` SDK.
 
 ```sh
-pnpm add @reely/provider-vimeo
+pnpm add @playdeck/provider-vimeo
 ```
 
-`@reely/react` loads this for you when the source resolves to `vimeo`. The SDK
+`@playdeck/react` loads this for you when the source resolves to `vimeo`. The SDK
 is bundled as a dependency and imported dynamically — nothing is fetched from a
 Vimeo CDN.
 
 <!-- example:provider-vimeo -->
 
 ```ts
-import { PlayerController } from '@reely/core';
+import { PlayerController } from '@playdeck/core';
 import {
   createVimeoProvider,
   loadVimeoSdk,
   resetVimeoSdkLoader
-} from '@reely/provider-vimeo';
-import type { VimeoMountElement } from '@reely/provider-vimeo';
+} from '@playdeck/provider-vimeo';
+import type { VimeoMountElement } from '@playdeck/provider-vimeo';
 
 declare const mount: VimeoMountElement;
 
@@ -46,7 +46,7 @@ export const reset = (): void => resetVimeoSdkLoader();
 
 <!-- /example -->
 
-The embed is chromeless by default (`controls: false`) so Reely's own controls
+The embed is chromeless by default (`controls: false`) so Playdeck's own controls
 are the only ones on screen, and `dnt` is on unless you turn it off. See
 [Third-party requests and CSP](../../docs/third-party-requests.md) for the full
 origins list and what a page's CSP has to allow.
@@ -82,7 +82,12 @@ origins list and what a page's CSP has to allow.
   `selectedQualityId: null`. A quality id that the player never offered is
   refused before the SDK sees it: `setQuality` with an unoffered id never
   settles at all, so forwarding one would hang the command forever.
-- **Captions are Reely's to draw** (`captionRendering: 'custom'`): the track is
+- **Chapters come from the SDK's own chapter list**, read once the player is
+  ready, and kept current by its `chapterchange` event rather than by polling.
+  The SDK reports a start and a title per chapter and no end at all, so every
+  `endTime` is derived: each chapter ends where the next begins, and the last
+  takes the duration, or `null` where the duration is not known.
+- **Captions are Playdeck's to draw** (`captionRendering: 'custom'`): the track is
   enabled with `showing: false`, which makes Vimeo emit `cuechange` without
   drawing the cues itself. `setCaptionRenderer('native')` hands drawing back and
   reports `provider`. Vimeo's cue payload is markup, not plain text — WebVTT
@@ -132,19 +137,19 @@ origins list and what a page's CSP has to allow.
   prevent this: it narrows the iframe's own request header, and this travels as
   a message afterwards. Neither does `dnt`. Pass `suppressSeoMetadata: true` —
   reachable from `Player.Root` as
-  `providerOptions={{ vimeo: { suppressSeoMetadata: true } }}` — and Reely sets
+  `providerOptions={{ vimeo: { suppressSeoMetadata: true } }}` — and Playdeck sets
   the SDK's own guard before the SDK is imported, so the listener is never
   installed. It is off by default, and with it off nothing about this changes.
   Two things to know before switching it on. First, **the effect is page-wide,
   not per-embed**: the SDK's guard is a `window` global, so this silences the
-  handshake for every Vimeo embed on the page, including embeds Reely did not
+  handshake for every Vimeo embed on the page, including embeds Playdeck did not
   create, and that blast radius is yours to accept rather than the library's to
   decide. Second, **it takes effect on the first Vimeo attach and holds for the
   life of the page**: the SDK module is imported once and cached, and it reads
   the guard while it evaluates, so a page that attaches one Vimeo source without
   the option and a later one with it gets no suppression at all. That is the
-  vendor's design, not something Reely works around. A page that has set the
-  guard itself keeps its own value, in either direction; Reely only ever writes
+  vendor's design, not something Playdeck works around. A page that has set the
+  guard itself keeps its own value, in either direction; Playdeck only ever writes
   it when it is not already set.
 
 ## License

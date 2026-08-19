@@ -215,7 +215,7 @@ test.each([
   // A disallowed character in the id breaks the path pattern itself.
   'https://fast.wistia.net/embed/iframe/oif-gmxnkb',
   // The media-file fall-through above is not a way in for junk: an extension
-  // Reely does not play leaves the recognised-host rule to fail it.
+  // Playdeck does not play leaves the recognised-host rule to fail it.
   'https://fast.wistia.net/embed/medias/oifkgmxnkb.avi'
 ])('rejects malformed provider strings: %s', (input) => {
   expect(detectSource(input)).toMatchObject({
@@ -293,6 +293,17 @@ test.each([
   [
     'blob: as an HLS src',
     { type: 'hls', src: 'blob:https://example.com/9b2c-4f1a' }
+  ],
+  [
+    'a space-prefixed javascript: among video sources',
+    {
+      type: 'video',
+      sources: [{ src: ' javascript:alert(1)', mimeType: 'video/mp4' }]
+    }
+  ],
+  [
+    'a space-prefixed blob: as an HLS src',
+    { type: 'hls', src: ' blob:https://evil.example/x' }
   ]
 ])('rejects explicit source objects carrying %s', (_case, input) => {
   const result = detectSource(input);
@@ -380,6 +391,66 @@ test.each([
   expect(detectSource(input)).toMatchObject({
     status: 'failure',
     input,
+    reason: 'malformed-string'
+  });
+});
+
+// Those three are what the parser strips anywhere. It also strips leading and
+// trailing C0 controls (U+0000 to U+001F) and spaces, so a value carrying one
+// of those at an edge is not the value the allowlist reads: ` javascript:`
+// names no scheme here and loads as `javascript:`. Refused at either edge for
+// the same reason and with the same value-that-plays property (#326).
+test.each([
+  ' javascript:alert(1)',
+  '\u0001javascript:alert(1)',
+  ' data:text/html,x',
+  ' blob:https://evil.example/x',
+  'javascript:alert(1) ',
+  'blob:https://evil.example/x\u0001'
+])('refuses a URL the parser would strip an edge off: %j', (url) => {
+  expect(isPermittedSourceUrl(url, undefined)).toBe(false);
+  expect(isPermittedSourceUrl(url, 'video')).toBe(false);
+  expect(isPermittedSourceUrl(url, 'hls')).toBe(false);
+});
+
+// The rule is the parser's stripped set, not the characters this arrived
+// reported with, so every character in that set is asserted (#326).
+test.each(
+  Array.from({ length: 0x21 }, (_, code) => [
+    `U+${code.toString(16).toUpperCase().padStart(4, '0')}`,
+    String.fromCharCode(code)
+  ])
+)('refuses %s at either edge of an otherwise permitted URL', (_label, edge) => {
+  expect(
+    isPermittedSourceUrl(`${edge}https://cdn.example.com/clip.mp4`, 'video')
+  ).toBe(false);
+  expect(
+    isPermittedSourceUrl(`https://cdn.example.com/clip.mp4${edge}`, 'video')
+  ).toBe(false);
+});
+
+// Where the set ends: U+0020 is the last character the parser strips and
+// U+0021 the first it keeps, so the guard stops there rather than widening to
+// whatever else looks unusual -- guessing past the parser is how a permitted
+// URL starts being refused (#326).
+test('stops the edge rule at the last character the parser strips', () => {
+  const permitted = 'https://cdn.example.com/clip.mp4';
+
+  expect(isPermittedSourceUrl(`\u001f${permitted}`, 'video')).toBe(false);
+  expect(isPermittedSourceUrl(` ${permitted}`, 'video')).toBe(false);
+  expect(isPermittedSourceUrl(`!${permitted}`, 'video')).toBe(true);
+  expect(isPermittedSourceUrl(`${permitted}!`, 'video')).toBe(true);
+});
+
+// A stripped edge defeats `resolveNetworkPath`'s `//` test as well, so a
+// protocol-relative URL would skip the `https:` normalisation #219 exists to
+// guarantee. The guard is what closes that: the value is refused before any
+// caller reaches the substitution, so the substitution needs no trimming of
+// its own (#326).
+test('refuses a protocol-relative URL with a stripped edge before it is normalised', () => {
+  expect(isPermittedSourceUrl(' //evil.example/a', undefined)).toBe(false);
+  expect(detectSource(' //evil.example/a')).toMatchObject({
+    status: 'failure',
     reason: 'malformed-string'
   });
 });

@@ -84,7 +84,7 @@ afterEach(() => {
 Root `package.json`, after `"test:integrations"`:
 
 ```json
-    "test:storybook": "pnpm --filter @reely/storybook test",
+    "test:storybook": "pnpm --filter @playdeck/storybook test",
 ```
 
 (keep JSON key order alphabetical-ish with existing style; place next to the other `test:*` scripts.)

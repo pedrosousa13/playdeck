@@ -44,7 +44,7 @@ export const Gestures = ({
   return (
     <div
       {...props}
-      data-reely-part="gestures"
+      data-playdeck-part="gestures"
       onPointerUp={(event) => {
         onPointerUp?.(event);
         if (event.defaultPrevented) return;
@@ -64,7 +64,12 @@ export const Gestures = ({
           if (!node) return;
           const rect = node.getBoundingClientRect();
           const forward = event.clientX - rect.left >= rect.width / 2;
-          void controller.seekBy(forward ? seekOffset : -seekOffset);
+          // A double tap is a person seeking, so the seek carries `'user'` the
+          // way the scrubber's and the shortcut layer's do (#186).
+          void controller.seekByWithOrigin(
+            forward ? seekOffset : -seekOffset,
+            'user'
+          );
           onSeek?.(forward ? 'forward' : 'backward', seekOffset);
           return;
         }

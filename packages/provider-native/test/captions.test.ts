@@ -1,128 +1,13 @@
 // @vitest-environment happy-dom
 
 import { expect, test } from 'vitest';
-import { PlayerController } from '@reely/core';
-import { createNativeProvider } from '../src/index';
-
-// happy-dom's real TextTrack/TextTrackList implementation is too limited to
-// drive this test: `kind`/`label`/`language`/`id` have no public setters,
-// there is no `default` flag, and `mode` rejects `'hidden'`. We fabricate a
-// minimal stand-in that shapes the properties the adapter actually reads and
-// attach it over the media element's `textTracks` getter, the same way
-// existing tests in index.test.ts override `duration`/`buffered`/`seekable`.
-type FakeTrackInit = {
-  readonly kind: string;
-  readonly label: string;
-  readonly language: string | null;
-  readonly id?: string;
-  readonly default?: boolean;
-  readonly hasCues?: boolean;
-};
-
-type FakeTrack = {
-  kind: string;
-  label: string;
-  language: string | null;
-  id: string;
-  default?: boolean;
-  mode: string;
-  cues: { length: number } | null;
-  activeCues: readonly unknown[] | null;
-  addEventListener: (type: string, listener: () => void) => void;
-  removeEventListener: (type: string, listener: () => void) => void;
-  dispatch: (type: string) => void;
-};
-
-type FakeTrackList = FakeTrack[] & {
-  addEventListener: (type: string, listener: () => void) => void;
-  removeEventListener: (type: string, listener: () => void) => void;
-  dispatch: (type: string) => void;
-};
-
-// `default` is only set when the init explicitly provides it, so tests can
-// produce a fake track that omits the property entirely (as real `TextTrack`
-// objects do) rather than defaulting it to `false`.
-//
-// `mode` is a real accessor (not a plain field) that calls `onModeChange`
-// when assigned — mirroring the DOM spec, where assigning `TextTrack.mode`
-// queues a `change` event on the owning `TextTrackList`. Tests that don't
-// care about that cascade can ignore the callback entirely.
-const createFakeTrack = (
-  init: FakeTrackInit,
-  onModeChange?: () => void
-): FakeTrack => {
-  const listeners = new Map<string, Set<() => void>>();
-  let mode = 'disabled';
-  return {
-    kind: init.kind,
-    label: init.label,
-    language: init.language,
-    id: init.id ?? '',
-    ...(init.default !== undefined ? { default: init.default } : {}),
-    get mode() {
-      return mode;
-    },
-    set mode(value: string) {
-      mode = value;
-      onModeChange?.();
-    },
-    cues: init.hasCues ? { length: 1 } : null,
-    activeCues: null,
-    addEventListener: (type, listener) => {
-      const set = listeners.get(type) ?? new Set<() => void>();
-      set.add(listener);
-      listeners.set(type, set);
-    },
-    removeEventListener: (type, listener) => {
-      listeners.get(type)?.delete(listener);
-    },
-    dispatch: (type) => {
-      listeners.get(type)?.forEach((listener) => listener());
-    }
-  };
-};
-
-const createFakeTrackList = (tracks: readonly FakeTrack[]): FakeTrackList => {
-  const listeners = new Map<string, Set<() => void>>();
-  const list = [...tracks] as FakeTrackList;
-  list.addEventListener = (type, listener) => {
-    const set = listeners.get(type) ?? new Set<() => void>();
-    set.add(listener);
-    listeners.set(type, set);
-  };
-  list.removeEventListener = (type, listener) => {
-    listeners.get(type)?.delete(listener);
-  };
-  list.dispatch = (type) => {
-    listeners.get(type)?.forEach((listener) => listener());
-  };
-  return list;
-};
-
-const mountNative = (trackInits: readonly FakeTrackInit[]) => {
-  const media = document.createElement('video');
-  const trackList = createFakeTrackList([]);
-  const tracks = trackInits.map((init) =>
-    createFakeTrack(init, () => trackList.dispatch('change'))
-  );
-  trackList.push(...tracks);
-  Object.defineProperty(media, 'textTracks', {
-    configurable: true,
-    value: trackList
-  });
-  const provider = createNativeProvider(media);
-  const patches: Array<Record<string, unknown>> = [];
-  provider.subscribe((patch) => patches.push(patch as Record<string, unknown>));
-  return { media, provider, patches, tracks, trackList };
-};
-
-const latest = (
-  patches: ReadonlyArray<Record<string, unknown>>
-): Record<string, unknown> =>
-  patches.reduce<Record<string, unknown>>(
-    (merged, patch) => ({ ...merged, ...patch }),
-    {}
-  );
+import { PlayerController } from '@playdeck/core';
+import { captureRethrows } from './fixtures/capture-rethrows';
+import {
+  createFakeTrack,
+  latest,
+  mountNative
+} from './fixtures/fake-text-tracks';
 
 test('discovers external tracks and normalizes them', async () => {
   const { provider, patches } = mountNative([
@@ -132,7 +17,7 @@ test('discovers external tracks and normalizes them', async () => {
       language: 'en',
       id: 't1',
       default: true,
-      hasCues: true
+      cues: [{}]
     },
     { kind: 'metadata', label: 'chapters', language: null, id: 'm1' }
   ]);
@@ -157,7 +42,7 @@ test('discovers external tracks and normalizes them', async () => {
   ).toBe('available');
 });
 
-test('excludes non-caption kinds and leaves their mode untouched', async () => {
+test('excludes non-caption kinds from the published track collection', async () => {
   const { provider, patches, tracks } = mountNative([
     { kind: 'subtitles', label: 'Spanish', language: 'es', id: 's1' },
     { kind: 'chapters', label: 'chapters', language: null, id: 'c1' },
@@ -181,7 +66,11 @@ test('excludes non-caption kinds and leaves their mode untouched', async () => {
   // (`disabled`) rather than the old blanket `hidden` applied to every
   // caption/subtitle entry regardless of selection.
   expect(tracks[0]?.mode).toBe('disabled');
-  expect(tracks[1]?.mode).toBe('disabled');
+  // The chapters track is the one exception, and it is not a caption concern:
+  // its cues are never obtained while its mode is `disabled`, so the chapters
+  // slice moves it to `hidden` to read them. It is still excluded from the
+  // collection above, which is what this test guards (#182).
+  expect(tracks[1]?.mode).toBe('hidden');
   expect(tracks[2]?.mode).toBe('disabled');
 });
 
@@ -597,5 +486,36 @@ test('cuechange with an empty, whitespace-only, or missing cue text normalizes t
       { id: 'cue-whitespace', startTime: 1, endTime: 2, text: '' },
       { id: 'cue-missing', startTime: 2, endTime: 3, text: '' }
     ]
+  ]);
+});
+
+// --- subscriber isolation (#233) ---
+
+// The cue channel is its own listener set, fanned out the same way the state
+// channel is, and owes its subscribers the same isolation. The deliberate throw
+// is rethrown on a fresh task, so it is captured rather than left to the
+// runner's unhandled-error handling.
+test('a throwing cue listener does not starve the listeners behind it', async () => {
+  captureRethrows();
+  const { provider, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t1');
+  provider.subscribeCues?.(() => {
+    throw new Error('cue listener blew up');
+  });
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  const track = tracks[0];
+  if (track)
+    track.activeCues = [
+      { id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }
+    ];
+
+  expect(() => track?.dispatch('cuechange')).not.toThrow();
+
+  expect(cueFrames).toEqual([
+    [{ id: 'cue-1', startTime: 1, endTime: 2, text: 'Hello' }]
   ]);
 });

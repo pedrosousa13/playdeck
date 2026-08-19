@@ -21,7 +21,7 @@ import {
 } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { PlayerController, type ProviderStatePatch } from '@reely/core';
+import { PlayerController, type ProviderStatePatch } from '@playdeck/core';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 import { createFakeProvider, deferred } from './fixtures/fake-provider';
@@ -70,7 +70,7 @@ const renderWithProvider = (
 };
 
 const part = (name: string): HTMLElement =>
-  document.querySelector<HTMLElement>(`[data-reely-part="${name}"]`)!;
+  document.querySelector<HTMLElement>(`[data-playdeck-part="${name}"]`)!;
 
 afterEach(() => {
   cleanup();
@@ -274,7 +274,7 @@ test('Poster visibility is state-derived and the consumer cannot override it', (
   expect(poster.style.zIndex).toBe('999');
   expect(poster.dataset.state).toBe('visible');
 
-  fireEvent.loadedData(screen.getByLabelText('Reely media'));
+  fireEvent.loadedData(screen.getByLabelText('Playdeck media'));
 
   // The poster has hidden itself. A static `style` must not pin it open —
   // that would defeat the hide permanently, for every source, and it is not
@@ -288,7 +288,7 @@ test('PosterImage resolves object-fit as prop, then style, then the theming defa
   const { rerender } = render(<PosterImage />);
   const image = document.querySelector('img')!;
 
-  expect(image.style.objectFit).toBe('var(--reely-poster-fit, cover)');
+  expect(image.style.objectFit).toBe('var(--playdeck-poster-fit, cover)');
 
   rerender(<PosterImage style={{ objectFit: 'contain' }} />);
   expect(image.style.objectFit).toBe('contain');

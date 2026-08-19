@@ -24,7 +24,7 @@ export const FullscreenButton = ({
       aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
       aria-pressed={fullscreen}
       data-provider={provider ?? undefined}
-      data-reely-part="fullscreen-button"
+      data-playdeck-part="fullscreen-button"
       data-state={fullscreen ? 'active' : 'inline'}
       onClick={(event) => {
         onClick?.(event);
@@ -67,7 +67,7 @@ export const PipButton = ({
       }
       aria-pressed={pictureInPicture}
       data-provider={provider ?? undefined}
-      data-reely-part="pip-button"
+      data-playdeck-part="pip-button"
       data-state={pictureInPicture ? 'active' : 'inline'}
       onClick={(event) => {
         onClick?.(event);
@@ -94,7 +94,7 @@ export type AirPlayButtonProps = ComponentPropsWithRef<'button'>;
  * so it renders nothing outside Safari/iOS where AirPlay does not exist.
  *
  * Unlike `FullscreenButton` and `PipButton` this is **not** a toggle. Which
- * device the user picked is never exposed, and Reely does not currently
+ * device the user picked is never exposed, and Playdeck does not currently
  * surface an active-route flag either: WebKit's
  * `webkitCurrentPlaybackTargetIsWireless` is deliberately unplumbed (see
  * `provider-native`). So there is no state to render today — no `aria-pressed`,
@@ -121,7 +121,7 @@ export const AirPlayButton = ({
       {...props}
       aria-label="AirPlay"
       data-provider={provider ?? undefined}
-      data-reely-part="airplay-button"
+      data-playdeck-part="airplay-button"
       onClick={(event) => {
         onClick?.(event);
         if (event.defaultPrevented) return;

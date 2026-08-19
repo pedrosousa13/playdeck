@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactElement } from 'react';
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import { createPortal } from 'react-dom';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
@@ -9,7 +9,7 @@ const viewportStyle = {
   position: 'relative' as const,
   aspectRatio: '16 / 9',
   // Wide enough for the full control row at the largest size these stories
-  // demonstrate (`--reely-control-size: 3.5rem` in AccentAndSizeTokens). The
+  // demonstrate (`--playdeck-control-size: 3.5rem` in AccentAndSizeTokens). The
   // buttons are `flex: 0 0 auto` so they push out of the box rather than
   // shrink, and at 480 the row overflowed by 49px once AirPlayButton made it
   // six buttons.
@@ -17,8 +17,8 @@ const viewportStyle = {
 };
 
 // Icon children, supplied here as a consumer supplies them -- the theme sizes
-// every button-shaped control to `--reely-control-size` and its `svg` to
-// `--reely-control-icon-size`, so the default text labels ("Enter
+// every button-shaped control to `--playdeck-control-size` and its `svg` to
+// `--playdeck-control-icon-size`, so the default text labels ("Enter
 // fullscreen", "Enter picture-in-picture", ...) do not fit a 44px box.
 //
 // The icons are the static enter-state ones. These stories are static: none of
@@ -97,8 +97,8 @@ const meta = {
     docs: {
       description: {
         component: [
-          'The optional `@reely/react/theme.css`. Everything lives in an',
-          '`@layer reely` cascade layer with `:where()` selectors, so unlayered',
+          'The optional `@playdeck/react/theme.css`. Everything lives in an',
+          '`@layer playdeck` cascade layer with `:where()` selectors, so unlayered',
           'consumer CSS wins without `!important` and a single class of your own',
           'outranks any theme rule. Tokens are set on the viewport part, so',
           'dropping a player into a page leaks no names into the document.'
@@ -139,11 +139,11 @@ export const Default: Story = {
 // The consumer rule is rigged to lose on every cascade axis except the layer,
 // so that the layer is the only thing left that can explain the win. It is
 // `:where(.consumer-tint)`, 0-0-0, exactly tying the theme's
-// `:where([data-reely-part='controls'])` on specificity -- a bare
+// `:where([data-playdeck-part='controls'])` on specificity -- a bare
 // `.consumer-tint` would be 0-1-0 and win outright, layer or no layer. And it
 // is declared earlier, so on source order alone the theme would take the tie.
 // What remains is the cascade layer: unlayered declarations beat layered ones
-// before specificity is ever consulted. Delete `@layer reely` from theme.css
+// before specificity is ever consulted. Delete `@layer playdeck` from theme.css
 // and this story goes red.
 //
 // Earlier means portalled into `document.head`, not mounted with `withCss`:
@@ -190,18 +190,18 @@ export const ConsumerCssWins: Story = {
     // source order is working against it.
     const styles = [...document.querySelectorAll('style')];
     // Matched on the at-rule itself, brace included: theme.css's header comment
-    // says "@layer reely" in prose too, and a bare substring match resolves to
+    // says "@layer playdeck" in prose too, and a bare substring match resolves to
     // the stylesheet even after the real wrapper is deleted -- which would let
     // the de-layered case pass this probe and then throw somewhere else. The
     // brace is optionally spaced because the production Storybook build
-    // minifies `?inline` CSS to `@layer reely{`.
+    // minifies `?inline` CSS to `@layer playdeck{`.
     const themeStyle = styles.find((style) =>
-      /@layer\s+reely\s*\{/.test(style.textContent ?? '')
+      /@layer\s+playdeck\s*\{/.test(style.textContent ?? '')
     )!;
     const consumerStyle = styles.find((style) =>
       style.textContent?.includes('.consumer-tint')
     )!;
-    // Both found, asserted by name: with `@layer reely` deleted the theme probe
+    // Both found, asserted by name: with `@layer playdeck` deleted the theme probe
     // matches nothing, and this reports that as the missing layer rather than
     // crashing on an undefined argument to compareDocumentPosition below.
     await expect({
@@ -230,8 +230,8 @@ export const AccentAndSizeTokens: Story = {
     <div
       style={
         {
-          '--reely-control-size': '3.5rem',
-          '--reely-color-accent': 'rgb(255, 0, 128)'
+          '--playdeck-control-size': '3.5rem',
+          '--playdeck-color-accent': 'rgb(255, 0, 128)'
         } as CSSProperties
       }
     >
@@ -264,9 +264,9 @@ export const ControlSizeFloorHolds: Story = {
     <div
       style={
         {
-          '--reely-control-size': '2.25rem',
-          '--reely-color-surface': 'rgb(20, 20, 30)',
-          '--reely-radius': '0px'
+          '--playdeck-control-size': '2.25rem',
+          '--playdeck-color-surface': 'rgb(20, 20, 30)',
+          '--playdeck-radius': '0px'
         } as CSSProperties
       }
     >
@@ -297,7 +297,7 @@ export const ControlSizeFloorHolds: Story = {
 //
 // Themed through the meta-level `globals`, and with no example stylesheet in
 // the tree: `Player/ActivationButton`'s own `Styled` story mounts
-// `examples/css-activation.css` unlayered, which beats `@layer reely` and would
+// `examples/css-activation.css` unlayered, which beats `@layer playdeck` and would
 // measure that file instead of the theme.
 export const ActivationIsCentred: Story = {
   parameters: {
@@ -322,7 +322,7 @@ export const ActivationIsCentred: Story = {
     await expect(styles.height).toBe('64px');
     await expect(styles.borderRadius).toBe('50%');
 
-    const viewport = button.closest('[data-reely-part="viewport"]')!;
+    const viewport = button.closest('[data-playdeck-part="viewport"]')!;
     const centre = (element: Element) => {
       const box = element.getBoundingClientRect();
       return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
@@ -360,8 +360,8 @@ export const TearsDownWithTheStory: Story = {
     const play = await canvas.findByRole('button', { name: 'Play' });
     // `cursor: pointer` is the theme's, and Default above asserts it arrives.
     await expect(globalThis.getComputedStyle(play).cursor).toBe('default');
-    const viewport = play.closest('[data-reely-part="viewport"]')!;
-    // The theme paints the viewport `--reely-color-backdrop` (#000).
+    const viewport = play.closest('[data-playdeck-part="viewport"]')!;
+    // The theme paints the viewport `--playdeck-color-backdrop` (#000).
     await expect(globalThis.getComputedStyle(viewport).backgroundColor).toBe(
       'rgba(0, 0, 0, 0)'
     );

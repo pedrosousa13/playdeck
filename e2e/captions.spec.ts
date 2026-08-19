@@ -10,11 +10,11 @@ test('custom captions render the discovered track once playing', async ({
 
   await playButton(page).click();
 
-  const captionsButton = page.locator('[data-reely-part="captions-button"]');
+  const captionsButton = page.locator('[data-playdeck-part="captions-button"]');
   await expect(captionsButton).toHaveAttribute('data-state', 'on');
 
-  const captions = page.locator('[data-reely-part="captions"]');
-  await expect(captions).toContainText('Reely caption one');
+  const captions = page.locator('[data-playdeck-part="captions"]');
+  await expect(captions).toContainText('Playdeck caption one');
 });
 
 test('the captions button toggles the overlay off and back on', async ({
@@ -26,19 +26,19 @@ test('the captions button toggles the overlay off and back on', async ({
 
   await playButton(page).click();
 
-  const captionsButton = page.locator('[data-reely-part="captions-button"]');
-  const captions = page.locator('[data-reely-part="captions"]');
-  await expect(captions).toContainText('Reely caption one');
+  const captionsButton = page.locator('[data-playdeck-part="captions-button"]');
+  const captions = page.locator('[data-playdeck-part="captions"]');
+  await expect(captions).toContainText('Playdeck caption one');
 
   await captionsButton.click();
   await expect(captionsButton).toHaveAttribute('data-state', 'off');
-  await expect(captions.locator('[data-reely-part="caption-cue"]')).toHaveCount(
-    0
-  );
+  await expect(
+    captions.locator('[data-playdeck-part="caption-cue"]')
+  ).toHaveCount(0);
 
   await captionsButton.click();
   await expect(captionsButton).toHaveAttribute('data-state', 'on');
-  await expect(captions).toContainText('Reely caption one');
+  await expect(captions).toContainText('Playdeck caption one');
 });
 
 test('native caption rendering leaves the custom overlay empty', async ({
@@ -50,10 +50,10 @@ test('native caption rendering leaves the custom overlay empty', async ({
 
   await playButton(page).click();
 
-  const captionsButton = page.locator('[data-reely-part="captions-button"]');
+  const captionsButton = page.locator('[data-playdeck-part="captions-button"]');
   await expect(captionsButton).toHaveAttribute('data-state', 'on');
 
-  await expect(page.locator('[data-reely-part="captions"]')).toHaveCount(0);
+  await expect(page.locator('[data-playdeck-part="captions"]')).toHaveCount(0);
 });
 
 // #59: the SafeArea story cannot observe this — env() resolves to its fallback
@@ -73,9 +73,9 @@ test('a device safe-area inset lifts the cue box clear of the chrome', async ({
     '/iframe.html?id=fixtures-playerfixture--captions-custom&viewMode=story'
   );
   await playButton(page).click();
-  const captions = page.locator('[data-reely-part="captions"]');
-  const cue = page.locator('[data-reely-part="caption-cue"]').first();
-  await expect(cue).toHaveText(/Reely caption one/);
+  const captions = page.locator('[data-playdeck-part="captions"]');
+  const cue = page.locator('[data-playdeck-part="caption-cue"]').first();
+  await expect(cue).toHaveText(/Playdeck caption one/);
   const before = (await cue.boundingBox())!;
 
   const session = await page.context().newCDPSession(page);

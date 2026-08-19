@@ -2,35 +2,35 @@
 
 <!-- factory:tracker kind=github -->
 
-Issues and PRDs for this repo live as GitHub issues on **pedrosousa13/reely**.
+Issues and PRDs for this repo live as GitHub issues on **pedrosousa13/playdeck**.
 
-Use the `gh` CLI for all operations. Pass `-R pedrosousa13/reely` explicitly on every
+Use the `gh` CLI for all operations. Pass `-R pedrosousa13/playdeck` explicitly on every
 call rather than relying on the current directory's remote — a session that
 runs from a worktree, a subdirectory, or another clone stays correct.
 
 ## Conventions
 
-- **Create an issue**: `gh issue create -R pedrosousa13/reely --title "..." --body
+- **Create an issue**: `gh issue create -R pedrosousa13/playdeck --title "..." --body
 "..."`. Title in imperative mood; use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <n> -R pedrosousa13/reely --json
+- **Read an issue**: `gh issue view <n> -R pedrosousa13/playdeck --json
 title,body,labels,milestone,state,stateReason,comments` — `comments` is a
   `--json` field, so one call returns the body and the discussion together.
-- **List issues**: `gh issue list -R pedrosousa13/reely --state open --limit 500 --json
+- **List issues**: `gh issue list -R pedrosousa13/playdeck --state open --limit 500 --json
 number,title,labels,milestone,createdAt`, plus `--label` / `--milestone`
   filters as needed. `--limit` defaults to 30; pass it on every listing.
-- **Comment**: `gh issue comment <n> -R pedrosousa13/reely --body "..."`.
-- **Apply / remove labels**: `gh issue edit <n> -R pedrosousa13/reely --add-label
+- **Comment**: `gh issue comment <n> -R pedrosousa13/playdeck --body "..."`.
+- **Apply / remove labels**: `gh issue edit <n> -R pedrosousa13/playdeck --add-label
 "..."` / `--remove-label "..."`.
-- **Close**: `gh issue close <n> -R pedrosousa13/reely --reason completed` (resolved)
+- **Close**: `gh issue close <n> -R pedrosousa13/playdeck --reason completed` (resolved)
   or `--reason "not planned"` (wontfix).
 
 ## When a skill says "publish to the issue tracker"
 
-Create a GitHub issue on pedrosousa13/reely.
+Create a GitHub issue on pedrosousa13/playdeck.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <n> -R pedrosousa13/reely --json
+Run `gh issue view <n> -R pedrosousa13/playdeck --json
 title,body,labels,milestone,state,stateReason,comments`.
 
 ## Factory loop operations
@@ -41,9 +41,9 @@ installed can find it, and one without it has no use for this section — one
 bullet per row. A `/factory` Loop Session needs every one of them.
 
 - **Reachability**: `gh auth status` resolves the `gh` CLI and confirms it
-  is authenticated; `gh repo view pedrosousa13/reely --json name` confirms the
-  **pedrosousa13/reely** repo exists and is visible to this account.
-- **Queue listing**: `gh issue list -R pedrosousa13/reely --state open --label
+  is authenticated; `gh repo view pedrosousa13/playdeck --json name` confirms the
+  **pedrosousa13/playdeck** repo exists and is visible to this account.
+- **Queue listing**: `gh issue list -R pedrosousa13/playdeck --state open --label
 ready-for-agent --milestone <n-or-title> --limit 500 --json
 number,title,labels,milestone,createdAt`. `--milestone` accepts either a
   milestone number or its title; drop the flag entirely for an unscoped
@@ -60,19 +60,19 @@ number,title,labels,milestone,createdAt`. `--milestone` accepts either a
   `P1` (High) > `P2` (Medium) > `P3` (Low) > no priority label** — ties
   broken by the oldest `createdAt`. Both the labels and `createdAt` come
   back on the same listing call, so ordering costs no extra call.
-- **State: started**: `gh issue edit <n> -R pedrosousa13/reely --add-label
+- **State: started**: `gh issue edit <n> -R pedrosousa13/playdeck --add-label
 in-progress --add-assignee @me` — one call, which is what makes pickup
   atomic. GitHub issues have only `OPEN` and `CLOSED`, so `in-progress` is
   the started state.
-- **State: completed / canceled**: `gh issue close <n> -R pedrosousa13/reely --reason
+- **State: completed / canceled**: `gh issue close <n> -R pedrosousa13/playdeck --reason
 completed` for landed work, which reads back as `state=CLOSED`,
   `stateReason=COMPLETED`. Wontfix is two calls, because `gh issue close`
-  has no label flag: `gh issue edit <n> -R pedrosousa13/reely --add-label wontfix`,
-  then `gh issue close <n> -R pedrosousa13/reely --reason "not planned"`, which reads
+  has no label flag: `gh issue edit <n> -R pedrosousa13/playdeck --add-label wontfix`,
+  then `gh issue close <n> -R pedrosousa13/playdeck --reason "not planned"`, which reads
   back as `state=CLOSED`, `stateReason=NOT_PLANNED`. The reason is what
   distinguishes the two — a closed issue with no reason is
   indistinguishable from either.
-- **Park**: `gh issue edit <n> -R pedrosousa13/reely --remove-label ready-for-agent
+- **Park**: `gh issue edit <n> -R pedrosousa13/playdeck --remove-label ready-for-agent
 --remove-label in-progress --add-label needs-info`. The issue stays
   **open**: Park returns work to an unstarted state, it does not close it.
   Removing `in-progress` is the unstarted half of the Park and is not
@@ -85,7 +85,7 @@ completed` for landed work, which reads back as `state=CLOSED`,
   Read the blockers of an issue with
 
   ```
-  gh api repos/pedrosousa13/reely/issues/<n>/dependencies/blocked_by
+  gh api repos/pedrosousa13/playdeck/issues/<n>/dependencies/blocked_by
   ```
 
   which returns the full issue objects that block `<n>`, and the reverse
@@ -94,12 +94,12 @@ completed` for landed work, which reads back as `state=CLOSED`,
 
   ```
   gh api --method POST \
-    repos/pedrosousa13/reely/issues/<n>/dependencies/blocked_by \
+    repos/pedrosousa13/playdeck/issues/<n>/dependencies/blocked_by \
     -F issue_id=<numeric id of the blocker>
   ```
 
   **`issue_id` is the blocker's numeric `id`, not its issue number.** Get it
-  with `gh api repos/pedrosousa13/reely/issues/<blocker> --jq .id`. Passing
+  with `gh api repos/pedrosousa13/playdeck/issues/<blocker> --jq .id`. Passing
   the issue number silently wires the wrong edge or fails; this was
   confirmed empirically against this repo.
 
@@ -120,19 +120,19 @@ completed` for landed work, which reads back as `state=CLOSED`,
   them one at a time, in Queue order, and stop at the first unblocked one.
 
 - **Milestone**: a GitHub **milestone** on the issue, not a label. Create
-  one with `gh api repos/pedrosousa13/reely/milestones -f title=... -f
+  one with `gh api repos/pedrosousa13/playdeck/milestones -f title=... -f
 description=...`; list a repo's milestones with `gh api --paginate
-"repos/pedrosousa13/reely/milestones?state=all&per_page=100"`, which returns them
+"repos/pedrosousa13/playdeck/milestones?state=all&per_page=100"`, which returns them
   in GitHub's own order, stable between runs. Both halves of that query
   are load-bearing: the endpoint returns only open milestones by default
   and pages at 30, and the milestone menu is supposed to show _every_
   milestone in the Project — a stable menu shape matters more than hiding
   the closed or the empty ones. Set one with `gh issue create --milestone
-<n-or-title>` at creation, or `gh issue edit <n> -R pedrosousa13/reely --milestone
+<n-or-title>` at creation, or `gh issue edit <n> -R pedrosousa13/playdeck --milestone
 <n-or-title>` afterwards. Read a milestone's completion with `gh api
-repos/pedrosousa13/reely/milestones/<n>` and its `open_issues` / `closed_issues`
+repos/pedrosousa13/playdeck/milestones/<n>` and its `open_issues` / `closed_issues`
   counts — GitHub reports no percentage, so compute one from the pair.
-- **Milestone issue counts**: `gh issue list -R pedrosousa13/reely --state all
+- **Milestone issue counts**: `gh issue list -R pedrosousa13/playdeck --state all
 --milestone <n> --limit 500 --json number,labels,state,stateReason`,
   bucketed by state: **done** is `state=CLOSED` with
   `stateReason=COMPLETED`; **canceled** is `state=CLOSED` with
@@ -144,7 +144,7 @@ repos/pedrosousa13/reely/milestones/<n>` and its `open_issues` / `closed_issues`
   empty-Queue report states a wrong number without any sign that it did.
   This is deliberately not a re-count of the Queue, which sees only
   `ready-for-agent`.
-- **Open issues**: `gh issue list -R pedrosousa13/reely --state open --milestone
+- **Open issues**: `gh issue list -R pedrosousa13/playdeck --state open --milestone
 <n-or-title> --limit 500 --json
 number,title,labels,milestone,createdAt,assignees`.
   Drop `--milestone` entirely for an unscoped call. Every open issue,
@@ -153,14 +153,14 @@ number,title,labels,milestone,createdAt,assignees`.
   `blockedBy` from the same `dependencies/blocked_by` call as **Blocking**
   above — it is not a `--json` field, so it costs one `gh api` call per
   issue — `claimedBy` from `assignees`.
-- **Read an issue**: `gh issue view <n> -R pedrosousa13/reely --json
+- **Read an issue**: `gh issue view <n> -R pedrosousa13/playdeck --json
 title,body,labels,milestone,state,stateReason,comments` — one call.
   `comments` is a valid `--json` field and returns each comment's author,
   body and timestamp, so the body and the whole discussion come back
-  together. `gh issue view <n> -R pedrosousa13/reely --comments` renders the same
+  together. `gh issue view <n> -R pedrosousa13/playdeck --comments` renders the same
   discussion for a human to read, but a session working from the issue
   needs only the `--json` call.
-- **Comment**: `gh issue comment <n> -R pedrosousa13/reely --body "..."`. Body as
+- **Comment**: `gh issue comment <n> -R pedrosousa13/playdeck --body "..."`. Body as
   Markdown; use a heredoc so newlines stay literal.
 - **Branch name**: GitHub supplies none, so it is a convention this repo
   derives: `<user>/issue-<number>-<slug>`, where `<user>` is the
@@ -170,7 +170,7 @@ title,body,labels,milestone,state,stateReason,comments` — one call.
   so every session that touches the issue must derive it the same way from
   the same title, and a session resuming an issue looks for that branch
   rather than inventing a new one.
-- **State verification**: `gh issue view <n> -R pedrosousa13/reely --json
+- **State verification**: `gh issue view <n> -R pedrosousa13/playdeck --json
 state,stateReason,labels,milestone` returns the issue's current state.
   Fetch it fresh when verifying a Pause note's claim — never compare
   against a value read earlier in the session.
@@ -185,17 +185,17 @@ never enter a Loop Session's Queue ("Wayfinder maps" in `PROTOCOL.md`, the
 Factory plugin's own protocol document — not a file in this repo;
 "Wayfinder labels" in `docs/agents/triage-labels.md`).
 
-- **The map**: an ordinary issue on **pedrosousa13/reely** labeled `wayfinder:map`.
-  Find a Project's maps with `gh issue list -R pedrosousa13/reely --state open
+- **The map**: an ordinary issue on **pedrosousa13/playdeck** labeled `wayfinder:map`.
+  Find a Project's maps with `gh issue list -R pedrosousa13/playdeck --state open
 --label wayfinder:map --limit 500 --json number,title`.
 - **Labels**: `wayfinder:map`, `wayfinder:research`, `wayfinder:prototype`,
-  `wayfinder:grilling`, `wayfinder:task` — repo labels on **pedrosousa13/reely**,
-  created lazily by the first charting session: `gh label list -R pedrosousa13/reely`
-  first, then `gh label create <label> -R pedrosousa13/reely` only for the names that
+  `wayfinder:grilling`, `wayfinder:task` — repo labels on **pedrosousa13/playdeck**,
+  created lazily by the first charting session: `gh label list -R pedrosousa13/playdeck`
+  first, then `gh label create <label> -R pedrosousa13/playdeck` only for the names that
   are missing. Never create a label you haven't first confirmed is missing.
 - **Child tickets**: GitHub's native sub-issues — `gh issue edit <map> -R
-pedrosousa13/reely --add-sub-issue <ticket>`, read back with `gh issue view
-<map> -R pedrosousa13/reely --json subIssues,subIssuesSummary`. Here a
+pedrosousa13/playdeck --add-sub-issue <ticket>`, read back with `gh issue view
+<map> -R pedrosousa13/playdeck --json subIssues,subIssuesSummary`. Here a
   sub-issue expresses **containment only** — which tickets belong to which
   map — and carries no blocking meaning in this repo, because blocking is
   issue dependencies (see the loop's **Blocking** bullet). A map with open
@@ -204,7 +204,7 @@ pedrosousa13/reely --add-sub-issue <ticket>`, read back with `gh issue view
 - **Blocking between tickets**: the same native issue dependencies the
   loop's **Blocking** bullet uses, wired in a second pass once every ticket
   has a number: `gh api --method POST
-repos/pedrosousa13/reely/issues/<blocked>/dependencies/blocked_by -F
+repos/pedrosousa13/playdeck/issues/<blocked>/dependencies/blocked_by -F
 issue_id=<numeric id of the blocker>`. A ticket is blocked while any issue
   in its `dependencies/blocked_by` listing is still open. **Dependencies are
   authoritative.** A `Blocked by #N` line in a ticket body — the form
@@ -212,25 +212,25 @@ issue_id=<numeric id of the blocker>`. A ticket is blocked while any issue
   where one exists it should be mirrored into a dependency edge, and where
   the two disagree the dependency edge wins.
 - **Frontier**: read the map's children from `gh issue view <map> -R
-pedrosousa13/reely --json subIssues`, keep the `OPEN` ones, then confirm each
-  candidate with its own `gh issue view <n> -R pedrosousa13/reely --json
+pedrosousa13/playdeck --json subIssues`, keep the `OPEN` ones, then confirm each
+  candidate with its own `gh issue view <n> -R pedrosousa13/playdeck --json
 assignees,state` plus `gh api
-repos/pedrosousa13/reely/issues/<n>/dependencies/blocked_by` — unclaimed
+repos/pedrosousa13/playdeck/issues/<n>/dependencies/blocked_by` — unclaimed
   means no assignee; unblocked means that listing contains no still-open
   issue. The per-candidate view is the authority here for the same reason it
   is in Queue selection: the listing lags.
-- **Claim**: `gh issue edit <n> -R pedrosousa13/reely --add-assignee @me` — the
+- **Claim**: `gh issue edit <n> -R pedrosousa13/playdeck --add-assignee @me` — the
   assignee is the claim; an open, unassigned ticket is unclaimed.
 - **Resolve**: post the resolution with `gh issue comment`, then `gh issue
-close <n> -R pedrosousa13/reely --reason completed`. A ticket ruled out of scope
+close <n> -R pedrosousa13/playdeck --reason completed`. A ticket ruled out of scope
   closes with `--reason "not planned"` instead — resolved and ruled-out
   stay distinguishable, the same way landed and wontfix do.
 
 ## Reachability
 
 What the Factory's Preflight checks: `gh` resolves and is authenticated,
-and the **pedrosousa13/reely** repo exists and is visible — `gh auth status`, then
-`gh repo view pedrosousa13/reely --json name`.
+and the **pedrosousa13/playdeck** repo exists and is visible — `gh auth status`, then
+`gh repo view pedrosousa13/playdeck --json name`.
 
 ## If GitHub is unreachable
 

@@ -217,23 +217,26 @@ export const uncoveredExports = (exportsByPackage, fixtureSources) => {
 
 /** @type {readonly { name: string; entry: string }[]} */
 const packages = [
-  { name: '@reely/core', entry: 'packages/core/src/index.ts' },
-  { name: '@reely/react', entry: 'packages/react/src/index.tsx' },
+  { name: '@playdeck/core', entry: 'packages/core/src/index.ts' },
+  { name: '@playdeck/react', entry: 'packages/react/src/index.tsx' },
   {
-    name: '@reely/provider-native',
+    name: '@playdeck/provider-native',
     entry: 'packages/provider-native/src/index.ts'
   },
-  { name: '@reely/provider-hls', entry: 'packages/provider-hls/src/index.ts' },
   {
-    name: '@reely/provider-youtube',
+    name: '@playdeck/provider-hls',
+    entry: 'packages/provider-hls/src/index.ts'
+  },
+  {
+    name: '@playdeck/provider-youtube',
     entry: 'packages/provider-youtube/src/index.ts'
   },
   {
-    name: '@reely/provider-vimeo',
+    name: '@playdeck/provider-vimeo',
     entry: 'packages/provider-vimeo/src/index.ts'
   },
   {
-    name: '@reely/provider-wistia',
+    name: '@playdeck/provider-wistia',
     entry: 'packages/provider-wistia/src/index.ts'
   }
 ];

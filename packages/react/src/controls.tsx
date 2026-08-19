@@ -57,7 +57,7 @@ const isTextEntryTarget = (node: EventTarget | null): boolean => {
 const isInOpenMenu = (node: EventTarget | null): boolean =>
   node instanceof HTMLElement &&
   node.closest(
-    '[role="menu"], [role="menubar"], [role="listbox"], [data-reely-menu="open"]'
+    '[role="menu"], [role="menubar"], [role="listbox"], [data-playdeck-menu="open"]'
   ) !== null;
 
 const nativeActivationSelector = 'button, [role="button"], a[href], summary';
@@ -262,7 +262,10 @@ export const Controls = ({
           // input no longer see arrow presses; `shortcuts={{ seekBackward:
           // null, seekForward: null }}` hands the arrows back to the input.
           event.preventDefault();
-          void controller.seekBy(seekSeconds[action]);
+          // Tagged as `PlayButton` and the scrubber tag theirs: owning the keys
+          // is what makes this a person seeking rather than an input stepping,
+          // so it must not report itself as an API call (#186).
+          void controller.seekByWithOrigin(seekSeconds[action], 'user');
           return;
         case 'volumeUp':
         case 'volumeDown': {
@@ -373,7 +376,7 @@ export const Controls = ({
       {...props}
       aria-label={ariaLabel ?? 'Video player controls'}
       data-provider={provider ?? undefined}
-      data-reely-part="controls"
+      data-playdeck-part="controls"
       data-state={global ? 'global' : 'scoped'}
       onBlur={(event) => {
         onBlur?.(event);

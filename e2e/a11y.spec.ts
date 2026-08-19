@@ -63,7 +63,7 @@ const states: ReadonlyArray<{
   // review" (messageKey: controlsWithinPopup) the instant the attribute is
   // present — it does not attempt to resolve the id first. Every
   // correctly-built aria-haspopup+aria-controls menu trips this; it is a
-  // permanent axe-core limitation for the pattern, not specific to reely and
+  // permanent axe-core limitation for the pattern, not specific to playdeck and
   // not fixable here.
   {
     name: 'menu-open',
@@ -107,11 +107,11 @@ const states: ReadonlyArray<{
 // and `region`/`landmark-one-main`/`page-has-heading-one` downgrade to
 // inapplicable instead of running and passing. Those three are properties of
 // Storybook's bare iframe document (no `<main>`, no `<h1>`, no landmarks) —
-// not of reely — and a consumer's real page owns them, not a story fragment.
+// not of playdeck — and a consumer's real page owns them, not a story fragment.
 // "Zero violations" below is therefore a claim about this subtree, not about
 // the host page.
 const scan = (page: Page) =>
-  new AxeBuilder({ page }).include('[data-reely-part="viewport"]').analyze();
+  new AxeBuilder({ page }).include('[data-playdeck-part="viewport"]').analyze();
 
 for (const state of states) {
   test(`no accessibility violations in the ${state.name} state`, async ({
@@ -119,12 +119,12 @@ for (const state of states) {
   }) => {
     await page.goto(state.url);
     // The idle state renders no controls at all, so wait on the viewport.
-    await expect(page.locator('[data-reely-part="viewport"]')).toBeVisible();
+    await expect(page.locator('[data-playdeck-part="viewport"]')).toBeVisible();
 
     if (state.open) {
       await settingsTrigger(page).click();
       await expect(settingsMenu(page)).toHaveAttribute(
-        'data-reely-menu',
+        'data-playdeck-menu',
         'open'
       );
       // The zero-violations claim below is only worth anything for
@@ -205,10 +205,12 @@ for (const state of states.filter(
     page
   }) => {
     await page.goto(state.url);
-    await expect(page.locator('[data-reely-part="viewport"]')).toBeVisible();
+    await expect(page.locator('[data-playdeck-part="viewport"]')).toBeVisible();
 
     const obscured = await page.evaluate(() => {
-      const viewport = document.querySelector('[data-reely-part="viewport"]')!;
+      const viewport = document.querySelector(
+        '[data-playdeck-part="viewport"]'
+      )!;
       const focusable = [
         ...viewport.querySelectorAll<HTMLElement>(
           'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -232,11 +234,11 @@ for (const state of states.filter(
             rect.top + rect.height / 2
           );
           return {
-            part: node.getAttribute('data-reely-part') ?? node.tagName,
+            part: node.getAttribute('data-playdeck-part') ?? node.tagName,
             label: node.getAttribute('aria-label'),
             reached: hit !== null && (hit === node || node.contains(hit)),
             resolvedTo:
-              hit?.getAttribute('data-reely-part') ?? hit?.tagName ?? null
+              hit?.getAttribute('data-playdeck-part') ?? hit?.tagName ?? null
           };
         })
         .filter((result) => !result.reached);
@@ -293,8 +295,10 @@ for (const reflow of reflowCases) {
     // reference.spec.ts lacks: it measures horizontal overflow only, which is
     // why a 35px vertical clip survived it.
     const clip = await page.evaluate(() => {
-      const viewport = document.querySelector('[data-reely-part="viewport"]')!;
-      const row = document.querySelector('[data-reely-part="controls"]')!;
+      const viewport = document.querySelector(
+        '[data-playdeck-part="viewport"]'
+      )!;
+      const row = document.querySelector('[data-playdeck-part="controls"]')!;
       const v = viewport.getBoundingClientRect();
       const r = row.getBoundingClientRect();
       return {
@@ -319,7 +323,7 @@ for (const reflow of reflowCases) {
     // hit-tested here explicitly rather than trusted to geometry.
     //
     // Note this proves hit-testability, not visual non-occlusion:
-    // `elementFromPoint` is blind to `pointer-events: none`, and reely's own
+    // `elementFromPoint` is blind to `pointer-events: none`, and playdeck's own
     // overlays (`Player.Poster`, `Player.Captions`, the active
     // `LoadingIndicator`) all set it. A green result here does not mean
     // nothing is painted over the controls — only that the control itself
@@ -336,13 +340,13 @@ for (const reflow of reflowCases) {
         isPlayButtonOrDescendant:
           el !== null && (el === play || play.contains(el)),
         resolvedTag: el?.tagName ?? null,
-        resolvedPart: el?.getAttribute('data-reely-part') ?? null
+        resolvedPart: el?.getAttribute('data-playdeck-part') ?? null
       };
     }, playHandle);
     expect(
       hit.isPlayButtonOrDescendant,
       `expected the play button's own center to hit-test to itself, but ` +
-        `resolved to <${hit.resolvedTag}> data-reely-part="${hit.resolvedPart}" instead`
+        `resolved to <${hit.resolvedTag}> data-playdeck-part="${hit.resolvedPart}" instead`
     ).toBe(true);
   });
 }
@@ -350,7 +354,7 @@ for (const reflow of reflowCases) {
 // Measured identical on Chromium, Firefox and WebKit. `Player.Controls`
 // defaults to `tabIndex={0}`, which is why the region itself is the first
 // stop. Both the CaptionsMenu and the SettingsMenu trigger carry
-// `data-reely-part="settings-menu-trigger"` — CaptionsMenu is a preset over
+// `data-playdeck-part="settings-menu-trigger"` — CaptionsMenu is a preset over
 // SettingsMenu — so the two consecutive entries are not a duplicate.
 const tabOrder = [
   'controls',
@@ -368,7 +372,7 @@ const tabOrder = [
 
 const focusedPart = (page: Page) =>
   page.evaluate(
-    () => document.activeElement?.getAttribute('data-reely-part') ?? null
+    () => document.activeElement?.getAttribute('data-playdeck-part') ?? null
   );
 
 test('every control in the composition is reachable by Tab, in composed order', async ({
@@ -399,7 +403,10 @@ test('the settings menu takes focus on open and gives it back on Escape', async 
 
   await settingsTrigger(page).focus();
   await page.keyboard.press('ArrowDown');
-  await expect(settingsMenu(page)).toHaveAttribute('data-reely-menu', 'open');
+  await expect(settingsMenu(page)).toHaveAttribute(
+    'data-playdeck-menu',
+    'open'
+  );
   // The menu autofocuses its first item, so the scrollable container's
   // default tabIndex={0} is never the landing spot.
   await expect(
@@ -434,7 +441,10 @@ test('the menu content root is keyboard-focusable without the composition supply
 
   for (const openTrigger of [settingsTrigger, captionsTrigger]) {
     await openTrigger(page).click();
-    await expect(settingsMenu(page)).toHaveAttribute('data-reely-menu', 'open');
+    await expect(settingsMenu(page)).toHaveAttribute(
+      'data-playdeck-menu',
+      'open'
+    );
     await expect(settingsMenu(page)).toHaveJSProperty('tabIndex', 0);
     await page.keyboard.press('Escape');
     await expect(settingsMenu(page)).toHaveCount(0);

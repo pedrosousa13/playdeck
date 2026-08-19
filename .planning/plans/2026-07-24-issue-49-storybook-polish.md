@@ -4,7 +4,7 @@
 
 **Goal:** Make the Storybook workbench derive its staged states from the real core capability/state contract (single source of truth, drift-guarded) and add per-component autodocs plus three hand-written MDX overview pages.
 
-**Architecture:** Rewrite `apps/storybook/stories/support.ts` so the ready-state helper's capability base comes from `@reely/core`'s `createInitialPlayerState().capabilities` instead of a hand-listed object; guard the derivation with a unit test. Enable Storybook autodocs (`@storybook/addon-docs`, `tags: ['autodocs']`, `.mdx` glob) and enrich each component's `meta` with a documentation description covering usage, the data-attribute contract, a11y/keyboard notes, and capability-gating. Add the missing `PosterImage` story and structural doc blocks, then three MDX overview pages.
+**Architecture:** Rewrite `apps/storybook/stories/support.ts` so the ready-state helper's capability base comes from `@playdeck/core`'s `createInitialPlayerState().capabilities` instead of a hand-listed object; guard the derivation with a unit test. Enable Storybook autodocs (`@storybook/addon-docs`, `tags: ['autodocs']`, `.mdx` glob) and enrich each component's `meta` with a documentation description covering usage, the data-attribute contract, a11y/keyboard notes, and capability-gating. Add the missing `PosterImage` story and structural doc blocks, then three MDX overview pages.
 
 **Tech Stack:** Storybook 10.5.3 (`@storybook/react-vite`), Vitest 4.1.10 browser mode (`@vitest/browser-playwright`), React 19, TypeScript, pnpm workspaces, Vite 8.
 
@@ -22,7 +22,7 @@
 **Execution setup (before Task 1, via `superpowers:using-git-worktrees`):**
 
 - Worktree `.worktrees/issue-49-storybook-polish`, branch `issue-49-storybook-polish`, off `main` @ `bf0261e`.
-- `pnpm install --frozen-lockfile`, then confirm a clean baseline: `pnpm --filter @reely/storybook test` passes and `pnpm typecheck` is green.
+- `pnpm install --frozen-lockfile`, then confirm a clean baseline: `pnpm --filter @playdeck/storybook test` passes and `pnpm typecheck` is green.
 - Run all pnpm commands serially within the worktree.
 
 ---
@@ -38,7 +38,7 @@ Rewrite `support.ts` so the capability base comes from core, and pin the derivat
 
 **Interfaces:**
 
-- Consumes: `createInitialPlayerState()` from `@reely/core` (returns a frozen `PlayerState`; `.capabilities` is a frozen `PlayerCapabilities` with all 9 keys set to `{ status: 'unknown', reason: 'not-ready' }`).
+- Consumes: `createInitialPlayerState()` from `@playdeck/core` (returns a frozen `PlayerState`; `.capabilities` is a frozen `PlayerCapabilities` with all 9 keys set to `{ status: 'unknown', reason: 'not-ready' }`).
 - Produces: `ready(overrides?: Partial<PlayerCapabilities>, patch?: ProviderStatePatch): { player: MockPlayerParameters }`; exported `Availability` samples `available`, `notReady`, `unavailable`.
 
 - [ ] **Step 1: Write the failing/characterization test**
@@ -46,7 +46,7 @@ Rewrite `support.ts` so the capability base comes from core, and pin the derivat
 Create `apps/storybook/stories/support.contract.test.ts`:
 
 ```ts
-import { createInitialPlayerState, type Availability } from '@reely/core';
+import { createInitialPlayerState, type Availability } from '@playdeck/core';
 import { describe, expect, it } from 'vitest';
 import { available, notReady, ready, unavailable } from './support';
 
@@ -97,7 +97,7 @@ describe('story support derives from the real core contract', () => {
 
 - [ ] **Step 2: Run the test against the current (hand-listed) support.ts**
 
-Run: `pnpm --filter @reely/storybook exec vitest run stories/support.contract.test.ts`
+Run: `pnpm --filter @playdeck/storybook exec vitest run stories/support.contract.test.ts`
 Expected: PASS (the current hand-listed `baseCapabilities` already matches core — this pins the invariant). If it FAILS, the current mock has already drifted from core; capture the diff before refactoring.
 
 - [ ] **Step 3: Refactor `support.ts` to derive the base from core**
@@ -110,7 +110,7 @@ import {
   type Availability,
   type PlayerCapabilities,
   type ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import type { MockPlayerParameters } from '../.storybook/mock-player';
 
 export const available: Availability = { status: 'available' };
@@ -153,7 +153,7 @@ export const ready = (
 
 - [ ] **Step 4: Run the guard test + the full storybook suite**
 
-Run: `pnpm --filter @reely/storybook test`
+Run: `pnpm --filter @playdeck/storybook test`
 Expected: PASS — the guard test plus all 11 existing story files stay green (the existing stories are the reachability proof: each pushes a `ready()` state through the real `PlayerController` and asserts `data-state`).
 
 - [ ] **Step 5: Typecheck**
@@ -251,12 +251,12 @@ Temporary page proving `.mdx` discovery. Removed in Task 5.
 
 - [ ] **Step 5: Build Storybook to verify docs + MDX compile**
 
-Run: `pnpm --filter @reely/storybook build`
+Run: `pnpm --filter @playdeck/storybook build`
 Expected: exit 0; build output mentions the `Overview/Smoke` docs entry and per-component autodocs. If the `@storybook/addon-docs/blocks` import fails, run `npm view @storybook/addon-docs@10.5.3` and confirm the `blocks` subpath — adjust the import only if the registry shows a different entry.
 
 - [ ] **Step 6: Story tests still green**
 
-Run: `pnpm --filter @reely/storybook test`
+Run: `pnpm --filter @playdeck/storybook test`
 Expected: PASS (autodocs pages are not story tests; the determinism guard is unaffected).
 
 - [ ] **Step 7: Commit**
@@ -278,7 +278,7 @@ Add a `parameters.docs.description.component` block to each capability-gated con
 
 **Confirmed contract (from source):**
 
-| Component        | `data-reely-part`                       | `data-state` values   | `data-provider` | Gating capability                                                |
+| Component        | `data-playdeck-part`                    | `data-state` values   | `data-provider` | Gating capability                                                |
 | ---------------- | --------------------------------------- | --------------------- | --------------- | ---------------------------------------------------------------- |
 | PlayButton       | `play-button`                           | `paused` \| `playing` | yes             | none (provider presence)                                         |
 | MuteButton       | `mute-button`                           | `muted` \| `unmuted`  | yes             | `setVolume`                                                      |
@@ -312,7 +312,7 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-reely-part="play-button"`, `data-provider="<provider>"`, and `data-state="paused" | "playing"`.',
+          '**Contract** — renders `data-playdeck-part="play-button"`, `data-provider="<provider>"`, and `data-state="paused" | "playing"`.',
           '',
           '**Accessibility** — a native `<button>`; label switches between "Play" and "Pause"; reachable and operable by keyboard (Tab to focus, Enter/Space to toggle).',
           '',
@@ -333,28 +333,28 @@ const meta = {
 
 For each file, add the same `parameters.docs.description.component` field to its `meta` (join an array of lines with `'\n'`, exactly as above), using this per-component copy. Do not change existing stories or `render`/`component` fields.
 
-`mute-button.stories.tsx` — component line: "`Player.MuteButton` mutes/unmutes the active provider."; Contract: `data-reely-part="mute-button"`, `data-provider`, `data-state="muted" | "unmuted"`; a11y: native `<button>`, label reflects mute state, keyboard-operable; Capability: **gated by `setVolume`** — renders nothing until `setVolume` resolves `available`.
+`mute-button.stories.tsx` — component line: "`Player.MuteButton` mutes/unmutes the active provider."; Contract: `data-playdeck-part="mute-button"`, `data-provider`, `data-state="muted" | "unmuted"`; a11y: native `<button>`, label reflects mute state, keyboard-operable; Capability: **gated by `setVolume`** — renders nothing until `setVolume` resolves `available`.
 
-`volume-slider.stories.tsx` — "`Player.VolumeSlider` sets the active provider's volume."; Contract: `data-reely-part="volume-slider"`, `data-provider`, `data-state="muted" | "unmuted"`; a11y: exposes a range semantics control; arrow keys adjust; Capability: **gated by `setVolume`**.
+`volume-slider.stories.tsx` — "`Player.VolumeSlider` sets the active provider's volume."; Contract: `data-playdeck-part="volume-slider"`, `data-provider`, `data-state="muted" | "unmuted"`; a11y: exposes a range semantics control; arrow keys adjust; Capability: **gated by `setVolume`**.
 
-`seek-slider.stories.tsx` — "`Player.SeekSlider` scrubs the current time; a child `seek-buffered` element reflects buffered ranges."; Contract: `data-reely-part="seek-slider"` (child `data-reely-part="seek-buffered"`), `data-provider`, `data-state="idle" | "ready"` (`ready` once a duration is known); a11y: range control, arrow keys seek; Capability: **gated by `seek`**.
+`seek-slider.stories.tsx` — "`Player.SeekSlider` scrubs the current time; a child `seek-buffered` element reflects buffered ranges."; Contract: `data-playdeck-part="seek-slider"` (child `data-playdeck-part="seek-buffered"`), `data-provider`, `data-state="idle" | "ready"` (`ready` once a duration is known); a11y: range control, arrow keys seek; Capability: **gated by `seek`**.
 
-`fullscreen-button.stories.tsx` — "`Player.FullscreenButton` toggles fullscreen on the viewport."; Contract: `data-reely-part="fullscreen-button"`, `data-provider`; a11y: native `<button>`, keyboard-operable; Capability: **gated by `fullscreen`**.
+`fullscreen-button.stories.tsx` — "`Player.FullscreenButton` toggles fullscreen on the viewport."; Contract: `data-playdeck-part="fullscreen-button"`, `data-provider`; a11y: native `<button>`, keyboard-operable; Capability: **gated by `fullscreen`**.
 
-`pip-button.stories.tsx` — "`Player.PipButton` toggles picture-in-picture."; Contract: `data-reely-part="pip-button"`, `data-provider`; a11y: native `<button>`, keyboard-operable; Capability: **gated by `pictureInPicture`**.
+`pip-button.stories.tsx` — "`Player.PipButton` toggles picture-in-picture."; Contract: `data-playdeck-part="pip-button"`, `data-provider`; a11y: native `<button>`, keyboard-operable; Capability: **gated by `pictureInPicture`**.
 
-`time.stories.tsx` — "`Player.Time` displays current time and/or duration."; Contract: `data-reely-part="time"`; a11y: text content; not an interactive control; Capability: not gated (display only).
+`time.stories.tsx` — "`Player.Time` displays current time and/or duration."; Contract: `data-playdeck-part="time"`; a11y: text content; not an interactive control; Capability: not gated (display only).
 
-`controls.stories.tsx` — "`Player.Controls` is the control-bar container; `data-state` distinguishes a `global` bar from a `scoped` one."; Contract: `data-reely-part="controls"`, `data-provider`, `data-state="global" | "scoped"`; a11y: groups child controls; Capability: reflects the aggregate of `seek`, `setVolume`, `fullscreen`, `pictureInPicture`.
+`controls.stories.tsx` — "`Player.Controls` is the control-bar container; `data-state` distinguishes a `global` bar from a `scoped` one."; Contract: `data-playdeck-part="controls"`, `data-provider`, `data-state="global" | "scoped"`; a11y: groups child controls; Capability: reflects the aggregate of `seek`, `setVolume`, `fullscreen`, `pictureInPicture`.
 
 - [ ] **Step 3: Build Storybook and confirm each Docs page renders the description**
 
-Run: `pnpm --filter @reely/storybook build`
+Run: `pnpm --filter @playdeck/storybook build`
 Expected: exit 0, no MDX/docgen errors.
 
 - [ ] **Step 4: Story tests still green**
 
-Run: `pnpm --filter @reely/storybook test`
+Run: `pnpm --filter @playdeck/storybook test`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -378,24 +378,24 @@ Add descriptions to the state-driven components, add the missing `PosterImage` s
 
 **Interfaces:**
 
-- Consumes: `Player.PosterImage` (renders `data-reely-part="poster-image"`, `data-state="idle" | "loading" | "loaded" | "error"`); the dev-only hanging asset `/__reely__/pending.png` (loading state) and a data-URI (loaded) — both request-free per the determinism guard.
+- Consumes: `Player.PosterImage` (renders `data-playdeck-part="poster-image"`, `data-state="idle" | "loading" | "loaded" | "error"`); the dev-only hanging asset `/__playdeck__/pending.png` (loading state) and a data-URI (loaded) — both request-free per the determinism guard.
 
 - [ ] **Step 1: Add descriptions to the three existing components**
 
 In each meta add `parameters.docs.description.component` (array joined by `'\n'`, as in Task 3):
 
-`poster.stories.tsx` — "`Player.Poster` is the pre-playback surface; wrap a `Player.PosterImage` or arbitrary children."; Contract: `data-reely-part="poster"`, `data-state`; note: children replace the default image.
+`poster.stories.tsx` — "`Player.Poster` is the pre-playback surface; wrap a `Player.PosterImage` or arbitrary children."; Contract: `data-playdeck-part="poster"`, `data-state`; note: children replace the default image.
 
-`loading-indicator.stories.tsx` — "`Player.LoadingIndicator` surfaces buffering/loading."; Contract: `data-reely-part="loading-indicator"`, `data-state`; a11y: decorative/status; Capability: not gated (state-driven).
+`loading-indicator.stories.tsx` — "`Player.LoadingIndicator` surfaces buffering/loading."; Contract: `data-playdeck-part="loading-indicator"`, `data-state`; a11y: decorative/status; Capability: not gated (state-driven).
 
-`activation.stories.tsx` — "`Player.ActivationButton` triggers pre-provider activation (`dormant`/`eligible`/`loading-provider`/`error`)."; Contract: `data-reely-part="activation"`, `data-state="<activation>"`; a11y: native `<button>`, keyboard-operable; include the `play`-function activation story as the reference interaction pattern.
+`activation.stories.tsx` — "`Player.ActivationButton` triggers pre-provider activation (`dormant`/`eligible`/`loading-provider`/`error`)."; Contract: `data-playdeck-part="activation"`, `data-state="<activation>"`; a11y: native `<button>`, keyboard-operable; include the `play`-function activation story as the reference interaction pattern.
 
 - [ ] **Step 2: Write a failing test for the new PosterImage story**
 
 Create `apps/storybook/stories/poster-image.stories.tsx` (mirrors the request-free technique already proven in `poster.stories.tsx`):
 
 ```tsx
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { ReactNode } from 'react';
@@ -412,7 +412,7 @@ const loadedSrc = `data:image/svg+xml;utf8,${encodeURIComponent(
 
 const image = (root: HTMLElement): HTMLElement => {
   const el = root.querySelector<HTMLElement>(
-    '[data-reely-part="poster-image"]'
+    '[data-playdeck-part="poster-image"]'
   );
   if (!el) throw new Error('Expected a poster image in the story.');
   return el;
@@ -427,7 +427,7 @@ const meta = {
         component: [
           '`Player.PosterImage` renders the poster bitmap and tracks its own load lifecycle.',
           '',
-          '**Contract** — `data-reely-part="poster-image"`, `data-state="idle" | "loading" | "loaded" | "error"`.',
+          '**Contract** — `data-playdeck-part="poster-image"`, `data-state="idle" | "loading" | "loaded" | "error"`.',
           '',
           '**Capability** — not gated; state is driven purely by the image load.'
         ].join('\n')
@@ -458,7 +458,7 @@ export const Loaded: Story = {
 
 - [ ] **Step 3: Run the new story test to verify it passes**
 
-Run: `pnpm --filter @reely/storybook exec vitest run stories/poster-image.stories.tsx`
+Run: `pnpm --filter @playdeck/storybook exec vitest run stories/poster-image.stories.tsx`
 Expected: PASS (the data-URI loads with no external request; a11y `error` gate satisfied — an `<img>` inside the poster).
 
 If a11y flags a missing alt/name, add the attribute the component expects (check `Player.PosterImage` props in `packages/react/src/index.tsx`) rather than disabling the rule.
@@ -489,7 +489,7 @@ story rather than shown in isolation.
 
 - [ ] **Step 5: Build + full storybook suite**
 
-Run: `pnpm --filter @reely/storybook build && pnpm --filter @reely/storybook test`
+Run: `pnpm --filter @playdeck/storybook build && pnpm --filter @playdeck/storybook test`
 Expected: both PASS; the `Player/PosterImage` autodocs page and `Player/Structural` page appear.
 
 - [ ] **Step 6: Commit**
@@ -525,7 +525,7 @@ import { Meta } from '@storybook/addon-docs/blocks';
 
 <Meta title="Overview/Introduction" />
 
-# Reely workbench
+# Playdeck workbench
 
 Headless player primitives staged in isolation. Every story renders under a
 mock `Player.Root` backed by an inert provider, so any `PlayerState` and
@@ -534,7 +534,7 @@ SDKs. Real playback lives in the docs app (`apps/docs`).
 
 ## Story conventions
 
-- Import primitives as `import * as Player from '@reely/react'`; title under
+- Import primitives as `import * as Player from '@playdeck/react'`; title under
   `Player/<Component>`.
 - Dial state with the `ready(capabilityOverrides, statePatch)` helper from
   `stories/support.ts`. Its capability base is derived from the real core
@@ -592,7 +592,7 @@ import { Meta } from '@storybook/addon-docs/blocks';
 
 Every primitive exposes a stable styling/testing contract via data attributes.
 
-- **`data-reely-part`** — the primitive's stable name (`play-button`,
+- **`data-playdeck-part`** — the primitive's stable name (`play-button`,
   `mute-button`, `volume-slider`, `seek-slider` / `seek-buffered`,
   `fullscreen-button`, `pip-button`, `time`, `controls`, `poster`,
   `poster-image`, `loading-indicator`, `activation`, `viewport`, `media`).
@@ -610,7 +610,7 @@ Real playback (real providers, real media) is demonstrated in the docs app
 
 - [ ] **Step 5: Build + suite + typecheck**
 
-Run: `pnpm --filter @reely/storybook build && pnpm --filter @reely/storybook test && pnpm typecheck`
+Run: `pnpm --filter @playdeck/storybook build && pnpm --filter @playdeck/storybook test && pnpm typecheck`
 Expected: all PASS; `Overview/Introduction`, `Overview/Capabilities matrix`, `Overview/Contract` render; no `Smoke` page remains.
 
 - [ ] **Step 6: Commit**

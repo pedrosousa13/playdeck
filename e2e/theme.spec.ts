@@ -5,7 +5,7 @@ import { playButton } from './locators';
 // emulation, which the Storybook play tests cannot do — they assert the rest of
 // the theme contract (layer override, tokens, the 44px floor) in-browser.
 //
-// Loads the Theme story, which mounts @reely/react/theme.css for its own
+// Loads the Theme story, which mounts @playdeck/react/theme.css for its own
 // lifetime rather than importing it into the whole preview.
 const themeStory =
   '/iframe.html?id=theme-theme--default&viewMode=story&globals=';
@@ -16,7 +16,7 @@ test('nonessential motion is disabled under prefers-reduced-motion', async ({
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(themeStory);
 
-  const controls = page.locator('[data-reely-part="controls"]');
+  const controls = page.locator('[data-playdeck-part="controls"]');
   await expect(controls).toBeVisible();
   // The transition still exists as a declaration; its duration collapses, so
   // nothing animates and no state change is delayed. Parsed rather than string
@@ -39,7 +39,7 @@ test('motion is present when reduced motion is not requested', async ({
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(themeStory);
 
-  const controls = page.locator('[data-reely-part="controls"]');
+  const controls = page.locator('[data-playdeck-part="controls"]');
   await expect(controls).toBeVisible();
   // Guards the test above: if the theme shipped no transition at all, the
   // reduced-motion assertion would pass for the wrong reason.

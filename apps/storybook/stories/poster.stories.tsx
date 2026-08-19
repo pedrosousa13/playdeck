@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { ReactNode } from 'react';
@@ -15,13 +15,9 @@ const Frame = ({ children }: { readonly children: ReactNode }) => (
   </Player.Viewport>
 );
 
-const loadedPosterSrc = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#1d2733"/><circle cx="800" cy="450" r="180" fill="#3f8cff"/></svg>'
-)}`;
-
 const posterImage = (canvasElement: HTMLElement): HTMLElement => {
   const image = canvasElement.querySelector<HTMLElement>(
-    '[data-reely-part="poster-image"]'
+    '[data-playdeck-part="poster-image"]'
   );
   if (!image) throw new Error('Expected a poster image in the story.');
   return image;
@@ -36,13 +32,13 @@ const meta = {
         component: [
           '`Player.Poster` is the pre-playback surface; wrap a `Player.PosterImage` or arbitrary children.',
           '',
-          '**Contract** — `data-reely-part="poster"`, `data-state`.',
+          '**Contract** — `data-playdeck-part="poster"`, `data-state`.',
           '',
           '**Note** — children replace the default image.',
           '',
           "**Poster image states** — the bitmap's own load lifecycle (`idle`, `loading`, `loaded`, `error`) belongs to `Player.PosterImage` and is staged under `Player/PosterImage`.",
           '',
-          '**Styling** — plain CSS against the parts; the primitive keeps its own geometry and `visibility`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer reely` the whole theme lives in:',
+          '**Styling** — plain CSS against the parts; the primitive keeps its own geometry and `visibility`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer playdeck` the whole theme lives in:',
           '```css',
           partCss.trim(),
           '```'
@@ -60,13 +56,17 @@ type Story = StoryObj<typeof meta>;
  * The same poster with the CSS from this page's **Styling** section applied.
  * Mounted as a `<style>` inside this story's own tree, so it is torn down with
  * the story and no other story on the page sees it.
+ *
+ * The `loaded` state needs a poster the image actually reaches `loaded` on;
+ * `isPermittedSourceUrl` refuses `data:` (#236), so this uses `/poster.svg`
+ * from this app's `staticDirs` instead of an inline data URI.
  */
 export const Styled: Story = {
   decorators: [withCss(partCss)],
   render: () => (
     <Frame>
       <Player.Poster>
-        <Player.PosterImage src={loadedPosterSrc} />
+        <Player.PosterImage src="/poster.svg" />
       </Player.Poster>
     </Frame>
   ),
@@ -103,7 +103,7 @@ export const CustomChild: Story = {
     </Frame>
   ),
   play: async ({ canvasElement }) => {
-    const poster = canvasElement.querySelector('[data-reely-part="poster"]');
+    const poster = canvasElement.querySelector('[data-playdeck-part="poster"]');
     await expect(poster).toHaveTextContent('Custom poster content');
   }
 };

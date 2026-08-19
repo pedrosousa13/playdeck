@@ -1,4 +1,4 @@
-import type { CommandResult, ProviderAdapter } from '@reely/core';
+import type { CommandResult, ProviderAdapter } from '@playdeck/core';
 import {
   blockedError,
   clamp01,

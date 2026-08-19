@@ -15,10 +15,12 @@ import {
   type CommandResult,
   PlayerController,
   type PlayerCapabilities,
+  type PlayerEventOrigin,
   type ProviderAdapter,
+  type ProviderEvent,
   type ProviderStateListener,
   type ProviderStatePatch
-} from '@reely/core';
+} from '@playdeck/core';
 import * as Player from '../src/index';
 
 const available: Availability = { status: 'available' };
@@ -58,8 +60,8 @@ const createMockAdapter = () => {
   return {
     adapter,
     spies,
-    emit: (patch: ProviderStatePatch) =>
-      listeners.forEach((listener) => listener(patch))
+    emit: (patch: ProviderStatePatch, event?: ProviderEvent) =>
+      listeners.forEach((listener) => listener(patch, event))
   };
 };
 
@@ -85,7 +87,8 @@ const renderWithPlayer = (ui: ReactNode, initial?: ProviderStatePatch) => {
     ...utils,
     controller,
     spies: mock.spies,
-    emit: (patch: ProviderStatePatch) => act(() => mock.emit(patch))
+    emit: (patch: ProviderStatePatch, event?: ProviderEvent) =>
+      act(() => mock.emit(patch, event))
   };
 };
 
@@ -95,6 +98,7 @@ const allNotReady = (): PlayerCapabilities => ({
   setPlaybackRate: notReady,
   selectQuality: notReady,
   selectTextTrack: notReady,
+  chapters: notReady,
   fullscreen: notReady,
   pictureInPicture: notReady,
   airPlay: notReady,
@@ -134,7 +138,7 @@ describe('PlayButton', () => {
   test('reflects playing state through label and state attributes', () => {
     renderWithPlayer(<Player.PlayButton />, { playback: 'playing' });
     const button = screen.getByRole('button', { name: 'Pause' });
-    expect(attr(button, 'data-reely-part')).toBe('play-button');
+    expect(attr(button, 'data-playdeck-part')).toBe('play-button');
     expect(attr(button, 'data-state')).toBe('playing');
     expect(attr(button, 'data-provider')).toBe('native');
     expect(attr(button, 'aria-pressed')).toBe('true');
@@ -179,7 +183,7 @@ describe('MuteButton', () => {
       muted: false
     });
     const button = screen.getByRole('button', { name: 'Mute' });
-    expect(attr(button, 'data-reely-part')).toBe('mute-button');
+    expect(attr(button, 'data-playdeck-part')).toBe('mute-button');
     expect(attr(button, 'data-state')).toBe('unmuted');
     expect(attr(button, 'aria-pressed')).toBe('false');
     fireEvent.click(button);
@@ -448,7 +452,9 @@ describe('SeekSlider', () => {
       <Player.SeekSlider />,
       seekReady()
     );
-    const slider = container.querySelector('[data-reely-part="seek-slider"]');
+    const slider = container.querySelector(
+      '[data-playdeck-part="seek-slider"]'
+    );
     expect(attr(slider, 'data-buffering')).toBe('false');
 
     vi.useFakeTimers();
@@ -493,6 +499,32 @@ describe('SeekSlider', () => {
     expect(spies.seekTo).toHaveBeenCalledWith(75);
   });
 
+  // The provider stamps every seek it reports `'provider'`; a seek this control
+  // asked for is the user's, and the controller is what relabels it (#186).
+  test('labels the seek it asks for as a user seek', () => {
+    const { controller, emit } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady()
+    );
+    const origins: PlayerEventOrigin[] = [];
+    controller.on('seeking', (event) => origins.push(event.origin));
+    controller.on('seeked', (event) => origins.push(event.origin));
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Seek' }), {
+      target: { value: '75' }
+    });
+    emit(
+      { seeking: true },
+      { type: 'seeking', detail: { currentTime: 75 }, origin: 'provider' }
+    );
+    emit(
+      { seeking: false, currentTime: 75 },
+      { type: 'seeked', detail: { currentTime: 75 }, origin: 'provider' }
+    );
+
+    expect(origins).toEqual(['user', 'user']);
+  });
+
   test('renders buffered ranges from player state', () => {
     const { container } = renderWithPlayer(
       <Player.SeekSlider />,
@@ -504,7 +536,7 @@ describe('SeekSlider', () => {
       })
     );
     const ranges = container.querySelectorAll<HTMLElement>(
-      '[data-reely-part="seek-buffered-range"]'
+      '[data-playdeck-part="seek-buffered-range"]'
     );
     expect(ranges).toHaveLength(2);
     expect(ranges[0]!.style.left).toBe('0%');
@@ -558,7 +590,7 @@ describe('SeekSlider', () => {
     expect(attr(slider, 'aria-disabled')).toBeNull();
     expect(
       attr(
-        container.querySelector('[data-reely-part="seek-slider"]')!,
+        container.querySelector('[data-playdeck-part="seek-slider"]')!,
         'data-state'
       )
     ).toBe('ready');
@@ -577,7 +609,7 @@ describe('SeekSlider', () => {
       liveWindow({ buffered: [{ start: 35, end: 50 }] })
     );
     const range = container.querySelector<HTMLElement>(
-      '[data-reely-part="seek-buffered-range"]'
+      '[data-playdeck-part="seek-buffered-range"]'
     )!;
     // window span 60, offset 20: left (35-20)/60=25%, width 15/60=25%.
     expect(range.style.left).toBe('25%');
@@ -598,7 +630,7 @@ describe('SeekSlider', () => {
     expect(attr(slider, 'aria-disabled')).toBe('true');
     expect(
       attr(
-        container.querySelector('[data-reely-part="seek-slider"]')!,
+        container.querySelector('[data-playdeck-part="seek-slider"]')!,
         'data-state'
       )
     ).toBe('idle');
@@ -660,7 +692,7 @@ describe('SeekSlider', () => {
     expect(
       attr(
         container.querySelector(
-          '[data-reely-part="seek-buffered-description"]'
+          '[data-playdeck-part="seek-buffered-description"]'
         )!,
         'id'
       )
@@ -683,7 +715,7 @@ describe('SeekSlider', () => {
     expect(describedText(slider)).toBe('65% loaded');
     expect(
       container.querySelectorAll(
-        '[data-reely-part="seek-buffered-description"]'
+        '[data-playdeck-part="seek-buffered-description"]'
       )
     ).toHaveLength(1);
     expect(attr(slider, 'aria-describedby')).not.toMatch(/\s/);
@@ -755,7 +787,9 @@ describe('SeekSlider', () => {
     const slider = screen.getByRole('slider', { name: 'Seek' });
     expect(attr(slider, 'aria-describedby')).toBeNull();
     expect(
-      container.querySelector('[data-reely-part="seek-buffered-description"]')
+      container.querySelector(
+        '[data-playdeck-part="seek-buffered-description"]'
+      )
     ).toBeNull();
   });
 
@@ -767,7 +801,9 @@ describe('SeekSlider', () => {
     const slider = screen.getByRole('slider', { name: 'Seek' });
     expect(attr(slider, 'aria-describedby')).toBeNull();
     expect(
-      container.querySelector('[data-reely-part="seek-buffered-description"]')
+      container.querySelector(
+        '[data-playdeck-part="seek-buffered-description"]'
+      )
     ).toBeNull();
   });
 
@@ -783,7 +819,9 @@ describe('SeekSlider', () => {
     // measurement of the window instead of an absence.
     expect(attr(slider, 'aria-describedby')).toBeNull();
     expect(
-      container.querySelector('[data-reely-part="seek-buffered-description"]')
+      container.querySelector(
+        '[data-playdeck-part="seek-buffered-description"]'
+      )
     ).toBeNull();
   });
 
@@ -793,17 +831,17 @@ describe('SeekSlider', () => {
       seekReady({ buffered: [{ start: 0, end: 45 }] })
     );
     const buffered = container.querySelector(
-      '[data-reely-part="seek-buffered"]'
+      '[data-playdeck-part="seek-buffered"]'
     )!;
     expect(attr(buffered, 'aria-hidden')).toBe('true');
     // The description is a sibling of the geometry, not a child: inside the
     // hidden subtree it would be unreadable, and every range element stays
     // the empty box it is.
     expect(
-      buffered.querySelector('[data-reely-part="seek-buffered-description"]')
+      buffered.querySelector('[data-playdeck-part="seek-buffered-description"]')
     ).toBeNull();
     for (const range of container.querySelectorAll(
-      '[data-reely-part="seek-buffered-range"]'
+      '[data-playdeck-part="seek-buffered-range"]'
     )) {
       expect(range.textContent).toBe('');
     }
@@ -815,7 +853,7 @@ describe('SeekSlider', () => {
       seekReady({ buffered: [{ start: 0, end: 45 }] })
     );
     const slider = screen.getByRole('slider', { name: 'Seek' });
-    const root = container.querySelector('[data-reely-part="seek-slider"]')!;
+    const root = container.querySelector('[data-playdeck-part="seek-slider"]')!;
     const shouty = () =>
       root.querySelectorAll(
         '[aria-live], [role="status"], [role="alert"], [role="log"]'
@@ -1277,7 +1315,7 @@ describe('Time', () => {
     renderWithPlayer(<Player.Time />, { currentTime: 75, duration: 100 });
     const time = screen.getByText('1:15');
     expect(time.tagName).toBe('TIME');
-    expect(attr(time, 'data-reely-part')).toBe('time');
+    expect(attr(time, 'data-playdeck-part')).toBe('time');
     expect(attr(time, 'data-time-type')).toBe('current');
   });
 
@@ -1342,7 +1380,7 @@ describe('FullscreenButton', () => {
       capabilities({ fullscreen: available })
     );
     const button = screen.getByRole('button', { name: 'Enter fullscreen' });
-    expect(attr(button, 'data-reely-part')).toBe('fullscreen-button');
+    expect(attr(button, 'data-playdeck-part')).toBe('fullscreen-button');
     expect(attr(button, 'data-state')).toBe('inline');
     expect(attr(button, 'aria-pressed')).toBe('false');
     fireEvent.click(button);
@@ -1372,7 +1410,7 @@ describe('PipButton', () => {
     const button = screen.getByRole('button', {
       name: 'Enter picture-in-picture'
     });
-    expect(attr(button, 'data-reely-part')).toBe('pip-button');
+    expect(attr(button, 'data-playdeck-part')).toBe('pip-button');
     fireEvent.click(button);
     expect(spies.requestPictureInPicture).toHaveBeenCalledTimes(1);
     emit({
@@ -1411,13 +1449,13 @@ describe('AirPlayButton', () => {
       capabilities({ airPlay: available })
     );
     const button = screen.getByRole('button', { name: 'AirPlay' });
-    expect(attr(button, 'data-reely-part')).toBe('airplay-button');
+    expect(attr(button, 'data-playdeck-part')).toBe('airplay-button');
     expect(attr(button, 'data-provider')).toBe('native');
     fireEvent.click(button);
     expect(spies.showAirPlayPicker).toHaveBeenCalledTimes(1);
   });
 
-  // Reely does not currently surface an active-route flag (WebKit's
+  // Playdeck does not currently surface an active-route flag (WebKit's
   // `webkitCurrentPlaybackTargetIsWireless` is deliberately unplumbed in
   // provider-native), so there is no state to expose — unlike PipButton,
   // which is a real toggle.
@@ -1492,7 +1530,7 @@ describe('Controls container and scoped shortcuts', () => {
       </Player.Controls>,
       controlsState()
     );
-    const region = container.querySelector('[data-reely-part="controls"]');
+    const region = container.querySelector('[data-playdeck-part="controls"]');
     expect(region).not.toBeNull();
   });
 
@@ -1503,7 +1541,7 @@ describe('Controls container and scoped shortcuts', () => {
       </Player.Controls>,
       controlsState({ provider: 'native' })
     );
-    const region = container.querySelector('[data-reely-part="controls"]');
+    const region = container.querySelector('[data-playdeck-part="controls"]');
     expect(attr(region, 'data-state')).toBe('scoped');
     expect(attr(region, 'data-provider')).toBe('native');
   });
@@ -1515,7 +1553,7 @@ describe('Controls container and scoped shortcuts', () => {
       </Player.Controls>,
       controlsState()
     );
-    const region = container.querySelector('[data-reely-part="controls"]');
+    const region = container.querySelector('[data-playdeck-part="controls"]');
     expect(attr(region, 'data-state')).toBe('global');
   });
 
@@ -1527,7 +1565,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: ' ' });
@@ -1543,10 +1581,10 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     const slider = container.querySelector<HTMLInputElement>(
-      '[data-reely-part="volume-slider"]'
+      '[data-playdeck-part="volume-slider"]'
     )!;
     region.focus();
 
@@ -1582,7 +1620,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
 
@@ -1604,6 +1642,37 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.85);
   });
 
+  // ADR-0005 takes the arrow keys off the scrubber's range input and gives them
+  // to this layer, so a keyboard seek is the same person seeking that a drag
+  // is. It carries the same origin (#186).
+  test('labels a keyboard seek as a user seek', () => {
+    const { container, controller, emit } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const origins: PlayerEventOrigin[] = [];
+    controller.on('seeking', (event) => origins.push(event.origin));
+    controller.on('seeked', (event) => origins.push(event.origin));
+    region.focus();
+
+    fireEvent.keyDown(region, { key: 'ArrowRight' });
+    emit(
+      { seeking: true },
+      { type: 'seeking', detail: { currentTime: 35 }, origin: 'provider' }
+    );
+    emit(
+      { seeking: false, currentTime: 35 },
+      { type: 'seeked', detail: { currentTime: 35 }, origin: 'provider' }
+    );
+
+    expect(origins).toEqual(['user', 'user']);
+  });
+
   test('arrows seek and change volume; J/L seek; M mutes; F toggles fullscreen', async () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>
@@ -1612,7 +1681,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'ArrowRight' });
@@ -1657,7 +1726,7 @@ describe('Controls container and scoped shortcuts', () => {
       }
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'm' });
@@ -1689,7 +1758,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const seekInput = container.querySelector<HTMLInputElement>(
-      '[data-reely-part="seek-slider-input"]'
+      '[data-playdeck-part="seek-slider-input"]'
     )!;
     seekInput.focus();
     // preventDefault (a false return) is what makes the input's own stepping
@@ -1705,7 +1774,7 @@ describe('Controls container and scoped shortcuts', () => {
     expect(fireEvent.keyDown(seekInput, { key: 'Home' })).toBe(true);
 
     const volumeInput = container.querySelector<HTMLInputElement>(
-      '[data-reely-part="volume-slider"]'
+      '[data-playdeck-part="volume-slider"]'
     )!;
     volumeInput.focus();
     expect(fireEvent.keyDown(volumeInput, { key: 'ArrowDown' })).toBe(false);
@@ -1728,10 +1797,10 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     const seekInput = container.querySelector<HTMLInputElement>(
-      '[data-reely-part="seek-slider-input"]'
+      '[data-playdeck-part="seek-slider-input"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'ArrowRight' });
@@ -1770,7 +1839,7 @@ describe('Controls container and scoped shortcuts', () => {
       })
     );
     const seekInput = container.querySelector<HTMLInputElement>(
-      '[data-reely-part="seek-slider-input"]'
+      '[data-playdeck-part="seek-slider-input"]'
     )!;
     seekInput.focus();
     fireEvent.keyDown(seekInput, { key: ' ' });
@@ -1894,7 +1963,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     expect(fireEvent.keyDown(region, { key: 'PageUp' })).toBe(false);
@@ -1904,7 +1973,7 @@ describe('Controls container and scoped shortcuts', () => {
     // The range input is the one target that pages natively, so this is where
     // the jump is the library's number only if preventDefault fires.
     const seekInput = container.querySelector<HTMLInputElement>(
-      '[data-reely-part="seek-slider-input"]'
+      '[data-playdeck-part="seek-slider-input"]'
     )!;
     seekInput.focus();
     expect(fireEvent.keyDown(seekInput, { key: 'PageUp' })).toBe(false);
@@ -1930,7 +1999,7 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.mute).toHaveBeenCalledTimes(1);
     // And the same binding fires normally away from an activation target.
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'Enter' });
@@ -2016,7 +2085,7 @@ describe('Controls container and scoped shortcuts', () => {
       )
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     // Inert means the key is left to the page, so no preventDefault either.
@@ -2033,7 +2102,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     const swallowed = [' ', 'k', 'ArrowRight', 'ArrowUp', 'j', 'm', 'f'].filter(
@@ -2115,7 +2184,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'K' });
@@ -2136,7 +2205,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'P' });
@@ -2151,7 +2220,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'p' });
@@ -2174,7 +2243,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     expect(fireEvent.keyDown(region, { key: 'm' })).toBe(true);
@@ -2206,7 +2275,7 @@ describe('Controls container and scoped shortcuts', () => {
       controlsState()
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     region.focus();
     fireEvent.keyDown(region, { key: 'x' });
@@ -2232,7 +2301,7 @@ describe('Controls container and scoped shortcuts', () => {
       })
     );
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     await waitFor(() => expect(document.activeElement).toBe(region));
     expect(document.activeElement).not.toBe(document.body);
@@ -2256,7 +2325,7 @@ describe('Controls container and scoped shortcuts', () => {
     emit({ volume: 0.6 });
     emit({ currentTime: 31 });
     const region = container.querySelector<HTMLElement>(
-      '[data-reely-part="controls"]'
+      '[data-playdeck-part="controls"]'
     )!;
     expect(document.activeElement).toBe(document.body);
     expect(document.activeElement).not.toBe(region);

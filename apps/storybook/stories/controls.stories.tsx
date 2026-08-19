@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { available, ready } from './support';
@@ -33,7 +33,7 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-reely-part="controls"`, `data-provider="<provider>"`, and `data-state="global" | "scoped"`.',
+          '**Contract** — renders `data-playdeck-part="controls"`, `data-provider="<provider>"`, and `data-state="global" | "scoped"`.',
           '',
           '**Accessibility** — groups its child controls, and owns the media keyboard shortcuts while focus is inside it (`global` attaches the same map to the document instead): Space and `k` toggle playback, `ArrowLeft`/`ArrowRight` seek 5s back and forward, `j`/`PageDown` seek 10s back and `l`/`PageUp` 10s forward, `ArrowUp`/`ArrowDown` move the volume by 0.05, and `m`, `f` and `c` toggle muted, fullscreen and captions. The region owns those keys on a focused `<input type="range">` too, so the arrow distances are the same on `SeekSlider` and `VolumeSlider` as off them; text entry still swallows every key, and a focused button keeps Space and `Enter`.',
           '',
@@ -80,7 +80,7 @@ export const AssembledBar: Story = {
     const region = await canvas.findByRole('group', {
       name: 'Video player controls'
     });
-    await expect(region).toHaveAttribute('data-reely-part', 'controls');
+    await expect(region).toHaveAttribute('data-playdeck-part', 'controls');
     await expect(
       canvas.getByRole('button', { name: 'Play' })
     ).toBeInTheDocument();

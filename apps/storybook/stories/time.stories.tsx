@@ -1,4 +1,4 @@
-import * as Player from '@reely/react';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import { ready } from './support';
@@ -21,7 +21,7 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-reely-part="time"`, `data-state="timed" | "untimed"`, and `data-provider="<provider>"`.',
+          '**Contract** — renders `data-playdeck-part="time"`, `data-state="timed" | "untimed"`, and `data-provider="<provider>"`.',
           '',
           '**Accessibility** — text content; not an interactive control.',
           '',

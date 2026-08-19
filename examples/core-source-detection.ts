@@ -6,7 +6,7 @@ import {
   isWistiaMediaId,
   isYouTubeVideoId,
   resolveNetworkPath
-} from '@reely/core';
+} from '@playdeck/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
 const vimeo = detectSource('https://vimeo.com/76979871?h=8272103f6e');
