@@ -1,6 +1,6 @@
 ### Issue #336: the packaging harness runs an unpinned install, in the publishing job
 
-**P0.** This is the highest-priority item in the v1 contract (#344), criterion 14.
+**P0.** Step 1 has landed in #348; Steps 2–4 remain. This is the highest-priority item in the v1 contract (#344), criterion 14.
 Read the escalation comment on #336 before starting — the issue body's impact
 bound was written before the first release and is wrong in a way that changes
 what this work is for.
@@ -46,15 +46,22 @@ attestation that would then vouch for the result.
 
 ## Steps
 
-- [ ] **Step 1 — split the job first, and land it on its own.** Move
-      `pnpm test:packages`, `test:budgets`, `test:bundle` and `test:integrations`
-      out of the `release` job into a job the publish `needs:`. This is the cheap
-      mitigation, it does not depend on fixing the install, and it removes the
-      publish adjacency immediately. **Ship this before starting Step 2** — the
-      repo should not sit on the current shape while the real fix is designed.
-      Keep `typecheck`, `test` and `test:audit` wherever they give the
-      attestation the coverage it claims — the point is the packaging install's
-      adjacency to the publish, not the gate set.
+- [x] **Step 1 — split the job. Done in #348.** `pnpm test:packages` now runs in
+      a `package-verify` job with `contents: read`, no `id-token`, no
+      `registry-url` and no secret, which `release` depends on.
+
+      This brief originally said to move four steps. That was wrong, and the
+          correction is worth keeping: `git grep` for an unpinned install returns
+          exactly one hit — `verify-packaging.mjs:274` — and `tests/bundle/*` and
+          `tests/integrations/*` are both globbed by `pnpm-workspace.yaml`, so the
+          root lockfile and the advisory floors already govern them. Only
+          `test:packages` needed to move; `test:budgets`, `test:bundle` and
+          `test:integrations` stay in `release`, where they keep the attestation
+          meaningful.
+
+          The cost is recorded in the workflow: `release` builds its own tarballs,
+          so `package-verify` proves the packaging of an equivalent build rather
+          than of the exact bytes that ship. Steps 2–4 remove that tradeoff.
 
 - [ ] **Step 2 — commit a lockfile for the fixture.** The issue establishes the
       flag is a convenience, not a constraint: the tarball paths are
