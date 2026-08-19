@@ -1873,11 +1873,14 @@ test('keeps the poster visible when cached media attaches under refused autoplay
   ).toBe('visible');
 });
 
-// The constraint #311 is most likely to break silently. Suppression declines
-// the attempt and leaves the mode configured, so the gate that kept the poster
-// up through a refusal keeps it up through a suppression too. Clearing the mode
-// instead would open that gate and uncover a paused first frame -- #242, with a
-// different cause.
+// The constraint #311 is most likely to break silently, and nothing in the
+// gate below names `'suppressed'`. The poster stays up because the `autoplay`
+// prop reaches `Root` un-cleared and because the `loadeddata` gate early-returns
+// on every autoplay state that is not `'started'` -- a suppression falls through
+// it the way a refusal does. Pass `autoplay={false}` under reduced motion, or
+// narrow that early return to the states it means, and the gate opens on a
+// paused first frame -- #242, with a different cause. This is the test that
+// fails when either half goes.
 test.each([['eager'], ['viewport']] as const)(
   'keeps the poster visible when a frame decodes under %s suppressed autoplay',
   async (loading) => {

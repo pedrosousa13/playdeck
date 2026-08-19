@@ -124,13 +124,7 @@ An autoplay that stays configured and is deliberately never attempted, because
 the viewer matches `prefers-reduced-motion: reduce`. Distinct from an autoplay
 that was never configured, and from one a browser refused: nothing was asked of
 the provider at all.
-_Avoid_: blocked autoplay, disabled autoplay, cancelled autoplay
-
-**Reduced-motion opt-out**:
-The consumer's explicit decision to attempt autoplay anyway, carried by
-`ignoreReducedMotion` on `Player.Root`. Off by default, and named for what it
-does so the trade-off is legible where it is made.
-_Avoid_: force autoplay, allow motion
+_Avoid_: skipped autoplay, disabled autoplay, cancelled autoplay
 
 ### Adapters
 

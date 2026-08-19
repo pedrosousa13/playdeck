@@ -892,6 +892,40 @@ test('attempts autoplay where matchMedia is unavailable', async () => {
   await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
 });
 
+// A `matchMedia` that is present but broken must fail the same way an absent one
+// does — the query does not match, autoplay proceeds — and must never take the
+// player down with it. `#synchronizeAutoplay` has no `try` around it, so a throw
+// out of the preference read escaped as a player-level `provider` error: the
+// viewer got `lifecycle: 'error'` and no playback at all, from a media query.
+// A host page that patches `matchMedia` (a polyfill, a test harness, an
+// extension) is not exotic, and a reduced-motion check is the last thing that
+// should be able to break a player (#311).
+test.each([
+  [
+    'throws',
+    () => {
+      throw new Error('matchMedia is not available');
+    }
+  ],
+  ['returns undefined', () => undefined],
+  ['returns an object with no matches', () => ({})],
+  ['returns a truthy non-boolean matches', () => ({ matches: 'yes' })]
+])('attempts autoplay where matchMedia %s', async (_label, implementation) => {
+  vi.stubGlobal('matchMedia', implementation);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+  expect(controller.getState()).toMatchObject({
+    autoplay: 'attempting',
+    lifecycle: 'ready',
+    error: null
+  });
+});
+
 // The preference is read once per decision, not subscribed to. A player that
 // has already decided keeps its decision; the next source reads the query
 // again, which is what makes a mid-session change reach the players that have

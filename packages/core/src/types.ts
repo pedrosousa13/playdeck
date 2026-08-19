@@ -164,9 +164,11 @@ export type PlayerState = {
   // viewer matches `prefers-reduced-motion: reduce` and the player was not told
   // to ignore it. It is a member of its own because `'idle'` already covers "no
   // autoplay configured", so without it a consumer cannot tell a suppressed
-  // autoplay from one that never existed. The mode stays configured through it
-  // — only the attempt is declined — so everything reading the mode, the poster
-  // gate included, behaves as it does for an attempt still to come (#311).
+  // autoplay from one that never existed. Only the attempt is declined, so a
+  // consumer reading this state gets a new member to handle and no behaviour
+  // change anywhere else: the React poster gate never enumerated the autoplay
+  // states, so `'suppressed'` falls through it and holds the poster over the
+  // frame exactly as `'blocked'` does (#311).
   readonly autoplay:
     'idle' | 'attempting' | 'started' | 'blocked' | 'failed' | 'suppressed';
   // True only where `autoplay` is `'started'` because an audible attempt was

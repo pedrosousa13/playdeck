@@ -479,8 +479,8 @@ export const Root = ({
       // keep hiding on the first frame. The attempt provably cannot have begun
       // this early -- `useActivation` prepares the media
       // (`use-activation.ts:627`) before `setProvider` (`:652`), and
-      // `#synchronizeAutoplay` (`player-controller.ts:631-651`) declines to
-      // apply `'attempting'` until there is a provider and a ready activation.
+      // `#synchronizeAutoplay` in `player-controller.ts` declines to apply
+      // `'attempting'` until there is a provider and a ready activation.
       // So the immediate call below for media that attaches already decodable
       // reads `'idle'` whatever the mode is, as does a `loadeddata` arriving
       // before the provider's `load()`.
