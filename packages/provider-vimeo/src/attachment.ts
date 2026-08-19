@@ -30,6 +30,45 @@ import type { VimeoPresentation } from './presentation.js';
 import type { VimeoQualityLevels } from './quality-levels.js';
 import type { VimeoTextTracks } from './text-tracks.js';
 
+// How long the SDK is given to resolve `player.ready()` before the attach is
+// reported as failed (#327).
+//
+// `commandsReady` is declared at player construction rather than here, because
+// the SDK queues calls it receives beforehand and waiting for `ready()` was one
+// of the two hangs that closed PR #72. That is right, and it is not a bound: a
+// frame that never posts back left the adapter in `loading` with `error: null`
+// for ever, so neither `ErrorDisplay` nor `ActivationButton` engaged -- both
+// gate on `activation === 'error'`.
+//
+// Fifteen seconds, matching Wistia's `API_READY_TIMEOUT_MS` and YouTube's
+// `PLAYER_READY_TIMEOUT_MS`, and chosen the same way: a "that is never coming"
+// backstop rather than a performance budget, so a slow connection is never
+// reported as a failure. Distinct from `CHROMELESS_PROBE_TIMEOUT_MS`, which
+// bounds the oEmbed probe alone at four seconds.
+export const PLAYER_READY_TIMEOUT_MS = 15_000;
+
+// Rejects if `settled` has not resolved within the deadline, and clears the
+// timer the moment it does, so a normal attach leaves nothing pending. Mirrors
+// `withDeadline` in the Wistia adapter.
+const withDeadline = <Value>(
+  settled: Promise<Value>,
+  milliseconds: number,
+  onTimeout: () => Error
+): Promise<Value> =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(onTimeout()), milliseconds);
+    settled.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (cause: unknown) => {
+        clearTimeout(timer);
+        reject(cause as Error);
+      }
+    );
+  });
+
 const loadFailure = (cause: unknown): PlayerError => {
   const name = errorString(cause, 'name');
   const category =
@@ -325,7 +364,17 @@ export const createVimeoAttachment = (
       // would never fire behind a blocked iframe (#69).
       emit({ commandsReady: true });
       const chromelessProbe = chromeless.probe();
-      await player.ready();
+      // A rejection here falls into this function's own catch, which tears
+      // down and emits the error state, so the deadline needs no separate
+      // reporting path.
+      await withDeadline(
+        player.ready(),
+        PLAYER_READY_TIMEOUT_MS,
+        () =>
+          new Error(
+            'The Vimeo player did not become ready. Its embed may be blocked by the page CSP, an extension or the network.'
+          )
+      );
       if (isStale(thisGeneration, player)) return { ok: true };
       const [
         initialDuration,
