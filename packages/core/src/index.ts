@@ -29,6 +29,7 @@ export type {
   ProviderEventFor,
   ProviderStateListener,
   ProviderStatePatch,
+  RefusedUrlSurface,
   ResolvedPlayerSource,
   SourceDetectionFailure,
   SourceDetectionFailureReason,

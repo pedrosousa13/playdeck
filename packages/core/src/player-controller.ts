@@ -16,6 +16,7 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStatePatch,
+  RefusedUrlSurface,
   TextCue
 } from './types.js';
 
@@ -27,6 +28,7 @@ import {
   freezeError,
   notifySafely,
   orderedRanges,
+  refusedUrlNotice,
   toProviderError,
   unsubscribeSafely
 } from './safety.js';
@@ -218,6 +220,44 @@ export class PlayerController {
   // attach would otherwise flap the slot — and it is dropped with the provider
   // that reported it (#235).
   #configurationNotice: PlayerError | undefined;
+  // The first consumer-supplied URL the shared allowlist refused, held the way
+  // `#hasAutoplayConfigurationError` holds the autoplay conflict: recorded by a
+  // public method, resolved in `#applyPatch`, never left in a patch (#330).
+  //
+  // Separate from `#configurationNotice` because the two have different
+  // lifetimes, not because the slot is shared. `#configurationNotice` describes
+  // one provider's configuration and is dropped with that provider; a refused
+  // `poster src` describes a consumer prop that the provider knows nothing
+  // about, and in the ordinary React ordering the poster renders and reports
+  // BEFORE the provider module has finished loading — so a provider-scoped
+  // notice would be wiped by the very next attach, before anything could
+  // observe it.
+  //
+  // Held for the controller's life, and there is a cost to that: a consumer who
+  // replaces a refused URL with a permitted one on the same player leaves this
+  // standing. Detection is the point (the refusal happened, and an operator has
+  // a poisoned field to go and clean), and the alternative — a per-surface
+  // record the React layer withdraws from — is arbitration this slot does not
+  // do today, which is #332's subject and not this change's.
+  #refusedUrlNotice: PlayerError | undefined;
+
+  // The detection half of the refusal at the five consumer-supplied URL props
+  // #320 routed through `isPermittedSourceUrl` and left silent. The refusal
+  // itself is unchanged: the value is still dropped exactly as an absent prop
+  // would be, and this reports it without throwing, without touching the
+  // lifecycle and without changing what renders (#320, #330).
+  //
+  // Takes the surface, never the value — see `RefusedUrlSurface`. First one
+  // wins and a repeat is a no-op, which also means a React effect may call this
+  // on every render of a refused prop without churning state.
+  reportRefusedUrl = (surface: RefusedUrlSurface): void => {
+    if (this.#refusedUrlNotice) return;
+    this.#refusedUrlNotice = refusedUrlNotice(surface);
+    // An empty patch: every key resolves to the state it already had, so the
+    // only thing this can change is the error slot, and it takes the slot only
+    // where `#applyPatch` finds it free.
+    this.#applyPatch({});
+  };
 
   configureAutoplay = (
     mode: AutoplayMode,
@@ -312,17 +352,18 @@ export class PlayerController {
     if (generation !== this.#generation) return;
     this.#provider = provider;
     // A notice describes one provider's configuration, so it goes with that
-    // provider — on a swap and on a detach alike (#235).
+    // provider — on a swap and on a detach alike (#235). `#refusedUrlNotice` is
+    // deliberately NOT cleared here: it describes a consumer prop no provider
+    // ever saw, and clearing it would drop the report on the very attach that
+    // normally follows it (#330).
     this.#configurationNotice = undefined;
     if (!provider) {
-      this.#setState(
-        this.#withAutoplayConfiguration(createInitialPlayerState())
-      );
+      this.#setState(this.#withHeldConfiguration(createInitialPlayerState()));
       return;
     }
 
     this.#setState(
-      this.#withAutoplayConfiguration({
+      this.#withHeldConfiguration({
         ...createInitialPlayerState(),
         lifecycle: 'loading',
         activation: 'loading-provider',
@@ -807,13 +848,26 @@ export class PlayerController {
           : // A notice waits behind whatever the slot already holds, not only
             // behind a fatal one: the `provider` error a refused autoplay
             // attempt publishes keeps the slot too, and the notice becomes
-            // visible when it clears (#235).
-            (errorBeforeNotice ?? this.#configurationNotice ?? null)
+            // visible when it clears (#235). A refused consumer URL waits
+            // behind a provider's own notice in turn — the provider reported
+            // something about the source that is about to play, and this one is
+            // about a decorative prop (#330).
+            (errorBeforeNotice ??
+            this.#configurationNotice ??
+            this.#refusedUrlNotice ??
+            null)
     };
     this.#setState(nextState);
   };
 
-  #withAutoplayConfiguration = (state: PlayerState): PlayerState =>
+  // The configuration the controller holds in its own fields rather than in the
+  // patch stream, re-applied over a state rebuilt from scratch. `setProvider`
+  // resets to `createInitialPlayerState()` without going through `#applyPatch`,
+  // so anything held here would otherwise be dropped on every attach — which
+  // for a refused consumer URL is the common case, not an edge one, because the
+  // poster reports before the provider loads (#330). The two are ranked as
+  // `#applyPatch` ranks them.
+  #withHeldConfiguration = (state: PlayerState): PlayerState =>
     this.#hasAutoplayConfigurationError
       ? {
           ...state,
@@ -821,7 +875,9 @@ export class PlayerController {
           autoplayRecovered: false,
           error: autoplayConfigurationError()
         }
-      : state;
+      : this.#refusedUrlNotice
+        ? { ...state, error: this.#refusedUrlNotice }
+        : state;
 
   #synchronizeAutoplay = (): void => {
     const provider = this.#provider;

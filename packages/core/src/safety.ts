@@ -3,6 +3,7 @@ import type {
   PlayerCapabilities,
   PlayerError,
   ProviderAdapter,
+  RefusedUrlSurface,
   TimeRange
 } from './types.js';
 
@@ -53,6 +54,35 @@ export const autoplayConfigurationError = (): PlayerError =>
     fatal: false,
     recoverable: false,
     message: 'Muted autoplay conflicts with a controlled unmuted state.'
+  });
+
+// One message per refused surface, written here rather than at the five call
+// sites so no caller can compose one of its own. Each names the prop and says
+// what was done instead, the same two halves every notice #318 established
+// carries ("The host option was rejected, so the default host was used."), and
+// none of them can carry the refused value: the only input is the key (#330).
+const REFUSED_URL_MESSAGES: Record<RefusedUrlSurface, string> = {
+  'poster src':
+    'The poster src URL was rejected, so no poster image was requested.',
+  'poster srcSet':
+    'A poster srcSet candidate URL was rejected, so that candidate was dropped.',
+  nativePoster:
+    'The nativePoster URL was rejected, so no poster attribute was set.',
+  'textTracks src':
+    'A textTracks src URL was rejected, so that text track was dropped.',
+  'mediaSession artwork':
+    'A mediaSession artwork src URL was rejected, so that artwork entry was dropped.'
+};
+
+// Non-fatal and `recoverable: false`, exactly like the provider-side notices:
+// nothing stopped working, and the remedy is a change the consumer makes, so a
+// retry would refuse the same value again (#198, #330).
+export const refusedUrlNotice = (surface: RefusedUrlSurface): PlayerError =>
+  freezeError({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    message: REFUSED_URL_MESSAGES[surface]
   });
 
 export const destroyProviderSafely = (provider: ProviderAdapter): void => {

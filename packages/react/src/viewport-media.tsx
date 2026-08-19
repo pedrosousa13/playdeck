@@ -171,8 +171,49 @@ export const Media = ({
   'aria-label': ariaLabel,
   ...rest
 }: MediaProps) => {
-  const { controls, preload, registerMedia, source, sourceCommitted } =
-    usePlayer();
+  const {
+    controller,
+    controls,
+    preload,
+    registerMedia,
+    source,
+    sourceCommitted
+  } = usePlayer();
+  // Both filters run here, above every early return, because the report below
+  // is a hook and a hook cannot sit after one. That also settles a question
+  // worth stating: a refused `nativePoster` or text track is reported for an
+  // embed source too, where neither prop would have been rendered at all. The
+  // detection is about the consumer's value, not about which branch consumed
+  // it -- the CMS field is poisoned whichever provider the source resolves to
+  // (#330).
+  const nativePosterSrc = permittedUrl(nativePoster);
+  const nativePosterRefused =
+    nativePoster !== undefined && nativePosterSrc === undefined;
+  // Filtered before the map, not inside it: a rejected entry's `key` (derived
+  // from its own un-resolved `src`) never needs computing, and the
+  // survivors' keys stay stable across renders that only add or remove a
+  // rejected entry (#236). Goes through `permittedUrl` (`permitted-url.ts`),
+  // this package's one check-then-resolve helper against the shared
+  // allowlist, rather than calling `isPermittedSourceUrl` and
+  // `resolveNetworkPath` separately here -- the exact duplication
+  // `permitted-url.ts` was extracted to end. It also guards a `src` that is
+  // `undefined` at runtime rather than throwing: the declared `string` type
+  // only binds a caller that is type-checked, and the #224 comment above
+  // records the same gap for untyped CMS data walking past a declared type.
+  const permittedTextTracks = textTracks?.flatMap((track) => {
+    const resolvedSrc = permittedUrl(track.src);
+    return resolvedSrc !== undefined ? [{ ...track, resolvedSrc }] : [];
+  });
+  const textTrackRefused =
+    textTracks !== undefined &&
+    (permittedTextTracks?.length ?? 0) < textTracks.length;
+  // In an effect, not in render: `reportRefusedUrl` writes controller state and
+  // wakes its subscribers. The controller holds only the first report, so
+  // re-running this is inert (#330).
+  useEffect(() => {
+    if (nativePosterRefused) controller.reportRefusedUrl('nativePoster');
+    if (textTrackRefused) controller.reportRefusedUrl('textTracks src');
+  }, [controller, nativePosterRefused, textTrackRefused]);
   // Merge the consumer ref onto the internal registration inside one callback
   // ref (rather than Viewport's stable-callback + separate `[ref]` effect):
   // Media is committed-source-gated and mounts its <video> late, so a `[ref]`
@@ -257,22 +298,6 @@ export const Media = ({
     delete (passthrough as Record<string, unknown>)[excluded.toLowerCase()];
   }
 
-  // Filtered before the map, not inside it: a rejected entry's `key` (derived
-  // from its own un-resolved `src`) never needs computing, and the
-  // survivors' keys stay stable across renders that only add or remove a
-  // rejected entry (#236). Goes through `permittedUrl` (`permitted-url.ts`),
-  // this package's one check-then-resolve helper against the shared
-  // allowlist, rather than calling `isPermittedSourceUrl` and
-  // `resolveNetworkPath` separately here -- the exact duplication
-  // `permitted-url.ts` was extracted to end. It also guards a `src` that is
-  // `undefined` at runtime rather than throwing: the declared `string` type
-  // only binds a caller that is type-checked, and the #224 comment above
-  // records the same gap for untyped CMS data walking past a declared type.
-  const permittedTextTracks = textTracks?.flatMap((track) => {
-    const resolvedSrc = permittedUrl(track.src);
-    return resolvedSrc !== undefined ? [{ ...track, resolvedSrc }] : [];
-  });
-
   return (
     <video
       playsInline
@@ -289,7 +314,7 @@ export const Media = ({
       // shared allowlist that gates a source URL, applied to this
       // consumer-supplied prop through `permittedUrl` (`permitted-url.ts`)
       // rather than forked into a second scheme test (#236).
-      poster={permittedUrl(nativePoster)}
+      poster={nativePosterSrc}
       preload={preload}
       ref={mediaRef}
       style={{ ...nativeMediaStyle, ...style }}

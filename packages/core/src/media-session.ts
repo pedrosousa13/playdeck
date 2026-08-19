@@ -153,6 +153,17 @@ const permittedArtwork = (
       )
     : [];
 
+// The detection half of the refusal above (#330). Kept apart from
+// `permittedArtwork` rather than folded into it because the two run in
+// different places: the filter runs inside the coordinator, which is shared by
+// every root on the document and holds no controller, while this runs in
+// `bindMediaSession`, which holds exactly one. Re-running the filter to count
+// its survivors costs a pass over an array of a handful of entries and keeps
+// one definition of "refused" rather than two that can drift.
+const hasRefusedArtwork = (metadata: MediaMetadataInput | null): boolean =>
+  metadata?.artwork !== undefined &&
+  permittedArtwork(metadata.artwork).length < metadata.artwork.length;
+
 const toMediaMetadata = (metadata: MediaMetadataInput): unknown => {
   const Ctor = globalMediaMetadata();
   const init = {
@@ -277,6 +288,19 @@ export const bindMediaSession = (
   coordinator: MediaSessionCoordinator,
   options: { readonly metadata?: MediaMetadataInput | null } = {}
 ): MediaSessionBinding => {
+  // Reported at every point metadata enters the binding, and reported whether
+  // or not this root ever owns the surface: the consumer's field is poisoned
+  // either way, and ownership is arbitration between roots, not a judgement on
+  // the value (#330). The controller holds only the first report, so the
+  // repetition across `setMetadata` calls costs nothing.
+  const reportRefusedArtwork = (metadata: MediaMetadataInput | null): void => {
+    if (hasRefusedArtwork(metadata)) {
+      controller.reportRefusedUrl('mediaSession artwork');
+    }
+  };
+
+  reportRefusedArtwork(options.metadata ?? null);
+
   const root = coordinator.register({
     metadata: options.metadata ?? null,
     actions: {
@@ -317,7 +341,10 @@ export const bindMediaSession = (
   });
 
   return {
-    setMetadata: (metadata) => root.setMetadata(metadata),
+    setMetadata: (metadata) => {
+      reportRefusedArtwork(metadata);
+      root.setMetadata(metadata);
+    },
     release: () => {
       unsubscribe();
       root.release();

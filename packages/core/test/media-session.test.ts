@@ -426,6 +426,60 @@ test.each([
   }
 );
 
+// #330: the refusal above is the blocking half and is unchanged. These cover
+// the detection half -- `bindMediaSession` is the one place in this file that
+// holds a `PlayerController`, so it is where the report is made.
+const bindArtwork = (
+  artwork: ReadonlyArray<{ readonly src: string }>
+): PlayerController => {
+  const { session } = createSession();
+  const coordinator = getMediaSessionCoordinator(session);
+  const controller = new PlayerController();
+  const { provider } = createProvider();
+  controller.setProvider(provider);
+  bindMediaSession(controller, coordinator, { metadata: { artwork } });
+  return controller;
+};
+
+test('reports a refused artwork src as a notice on the bound controller', () => {
+  const controller = bindArtwork([
+    { src: 'javascript:alert(1)' },
+    { src: 'https://example.com/good.png' }
+  ]);
+
+  expect(controller.getState().error).toMatchObject({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false
+  });
+  expect(controller.getState().error?.message).toContain('artwork');
+  // The report is not a failure: nothing about the player moved.
+  expect(controller.getState().lifecycle).not.toBe('error');
+});
+
+test('publishes nothing when every artwork src is permitted', () => {
+  expect(
+    bindArtwork([{ src: 'https://example.com/good.png' }]).getState().error
+  ).toBeNull();
+});
+
+test('reports a refused artwork src handed to setMetadata after binding', () => {
+  const { session } = createSession();
+  const coordinator = getMediaSessionCoordinator(session);
+  const controller = new PlayerController();
+  const { provider } = createProvider();
+  controller.setProvider(provider);
+  const binding = bindMediaSession(controller, coordinator, {
+    metadata: { artwork: [{ src: 'https://example.com/good.png' }] }
+  });
+
+  expect(controller.getState().error).toBeNull();
+
+  binding.setMetadata({ artwork: [{ src: 'file:///etc/passwd' }] });
+
+  expect(controller.getState().error?.message).toContain('artwork');
+});
+
 test('on() keeps a re-registered listener after a duplicated unsubscribe', () => {
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
