@@ -194,7 +194,7 @@ export const PosterImage = ({
   // needs no player state to render an <img> -- and #330 is a detection fix,
   // so it must not turn a standalone poster into a thrown error. Outside a
   // root there is no controller to report to and the refusal stands silently,
-  // exactly as it did before this change.
+  // exactly as it did before #330.
   const controller = useContext(PlayerContext)?.controller;
   // One registration per surface, each standing only while THIS poster refuses
   // that surface -- see `useRefusedUrlReport` (`player-context.ts`) for why the

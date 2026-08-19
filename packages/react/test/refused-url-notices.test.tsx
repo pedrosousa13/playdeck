@@ -210,14 +210,14 @@ test('keeps the notice when only one of two poisoned posters is fixed', () => {
   expect(controller.getState().error?.message).toContain('poster src');
 });
 
-// Pins the unmount decision, which this pass reversed. The first pass left the
-// registration standing on unmount, reasoning that `Player.Poster` stays mounted
-// and merely hides; it does, so the ordinary flow never reaches this cleanup.
-// But a registration no live component owns can never be withdrawn, and a keyed
-// list remounting poisoned posters would pile them up with no route back to a
-// clear state. The accepted cost is exactly what this test asserts: take the
-// poisoned poster out of the tree and its notice goes with it. See
-// `useRefusedUrlReport` (`player-context.ts`) for the reasoning (#330).
+// Pins the unmount decision. `Player.Poster` stays mounted and merely hides, so
+// the ordinary flow never reaches this cleanup; leaving the registration
+// standing on unmount would still be wrong, because a registration no live
+// component owns can never be withdrawn, and a keyed list remounting poisoned
+// posters would pile them up with no route back to a clear state. The accepted
+// cost is exactly what this test asserts: take the poisoned poster out of the
+// tree and its notice goes with it. See `useRefusedUrlReport`
+// (`player-context.ts`) for the reasoning (#330).
 test('withdraws the notice when the only poster refusing a value unmounts', () => {
   const { controller, notice, rerender } = renderWithPlayer(
     <PosterImage src="javascript:alert(1)" />

@@ -21,10 +21,11 @@ This is the detection half only.
 `PlayerController` gains one method, `reportRefusedUrl(surface)`. It takes a
 closed union naming the prop — `'poster src'`, `'poster srcSet'`,
 `'nativePoster'`, `'textTracks src'`, `'mediaSession artwork'` — and never the
-URL. That union is `RefusedUrlSurface`, the one addition this change makes to
-`@playdeck/core`'s public surface. The message is built in core from that key
-alone, so a refused value cannot be carried into an error that a monitoring
-system may log or `ErrorDisplay` may render.
+URL. That union is `RefusedUrlSurface`, the one type this change adds to
+`@playdeck/core`'s public API; the method above is the only other addition. The
+message is built in core from that key alone, so a refused value cannot be
+carried into an error that a monitoring system may log or `ErrorDisplay` may
+render.
 
 The method registers a standing refusal and returns a disposer. The notice is
 published while any registration stands and is withdrawn only by the reporter
@@ -40,8 +41,8 @@ withdrawn exactly when the value turns permitted or the component holding it goe
 away, and nothing is left standing that no live reporter owns.
 
 Several surfaces can stand refused at once and the state has one error slot, so
-the published notice is the first refused surface in the order the union
-declares — `poster src`, `poster srcSet`, `nativePoster`, `textTracks src`,
+the published notice is the first refused surface in the rank core fixes —
+`poster src`, `poster srcSet`, `nativePoster`, `textTracks src`,
 `mediaSession artwork` — never the order the reports arrived in. Report order
 depends on where a consumer placed `PosterImage` in the tree and on whether the
 pass is a mount or an update; the same poisoned fields should always produce the

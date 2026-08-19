@@ -483,8 +483,8 @@ test('reports a refused artwork src handed to setMetadata after binding', () => 
 // `setMetadata` reports the permitted case as well as the refused one, so a
 // consumer who cleans the poisoned artwork field and pushes the metadata again
 // gets the notice withdrawn. Reporting only the refused case would leave the
-// notice standing for the controller's life, which is the false positive #330's
-// second pass removes.
+// notice standing for the controller's life -- a false positive an operator
+// learns to ignore, which defeats the monitoring #330 exists to add.
 test('withdraws the artwork notice once setMetadata carries only permitted srcs', () => {
   const { session } = createSession();
   const coordinator = getMediaSessionCoordinator(session);
@@ -502,11 +502,16 @@ test('withdraws the artwork notice once setMetadata carries only permitted srcs'
   expect(controller.getState().error).toBeNull();
 });
 
-// Two roots on one document bind to the same coordinator, and a binding is one
-// reporter: the one whose artwork is clean must not be able to withdraw the
-// notice the poisoned one published. This is the media-session shape of the
-// sibling defect `keeps the notice while a second reporter still refuses the
-// same surface` (`configuration-notices.test.ts`) pins in the controller (#330).
+// A binding is one reporter and withdraws only its own registration, so a
+// second binding whose artwork is clean leaves the notice the poisoned one
+// published alone. Two bindings on one controller is a state `root.tsx` never
+// reaches -- it builds one `PlayerController` per `Player.Root`, and its
+// media-session effect releases the previous binding in cleanup before the next
+// one binds -- and two roots on a document are two controllers with two tallies
+// of their own, so neither route produces it. What this pins is
+// `bindMediaSession`'s side of the contract: the report belongs to the binding
+// that made it, not to the controller, which is what stops a clean binding
+// silencing a refusal that still stands (#330).
 test('a second binding with permitted artwork does not withdraw the first notice', () => {
   const { session } = createSession();
   const coordinator = getMediaSessionCoordinator(session);

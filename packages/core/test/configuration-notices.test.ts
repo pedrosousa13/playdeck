@@ -290,9 +290,7 @@ test('publishes a refused consumer URL as a notice without moving the lifecycle'
 // in `src`, so two surfaces could have shared one notice -- or had their
 // notices swapped -- with this green. `Record` typing makes the table
 // exhaustive, so a sixth surface added to `RefusedUrlSurface` fails to compile
-// until it has a message here, and walking all five pins that every surface has
-// a rank in `REFUSED_URL_SURFACE_RANK` (`safety.ts`): one missing from that list
-// would publish no notice at all.
+// until it has a message here.
 const REFUSED_URL_MESSAGES: Record<RefusedUrlSurface, string> = {
   'poster src':
     'The poster src URL was rejected, so no poster image was requested.',
@@ -344,13 +342,12 @@ test('keeps a refused-URL notice through a provider attaching after it', () => {
   expect(controller.getState().error).toMatchObject(reported!);
 });
 
-// The defect #330's own first pass shipped: the notice recorded that a refusal
-// had EVER happened rather than whether one currently stands, so a consumer who
-// cleaned the poisoned CMS field was left with a permanent `configuration`
-// error. A security notice that cannot be withdrawn is a false positive an
-// operator learns to ignore, which defeats the monitoring the issue exists to
-// add. Disposing the registration is how a call site says the value it was
-// refusing is now permitted.
+// A notice reports whether a refusal currently stands, never that one had EVER
+// happened: keyed to the latter, a consumer who cleaned the poisoned CMS field
+// would be left with a permanent `configuration` error. A security notice that
+// cannot be withdrawn is a false positive an operator learns to ignore, which
+// defeats the monitoring the issue exists to add. Disposing the registration is
+// how a call site says the value it was refusing is now permitted.
 test('withdraws the notice when the refused surface turns permitted', () => {
   const controller = new PlayerController();
 
@@ -389,13 +386,12 @@ test('keeps the notice while another surface is still refused', () => {
   expect(controller.getState().error?.message).toContain('srcSet');
 });
 
-// The defect this pass fixes, at the controller. A refusal is keyed by a PROP
-// NAME, and several component instances can hold that same prop at once -- two
-// `PosterImage`s under one `Player.Root`, one poisoned and one not. With a
-// per-prop boolean the permitted sibling's report withdrew the poisoned one's
-// notice and the refusal went silent, which is exactly the A09 failure #330
-// exists to fix (#345). A registration is withdrawn only by the reporter that
-// made it.
+// A refusal is keyed by a PROP NAME, and several component instances can hold
+// that same prop at once -- two `PosterImage`s under one `Player.Root`, one
+// poisoned and one not. Keyed by prop alone, the permitted sibling's report
+// would withdraw the poisoned one's notice and the refusal would go silent,
+// which is exactly the A09 failure #330 exists to fix (#345). A registration is
+// withdrawn only by the reporter that made it.
 test('keeps the notice while a second reporter still refuses the same surface', () => {
   const controller = new PlayerController();
 
@@ -420,10 +416,13 @@ test('withdraws the notice once every reporter of a surface has released', () =>
   expect(controller.getState().error).toBeNull();
 });
 
-// A disposer is handed to callers who may run it twice -- React's strict-mode
-// double invoke, a consumer holding one past a `release()`. A second run must
-// not decrement a tally another live reporter owns, which would withdraw a
-// refusal that still stands (#330).
+// `reportRefusedUrl` is public on `PlayerController`, so the disposer reaches
+// callers this repo does not write, and one of them can run it twice. A second
+// run must not decrement a tally another live reporter owns, which would
+// withdraw a refusal that still stands. Neither call site in the library gets
+// there -- React never repeats an effect cleanup, and `bindMediaSession` nulls
+// its own handle inside `release()` -- so what this pins is the guard the public
+// method needs and nothing inside reaches (#330).
 test('a disposer run twice does not withdraw another reporter of the same surface', () => {
   const controller = new PlayerController();
 
@@ -436,13 +435,13 @@ test('a disposer run twice does not withdraw another reporter of the same surfac
 });
 
 // The state has one error slot, so several surfaces refused at once need a
-// tie-break. It is the rank in `REFUSED_URL_SURFACE_RANK` (`safety.ts`), the
-// declaration order of `RefusedUrlSurface` -- NOT the order the reports arrived
-// in. The reports come from React effects, and their order depends on where a
-// consumer happened to place `PosterImage` in the tree and on whether this pass
-// is a mount or an update. Ranking makes the published message a function of
-// what stands refused and of nothing else, so the same poisoned fields produce
-// the same notice every time (#330).
+// tie-break. It is the order of `REFUSED_URL_SURFACE_RANK` (`safety.ts`), a
+// list of its own and not the declaration order of `RefusedUrlSurface` -- and
+// NOT the order the reports arrived in. The reports come from React effects,
+// and their order depends on where a consumer happened to place `PosterImage`
+// in the tree and on whether this pass is a mount or an update. Ranking makes
+// the published message a function of what stands refused and of nothing else,
+// so the same poisoned fields produce the same notice every time (#330).
 test('publishes the highest-ranked refused surface whatever order the reports arrive in', () => {
   const forwards = new PlayerController();
   forwards.reportRefusedUrl('poster src');

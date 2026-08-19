@@ -49,6 +49,16 @@ consumer-supplied URL prop and provider option alike (#219, #236). A refused
 value is treated exactly as if the prop were absent — never a throw.
 _Avoid_: whitelist, sanitise, safe URL
 
+**Refused surface**:
+The name of one consumer-supplied URL prop the shared allowlist can refuse
+outside a provider, published as the closed union `RefusedUrlSurface`:
+`poster src`, `poster srcSet`, `nativePoster`, `textTracks src` and
+`mediaSession artwork`. A surface names the prop an operator has to go and fix
+and never the value that was refused, so a Notice built from one carries no
+consumer text at all. It is a prop name, not a component instance: several
+instances can refuse the same surface at once.
+_Avoid_: field, key, call site
+
 **Shortcut layer**:
 The media keys `Player.Controls` owns. One binding maps keys to one action —
 `seekForward`, `toggleMuted` — and a consumer rebinds or suppresses a binding
@@ -156,10 +166,10 @@ A non-fatal `configuration` error published to report a consumer-supplied value
 that was rejected, while the fall-back behaviour it degraded to stands
 unchanged. A provider reports one through a state patch; a consumer-supplied URL
 prop the shared allowlist refuses is reported by `reportRefusedUrl`, which names
-the prop and never the value, and which returns a disposer the reporter holds
-for as long as it keeps refusing that prop — so the notice stands while any
-reporter's registration stands, and is withdrawn only by the reporter that made
-it. Held as controller state and surfaced on
+the refused surface and never the value, and which returns a disposer the
+reporter holds for as long as it keeps refusing that surface — so the notice
+stands while any reporter's registration stands, and is withdrawn only by the
+reporter that made it. Held as controller state and surfaced on
 `PlayerState.error` like any other error, but never a failure: it never masks a
 standing error, and it never drives a transition into the error lifecycle.
 _Avoid_: warning, soft error

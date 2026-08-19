@@ -224,10 +224,10 @@ export class PlayerController {
   // answer, not a log of what was once refused. Keyed by surface because the
   // notice is chosen by surface, counted because a surface is a PROP NAME and
   // several independent component instances can hold that same prop at once.
-  // A boolean per surface was the first shape and it was wrong: two
-  // `PosterImage`s under one `Player.Root` are two reporters, and the permitted
-  // one's report withdrew the poisoned one's notice, so half the render orders
-  // refused in total silence — the exact A09 failure #330 exists to fix (#345).
+  // A boolean per surface cannot express that: two `PosterImage`s under one
+  // `Player.Root` are two reporters, and the permitted one's report would
+  // withdraw the poisoned one's notice, so half the render orders would refuse
+  // in total silence — the exact A09 failure #330 exists to fix (#345).
   //
   // Scoped to the controller rather than to a provider, unlike
   // `#configurationNotice`. That is not a difference in how long a rejection is
@@ -261,13 +261,14 @@ export class PlayerController {
   // stands while any registration for any surface stands, so a refusal is
   // withdrawn only by the reporter that made it — never by a sibling that
   // happens to hold a permitted value for the same prop. A per-prop boolean
-  // could not express that, and the withdrawal it got wrong is not a rare one:
-  // two `PosterImage`s under one root is an ordinary responsive-poster tree.
+  // could not express that, and the withdrawal it would get wrong is not a rare
+  // one: two `PosterImage`s under one root is an ordinary responsive-poster
+  // tree.
   //
   // Withdrawable at all, rather than fire-once, because a notice that could
   // never be cleared is a permanent false positive: a consumer who replaced a
-  // poisoned CMS value with a good one kept the error forever, and an operator
-  // who cannot clear a security notice learns to ignore all of them.
+  // poisoned CMS value with a good one would keep the error forever, and an
+  // operator who cannot clear a security notice learns to ignore all of them.
   //
   // The disposer shape is what makes the React call sites correct by
   // construction — each is `return controller.reportRefusedUrl(surface)` from an
@@ -282,10 +283,14 @@ export class PlayerController {
       (this.#refusedUrlReports.get(surface) ?? 0) + 1
     );
     this.#resolveRefusedUrlNotice();
-    // Idempotent, because the disposer is handed to callers who may run it more
-    // than once — React's strict-mode double invoke, a consumer holding it past
-    // a `release()`. A second run must not decrement a count another live
-    // reporter owns, which would withdraw a refusal that still stands.
+    // Idempotent, because the disposer leaves the library: `reportRefusedUrl`
+    // is public on `PlayerController`, so anything holding the controller can
+    // register and then run the disposer twice. A second run must not decrement
+    // a count another live reporter owns, which would withdraw a refusal that
+    // still stands. Neither call site here gets there — React never repeats an
+    // effect cleanup, and `bindMediaSession` nulls its own handle inside
+    // `release()` — so the guard is defensive for those two, and it is what
+    // makes the disposer safe to hand any further out.
     let disposed = false;
     return () => {
       if (disposed) return;

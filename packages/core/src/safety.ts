@@ -74,14 +74,11 @@ export const autoplayConfigurationError = (): PlayerError =>
 // published notice actually changed, instead of comparing message text.
 //
 // The array below is the tie-break: the state has one error slot, so several
-// surfaces refused at once publish the first of these that stands. Declaration
-// order, NOT the order the reports arrived in — the reports come from React
+// surfaces refused at once publish the first of these that stands. That array's
+// own order, NOT the order the reports arrived in — the reports come from React
 // effects whose order depends on where a consumer placed `PosterImage` and on
 // whether the pass is a mount or an update, and a notice that changed wording
-// for that reason would be unreadable to a monitoring system. `Record` typing
-// forces every surface to have a notice; that every surface also has a rank is
-// pinned by `names the refused surface in the notice and never the refused
-// value`, which walks all five and would see an empty message for a missing one.
+// for that reason would be unreadable to a monitoring system.
 const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
   'poster src': freezeError({
     category: 'configuration',
@@ -120,18 +117,33 @@ const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
   })
 };
 
+// A list of its own, in no way derived from `RefusedUrlSurface` — the union's
+// own declaration order decides nothing, and a reader who assumes it does will
+// be wrong the first time either is reordered. So the two are coupled here
+// instead: `RankOf` admits only a list that is the whole union, each surface
+// exactly once, which makes a surface added to `RefusedUrlSurface` fail to
+// compile until it is ranked, the way `Record` above makes it fail until it has
+// a message. A surface missing from the rank would publish no notice at all,
+// which is the silence #330 exists to end.
+type RankOf<Surfaces, Each = Surfaces> = [Surfaces] extends [never]
+  ? readonly []
+  : Each extends Each
+    ? readonly [Each, ...RankOf<Exclude<Surfaces, Each>>]
+    : never;
+
 const REFUSED_URL_SURFACE_RANK = [
   'poster src',
   'poster srcSet',
   'nativePoster',
   'textTracks src',
   'mediaSession artwork'
-] as const satisfies readonly RefusedUrlSurface[];
+] as const satisfies RankOf<RefusedUrlSurface>;
 
 // The notice the standing refusal registrations publish, or `undefined` when
-// none stands. Returning `undefined` rather than a notice for an empty tally is
-// the whole point of #330's second pass: the notice says a refusal stands right
-// now, not that one once happened. Only membership is read — how many reporters
+// none stands. An empty tally returns `undefined` rather than a notice because
+// a notice says a refusal stands right now, not that one once happened: keyed
+// to the latter, a consumer who cleaned the poisoned field would keep the error
+// for the controller's life. Only membership is read — how many reporters
 // stand behind a surface is `PlayerController`'s bookkeeping, not this
 // function's business (#330).
 export const standingRefusedUrlNotice = (
