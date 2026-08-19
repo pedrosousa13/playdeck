@@ -305,3 +305,5 @@ export const createVimeoProvider = (
     retry: attachment.retry
   };
 };
+
+export { PLAYER_READY_TIMEOUT_MS } from './attachment.js';

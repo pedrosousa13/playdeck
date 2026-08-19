@@ -146,3 +146,42 @@ export const CustomRendering: Story = {
     ).toBeInTheDocument();
   }
 };
+
+/**
+ * A **Notice** — a non-fatal `configuration` error reporting a value a provider
+ * rejected, while the fall-back it degraded to stands unchanged. Nothing
+ * stopped working, so this renders no overlay and no `role="alert"`, and the
+ * player underneath is never covered (#319).
+ *
+ * It is still in the DOM at `data-playdeck-part="notice"`, carrying the
+ * category on `data-state`, so a consumer can place it and a monitoring system
+ * can read it. It has no appearance of its own: what you see below is the
+ * story's own `style`, not the library's.
+ */
+export const ConfigurationNotice: Story = {
+  parameters: {
+    player: {
+      state: {
+        lifecycle: 'ready',
+        provider: 'youtube',
+        error: {
+          category: 'configuration',
+          fatal: false,
+          recoverable: false,
+          message: 'The host option was rejected, so the default host was used.'
+        }
+      } satisfies ProviderStatePatch
+    }
+  },
+  play: async ({ canvas, canvasElement }) => {
+    // No overlay, and nothing announcing a failure that did not happen.
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    const notice = canvasElement.querySelector('[data-playdeck-part="notice"]');
+    await expect(notice).toHaveAttribute('data-state', 'configuration');
+    // The library gives this part no geometry; only the story's style prop is
+    // on it, so the working player underneath stays visible.
+    await expect(
+      canvasElement.querySelector('[data-playdeck-part="error"]')
+    ).toBeNull();
+  }
+};

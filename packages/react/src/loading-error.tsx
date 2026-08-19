@@ -1,4 +1,4 @@
-import type { PlayerError } from '@playdeck/core';
+import type { PlayerError, PlayerState } from '@playdeck/core';
 import { usePlayer, usePlayerState } from './player-context.js';
 import {
   useEffect,
@@ -254,17 +254,72 @@ const errorOverlayStyle: CSSProperties = {
   zIndex: 40
 };
 
+// A Notice, per CONTEXT.md: a non-fatal `configuration` error a provider
+// publishes to report a value it rejected, while the fall-back behaviour it
+// degraded to stands unchanged. Nothing stopped working, so it must not be
+// rendered as a failure (#319).
+//
+// The predicate mirrors `noticeIn` at `packages/core/src/player-controller.ts`,
+// deliberately rather than importing it: that one classifies a
+// `ProviderStatePatch` on its way in, this one classifies the published
+// `PlayerState.error` on its way out, and they are the same rule seen from two
+// sides. If a third caller ever needs it, lift it into core rather than adding
+// a third copy.
+//
+// This gates on notice-ness and NOT on `fatal`. `fatal: false` also covers
+// `toProviderError` (`provider`, and `recoverable: true`, so it offers a
+// retry), Wistia's `policy` refusal and its `unsupported` refusal — every one
+// of them a real failure that keeps the overlay.
+//
+// The lifecycle clause is the one that is easy to drop and must not be. A
+// `configuration` error is NOT always a notice: `useActivation` publishes one
+// with `activation: 'error'` for `loading="interaction"` with autoplay
+// (`use-activation.ts:458-463`) and for viewport activation without a
+// `Player.Viewport` (`:477-480`). Both mean the player will never load, so both
+// have to keep the overlay — without this clause they would render as an
+// invisible notice and the consumer would see a dead player and no error at
+// all, which is the defect this change exists to remove.
+const isNotice = (
+  error: PlayerError,
+  lifecycle: PlayerState['lifecycle']
+): boolean =>
+  error.category === 'configuration' && !error.fatal && lifecycle !== 'error';
+
 export const ErrorDisplay = ({
   children,
   style,
   ...props
 }: ErrorDisplayProps) => {
-  const { error, provider } = usePlayerState((state) => ({
+  const { error, lifecycle, provider } = usePlayerState((state) => ({
     error: state.error,
+    lifecycle: state.lifecycle,
     provider: state.provider
   }));
   const { controller } = usePlayer();
   if (!error) return null;
+
+  // No `role="alert"`, no geometry, no stacking: a consumer composes where this
+  // goes, and a player that is still working is never covered by it. `children`
+  // still receives it, so a consumer who renders both through one component
+  // keeps that. `retry` is always null here — `configuration` is always
+  // `recoverable: false` (#198) — so the render prop's contract is unchanged.
+  if (isNotice(error, lifecycle)) {
+    return (
+      <div
+        {...props}
+        data-provider={provider ?? undefined}
+        data-playdeck-part="notice"
+        data-state={error.category}
+        style={style}
+      >
+        {children ? (
+          children({ error, retry: null })
+        ) : (
+          <p data-playdeck-part="notice-message">{error.message}</p>
+        )}
+      </div>
+    );
+  }
   // `recoverable` is the state-level signal that a retry is worth offering (see
   // `PlayerError` in @playdeck/core), and `ActivationButton` reads the same one.
   // Absent — not disabled — when it does not hold (issue #34 capability rule).
