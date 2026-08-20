@@ -28,10 +28,6 @@ export const muteButton = (page: Page) =>
 export const captionsButton = (page: Page) =>
   page.locator('[data-playdeck-part="captions-button"]');
 
-// The live region `LoadingIndicator` keeps mounted at all times (empty and
-// visually hidden while idle), so this resolves whether or not anything is
-// loading; `data-state` is what says which — 'loading-provider', 'buffering'
-// or 'idle'.
 export const loadingIndicator = (page: Page) =>
   page.locator('[data-playdeck-part="loading-indicator"]');
 
