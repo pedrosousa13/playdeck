@@ -98,9 +98,27 @@ jobs:
   # level below it: the verdict is `node scripts/audit.mjs`, an ordinary file
   # the same pull request can edit. Turning `process.exit(result.exitCode)`
   # into `process.exit(0)` leaves the `audit` context arriving, running and
-  # green. So the authoritative run below is `main`'s copy of the gate,
-  # fetched here and run against this pull request's installed tree — editing
-  # the pull request's copy then changes nothing about the verdict.
+  # green. So the authoritative run below takes the gate's *source* from
+  # `main` rather than from the pull request.
+  #
+  # What that is, exactly, because it is narrower than "the gate is pinned":
+  # pinned logic over unpinned inputs. `main` supplies the source. The pull
+  # request still supplies everything that source consumes — the tree being
+  # measured, the `node_modules` it imports from, and the pnpm that corepack
+  # resolves from its `packageManager`. So it defeats an edit to
+  # `scripts/audit.mjs`, and that is the whole of what it defeats. Two
+  # residuals are known and filed rather than papered over: `main`'s copy
+  # executes pull-request-authored dependency code, since `yaml` resolves into
+  # this tree (#372), and the publishable boundary the gate measures against is
+  # itself declared in pull-request-owned manifests (#373).
+  #
+  # A third was closed rather than filed, and is why pinning is worth having:
+  # an `auditConfig` block in `pnpm-workspace.yaml` makes pnpm drop advisories
+  # from `pnpm audit --json` before either copy of the gate reads it, so it
+  # needed no edit to `audit.mjs` at all. `scripts/audit.mjs` now fails on one.
+  # The two halves reinforce each other: that guard living on `main` is what
+  # makes it unremovable by the pull request it judges, and the pinned run is
+  # what carries it there.
   #
   # Both copies run, and either one failing fails the job. That is three
   # properties rather than one:
@@ -140,9 +158,27 @@ jobs:
       # `.gate/*` rather than `.gate/scripts/*`. The whole directory is copied
       # rather than the two files it imports today, so `main`'s import closure
       # stays complete even if a pull request deletes a module it needs.
+      #
+      # `pipefail` and the `rm -rf` both bound what runs when the extraction
+      # does not. The default step shell is `bash -e {0}`, where a pipeline's
+      # status is its *last* command's, so `tar` alone decides that line — and
+      # GNU tar's verdict on degenerate input is not uniform: measured, it
+      # exits 2 on empty stdin but 0 on a well-formed empty archive. Rather
+      # than rest on which of those a broken `git archive` happens to produce,
+      # `pipefail` makes `git archive`'s own failure the pipeline's.
+      #
+      # `rm -rf` closes a substitution the extraction cannot. `git archive`
+      # overwrites only the paths `main`'s `scripts/` actually carries, so
+      # anything else a pull request committed under `.gate/` survives it —
+      # and `.gate/node_modules/yaml/` is the one that bites, because Node
+      # resolves a bare import from the nearest `node_modules` upward. A
+      # committed one is found before this tree's, and `main`'s gate would
+      # then parse `pnpm-workspace.yaml` with pull-request code.
       - name: Audit — main's copy of the gate
         run: |
+          set -o pipefail
           git fetch --depth=1 origin main
+          rm -rf .gate
           mkdir -p .gate
           git archive FETCH_HEAD scripts | tar -x --strip-components=1 -C .gate
           node .gate/audit.mjs
