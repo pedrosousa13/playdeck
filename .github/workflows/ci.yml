@@ -201,11 +201,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
-  # a11y-media.spec.ts's cue-boundary guard (installedAt < cueBoundary) proves
-  # the mutation observer installs before the fixture's real cue transition; it
-  # is not a player performance budget. The fixture's cue boundary
-  # (captions-reference.vtt, 0.7s) and the matching JS constant carry the
-  # headroom that keeps the guard honest on a slower host. See
+  # a11y-media.spec.ts arranges its live-region window instead of racing it:
+  # since #279 the clip is rewound to 0 and settled there before the mutation
+  # observer installs, so nothing in that test is a margin against runner speed,
+  # and none of it was ever a player performance budget. See
   # e2e/a11y-media.spec.ts for the full rationale.
   e2e:
     runs-on: ubuntu-latest
