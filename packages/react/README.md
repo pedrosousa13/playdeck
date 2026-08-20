@@ -174,9 +174,11 @@ is showing rather than on the published volume behind it: `ArrowUp` unmutes and
 restores that published level unchanged — stepping to 0.05 only where the
 published volume is itself 0, which unmuting alone would leave silent — and
 `ArrowDown` does nothing, because the player is already silent. `ArrowDown`
-still keeps the key. `VolumeSlider`'s own pointer, `Home` and `End` changes are
-unaffected: those start from the zero on screen, so moving one up unmutes at
-the value the user chose.
+still keeps the key. Both arrows do step a change the player has not answered
+yet, because that is what the thumb is showing: muted and dragged to 0.3,
+`ArrowDown` moves to 0.25. `VolumeSlider`'s own pointer, `Home` and `End`
+changes are unaffected: those start from the zero on screen, so moving one up
+unmutes at the value the user chose.
 
 The region owns those keys wherever focus sits inside it, a focused
 `<input type="range">` included, so the arrows seek and adjust volume at the

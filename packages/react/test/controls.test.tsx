@@ -1777,7 +1777,7 @@ describe('Controls container and scoped shortcuts', () => {
   // #274. The thumb sits on the muted zero, so an arrow that stepped the
   // published volume would move from a number nothing on screen shows — and a
   // downward step from it would land above zero and turn the sound back on.
-  test('unmutes on ArrowUp while muted and moves no volume', async () => {
+  test('unmutes on ArrowUp while muted and steps no volume', async () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>
         <Player.VolumeSlider />
@@ -1796,12 +1796,38 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.unmute).toHaveBeenCalledTimes(1);
     // `muted` and `volume` are independent, so the unmute alone restores the
     // published 0.5. Asking for 0.55 as well would be a step the user never
-    // made, from a base they were never shown.
+    // made, from a base they were never shown: the volume asked for is that
+    // same 0.5, which moves the player nowhere and records where the unmute is
+    // going for whatever is pressed next.
     await act(async () => {});
-    expect(spies.setVolume).not.toHaveBeenCalled();
-    // Nothing was requested, so the thumb stays on the muted zero until the
-    // player publishes the unmute.
-    expect(slider.value).toBe('0');
+    expect(spies.setVolume.mock.calls).toEqual([[0.5]]);
+    expect(slider.value).toBe('0.5');
+  });
+
+  test('compounds a second ArrowUp pressed while muted inside one round trip', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    // The player publishes nothing between the two presses, so `muted` is
+    // still true on the second. Reading the muted branch again there would
+    // unmute twice and step nothing, and the user would land on the 0.5 they
+    // started from — the press lost inside one round trip #271 was filed over.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    expect(slider.value).toBe('0.55');
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.5], [0.55]]);
   });
 
   test('does nothing at all on ArrowDown while muted, and still owns the key', async () => {
@@ -1860,6 +1886,35 @@ describe('Controls container and scoped shortcuts', () => {
     expect(slider.value).toBe('0.1');
     await act(async () => {});
     expect(spies.setVolume.mock.calls).toEqual([[0.05], [0.1]]);
+  });
+
+  test('steps down on ArrowDown while muted over an outstanding change', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    // Dragged up off the muted zero to 0.3, which the player has not answered
+    // for yet, so the thumb shows 0.3 while `muted` is still true.
+    fireEvent.change(slider, { target: { value: '0.3' } });
+    expect(slider.value).toBe('0.3');
+    region.focus();
+
+    // 0.3 is what the control is showing, so that is what the arrow acts on:
+    // stepping down from it is the same principle that keeps a muted arrow off
+    // the published volume, and the no-op above applies only where the thumb is
+    // on the muted zero.
+    fireEvent.keyDown(region, { key: 'ArrowDown' });
+    expect(slider.value).toBe('0.25');
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.3], [0.25]]);
   });
 
   test('leaves the volume arrows to the page while the capability is unavailable', () => {

@@ -291,16 +291,27 @@ export const Controls = ({
           // number nothing on screen shows, and a downward one lands above zero
           // and turns the sound back on where the user asked for less. `muted`
           // and `volume` are independent, so unmuting on its own restores the
-          // published level and leaves `ArrowUp` nothing else to do — except at
-          // a published zero, which it would restore silently, so there it
-          // steps as well. `ArrowDown` has nothing to do at all, and still owns
-          // its key: the `preventDefault()` above is what keeps a focused range
+          // published level and leaves `ArrowUp` nothing to step — except at a
+          // published zero, which it would restore silently, so there it steps
+          // as well. `ArrowDown` has nothing to do at all, and still owns its
+          // key: the `preventDefault()` above is what keeps a focused range
           // input from stepping itself in place of the no-op (ADR-0005).
           const requested = volumeRequest.getRequested();
           if (muted && requested === null) {
             if (action === 'volumeDown') return;
             void controller.unmute();
-            if (volume === 0) volumeRequest.request(0.05);
+            // The request records where the unmute is going, so the press after
+            // it has a base. At a nonzero published volume it asks for the
+            // level the player already holds: nothing moves, and the arrow
+            // still only unmutes. Without it a second press inside the same
+            // round trip would find `muted` still true and still no request,
+            // arrive here again, and step nothing — the press lost inside one
+            // round trip that #271 exists to prevent, on this path instead.
+            // With it that press reads 0.5, steps to 0.55 through the path
+            // below, and coalesces into the same chain as ever. A published
+            // zero is the one value the request does move, because unmuting
+            // alone would restore silence.
+            volumeRequest.request(volume === 0 ? 0.05 : volume);
             return;
           }
           const delta = action === 'volumeUp' ? 0.05 : -0.05;
@@ -310,8 +321,12 @@ export const Controls = ({
             Math.max(0, Math.round((base + delta) * 100) / 100)
           );
           // Reachable only while muted with a request outstanding — a drag up
-          // from the muted zero, or the step above — where the thumb already
-          // shows an audible volume and the unmute may not have been issued.
+          // from the muted zero, or the branch above — where the thumb shows
+          // the request instead of the zero and the unmute may not have been
+          // answered yet. The request can be zero itself, from a drag up off
+          // the muted zero and back down inside one drag, and `next > 0` is
+          // what keeps the arrow off `unmute()` while the control is still
+          // showing silence.
           if (muted && next > 0) void controller.unmute();
           // The same request `VolumeSlider` renders, so the presses coalesce
           // into one chain and the thumb shows every one of them.

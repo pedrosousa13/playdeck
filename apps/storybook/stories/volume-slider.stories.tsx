@@ -23,7 +23,7 @@ const meta = {
           '',
           '**Contract** — renders `data-playdeck-part="volume-slider"`, `data-provider="<provider>"`, and `data-state="muted" | "unmuted"`.',
           '',
-          '**Accessibility** — exposes a range semantics control. On its own, every arrow key adjusts the value by `step`. Inside a `Player.Controls` region the shortcut layer owns the arrows: `ArrowUp`/`ArrowDown` still adjust the volume, by 0.05 through `setVolume` rather than through `step`, and `ArrowLeft`/`ArrowRight` seek instead. `Home` and `End` stay native either way.',
+          '**Accessibility** — exposes a range semantics control. On its own, every arrow key adjusts the value by `step`. Inside a `Player.Controls` region the shortcut layer owns the arrows: `ArrowUp`/`ArrowDown` still adjust the volume, by 0.05 through `setVolume` rather than through `step`, and `ArrowLeft`/`ArrowRight` seek instead. While muted the volume arrows act on the muted zero this control is showing rather than on the published volume behind it: `ArrowUp` unmutes and restores that level unchanged (stepping to 0.05 only where the published volume is itself 0), and `ArrowDown` does nothing while still keeping the key. Both still step a change the player has not answered yet, because that is what the thumb is showing — muted and dragged to 0.3, `ArrowDown` moves to 0.25. `Home` and `End` stay native either way.',
           '',
           '**Capability** — gated by `setVolume`; renders nothing until `setVolume` resolves `available`.'
         ].join('\n')
