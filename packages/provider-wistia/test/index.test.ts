@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
 
 import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
-import type {
-  MediaDimensions,
-  ProviderAdapter,
-  ProviderEvent,
-  ProviderStateListener,
-  ProviderStatePatch,
-  WistiaSource
+import {
+  PlayerController,
+  type MediaDimensions,
+  type ProviderAdapter,
+  type ProviderEvent,
+  type ProviderStateListener,
+  type ProviderStatePatch,
+  type WistiaSource
 } from '@playdeck/core';
 import {
   API_READY_TIMEOUT_MS,
@@ -57,10 +58,14 @@ type Setup = {
 };
 
 const setup = async ({
+  controller,
   fake = {},
   options,
   prepareMount
 }: {
+  // Subscribed before the attach when given, so what a real host publishes —
+  // `PlayerState.error`, not the raw patches — is assertable (#332).
+  controller?: PlayerController;
   fake?: FakePlayerOptions;
   options?: WistiaProviderOptions;
   prepareMount?: (mount: WistiaMountElement) => void;
@@ -71,6 +76,7 @@ const setup = async ({
   const sdk = installFakeWistiaPlayer(fake);
   sdkState.load = sdk.load;
   const provider = createWistiaProvider(mount, source, options);
+  controller?.setProvider(provider);
   const patches: ProviderStatePatch[] = [];
   const events: ProviderEvent[] = [];
   provider.subscribe((patch, event) => {
@@ -483,8 +489,8 @@ test('does not publish a notice for a valid poster', async () => {
 
 // One bad presentation option must not fail playback: the drop is silent and
 // the rest of the attach runs, so the player still reaches ready. Both
-// rejections are reported (#235): the controller's first-wins behaviour is
-// Task 1's, so at the provider level each rejection emits its own notice.
+// rejections are emitted (#235) — the controller keeps only the first, which
+// is why the emission order below is asserted rather than the set (#332).
 test('reaches ready with the dropped presentation options unset, and publishes a notice for each rejection', async () => {
   const result = await setup({
     options: { playerColor: 'red', poster: 'javascript:alert(1)' }
@@ -497,9 +503,60 @@ test('reaches ready with the dropped presentation options unset, and publishes a
   const notices = configurationNotices(result.patches);
   expect(notices).toHaveLength(2);
   expect(notices[0]?.error?.message).toBe(
-    'The playerColor option was rejected: expected a CSS hex colour.'
+    'The poster option was rejected: expected a permitted source URL.'
   );
   expect(notices[1]?.error?.message).toBe(
+    'The playerColor option was rejected: expected a CSS hex colour.'
+  );
+});
+
+// A valid pair still lands: the reorder above moved a `setAttribute` call, and
+// this is what says both attributes survived it (#332).
+test('sets both presentation attributes when the colour and the poster are valid', async () => {
+  const result = await setup({
+    options: {
+      playerColor: '#ff0000',
+      poster: 'https://example.test/poster.png'
+    }
+  });
+  const player = element(result);
+  expect(player.getAttribute('player-color')).toBe('#ff0000');
+  expect(player.getAttribute('poster')).toBe('https://example.test/poster.png');
+  expect(configurationNotices(result.patches)).toHaveLength(0);
+});
+
+// What a host actually shows an operator. The controller holds ONE
+// `configuration` notice per attach, filled with `??=`, so the first rejection
+// this adapter emits is the only one that ever reaches `PlayerState.error`
+// (`packages/core/src/player-controller.ts`, `#configurationNotice`) — it is
+// dropped with the provider, so the second is not told later either. The three
+// tests below are what holds `buildElement`'s poster-before-playerColor order
+// in place: swap the two blocks back and the first of them fails (#332).
+const publishedNotice = async (
+  options: WistiaProviderOptions
+): Promise<string | undefined> => {
+  const controller = new PlayerController();
+  await setup({ controller, options });
+  return controller.getState().error?.message;
+};
+
+test('publishes the poster rejection, not the colour one, when an attach rejects both', async () => {
+  expect(
+    await publishedNotice({
+      playerColor: 'red',
+      poster: 'javascript:alert(1)'
+    })
+  ).toBe('The poster option was rejected: expected a permitted source URL.');
+});
+
+test('publishes the colour rejection when it is the only one', async () => {
+  expect(await publishedNotice({ playerColor: 'red' })).toBe(
+    'The playerColor option was rejected: expected a CSS hex colour.'
+  );
+});
+
+test('publishes the poster rejection when it is the only one', async () => {
+  expect(await publishedNotice({ poster: 'javascript:alert(1)' })).toBe(
     'The poster option was rejected: expected a permitted source URL.'
   );
 });
