@@ -296,8 +296,8 @@ describe('ErrorDisplay and a non-fatal configuration notice', () => {
 
   // The clause that is easy to drop. `useActivation` publishes a
   // `configuration` error with `activation: 'error'` for `loading="interaction"`
-  // with autoplay (`use-activation.ts:458-463`) and for viewport activation
-  // without a `Player.Viewport` (`:477-480`). Both mean the player will never
+  // with autoplay (`use-activation.ts:510-515`) and for viewport activation
+  // without a `Player.Viewport` (`:535-538`). Both mean the player will never
   // load, so both are failures however non-fatal the record is — and without
   // this the consumer would see a dead player and no error at all, which is the
   // defect #319 exists to remove rather than to relocate.
