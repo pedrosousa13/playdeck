@@ -106,9 +106,10 @@ const chromelessProbeConfigurationNotice: PlayerError = {
 
 // What a `suppressSeoMetadata` request that did not take publishes. The SDK
 // reads its guard once, while the module evaluates, so only the attach that
-// performs the import can decide it — and a page that set the guard itself,
-// `false` included, keeps its own value. Either way the embed still receives
-// this page's `window.location.href`, and the ordering bargain is documented
+// performs the import can decide it — and a page that pinned the guard to
+// `false` keeps that, which suppresses nothing. Either way the embed still
+// receives this page's `window.location.href`, and the ordering bargain is
+// documented
 // (`VimeoProviderOptions.suppressSeoMetadata`) but documentation is not a
 // signal a monitoring system can consume, which is the ground #235 stood on.
 // Non-fatal: the SDK behaves as it always has and the rest of the embed is
@@ -358,11 +359,17 @@ export const createVimeoAttachment = (
       });
       if (isStale(thisGeneration)) return { ok: true };
       // Detected by outcome, not by mechanism: suppression was asked for and
-      // the guard the SDK consults is still not set. That covers both ways a
-      // request goes nowhere — a cached module, and a guard the page already
-      // owns — with one test, and stays right if the loader changes. It also
-      // stays quiet when somebody else suppressed first: the request was
-      // honoured, just not by this call.
+      // the SDK's evaluation did not suppress. That covers both ways a request
+      // goes nowhere — a cached module, and a guard the page already owns,
+      // `false` included — with one test, and stays right if the loader
+      // changes. It also stays quiet when somebody else suppressed first: the
+      // request was honoured, just not by this call.
+      //
+      // `=== false`, not `!`: the loader answers `undefined` where no
+      // evaluation has decided, and an unknown must not be reported as a
+      // failure. Unreachable from here — this line is past a resolved load, so
+      // some import succeeded and recorded — but it is the difference between
+      // "not suppressed" and "no answer", and writing it out costs nothing.
       //
       // Emitted HERE, at the load site, and that placement is load-bearing.
       // The controller holds one `configuration` notice per attach, filled
@@ -372,7 +379,10 @@ export const createVimeoAttachment = (
       // that did not apply, so it has to win. Sitting on the far side of the
       // SDK load — which every path to the probe's emit must pass through —
       // orders the two by construction rather than by convention (#333).
-      if (options.suppressSeoMetadata === true && !isSeoMetadataSuppressed()) {
+      if (
+        options.suppressSeoMetadata === true &&
+        isSeoMetadataSuppressed() === false
+      ) {
         emit({ error: seoMetadataConfigurationNotice });
       }
       // No `sandbox` here, and that is a decision rather than an omission: the

@@ -53,6 +53,17 @@ const appendedMetadata = async (page: Page): Promise<unknown> =>
     (message) => message.method === 'appendVideoMetadata'
   )?.value;
 
+// The non-fatal `configuration` Notice the player is standing on, if any. The
+// real SDK is what decides these cases: it writes its own guard `true` while
+// installing the listener, so nothing read off `window` after the load can tell
+// a suppressed page from a sending one, and only a real evaluation proves the
+// adapter is not answering from that write (#333).
+const configurationNotice = async (page: Page): Promise<string | undefined> =>
+  page.evaluate(() => {
+    const error = window.playdeckHandle?.getState().error;
+    return error?.category === 'configuration' ? error.message : undefined;
+  });
+
 // The embed has answered the SDK's readiness handshake and the adapter has
 // published `ready` — the same point the SDK's own metadata listener fires
 // from, so a metadata message that is going to arrive has arrived by now.
@@ -92,6 +103,8 @@ test('suppressSeoMetadata stops the SDK sending the page url', async ({
   await settleAfterReady(page);
 
   expect(await appendedMetadata(page)).toBeUndefined();
+  // The request took, so there is nothing to report.
+  expect(await configurationNotice(page)).toBeUndefined();
 });
 
 test('suppressSeoMetadata leaves the rest of the Vimeo path alone', async ({
@@ -134,6 +147,11 @@ for (const suppress of [true, false] as const) {
       true
     );
     expect(await appendedMetadata(page)).toBeUndefined();
+    // Suppression is in effect, so a request for it was honoured — by the page
+    // rather than by Playdeck, which is not a distinction a consumer needs to
+    // hear about. Reporting here would be a false alarm on a page that is doing
+    // exactly what was asked (#333).
+    expect(await configurationNotice(page)).toBeUndefined();
   });
 
   test(`a page that already set the guard false keeps it, with the option ${label}`, async ({
@@ -150,5 +168,19 @@ for (const suppress of [true, false] as const) {
     // the url — the observable proof that nothing overwrote the page's value.
     const href = await page.evaluate(() => window.location.href);
     await expect.poll(() => appendedMetadata(page)).toBe(href);
+
+    // And with the option on, that is a privacy request that did not take,
+    // which has to be reported. This is the case the real SDK is needed for:
+    // by the time the adapter looks, the SDK has overwritten the page's `false`
+    // with `true` on its way to installing the listener above, so an adapter
+    // reading the guard rather than what it held at evaluation sees
+    // "suppressed" and says nothing (#333).
+    if (suppress) {
+      await expect
+        .poll(() => configurationNotice(page))
+        .toContain('did not take effect');
+    } else {
+      expect(await configurationNotice(page)).toBeUndefined();
+    }
   });
 }

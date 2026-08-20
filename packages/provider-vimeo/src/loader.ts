@@ -97,6 +97,14 @@ const importVimeoSdk = (): Promise<VimeoSdkModule> =>
 // (`@vimeo/player@2.30.4/dist/player.js:993-1016`, reached from `:2827`).
 // Undocumented vendor surface, version-bound to the pinned `2.30.4` — re-check
 // both the name and the module-scope call site on an SDK version bump.
+//
+// The half that is easy to miss: on the branch that installs the listener the
+// SDK also WRITES the guard `true` (`:999`), one line after the test it just
+// failed. So once the module has evaluated the guard is truthy either way —
+// `true` because Playdeck set it and no listener installed, or `true` because
+// the SDK set it while installing one. Reading it afterwards cannot tell those
+// apart, which is why `isSeoMetadataSuppressed` reports a recorded value below
+// rather than a live read (#333).
 const SEO_METADATA_GUARD = 'VimeoSeoMetadataAppended';
 
 // Suppression is one-way: this switches the guard on, and never off. A page
@@ -109,19 +117,30 @@ const suppressSeoMetadata = (): void => {
   globals[SEO_METADATA_GUARD] = true;
 };
 
+// What the guard held at the one moment that decides anything: just before the
+// import that evaluates the SDK module. Truthy there means
+// `initAppendVideoMetadata` returned early and no listener exists; falsy means
+// it installed one. `undefined` until a load has resolved — no evaluation has
+// happened, so there is no answer to give rather than a negative one.
+let seoMetadataSuppressed: boolean | undefined;
+
 /**
- * Whether the SDK's SEO-metadata handshake is suppressed on this page — by this
- * library, by consumer code, or by another copy of the SDK. Truthy rather than
- * `=== true` on purpose: truthy is exactly what `initAppendVideoMetadata` tests
- * before it returns early, so this answers the question the SDK actually asks.
+ * Whether the SDK's SEO-metadata handshake is suppressed on this page, whoever
+ * suppressed it — `undefined` where no successful load has decided it yet.
  *
  * Read after a load to tell an honoured `suppressSeoMetadata` from an
- * ineffective one. The outcome is the only reliable test: a request is dropped
- * both by arriving at an already-cached module and by finding the global already
- * set — including set to `false` — and the guard is what decides either way.
+ * ineffective one. It answers from what the guard held at module evaluation,
+ * not from what it holds now: the SDK writes the guard `true` on the branch
+ * that installs the listener, so every outcome reads truthy afterwards and a
+ * live read would report suppression that is not in effect (#333).
+ *
+ * Recording it in the importing call is also what makes the answer cover a
+ * caller that imported nothing. A request reaching the cached module changes no
+ * evaluation, so the recorded answer is still the page's — which is exactly
+ * what such a caller needs to hear.
  */
-export const isSeoMetadataSuppressed = (): boolean =>
-  Boolean((window as unknown as Record<string, unknown>)[SEO_METADATA_GUARD]);
+export const isSeoMetadataSuppressed = (): boolean | undefined =>
+  seoMetadataSuppressed;
 
 export type VimeoSdkLoadOptions = {
   /**
@@ -153,10 +172,23 @@ export const loadVimeoSdk = (
   // Before the import, deliberately: the guard is read while the module
   // evaluates, and `importSdk` is what evaluates it.
   if (options.suppressSeoMetadata === true) suppressSeoMetadata();
+  // Read here, between the write above and the evaluation below, because this
+  // is the last instant the value means anything — the SDK overwrites it while
+  // evaluating. Truthy now is the whole of "no listener installed", whether
+  // this call put it there, consumer code did, or an earlier copy of the SDK.
+  const suppressedAtEvaluation = Boolean(
+    (window as unknown as Record<string, unknown>)[SEO_METADATA_GUARD]
+  );
   const pending: Promise<VimeoSdkConstructor> = Promise.resolve()
     .then(importSdk)
     .then(
-      (module) => module.default,
+      (module) => {
+        // Committed on success only. An import that rejected evaluated nothing
+        // this can describe, and leaving the record alone keeps any answer an
+        // earlier successful load established.
+        seoMetadataSuppressed = suppressedAtEvaluation;
+        return module.default;
+      },
       (cause: unknown) => {
         if (cachedSdk === pending) cachedSdk = undefined;
         throw cause;
@@ -168,4 +200,5 @@ export const loadVimeoSdk = (
 
 export const resetVimeoSdkLoader = (): void => {
   cachedSdk = undefined;
+  seoMetadataSuppressed = undefined;
 };

@@ -50,7 +50,16 @@ import {
 } from './fixtures/fake-sdk';
 
 const sdkState = vi.hoisted(() => ({
-  load: undefined as (() => Promise<unknown>) | undefined
+  load: undefined as (() => Promise<unknown>) | undefined,
+  // What the loader reports about the page's SEO-metadata handshake once the
+  // load has resolved: suppressed, not suppressed, or not yet decided. Faked
+  // alongside `loadVimeoSdk` because it is the same seam — with the real load
+  // replaced, nothing evaluates the SDK, and it is the SDK's evaluation the
+  // real predicate records. Which page states produce which answer is
+  // `loader.test.ts`'s subject, against an importer that writes the guard the
+  // way the vendor does; what the attachment does with the answer is this
+  // file's (#333).
+  seoMetadataSuppressed: undefined as boolean | undefined
 }));
 
 vi.mock('../src/loader', async (importOriginal) => ({
@@ -58,7 +67,8 @@ vi.mock('../src/loader', async (importOriginal) => ({
   loadVimeoSdk: () =>
     sdkState.load
       ? sdkState.load()
-      : Promise.reject(new Error('No fake Vimeo SDK is installed.'))
+      : Promise.reject(new Error('No fake Vimeo SDK is installed.')),
+  isSeoMetadataSuppressed: () => sdkState.seoMetadataSuppressed
 }));
 
 const oembedResponse = (accountType: string): Response =>
@@ -71,19 +81,10 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
 });
 
-// The SDK's own SEO-metadata guard, written the way an earlier load or the
-// page's own code would have left it. `undefined` removes it, which is a page
-// that never touched it — distinct from `false`, which is a page that did.
-const setSeoGuard = (value: unknown): void => {
-  const globals = window as unknown as Record<string, unknown>;
-  if (value === undefined) delete globals.VimeoSeoMetadataAppended;
-  else globals.VimeoSeoMetadataAppended = value;
-};
-
 afterEach(() => {
   vi.unstubAllGlobals();
   sdkState.load = undefined;
-  setSeoGuard(undefined);
+  sdkState.seoMetadataSuppressed = undefined;
 });
 
 const publicSource: VimeoSource = { type: 'vimeo', videoId: '76979871' };
@@ -805,13 +806,14 @@ test.each([
 // `suppressSeoMetadata` is a privacy control, and the SDK reads its guard once
 // per page, while the module evaluates. A second player asking for suppression
 // after a first one loaded without it gets nothing, and that ordering cannot be
-// repaired — so what is reported is the outcome, never the mechanism. The guard
-// is set directly below because it is exactly what these tests are about: the
-// page's state after the load, whichever load or whichever code left it there.
+// repaired — so what is reported is the outcome, never the mechanism. These
+// tests set that outcome directly: what the attachment owes a consumer is
+// decided by the loader's answer and by nothing else it can see.
 
 test('reports a suppression request that did not take as a configuration notice', async () => {
-  // No guard at all: an earlier Vimeo load imported the SDK without asking for
-  // suppression, so this request arrived at a module already evaluated.
+  // What the loader reports for an earlier load that imported the SDK without
+  // asking for suppression, or for a page that pinned the guard to `false`.
+  sdkState.seoMetadataSuppressed = false;
   const { patches } = await setup({ options: { suppressSeoMetadata: true } });
   // The whole patch, not a subset: a notice carries an error and nothing else,
   // so it never moves the lifecycle, the activation, or command readiness.
@@ -831,28 +833,31 @@ test('reports a suppression request that did not take as a configuration notice'
   });
 });
 
-test('reports a suppression request the page pinned the guard to false against', async () => {
-  setSeoGuard(false);
+// The request was honoured, just not necessarily by this call — which is the
+// whole point of asking for the outcome rather than for which call imported.
+test('reports no notice when suppression is already in effect', async () => {
+  sdkState.seoMetadataSuppressed = true;
   const { patches } = await setup({ options: { suppressSeoMetadata: true } });
-  expect(configurationNotices(patches)).toHaveLength(1);
+  expect(configurationNotices(patches)).toEqual([]);
 });
 
-// The request was honoured, just not by this call — which is the whole point of
-// testing the outcome rather than which call performed the import.
-test('reports no notice when suppression is already in effect', async () => {
-  setSeoGuard(true);
+// No evaluation has decided, so there is nothing to report. Not reachable
+// behind a resolved load — this is the `=== false` in the guard holding an
+// unknown apart from a negative rather than reporting both as a failure.
+test('reports no notice when no load has decided the outcome', async () => {
+  sdkState.seoMetadataSuppressed = undefined;
   const { patches } = await setup({ options: { suppressSeoMetadata: true } });
   expect(configurationNotices(patches)).toEqual([]);
 });
 
 test.each([
-  ['unset', undefined],
-  ['false', false],
-  ['true', true]
+  ['not decided', undefined],
+  ['not suppressed', false],
+  ['suppressed', true]
 ])(
-  'reports no notice when suppression was never requested and the guard is %s',
-  async (_form, guard) => {
-    setSeoGuard(guard);
+  'reports no notice when suppression was never requested and the page is %s',
+  async (_form, suppressed) => {
+    sdkState.seoMetadataSuppressed = suppressed;
     const { patches } = await setup({
       options: { suppressSeoMetadata: false }
     });
@@ -861,6 +866,7 @@ test.each([
 );
 
 test('reports no notice when the option is omitted entirely', async () => {
+  sdkState.seoMetadataSuppressed = false;
   const { patches } = await setup();
   expect(configurationNotices(patches)).toEqual([]);
 });
@@ -901,6 +907,7 @@ const publishedNotice = async (
 };
 
 test('publishes the suppression notice, not the chromeless one, when an attach hits both', async () => {
+  sdkState.seoMetadataSuppressed = false;
   fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
   expect(
     await publishedNotice({ suppressSeoMetadata: true, customControls: true })
