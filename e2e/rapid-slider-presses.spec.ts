@@ -85,6 +85,17 @@ import {
 // good, if the trace bought a fix), and the recorder goes with it: it is a
 // probe, and a probe left in a suite is instrumentation nobody reads.
 //
+// That run reproduced it — 4 samples of 15 — and moved the question a long way
+// down. In every failing sample all three presses fired a complete
+// `keydown`/`input`/`change` against an input that was healthy throughout
+// (`max="1"`, `data-state="ready"`, connected, focused), and the third `change`
+// carried `value:"1"` with React's tracker agreeing, so `seek(1)` was issued.
+// The header's old claim — that the third `End` issues no seek request at all —
+// is therefore wrong, along with the tracker dedupe, a null seek window, focus
+// loss and node replacement. The request is made and then lost below the input,
+// which is why the probe now also watches the media element itself: see
+// `recordMediaTrace`.
+//
 // This no longer has to wait for CI. It used to: every test in this file failed
 // on the arrangement locally, and the reason recorded here was that a locally
 // installed Playwright Linux WebKit has no H.264. That reason was wrong, and it
@@ -120,9 +131,10 @@ type PressRecord = {
   readonly answered: number;
 };
 
-// One line of #277's trace. Two shapes, because an attribute mutation is not a
-// press: it has no "what the input was showing" to report, and pretending
-// otherwise would put a value in the log that nothing measured.
+// One line of #277's trace. Several shapes, because an attribute mutation is
+// not a press and neither is anything the media element does: each has its own
+// set of things that were actually measured, and folding them into one shape
+// would put values in the log that nothing read.
 type SeekTraceEntry =
   | {
       readonly at: number;
@@ -157,6 +169,53 @@ type SeekTraceEntry =
       readonly attribute: string;
       readonly from: string | null;
       readonly to: string | null;
+    }
+  | {
+      readonly at: number;
+      // What the library asked the media element to do, caught on the element
+      // itself. This is the reading that cuts #277 in half: a third `End` with
+      // no `setCurrentTime` behind it is a command lost somewhere between
+      // `SeekSlider` and the element, and one WITH a `setCurrentTime` of 1
+      // behind it is an element that was asked and refused. Same failed
+      // assertion, two unrelated defects, and nothing above this line can tell
+      // them apart.
+      readonly phase: 'setCurrentTime';
+      readonly to: number;
+      // Where the element stood as the assignment was made, read through the
+      // prototype getter. `to === from` is its own answer: an element already
+      // holding the value it is handed announces nothing, so a `seeked` that
+      // never arrives needs this to be read as "nothing to do" rather than
+      // "refused".
+      readonly from: number;
+      // The two states under which an assignment is kept but not honoured yet.
+      readonly readyState: number;
+      readonly seeking: boolean;
+    }
+  | {
+      readonly at: number;
+      readonly phase: 'seeking' | 'seeked';
+      readonly currentTime: number;
+      readonly readyState: number;
+      readonly seeking: boolean;
+    }
+  | {
+      readonly at: number;
+      readonly phase:
+        'ended' | 'waiting' | 'stalled' | 'durationchange' | 'emptied';
+      readonly currentTime: number;
+      // JSON has no NaN, so a `duration` logged as `null` is an element with no
+      // duration yet rather than a field the probe failed to fill in.
+      readonly duration: number;
+      readonly readyState: number;
+    }
+  | {
+      readonly at: number;
+      // The probe reporting on itself: this engine had no
+      // `HTMLMediaElement.prototype.currentTime` accessor to delegate to, so
+      // the absence of `setCurrentTime` lines below this one means "never
+      // watched" and not "never assigned". A reading rather than a throw — a
+      // probe that crashes takes the gesture it was measuring with it.
+      readonly phase: 'currentTimeNotHooked';
     };
 
 // React's tracked value hangs off the DOM node under a private name, so this is
@@ -164,6 +223,17 @@ type SeekTraceEntry =
 // step is optional: a React that stopped installing it must read as `null`.
 type TrackedInput = HTMLInputElement & {
   readonly _valueTracker?: { readonly getValue?: () => string };
+};
+
+// The prototype accessor the `currentTime` hook delegates to, narrowed here for
+// the same reason as `TrackedInput`: `Object.getOwnPropertyDescriptor` hands
+// back a `PropertyDescriptor` whose `get`/`set` are optional and untyped, and
+// the lint config refuses the cast that would paper over that. Both halves stay
+// optional — an engine that publishes `currentTime` some other way has to read
+// as a missing reading, not as a crash.
+type CurrentTimeAccessor = {
+  readonly get?: (this: HTMLMediaElement) => number;
+  readonly set?: (this: HTMLMediaElement, value: number) => void;
 };
 
 declare global {
@@ -310,6 +380,115 @@ const recordPresses = (
     [`[data-playdeck-part="${part}"]`, echo.event, echo.of] as const
   );
 
+// #277 only, and installed before anything else the probe installs: watch the
+// media element itself, so the next WebKit run says whether the third press's
+// seek request ever reached it.
+//
+// This is where the trace stopped last time. Every failing sample fired a
+// complete `keydown`/`input`/`change` against a healthy input — `max="1"`,
+// `data-state="ready"`, focus on the seek input, the node still connected, and
+// a third `change` carrying `value:"1"` with a tracker to match — so
+// `SeekSlider`'s `onChange` ran with `next = 1` and a live seek window, and
+// `seek(1)` was called. Everything BELOW the input is still a suspect:
+// `useSeekPreview`, the command chain, the controller, the native provider, the
+// element. `currentTime` is the one place all of them have to arrive, so an
+// own-property accessor on the element instance is the whole of the remaining
+// question — asked and refused, or never asked — and it is readable from the
+// page, which nothing further down the stack is without editing the library.
+//
+// Delegation is the entire contract. The getter returns what the prototype
+// getter returns; the setter records and then calls the prototype setter, in
+// that order, with the value it was handed. A probe that coerced, swallowed or
+// deferred an assignment would be measuring itself. `configurable: true` and
+// `enumerable: true` because the prototype's WebIDL accessor is both, and a
+// non-enumerable own property would hide the prototype's from `for...in` —
+// changing what the page sees, which is the one thing a probe may not do.
+//
+// The events behind it are what the element says back. `seeking`/`seeked` are
+// the shape an accepted seek has; `waiting`, `stalled`, `emptied`,
+// `durationchange` and `ended` are the states under which the provider or the
+// controller could drop a command on the floor, and they cost one listener
+// each.
+//
+// Called before the parking assignment in the test body, so the `el.currentTime
+// = 0` there lands in the trace as the first `setCurrentTime` entry. That entry
+// is the hook's self-test: without it, a run with no `setCurrentTime` at all
+// proves nothing, because a hook that never installed looks exactly like a
+// command that never arrived.
+const recordMediaTrace = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const element = document.querySelector('video');
+    if (element === null) {
+      throw new Error('Nothing to trace: the media element is not rendered');
+    }
+    // Shared with `recordSeekTrace` rather than owned, so the assignments
+    // interleave with the presses in one ordered timeline. An assignment that
+    // cannot be placed against the press that caused it is not evidence.
+    const trace: SeekTraceEntry[] = (window.playdeckSeekTrace ??= []);
+
+    const accessor: CurrentTimeAccessor | undefined =
+      Object.getOwnPropertyDescriptor(
+        HTMLMediaElement.prototype,
+        'currentTime'
+      );
+    const read = accessor?.get;
+    const write = accessor?.set;
+    if (read === undefined || write === undefined) {
+      trace.push({ at: performance.now(), phase: 'currentTimeNotHooked' });
+    } else {
+      Object.defineProperty(element, 'currentTime', {
+        configurable: true,
+        enumerable: true,
+        get(this: HTMLMediaElement): number {
+          return read.call(this);
+        },
+        set(this: HTMLMediaElement, value: number): void {
+          trace.push({
+            at: performance.now(),
+            phase: 'setCurrentTime',
+            to: value,
+            // Through the prototype getter, not `this.currentTime`: that would
+            // come back through the hook being installed here.
+            from: read.call(this),
+            readyState: this.readyState,
+            seeking: this.seeking
+          });
+          write.call(this, value);
+        }
+      });
+    }
+
+    for (const phase of ['seeking', 'seeked'] as const) {
+      element.addEventListener(phase, () => {
+        trace.push({
+          at: performance.now(),
+          phase,
+          currentTime: element.currentTime,
+          readyState: element.readyState,
+          seeking: element.seeking
+        });
+      });
+    }
+
+    for (const phase of [
+      'ended',
+      'waiting',
+      'stalled',
+      'durationchange',
+      'emptied'
+    ] as const) {
+      element.addEventListener(phase, () => {
+        trace.push({
+          at: performance.now(),
+          phase,
+          currentTime: element.currentTime,
+          duration: element.duration,
+          readyState: element.readyState
+        });
+      });
+    }
+  });
+
 // #277 only, and deliberately temporary: record everything the seek control
 // does across one gesture, so a WebKit run says why its third press issues no
 // seek instead of leaving the value it ended on to be argued over.
@@ -353,6 +532,9 @@ const recordPresses = (
 //     off a detached element and describes a control the user is no longer
 //     touching. That has to be visible in the log rather than deduced from a
 //     trace that suddenly stops making sense.
+//
+// The `setCurrentTime` and media-event entries interleaved with these come from
+// `recordMediaTrace`, which runs first and owns the array both write into.
 const recordSeekTrace = (page: Page): Promise<void> =>
   page.evaluate(() => {
     const input = document.querySelector<HTMLInputElement>(
@@ -364,8 +546,9 @@ const recordSeekTrace = (page: Page): Promise<void> =>
     if (input === null || wrapper === null) {
       throw new Error('Nothing to trace: the seek control is not rendered');
     }
-    const trace: SeekTraceEntry[] = [];
-    window.playdeckSeekTrace = trace;
+    // Appended to, never replaced: `recordMediaTrace` has already put the
+    // parking assignment in here, and one array is one timeline.
+    const trace: SeekTraceEntry[] = (window.playdeckSeekTrace ??= []);
 
     const tracked = (): string | null =>
       (input as TrackedInput)._valueTracker?.getValue?.() ?? null;
@@ -651,6 +834,12 @@ for (let sample = 0; sample < SEEK_SAMPLES; sample += 1) {
       await page.goto(story);
       await activationButton(page).click();
       await played(page);
+
+      // Before the parking assignment below, and so before every listener
+      // `recordSeekTrace` installs: an assignment made in the gap would be
+      // invisible, and the parking `el.currentTime = 0` is what proves the hook
+      // is live at all. A trace whose silence is evidence has to earn it (#277).
+      await recordMediaTrace(page);
 
       // Park the media at the start and hold it there. Not a wait for the player
       // to go quiet — the gesture below is made under congestion with nothing
