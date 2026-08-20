@@ -59,6 +59,22 @@ consumer text at all. It is a prop name, not a component instance: several
 instances can refuse the same surface at once.
 _Avoid_: field, key, call site
 
+**Refused source**:
+The `source` prop turned down before any provider is constructed — by the shared
+allowlist, or by source detection failing to read a video out of it. Published
+as an `unsupported` error whose message names which of the three detection
+failures occurred **and quotes the offending value**, truncated, escaped by the
+text child that renders it. Never recoverable: the same prop re-read is refused
+by the same rules, so no control offers a retry.
+
+Quoting the value is what separates this from a **Refused surface**, and the
+reason is structural rather than a difference of opinion about disclosure. A
+source is one prop holding one value, so naming the value _is_ naming what to
+fix. A surface can be refused by several component instances at once, so no one
+value describes the refusal and the prop name is the only honest thing to
+report. Neither is a Notice: a refused source is a failure with no fall-back.
+_Avoid_: bad source, invalid URL, unsupported source
+
 **Shortcut layer**:
 The media keys `Player.Controls` owns. One binding maps keys to one action —
 `seekForward`, `toggleMuted` — and a consumer rebinds or suppresses a binding
@@ -181,8 +197,9 @@ A non-fatal `configuration` error published to report a consumer-supplied value
 that was rejected, or one accepted and then impossible to apply, while the
 fall-back behaviour it degraded to stands unchanged. A provider reports one
 through a state patch; a consumer-supplied URL prop the shared allowlist refuses
-is reported by `reportRefusedUrl`, which names the refused surface and never the
-value, and which returns a disposer the reporter holds for as long as it keeps
+— every one except `source`, which is a **Refused source** and reports its own
+value — is reported by `reportRefusedUrl`, which names the refused surface and
+never the value, and which returns a disposer the reporter holds for as long as it keeps
 refusing that surface — so the notice stands while any reporter's registration
 stands, and is withdrawn only by the reporter that made it. Held as controller
 state and surfaced on `PlayerState.error` like any other error, but never a

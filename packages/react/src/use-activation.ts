@@ -3,6 +3,7 @@ import type {
   PlayerController,
   ProviderAdapter,
   ResolvedPlayerSource,
+  SourceDetectionFailure,
   SourceDetectionResult
 } from '@playdeck/core';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
@@ -233,6 +234,85 @@ const unsupportedError = (message: string) => ({
   message
 });
 
+// How much of the rejected source the message quotes, in code points. A YouTube
+// watch url is 43 of them and a `player.vimeo.com` url with a privacy hash 55, so
+// every form `docs/provider-setup.md` lists survives whole. Past that the quote
+// is into a query string, while what identifies the mistake -- the scheme, the
+// host, the path shape -- is all at the front. It is a bound and not a
+// summary: `ErrorDisplay` renders the message as one paragraph over the player
+// (`loading-error.tsx:345`), and an unbounded source url would push the retry
+// button below a small viewport.
+const MAX_SOURCE_ECHO = 120;
+
+// The rejected value as a message can carry it. Echoed verbatim rather than
+// filtered: `ErrorDisplay` renders the message as a React text child
+// (`loading-error.tsx:318`, `:345`), which escapes it, so the value a consumer
+// reads back is the value they passed (#305).
+const echoSource = (input: unknown): string => {
+  let rendered: string;
+  if (typeof input === 'string') {
+    // Even the empty string, which is a refusal a consumer can hit with
+    // `source=""` and wants to see quoted as such.
+    rendered = input;
+  } else {
+    try {
+      // `undefined`, a function and a symbol all render as `undefined` here, so
+      // there is a fall-back for them as well as for a value that throws.
+      rendered = JSON.stringify(input) ?? `of type ${typeof input}`;
+    } catch {
+      // A `source` that cannot be rendered at all -- circular, or a hostile
+      // `toJSON` -- still has to produce a message rather than throw out of the
+      // effect publishing it.
+      rendered = `of type ${typeof input}`;
+    }
+  }
+  // By code point, not by code unit: slicing a string at a UTF-16 boundary can
+  // cut a surrogate pair in half, and the lone surrogate left behind renders as
+  // U+FFFD. A source url can carry an astral character in a path or a query.
+  const points = Array.from(rendered);
+  return points.length > MAX_SOURCE_ECHO
+    ? `${points.slice(0, MAX_SOURCE_ECHO).join('')}…`
+    : rendered;
+};
+
+// Deliberately not `SourceDetectionFailure.guidance`, which every failure also
+// carries. Core's string is one sentence for all three reasons -- "Pass an
+// explicit source object with a supported type and the required fields" -- and
+// it is addressed to a caller of `detectSource`, for whom building the object
+// by hand is the answer. It is the wrong advice for a `Player.Root` consumer
+// who mistyped a YouTube url: the fix there is the url, not a hand-built
+// object. So the two are for different audiences and both are correct for
+// theirs; this one is the React layer's, and core's stays what a direct caller
+// reads off the result.
+const SOURCE_GUIDANCE =
+  "See Playdeck's docs/provider-setup.md for the source forms each provider accepts.";
+
+// One sentence per `detectSource` failure reason, because the three do not mean
+// the same thing and one sentence for all three is the dead end #305 reports.
+// Each quotes what was rejected, so the message says which value to go and fix
+// rather than only that one exists.
+//
+// Each sentence is held to what its reason actually proves. `malformed-string`
+// is a string no video could be read out of -- ill-formed, or a recognised
+// provider host in a path shape the detector does not read -- and says so.
+// `unsupported-string` is the one that cannot name a cause: it covers a scheme
+// the shared allowlist refuses, a space or C0 control the URL parser would
+// strip from either end, and a well-formed url that simply matched nothing.
+// "Its scheme or its host is not one Playdeck plays" was wrong for two of those
+// three -- `clip.avi` has neither a scheme nor a host, and an invisible control
+// character on an otherwise playable `.mp4` url is nothing to do with the host
+// -- so it states the requirement instead of guessing which half of it failed.
+const refusedSourceMessage = (source: SourceDetectionFailure): string => {
+  const echoed = echoSource(source.input);
+  if (source.reason === 'malformed-string') {
+    return `Playdeck could not read a video from the player source "${echoed}" — it is either not a well-formed URL, or a provider URL in a form Playdeck does not read. ${SOURCE_GUIDANCE}`;
+  }
+  if (source.reason === 'unsupported-string') {
+    return `Playdeck will not play the player source "${echoed}". An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ${SOURCE_GUIDANCE}`;
+  }
+  return `The player source ${echoed} is not a source object Playdeck accepts. ${SOURCE_GUIDANCE}`;
+};
+
 // What every strategy publishes when `detectSource` turns the URL down. Not
 // `recoverable`: retrying re-reads the same `source` prop and the allowlist
 // refuses it again, so there is no press that could change the outcome. Both
@@ -244,19 +324,40 @@ const unsupportedError = (message: string) => ({
 // Narrower than `unsupportedError` on purpose. That factory also carries the
 // missing-`IntersectionObserver` refusal below, which is about the environment
 // the player mounted into rather than about the URL, and is left retryable.
-const refusedSourceError = () => ({
+const refusedSourceError = (message: string) => ({
   category: 'unsupported' as const,
   fatal: false,
   recoverable: false,
-  message: 'The player source is not supported.'
+  message
 });
 
-const providerError = (cause: unknown) => ({
+const PROVIDER_LABELS: Record<ResolvedPlayerSource['type'], string> = {
+  hls: 'HLS',
+  video: 'native',
+  vimeo: 'Vimeo',
+  wistia: 'Wistia',
+  youtube: 'YouTube'
+};
+
+// Names the provider, which is knowable from the resolved source, and stops
+// there, which the reason is not: `loadProvider` rejects for a chunk the
+// network never delivered, a CSP that refused it, a missing media mount and an
+// adapter factory that threw, and nothing here can tell those apart. Saying so
+// beats inventing a reason.
+//
+// It names a fix rather than only a field. `cause` still carries the rejection,
+// but `ErrorDisplay` renders `error.message` and nothing else
+// (`loading-error.tsx:341`, `:345`), so a message whose only next step is
+// `error.cause` dead-ends for the person actually looking at the player. The
+// document is the step both audiences can take, and its provider-load section
+// is what forwards to the CSP origins list -- one place to keep true, rather
+// than a second link maintained here.
+const providerError = (cause: unknown, type: ResolvedPlayerSource['type']) => ({
   category: 'provider' as const,
   cause,
   fatal: false,
   recoverable: true,
-  message: 'Unable to load the player provider.'
+  message: `Unable to load the ${PROVIDER_LABELS[type]} provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See Playdeck's docs/provider-setup.md for what to check.`
 });
 
 const destroyStale = (adapter: ProviderAdapter): void => {
@@ -281,6 +382,19 @@ export const useActivation = (
   options: UseActivationOptions
 ): ActivationBindings => {
   const currentKey = sourceKey(options.source);
+  // The refusal to publish, or `undefined` for a source that resolved. Derived
+  // per render rather than held, because it is a string: the three strategy
+  // effects below depend on it by value, so they re-run when one refused source
+  // replaces another. Nothing else here reports that -- `sourceKey` collapses
+  // every refusal to the one `'unsupported-source'` constant and `status` is
+  // `'failure'` for both -- so a message naming the previous value would stand
+  // after the consumer had already changed it. Depending on the
+  // `SourceDetectionResult` itself would need every caller to memoise it, which
+  // `Root` does (`root.tsx:199`) and a direct caller of this hook need not.
+  const refusedMessage =
+    options.source.status === 'success'
+      ? undefined
+      : refusedSourceMessage(options.source);
   const currentConfiguration = activationConfiguration(options);
   const currentActivationIdentity = activationIdentityKey(
     currentKey,
@@ -470,10 +584,10 @@ export const useActivation = (
 
   useEffect(() => {
     if (options.loading !== 'eager') return;
-    if (options.source.status !== 'success') {
+    if (refusedMessage !== undefined) {
       options.controller.setActivation({
         activation: 'error',
-        error: refusedSourceError()
+        error: refusedSourceError(refusedMessage)
       });
       return;
     }
@@ -483,7 +597,7 @@ export const useActivation = (
     currentKey,
     options.controller,
     options.loading,
-    options.source.status
+    refusedMessage
   ]);
 
   useEffect(() => {
@@ -500,10 +614,10 @@ export const useActivation = (
     // lost: this effect re-runs on both `currentKey` and
     // `options.autoplay`, so a consumer who fixes the source is told about the
     // autoplay conflict next (#331).
-    if (options.source.status !== 'success') {
+    if (refusedMessage !== undefined) {
       options.controller.setActivation({
         activation: 'error',
-        error: refusedSourceError()
+        error: refusedSourceError(refusedMessage)
       });
       return;
     }
@@ -519,15 +633,15 @@ export const useActivation = (
     options.autoplay,
     options.controller,
     options.loading,
-    options.source.status
+    refusedMessage
   ]);
 
   useEffect(() => {
     if (options.loading !== 'viewport' || session.current.started) return;
-    if (options.source.status !== 'success') {
+    if (refusedMessage !== undefined) {
       options.controller.setActivation({
         activation: 'error',
-        error: refusedSourceError()
+        error: refusedSourceError(refusedMessage)
       });
       return;
     }
@@ -647,7 +761,7 @@ export const useActivation = (
     options.loadMargin,
     options.loadThreshold,
     options.loading,
-    options.source.status,
+    refusedMessage,
     viewportVersion
   ]);
 
@@ -779,7 +893,7 @@ export const useActivation = (
         if (!isCurrentLoad()) return;
         controller.setActivation({
           activation: 'error',
-          error: providerError(cause)
+          error: providerError(cause, source.source.type)
         });
       });
   }, [currentKey, mediaVersion, sourceCommitted]);

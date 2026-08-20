@@ -33,6 +33,13 @@ export const Clip = () => (
 
 <!-- /example -->
 
+A YouTube or Vimeo source is the same prop and nothing else — no extra package,
+no registration: `source="https://www.youtube.com/watch?v=dQw4w9WgXcQ"`,
+`source="https://vimeo.com/76979871"`, or `source="https://vimeo.com/76979871?h=<hash>"`
+for an unlisted video. Those are three of the forms the detector accepts;
+[Provider setup](docs/provider-setup.md) lists every one per provider, names the
+forms it refuses, and covers each provider's `providerOptions`.
+
 ## Packages
 
 | Package                                                   | What it is                                                    |
@@ -77,6 +84,8 @@ pnpm --filter @playdeck/storybook dev
 contract), **Overview/Capabilities matrix** (what each provider reports),
 **Overview/Captions** and **Overview/Theme**.
 
+[Provider setup](docs/provider-setup.md) lists the source values each provider
+accepts and the ones it refuses, plus each provider's own options.
 [Third-party requests and CSP](docs/third-party-requests.md) names every
 origin a provider reaches and when each request happens.
 

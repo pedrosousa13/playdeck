@@ -49,7 +49,9 @@ export const Clip = () => (
 <!-- /example -->
 
 `source` takes the same input as `detectSource` — a URL string, or an explicit
-`{ type: 'hls' | 'video' | 'youtube' | 'vimeo' | 'wistia', ... }` object.
+`{ type: 'hls' | 'video' | 'youtube' | 'vimeo' | 'wistia', ... }` object. See
+[Provider setup](../../docs/provider-setup.md) for which URL forms each provider
+accepts, which it refuses, and what each provider's `providerOptions` are.
 
 Optional stylesheet with the default look:
 

@@ -7,7 +7,9 @@ progressive MP4/WebM, and HLS in browsers that play it natively (Safari, iOS).
 pnpm add @playdeck/provider-native
 ```
 
-`@playdeck/react` loads this for you when the source resolves to `video`. Install
+`@playdeck/react` loads this for you when the source resolves to `video` — an
+`.mp4` or `.webm` path, or an explicit `{ type: 'video' }` source; see
+[Provider setup](../../docs/provider-setup.md#the-other-three-providers). Install
 it directly only if you are driving a `PlayerController` yourself.
 
 <!-- example:provider-native -->

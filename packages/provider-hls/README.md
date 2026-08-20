@@ -9,9 +9,11 @@ reimplementing it.
 pnpm add @playdeck/provider-hls
 ```
 
-`@playdeck/react` loads this for you when the source resolves to `hls`. hls.js is a
-dependency but is imported dynamically, so it only reaches the network when the
-hls.js engine is actually selected.
+`@playdeck/react` loads this for you when the source resolves to `hls` — an
+`.m3u8` path, or an explicit `{ type: 'hls' }` source; see
+[Provider setup](../../docs/provider-setup.md#the-other-three-providers). hls.js
+is a dependency but is imported dynamically, so it only reaches the network when
+the hls.js engine is actually selected.
 
 <!-- example:provider-hls -->
 
