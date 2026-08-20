@@ -90,8 +90,12 @@ jobs:
       # with no deps installed? A pass here is what would make dropping
       # `--with-deps` safe for a job that only launches a browser.
       - name: Launch each engine for real
+        continue-on-error: true
         run: |
-          cat > /tmp/launch-probe.mjs <<'PROBE'
+          # Inside the workspace, not /tmp: pnpm resolves `@playwright/test`
+          # from the workspace's node_modules, so a script outside it cannot
+          # import the package at all.
+          cat > ./launch-probe.mjs <<'PROBE'
           import { chromium, firefox, webkit } from '@playwright/test';
 
           const engines = { chromium, firefox, webkit };
@@ -113,16 +117,32 @@ jobs:
 
           console.log(`launch failures: ${failures}`);
           PROBE
-          node /tmp/launch-probe.mjs
+          node ./launch-probe.mjs
 
       # The e2e suites are what actually has to keep passing, so run the two
       # that matter on chromium with no deps installed. `visual` is included
       # deliberately: its baselines are the font-sensitive artefact, so a pass
       # or a pixel failure here is the font answer.
-      - name: Run chromium e2e and visual with no deps
+      # `visual` is reported separately from `chromium`, because they answer
+      # different questions. chromium answers "does the engine work without its
+      # OS packages". visual answers the font question: its committed baselines
+      # were generated on a runner that had the `tools` font group, and
+      # `e2e/visual.spec.ts` is text-rendering sensitive, so a pixel failure
+      # here is the evidence that `visual` cannot drop `--with-deps`.
+      - name: Build
+        continue-on-error: true
+        run: pnpm build
+
+      - name: e2e chromium with no deps
         continue-on-error: true
         run: |
           set +e
-          pnpm build
-          npx playwright test --project=chromium 2>&1 | tail -40
-          echo "E2E_CHROMIUM_EXIT=$?"
+          pnpm test:e2e --project=chromium 2>&1 | tail -30
+          echo "E2E_CHROMIUM_EXIT=${PIPESTATUS[0]}"
+
+      - name: visual with no deps (the font question)
+        continue-on-error: true
+        run: |
+          set +e
+          pnpm test:e2e --project=visual 2>&1 | tail -30
+          echo "VISUAL_EXIT=${PIPESTATUS[0]}"
