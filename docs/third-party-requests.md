@@ -463,7 +463,7 @@ is what emits the requests: `loading` chooses the gate, and `loadMargin` and
   near `1`, and rather than never attaching, such a box attaches at the first
   visible pixel instead (`packages/react/src/use-activation.ts:183-220`).
   Neither prop applies under `interaction` or `eager`: the observer is only
-  ever built for `viewport` (`packages/react/src/use-activation.ts:466-467`).
+  ever built for `viewport` (`packages/react/src/use-activation.ts:524-525`).
 - **`interaction`**: nothing attaches until the viewer activates the
   play/retry affordance `Player.ActivationButton` renders
   (`packages/react/src/loading-error.tsx:56`, `activateFromInteraction()`).

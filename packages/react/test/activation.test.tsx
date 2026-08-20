@@ -204,6 +204,11 @@ const interactionFixture = (
   </Player.Root>
 );
 
+// A source `detectSource` turns down: the scheme is not one this library will
+// carry (`isPermittedSourceUrl`), so detection fails and no provider is ever
+// constructed for it.
+const REFUSED_SOURCE = 'javascript:alert(1)';
+
 beforeEach(() => {
   ControlledIntersectionObserver.instances = [];
   mockedLoadProvider.mockReset();
@@ -1276,6 +1281,148 @@ test('interaction loading rejects autoplay before importing', async () => {
       lifecycle: 'error'
     })
   );
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// #331. `detectSource` refusing a URL *is* the security control -- it is where
+// `javascript:`, `data:` and tab-split scheme smuggling are turned down
+// (`packages/core/src/source-detection.ts`). Whether that refusal is observable
+// must not depend on an unrelated prop, so all three strategies are pinned on
+// one table: `interaction` used to check the autoplay conflict alone and left a
+// poisoned `source` sitting at `activation: 'dormant', error: null`, which a
+// consumer cannot tell apart from "the user has not clicked yet".
+test.each([
+  { loading: 'eager' as const },
+  { loading: 'viewport' as const },
+  { loading: 'interaction' as const }
+])(
+  '$loading loading reports a refused source and never imports',
+  async ({ loading }) => {
+    const handle = createRef<Player.PlayerHandle>();
+    render(fixture({ loading, ref: handle, source: REFUSED_SOURCE }));
+
+    await vi.waitFor(() =>
+      expect(handle.current?.getState()).toMatchObject({
+        activation: 'error',
+        error: {
+          category: 'unsupported',
+          fatal: false,
+          message: 'The player source is not supported.',
+          // Not recoverable: a retry re-reads the same `source` prop and the
+          // allowlist refuses it again, so no press could change the outcome.
+          // This is what withholds the retry `ActivationButton` and
+          // `ErrorDisplay` would otherwise offer -- see the two tests below.
+          recoverable: false
+        },
+        lifecycle: 'error'
+      })
+    );
+    expect(mockedLoadProvider).not.toHaveBeenCalled();
+  }
+);
+
+// Both conditions at once. The refusal wins: it is the order `eager` and
+// `viewport` already check in, and a security-relevant refusal masked by a
+// configuration complaint is the failure #332 reports elsewhere in the tree.
+test('interaction reports a refused source ahead of the autoplay conflict', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    fixture({
+      autoplay: 'muted',
+      loading: 'interaction',
+      ref: handle,
+      source: REFUSED_SOURCE
+    })
+  );
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'unsupported',
+        message: 'The player source is not supported.'
+      },
+      lifecycle: 'error'
+    })
+  );
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// The control must not advertise a recovery it cannot perform. `ActivationButton`
+// reads `error.recoverable` and nothing else (#198), so while the refusal was
+// `recoverable: true` this rendered an enabled "Retry loading video" that the
+// arming guard then turned into a no-op -- an affordance that lies, which is the
+// complaint #331 opens with. The refusal is `recoverable: false`, so there is no
+// retry to press: the button keeps the `error` state's colour, reads `Play video`
+// and refuses the press.
+test('interaction offers no retry for a refused source', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(interactionFixture({ ref: handle, source: REFUSED_SOURCE }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({ activation: 'error' })
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Retry loading video' })
+  ).toBeNull();
+  const button = screen.getByRole('button', { name: 'Play video' });
+  expect(button.getAttribute('aria-disabled')).toBe('true');
+  expect(button.getAttribute('data-state')).toBe('error');
+
+  // `aria-disabled`, not `disabled`, so the press is delivered and refused
+  // rather than never dispatched.
+  fireEvent.click(button);
+
+  expect(handle.current?.getState()).toMatchObject({
+    activation: 'error',
+    error: {
+      category: 'unsupported',
+      message: 'The player source is not supported.'
+    },
+    lifecycle: 'error'
+  });
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// The same refusal one level below the control. A caller reaching the handle
+// directly presents no affordance, so `recoverable` says nothing about it --
+// `activateFromInteraction` refuses on the source status itself. Without that,
+// the error branch would commit to `'eligible'`, clear the error, and land the
+// player back at the `error: null` dead end #331 is about, this time behind one
+// call: the effect that published the refusal does not re-run, because none of
+// its inputs changed.
+test('interaction refuses a programmatic activation on a refused source', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(interactionFixture({ ref: handle, source: REFUSED_SOURCE }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({ activation: 'error' })
+  );
+  act(() => handle.current?.activateFromInteraction());
+
+  expect(handle.current?.getState()).toMatchObject({
+    activation: 'error',
+    error: {
+      category: 'unsupported',
+      message: 'The player source is not supported.'
+    },
+    lifecycle: 'error'
+  });
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// The other half of the interaction branch, unchanged: a source that was never
+// refused still sits dormant with nothing to report until it is asked.
+test('interaction with a supported source stays dormant with no error', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'interaction', ref: handle }));
+
+  await Promise.resolve();
+  expect(handle.current?.getState()).toMatchObject({
+    activation: 'dormant',
+    error: null,
+    lifecycle: 'idle'
+  });
   expect(mockedLoadProvider).not.toHaveBeenCalled();
 });
 
