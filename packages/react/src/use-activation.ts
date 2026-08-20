@@ -493,10 +493,11 @@ export const useActivation = (
     // `detectSource` turning down a `javascript:` or `data:` URL, which is the
     // one security control this library applies to a source, and `setActivation`
     // carries one error. A configuration complaint about an unrelated prop
-    // masking that refusal is the failure #332 reports elsewhere, where a
-    // cosmetic `playerColor` rejection hides a rejected poster; the refusal
-    // wins here so it is never the second thing a consumer is told. Neither
-    // error is lost: this effect re-runs on both `currentKey` and
+    // masking that refusal is what #332 reported in the Wistia notice slot,
+    // where a cosmetic `playerColor` rejection suppressed a rejected poster
+    // until the same order-first rule settled it there; the refusal wins here
+    // so it is never the second thing a consumer is told. Neither error is
+    // lost: this effect re-runs on both `currentKey` and
     // `options.autoplay`, so a consumer who fixes the source is told about the
     // autoplay conflict next (#331).
     if (options.source.status !== 'success') {
