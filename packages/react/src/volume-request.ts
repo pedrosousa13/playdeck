@@ -106,6 +106,19 @@ export const createVolumeRequest = (
 
   const reconcile = (state: PlayerState): void => {
     if (requested === null) return;
+    // The zero `publishedVolume` reports while muted is the same zero whatever
+    // volume the player holds behind it, so it carries nothing about the volume
+    // and can only answer a request for silence. Reading it as an answer to a
+    // request above zero is a false positive the tolerance merely hides at
+    // every volume far enough from 0: muted at a published 0.02, a muted
+    // `ArrowUp` records 0.02 as the level the unmute is restoring
+    // (`controls.tsx`), the drain finds `|0 - 0.02| <= 0.02` and releases it,
+    // and the press after it reads no request, re-enters the muted branch,
+    // unmutes again and steps nothing — the press lost inside one round trip
+    // that #271 and #274 both exist to close. Holding instead costs nothing:
+    // the deadline armed at the drain is the backstop for a request no unmute
+    // ever answers, exactly as it is for a louder one.
+    if (state.muted && requested > 0) return;
     if (
       requestAnswered({
         published: publishedVolume(state),
