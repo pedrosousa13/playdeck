@@ -22,6 +22,11 @@ type PlayerFixtureProps = {
   readonly airplay?: 'demo';
   readonly sourceChange?: 'external';
   readonly captionRenderer?: Player.RootProps['captionRenderer'];
+  // The `[startTime, endTime]` window (#214), so a spec can drive a fixture
+  // whose playback is confined to something other than the whole media.
+  // `e2e/vimeo-url-time-param.spec.ts` needs one to have anything to defend.
+  readonly startTime?: number;
+  readonly endTime?: number;
   // Opts a Vimeo-sourced fixture into the chromeless-controls probe (#162):
   // without it, `customControlsAvailability` never resolves, since the probe
   // is opt-in precisely so it never fires uninvited on attach.
@@ -237,6 +242,8 @@ const PlayerFixture = ({
   airplay,
   sourceChange: sourceChangeInput,
   captionRenderer,
+  startTime,
+  endTime,
   vimeoCustomControls,
   vimeoSuppressSeoMetadata
 }: PlayerFixtureProps) => {
@@ -290,6 +297,7 @@ const PlayerFixture = ({
         autoplay={autoplay}
         captionRenderer={captionRenderer}
         defaultMuted={defaultMuted}
+        endTime={endTime}
         loading={loading}
         mediaMetadata={{
           title: 'Playdeck tracer',
@@ -315,6 +323,7 @@ const PlayerFixture = ({
           window.playdeckHandle = handle ?? undefined;
         }}
         source={source}
+        startTime={startTime}
       >
         <Player.Viewport
           data-testid="viewport"
@@ -417,7 +426,9 @@ const meta: Meta<PlayerFixtureProps> = {
     captionRenderer: {
       control: 'radio',
       options: ['custom', 'native']
-    }
+    },
+    startTime: { control: 'number' },
+    endTime: { control: 'number' }
   },
   parameters: {
     docs: {
@@ -526,6 +537,14 @@ export const VimeoSuppressSeoMetadata: Story = {
   // e2e/vimeo-seo-metadata.spec.ts drives both sides of the option: this story
   // for the suppressed one, `VimeoViewport` for the default.
   args: { source: 'vimeo', vimeoSuppressSeoMetadata: true }
+};
+
+export const VimeoStartTime: Story = {
+  // A window that begins somewhere other than zero, which is what the SDK's
+  // `vimeo_t_` url parameter attacks (#329). 20s sits well inside 76979871's
+  // ~61s, so a playhead below it is the boundary being lost rather than the
+  // start collapsing onto the end of a shorter video.
+  args: { source: 'vimeo', startTime: 20, defaultMuted: true }
 };
 
 export const VimeoUnlistedInteraction: Story = {
