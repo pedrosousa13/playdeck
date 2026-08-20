@@ -7,7 +7,9 @@ Wistia's Aurora `<wistia-player>` element.
 pnpm add @playdeck/provider-wistia
 ```
 
-`@playdeck/react` loads this for you when the source resolves to `wistia`. The
+`@playdeck/react` loads this for you when the source resolves to `wistia`, for
+the URL forms [Provider setup](../../docs/provider-setup.md#the-other-three-providers)
+lists. The
 player bundle is fetched from `https://fast.wistia.com/player.js` on the first
 attach — Aurora's own entry point, not the legacy `E-v1.js` shim, so there is
 still no `window._wq`. This package does **not** depend on

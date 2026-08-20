@@ -16,8 +16,8 @@ nothing to render, nothing to log, and a play button that did nothing forever.
 **Nothing about the refusal itself changed.** No provider was constructed for a
 refused source before this and none is now; no URL was fetched and none is. The
 error is the same record the other two strategies publish — `unsupported`,
-`fatal: false`, "The player source is not supported." — with one field changed
-for all three, described under its own heading below.
+`fatal: false`, and the same message text — with one field changed for all
+three, described under its own heading below.
 
 The refusal is reported **ahead of** the `interaction`-with-autoplay
 configuration conflict when both are true at once. `setActivation` carries one

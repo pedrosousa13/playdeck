@@ -8,6 +8,9 @@ pnpm add @playdeck/provider-youtube
 ```
 
 `@playdeck/react` loads this for you when the source resolves to `youtube`.
+[Provider setup](../../docs/provider-setup.md#youtube) lists the URL forms that
+resolve to it, the ones that do not, and the options reachable through
+`Player.Root`.
 
 <!-- example:provider-youtube -->
 

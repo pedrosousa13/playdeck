@@ -9,7 +9,9 @@ pnpm add @playdeck/provider-vimeo
 
 `@playdeck/react` loads this for you when the source resolves to `vimeo`. The SDK
 is bundled as a dependency and imported dynamically — nothing is fetched from a
-Vimeo CDN.
+Vimeo CDN. [Provider setup](../../docs/provider-setup.md#vimeo) lists the URL
+forms that resolve to it, the ones that do not, and the options reachable
+through `Player.Root`.
 
 <!-- example:provider-vimeo -->
 
