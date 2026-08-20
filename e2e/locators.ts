@@ -28,6 +28,13 @@ export const muteButton = (page: Page) =>
 export const captionsButton = (page: Page) =>
   page.locator('[data-playdeck-part="captions-button"]');
 
+// The live region `LoadingIndicator` keeps mounted at all times (empty and
+// visually hidden while idle), so this resolves whether or not anything is
+// loading; `data-state` is what says which — 'loading-provider', 'buffering'
+// or 'idle'.
+export const loadingIndicator = (page: Page) =>
+  page.locator('[data-playdeck-part="loading-indicator"]');
+
 // `CaptionsMenu` is a preset assembly over `SettingsMenu`, so TWO elements
 // carry `data-playdeck-part="settings-menu-trigger"` in this composition. The
 // part alone is a strict-mode ambiguity; the aria-label disambiguates without

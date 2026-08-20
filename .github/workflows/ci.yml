@@ -203,10 +203,12 @@ jobs:
 
   # a11y-media.spec.ts's cue-boundary guard (installedAt < cueBoundary) proves
   # the mutation observer installs before the fixture's real cue transition; it
-  # is not a player performance budget. The fixture's cue boundary
-  # (captions-reference.vtt, 0.7s) and the matching JS constant carry the
-  # headroom that keeps the guard honest on a slower host. See
-  # e2e/a11y-media.spec.ts for the full rationale.
+  # is not a player performance budget, and since #279 it is not a timing
+  # margin either. The test rewinds the clip to 0 and waits there before
+  # installing, so the guard compares a position it SET against the fixture's
+  # cue boundary (captions-reference.vtt, 0.7s) and the matching JS constant —
+  # runner speed cannot move it. See e2e/a11y-media.spec.ts for the full
+  # rationale.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 25
