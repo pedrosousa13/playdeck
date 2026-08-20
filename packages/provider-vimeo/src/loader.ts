@@ -109,6 +109,20 @@ const suppressSeoMetadata = (): void => {
   globals[SEO_METADATA_GUARD] = true;
 };
 
+/**
+ * Whether the SDK's SEO-metadata handshake is suppressed on this page — by this
+ * library, by consumer code, or by another copy of the SDK. Truthy rather than
+ * `=== true` on purpose: truthy is exactly what `initAppendVideoMetadata` tests
+ * before it returns early, so this answers the question the SDK actually asks.
+ *
+ * Read after a load to tell an honoured `suppressSeoMetadata` from an
+ * ineffective one. The outcome is the only reliable test: a request is dropped
+ * both by arriving at an already-cached module and by finding the global already
+ * set — including set to `false` — and the guard is what decides either way.
+ */
+export const isSeoMetadataSuppressed = (): boolean =>
+  Boolean((window as unknown as Record<string, unknown>)[SEO_METADATA_GUARD]);
+
 export type VimeoSdkLoadOptions = {
   /**
    * Set the SDK's SEO-metadata guard before the module is imported, so its

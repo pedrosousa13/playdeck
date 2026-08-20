@@ -11,6 +11,7 @@ import {
 } from 'vitest';
 import {
   detectSource,
+  PlayerController,
   type MediaDimensions,
   type PlayerCapabilities,
   type ProviderAdapter,
@@ -70,9 +71,19 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
 });
 
+// The SDK's own SEO-metadata guard, written the way an earlier load or the
+// page's own code would have left it. `undefined` removes it, which is a page
+// that never touched it — distinct from `false`, which is a page that did.
+const setSeoGuard = (value: unknown): void => {
+  const globals = window as unknown as Record<string, unknown>;
+  if (value === undefined) delete globals.VimeoSeoMetadataAppended;
+  else globals.VimeoSeoMetadataAppended = value;
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
   sdkState.load = undefined;
+  setSeoGuard(undefined);
 });
 
 const publicSource: VimeoSource = { type: 'vimeo', videoId: '76979871' };
@@ -788,6 +799,120 @@ test.each([
     expect(configurationNotices(patches)).toEqual([]);
   }
 );
+
+// --- the suppression request that did not take (#333) ---
+//
+// `suppressSeoMetadata` is a privacy control, and the SDK reads its guard once
+// per page, while the module evaluates. A second player asking for suppression
+// after a first one loaded without it gets nothing, and that ordering cannot be
+// repaired — so what is reported is the outcome, never the mechanism. The guard
+// is set directly below because it is exactly what these tests are about: the
+// page's state after the load, whichever load or whichever code left it there.
+
+test('reports a suppression request that did not take as a configuration notice', async () => {
+  // No guard at all: an earlier Vimeo load imported the SDK without asking for
+  // suppression, so this request arrived at a module already evaluated.
+  const { patches } = await setup({ options: { suppressSeoMetadata: true } });
+  // The whole patch, not a subset: a notice carries an error and nothing else,
+  // so it never moves the lifecycle, the activation, or command readiness.
+  expect(configurationNotices(patches)).toEqual([
+    {
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false,
+        message: expect.stringContaining('did not take effect')
+      }
+    }
+  ]);
+  expect(readyPatch(patches)).toMatchObject({
+    lifecycle: 'ready',
+    activation: 'ready'
+  });
+});
+
+test('reports a suppression request the page pinned the guard to false against', async () => {
+  setSeoGuard(false);
+  const { patches } = await setup({ options: { suppressSeoMetadata: true } });
+  expect(configurationNotices(patches)).toHaveLength(1);
+});
+
+// The request was honoured, just not by this call — which is the whole point of
+// testing the outcome rather than which call performed the import.
+test('reports no notice when suppression is already in effect', async () => {
+  setSeoGuard(true);
+  const { patches } = await setup({ options: { suppressSeoMetadata: true } });
+  expect(configurationNotices(patches)).toEqual([]);
+});
+
+test.each([
+  ['unset', undefined],
+  ['false', false],
+  ['true', true]
+])(
+  'reports no notice when suppression was never requested and the guard is %s',
+  async (_form, guard) => {
+    setSeoGuard(guard);
+    const { patches } = await setup({
+      options: { suppressSeoMetadata: false }
+    });
+    expect(configurationNotices(patches)).toEqual([]);
+  }
+);
+
+test('reports no notice when the option is omitted entirely', async () => {
+  const { patches } = await setup();
+  expect(configurationNotices(patches)).toEqual([]);
+});
+
+// What a host actually shows an operator. The controller holds ONE
+// `configuration` notice per attach, filled with `??=`, so the first notice
+// this adapter emits is the only one that ever reaches `PlayerState.error`
+// (`packages/core/src/player-controller.ts`, `#configurationNotice`) — the
+// second is dropped with the provider and never told later either (#332,
+// #368). An ineffective privacy control has to beat a chromeless probe that
+// could not report a presentational capability, and the SDK load sits before
+// the probe's verdict on every path, so the order holds by construction. The
+// two tests below are what says so: move the emit past the probe and the first
+// of them fails.
+const publishedNotice = async (
+  options: VimeoProviderOptions
+): Promise<string | undefined> => {
+  const controller = new PlayerController();
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource, options);
+  // The controller drives attach and load itself and keeps the load promise, so
+  // the settled attach is waited for here through the state it publishes.
+  // Calling `load` again would return at once — the attachment is already
+  // started — and read the notice slot before the attach had filled it.
+  const settled = new Promise<void>((resolve) => {
+    const stop = controller.subscribe((state) => {
+      if (state.lifecycle !== 'ready' && state.lifecycle !== 'error') return;
+      stop();
+      resolve();
+    });
+  });
+  controller.setProvider(provider);
+  await settled;
+  return controller.getState().error?.message;
+};
+
+test('publishes the suppression notice, not the chromeless one, when an attach hits both', async () => {
+  fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+  expect(
+    await publishedNotice({ suppressSeoMetadata: true, customControls: true })
+  ).toContain('did not take effect');
+});
+
+test('publishes the chromeless notice when it is the only one', async () => {
+  fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+  expect(await publishedNotice({ customControls: true })).toContain(
+    'could not be completed'
+  );
+});
 
 test('honors an explicit Do-Not-Track opt-out', async () => {
   const result = await setup({ options: { dnt: false } });

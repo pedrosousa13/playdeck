@@ -159,7 +159,10 @@ origins list and what a page's CSP has to allow.
   the option and a later one with it gets no suppression at all. That is the
   vendor's design, not something Playdeck works around. A page that has set the
   guard itself keeps its own value, in either direction; Playdeck only ever writes
-  it when it is not already set.
+  it when it is not already set. Either way the adapter says so: an attach whose
+  request did not take publishes a non-fatal `configuration` notice on
+  `PlayerState.error`, so a fall back to the SDK's default is detectable at
+  runtime and not only readable here.
 
 ## License
 

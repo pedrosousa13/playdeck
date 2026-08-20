@@ -86,6 +86,12 @@ export type VimeoProviderOptions = {
    *
    * A page that has already set the guard itself keeps its own value, in
    * either direction — Playdeck never overwrites it.
+   *
+   * A request that ends up applying neither way — a later attach, or a guard
+   * the page pinned to `false` — is reported as a non-fatal `configuration`
+   * notice on `PlayerState.error`, so the silent fall back to the SDK's
+   * default is something a consumer can detect rather than only read about
+   * here (#333).
    */
   readonly suppressSeoMetadata?: boolean;
 };

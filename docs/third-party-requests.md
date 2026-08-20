@@ -156,7 +156,9 @@ Notes, per row:
   evaluates, so a page whose first Vimeo attach did not ask for suppression
   cannot get it from a later one. A page that has already set that global itself
   keeps its own value, in either direction: Playdeck writes it only when it is not
-  already set.
+  already set. Both of those leave the request unapplied, and the adapter
+  reports either as a non-fatal `configuration` notice on `PlayerState.error`
+  (#333) — the ordering cannot be repaired, so what is offered is the signal.
 
   The second **is** a request, and it is the one the table's `connect-src` cell
   points at: **importing the Vimeo provider makes the SDK scan the consumer's

@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
+  isSeoMetadataSuppressed,
   loadVimeoSdk,
   resetVimeoSdkLoader,
   type VimeoSdkConstructor,
@@ -130,6 +131,65 @@ test('leaves a seo-metadata guard the page already set, in either direction', as
   window.VimeoSeoMetadataAppended = true;
   await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
   expect(seoGuard()).toBe(true);
+});
+
+// What a caller asks after a load to find out whether its request took (#333).
+// The predicate reports the page's outcome, not this call's mechanism, so the
+// two ways a request goes nowhere — a module already imported, and a guard the
+// page already owns — answer the same.
+
+test('reports suppression once a load has applied it', async () => {
+  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+
+  expect(isSeoMetadataSuppressed()).toBe(false);
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+  expect(isSeoMetadataSuppressed()).toBe(true);
+});
+
+test('reports no suppression after a load that did not ask for it', async () => {
+  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+
+  await loadVimeoSdk(importSdk);
+  expect(isSeoMetadataSuppressed()).toBe(false);
+});
+
+test('reports no suppression for a request that arrived at the cached SDK', async () => {
+  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+
+  await loadVimeoSdk(importSdk);
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(importSdk).toHaveBeenCalledTimes(1);
+  expect(isSeoMetadataSuppressed()).toBe(false);
+});
+
+test('reports suppression for a request the earlier load already honoured', async () => {
+  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(isSeoMetadataSuppressed()).toBe(true);
+});
+
+test('reports no suppression when the page pinned the guard to false', async () => {
+  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+
+  window.VimeoSeoMetadataAppended = false;
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(isSeoMetadataSuppressed()).toBe(false);
+});
+
+// Truthy, not `=== true`: `initAppendVideoMetadata` returns early on any truthy
+// value, so a page that set the guard to one has suppression in effect.
+test('reports suppression for a truthy guard the page set itself', async () => {
+  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+
+  (window as unknown as Record<string, unknown>).VimeoSeoMetadataAppended = 1;
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(isSeoMetadataSuppressed()).toBe(true);
 });
 
 test('resetVimeoSdkLoader clears the cached SDK', async () => {
