@@ -72,6 +72,16 @@ import {
 // the remaining suspect. Whoever re-enables this gesture to collect that should
 // expect it to pass most attempts.
 //
+// That collection is what the seek gesture is doing on WebKit right now: its
+// exclusion is lifted and `recordSeekTrace` is installed, so a CI run on that
+// engine records why the third press issues no seek. This is an experiment, not
+// a claim that #277 is fixed — nothing about the control changed, and the run
+// is expected to pass more often than it fails, which is exactly why the trace
+// prints unconditionally rather than only on the way to a failed assertion.
+// Before any of this reaches `main` the exclusion goes back (or comes out for
+// good, if the trace bought a fix), and the recorder goes with it: it is a
+// probe, and a probe left in a suite is instrumentation nobody reads.
+//
 // This no longer has to wait for CI. It used to: every test in this file failed
 // on the arrangement locally, and the reason recorded here was that a locally
 // installed Playwright Linux WebKit has no H.264. That reason was wrong, and it
@@ -107,11 +117,51 @@ type PressRecord = {
   readonly answered: number;
 };
 
+// One line of #277's trace. Two shapes, because an attribute mutation is not a
+// press: it has no "what the input was showing" to report, and pretending
+// otherwise would put a value in the log that nothing measured.
+type SeekTraceEntry =
+  | {
+      readonly at: number;
+      readonly phase: 'keydown' | 'input' | 'change';
+      // The input as it stands at that instant. `max` is the suspect — a blip
+      // to `"0"` renders an input pressing `End` cannot move, which fires no
+      // event at all — and `ariaDisabled`/`state` are the same null seek window
+      // seen from the two places the control publishes it.
+      readonly value: string;
+      readonly max: string;
+      readonly min: string;
+      readonly step: string;
+      readonly ariaDisabled: string | null;
+      readonly state: string | null;
+      // What React believes the input holds. `null` means no tracker was
+      // found, which is a reading and not an error: a probe that throws here
+      // would take the gesture with it.
+      readonly tracked: string | null;
+    }
+  | {
+      readonly at: number;
+      readonly phase: 'attribute';
+      readonly on: 'input' | 'wrapper';
+      readonly attribute: string;
+      readonly from: string | null;
+      readonly to: string | null;
+    };
+
+// React's tracked value hangs off the DOM node under a private name, so this is
+// the shape rather than a cast to `any` (which the lint config refuses). Every
+// step is optional: a React that stopped installing it must read as `null`.
+type TrackedInput = HTMLInputElement & {
+  readonly _valueTracker?: { readonly getValue?: () => string };
+};
+
 declare global {
   interface Window {
     // Installed by `recordPresses`, read back by `presses` and `echoes`.
     playdeckPresses?: PressRecord[];
     playdeckEchoes?: number[];
+    // Installed by `recordSeekTrace`, read back by `seekTrace`. #277 only.
+    playdeckSeekTrace?: SeekTraceEntry[];
     // Installed by `underCongestion`, and its way back out.
     playdeckStopCongestion?: () => void;
   }
@@ -248,6 +298,99 @@ const recordPresses = (
     },
     [`[data-playdeck-part="${part}"]`, echo.event, echo.of] as const
   );
+
+// #277 only, and deliberately temporary: record everything the seek control
+// does across one gesture, so a WebKit run says why its third press issues no
+// seek instead of leaving the value it ended on to be argued over.
+//
+// Separate from `recordPresses` rather than folded into it. That one is shared
+// by every gesture in this file and its `shown` array is asserted on by all of
+// them; a probe is not the sort of thing to hang off a fixture three passing
+// tests depend on.
+//
+// Everything here is synchronous and in-page. Not a preference: the gesture is
+// only a gesture while its presses stay inside one round trip, so an `await`
+// between them — a Playwright read, a poll, anything — would drain the renderer
+// and destroy the thing being measured. The trace comes back out afterwards.
+//
+// What each phase is worth:
+//   - `keydown`, capture-phase on the window, so it runs before the browser
+//     applies the key: the input as press `i` found it. If `max` reads `"0"`
+//     here on the third `End`, the press had nowhere to go and no `input` event
+//     followed it — which is the hypothesis, visible directly.
+//   - `input`/`change`: whether an event fired at all, and against which `max`.
+//     A `keydown` with no `input` behind it is a press the DOM swallowed; an
+//     `input` with no `change` is one React's tracker deduped.
+//   - `attribute`: the render that moved `max`, `value`, `aria-disabled` or the
+//     wrapper's `data-state` between one press and the next. Its `at` is when
+//     the observer batch was delivered, a microtask after the mutation itself,
+//     so read these for order and for old/new values rather than for timing to
+//     the millisecond.
+const recordSeekTrace = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    );
+    const wrapper = document.querySelector(
+      '[data-playdeck-part="seek-slider"]'
+    );
+    if (input === null || wrapper === null) {
+      throw new Error('Nothing to trace: the seek control is not rendered');
+    }
+    const trace: SeekTraceEntry[] = [];
+    window.playdeckSeekTrace = trace;
+
+    const tracked = (): string | null =>
+      (input as TrackedInput)._valueTracker?.getValue?.() ?? null;
+
+    const snapshot = (phase: 'keydown' | 'input' | 'change'): void => {
+      trace.push({
+        at: performance.now(),
+        phase,
+        value: input.value,
+        max: input.max,
+        min: input.min,
+        step: input.step,
+        ariaDisabled: input.getAttribute('aria-disabled'),
+        state: wrapper.getAttribute('data-state'),
+        tracked: tracked()
+      });
+    };
+
+    window.addEventListener('keydown', () => snapshot('keydown'), true);
+    input.addEventListener('input', () => snapshot('input'));
+    input.addEventListener('change', () => snapshot('change'));
+
+    const observer = new MutationObserver((records) => {
+      const at = performance.now();
+      for (const record of records) {
+        const attribute = record.attributeName;
+        if (attribute === null) continue;
+        const target = record.target as Element;
+        trace.push({
+          at,
+          phase: 'attribute',
+          on: target === input ? 'input' : 'wrapper',
+          attribute,
+          from: record.oldValue,
+          to: target.getAttribute(attribute)
+        });
+      }
+    });
+    observer.observe(input, {
+      attributes: true,
+      attributeOldValue: true,
+      attributeFilter: ['value', 'max', 'min', 'step', 'aria-disabled']
+    });
+    observer.observe(wrapper, {
+      attributes: true,
+      attributeOldValue: true,
+      attributeFilter: ['data-state']
+    });
+  });
+
+const seekTrace = (page: Page): Promise<SeekTraceEntry[]> =>
+  page.evaluate(() => window.playdeckSeekTrace ?? []);
 
 const presses = (page: Page): Promise<PressRecord[]> =>
   page.evaluate(() => window.playdeckPresses ?? []);
@@ -420,15 +563,12 @@ test('volume arrow presses past the end clamp there rather than run past it', as
     .toBe(0);
 });
 
+// Running on WebKit too, for as long as #277 needs the trace below. See the
+// header: the exclusion is lifted to collect a measurement, not because
+// anything was fixed, and it goes back before this lands.
 test('the seek control keeps End, Home and End pressed inside one round trip', async ({
-  browserName,
   page
-}) => {
-  test.skip(
-    browserName === 'webkit',
-    'This gesture is flaky on WebKit rather than failing outright — it fails a first attempt on the value the media arrives at and passes on a retry (#277).'
-  );
-
+}, testInfo) => {
   await page.goto(story);
   await activationButton(page).click();
   await played(page);
@@ -449,10 +589,22 @@ test('the seek control keeps End, Home and End pressed inside one round trip', a
     event: 'seeked',
     of: 'currentTime'
   });
+  await recordSeekTrace(page);
 
   await underCongestion(page, () =>
     pressTogether(page, ['End', 'Home', 'End'])
   );
+
+  // #277's measurement, taken before the first assertion can throw: the run
+  // that fails and the run that passes are both evidence, and on WebKit the
+  // second is the likelier of the two. Logged for the CI job output and
+  // attached so the report keeps it once the log has scrolled away.
+  const trace = JSON.stringify(await seekTrace(page), null, 2);
+  console.log(`#277 TRACE START\n${trace}\n#277 TRACE END`);
+  await testInfo.attach('277-trace', {
+    body: trace,
+    contentType: 'application/json'
+  });
 
   // The thumb showed the end of the window while the media element was still at
   // the start, and the start again while nothing had answered for either. Both
