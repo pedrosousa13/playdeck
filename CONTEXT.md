@@ -178,15 +178,16 @@ _Avoid_: broadcast, notify loop
 
 **Notice**:
 A non-fatal `configuration` error published to report a consumer-supplied value
-that was rejected, while the fall-back behaviour it degraded to stands
-unchanged. A provider reports one through a state patch; a consumer-supplied URL
-prop the shared allowlist refuses is reported by `reportRefusedUrl`, which names
-the refused surface and never the value, and which returns a disposer the
-reporter holds for as long as it keeps refusing that surface — so the notice
-stands while any reporter's registration stands, and is withdrawn only by the
-reporter that made it. Held as controller state and surfaced on
-`PlayerState.error` like any other error, but never a failure: it never masks a
-standing error, and it never drives a transition into the error lifecycle.
+that was rejected, or one accepted and then impossible to apply, while the
+fall-back behaviour it degraded to stands unchanged. A provider reports one
+through a state patch; a consumer-supplied URL prop the shared allowlist refuses
+is reported by `reportRefusedUrl`, which names the refused surface and never the
+value, and which returns a disposer the reporter holds for as long as it keeps
+refusing that surface — so the notice stands while any reporter's registration
+stands, and is withdrawn only by the reporter that made it. Held as controller
+state and surfaced on `PlayerState.error` like any other error, but never a
+failure: it never masks a standing error, and it never drives a transition into
+the error lifecycle.
 _Avoid_: warning, soft error
 
 **Aurora**:

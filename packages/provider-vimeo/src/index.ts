@@ -86,6 +86,13 @@ export type VimeoProviderOptions = {
    *
    * A page that has already set the guard itself keeps its own value, in
    * either direction — Playdeck never overwrites it.
+   *
+   * Where the handshake ends up installed anyway — a later attach, or a guard
+   * the page pinned to `false` — that is reported as a non-fatal
+   * `configuration` notice on `PlayerState.error`, so the silent fall back to
+   * the SDK's default is something a consumer can detect rather than only read
+   * about here. A guard someone else already set truthy publishes nothing:
+   * suppression is in effect, so the request was honoured (#333).
    */
   readonly suppressSeoMetadata?: boolean;
 };
