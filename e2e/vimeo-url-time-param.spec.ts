@@ -112,35 +112,51 @@ const samplePlayhead = async (
   return samples;
 };
 
-// The mechanism itself, stated as narrowly as it can be: a page url the
-// consumer did not write becomes a seek command the embed obeys. This is the
-// part that is confirmed outright, and it is confirmed with the real SDK.
-test('the Vimeo SDK turns a vimeo_t_ page-url parameter into a seek on the embed', async ({
+// The page's own escape hatch, which is also the only way left to observe the
+// weakness: Playdeck's write is one-way and non-clobbering, so a page that
+// pinned the guard to `false` keeps it and the SDK installs its listener as it
+// always has. Every test below that needs the unguarded behaviour opts out
+// this way, and each of them is therefore proof of two things at once — that
+// the mechanism is real, and that Playdeck did not overwrite a value the page
+// owns.
+const optOutOfTheGuard = async (page: Page): Promise<void> => {
+  await page.addInitScript(() => {
+    (window as unknown as Record<string, unknown>).VimeoCheckedUrlTimeParam =
+      false;
+  });
+};
+
+// The change itself. A crafted page url reaches the embed as nothing at all:
+// the only seek it receives is the adapter's own start positioning.
+test('the guard stops a vimeo_t_ page-url parameter becoming a seek on the embed', async ({
   page
 }) => {
   await routeVimeoEmbed(page);
   await page.goto(craftedStory('vimeo-start-time'));
   await waitForReady(page);
+  await expect.poll(() => seeks(page)).toEqual([START_TIME]);
 
-  await expect.poll(() => seeks(page)).toContain(String(CRAFTED_TIME));
-  // Nothing on the page asked for it, so it can only have come from the url.
+  // The parameter really was there to be read, so the silence is the guard and
+  // not a url that never carried anything.
   const href = await page.evaluate(() => window.location.href);
   expect(href).toContain(`vimeo_t_${VIDEO_ID}=${CRAFTED_TIME}`);
+  expect(await embedPlayhead(page)).toBe(START_TIME);
 });
 
-// ...and where it lands at first load, which is NOT where the issue predicted.
-// Both chains start from the same `ready`: the SDK's needs one round trip
-// (`getVideoId`, then the seek), the adapter's needs at least two (its own
-// readiness handshake, then the getters `adopt` reads, then the seek). So the
-// adapter's start seek is structurally last and overwrites the crafted one.
-//
-// Characterisation, not a guarantee. It records an ordering that nothing in
-// either codebase promises, so that a change on either side of the bridge
-// shows up here as a failure to think about rather than as silence.
-test('the adapter start seek lands after the crafted one, so the first position holds', async ({
+// ...and the same page without the guard, which is what makes the test above
+// mean something. The seek arrives with the attacker's value — 45, a number
+// only the url carried — and the adapter's lands after it, so at FIRST LOAD the
+// start boundary survives anyway. Both chains begin at the same embed `ready`:
+// the SDK's needs one round trip (`getVideoId`, then the seek), the adapter's
+// needs at least two (its own readiness handshake, then the getters `adopt`
+// reads). That ordering is recorded as characterisation, not as a guarantee —
+// nothing on either side of the bridge promises it, which is half the reason
+// the guard is worth having.
+test('a page that opts out of the guard receives the crafted seek, before the adapter positions', async ({
   page
 }) => {
   await routeVimeoEmbed(page);
+  await optOutOfTheGuard(page);
   await page.goto(craftedStory('vimeo-start-time'));
   await waitForReady(page);
 
@@ -151,15 +167,12 @@ test('the adapter start seek lands after the crafted one, so the first position 
   expect(Math.min(...(await samplePlayhead(page, 2_000)))).toBe(START_TIME);
 });
 
-// The exposure that survives that ordering. The SDK's listener answers EVERY
-// `ready` for the life of the page; the adapter positions the playhead on the
-// first one only (`playback.ts`'s `adopt`, reached once per attach). So a
-// second `ready` from the same embed carries the crafted seek with nothing
-// behind it — and Playdeck goes on publishing the start boundary it no longer
-// holds.
-test('a repeat embed ready leaves the crafted seek unopposed', async ({
-  page
-}) => {
+// The exposure that survives that ordering, and the one this change is really
+// for. The SDK's listener answers EVERY `ready` for the life of the page; the
+// adapter positions the playhead on the first one only (`playback.ts`'s
+// `adopt`, reached once per attach). So a repeat `ready` from the same embed
+// carries the crafted seek with nothing behind it.
+test('the guard closes the repeat-ready path', async ({ page }) => {
   await routeVimeoEmbed(page);
   await page.goto(craftedStory('vimeo-start-time'));
   await waitForReady(page);
@@ -167,9 +180,31 @@ test('a repeat embed ready leaves the crafted seek unopposed', async ({
 
   await embedFrame(page).evaluate(() => window.playdeckEmbedRepublishReady?.());
 
+  // Nothing answered the second `ready`, so the embed never left the window
+  // and the seek list is still the adapter's one entry.
+  await expect.poll(() => seeks(page)).toEqual([START_TIME]);
+  expect(await embedPlayhead(page)).toBe(START_TIME);
+  expect(await publishedPlayhead(page)).toBe(START_TIME);
+});
+
+// The same repeat `ready` on a page that opted out — the failure being closed,
+// spelled out. Nothing pulls the playhead back, and the divergence is the sharp
+// part: the embed sits at 45 while Playdeck goes on publishing 20, so the
+// window it was asked to confine playback to is broken with no report saying
+// so. That divergence is #381; the guard keeps it out of reach rather than
+// fixing it.
+test('a page that opts out is left at the crafted position by a repeat ready', async ({
+  page
+}) => {
+  await routeVimeoEmbed(page);
+  await optOutOfTheGuard(page);
+  await page.goto(craftedStory('vimeo-start-time'));
+  await waitForReady(page);
+  await expect.poll(() => embedPlayhead(page)).toBe(START_TIME);
+
+  await embedFrame(page).evaluate(() => window.playdeckEmbedRepublishReady?.());
+
   await expect.poll(() => embedPlayhead(page)).toBe(String(CRAFTED_TIME));
-  // The window Playdeck was asked to confine playback to is [20, ∞), and the
-  // embed is outside it with no report that says so.
   expect(await publishedPlayhead(page)).toBe(START_TIME);
 });
 
@@ -179,11 +214,20 @@ test('a repeat embed ready leaves the crafted seek unopposed', async ({
 //   PLAYDECK_REAL_PROVIDERS=1 pnpm exec playwright test --project=chromium \
 //     e2e/vimeo-url-time-param.spec.ts
 //
-// Measured 2026-08-20, chromium: the crafted parameter did NOT move the
-// published playhead below `startTime` on the real embed — 78 samples over 8s
-// read 20 in both the control and the attacked run, matching the ordering the
-// characterisation test above records. What the issue predicted at first load
-// is therefore not what a real embed does.
+// Measured 2026-08-20, chromium, BEFORE the guard existed: the crafted
+// parameter did NOT move the published playhead below `startTime` on the real
+// embed — 78 samples over 8s read 20 in both the control and the attacked run,
+// matching the ordering the second test above records. What the issue predicted
+// at first load is therefore not what a real embed does, and that measurement
+// is what turned this from a start-boundary change into a guard.
+//
+// So this test cannot tell the guard apart from its absence, and it is not
+// meant to: it pins the real-embed behaviour the guard must not regress. What
+// the guard does is proved against the stub, where the SDK is the shipped one
+// and only the far side of the bridge is ours. Two things are still unmeasured
+// against a real embed and want the next approved run: whether one ever
+// republishes `ready`, and whether the ordering holds once playback starts from
+// a user gesture.
 test(
   'a crafted vimeo_t_ url parameter does not move a real Vimeo playhead at first load',
   { tag: '@real' },
