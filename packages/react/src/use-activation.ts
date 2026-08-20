@@ -233,6 +233,24 @@ const unsupportedError = (message: string) => ({
   message
 });
 
+// What every strategy publishes when `detectSource` turns the URL down. Not
+// `recoverable`: retrying re-reads the same `source` prop and the allowlist
+// refuses it again, so there is no press that could change the outcome. Both
+// `ActivationButton` and `ErrorDisplay` read that one flag to decide whether to
+// offer a retry at all (#34, #198), so `recoverable: true` here bought an
+// enabled control that did nothing -- the same dead affordance #331 opens by
+// describing (#331).
+//
+// Narrower than `unsupportedError` on purpose. That factory also carries the
+// missing-`IntersectionObserver` refusal below, which is about the environment
+// the player mounted into rather than about the URL, and is left retryable.
+const refusedSourceError = () => ({
+  category: 'unsupported' as const,
+  fatal: false,
+  recoverable: false,
+  message: 'The player source is not supported.'
+});
+
 const providerError = (cause: unknown) => ({
   category: 'provider' as const,
   cause,
@@ -401,15 +419,21 @@ export const useActivation = (
   const activateFromInteraction = useCallback(() => {
     const current = optionsRef.current;
     const state = current.controller.getState();
-    // A refused source refuses to arm, so the control never presents itself as
-    // functional. Publishing the refusal above is not sufficient on its own:
-    // `unsupportedError` is `recoverable: true`, so the error branch below
-    // accepts this call, commits to `'eligible'` and clears the error -- and the
-    // effect that published it does not re-run, since none of its inputs
-    // changed. That lands the player right back at the `error: null` dead end
-    // #331 is about, one click later. The session guards cannot catch it: they
-    // compare `sourceKey`, which is the same `'unsupported-source'` constant for
-    // every failure, so they all pass.
+    // A refused source refuses to arm. Publishing the refusal above is not
+    // sufficient on its own: without this the error branch below would accept
+    // the call, commit to `'eligible'` and clear the error -- and the effect
+    // that published it does not re-run, since none of its inputs changed. That
+    // lands the player right back at the `error: null` dead end #331 is about,
+    // one call later. The session guards cannot catch it: they compare
+    // `sourceKey`, which is the same `'unsupported-source'` constant for every
+    // failure, so they all pass.
+    //
+    // `refusedSourceError` is `recoverable: false`, so the error branch's own
+    // `recoverable` check would now refuse the same call. This is checked
+    // anyway, and first: `recoverable` is what a *presented* control reads, and
+    // a caller reaching this method directly presents nothing. The two must
+    // refuse the same source whichever way it is reached (#198), and only the
+    // source status says so on its own terms.
     if (
       current.loading !== 'interaction' ||
       current.autoplay !== false ||
@@ -449,7 +473,7 @@ export const useActivation = (
     if (options.source.status !== 'success') {
       options.controller.setActivation({
         activation: 'error',
-        error: unsupportedError('The player source is not supported.')
+        error: refusedSourceError()
       });
       return;
     }
@@ -478,7 +502,7 @@ export const useActivation = (
     if (options.source.status !== 'success') {
       options.controller.setActivation({
         activation: 'error',
-        error: unsupportedError('The player source is not supported.')
+        error: refusedSourceError()
       });
       return;
     }
@@ -502,7 +526,7 @@ export const useActivation = (
     if (options.source.status !== 'success') {
       options.controller.setActivation({
         activation: 'error',
-        error: unsupportedError('The player source is not supported.')
+        error: refusedSourceError()
       });
       return;
     }

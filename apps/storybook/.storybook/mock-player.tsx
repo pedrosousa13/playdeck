@@ -53,9 +53,21 @@ export type MockPlayerParameters = {
 };
 
 /**
- * Never fetched. The decorator's root commits no source — nothing calls
- * `activateFromInteraction` on it — so `Player.Media` mounts nothing even in a
- * story whose component renders one.
+ * Never fetched. `Player.Media` renders nothing until the root it sits in has
+ * committed its source — the `sourceCommitted` gate in the react package's
+ * `viewport-media.tsx` — and under `loading="interaction"` the one thing that
+ * commits it is an `activateFromInteraction` call. So a story that never
+ * activates mounts no `<video>` and no embed, whatever it composes: the source
+ * below is read, but nothing carrying it reaches the document.
+ *
+ * `activateFromInteraction` is not unreachable here: `ActivationButton` calls
+ * it (`packages/react/src/loading-error.tsx`) and `Player/ActivationButton`'s
+ * `ActivatesOnClick` presses it. That story composes the overlay alone. The
+ * decorator-wrapped stories that do render a `Player.Media` are the
+ * `Reference/Player` set, and every one of them stages an activation through
+ * the mock instead of pressing for one — which moves the controller's state,
+ * not this root's commit. Every story that both renders media and plays it is
+ * tagged `real-playback`, and `withMockPlayer` hands those back undecorated.
  *
  * A reserved `.invalid` host over `https:` rather than an invented `mock:`
  * scheme (#331): the shared allowlist refuses every scheme but `http:`,

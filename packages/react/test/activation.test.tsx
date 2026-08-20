@@ -1308,7 +1308,11 @@ test.each([
           category: 'unsupported',
           fatal: false,
           message: 'The player source is not supported.',
-          recoverable: true
+          // Not recoverable: a retry re-reads the same `source` prop and the
+          // allowlist refuses it again, so no press could change the outcome.
+          // This is what withholds the retry `ActivationButton` and
+          // `ErrorDisplay` would otherwise offer -- see the two tests below.
+          recoverable: false
         },
         lifecycle: 'error'
       })
@@ -1344,20 +1348,56 @@ test('interaction reports a refused source ahead of the autoplay conflict', asyn
   expect(mockedLoadProvider).not.toHaveBeenCalled();
 });
 
-// Publishing the refusal is not enough on its own. `unsupported` is
-// `recoverable: true`, so `ActivationButton` renders an enabled retry and
-// `activateFromInteraction` takes its error branch -- which would commit to
-// `'eligible'`, clear the error, and put the player back at exactly the
-// `error: null` dead end #331 is about, this time behind one click. The
-// interaction path therefore refuses to arm on a refused source at all.
-test('interaction refuses to arm on a refused source and keeps the refusal published', async () => {
+// The control must not advertise a recovery it cannot perform. `ActivationButton`
+// reads `error.recoverable` and nothing else (#198), so while the refusal was
+// `recoverable: true` this rendered an enabled "Retry loading video" that the
+// arming guard then turned into a no-op -- an affordance that lies, which is the
+// complaint #331 opens with. The refusal is `recoverable: false`, so there is no
+// retry to press: the button keeps the `error` state's colour, reads `Play video`
+// and refuses the press.
+test('interaction offers no retry for a refused source', async () => {
   const handle = createRef<Player.PlayerHandle>();
   render(interactionFixture({ ref: handle, source: REFUSED_SOURCE }));
 
   await vi.waitFor(() =>
     expect(handle.current?.getState()).toMatchObject({ activation: 'error' })
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Retry loading video' }));
+  expect(
+    screen.queryByRole('button', { name: 'Retry loading video' })
+  ).toBeNull();
+  const button = screen.getByRole('button', { name: 'Play video' });
+  expect(button.getAttribute('aria-disabled')).toBe('true');
+  expect(button.getAttribute('data-state')).toBe('error');
+
+  // `aria-disabled`, not `disabled`, so the press is delivered and refused
+  // rather than never dispatched.
+  fireEvent.click(button);
+
+  expect(handle.current?.getState()).toMatchObject({
+    activation: 'error',
+    error: {
+      category: 'unsupported',
+      message: 'The player source is not supported.'
+    },
+    lifecycle: 'error'
+  });
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// The same refusal one level below the control. A caller reaching the handle
+// directly presents no affordance, so `recoverable` says nothing about it --
+// `activateFromInteraction` refuses on the source status itself. Without that,
+// the error branch would commit to `'eligible'`, clear the error, and land the
+// player back at the `error: null` dead end #331 is about, this time behind one
+// call: the effect that published the refusal does not re-run, because none of
+// its inputs changed.
+test('interaction refuses a programmatic activation on a refused source', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(interactionFixture({ ref: handle, source: REFUSED_SOURCE }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({ activation: 'error' })
+  );
   act(() => handle.current?.activateFromInteraction());
 
   expect(handle.current?.getState()).toMatchObject({
