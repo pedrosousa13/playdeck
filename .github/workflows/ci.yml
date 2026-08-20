@@ -15,11 +15,19 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Measured wall times on a healthy run (2026-08-19): audit 21s, unit 35s,
-# static 54s, visual 57s, storybook 64s, package 113s, e2e firefox 160s,
-# chromium 162s, webkit 232s. These are whole-job times, install step
-# included. The timeouts below are several times those, so they never fire on
-# a run that is merely slow.
+# Measured wall times on a healthy run (2026-08-20, run 32337178101): audit
+# 12s, unit 31s, visual 37s, storybook 37s, static 52s, package 70s, e2e
+# chromium 84s, firefox 115s, webkit 178s. These are whole-job times, install
+# step included. The timeouts below are several times those, so they never
+# fire on a run that is merely slow.
+#
+# Re-measured because #359 moved four of them. The figures they replace, taken
+# on 2026-08-19 before that change, were visual 57s, storybook 64s, package
+# 113s and chromium 162s — every one of those jobs installed OS packages then
+# and does not now, so the old numbers describe a workflow that no longer
+# exists. audit, unit, static, firefox and webkit were not changed by #359, so
+# the movement in those is ordinary run-to-run variance and is what the spread
+# here looks like.
 #
 # The one part that does not respect those figures is `playwright install`
 # when it also installs OS packages, whose apt half has a long tail — see
