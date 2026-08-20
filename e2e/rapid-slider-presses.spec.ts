@@ -16,8 +16,8 @@ import {
 //
 // WebKit, for whoever meets a red run on it: CI has run all four of these on
 // that engine, and three of them are excluded from it as a result. Each of the
-// three is skipped at the top of its own test with the issue it is waiting on.
-// The volume `End`/`Home`/`End` gesture runs on all three engines.
+// three is skipped at the top of its own test with the issue that accounts for
+// it. The volume `End`/`Home`/`End` gesture runs on all three engines.
 //
 // The two arrow gestures were flaky on WebKit and are excluded under #278.
 // Playwright's injected key events return to WebKit's task queue between one
@@ -37,8 +37,9 @@ import {
 // seen, the optimistic render working — and what failed is that the media never
 // arrived: the input was polled 14 times across 5 seconds and read `"0"` every
 // time, and since `useSeekPreview` holds a requested value for 2000ms after the
-// chain drains, a seek that had been issued would have shown. The third `End`
-// issued no seek request at all.
+// chain drains, a seek that had been issued would have shown. That was read at
+// the time as the third `End` issuing no seek request at all, and the reading
+// stood until it was instrumented. It is wrong — see the end of this account.
 //
 // It ran on WebKit again under #384, as an experiment rather than a claim that
 // the defect was gone, and the experiment came back negative. The same
@@ -65,12 +66,48 @@ import {
 // presses genuinely land inside one round trip, and one and four workers, all
 // green.
 //
-// Instrumentation is the next step rather than the contingency it used to be:
-// per press, the `input`/`change` events, the DOM value,
-// `input._valueTracker.getValue()`, and a `MutationObserver` over the input's
-// attributes — a `max` blip to `0` between the second press and the third is
-// the remaining suspect. Whoever re-enables this gesture to collect that should
-// expect it to pass most attempts.
+// The instrumentation was then built and run on the CI leg — per press, the
+// `input`/`change` events, the DOM value, `input._valueTracker.getValue()` and
+// a `MutationObserver` over the input's attributes, alongside a probe on the
+// media element recording every `currentTime` assignment and every seek event.
+// Three runs, each sampling this gesture 15 times with `retries: 0`. The
+// sampling is what made it tractable: it fails 4 of 15 first attempts, and 10
+// of 15 in a later run, so the single attempt an ordinary run gives it was
+// never going to catch it reliably.
+//
+// It is a WebKit bug, and there is nothing in this library to fix. Every
+// sample, failing and passing alike, issued the identical four `currentTime`
+// assignments — `0` (this test's own parking assignment), then `1`, `0`, `1`.
+// The library's behaviour was byte-identical across all of them. What differed
+// was WebKit's final `seeked`: it reported `currentTime: 0`, the SUPERSEDED
+// target, in 8 of 8 failing samples, and `currentTime: 1` in 5 of 5 passing
+// ones. WebKit accepts the third assignment, reports `currentTime` as `1` and
+// fires `seeking` at `1`, and then completes the seek at `0` — resolving the
+// in-flight seek to the superseded position and discarding the newer request it
+// had already reported as the official playback position.
+//
+// So the third press does issue its seek, and the sighting above is wrong where
+// it says otherwise. In every failing sample the third press fired a complete
+// `keydown`, `input` and `change`, against `max="1"`, `data-state="ready"`, a
+// connected node and focus still on the seek input, with the change carrying
+// `value:"1"` and `tracked:"1"`. That leaves the following dead with evidence
+// rather than argument: React's `_valueTracker` dedupe, since every press
+// produced both an `input` and a `change`; a null seek window, the `max` blip
+// to `0` this header used to name as the remaining suspect, since `max` never
+// left `"1"` and `data-state` never left `ready`; focus loss and node
+// replacement, since neither happened; and press spacing once more, since a
+// sample failed with 53-59ms gaps, the same spacing as samples that passed.
+//
+// The two failure modes this gesture has shown are one cause. The media parks
+// at `0` while the control correctly shows `1`, because `useSeekPreview` is
+// holding the requested value — so `toHaveValue("1")` passes and the
+// `currentTime` assertion fails, until the echo deadline releases the preview
+// and the control drops to `0`, which is the original sighting above.
+//
+// The gesture therefore stays excluded from WebKit permanently, for a known
+// reason rather than pending an investigation. The diagnostic branch
+// `pedrosousa13/issue-277-on-webkit-the-third-of-three` (PR #386, closed) is
+// kept if anyone needs to re-read the traces or re-measure.
 //
 // This no longer has to wait for CI. It used to: every test in this file failed
 // on the arrangement locally, and the reason recorded here was that a locally
@@ -426,7 +463,7 @@ test('the seek control keeps End, Home and End pressed inside one round trip', a
 }) => {
   test.skip(
     browserName === 'webkit',
-    'This gesture is flaky on WebKit rather than failing outright — it fails a first attempt on the value the media arrives at and passes on a retry (#277).'
+    'WebKit resolves a rapid seek sequence to the superseded target rather than the last one requested, so the media parks at the start of the window instead of arriving at its end (#277).'
   );
 
   await page.goto(story);
@@ -468,9 +505,12 @@ test('the seek control keeps End, Home and End pressed inside one round trip', a
 
   await expect(seekSliderInput(page)).toHaveValue('1');
   // `>= 1` rather than exactly 1: chromium and firefox report exactly 1, and
-  // the tolerance is kept for whoever re-enables this on WebKit under #277,
-  // where currentTime after arriving at the end settles a fraction past it
-  // (1.000122584-1.000185166) (e2e/reference.spec.ts).
+  // WebKit settles a fraction past the end on arrival
+  // (1.000122584-1.000185166) (e2e/reference.spec.ts). The tolerance is now
+  // slack this gesture never spends — #277's exclusion is permanent, so the one
+  // engine it was widened for no longer runs this line. Kept anyway: it costs
+  // nothing, and an engine that lands a hair past the end is a pass by any
+  // reading of what this asserts.
   await expect
     .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
     .toBeGreaterThanOrEqual(1);
