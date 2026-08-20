@@ -45,15 +45,33 @@ runs:
     # codec-less runner.
     #
     # The fonts need stating precisely, because `visual` pixel-compares
-    # committed baselines. Of the font group `--with-deps` installs, the image
-    # already carries `fonts-liberation` and `fonts-noto-color-emoji`; the ones
-    # actually missing are CJK, Thai and Cyrillic (`fonts-ipafont-gothic`,
-    # `fonts-wqy-zenhei`, `fonts-tlwg-loma-otf`, `xfonts-cyrillic`).
-    # `e2e/visual.spec.ts` renders Latin text, which `fonts-liberation` covers,
-    # and that is *why* it passes — not because fonts are irrelevant here. A
-    # future baseline carrying CJK, Thai or Cyrillic text would diverge from
-    # its reference, and a pixel test is exactly the kind that drifts silently
-    # rather than failing loudly.
+    # committed baselines. All nine chromium is missing, in full:
+    #
+    #   fonts-freefont-ttf      Latin and Greek
+    #   fonts-ipafont-gothic    Japanese
+    #   fonts-tlwg-loma-otf     Thai
+    #   fonts-unifont           all-Unicode fallback
+    #   fonts-wqy-zenhei        Chinese
+    #   xfonts-cyrillic         Cyrillic
+    #   xfonts-encodings        X font infrastructure
+    #   xfonts-scalable         X font infrastructure
+    #   xfonts-utils            X font infrastructure
+    #
+    # Resist the shorthand that these are "the non-Latin ones". They are not:
+    # FreeFont is a Latin face and Unifont covers everything, and both were
+    # present on the runner that generated the committed baselines. What the
+    # 15/15 pass actually shows is that fontconfig resolves `visual`'s text to
+    # `fonts-liberation`, which the image still carries — it does not show that
+    # no Latin font went missing. The image also keeps
+    # `fonts-noto-color-emoji`.
+    #
+    # So the risk is narrower than "fonts are irrelevant" and wider than "only
+    # non-Latin baselines are at risk": any future baseline whose text
+    # fontconfig would resolve to one of the nine — a script none of the
+    # remaining faces cover, or a glyph Liberation lacks and FreeFont or
+    # Unifont supplied — diverges from its reference. A pixel test is exactly
+    # the kind that drifts silently rather than failing loudly, so if a
+    # baseline ever disagrees for no reason anyone can see, start here.
     #
     # Both paths are bounded, for different reasons and at different values.
     #

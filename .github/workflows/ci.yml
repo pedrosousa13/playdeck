@@ -42,12 +42,14 @@ concurrency:
 # red on its own is the whole point.
 #
 # Four of those six no longer touch apt. #359 measured that on this runner
-# image chromium is missing no shared library at all — only CJK, Thai and
-# Cyrillic fonts — so the action drops `--with-deps` for chromium, and
+# image chromium is missing no shared library at all — only fonts and X font
+# utilities — so the action drops `--with-deps` for chromium, and
 # `e2e (chromium)`, `visual`, `package` and `storybook` now download a browser
 # binary and nothing else. `e2e (firefox)` and `e2e (webkit)` still install OS
 # packages, so the apt exposure is cut from six job runs to two rather than
-# removed, and every timeout below stays as it was.
+# removed, and every timeout below stays as it was. Which nine packages those
+# are, and what their absence means for `visual`'s baselines, is in that
+# action rather than repeated here.
 #
 # These job timeouts are the outermost of three limits and the one that should
 # never fire. The install runs through `.github/actions/playwright-install`,
