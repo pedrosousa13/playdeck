@@ -169,6 +169,15 @@ every provider, subject only to the target rules below. The layer fires only
 while focus is inside the region; `global` attaches the same map to the
 document instead.
 
+While the player is muted the volume arrows act on the muted zero the control
+is showing rather than on the published volume behind it: `ArrowUp` unmutes and
+restores that published level unchanged — stepping to 0.05 only where the
+published volume is itself 0, which unmuting alone would leave silent — and
+`ArrowDown` does nothing, because the player is already silent. `ArrowDown`
+still keeps the key. `VolumeSlider`'s own pointer, `Home` and `End` changes are
+unaffected: those start from the zero on screen, so moving one up unmutes at
+the value the user chose.
+
 The region owns those keys wherever focus sits inside it, a focused
 `<input type="range">` included, so the arrows seek and adjust volume at the
 same distances on `SeekSlider` and `VolumeSlider` as off them — see

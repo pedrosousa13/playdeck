@@ -1774,6 +1774,120 @@ describe('Controls container and scoped shortcuts', () => {
     expect(attr(slider, 'aria-valuetext')).toBe('100%');
   });
 
+  // #274. The thumb sits on the muted zero, so an arrow that stepped the
+  // published volume would move from a number nothing on screen shows — and a
+  // downward step from it would land above zero and turn the sound back on.
+  test('unmutes on ArrowUp while muted and moves no volume', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    expect(fireEvent.keyDown(region, { key: 'ArrowUp' })).toBe(false);
+    expect(spies.unmute).toHaveBeenCalledTimes(1);
+    // `muted` and `volume` are independent, so the unmute alone restores the
+    // published 0.5. Asking for 0.55 as well would be a step the user never
+    // made, from a base they were never shown.
+    await act(async () => {});
+    expect(spies.setVolume).not.toHaveBeenCalled();
+    // Nothing was requested, so the thumb stays on the muted zero until the
+    // player publishes the unmute.
+    expect(slider.value).toBe('0');
+  });
+
+  test('does nothing at all on ArrowDown while muted, and still owns the key', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    // The player is already silent, so "quieter" has nothing to do — but the
+    // key is still the layer's under ADR-0005, and a false return is what keeps
+    // a focused range input from stepping itself instead.
+    expect(fireEvent.keyDown(region, { key: 'ArrowDown' })).toBe(false);
+    slider.focus();
+    expect(fireEvent.keyDown(slider, { key: 'ArrowDown' })).toBe(false);
+    expect(spies.unmute).not.toHaveBeenCalled();
+    expect(spies.mute).not.toHaveBeenCalled();
+    await act(async () => {});
+    expect(spies.setVolume).not.toHaveBeenCalled();
+    expect(slider.value).toBe('0');
+  });
+
+  test('steps to one increment on ArrowUp muted at a published zero', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true, volume: 0 })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    // Unmuting alone would restore a published zero and leave the press looking
+    // dead, so this is the one muted case that moves the volume too.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    expect(spies.unmute).toHaveBeenCalledTimes(1);
+    expect(slider.value).toBe('0.05');
+
+    // And the press after it compounds on that request rather than being
+    // swallowed by a `muted` the player has not answered for yet: the thumb is
+    // showing 0.05, so that is the number the arrow acts on.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    expect(slider.value).toBe('0.1');
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.05], [0.1]]);
+  });
+
+  test('leaves the volume arrows to the page while the capability is unavailable', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState({
+        ...capabilities({
+          seek: available,
+          setVolume: unavailable,
+          fullscreen: available
+        }),
+        muted: true
+      })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    region.focus();
+    // The gate runs ahead of preventDefault (ADR-0005), so a key the layer
+    // cannot act on is left whole — the muted branch included.
+    expect(fireEvent.keyDown(region, { key: 'ArrowUp' })).toBe(true);
+    expect(fireEvent.keyDown(region, { key: 'ArrowDown' })).toBe(true);
+    expect(spies.unmute).not.toHaveBeenCalled();
+    expect(spies.setVolume).not.toHaveBeenCalled();
+  });
+
   test('reconciles the volume request while no volume slider is mounted', async () => {
     const { container, emit, spies } = renderWithPlayer(
       <Player.Controls>

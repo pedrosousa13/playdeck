@@ -271,7 +271,6 @@ export const Controls = ({
         case 'volumeDown': {
           if (volumeStatus !== 'available') return;
           event.preventDefault();
-          const delta = action === 'volumeUp' ? 0.05 : -0.05;
           // The volume the user last asked for while it is still outstanding,
           // and published state otherwise. Published state alone is a stale
           // base: it moves only on the media element's own `volumechange`, so
@@ -286,14 +285,33 @@ export const Controls = ({
           // The two sides are different spaces, which nothing else here says: a
           // request is the muted-adjusted volume the thumb shows, while the
           // fallback is the raw published one, which ignores `muted`. They can
-          // only disagree when no request is outstanding, and the raw fallback
-          // is what keeps an arrow press while muted behaving exactly as it
-          // always has.
-          const base = volumeRequest.getRequested() ?? volume;
+          // only disagree while muted with no request outstanding, and that is
+          // the one case an arrow must not step at all (#274): the thumb is on
+          // the muted zero, so a step off the published volume moves from a
+          // number nothing on screen shows, and a downward one lands above zero
+          // and turns the sound back on where the user asked for less. `muted`
+          // and `volume` are independent, so unmuting on its own restores the
+          // published level and leaves `ArrowUp` nothing else to do — except at
+          // a published zero, which it would restore silently, so there it
+          // steps as well. `ArrowDown` has nothing to do at all, and still owns
+          // its key: the `preventDefault()` above is what keeps a focused range
+          // input from stepping itself in place of the no-op (ADR-0005).
+          const requested = volumeRequest.getRequested();
+          if (muted && requested === null) {
+            if (action === 'volumeDown') return;
+            void controller.unmute();
+            if (volume === 0) volumeRequest.request(0.05);
+            return;
+          }
+          const delta = action === 'volumeUp' ? 0.05 : -0.05;
+          const base = requested ?? volume;
           const next = Math.min(
             1,
             Math.max(0, Math.round((base + delta) * 100) / 100)
           );
+          // Reachable only while muted with a request outstanding — a drag up
+          // from the muted zero, or the step above — where the thumb already
+          // shows an audible volume and the unmute may not have been issued.
           if (muted && next > 0) void controller.unmute();
           // The same request `VolumeSlider` renders, so the presses coalesce
           // into one chain and the thumb shows every one of them.
