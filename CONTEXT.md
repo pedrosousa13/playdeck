@@ -265,6 +265,16 @@ gate fails on one whether or not any advisory is reachable, and prints it as
 resolves something the gate never saw (#335).
 _Avoid_: overridden, pinned
 
+**Suppressed**:
+An advisory an `auditConfig` entry in the root `pnpm-workspace.yaml` removes
+from the audit report — `ignoreGhsas` by advisory id, `ignoreCves` by CVE. pnpm
+applies both while it builds the report, so a suppressed advisory is absent from
+the gate's input rather than labelled in it, and reachability cannot be computed
+for it at all. The audit gate fails on any entry carrying an identifier and
+prints it as `SUPPRESSED`. Distinct from **floored**, which changes what the
+graph resolves to; this changes what the gate is shown (#337).
+_Avoid_: ignored, allowlisted, accepted
+
 **Governed**:
 An install the root `pnpm-workspace.yaml` reaches — its advisory floors, its
 `minimumReleaseAge` cooldown and that cooldown's exclusions. The packaging

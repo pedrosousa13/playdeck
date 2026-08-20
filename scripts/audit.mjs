@@ -9,8 +9,9 @@
 // `dependencies` -- at any severity. Everything else is printed, labelled
 // "not shipped", and left alone, whatever its severity.
 //
-// One thing besides an advisory fails it, and only one: an `overrides` entry
-// in `pnpm-workspace.yaml` whose package name lands inside a publishable
+// Two things besides an advisory fail it, and both are settings in
+// `pnpm-workspace.yaml` rather than anything pnpm reported. The first is an
+// `overrides` entry whose package name lands inside a publishable
 // package's dependency closure. The two inputs the gate joins are both
 // produced by running pnpm at the repository root, so both are computed under
 // that block: `pnpm list --prod` reports the floored version, and `pnpm audit`
@@ -27,6 +28,14 @@
 // appears the graph measured here is the graph a consumer resolves and the
 // reachability above is sound, and where one does appear it is not, and this
 // gate says so rather than reporting a clean tree.
+//
+// The second is an `auditConfig` entry, which is not a narrowing of the gate
+// but a hole underneath it. pnpm applies `ignoreGhsas` and `ignoreCves` while
+// it builds the report, so a suppressed advisory never reaches this file to be
+// classified: what arrives is a clean report, indistinguishable from the one a
+// genuinely clean tree produces. Reachability cannot be measured for something
+// the gate was not shown, so it reports the entry and fails rather than passing
+// off the remainder as the whole. See workspaceSuppressions.
 //
 // `pnpm audit --prod` is not the same boundary and is not used: a private
 // integration fixture in this workspace declares its framework under
@@ -74,12 +83,16 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  * derives from them -- which package boundary reachability is drawn around --
  * and the `overrides` block gather() reads from `pnpm-workspace.yaml`, keyed by
  * pnpm selector.
- * @typedef {{ workspace: WorkspaceProject[]; publishable: PublishablePackage[]; prodTrees: ProjectTree[]; audit: AuditReport; overrides: Readonly<Record<string, string>> }} AuditInputs
+ * @typedef {{ workspace: WorkspaceProject[]; publishable: PublishablePackage[]; prodTrees: ProjectTree[]; audit: AuditReport; overrides: Readonly<Record<string, string>>; suppressions: AuditSuppression[] }} AuditInputs
  * @typedef {{ severity: string; module: string; advisoryId: string; title: string; url: string; shipped: boolean; reachableFrom: string[]; paths: string[] }} ClassifiedAdvisory
  *
  * One `name@version` in a publishable package's closure whose name an override
  * floors. A workspace link counts, so the version may read `link:<path>`.
  * @typedef {{ module: string; reachableFrom: string[] }} FlooredModule
+ *
+ * One `auditConfig` entry, as the key it was written under and the identifiers
+ * it carries.
+ * @typedef {{ key: string; identifiers: string[] }} AuditSuppression
  */
 
 // Report order only. The gate does not read it.
@@ -130,6 +143,52 @@ export const shippedVersions = (prodTrees) => {
  */
 export const workspaceOverrides = (workspaceYaml) =>
   parse(workspaceYaml)?.overrides ?? {};
+
+/**
+ * Every `auditConfig` entry in a `pnpm-workspace.yaml` that carries something.
+ *
+ * This is the one input the gate cannot recover by looking harder at its own
+ * output. `pnpm audit` applies `auditConfig` while building the report: in
+ * pnpm 10.34.5 `ignoreGhsas` drops advisories by `github_advisory_id` and
+ * `ignoreCves` by `cves`, both before the `--json` branch serialises anything.
+ * So a suppressed advisory is not labelled in the report, it is absent from
+ * it, and `parseAuditOutput` receives a clean tree indistinguishable from a
+ * genuinely clean one. Reachability is computed over what is left, which makes
+ * the gate's silence meaningless rather than merely narrower -- the failure
+ * mode `parseAuditOutput` already refuses for a registry outage, arriving
+ * through a workspace setting instead.
+ *
+ * Read out of the same file the `overrides` block is read from, and reported
+ * the same way a floored module is: this is the second thing that voids the
+ * measurement without any advisory being reachable.
+ *
+ * Keyed on the block rather than on the two names pnpm reads today, so a key
+ * added by a later pnpm fails closed instead of passing unnoticed. Nothing is
+ * lost by the breadth: `auditConfig` is a suppression-only namespace, and a
+ * benign key appearing there later should be a decision taken here rather than
+ * a default.
+ *
+ * An entry carrying nothing is not reported. An empty list suppresses no
+ * advisory, so failing on one would be a false alarm, and it buys nothing as a
+ * foothold either -- the pull request that adds the first identifier is the one
+ * that fails. A bare string counts as an entry rather than as a mistake: pnpm
+ * tests `ignoreGhsas` with `.includes`, which a string answers too.
+ * @param {string} workspaceYaml
+ * @returns {AuditSuppression[]}
+ */
+export const workspaceSuppressions = (workspaceYaml) => {
+  const auditConfig = parse(workspaceYaml)?.auditConfig;
+  if (typeof auditConfig !== 'object' || auditConfig === null) return [];
+  return Object.entries(auditConfig)
+    .map(([key, value]) => ({
+      key: `auditConfig.${key}`,
+      identifiers: (Array.isArray(value) ? value : [value])
+        .filter((entry) => entry != null && entry !== '')
+        .map(String)
+    }))
+    .filter((entry) => entry.identifiers.length > 0)
+    .sort((a, b) => a.key.localeCompare(b.key));
+};
 
 // Inside a range, a `>` is a semver operator, and these are the characters one
 // can follow: the `@` that opens the range, whitespace, and semver's own
@@ -315,13 +374,15 @@ const flooredModules = (overrides, prodTrees) => {
  * @param {number} importers
  * @param {readonly string[]} publishable
  * @param {readonly FlooredModule[]} floored
+ * @param {readonly AuditSuppression[]} suppressions
  */
 const formatReport = (
   advisories,
   metadata,
   importers,
   publishable,
-  floored
+  floored,
+  suppressions
 ) => {
   const shippedCount = advisories.filter((advisory) => advisory.shipped).length;
   const lines = [
@@ -350,7 +411,18 @@ const formatReport = (
       `              reachable from: ${entry.reachableFrom.join(', ')}`
     );
   }
-  if (advisories.length + floored.length > 0) lines.push('');
+  // A suppression is a finding about the report itself, so it prints among
+  // them and says which advisories the line above it can no longer be read as
+  // covering.
+  for (const entry of suppressions) {
+    lines.push(
+      `SUPPRESSED   ${entry.key}`,
+      `              ${entry.identifiers.join(', ')}`,
+      `              set in pnpm-workspace.yaml, which drops these advisories from the audit report before this gate reads it`
+    );
+  }
+  if (advisories.length + floored.length + suppressions.length > 0)
+    lines.push('');
 
   const summary = [
     shippedCount === 0
@@ -360,6 +432,13 @@ const formatReport = (
   if (floored.length > 0) {
     summary.push(
       `${floored.length} module(s) above are floored. A floor does not travel to a consumer, so what a consumer resolves was never measured.`
+    );
+  }
+  if (suppressions.length > 0) {
+    summary.push(
+      suppressions.length === 1
+        ? '1 auditConfig entry above suppresses advisories, so the count this report opens with is not the count pnpm found.'
+        : `${suppressions.length} auditConfig entries above suppress advisories, so the count this report opens with is not the count pnpm found.`
     );
   }
   lines.push(summary.join(' '));
@@ -375,7 +454,8 @@ export const gate = ({
   publishable,
   prodTrees,
   audit,
-  overrides
+  overrides,
+  suppressions
 }) => {
   const advisories = classify(audit, shippedVersions(prodTrees));
   const floored = flooredModules(overrides, prodTrees);
@@ -385,11 +465,18 @@ export const gate = ({
       audit.metadata,
       workspace.length,
       publishable.map((pkg) => pkg.name),
-      floored
+      floored,
+      suppressions
     ),
     advisories,
+    // A suppression fails on its own, and unlike a floor it is not scoped to a
+    // publishable closure: an advisory pnpm removed from the report cannot be
+    // tested for reachability, because it is not there to test. There is
+    // nothing to intersect, so there is nothing to narrow this to.
     exitCode:
-      advisories.some((advisory) => advisory.shipped) || floored.length > 0
+      advisories.some((advisory) => advisory.shipped) ||
+      floored.length > 0 ||
+      suppressions.length > 0
         ? 1
         : 0
   };
@@ -434,10 +521,12 @@ const gather = () => {
     output = stdout;
   }
 
-  // Read rather than run: an override is a workspace setting, not command
-  // output.
-  const overrides = workspaceOverrides(
-    readFileSync(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8')
+  // Read rather than run: an override and an audit suppression are both
+  // workspace settings, not command output. One file, read once, since the two
+  // answers come out of the same parse either way.
+  const workspaceYaml = readFileSync(
+    new URL('../pnpm-workspace.yaml', import.meta.url),
+    'utf8'
   );
 
   return {
@@ -445,7 +534,8 @@ const gather = () => {
     publishable,
     prodTrees,
     audit: parseAuditOutput(output),
-    overrides
+    overrides: workspaceOverrides(workspaceYaml),
+    suppressions: workspaceSuppressions(workspaceYaml)
   };
 };
 

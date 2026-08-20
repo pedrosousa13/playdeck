@@ -7,7 +7,8 @@ import {
   gate,
   parseAuditOutput,
   shippedVersions,
-  workspaceOverrides
+  workspaceOverrides,
+  workspaceSuppressions
 } from './audit.mjs';
 import { selectPublishable } from './workspace-packages.mjs';
 
@@ -28,7 +29,7 @@ import { selectPublishable } from './workspace-packages.mjs';
 // fixture directory rewritten to `.`.
 /**
  * @param {string} variant
- * @returns {Omit<import('./audit.mjs').AuditInputs, 'publishable' | 'overrides'>}
+ * @returns {Omit<import('./audit.mjs').AuditInputs, 'publishable' | 'overrides' | 'suppressions'>}
  */
 const capture = (variant) =>
   JSON.parse(
@@ -41,25 +42,26 @@ const capture = (variant) =>
     )
   );
 
-// The capture holds command output only. `publishable` and `overrides` are the
-// two inputs gather() derives and reads rather than captures, so produce them
-// here through the same two exports it calls -- the second from the variant's
-// own workspace file, neither of which declares any override.
+// The capture holds command output only. `publishable`, `overrides` and
+// `suppressions` are the inputs gather() derives and reads rather than
+// captures, so produce them here through the same exports it calls -- the last
+// two from the variant's own workspace file, neither of which declares any
+// override or any `auditConfig`.
 /** @param {string} variant */
 const fixture = (variant) => {
   const captured = capture(variant);
+  const workspaceYaml = readFileSync(
+    new URL(
+      `../tests/audit/fixture/${variant}/pnpm-workspace.yaml`,
+      import.meta.url
+    ),
+    'utf8'
+  );
   return {
     ...captured,
     publishable: selectPublishable(captured.workspace),
-    overrides: workspaceOverrides(
-      readFileSync(
-        new URL(
-          `../tests/audit/fixture/${variant}/pnpm-workspace.yaml`,
-          import.meta.url
-        ),
-        'utf8'
-      )
-    )
+    overrides: workspaceOverrides(workspaceYaml),
+    suppressions: workspaceSuppressions(workspaceYaml)
   };
 };
 
@@ -428,6 +430,138 @@ test('an override selector key names the package it floors', () => {
   assert.deepEqual(
     Object.fromEntries(Object.keys(keys).map((key) => [key, flooredName(key)])),
     keys
+  );
+});
+
+// An `auditConfig` block is the other way a workspace setting voids the
+// measurement, and it is the quieter of the two: a floor at least leaves the
+// floored module in the tree for `flooredModules` to find, whereas pnpm applies
+// `ignoreGhsas` and `ignoreCves` while building the report, so what this file
+// receives is a tree with the advisory simply not in it. `development-only`
+// passes today, which isolates the new failure from the advisory gate the same
+// way the floor tests above do.
+test('an auditConfig entry fails an otherwise clean gate', () => {
+  const result = gate({
+    ...developmentOnly,
+    suppressions: [
+      { key: 'auditConfig.ignoreGhsas', identifiers: ['GHSA-vh95-rmgr-6w4m'] }
+    ]
+  });
+  assert.equal(result.exitCode, 1);
+  // Not the advisory gate doing the failing, and not the floor gate either.
+  assert.deepEqual(
+    result.advisories.filter((advisory) => advisory.shipped),
+    []
+  );
+  assert.ok(!result.report.includes('FLOORED'));
+});
+
+test('the report names the suppressed identifiers and why the count above them cannot be read', () => {
+  const report = gate({
+    ...developmentOnly,
+    suppressions: [
+      {
+        key: 'auditConfig.ignoreCves',
+        identifiers: ['CVE-2020-7598', 'CVE-2021-44906']
+      }
+    ]
+  }).report;
+  assert.match(report, /SUPPRESSED\s+auditConfig\.ignoreCves/);
+  // The identifiers themselves, so a reader can look up what was hidden rather
+  // than only learn that something was.
+  assert.ok(report.includes('CVE-2020-7598, CVE-2021-44906'));
+  assert.ok(report.includes('pnpm-workspace.yaml'));
+  assert.equal(
+    lastLine(report),
+    "No advisory is reachable from a publishable package's dependencies. 1 auditConfig entry above suppresses advisories, so the count this report opens with is not the count pnpm found."
+  );
+});
+
+test('a floor and a suppression are counted and worded separately', () => {
+  // Both at once, because they are reported through the same list and the same
+  // summary: one must not swallow the other's line or its sentence.
+  const report = gate({
+    ...developmentOnly,
+    overrides: { 'ms@<2.1.3': '>=2.1.3' },
+    suppressions: [
+      { key: 'auditConfig.ignoreGhsas', identifiers: ['GHSA-a', 'GHSA-b'] },
+      { key: 'auditConfig.ignoreCves', identifiers: ['CVE-1'] }
+    ]
+  }).report;
+  assert.match(report, /FLOORED\s+ms@2\.1\.3/);
+  assert.match(report, /SUPPRESSED\s+auditConfig\.ignoreGhsas/);
+  assert.match(report, /SUPPRESSED\s+auditConfig\.ignoreCves/);
+  assert.ok(
+    lastLine(report).endsWith(
+      '1 module(s) above are floored. A floor does not travel to a consumer, so what a consumer resolves was never measured. 2 auditConfig entries above suppress advisories, so the count this report opens with is not the count pnpm found.'
+    )
+  );
+});
+
+test('a workspace declaring no auditConfig leaves both variants as they are', () => {
+  assert.deepEqual(shipped.suppressions, []);
+  assert.deepEqual(developmentOnly.suppressions, []);
+  for (const variant of [shipped, developmentOnly]) {
+    assert.ok(!gate(variant).report.includes('SUPPRESSED'));
+  }
+  // Same reasoning as the floor case: absent means the summary is the advisory
+  // sentence alone, not one that has gained a second counting zero.
+  assert.match(
+    lastLine(gate(developmentOnly).report),
+    /^No advisory is reachable from a publishable package's dependencies\.$/
+  );
+});
+
+test('the auditConfig block is read out of a workspace file, and its absence is empty', () => {
+  assert.deepEqual(
+    workspaceSuppressions(
+      'packages:\n  - packages/*\nauditConfig:\n  ignoreGhsas:\n    - GHSA-vh95-rmgr-6w4m\n  ignoreCves:\n    - CVE-2020-7598\n'
+    ),
+    // Sorted by key, so the report does not reorder when the file does.
+    [
+      { key: 'auditConfig.ignoreCves', identifiers: ['CVE-2020-7598'] },
+      { key: 'auditConfig.ignoreGhsas', identifiers: ['GHSA-vh95-rmgr-6w4m'] }
+    ]
+  );
+  // Keyed on the block, not on the two names pnpm reads today: a key a later
+  // pnpm adds has to fail closed rather than pass unnoticed.
+  assert.deepEqual(
+    workspaceSuppressions('auditConfig:\n  ignoreSomethingNew:\n    - X-1\n'),
+    [{ key: 'auditConfig.ignoreSomethingNew', identifiers: ['X-1'] }]
+  );
+  // pnpm tests `ignoreGhsas` with `.includes`, which a bare string answers, so
+  // one suppresses for real and has to count as an entry.
+  assert.deepEqual(
+    workspaceSuppressions('auditConfig:\n  ignoreGhsas: GHSA-only-one\n'),
+    [{ key: 'auditConfig.ignoreGhsas', identifiers: ['GHSA-only-one'] }]
+  );
+  // Carrying nothing is not a suppression. An empty list hides no advisory, so
+  // failing on one would be a false alarm -- and it is no foothold either,
+  // since the change that adds the first identifier is the one that fails.
+  assert.deepEqual(
+    workspaceSuppressions('auditConfig:\n  ignoreCves: []\n'),
+    []
+  );
+  assert.deepEqual(workspaceSuppressions('auditConfig: {}\n'), []);
+  assert.deepEqual(workspaceSuppressions('auditConfig:\n  ignoreCves:\n'), []);
+  // And the shapes the overrides read has to survive too: no block, an empty
+  // file, and a file of comments, which parses to null rather than an object.
+  assert.deepEqual(workspaceSuppressions('packages:\n  - packages/*\n'), []);
+  assert.deepEqual(workspaceSuppressions(''), []);
+  assert.deepEqual(workspaceSuppressions('# no settings yet\n'), []);
+});
+
+test("the repository's own workspace file declares no audit suppression", () => {
+  // The counterpart to the overrides fact above, and the one that matters most
+  // if it ever changes: this file legitimately carries a security block, so an
+  // `auditConfig` added to it reads as routine triage rather than as a bypass.
+  // The gate would fail on it -- this says the tree is clean today, so that
+  // failure means something new rather than something already tolerated.
+  assert.deepEqual(
+    workspaceSuppressions(
+      readFileSync(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8')
+    ),
+    []
   );
 });
 
