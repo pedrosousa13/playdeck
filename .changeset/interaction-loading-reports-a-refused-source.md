@@ -22,10 +22,10 @@ for all three, described under its own heading below.
 The refusal is reported **ahead of** the `interaction`-with-autoplay
 configuration conflict when both are true at once. `setActivation` carries one
 error, and the order matters: a security-relevant refusal masked by a complaint
-about an unrelated cosmetic prop is the failure #332 reports elsewhere in the
-tree. Source first is also the order `eager` and `viewport` already check in.
-Neither error is lost — fix the source and the autoplay conflict is what you are
-told next.
+about an unrelated cosmetic prop is what #332 reported in the Wistia notice
+slot, where the same order-first rule settled it. Source first is also the
+order `eager` and `viewport` already check in. Neither error is lost — fix the
+source and the autoplay conflict is what you are told next.
 
 The interaction path also refuses to **arm** on a refused source. Publishing the
 error alone would not have been enough: `activateFromInteraction` would have

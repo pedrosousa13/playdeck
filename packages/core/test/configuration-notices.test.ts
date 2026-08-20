@@ -498,9 +498,14 @@ test('does not let a refused-URL notice displace a standing error', () => {
 
 // Characterizes the single slot as it stands, and does not fix it. A refused
 // consumer URL published first keeps the slot against a provider's own notice,
-// the same first-one-wins the two provider notices of #332 already show. This
-// change makes that masking reachable from one more direction; ranking the two
-// is arbitration, which is #332's subject.
+// the same first-one-wins that #332 reported between two provider notices. This
+// change makes that masking reachable from one more direction.
+//
+// #332 is closed, but it was settled by ordering rather than by arbitration:
+// Wistia now checks the security-relevant option first, so its own two notices
+// no longer mask. That fixes the instance and leaves the mechanism, and this
+// path is not covered by it — nothing orders a refused-URL notice against a
+// provider's. Ranking the two is #368.
 test('a refused-URL notice published first masks a later provider notice (#332)', () => {
   const fake = createProvider();
   const controller = new PlayerController();

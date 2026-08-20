@@ -370,16 +370,16 @@ export const createWistiaAttachment = (
     // computed 'false' or empty string. A `playerColor` or `poster` that fails
     // its check is dropped onto that same path, and now also reported as a
     // notice (#235).
-    if (options.playerColor !== undefined) {
-      if (isHexColor(options.playerColor)) {
-        setOption('playerColor', options.playerColor);
-      } else {
-        emit({ error: playerColorConfigurationNotice });
-      }
-    }
-    if (options.swatch !== undefined) {
-      setOption('swatch', options.swatch ? 'true' : 'false');
-    }
+    //
+    // `poster` is checked BEFORE `playerColor`, and that order is load-bearing.
+    // The controller holds one `configuration` notice per attach, filled with
+    // `??=`, so the first notice emitted here is the only one that ever reaches
+    // `PlayerState.error` — and it is dropped with the provider, so the second
+    // is never reported later either. Checking the cosmetic colour first
+    // therefore suppressed this security-relevant refusal every time, not
+    // sometimes. Neither attribute depends on the other, so ordering them by
+    // what an operator most needs to hear costs nothing (#332).
+    //
     // This check applies the shared allowlist (`isPermittedSourceUrl`,
     // `@playdeck/core`) rather than restating a rule of its own. That allowlist
     // is the library's rule — the same one source detection and every other
@@ -402,6 +402,16 @@ export const createWistiaAttachment = (
       } else {
         emit({ error: posterConfigurationNotice });
       }
+    }
+    if (options.playerColor !== undefined) {
+      if (isHexColor(options.playerColor)) {
+        setOption('playerColor', options.playerColor);
+      } else {
+        emit({ error: playerColorConfigurationNotice });
+      }
+    }
+    if (options.swatch !== undefined) {
+      setOption('swatch', options.swatch ? 'true' : 'false');
     }
     if (options.transparentLetterbox !== undefined) {
       setOption(

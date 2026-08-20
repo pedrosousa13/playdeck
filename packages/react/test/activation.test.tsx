@@ -1323,7 +1323,8 @@ test.each([
 
 // Both conditions at once. The refusal wins: it is the order `eager` and
 // `viewport` already check in, and a security-relevant refusal masked by a
-// configuration complaint is the failure #332 reports elsewhere in the tree.
+// configuration complaint is what #332 reported in the Wistia notice slot,
+// where the same order-first rule settled it.
 test('interaction reports a refused source ahead of the autoplay conflict', async () => {
   const handle = createRef<Player.PlayerHandle>();
   render(
