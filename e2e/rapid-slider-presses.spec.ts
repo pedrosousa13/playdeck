@@ -15,9 +15,9 @@ import {
 // passes because it waited proves the opposite of what this file is for.
 //
 // WebKit, for whoever meets a red run on it: CI has run all four of these on
-// that engine, and two of them are excluded from it as a result. Each of the two
-// is skipped at the top of its own test with the issue it is waiting on. Both
-// `End`/`Home`/`End` gestures run on all three engines.
+// that engine, and three of them are excluded from it as a result. Each of the
+// three is skipped at the top of its own test with the issue it is waiting on.
+// The volume `End`/`Home`/`End` gesture runs on all three engines.
 //
 // The two arrow gestures were flaky on WebKit and are excluded under #278.
 // Playwright's injected key events return to WebKit's task queue between one
@@ -40,23 +40,37 @@ import {
 // chain drains, a seek that had been issued would have shown. The third `End`
 // issued no seek request at all.
 //
-// It runs on WebKit again, and this is the experiment rather than a claim that
-// the defect is gone. It was NEVER reproduced on a local WebKit — ~70 runs of
-// exactly this gesture across congestion burns of 0 to 400, a seek answered
-// late by up to 400ms so all three presses genuinely land inside one round trip,
-// and one and four workers, all green. What was found instead is that the
+// It ran on WebKit again under #384, as an experiment rather than a claim that
+// the defect was gone, and the experiment came back negative. The same
+// assertion failed with the same values — `"1"` expected, `"0"` read. It was
+// flaky rather than cleanly red: it failed a first attempt and passed a later
+// one, so the leg was green and the failure was visible only in the log. It is
+// excluded from WebKit again for that reason, under #344's criterion 18 — a
+// green run has to mean every test passed on its first attempt, and a
+// knowingly-flaky test on `main` spends a retry and hides the next flake behind
+// itself, which is how this defect stayed unnoticed in the first place.
+//
+// What the experiment bought is one mechanism struck off, not a cause. The
 // control used to hand its input values the input cannot keep — a ~1s window
 // under the default 1s step leaves it two — which desynchronises React's value
-// tracker from the DOM permanently, and React drops a change event whose value
-// matches what the tracker holds. That is the only mechanism anyone has that
-// produces this exact shape, and it is fixed at the source in `SeekSlider`. A
-// green WebKit leg settles #277; a red one hands back a much narrower question.
+// tracker from the DOM permanently, and React then drops a change event whose
+// value matches what the tracker holds. That was the only mechanism anyone had
+// that produces this exact shape; #384 fixed it at the source in `SeekSlider`
+// and the failure survived it, so it is not the cause.
 //
-// Read a red run here as evidence and not as a regression: reach for the
-// instrumentation the diagnosis used (per press, the `input`/`change` events,
-// the DOM value, `input._valueTracker.getValue()`, and a `MutationObserver`
-// over the input's attributes — a `max` blip to `0` between the second press
-// and the third is the remaining suspect) before changing anything.
+// Ruled out and carried forward: the media element, the command path, a bare
+// range input, and the spacing of the presses. And it has NEVER been reproduced
+// on a local WebKit — ~70 runs of exactly this gesture across congestion burns
+// of 0 to 400, a `currentTime` setter answering up to 400ms late so all three
+// presses genuinely land inside one round trip, and one and four workers, all
+// green.
+//
+// Instrumentation is the next step rather than the contingency it used to be:
+// per press, the `input`/`change` events, the DOM value,
+// `input._valueTracker.getValue()`, and a `MutationObserver` over the input's
+// attributes — a `max` blip to `0` between the second press and the third is
+// the remaining suspect. Whoever re-enables this gesture to collect that should
+// expect it to pass most attempts.
 //
 // This no longer has to wait for CI. It used to: every test in this file failed
 // on the arrangement locally, and the reason recorded here was that a locally
@@ -407,8 +421,14 @@ test('volume arrow presses past the end clamp there rather than run past it', as
 });
 
 test('the seek control keeps End, Home and End pressed inside one round trip', async ({
+  browserName,
   page
 }) => {
+  test.skip(
+    browserName === 'webkit',
+    'This gesture is flaky on WebKit rather than failing outright — it fails a first attempt on the value the media arrives at and passes on a retry (#277).'
+  );
+
   await page.goto(story);
   await activationButton(page).click();
   await played(page);
@@ -447,10 +467,10 @@ test('the seek control keeps End, Home and End pressed inside one round trip', a
   await outranTheEcho(page);
 
   await expect(seekSliderInput(page)).toHaveValue('1');
-  // `>= 1` rather than exactly 1: chromium and firefox report exactly 1, while
-  // WebKit's currentTime after arriving at the end settles a fraction past it
-  // (1.000122584-1.000185166), and this test runs there again as of #277
-  // (e2e/reference.spec.ts).
+  // `>= 1` rather than exactly 1: chromium and firefox report exactly 1, and
+  // the tolerance is kept for whoever re-enables this on WebKit under #277,
+  // where currentTime after arriving at the end settles a fraction past it
+  // (1.000122584-1.000185166) (e2e/reference.spec.ts).
   await expect
     .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
     .toBeGreaterThanOrEqual(1);
