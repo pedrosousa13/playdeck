@@ -77,7 +77,10 @@ import {
 // engine records why the third press issues no seek. This is an experiment, not
 // a claim that #277 is fixed — nothing about the control changed, and the run
 // is expected to pass more often than it fails, which is exactly why the trace
-// prints unconditionally rather than only on the way to a failed assertion.
+// prints unconditionally rather than only on the way to a failed assertion. The
+// first such run passed outright, which is why the gesture is now made
+// `SEEK_SAMPLES` times per run on that engine and with no retries: one sample a
+// run, retried until green, is how long a wait for evidence nobody would notice.
 // Before any of this reaches `main` the exclusion goes back (or comes out for
 // good, if the trace bought a fix), and the recorder goes with it: it is a
 // probe, and a probe left in a suite is instrumentation nobody reads.
@@ -138,6 +141,14 @@ type SeekTraceEntry =
       // found, which is a reading and not an error: a probe that throws here
       // would take the gesture with it.
       readonly tracked: string | null;
+      // Whether the key had anywhere to land, and whether this is still the
+      // node it would land on. Both separate "the press never reached the
+      // input" from "the input refused it", which the readings above cannot
+      // tell apart. `data-playdeck-part` of `document.activeElement`, or
+      // `'<body>'` for the element focus falls back to, or `null` for anything
+      // else unlabelled.
+      readonly active: string | null;
+      readonly connected: boolean;
     }
   | {
       readonly at: number;
@@ -326,6 +337,22 @@ const recordPresses = (
 //     the observer batch was delivered, a microtask after the mutation itself,
 //     so read these for order and for old/new values rather than for timing to
 //     the millisecond.
+//
+// And two fields on every press-shaped entry, both there because the trace as
+// it stood could not distinguish a key that never reached the input from an
+// input that refused it, and those are different defects:
+//   - `active`: what had focus when the key was dispatched. The gesture focuses
+//     the seek input once and never again, so a render that moves focus — a
+//     remounted control row, a disabled input the engine blurs — sends the
+//     third `End` to whatever holds it instead, and the missing `input` event
+//     then has nothing to do with the seek window at all. Read as
+//     `"seek-slider-input"` for the healthy case.
+//   - `connected`: whether the traced node is still in the document. The
+//     listeners and the `MutationObserver` are bound to the node found at
+//     install time, so if React replaced it every reading after that point came
+//     off a detached element and describes a control the user is no longer
+//     touching. That has to be visible in the log rather than deduced from a
+//     trace that suddenly stops making sense.
 const recordSeekTrace = (page: Page): Promise<void> =>
   page.evaluate(() => {
     const input = document.querySelector<HTMLInputElement>(
@@ -343,6 +370,16 @@ const recordSeekTrace = (page: Page): Promise<void> =>
     const tracked = (): string | null =>
       (input as TrackedInput)._valueTracker?.getValue?.() ?? null;
 
+    // `document.body` spelled out, because an unlabelled element and the
+    // fallback focus target both read `null` off `data-playdeck-part` and only
+    // the second of them means "focus left the control entirely".
+    const active = (): string | null => {
+      const element = document.activeElement;
+      if (element === null) return null;
+      if (element === document.body) return '<body>';
+      return element.getAttribute('data-playdeck-part');
+    };
+
     const snapshot = (phase: 'keydown' | 'input' | 'change'): void => {
       trace.push({
         at: performance.now(),
@@ -353,7 +390,9 @@ const recordSeekTrace = (page: Page): Promise<void> =>
         step: input.step,
         ariaDisabled: input.getAttribute('aria-disabled'),
         state: wrapper.getAttribute('data-state'),
-        tracked: tracked()
+        tracked: tracked(),
+        active: active(),
+        connected: input.isConnected
       });
     };
 
@@ -563,67 +602,116 @@ test('volume arrow presses past the end clamp there rather than run past it', as
     .toBe(0);
 });
 
+// How many times one CI run makes the seek gesture. A diagnostic sample count
+// and not a permanent feature of this suite: it exists because #277 is flaky on
+// the WebKit leg — it has failed a first attempt and passed a later one, and the
+// most recent leg passed outright — so a single sample per run makes a red trace
+// a matter of luck, and every negative run buys one observation. Fifteen fresh
+// pages per run buys fifteen. It goes when the probe goes.
+const SEEK_SAMPLES = 15;
+
+// No retries for anything in this file while the samples are here. CI sets
+// `retries: 2`, and a sample that reproduces #277 on its first attempt and
+// passes on its second is reported as a pass — precisely the masking that let
+// this defect sit unnoticed (see the header, and #344's criterion 18). The
+// measurement is the raw first-attempt outcome, so the retry has to go.
+//
+// File scope rather than a `test.describe` around the samples, deliberately:
+// Playwright applies a file-scope `configure` to the whole file suite whatever
+// its position, so this also takes the retries off the three volume gestures
+// above, and wrapping the samples in a describe instead would rename sample 0
+// and change the test identity chromium and firefox have today. On a branch
+// whose whole purpose is first-attempt evidence, three more tests that must
+// pass first time is the right side to err on. It goes with `SEEK_SAMPLES`.
+test.describe.configure({ retries: 0 });
+
 // Running on WebKit too, for as long as #277 needs the trace below. See the
 // header: the exclusion is lifted to collect a measurement, not because
 // anything was fixed, and it goes back before this lands.
-test('the seek control keeps End, Home and End pressed inside one round trip', async ({
-  page
-}, testInfo) => {
-  await page.goto(story);
-  await activationButton(page).click();
-  await played(page);
+//
+// Sample 0 is the test this file has always had, under its own title and on all
+// three engines. Samples 1 upwards are extra observations of the same gesture,
+// each on a page of its own, and they are WebKit-only: the other two engines
+// have never shown #277 and paying for fifteen runs of a ~10s gesture on each of
+// them would buy nothing. Every sample keeps the full set of assertions — a
+// sample that reproduces the defect has to go red, since a red run carrying the
+// trace is the whole deliverable.
+for (let sample = 0; sample < SEEK_SAMPLES; sample += 1) {
+  const title =
+    'the seek control keeps End, Home and End pressed inside one round trip';
 
-  // Park the media at the start and hold it there. Not a wait for the player to
-  // go quiet — the gesture below is made under congestion with nothing settled
-  // between its presses — but the seek window is only ~1s wide and the control
-  // steps by 1, so a clip left running would put the thumb at a different end
-  // of that window depending on how far it had got, and the gesture would be
-  // asserting something different on every run.
-  await media(page).evaluate((el: HTMLVideoElement) => {
-    el.pause();
-    el.currentTime = 0;
-  });
-  await expect(seekSliderInput(page)).toHaveValue('0');
-  await seekSliderInput(page).focus();
-  await recordPresses(page, 'seek-slider-input', {
-    event: 'seeked',
-    of: 'currentTime'
-  });
-  await recordSeekTrace(page);
+  test(
+    sample === 0 ? title : `${title} (#277 sample ${sample})`,
+    async ({ browserName, page }, testInfo) => {
+      test.skip(
+        sample > 0 && browserName !== 'webkit',
+        '#277 is only ever seen on WebKit, so only that leg pays for the extra samples; chromium and firefox run this gesture once (#277).'
+      );
 
-  await underCongestion(page, () =>
-    pressTogether(page, ['End', 'Home', 'End'])
+      await page.goto(story);
+      await activationButton(page).click();
+      await played(page);
+
+      // Park the media at the start and hold it there. Not a wait for the player
+      // to go quiet — the gesture below is made under congestion with nothing
+      // settled between its presses — but the seek window is only ~1s wide and
+      // the control steps by 1, so a clip left running would put the thumb at a
+      // different end of that window depending on how far it had got, and the
+      // gesture would be asserting something different on every run.
+      await media(page).evaluate((el: HTMLVideoElement) => {
+        el.pause();
+        el.currentTime = 0;
+      });
+      await expect(seekSliderInput(page)).toHaveValue('0');
+      await seekSliderInput(page).focus();
+      await recordPresses(page, 'seek-slider-input', {
+        event: 'seeked',
+        of: 'currentTime'
+      });
+      await recordSeekTrace(page);
+
+      await underCongestion(page, () =>
+        pressTogether(page, ['End', 'Home', 'End'])
+      );
+
+      // #277's measurement, taken before the first assertion can throw: the run
+      // that fails and the run that passes are both evidence, and on WebKit the
+      // second is the likelier of the two. Logged for the CI job output and
+      // attached so the report keeps it once the log has scrolled away. Both
+      // carry the sample index, because fifteen of these land in one job's log
+      // and a trace nobody can attribute to a sample is a trace nobody can pair
+      // with the pass or fail it came from.
+      const trace = JSON.stringify(await seekTrace(page), null, 2);
+      console.log(
+        `#277 TRACE START sample=${sample}\n${trace}\n#277 TRACE END sample=${sample}`
+      );
+      await testInfo.attach(`277-trace-sample-${sample}`, {
+        body: trace,
+        contentType: 'application/json'
+      });
+
+      // The thumb showed the end of the window while the media element was still
+      // at the start, and the start again while nothing had answered for either.
+      // Both are positions the user asked for, so neither press was lost.
+      // Pre-fix run of this test: `[0, 0, 0]`, the middle `Home` swallowed by an
+      // input React had already restored to 0.
+      expect(await shown(page)).toEqual([0, 1, 0]);
+      // Weak here for the same reason it is weak on the volume `End`/`Home`/`End`
+      // gesture: a media element takes long enough to report a `seeked` that
+      // little can have answered by the last press however the presses were sent.
+      // The `shown` array is what carries this test.
+      await outranTheEcho(page);
+
+      await expect(seekSliderInput(page)).toHaveValue('1');
+      // `>= 1` rather than exactly 1: chromium and firefox report exactly 1, and
+      // the tolerance is kept for whoever re-enables this on WebKit under #277,
+      // where currentTime after arriving at the end settles a fraction past it
+      // (1.000122584-1.000185166) (e2e/reference.spec.ts).
+      await expect
+        .poll(() =>
+          media(page).evaluate((el: HTMLVideoElement) => el.currentTime)
+        )
+        .toBeGreaterThanOrEqual(1);
+    }
   );
-
-  // #277's measurement, taken before the first assertion can throw: the run
-  // that fails and the run that passes are both evidence, and on WebKit the
-  // second is the likelier of the two. Logged for the CI job output and
-  // attached so the report keeps it once the log has scrolled away.
-  const trace = JSON.stringify(await seekTrace(page), null, 2);
-  console.log(`#277 TRACE START\n${trace}\n#277 TRACE END`);
-  await testInfo.attach('277-trace', {
-    body: trace,
-    contentType: 'application/json'
-  });
-
-  // The thumb showed the end of the window while the media element was still at
-  // the start, and the start again while nothing had answered for either. Both
-  // are positions the user asked for, so neither press was lost. Pre-fix run of
-  // this test: `[0, 0, 0]`, the middle `Home` swallowed by an input React had
-  // already restored to 0.
-  expect(await shown(page)).toEqual([0, 1, 0]);
-  // Weak here for the same reason it is weak on the volume `End`/`Home`/`End`
-  // gesture: a media element takes long enough to report a `seeked` that little
-  // can have answered by the last press however the presses were sent. The
-  // `shown` array is what carries this test.
-  await outranTheEcho(page);
-
-  await expect(seekSliderInput(page)).toHaveValue('1');
-  // `>= 1` rather than exactly 1: chromium and firefox report exactly 1, and
-  // the tolerance is kept for whoever re-enables this on WebKit under #277,
-  // where currentTime after arriving at the end settles a fraction past it
-  // (1.000122584-1.000185166) (e2e/reference.spec.ts).
-  await expect
-    .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
-    .toBeGreaterThanOrEqual(1);
-});
+}
