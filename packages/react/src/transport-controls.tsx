@@ -15,7 +15,8 @@ import {
   useId,
   useState,
   useSyncExternalStore,
-  type ComponentPropsWithRef
+  type ComponentPropsWithRef,
+  type Ref
 } from 'react';
 
 const formatTime = (totalSeconds: number): string => {
@@ -465,27 +466,92 @@ export const SeekSlider = ({
   );
 };
 
-export type TimeProps = ComponentPropsWithRef<'time'> & {
+// `ref` is widened past `HTMLTimeElement` because the element is not fixed: the
+// untimed branch below renders a `<span>`, so a ref declared as a `<time>` was
+// handed something that is not one. TypeScript could not catch it —
+// `HTMLSpanElement` declares no member `HTMLElement` does not, so
+// `HTMLTimeElement` is structurally assignable to it and the swap type-checked
+// silently while `ref.current.dateTime` read `undefined` at runtime. The
+// declared surface has to be honest about what it hands back, on #356's
+// reasoning. Nothing a consumer writes breaks: property covariance and
+// parameter bivariance keep both `useRef<HTMLTimeElement>(null)` and
+// `(el: HTMLTimeElement | null) => void` assignable. What goes is `.dateTime`
+// autocomplete off the ref — the one member this component does not guarantee.
+export type TimeProps = Omit<ComponentPropsWithRef<'time'>, 'ref'> & {
+  readonly ref?: Ref<HTMLElement>;
   readonly type?: 'current' | 'duration' | 'remaining';
 };
 
-export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
+export const Time = ({
+  children,
+  ref,
+  type = 'current',
+  ...props
+}: TimeProps) => {
   const { currentTime, duration, provider } = usePlayerState((state) => ({
     currentTime: state.currentTime,
     duration: state.duration,
     provider: state.provider
   }));
   const hasDuration = typeof duration === 'number' && Number.isFinite(duration);
+  // `null` for a total this source does not have — a live stream, or one whose
+  // duration has not arrived. `0` was the defect (#248): `formatTime(0)` renders
+  // `0:00`, and a viewer reads a zero-length video rather than an untimed one.
+  // `current` never reaches it, because `currentTime` means the same thing on a
+  // live source as on a VOD one, so a `current` instance is always the `<time>`
+  // below.
   const seconds =
     type === 'duration'
       ? hasDuration
         ? duration
-        : 0
+        : null
       : type === 'remaining'
         ? hasDuration
           ? Math.max(0, duration - currentTime)
-          : 0
+          : null
         : currentTime;
+
+  // Not a `<time>`: there is no time here to mark up. Keeping the element and
+  // emptying it would leave a `<time>` with neither a `datetime` nor parseable
+  // time-string content, which its own rule forbids, and the `PT0S` that would
+  // make it conformant is the same zero-duration claim the text just stopped
+  // making. ADR-0002 rules that an unknown measurement removes the published
+  // property rather than publishing a zero or an empty value; that ADR governs a
+  // CSS custom property rather than an element, but it is the shape this file
+  // already keeps for something it has not measured — `bufferedShare` returns
+  // `null` rather than `0`, and `SeekSlider` then leaves the
+  // `seek-buffered-description` element out instead of rendering an empty one.
+  //
+  // Every hook is repeated onto the `<span>`, because they are the whole
+  // affordance: `data-state="untimed"` is what a consumer hangs a `LIVE` badge,
+  // an em dash or an elapsed-time fallback off, in their own layout rather than
+  // one this library materialises inside their design. The known cost is a
+  // consumer selector written `time[data-playdeck-part="time"]`, which stops
+  // matching in this state — the part attribute is the documented hook, not the
+  // tag name.
+  if (seconds === null) {
+    // The library owns `datetime` in both states. The `<time>` below writes its
+    // own after the spread and so always outranked a consumer's, but a `<span>`
+    // writes none, so an unstripped `dateTime` prop would reach the DOM here and
+    // restate — in the form a machine parses — the zero-duration claim the text
+    // has just stopped making.
+    const untimedProps = { ...props };
+    delete untimedProps.dateTime;
+
+    return (
+      <span
+        {...untimedProps}
+        ref={ref}
+        data-provider={provider ?? undefined}
+        data-playdeck-part="time"
+        data-state="untimed"
+        data-time-type={type}
+      >
+        {children}
+      </span>
+    );
+  }
+
   const formatted = formatTime(seconds);
   const display =
     type === 'remaining' && seconds > 0 ? `-${formatted}` : formatted;
@@ -493,6 +559,12 @@ export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
   return (
     <time
       {...props}
+      // Narrowed back for this branch only. `Ref<HTMLElement>` is a declaration
+      // about what a holder may rely on, not about what arrives: here the
+      // element is a `<time>`, so an `HTMLTimeElement` is what the ref receives.
+      // The cast writes a subtype into a wider slot, which is the safe
+      // direction; TypeScript refuses it only because a ref object is mutable.
+      ref={ref as Ref<HTMLTimeElement>}
       dateTime={`PT${Math.max(0, Math.floor(seconds))}S`}
       data-provider={provider ?? undefined}
       data-playdeck-part="time"
