@@ -30,6 +30,66 @@ const formatTime = (totalSeconds: number): string => {
     : `${minutes}:${pad(seconds)}`;
 };
 
+// How many digits sit after the point, including the ones `String` hides in
+// exponent form (it switches to it below 1e-6).
+const decimalPlaces = (value: number): number => {
+  const text = String(value);
+  const exponent = text.indexOf('e');
+  const mantissa = exponent === -1 ? text : text.slice(0, exponent);
+  const point = mantissa.indexOf('.');
+  const digits = point === -1 ? 0 : mantissa.length - point - 1;
+  if (exponent === -1) return digits;
+  return Math.max(0, digits - Number(text.slice(exponent + 1)));
+};
+
+// The value a range input will actually keep, which is not always the value it
+// is handed: the HTML value sanitisation algorithm clamps into `[min, max]` and
+// then snaps to the nearest `step`, ties going to the higher.
+//
+// A controlled input handed a value it cannot keep desynchronises React's value
+// tracker from the DOM — React's tracker records the string React assigned, the
+// input records the string it kept — and React drops a change event whose new
+// value equals what the tracker holds. The press behind that event then issues
+// no command at all, while every other signal says it was seen: the thumb moves,
+// the keydown fires, and only the media never arrives.
+//
+// Neither slider below can assume it is handed a step-valid value, because both
+// render what the media publishes rather than what the user chose. Measured on
+// the ~1s reference clip, where the default 1s step leaves the seek input two
+// values it can keep: React assigns `0.505738182`, the input keeps `1`, the
+// tracker keeps `0.505738182`, and `End` from there moves nothing and seeks
+// nowhere on all three engines. A volume arrow chain drifts off its 0.05 grid in
+// floating point the same way. Snapping here is what keeps the string React
+// assigns and the string the input keeps the same string.
+//
+// It renders only. Nothing downstream reads it: a command carries the value read
+// back off the DOM, and the preview policy compares against what was requested.
+const snapToStep = (
+  value: number,
+  min: number,
+  max: number,
+  step: number | string | undefined
+): number => {
+  const clamped = Math.min(Math.max(value, min), max);
+  const size = typeof step === 'number' ? step : Number(step);
+  // `step="any"` parses to `NaN`, which is the attribute asking for no grid at
+  // all — the one case where any value is one the input can keep.
+  if (!Number.isFinite(size) || size <= 0) return clamped;
+  // Rebuilt from the step index rather than accumulated, and rounded to the
+  // grid's own precision: `7 * 0.05` is `0.35000000000000003`, a step mismatch
+  // of its own that would leave behind exactly the desync this exists to avoid.
+  const places = Math.min(
+    Math.max(decimalPlaces(size), decimalPlaces(min)),
+    20
+  );
+  const on = (index: number): number =>
+    Number((min + index * size).toFixed(places));
+  const nearest = on(Math.round((clamped - min) / size));
+  // A grid whose last stop falls short of the maximum stops there rather than
+  // stepping past it, which is what the sanitisation algorithm does too.
+  return nearest <= max ? nearest : on(Math.floor((max - min) / size));
+};
+
 export type PlayButtonProps = ComponentPropsWithRef<'button'>;
 
 export const PlayButton = ({
@@ -132,10 +192,11 @@ export const VolumeSlider = ({
     volumeRequest.getRequested
   );
   if (status !== 'available') return null;
+  const grid = step ?? 0.05;
   // A request outranks the muted zero. Dragging up while muted unmutes, but
   // `muted` stays true until the player publishes the unmute, so rendering the
   // zero here would swallow that drag exactly as a lagging volume does.
-  const value = requested ?? (muted ? 0 : volume);
+  const value = snapToStep(requested ?? (muted ? 0 : volume), 0, 1, grid);
   // Read off the value the thumb is showing, so assistive technology is never
   // told something the sighted user is being shown the opposite of.
   const percent = Math.round(value * 100);
@@ -158,7 +219,7 @@ export const VolumeSlider = ({
         if (muted && next > 0) void controller.unmute();
         volumeRequest.request(next);
       }}
-      step={step ?? 0.05}
+      step={grid}
       style={{ ...controlTargetStyle, ...style }}
       type="range"
       value={value}
@@ -386,11 +447,13 @@ export const SeekSlider = ({
   const min = window ? window.start : 0;
   const max = window ? window.end : 0;
   const span = max - min;
+  // The step the input will actually be rendered with, since `inputProps`
+  // overrides the default below and the value has to be snapped to whichever
+  // grid wins.
+  const grid = inputProps?.step ?? 1;
   // A held preview is clamped like media time is: the window it was asked
   // against can have moved on before the seek was answered.
-  const value = window
-    ? Math.min(Math.max(preview ?? currentTime, min), max)
-    : 0;
+  const value = window ? snapToStep(preview ?? currentTime, min, max, grid) : 0;
   // The geometry below is `aria-hidden`, so this description is the extent's
   // only route to assistive technology (#189) — read on demand, never a live
   // region, because `buffered` moves many times a second.
@@ -429,8 +492,8 @@ export const SeekSlider = ({
       </div>
       <input
         aria-label="Seek"
-        step={1}
         {...inputProps}
+        step={grid}
         aria-describedby={describedBy}
         aria-disabled={window ? undefined : true}
         aria-valuetext={
