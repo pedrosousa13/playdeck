@@ -234,8 +234,8 @@ const unsupportedError = (message: string) => ({
   message
 });
 
-// How much of the rejected source the message quotes. A YouTube watch url is
-// 43 characters and a `player.vimeo.com` url carrying a privacy hash is 55, so
+// How much of the rejected source the message quotes, in code points. A YouTube
+// watch url is 43 of them and a `player.vimeo.com` url with a privacy hash 55, so
 // every form `docs/provider-setup.md` lists survives whole. Past that the quote
 // is into a query string, while what identifies the mistake -- the scheme, the
 // host, the path shape -- is all at the front. It is a bound and not a
@@ -266,30 +266,49 @@ const echoSource = (input: unknown): string => {
       rendered = `of type ${typeof input}`;
     }
   }
-  return rendered.length > MAX_SOURCE_ECHO
-    ? `${rendered.slice(0, MAX_SOURCE_ECHO)}…`
+  // By code point, not by code unit: slicing a string at a UTF-16 boundary can
+  // cut a surrogate pair in half, and the lone surrogate left behind renders as
+  // U+FFFD. A source url can carry an astral character in a path or a query.
+  const points = Array.from(rendered);
+  return points.length > MAX_SOURCE_ECHO
+    ? `${points.slice(0, MAX_SOURCE_ECHO).join('')}…`
     : rendered;
 };
 
+// Deliberately not `SourceDetectionFailure.guidance`, which every failure also
+// carries. Core's string is one sentence for all three reasons -- "Pass an
+// explicit source object with a supported type and the required fields" -- and
+// it is addressed to a caller of `detectSource`, for whom building the object
+// by hand is the answer. It is the wrong advice for a `Player.Root` consumer
+// who mistyped a YouTube url: the fix there is the url, not a hand-built
+// object. So the two are for different audiences and both are correct for
+// theirs; this one is the React layer's, and core's stays what a direct caller
+// reads off the result.
 const SOURCE_GUIDANCE =
   "See Playdeck's docs/provider-setup.md for the source forms each provider accepts.";
 
 // One sentence per `detectSource` failure reason, because the three do not mean
-// the same thing and one sentence for all three is the dead end #305 reports:
-// `malformed-string` is a string no video could be read out of -- ill-formed,
-// or a recognised provider host in a path shape the detector does not read
-// (`source-detection.ts:328`, `:334`, `:346`); `unsupported-string` is a
-// well-formed url whose scheme the shared allowlist refuses or whose host no
-// provider claims (`:290`, `:353`); `invalid-source` is a non-string that is
-// not a source object (`:369`). Each quotes what was rejected, so the message
-// says which value to go and fix rather than only that one exists.
+// the same thing and one sentence for all three is the dead end #305 reports.
+// Each quotes what was rejected, so the message says which value to go and fix
+// rather than only that one exists.
+//
+// Each sentence is held to what its reason actually proves. `malformed-string`
+// is a string no video could be read out of -- ill-formed, or a recognised
+// provider host in a path shape the detector does not read -- and says so.
+// `unsupported-string` is the one that cannot name a cause: it covers a scheme
+// the shared allowlist refuses, a space or C0 control the URL parser would
+// strip from either end, and a well-formed url that simply matched nothing.
+// "Its scheme or its host is not one Playdeck plays" was wrong for two of those
+// three -- `clip.avi` has neither a scheme nor a host, and an invisible control
+// character on an otherwise playable `.mp4` url is nothing to do with the host
+// -- so it states the requirement instead of guessing which half of it failed.
 const refusedSourceMessage = (source: SourceDetectionFailure): string => {
   const echoed = echoSource(source.input);
   if (source.reason === 'malformed-string') {
     return `Playdeck could not read a video from the player source "${echoed}" — it is either not a well-formed URL, or a provider URL in a form Playdeck does not read. ${SOURCE_GUIDANCE}`;
   }
   if (source.reason === 'unsupported-string') {
-    return `Playdeck has no provider for the player source "${echoed}" — its scheme or its host is not one Playdeck plays. ${SOURCE_GUIDANCE}`;
+    return `Playdeck will not play the player source "${echoed}". An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ${SOURCE_GUIDANCE}`;
   }
   return `The player source ${echoed} is not a source object Playdeck accepts. ${SOURCE_GUIDANCE}`;
 };
@@ -324,13 +343,21 @@ const PROVIDER_LABELS: Record<ResolvedPlayerSource['type'], string> = {
 // there, which the reason is not: `loadProvider` rejects for a chunk the
 // network never delivered, a CSP that refused it, a missing media mount and an
 // adapter factory that threw, and nothing here can tell those apart. Saying so
-// beats inventing a reason; the rejection itself already rides on `cause`.
+// beats inventing a reason.
+//
+// It names a fix rather than only a field. `cause` still carries the rejection,
+// but `ErrorDisplay` renders `error.message` and nothing else
+// (`loading-error.tsx:341`, `:345`), so a message whose only next step is
+// `error.cause` dead-ends for the person actually looking at the player. The
+// document is the step both audiences can take, and its provider-load section
+// is what forwards to the CSP origins list -- one place to keep true, rather
+// than a second link maintained here.
 const providerError = (cause: unknown, type: ResolvedPlayerSource['type']) => ({
   category: 'provider' as const,
   cause,
   fatal: false,
   recoverable: true,
-  message: `Unable to load the ${PROVIDER_LABELS[type]} provider. Playdeck cannot say why — the failure it caught is on this error's cause.`
+  message: `Unable to load the ${PROVIDER_LABELS[type]} provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See Playdeck's docs/provider-setup.md for what to check.`
 });
 
 const destroyStale = (adapter: ProviderAdapter): void => {

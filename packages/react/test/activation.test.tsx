@@ -214,7 +214,8 @@ const REFUSED_SOURCE = 'javascript:alert(1)';
 // `javascript:` fails at the shared allowlist, which is `unsupported-string` --
 // the reason whose sentence names the scheme and the host (#305).
 const REFUSED_SOURCE_MESSAGE =
-  'Playdeck has no provider for the player source "javascript:alert(1)" — its scheme or its host is not one Playdeck plays. ' +
+  'Playdeck will not play the player source "javascript:alert(1)". ' +
+  'An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ' +
   "See Playdeck's docs/provider-setup.md for the source forms each provider accepts.";
 
 beforeEach(() => {
@@ -1351,7 +1352,8 @@ test.each([
     label: 'a URL no provider claims',
     source: 'https://example.com/watch',
     message:
-      'Playdeck has no provider for the player source "https://example.com/watch" — its scheme or its host is not one Playdeck plays. ' +
+      'Playdeck will not play the player source "https://example.com/watch". ' +
+      'An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ' +
       "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
   },
   {
@@ -1382,12 +1384,12 @@ test.each([
 
 // The quote is bounded. `ErrorDisplay` renders the message as one paragraph
 // over the player, so a source carrying a long query string would otherwise
-// push the retry button off a small viewport. 120 characters keeps the whole of
+// push the retry button off a small viewport. 120 code points keep the whole of
 // every form the setup document lists, and the scheme, host and path that
 // identify the mistake are all inside it.
 test('eager loading truncates a long source in the message', async () => {
   const handle = createRef<Player.PlayerHandle>();
-  // 20 characters of origin, then 200 more: quoted to the first 120 and elided.
+  // 20 code points of origin, then 200 more: quoted to the first 120, elided.
   render(
     fixture({
       loading: 'eager',
@@ -1401,11 +1403,29 @@ test('eager loading truncates a long source in the message', async () => {
       activation: 'error',
       error: {
         message:
-          `Playdeck has no provider for the player source "https://example.com/${'a'.repeat(100)}…" — its scheme or its host is not one Playdeck plays. ` +
+          `Playdeck will not play the player source "https://example.com/${'a'.repeat(100)}…". ` +
+          'An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ' +
           "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
       }
     })
   );
+});
+
+// The bound is counted in code points, so the cut cannot land inside a surrogate
+// pair. Slicing by code unit here would leave a lone `\ud83c`, which renders as
+// U+FFFD -- a message quoting a character the consumer never passed.
+test('eager loading truncates a long source between code points', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  // The astral character is the 120th code point, so it is the last one kept.
+  const source = `https://example.com/${'a'.repeat(99)}🎬${'b'.repeat(40)}`;
+  render(fixture({ loading: 'eager', ref: handle, source }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState().error?.message).toContain(
+      `"https://example.com/${'a'.repeat(99)}🎬…"`
+    )
+  );
+  expect(handle.current?.getState().error?.message).not.toContain('�');
 });
 
 // The message has to follow the prop. Every refusal collapses to one
@@ -2378,7 +2398,7 @@ test('names the provider a failed load was for', async () => {
         category: 'provider',
         cause,
         message:
-          "Unable to load the Vimeo provider. Playdeck cannot say why — the failure it caught is on this error's cause.",
+          "Unable to load the Vimeo provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See Playdeck's docs/provider-setup.md for what to check.",
         recoverable: true
       },
       lifecycle: 'error'

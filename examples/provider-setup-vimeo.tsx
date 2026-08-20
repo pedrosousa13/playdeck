@@ -6,10 +6,10 @@ import * as Player from '@playdeck/react';
 export const VimeoClip = () => (
   <Player.Root
     controls={false}
-    // Everything Vimeo alone has lives here. `dnt` asks Vimeo not to track the
-    // session; `suppressSeoMetadata` stops the SDK sending the page's own URL
-    // to the embed, and is page-wide rather than per-player.
-    providerOptions={{ vimeo: { dnt: true, suppressSeoMetadata: true } }}
+    // No `providerOptions`: `dnt` is already on by default, and
+    // `suppressSeoMetadata` silences the SDK handshake for every Vimeo embed on
+    // the page, not just this one. That blast radius is a decision to make
+    // deliberately, not to inherit from an example.
     source="https://vimeo.com/76979871?h=8272103f6e"
   >
     <Player.Viewport>

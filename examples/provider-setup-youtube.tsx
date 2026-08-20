@@ -6,12 +6,11 @@ import * as Player from '@playdeck/react';
 export const YouTubeClip = () => (
   <Player.Root
     // `controls`, `loop`, `startTime` and `endTime` are Playdeck's own props on
-    // every provider (ADR-0004), never keys in the bag below.
+    // every provider (ADR-0004), never keys in a provider's option bag.
     controls={false}
-    // Everything YouTube alone has lives here. `host` moves the embed off the
-    // privacy-enhanced youtube-nocookie.com default; only the two origins
-    // YouTube serves the embed from are honoured.
-    providerOptions={{ youtube: { host: 'https://www.youtube.com' } }}
+    // No `providerOptions`: every YouTube default is the one to start from. The
+    // embed loads from youtube-nocookie.com unless you move it, and moving it
+    // is a decision to make deliberately, not to inherit from an example.
     source="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
   >
     <Player.Viewport>

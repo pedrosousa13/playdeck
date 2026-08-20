@@ -103,7 +103,7 @@ export const ErrorState: Story = {
       fatal: false,
       recoverable: true,
       message:
-        "Unable to load the Vimeo provider. Playdeck cannot say why — the failure it caught is on this error's cause."
+        "Unable to load the Vimeo provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See Playdeck's docs/provider-setup.md for what to check."
     }
   }),
   play: async ({ canvas }) => {

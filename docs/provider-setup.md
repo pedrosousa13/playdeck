@@ -4,9 +4,9 @@ Which source values each provider accepts, what each provider's own options are,
 and a working player per provider. Read against
 `packages/core/src/source-detection.ts` — the detector itself, not a provider's
 own documentation — because a form a provider publishes is not a form this
-library reads. Every accepted form below is cited to the line that accepts it,
-and the refused ones are named too: a setup guide that lists a form the detector
-turns down is worse than one that lists fewer.
+library reads. The refused forms are named alongside the accepted ones: a setup
+guide that lists a form the detector turns down is worse than one that lists
+fewer. Every claim here was checked by running the detector, not by reading it.
 
 Nothing here is an install step. `@playdeck/react` depends on all five provider
 packages and imports each one dynamically, so a YouTube or Vimeo source needs no
@@ -28,23 +28,30 @@ Everything one provider alone has goes in `providerOptions`, keyed by provider.
 
 ## Shared rules for a source string
 
-These run before any host is looked at, and they refuse a string outright
-(`source-detection.ts:276-321`).
+These run before any host is looked at, and they refuse a string outright.
 
-| Rule                                                                                                                                                      | Line   |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Non-empty, and equal to its own `trim()` — a leading or trailing space is refused rather than trimmed. No raw tab, line feed or carriage return anywhere. | `:279` |
-| No `%` that is not followed by two hex digits.                                                                                                            | `:286` |
-| Scheme must be `http:` or `https:`, or absent. Everything else — `javascript:`, `data:`, `file:`, and `blob:` too — is refused for a string.              | `:290` |
-| A scheme must be followed by `//`: `https:clip.mp4` and `https:/host/clip.mp4` are refused.                                                               | `:310` |
-| A protocol-relative `//host/…` must have a non-`/` after the two slashes.                                                                                 | `:294` |
-| The URL must parse.                                                                                                                                       | `:314` |
+| Rule                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Non-empty, and equal to its own `trim()` — a leading or trailing space is refused rather than trimmed. No raw tab, line feed or carriage return anywhere.                                |
+| No space and no C0 control character (U+0000 to U+001F) at either end. These are what the URL parser would strip before parsing, so the value that plays would not be the value checked. |
+| No `%` that is not followed by two hex digits.                                                                                                                                           |
+| Scheme must be `http:` or `https:`, or absent. Everything else — `javascript:`, `data:`, `file:`, and `blob:` too — is refused for a string.                                             |
+| A scheme must be followed by `//`: `https:clip.mp4` and `https:/host/clip.mp4` are refused.                                                                                              |
+| A protocol-relative `//host/…` must have a non-`/` after the two slashes.                                                                                                                |
+| The URL must parse.                                                                                                                                                                      |
+
+The two whitespace rules overlap but are not the same rule, and they do not
+report the same way. A trailing **space** is caught by the `trim()` comparison
+and reads as _not readable_; a trailing **control character** is invisible, gets
+past that comparison, and reads as _will not play_ — see
+[What a refusal reads like](#what-a-refusal-reads-like). If a URL that looks
+correct is refused, an invisible character copied in with it is the first thing
+to check.
 
 Scheme-less forms are accepted for every provider: protocol-relative
 (`//host/clip.mp4`), root-relative (`/clip.mp4`) and relative (`clip.mp4`). A
 protocol-relative URL is resolved against `https:` and it is the resolved value
-that is carried forward, never the `//host/…` the caller wrote
-(`:300`, `resolveNetworkPath`).
+that is carried forward, never the `//host/…` the caller wrote.
 
 `blob:` is refused for a string because no source type has been resolved yet. It
 is accepted inside an explicit `{ type: 'video' }` object, and only there — see
@@ -52,42 +59,52 @@ is accepted inside an explicit `{ type: 'video' }` object, and only there — se
 
 ## YouTube
 
-Hosts (`:129-135`): `youtube.com`, `www.youtube.com`, `m.youtube.com`,
-`music.youtube.com`, `youtu.be`, `www.youtu.be`.
+Six hosts, and the path shapes differ between two groups of them:
 
-A video id is `[A-Za-z0-9_-]+` (`:22`). Accepted path shapes (`:150-169`):
+- the **short hosts** — `youtu.be` and `www.youtu.be`;
+- the **full hosts** — `youtube.com`, `www.youtube.com`, `m.youtube.com` and
+  `music.youtube.com`.
 
-| Form                                   | Host                    | Line   |
-| -------------------------------------- | ----------------------- | ------ |
-| `https://www.youtube.com/watch?v=<id>` | any host but `youtu.be` | `:162` |
-| `https://www.youtube.com/embed/<id>`   | any host but `youtu.be` | `:157` |
-| `https://www.youtube.com/shorts/<id>`  | any host but `youtu.be` | `:157` |
-| `https://youtu.be/<id>`                | `youtu.be` only         | `:156` |
+A video id is `[A-Za-z0-9_-]+`. Accepted path shapes:
+
+| Form                                   | Host        |
+| -------------------------------------- | ----------- |
+| `https://www.youtube.com/watch?v=<id>` | full hosts  |
+| `https://www.youtube.com/embed/<id>`   | full hosts  |
+| `https://www.youtube.com/shorts/<id>`  | full hosts  |
+| `https://youtu.be/<id>`                | short hosts |
 
 Non-obvious, and accepted: any other query parameter is ignored, so
 `…/watch?v=<id>&t=42&list=<playlist>` resolves to that video — the timestamp and
 the playlist are dropped rather than refusing the URL. Use `Root`'s `startTime`
 prop for an offset.
 
-Refused — the first five because the shape is not one of the four above, the
+Non-obvious, and a trap: on a short host the **whole first path segment is taken
+as the id**, whatever it says. `https://youtu.be/watch?v=<id>` therefore
+resolves — to the video id `watch`, not to `<id>` — and fails at YouTube rather
+than here. On a short host, pass only `https://youtu.be/<id>`.
+
+Refused — the first four because the shape is not one of the four above, the
 last because the host is not one of the six:
 
-- `https://www.youtube.com/<id>` — a bare id path is read on `youtu.be` only.
-- `https://youtu.be/embed/<id>` — `/embed/` and `/shorts/` are read on the full
-  hosts only.
+- `https://www.youtube.com/<id>` — a bare id path is read on the short hosts
+  only.
+- `https://youtu.be/embed/<id>`, `https://www.youtu.be/shorts/<id>` — `/embed/`
+  and `/shorts/` are read on the full hosts only, and this holds for both short
+  hosts.
 - `https://www.youtube.com/live/<id>`, `/playlist?list=…`, `/@handle` — no
   shape reads them.
 - `https://www.youtube.com/watch?v=<a>&v=<b>` — two `v` parameters are
-  ambiguous, so it fails here rather than in the provider (`:162`).
+  ambiguous, so it fails here rather than in the provider.
 - `https://www.youtube-nocookie.com/embed/<id>` — that host is where the embed
   is _served_, chosen by the `host` option below. It is not a source host.
 
-`providerOptions.youtube` accepts `host` and `loadIframeApi`
-(`packages/react/src/provider-loaders.ts`, `PlayerProviderOptions`). `host`
-moves the embed off the privacy-enhanced `https://www.youtube-nocookie.com`
-default; only `https://www.youtube.com` and that default are honoured, and any
-other value falls back rather than throwing. `loadIframeApi` supplies the iframe
-API yourself instead of fetching `https://www.youtube.com/iframe_api`. See
+`providerOptions.youtube` accepts `host` and `loadIframeApi`. `host` moves the
+embed off the privacy-enhanced `https://www.youtube-nocookie.com` default, which
+is a privacy trade to make deliberately; only `https://www.youtube.com` and that
+default are honoured, and any other value falls back rather than throwing.
+`loadIframeApi` supplies the iframe API yourself instead of fetching
+`https://www.youtube.com/iframe_api`. See
 [Third-party requests and CSP](third-party-requests.md) for what a page's CSP
 has to allow, and [`@playdeck/provider-youtube`](../packages/provider-youtube)
 for what the adapter reports.
@@ -103,12 +120,11 @@ import * as Player from '@playdeck/react';
 export const YouTubeClip = () => (
   <Player.Root
     // `controls`, `loop`, `startTime` and `endTime` are Playdeck's own props on
-    // every provider (ADR-0004), never keys in the bag below.
+    // every provider (ADR-0004), never keys in a provider's option bag.
     controls={false}
-    // Everything YouTube alone has lives here. `host` moves the embed off the
-    // privacy-enhanced youtube-nocookie.com default; only the two origins
-    // YouTube serves the embed from are honoured.
-    providerOptions={{ youtube: { host: 'https://www.youtube.com' } }}
+    // No `providerOptions`: every YouTube default is the one to start from. The
+    // embed loads from youtube-nocookie.com unless you move it, and moving it
+    // is a decision to make deliberately, not to inherit from an example.
     source="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
   >
     <Player.Viewport>
@@ -131,20 +147,20 @@ export const YouTubeClip = () => (
 
 ## Vimeo
 
-Hosts (`:137-140`): `vimeo.com`, `www.vimeo.com`, `player.vimeo.com`.
+Hosts: `vimeo.com`, `www.vimeo.com`, `player.vimeo.com`.
 
-A video id is digits only (`:26`) and a privacy hash is `[A-Za-z0-9]+` (`:29`).
-Accepted path shapes (`:171-197`):
+A video id is digits only and a privacy hash is `[A-Za-z0-9]+`. Accepted path
+shapes:
 
-| Form                                         | Host                         | Line   |
-| -------------------------------------------- | ---------------------------- | ------ |
-| `https://vimeo.com/<id>`                     | `vimeo.com`, `www.vimeo.com` | `:178` |
-| `https://player.vimeo.com/video/<id>`        | `player.vimeo.com`           | `:175` |
-| `https://player.vimeo.com/video/<id>/<hash>` | `player.vimeo.com`           | `:175` |
-| any of the above with `?h=<hash>`            | either                       | `:181` |
+| Form                                         | Host                         |
+| -------------------------------------------- | ---------------------------- |
+| `https://vimeo.com/<id>`                     | `vimeo.com`, `www.vimeo.com` |
+| `https://player.vimeo.com/video/<id>`        | `player.vimeo.com`           |
+| `https://player.vimeo.com/video/<id>/<hash>` | `player.vimeo.com`           |
+| any of the above with `?h=<hash>`            | either                       |
 
 An unlisted video's hash reaches the embed whichever way it arrives. Where both
-arrive, the `?h=` query hash wins over the path hash (`:195`).
+arrive, the `?h=` query hash wins over the path hash.
 
 Refused:
 
@@ -154,17 +170,19 @@ Refused:
 - `https://vimeo.com/channels/<channel>/<id>`,
   `https://vimeo.com/groups/<group>/videos/<id>`,
   `https://vimeo.com/ondemand/<slug>` — none is `/<id>`.
-- `?h=<a>&h=<b>` — two hashes are ambiguous (`:186`).
-- `?h=` holding anything outside `[A-Za-z0-9]` (`:187`).
+- `?h=<a>&h=<b>` — two hashes are ambiguous.
+- `?h=` holding anything outside `[A-Za-z0-9]`.
 
 `providerOptions.vimeo` accepts `dnt`, `customControls` and
 `suppressSeoMetadata`. `dnt` asks Vimeo not to track the session and is on
 unless you turn it off. `customControls: true` is what makes Playdeck probe
 whether the account behind the video is on a tier that allows chromeless
-playback — without it no probe request is made at all. `suppressSeoMetadata`
-stops the SDK sending the embedding page's own URL to the embed, and is
-page-wide rather than per-player. All three are documented in full in
-[`@playdeck/provider-vimeo`](../packages/provider-vimeo).
+playback — without it no probe request is made at all, so no viewer is disclosed
+to Vimeo before anyone has asked for the capability. `suppressSeoMetadata` stops
+the SDK sending the embedding page's own URL to the embed; it is page-wide
+rather than per-player, so switching it on silences that handshake for every
+Vimeo embed on the page, including ones Playdeck did not create. All three are
+documented in full in [`@playdeck/provider-vimeo`](../packages/provider-vimeo).
 
 <!-- example:provider-setup-vimeo -->
 
@@ -177,10 +195,10 @@ import * as Player from '@playdeck/react';
 export const VimeoClip = () => (
   <Player.Root
     controls={false}
-    // Everything Vimeo alone has lives here. `dnt` asks Vimeo not to track the
-    // session; `suppressSeoMetadata` stops the SDK sending the page's own URL
-    // to the embed, and is page-wide rather than per-player.
-    providerOptions={{ vimeo: { dnt: true, suppressSeoMetadata: true } }}
+    // No `providerOptions`: `dnt` is already on by default, and
+    // `suppressSeoMetadata` silences the SDK handshake for every Vimeo embed on
+    // the page, not just this one. That blast radius is a decision to make
+    // deliberately, not to inherit from an example.
     source="https://vimeo.com/76979871?h=8272103f6e"
   >
     <Player.Viewport>
@@ -207,18 +225,17 @@ Covered here as well, because the detector treats all five the same way.
 
 **Wistia.** Hosts are `wistia.com`, `wistia.net` and any subdomain of either —
 matched on the suffix, because the account subdomain is per-customer and cannot
-be enumerated (`:144-148`). A media id is `[A-Za-z0-9]+` (`:32`), and the
-accepted paths are `/medias/<id>`, `/embed/medias/<id>` and
-`/embed/iframe/<id>` (`:202-210`). Wistia is the one host set where a
-non-embed path is not refused outright: it serves media files itself, so a
-Wistia URL that is not an embed shape is read by file extension before failing
-(`:336-347`). `providerOptions.wistia` accepts `controls`, `dnt`,
+be enumerated. A media id is `[A-Za-z0-9]+`, and the accepted paths are
+`/medias/<id>`, `/embed/medias/<id>` and `/embed/iframe/<id>`. Wistia is the one
+host set where a non-embed path is not refused outright: it serves media files
+itself, so a Wistia URL that is not an embed shape is read by file extension
+before failing. `providerOptions.wistia` accepts `controls`, `dnt`,
 `playerColor`, `swatch`, `poster` and `transparentLetterbox`.
 
 **Native files and HLS.** These have no host list at all — the extension of the
-path decides, on any host and on relative paths too (`:115-127`, `:350`). The
-extension is read from the path before the first `?` or `#`, so a query string
-does not hide it, and the match is case-insensitive.
+path decides, on any host and on relative paths too. The extension is read from
+the path before the first `?` or `#`, so a query string does not hide it, and
+the match is case-insensitive.
 
 | Extension | Resolves to                                         |
 | --------- | --------------------------------------------------- |
@@ -232,14 +249,15 @@ engine is chosen per browser, and is pinned through an explicit source object
 rather than through options — see below.
 
 Any other URL — a host no provider claims and a path with none of those three
-extensions — is refused. There is no fall-back provider that tries it anyway.
+extensions — is refused. There is no fall-back provider that tries it anyway, so
+`clip.avi` and `https://example.com/clip.avi` are both refused on the extension:
+in the first there is no host to blame at all.
 
 ## Explicit source objects
 
 An object skips host and path detection and names its provider itself. The same
 validation runs, and the same shared allowlist runs over every `src` it carries,
-so `javascript:` and `data:` cannot reach a provider by taking this path
-(`:215-274`).
+so `javascript:` and `data:` cannot reach a provider by taking this path.
 
 | Object                                               | Validated on                                                                  |
 | ---------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -268,11 +286,13 @@ provider host in a path shape not listed above:
 > Playdeck could not read a video from the player source "…" — it is either not
 > a well-formed URL, or a provider URL in a form Playdeck does not read.
 
-**No provider** — a well-formed URL whose scheme the allowlist refuses, or whose
-host no provider claims and whose path carries none of the three extensions:
+**Will not play** — the reason that cannot name a single cause, so it states the
+requirement instead. It covers a scheme the allowlist refuses, a control
+character at either end, and a URL that simply matched nothing:
 
-> Playdeck has no provider for the player source "…" — its scheme or its host is
-> not one Playdeck plays.
+> Playdeck will not play the player source "…". An accepted source URL is
+> http(s) or scheme-less, carries no control character at either end, and is
+> either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8.
 
 **Not a source object** — a value that is not a string and does not validate as
 one of the objects above:
@@ -282,9 +302,32 @@ one of the objects above:
 None of the three is recoverable: a retry re-reads the same `source` prop and
 the same rules refuse it again, so no control offers one. Fix the value.
 
-A player that fails _after_ the source resolved reports something else —
-`Unable to load the <provider> provider.` — which names the provider being
-loaded and says the reason is not knowable from there. The rejection that caused
-it is carried on the error's `cause`. A dynamic import the network never
-delivered, a Content-Security-Policy that refused the chunk and an adapter that
-threw all arrive the same way, so the message does not guess between them.
+### When the provider fails to load
+
+A player that fails _after_ the source resolved reports something else:
+
+> Unable to load the &lt;provider&gt; provider. Playdeck cannot say why: the
+> rejection it caught is on this error's cause. See Playdeck's
+> docs/provider-setup.md for what to check.
+
+The provider is named because the resolved source knows it. The reason is not,
+and is not guessable: a dynamic import the network never delivered, a
+Content-Security-Policy that refused the chunk, and an adapter factory that
+threw all arrive as one rejection. What to check, in the order that resolves
+this most often:
+
+1. **The page's Content-Security-Policy.** An embed provider needs its origins
+   allowed, and a policy that blocks them fails the load with nothing else to
+   see. [Third-party requests and CSP](third-party-requests.md) lists every
+   origin each provider reaches and the directive it falls under.
+2. **The chunk actually arriving.** Each provider is a dynamic `import()`, so an
+   offline network, a stale deploy or an asset host returning HTML for a missing
+   chunk all land here. The browser's network panel says which.
+3. **`error.cause`.** The rejection itself is carried there for a consumer
+   reading the error object — `usePlayerState((state) => state.error)`, or the
+   `children` render prop on `Player.ErrorDisplay`. It is not rendered by
+   `ErrorDisplay`'s default output, which draws the message and nothing else.
+
+Unlike a refused source, this one **is** recoverable: `ErrorDisplay` offers a
+retry and `ActivationButton` arms, because a load that failed on the network can
+succeed on a second attempt.
