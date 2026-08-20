@@ -178,6 +178,208 @@ test('collects the transitive production closure of each publishable package', (
   );
 });
 
+// An npm alias -- `"foo": "npm:bar@1.0.0"` -- installs one package under
+// another name. pnpm reports the node under the alias and carries the package
+// actually installed in `from`, and `pnpm audit` names that package and only
+// that package in `module_name`. So the closure has to be keyed on `from`: keyed
+// on the alias, the entry cannot be joined to any advisory by construction, and
+// an advisory against something a publishable package really does ship reads as
+// `not shipped` while the gate exits 0.
+//
+// Every node below is the verbatim shape of `pnpm list --prod --no-optional
+// --depth Infinity --json` on pnpm 11.20.0, with the fields the walk does not
+// read (`resolved`, `path`) dropped.
+test('an aliased dependency is keyed on the package installed, not the alias', () => {
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'safe-name': { from: 'cookie', version: '0.4.0' }
+        }
+      }
+    ]),
+    new Map([['cookie@0.4.0', ['@playdeck/audit-fixture-publishable']]])
+  );
+});
+
+test('an advisory against an aliased dependency is reachable and fails the gate', () => {
+  // `development-only` ships one clean dependency and passes today, and its
+  // captured report carries three real advisories against shell-quote@1.7.2 --
+  // reached, in the workspace it was taken from, only through a private
+  // package. Alias that same version into the publishable package's own
+  // `dependencies` and the gate has to see it.
+  const result = gate({
+    ...developmentOnly,
+    prodTrees: [
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'safe-shell': { from: 'shell-quote', version: '1.7.2' }
+        }
+      }
+    ]
+  });
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(
+    result.advisories
+      .filter((advisory) => advisory.shipped)
+      .map((advisory) => advisory.module),
+    ['shell-quote@1.7.2', 'shell-quote@1.7.2', 'shell-quote@1.7.2']
+  );
+  // Named by the package the advisory is against, and attributed to the
+  // publishable package that reaches it -- not to the alias, which names no
+  // package at all.
+  assert.match(result.report, /SHIPPED\s+critical\s+shell-quote@1\.7\.2/);
+  assert.match(
+    result.report,
+    /reachable from: @playdeck\/audit-fixture-publishable/
+  );
+  assert.ok(!result.report.includes('safe-shell'));
+});
+
+test('an alias standing in for a vulnerable name does not join to its advisories', () => {
+  // The other direction, and the reason the alias key is not recorded
+  // alongside `from` as a second key: aliasing away from a vulnerable package
+  // to a patched fork leaves the vulnerable name as the key over a package
+  // that is not it. Recording `shell-quote@1.7.2` here would report a module
+  // this closure does not contain, and fail the gate on the change that fixed
+  // the problem.
+  const result = gate({
+    ...developmentOnly,
+    prodTrees: [
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'shell-quote': { from: 'safe-shell-quote', version: '1.7.2' }
+        }
+      }
+    ]
+  });
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(
+    result.advisories.filter((advisory) => advisory.shipped),
+    []
+  );
+});
+
+test('a scoped package is keyed on its scope in either direction across an alias', () => {
+  // A scope's `@` sits inside a package name and never separates one, so both
+  // directions have to survive: a scoped package installed under an unscoped
+  // alias, and an unscoped one installed under a scoped alias. Both shapes are
+  // real -- `"aliased-player": "npm:@vimeo/player@2.30.4"` and `"@safe/scoped":
+  // "npm:@sindresorhus/is@7.0.1"` produce exactly these nodes.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'aliased-player': { from: '@vimeo/player', version: '2.30.4' },
+          '@safe/scoped': { from: '@sindresorhus/is', version: '7.0.1' },
+          '@safe/unscoped': { from: 'cookie', version: '0.4.0' }
+        }
+      }
+    ]),
+    new Map([
+      ['@vimeo/player@2.30.4', ['@playdeck/audit-fixture-publishable']],
+      ['@sindresorhus/is@7.0.1', ['@playdeck/audit-fixture-publishable']],
+      ['cookie@0.4.0', ['@playdeck/audit-fixture-publishable']]
+    ])
+  );
+});
+
+test('a dependency installed under its own name is keyed on that name', () => {
+  // The regression the alias key is traded for. `from` equals the key on every
+  // node of this repository's own trees, so this is the shape the walk almost
+  // always meets, and keying on `from` must leave it exactly where it was.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'hls.js': { from: 'hls.js', version: '1.6.16' },
+          '@vimeo/player': { from: '@vimeo/player', version: '2.30.4' }
+        }
+      }
+    ]),
+    new Map([
+      ['hls.js@1.6.16', ['@playdeck/audit-fixture-publishable']],
+      ['@vimeo/player@2.30.4', ['@playdeck/audit-fixture-publishable']]
+    ])
+  );
+});
+
+test('every node shape the walk meets is keyed on the package installed', () => {
+  // The four shapes `pnpm list` produces, in one tree, each with an alias on
+  // it where an alias can occur:
+  //
+  // - a workspace link, whose `from` is its own name whatever the dependency
+  //   was written as -- a `file:` value pointing at a directory resolves to a
+  //   `link:` version under the key, with `from` left on the key rather than
+  //   on the linked package's real name. Skipped either way: a link is not a
+  //   registry package and carries no advisory. What it pulls in is the point,
+  //   so the walk goes through it.
+  // - a transitive node several levels down, which carries `from` like any
+  //   other.
+  // - a deduped node, which carries `from` and drops `dependencies`.
+  // - a scoped package under an unscoped alias.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          '@playdeck/core': {
+            from: '@playdeck/core',
+            version: 'link:../core',
+            dependencies: {
+              'aliased-player': {
+                from: '@vimeo/player',
+                version: '2.30.4',
+                dependencies: {
+                  'safe-promise': {
+                    from: 'native-promise-only',
+                    version: '0.8.1'
+                  }
+                }
+              }
+            }
+          },
+          'aliased-file': { from: 'aliased-file', version: 'link:../local' },
+          'aliased-deduped': {
+            from: '@vimeo/player',
+            version: '2.30.4',
+            deduped: true,
+            dedupedDependenciesCount: 2
+          }
+        }
+      }
+    ]),
+    // No `link:` key of either kind, and the deduped node keyed on the same
+    // `name@version` its undeduped twin above produced, so the two collapse to
+    // one entry rather than to one real and one aliased.
+    new Map([
+      ['@vimeo/player@2.30.4', ['@playdeck/audit-fixture-publishable']],
+      ['native-promise-only@0.8.1', ['@playdeck/audit-fixture-publishable']]
+    ])
+  );
+});
+
+test('a node carrying no `from` is keyed on the name it is installed under', () => {
+  // `from` is on every node pnpm 11.20.0 emits, at every depth and for every
+  // shape above. The fallback is for a pnpm that stops emitting it: the join
+  // is then no worse than it was before aliases were handled at all, rather
+  // than the closure being dropped or the walk throwing.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: { 'hls.js': { version: '1.6.16' } }
+      }
+    ]),
+    new Map([['hls.js@1.6.16', ['@playdeck/audit-fixture-publishable']]])
+  );
+});
+
 test('every advisory labelled SHIPPED names the packages it is reachable from', () => {
   // The label and the list are one fact stated twice, and the report prints
   // them separately. A run reporting SHIPPED over an empty `reachable from:`

@@ -75,8 +75,11 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  * @typedef {{ advisories: Record<string, AuditAdvisory>; metadata: AuditMetadata; error?: { code: string; message: string } }} AuditReport
  *
  * A node of `pnpm list --prod --json`. A workspace link carries the version
- * `link:<relative path>`.
- * @typedef {{ version: string; dependencies?: Record<string, DependencyNode> }} DependencyNode
+ * `link:<relative path>`. `from` is the name of the package actually
+ * installed, which is the key's own name except under an npm alias. A node
+ * pnpm has already printed in full elsewhere is marked `deduped` and carries no
+ * `dependencies`.
+ * @typedef {{ version: string; from?: string; deduped?: boolean; dedupedDependenciesCount?: number; dependencies?: Record<string, DependencyNode> }} DependencyNode
  * @typedef {{ name: string; dependencies?: Record<string, DependencyNode> }} ProjectTree
  *
  * The three captured pnpm outputs the gate reads, plus the one thing gather()
@@ -101,6 +104,28 @@ const SEVERITY_ORDER = ['critical', 'high', 'moderate', 'low', 'info'];
 /**
  * Every `name@version` in the transitive `dependencies` closure of each
  * publishable package, mapped to the packages it is reachable from.
+ *
+ * The name is the installed package's, taken from `from`, not the key it is
+ * installed under. Those are the same string until an npm alias separates
+ * them: `"foo": "npm:bar@1.0.0"` installs `bar` and pnpm reports it under
+ * `foo`, carrying `bar` in `from`. This map exists to be joined to
+ * `pnpm audit`'s `module_name`, which names the package the advisory is
+ * against, so `bar` is the only side of that pair an advisory can ever meet --
+ * keyed under `foo` the entry is unreachable by construction, and the advisory
+ * against a package a publishable one really does ship reads as `not shipped`.
+ *
+ * Keyed on the installed name alone rather than on both names, because the
+ * alias key is not merely useless to the join, it is wrong for it. Aliasing
+ * away from a vulnerable package to a patched fork -- `"cookie":
+ * "npm:safe-cookie@1.0.0"` -- leaves the vulnerable name as the key over a
+ * package that is not it, and an advisory against `cookie@1.0.0` would join to
+ * it and report a module the closure does not contain.
+ *
+ * `from` is absent on no node pnpm 11.20.0 reports, at any depth and for every
+ * shape the walk meets -- a workspace link, a deduped node, a scoped package.
+ * The fallback to the key is for a pnpm that stops emitting it: the join is
+ * then no worse than it was before this, rather than throwing or dropping the
+ * closure.
  * @param {readonly ProjectTree[]} prodTrees
  * @returns {Map<string, string[]>}
  */
@@ -118,9 +143,10 @@ export const shippedVersions = (prodTrees) => {
       // of its own. What it pulls in transitively is what matters, so keep
       // walking through it.
       if (!node.version.startsWith('link:')) {
-        const owners = shipped.get(`${name}@${node.version}`) ?? [];
+        const module = `${node.from ?? name}@${node.version}`;
+        const owners = shipped.get(module) ?? [];
         if (!owners.includes(owner)) owners.push(owner);
-        shipped.set(`${name}@${node.version}`, owners);
+        shipped.set(module, owners);
       }
       walk(node.dependencies, owner);
     }
@@ -332,6 +358,10 @@ const classify = (audit, shipped) =>
  * outright -- all lands at or beneath the name the entry selects, and pnpm
  * reports the dependency under that entry's own name whichever form the value
  * takes. So a closure an override changed at all holds the name it selects.
+ *
+ * That is also why this matches on the key while `shippedVersions` keys on
+ * `from`: an override selects by the name the dependency is written under, and
+ * an aliased value moves `from` off that name while leaving the key on it.
  *
  * Where no floored name appears, then, nothing the block could have changed is
  * in the closure: it is the one a consumer resolves, and the reachability this
