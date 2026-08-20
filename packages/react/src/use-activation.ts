@@ -401,9 +401,19 @@ export const useActivation = (
   const activateFromInteraction = useCallback(() => {
     const current = optionsRef.current;
     const state = current.controller.getState();
+    // A refused source refuses to arm, so the control never presents itself as
+    // functional. Publishing the refusal above is not sufficient on its own:
+    // `unsupportedError` is `recoverable: true`, so the error branch below
+    // accepts this call, commits to `'eligible'` and clears the error -- and the
+    // effect that published it does not re-run, since none of its inputs
+    // changed. That lands the player right back at the `error: null` dead end
+    // #331 is about, one click later. The session guards cannot catch it: they
+    // compare `sourceKey`, which is the same `'unsupported-source'` constant for
+    // every failure, so they all pass.
     if (
       current.loading !== 'interaction' ||
       current.autoplay !== false ||
+      current.source.status !== 'success' ||
       activationConfiguration(current) !== 'valid'
     ) {
       return;
@@ -454,6 +464,24 @@ export const useActivation = (
 
   useEffect(() => {
     if (options.loading !== 'interaction') return;
+    // Checked ahead of the autoplay conflict below, and for the same reason it
+    // is checked first in `eager` and `viewport`: a refused source is
+    // `detectSource` turning down a `javascript:` or `data:` URL, which is the
+    // one security control this library applies to a source, and `setActivation`
+    // carries one error. A configuration complaint about an unrelated prop
+    // masking that refusal is the failure #332 reports elsewhere, where a
+    // cosmetic `playerColor` rejection hides a rejected poster; the refusal
+    // wins here so it is never the second thing a consumer is told. Neither
+    // error is lost: this effect re-runs on both `currentKey` and
+    // `options.autoplay`, so a consumer who fixes the source is told about the
+    // autoplay conflict next (#331).
+    if (options.source.status !== 'success') {
+      options.controller.setActivation({
+        activation: 'error',
+        error: unsupportedError('The player source is not supported.')
+      });
+      return;
+    }
     if (options.autoplay === false) return;
     options.controller.setActivation({
       activation: 'error',
@@ -461,7 +489,13 @@ export const useActivation = (
         'Interaction loading cannot be used with autoplay.'
       )
     });
-  }, [currentKey, options.autoplay, options.controller, options.loading]);
+  }, [
+    currentKey,
+    options.autoplay,
+    options.controller,
+    options.loading,
+    options.source.status
+  ]);
 
   useEffect(() => {
     if (options.loading !== 'viewport' || session.current.started) return;

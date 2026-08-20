@@ -56,10 +56,19 @@ export type MockPlayerParameters = {
  * Never fetched. The decorator's root commits no source — nothing calls
  * `activateFromInteraction` on it — so `Player.Media` mounts nothing even in a
  * story whose component renders one.
+ *
+ * A reserved `.invalid` host over `https:` rather than an invented `mock:`
+ * scheme (#331): the shared allowlist refuses every scheme but `http:`,
+ * `https:` and the scheme-less forms, so `mock:` was a source the library was
+ * turning down, and every story here rode on `loading="interaction"` being the
+ * one strategy that said nothing about it. `.invalid` is reserved by RFC 2606
+ * and resolves nowhere, so the source stays as unfetchable as it reads.
  */
 const mockSource: RootProps['source'] = {
   type: 'video',
-  sources: [{ src: 'mock://playdeck/video.mp4', mimeType: 'video/mp4' }]
+  sources: [
+    { src: 'https://provider.invalid/mock-video.mp4', mimeType: 'video/mp4' }
+  ]
 };
 
 /**
