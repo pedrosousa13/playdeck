@@ -93,6 +93,30 @@ jobs:
   # severity. Severity was the wrong axis: it fired hardest on the linting
   # toolchain, which never ships, and stayed quiet about a published
   # package's own runtime tree. See scripts/audit.mjs.
+  #
+  # That argument stopped at the workflow file, and the same bypass sits one
+  # level below it: the verdict is `node scripts/audit.mjs`, an ordinary file
+  # the same pull request can edit. Turning `process.exit(result.exitCode)`
+  # into `process.exit(0)` leaves the `audit` context arriving, running and
+  # green. So the authoritative run below is `main`'s copy of the gate,
+  # fetched here and run against this pull request's installed tree — editing
+  # the pull request's copy then changes nothing about the verdict.
+  #
+  # Both copies run, and either one failing fails the job. That is three
+  # properties rather than one:
+  #   - a pull request that weakens the gate still faces `main`'s copy;
+  #   - a pull request that legitimately improves the gate still gets its own
+  #     new version exercised, so the improvement stays testable in the pull
+  #     request that makes it;
+  #   - a pull request that breaks the gate is caught by its own copy failing.
+  #
+  # This is friction and not a fix, and is worth having on those terms. A pull
+  # request can still edit this file and take the pinned run out. What it buys
+  # is that neutering the gate is now a diff to a workflow file rather than
+  # one character inside a script — the same argument the paragraph above
+  # makes for `audit` being a job, carried one level down.
+  # scripts/verify-packaging.mjs and scripts/check-bundle-budgets.mjs are
+  # editable in-band the same way and are not covered here. See #337.
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -104,7 +128,29 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:audit
+      # `actions/checkout` is shallow and fetches only the ref under test, so
+      # `main` is not in this clone and `origin/main` does not exist here —
+      # hence the explicit fetch, read back through `FETCH_HEAD`.
+      #
+      # `scripts/audit.mjs` resolves both the repository root and
+      # `pnpm-workspace.yaml` relative to its own location, so a copy exactly
+      # one level below the root measures *this* pull request's tree while
+      # executing *main*'s logic; `yaml` resolves upward into this tree's
+      # `node_modules`. `--strip-components=1` is what puts `scripts/*` at
+      # `.gate/*` rather than `.gate/scripts/*`. The whole directory is copied
+      # rather than the two files it imports today, so `main`'s import closure
+      # stays complete even if a pull request deletes a module it needs.
+      - name: Audit — main's copy of the gate
+        run: |
+          git fetch --depth=1 origin main
+          mkdir -p .gate
+          git archive FETCH_HEAD scripts | tar -x --strip-components=1 -C .gate
+          node .gate/audit.mjs
+      # Runs even when the pinned copy above failed, so one run never hides
+      # the other's verdict: the two disagreeing is the interesting case.
+      - name: Audit — this pull request's copy of the gate
+        if: ${{ !cancelled() }}
+        run: pnpm test:audit
 
   unit:
     runs-on: ubuntu-latest
