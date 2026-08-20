@@ -1,0 +1,128 @@
+# THROWAWAY. Delete this file before #359's PR is opened.
+#
+# Answers the one question #359 says to answer before changing any job: on a
+# clean `ubuntu-latest`, which Playwright engines are actually missing OS
+# packages? Everything else in that issue depends on the answer, and nothing in
+# the repo records it.
+#
+# Both traps #359 documents are respected here:
+#
+# 1. A missing dependency does not fail `playwright install` — the validation
+#    error is caught, renamed to a warning, and the process exits 0
+#    (`coreBundle.js:67954-67957`). So this measures with
+#    `install-deps --dry-run`, which exits non-zero when packages are missing,
+#    and *separately* asserts by launching each engine for real. Watching for a
+#    red install step would measure nothing.
+#
+# 2. `--with-deps` also installs a font group, which no shared-object check
+#    looks at but `visual`'s committed baselines were generated with. So the
+#    fonts are reported separately from the libraries, because `visual` cannot
+#    be treated like the other jobs.
+#
+# Browsers are installed WITHOUT `--with-deps` throughout: that is the
+# condition under test. Every apt-touching command is bounded, because apt is
+# what wedges (#352) and a measurement run that hangs measures nothing.
+name: measure-playwright-deps
+
+# Branch-scoped `push` rather than `workflow_dispatch`: a dispatchable workflow
+# has to already be on the default branch, and this one must never land there.
+on:
+  push:
+    branches: [pedrosousa13/issue-359-measure-which-jobs-need-apt]
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Runner image
+        run: |
+          echo "## Runner"
+          cat /etc/os-release | grep -E '^(NAME|VERSION)='
+          echo "image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+
+      # No `--with-deps`: the binaries only. This is the state every job would
+      # be in if the flag were dropped.
+      - name: Install browser binaries without deps
+        run: |
+          timeout 10m npx playwright install chromium firefox webkit
+          echo "exit=$?"
+
+      - name: Font packages already on the image
+        run: |
+          echo "## Fonts from Playwright's 'tools' group"
+          for p in fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei \
+                   fonts-tlwg-loma-otf ttf-unifont xfonts-cyrillic \
+                   fonts-noto-color-emoji fonts-unifont fonts-freefont-ttf; do
+            if dpkg -s "$p" >/dev/null 2>&1; then
+              echo "PRESENT  $p"
+            else
+              echo "MISSING  $p"
+            fi
+          done
+
+      # `install-deps --dry-run` exits non-zero when packages are missing. It
+      # talks to apt itself, which is why it belongs in a one-off run and not in
+      # the steady-state workflow — and why it is bounded.
+      - name: Dry-run dependency check per engine
+        run: |
+          echo "## install-deps --dry-run"
+          for b in chromium firefox webkit; do
+            echo "----- $b -----"
+            set +e
+            timeout 8m npx playwright install-deps --dry-run "$b" 2>&1
+            echo "EXITCODE($b)=$?"
+            set -e
+          done
+
+      # The assertion the dry run cannot give: does the engine actually start
+      # with no deps installed? A pass here is what would make dropping
+      # `--with-deps` safe for a job that only launches a browser.
+      - name: Launch each engine for real
+        run: |
+          cat > /tmp/launch-probe.mjs <<'PROBE'
+          import { chromium, firefox, webkit } from '@playwright/test';
+
+          const engines = { chromium, firefox, webkit };
+          let failures = 0;
+
+          for (const [name, engine] of Object.entries(engines)) {
+            try {
+              const browser = await engine.launch();
+              const page = await browser.newPage();
+              await page.setContent('<h1>ok</h1>');
+              const text = await page.textContent('h1');
+              await browser.close();
+              console.log(`LAUNCH(${name})=ok text=${text}`);
+            } catch (error) {
+              failures += 1;
+              console.log(`LAUNCH(${name})=FAILED ${error.message.split('\n')[0]}`);
+            }
+          }
+
+          console.log(`launch failures: ${failures}`);
+          PROBE
+          node /tmp/launch-probe.mjs
+
+      # The e2e suites are what actually has to keep passing, so run the two
+      # that matter on chromium with no deps installed. `visual` is included
+      # deliberately: its baselines are the font-sensitive artefact, so a pass
+      # or a pixel failure here is the font answer.
+      - name: Run chromium e2e and visual with no deps
+        continue-on-error: true
+        run: |
+          set +e
+          pnpm build
+          npx playwright test --project=chromium 2>&1 | tail -40
+          echo "E2E_CHROMIUM_EXIT=$?"
