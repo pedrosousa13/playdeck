@@ -4,7 +4,7 @@
 
 `Player.SeekSlider` and `Player.VolumeSlider` now snap the value they render
 onto the `step` grid their input is rendered with, so the value the library
-hands the control is always one the control can keep (#277).
+hands the control is always one the control can keep.
 
 A range input keeps only the values its own grid can express: the HTML value
 sanitisation algorithm clamps into `[min, max]` and then snaps to the nearest
@@ -47,13 +47,17 @@ It lands as `minor` rather than `patch`: no API changed, but what a released
 control renders and announces did, and a consumer asserting on either sees
 different values.
 
-**This is the fix for #277 and not a demonstration of it.** #277 is a WebKit-only
-CI failure in which the third of three pipelined seek presses issued no seek. It
-was never reproduced locally — ~70 runs of that exact gesture across congestion
-burns of 0 to 400, a seek answered up to 400ms late so all three presses land
-inside one round trip, and one and four workers, all green. The tracker desync
-above is the only known mechanism that produces that shape, so the WebKit leg of
-`e2e/rapid-slider-presses.spec.ts` runs again as the experiment.
+**Found under #277, and not the cause of #277.** This defect was found while
+investigating #277, a WebKit-only CI failure in which three pipelined seek
+presses leave the media at the start of the seek window. The tracker desync
+above was the only known mechanism that produced that shape, so it was fixed and
+the WebKit leg of `e2e/rapid-slider-presses.spec.ts` was re-enabled as the
+experiment. The experiment came back negative: the failure survived the fix.
+Instrumenting the media element then showed that the third press does issue its
+seek and that WebKit completes that seek at the superseded position, so #277 is
+an engine bug closed as wontfix and that leg is excluded from WebKit
+permanently. The snapping change stands on its own regardless: a control handed
+values its input cannot keep is a defect whatever #277 turned out to be.
 
 **A short window is still a coarse control.** Snapping makes the control honest
 about its grid; it does not add positions to it. On a window of ~1s the default
