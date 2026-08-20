@@ -19,6 +19,14 @@
     <script>
       (() => {
         const query = new URLSearchParams(window.location.search);
+        // The numeric id out of `/video/<id>`, answered to `getVideoId`. The
+        // SDK's own `checkUrlTimeParam` listener asks for it before building
+        // the `vimeo_t_<videoId>` pattern it greps the embedding page url
+        // with, so a stub that answered `null` would put the whole mechanism
+        // behind a parameter no attacker would ever write (#329).
+        const videoId = Number(
+          window.location.pathname.split('/').filter(Boolean).pop()
+        );
         const state = {
           playing: false,
           currentTime: 0,
@@ -61,6 +69,16 @@
         // with `frame.evaluate`. `vimeo-seo-metadata.spec.ts` asserts on the
         // `appendVideoMetadata` the SDK sends here unasked.
         window.playdeckEmbedMessages = [];
+        // This embed's own playhead, which is not the same thing as the one
+        // Playdeck publishes: a seek the adapter did not issue moves this and
+        // leaves Playdeck's mirror behind. `vimeo-url-time-param.spec.ts`
+        // reads both, because the gap between them is the finding (#329).
+        window.playdeckEmbedState = state;
+        // Publishes `ready` again, the way a re-initialising embed would. The
+        // SDK's module-scope listeners are page-wide and permanent, so they
+        // answer every `ready` — while the adapter positions the playhead on
+        // the first one only.
+        window.playdeckEmbedRepublishReady = () => emit('ready');
         window.addEventListener('message', (messageEvent) => {
           const data =
             typeof messageEvent.data === 'string'
@@ -90,6 +108,9 @@
               break;
             case 'getDuration':
               respond('getDuration', state.duration);
+              break;
+            case 'getVideoId':
+              respond('getVideoId', videoId);
               break;
             case 'getCurrentTime':
               respond('getCurrentTime', state.currentTime);

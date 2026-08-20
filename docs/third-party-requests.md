@@ -257,6 +257,33 @@ Notes, per row:
   constructor path only: it is a separate call site, and does nothing about the
   module-scope scan at `:2825`.
 
+  One more of those module-scope guards is written by Playdeck, and unlike
+  `suppressSeoMetadata` it is not a consumer's choice. **Importing the Vimeo
+  provider now sets `window.VimeoCheckedUrlTimeParam` before the SDK is
+  imported, which stops `checkUrlTimeParam` installing its listener** (#329).
+  That listener answers a recognised embed's `ready` by resolving the frame's
+  video id, grepping this page's own url for `vimeo_t_<videoId>`, and calling
+  `setCurrentTime` with the value it finds (`:1018-1057`) — so the seek command
+  is whatever the query string says, and any third party can supply it by
+  handing a victim a link to your page. Nothing legitimate is withheld by
+  switching it off: Playdeck positions the playhead itself from `startTime`.
+  **The cost is the same page-wide cost the SEO guard has** — this disables
+  `vimeo_t_` for every Vimeo embed on the page, including embeds Playdeck did
+  not create. A page that wants the behaviour can keep it by setting
+  `window.VimeoCheckedUrlTimeParam = false` itself before Playdeck loads;
+  Playdeck writes the global only when it is not already set, in either
+  direction, exactly as it does for the SEO guard.
+
+  What this is defence against is narrower than it first reads, and the
+  measurement is worth carrying: the listener does issue an attacker-chosen seek
+  on every `ready`, but at first load the adapter's own positioning seek lands
+  after it — the SDK's chain is one round trip from `ready` and the adapter's is
+  at least two — so `startTime` survived on a real embed. It closes the case
+  where the embed republishes `ready`, which the SDK's permanent listener
+  answers and the adapter's once-per-attach positioning does not, and an
+  ordering neither side promises. `e2e/vimeo-url-time-param.spec.ts` covers it
+  against the real SDK.
+
 - **Wistia**'s player bundle is fetched from
   `https://fast.wistia.com/player.js` (`packages/provider-wistia/src/loader.ts:158`,
   appended to `document.head` at `:181-187`), with no `integrity` and no
