@@ -1830,6 +1830,79 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.setVolume.mock.calls).toEqual([[0.5], [0.55]]);
   });
 
+  test('compounds a second ArrowUp muted at a published volume inside the echo tolerance', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true, volume: 0.02 })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    // The drain reconciles against the muted published volume, which reads 0
+    // however loud the player is. Answering a request for 0.02 with it would
+    // release the base the unmute recorded and leave the press after this one
+    // back in the muted branch, unmuting again and stepping nothing.
+    await act(async () => {});
+    expect(slider.value).toBe('0.02');
+
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    expect(slider.value).toBe('0.07');
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.02], [0.07]]);
+  });
+
+  test('holds the restored level to the deadline when the unmute is refused', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    spies.unmute.mockResolvedValue({ ok: false, reason: 'unsupported' });
+    region.focus();
+
+    vi.useFakeTimers();
+    // The two commands are independent, so a refused `unmute()` leaves the
+    // accepted `setVolume(0.5)` standing and the request with it.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.5]]);
+    expect(slider.value).toBe('0.5');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(slider.value).toBe('0.5');
+
+    // The player never unmutes, so nothing it publishes can answer a request
+    // above zero and the drain's deadline is the only thing left to release it.
+    // For that window the thumb shows the level the unmute was restoring on a
+    // player that is still silent. Accepted rather than papered over: an unmute
+    // that is going to be refused is refused everywhere, so the alternative is
+    // reading the refusal back into the request, and the deadline already
+    // exists to cover every other command a provider accepts and never answers.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(slider.value).toBe('0');
+
+    vi.useRealTimers();
+  });
+
   test('does nothing at all on ArrowDown while muted, and still owns the key', async () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>
