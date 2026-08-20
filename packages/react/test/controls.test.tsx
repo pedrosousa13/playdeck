@@ -1315,6 +1315,165 @@ describe('SeekSlider', () => {
   });
 });
 
+// Both sliders render what the media publishes, and a range input keeps only
+// the values its own `step` grid can express: the HTML value sanitisation
+// algorithm clamps into `[min, max]` and snaps to the nearest step. A value that
+// does not survive that is a value React's tracker and the DOM disagree about
+// from then on, and React drops the next change event that lands on the string
+// the tracker kept -- so the press behind it issues no command while every other
+// signal says it was seen (#277).
+//
+// WHAT THIS ENVIRONMENT CAN AND CANNOT SEE. happy-dom does not implement value
+// sanitisation at all: measured, `input.step = '1'` then `input.value = '0.75'`
+// reads back `'0.75'`, where every real engine keeps `'1'`. So nothing here can
+// observe the snap, and a test written to watch the DOM correct us would pass
+// against any implementation whatsoever (#333). What these tests assert instead
+// is the half that is ours and that this environment does render faithfully:
+// the string the library hands the input is already one the grid can express,
+// and the valuetext read out beside it agrees with it. The other half -- that
+// the string then survives a real input untouched, leaving the tracker in sync
+// -- needs an engine, and is pinned by `ShortWindowSnapsToItsStep` in
+// `apps/storybook/stories/seek-slider.stories.tsx`, whose play function runs in
+// chromium.
+describe('slider values are snapped onto the step grid they render with', () => {
+  const seekReady = (patch: ProviderStatePatch = {}): ProviderStatePatch => ({
+    ...capabilities({ seek: available }),
+    duration: 1,
+    currentTime: 0,
+    ...patch
+  });
+
+  // The reference clip is ~1s and the default step is 1s, which leaves the seek
+  // input two values it can express. Nothing else in the suite runs a window
+  // that short, and it is where this was measured.
+  test('a fractional time past the halfway mark renders as the window end', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.6 }));
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect((slider as HTMLInputElement).value).toBe('1');
+    // And the valuetext is the thumb's position, not the media's: reading
+    // `0:00` here while the thumb sits hard right is the mismatch VolumeSlider's
+    // percentage has always been careful to avoid.
+    expect(attr(slider, 'aria-valuetext')).toBe('0:01 of 0:01');
+  });
+
+  test('a fractional time below the halfway mark renders as the window start', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.4 }));
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect((slider as HTMLInputElement).value).toBe('0');
+    expect(attr(slider, 'aria-valuetext')).toBe('0:00 of 0:01');
+  });
+
+  // Ties go to the higher value, which is what the sanitisation algorithm does.
+  test('a time exactly between two steps rounds up', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.5 }));
+    expect(
+      (screen.getByRole('slider', { name: 'Seek' }) as HTMLInputElement).value
+    ).toBe('1');
+  });
+
+  test('a consumer step is the grid, not the default one', () => {
+    renderWithPlayer(
+      <Player.SeekSlider inputProps={{ step: 0.25 }} />,
+      seekReady({ currentTime: 0.6 })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(attr(slider, 'step')).toBe('0.25');
+    expect((slider as HTMLInputElement).value).toBe('0.5');
+  });
+
+  // `step="any"` is the attribute asking for no grid at all, so every value is
+  // one the input can express and nothing should be moved.
+  test('step="any" leaves the published time alone', () => {
+    renderWithPlayer(
+      <Player.SeekSlider inputProps={{ step: 'any' }} />,
+      seekReady({ currentTime: 0.6 })
+    );
+    expect(
+      (screen.getByRole('slider', { name: 'Seek' }) as HTMLInputElement).value
+    ).toBe('0.6');
+  });
+
+  // A live DVR window starts past zero, and the step grid starts with it: the
+  // values a range input can express are `min + n * step`, not multiples of the
+  // step. Snapping to the latter would move the thumb by up to a whole step and
+  // leave the same disagreement behind on every live player.
+  test('a window starting past zero puts the grid on its own start', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({
+        duration: null,
+        currentTime: 14,
+        seekable: [{ start: 12.3, end: 20.3 }]
+      })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(attr(slider, 'min')).toBe('12.3');
+    expect((slider as HTMLInputElement).value).toBe('14.3');
+  });
+
+  // The last stop short of the maximum, rather than a step past it: 1.6 is
+  // nearer to 2 than to 1, and 2 is outside the window.
+  test('a window the grid cannot reach the end of stops at its last step', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({ duration: 1.6, currentTime: 1.6 })
+    );
+    expect(
+      (screen.getByRole('slider', { name: 'Seek' }) as HTMLInputElement).value
+    ).toBe('1');
+  });
+
+  test('a published volume off the 0.05 grid renders on it', () => {
+    renderWithPlayer(<Player.VolumeSlider />, {
+      ...withVolume(available),
+      volume: 0.37,
+      muted: false
+    });
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    expect((slider as HTMLInputElement).value).toBe('0.35');
+    expect(attr(slider, 'aria-valuetext')).toBe('35%');
+  });
+
+  // Floating-point drift is the volume control's own way onto an unrenderable
+  // value: a chain of 0.05 decrements does not land on the grid it started on.
+  test('a volume drifted off the grid in floating point renders back onto it', () => {
+    renderWithPlayer(<Player.VolumeSlider />, {
+      ...withVolume(available),
+      volume: 0.7999999999999999,
+      muted: false
+    });
+    expect(
+      (screen.getByRole('slider', { name: 'Volume' }) as HTMLInputElement).value
+    ).toBe('0.8');
+  });
+
+  // Rebuilt from the step index rather than accumulated: `7 * 0.05` is
+  // `0.35000000000000003`, which is a step mismatch of its own.
+  test('a snapped volume is not itself off the grid in floating point', () => {
+    renderWithPlayer(<Player.VolumeSlider />, {
+      ...withVolume(available),
+      volume: 0.34,
+      muted: false
+    });
+    const value = (
+      screen.getByRole('slider', { name: 'Volume' }) as HTMLInputElement
+    ).value;
+    expect(value).toBe('0.35');
+    expect(Number(value) * 100).toBe(35);
+  });
+
+  test('a consumer volume step is the grid', () => {
+    renderWithPlayer(<Player.VolumeSlider step={0.25} />, {
+      ...withVolume(available),
+      volume: 0.6,
+      muted: false
+    });
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    expect(attr(slider, 'step')).toBe('0.25');
+    expect((slider as HTMLInputElement).value).toBe('0.5');
+  });
+});
+
 // Compile-time guard: `TimeProps['ref']` is `Ref<HTMLElement>` rather than
 // `Ref<HTMLTimeElement>`, because the untimed state renders a `<span>` (#248)
 // and TypeScript cannot catch the swap on its own -- `HTMLSpanElement` declares
@@ -1850,11 +2009,18 @@ describe('Controls container and scoped shortcuts', () => {
     // however loud the player is. Answering a request for 0.02 with it would
     // release the base the unmute recorded and leave the press after this one
     // back in the muted branch, unmuting again and stepping nothing.
+    //
+    // `'0'` and not `'0.02'`: a range input stepping by 0.05 has no 0.02 to
+    // show, and rendering one is what used to poison React's value tracker.
+    // The thumb is not what discriminates a held base from a released one here
+    // — both would sit at 0 — so the two assertions below are: a released base
+    // would put the press after this one back in the muted branch and issue
+    // 0.5, not 0.07.
     await act(async () => {});
-    expect(slider.value).toBe('0.02');
+    expect(slider.value).toBe('0');
 
     fireEvent.keyDown(region, { key: 'ArrowUp' });
-    expect(slider.value).toBe('0.07');
+    expect(slider.value).toBe('0.05');
     await act(async () => {});
     expect(spies.setVolume.mock.calls).toEqual([[0.02], [0.07]]);
   });

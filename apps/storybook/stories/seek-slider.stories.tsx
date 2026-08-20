@@ -220,3 +220,37 @@ export const CapabilityAbsent: Story = {
     await expect(canvas.queryByRole('slider')).toBeNull();
   }
 };
+
+/**
+ * A seek window short enough that the default 1s step can only express its two
+ * ends — the ~1s reference clip is one — and a position between them.
+ *
+ * This runs in a real engine, and that is the whole reason it is a story rather
+ * than a node test. A range input keeps only the values its `step` grid can
+ * express: hand it `0.6` on a `[0, 1]` window stepping by 1 and it keeps `1`.
+ * The node suite runs on happy-dom, which implements no value sanitisation at
+ * all (measured: `step = '1'` then `value = '0.75'` reads back `'0.75'`), so it
+ * cannot see that happen and a test written there to watch it would pass
+ * against any implementation whatsoever.
+ *
+ * The two assertions are the input's view and the library's view of the same
+ * value, and the point is that they agree. They used to not: the library
+ * rendered `0.6`, the engine kept `1`, and React's value tracker went on
+ * holding `'0.6'` — so React would drop the next change event that landed on
+ * `0.6`, and the press behind it issued no seek at all while every other signal
+ * said it had been seen (#277).
+ *
+ * What it does NOT do is give the control more positions. A window this short
+ * still has only the two, so a press asking for the end while the thumb is
+ * already there moves nothing and seeks nowhere on every engine, and the
+ * valuetext below reads `0:01` for the whole second half of the clip. That is
+ * #383, and it needs a decision about the step rather than about the value.
+ */
+export const ShortWindowSnapsToItsStep: Story = {
+  parameters: ready({ seek: available }, { currentTime: 0.6, duration: 1 }),
+  play: async ({ canvas }) => {
+    const slider = await canvas.findByRole('slider', { name: 'Seek' });
+    await expect((slider as HTMLInputElement).value).toBe('1');
+    await expect(slider).toHaveAttribute('aria-valuetext', '0:01 of 0:01');
+  }
+};
