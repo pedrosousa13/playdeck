@@ -115,14 +115,27 @@ export const createNativeAttachment = (
     emit(patch);
   };
 
-  const emitMediaState = (originalEvent?: Event): void =>
+  // The published duration: the raw one with the endless and unknown cases
+  // normalized to `null`, which is what `PlayerState.duration` carries.
+  const publishedDuration = (): number | null =>
+    Number.isFinite(media.duration) ? media.duration : null;
+
+  // The value last put on the wire, so `durationchange` can tell news from
+  // noise. `undefined` only until the attach snapshot writes it. `attach()`
+  // adds the listeners before it takes that snapshot, so the unset window is
+  // real; what keeps a handler out of it is that nothing between those two
+  // statements dispatches a media event.
+  let lastDuration: number | null | undefined;
+
+  const emitMediaState = (originalEvent?: Event): void => {
+    lastDuration = publishedDuration();
     emit(
       syncLive({
         lifecycle: media.readyState >= HAVE_METADATA ? 'ready' : 'loading',
         activation:
           media.readyState >= HAVE_METADATA ? 'ready' : 'loading-provider',
         currentTime: media.currentTime,
-        duration: Number.isFinite(media.duration) ? media.duration : null,
+        duration: lastDuration,
         buffered: toRanges(media.buffered),
         seekable: toRanges(media.seekable),
         muted: media.muted,
@@ -134,6 +147,7 @@ export const createNativeAttachment = (
         ? providerEvent('ready', originalEvent, undefined)
         : undefined
     );
+  };
 
   const {
     onPlay,
@@ -176,6 +190,49 @@ export const createNativeAttachment = (
   // switch, or a new source loaded into the same element. `resize` is the only
   // event that reports it; `loadedmetadata` has already fired by then.
   const onResize = (): void => publishDimensions();
+  // Duration used to be published from `emitMediaState` alone, which runs on
+  // the attach snapshot, `canplay` and `loadedmetadata` and nowhere else. An
+  // element that keeps revising its duration — WebKit publishes a growing one
+  // while it is still parsing — therefore latched whatever the last of those
+  // read and never recovered, so `SeekSlider`'s `max`, taken from
+  // `seekWindow(duration, seekable)`, stayed a fraction of the clip for the
+  // whole session; and under the default `step={1}` a sub-second `max` leaves
+  // `0` as the only value on the grid, which makes the control inoperable
+  // rather than merely mis-scaled (#400).
+  //
+  // A narrow patch rather than a second `emitMediaState` call — the shape
+  // `progress`, `volumechange` and `ratechange` already use: a patch carrying
+  // what the event reports and nothing else, which is one key here and two in
+  // `progress`. Republishing the snapshot was the obvious reading of the
+  // issue's suggestion and is rejected on two counts: it rebuilds
+  // `capabilities` and restates `lifecycle`/`activation`, fields this event has
+  // no news about and other seams own the timing of — and `durationchange` also
+  // fires from the media load algorithm, with `readyState` back at 0, so a
+  // retry would walk a ready player back to `loading` on its way through.
+  //
+  // Silent when the published value held, the rule `emitLiveUpdate` already
+  // follows: a live stream fires `durationchange` for a duration that
+  // normalizes to `null` every time, and a snapshot per event for a value that
+  // never moves is exactly the empty patch the review of #361 refused. What
+  // liveness such an event does change is still published, because the raw
+  // duration is what `computeLiveState` reads.
+  //
+  // `seekable` is deliberately left out of that key. For a finite duration
+  // above zero `seekWindow` reads the duration and ignores the window entirely
+  // — it guards on `duration > 0`, so a finite `0` falls through to the
+  // seekable branch — and for the live DVR case that does read it, `progress`
+  // is the event that reports the window moving and already publishes it on
+  // every one. A duration changing says nothing about the window that a
+  // `progress` has not said.
+  const onDurationChange = (): void => {
+    const duration = publishedDuration();
+    if (duration === lastDuration) {
+      emitLiveUpdate();
+      return;
+    }
+    lastDuration = duration;
+    emit(syncLive({ duration }));
+  };
   const onProgress = (): void =>
     emit(
       syncLive({
@@ -207,6 +264,7 @@ export const createNativeAttachment = (
     media.addEventListener('waiting', onWaiting);
     media.addEventListener('canplay', onCanPlay);
     media.addEventListener('loadedmetadata', onLoadedMetadata);
+    media.addEventListener('durationchange', onDurationChange);
     media.addEventListener('resize', onResize);
     media.addEventListener('seeking', onSeeking);
     media.addEventListener('seeked', onSeeked);
@@ -238,6 +296,7 @@ export const createNativeAttachment = (
     media.removeEventListener('waiting', onWaiting);
     media.removeEventListener('canplay', onCanPlay);
     media.removeEventListener('loadedmetadata', onLoadedMetadata);
+    media.removeEventListener('durationchange', onDurationChange);
     media.removeEventListener('resize', onResize);
     media.removeEventListener('seeking', onSeeking);
     media.removeEventListener('seeked', onSeeked);
