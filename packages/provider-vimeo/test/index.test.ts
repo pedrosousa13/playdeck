@@ -582,7 +582,10 @@ test('reports provider-plan when chromeless controls require an unavailable plan
   });
   expect(fetchMock).toHaveBeenCalledWith(
     'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871',
-    { signal: expect.any(AbortSignal) }
+    {
+      signal: expect.any(AbortSignal),
+      referrerPolicy: 'strict-origin-when-cross-origin'
+    }
   );
 });
 
@@ -597,7 +600,10 @@ test('resolves the plan for unlisted videos through the hashed watch URL', async
   });
   expect(fetchMock).toHaveBeenCalledWith(
     'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871%2Fabc123',
-    { signal: expect.any(AbortSignal) }
+    {
+      signal: expect.any(AbortSignal),
+      referrerPolicy: 'strict-origin-when-cross-origin'
+    }
   );
 });
 
