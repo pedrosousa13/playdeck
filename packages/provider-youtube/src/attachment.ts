@@ -219,6 +219,11 @@ export const createYouTubeAttachment = (
     // Google recommends declaring the embedding origin when the JS API is
     // active so the player can validate postMessage targets.
     const embedOrigin = ownerDocument.defaultView?.location?.origin;
+    // No `sandbox` here, and that is a decision rather than an omission: the
+    // iframe API's postMessage bridge is origin-pinned in both directions, so
+    // it needs `allow-scripts allow-same-origin`, and a sandbox carrying both
+    // is close to none (#321). The reasoning, and what would reopen it, are in
+    // docs/third-party-requests.md, under "The YouTube sandbox bargain".
     const target = ownerDocument.createElement('iframe');
     target.src = youTubeEmbedUrl(host, videoId, {
       autoplay: 0,

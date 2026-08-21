@@ -47,7 +47,7 @@ Notes, per row:
   iframe_ itself points at (it defaults to `https://www.youtube-nocookie.com`,
   `packages/provider-youtube/src/index.ts:81`, and is resolved at `:101-109`; the
   value reaches the iframe as the origin of the embed url the adapter builds,
-  `packages/provider-youtube/src/attachment.ts:193`). A
+  `packages/provider-youtube/src/attachment.ts:228`). A
   `Player.Root` consumer **can** change `host`: `provider-loaders.ts` passes
   `providerOptions?.youtube` straight to `createYouTubeProvider`, so every key
   `YouTubeProviderOptions` declares — `host` and the `loadIframeApi` injection
@@ -62,9 +62,9 @@ Notes, per row:
   not move.
 
   Playdeck builds that embed iframe itself, as of #221
-  (`packages/provider-youtube/src/attachment.ts:192-239`), and hands the
+  (`packages/provider-youtube/src/attachment.ts:227-274`), and hands the
   finished element to the iframe API, which adopts a frame that already exists
-  instead of building one (`:246`, `new api.Player(…)`). So the `src`, the
+  instead of building one (`:302`, `new api.Player(…)`). So the `src`, the
   `referrerpolicy` and the `allow` on it are Playdeck's — see the referrer section
   below for what that changes and what it does not. The player vars ride on
   that url rather than through the constructor, `enablejsapi=1` among them,
@@ -677,23 +677,24 @@ provider's options surface rather than a property of Wistia's CDN.
 ## The Vimeo sandbox bargain
 
 Playdeck builds two of the three embed frames itself. The Vimeo one is
-`packages/provider-vimeo/src/attachment.ts:307-318`, with the comment recording
-this decision at `:302-306`. The YouTube one is
-`packages/provider-youtube/src/attachment.ts:192-239`, handed to the iframe API
-at `:246` — see the YouTube row above. Only Wistia's frame is genuinely not
+`packages/provider-vimeo/src/attachment.ts:393-404`, with the comment recording
+this decision at `:388-392`. The YouTube one is
+`packages/provider-youtube/src/attachment.ts:227-274`, handed to the iframe API
+at `:302` — see the YouTube row above. Only Wistia's frame is genuinely not
 Playdeck's to configure: that provider creates the vendor's custom element
 (`packages/provider-wistia/src/attachment.ts:339-341`), and whatever frame the
 element then makes is the vendor's.
 
 This section records the decision taken for the **Vimeo** frame. The YouTube
-frame's sandbox posture is not addressed here and is tracked separately in
-#321.
+frame's is recorded in the section after it, reached from that frame's own
+bridge rather than carried across from this one.
 
 On the Vimeo frame, Playdeck sets no `sandbox` attribute. No tracked file sets one
-on any element: `git grep sandbox` returns this document, the comment at
-`packages/provider-vimeo/src/attachment.ts:302-306` that points back at this
-section, and one unrelated hit — the `sandbox;` CSP directive `next/image`
-needs for SVG (`tests/integrations/next-image/next.config.ts:7`), a different
+on any element: `git grep sandbox` returns this document, the two comments that
+point back at it — `packages/provider-vimeo/src/attachment.ts:388-392` for this
+section and `packages/provider-youtube/src/attachment.ts:222-226` for the next
+one — and one unrelated hit, the `sandbox;` CSP directive `next/image` needs
+for SVG (`tests/integrations/next-image/next.config.ts:7`), a different
 mechanism on a different surface. The absence is deliberate (#237), and it is
 recorded here rather than left to a commit message because this document is
 where a reader decides what to permit this frame.
@@ -772,7 +773,10 @@ against the cost of shipping it unverified and rejected on that comparison, not
 skipped. The consequence is not softened by that reasoning: a Vimeo source puts
 a frame on your page that can navigate the page away, and Playdeck does not
 prevent it. That is the bargain a Vimeo source makes on your page's behalf, and
-it is accepted, not overlooked — not a gap to close.
+it is accepted, not overlooked — not a gap to close. It bounds to real
+consumers rather than to this repository: `@playdeck/provider-vimeo` is
+published on npm, so it reaches anyone who mounts a Vimeo source through
+`Player.Root` or calls `createVimeoProvider` directly.
 
 Three things would reopen it, each checkable rather than a matter of taste:
 
@@ -783,6 +787,232 @@ Three things would reopen it, each checkable rather than a matter of taste:
   verified rather than reasoned about, which is the whole of the objection.
 - **Evidence appears of an embed exercising top-level navigation.** The gain
   stops being narrow, and the comparison above inverts.
+
+## The YouTube sandbox bargain
+
+Playdeck sets no `sandbox` attribute on the YouTube frame either. The conclusion
+matches the Vimeo one, but it is not inherited from it: the reason a sandbox is
+close to worthless there is that `@vimeo/player`'s bridge needs `allow-scripts
+allow-same-origin`, and whether YouTube's bridge needs the same had never been
+read (#321). It does, on its own evidence, and this section is that reading.
+
+**How to re-derive the citations below**, because they rot by design. YouTube's
+iframe API is not a bundled dependency, so there is no `node_modules` copy to
+cite and no version to pin the way the Vimeo section pins `@vimeo/player@2.30.4`.
+`packages/provider-youtube/src/loader.ts:77` names
+`https://www.youtube.com/iframe_api`, injected as a script at `:171-174`; fetch
+that url and it answers with a 993-byte loader whose `scriptUrl` holds a
+**versioned** path to the real bundle. Read the revision out of it, then fetch
+`https://www.youtube.com/s/player/<revision>/www-widgetapi.vflset/www-widgetapi.js`.
+Everything below was read at revision **`e937390a`**, where that bundle is
+26,769 bytes on 185 minified lines. Citations into it are `line:column`, both
+1-indexed, the column counted in characters from the line's start (the file is
+plain ASCII, so a byte offset gives the same number); on lines this long a line
+number alone would not locate anything.
+
+**Host to frame is targeted, never `"*"`.** `n.sendMessage` (`:163:1`)
+serialises the command and posts it with
+`this.h.contentWindow.postMessage(a, b)` (`:163:158`), where `b` is
+`Na(this.h.src || "").replace("http:", "https:")` — the origin parsed straight
+out of the frame's own `src` (`Na` at `:138:210`). Everything the provider
+issues goes through that one function: `ab()` at `:157:1` wraps each call as
+`{event: "command", func, args}`, and the readiness probe `bb()` at `:159:1`
+posts `{event: "listening"}` on a 250 ms interval until the frame answers.
+
+**Frame to host is gated on `event.origin` twice.** `cb()` (`:178:1`) installs
+the single `window` `"message"` listener. An inbound message is dropped unless
+`gb.has(d.origin)` (`:178:87`), `gb` being the set of registered frame origins,
+and dropped again unless `d.origin === k.P` (`:178:171`), the origin registered
+for that specific widget id. Both are filled at `:180:1`
+(`Z[b] = {T: a, P: c}; gb.add(c)`), from `cb(a, a.id, String(Y(a, "host")))` in
+`Ya()` at `:160:1`.
+
+**And that `host` is not a value Playdeck passes.** The constructor derives it
+from the element it was handed: `b.host || (b.host = c ? Na(a.src) :
+"https://www.youtube.com")` at `:146:430`, where `c` is
+`tagName === "iframe"`. So the origin both gates run against is the origin of
+the `src` Playdeck wrote at `packages/provider-youtube/src/attachment.ts:228` —
+`https://www.youtube-nocookie.com` by default. That is the same fact the
+comment at `attachment.ts:276-280` already asserts, now confirmed in the
+vendor's own code rather than inferred from the API behaving.
+
+Drop `allow-same-origin` and both directions fail, each on its own gate,
+because the frame gets an opaque origin. Host to frame: a `postMessage`
+carrying a concrete `targetOrigin` is delivered only if the target document's
+origin is same origin with it, and an opaque origin is same origin with no tuple
+origin — so every command and every `listening` probe is discarded by the
+platform before the frame sees it. Frame to host: an opaque origin serialises to
+`"null"`, so `gb.has("null")` is false and the listener at `:178:87` breaks out
+before it even parses the payload. Both of those steps are the platform's, taken
+from the HTML specification's `postMessage` and origin-serialisation rules
+rather than watched in a browser: no sandboxed frame was ever loaded here, which
+is this section's own conclusion rather than an exception to it. The code either
+side of them was read, and is cited so it can be checked.
+
+The result would not be subtle. `a.u` never becomes true, so nothing queued in
+`a.m` is ever flushed (`:157:1`), `onReady` never fires, and Playdeck's own
+15-second deadline (`attachment.ts:38`, armed at `:284-300`) emits its
+non-fatal `provider` error — "The YouTube player did not become ready. Its embed
+may be blocked by the page CSP, an extension or the network." — for every
+YouTube source on the page. Drop `allow-scripts` instead and there is no player
+in the frame to answer in the first place. So the only sandbox this provider can
+carry includes both tokens, which is where Vimeo's reasoning ends up and for the
+same structural reason: an origin-checked postMessage bridge cannot survive an
+opaque origin.
+
+That pair's reputation comes from a case this is not. On a **same-origin** frame
+`allow-scripts allow-same-origin` is an escape hatch: the frame's script can
+reach into the parent document and strip the `sandbox` attribute off its own
+element. This frame is cross-origin — `www.youtube-nocookie.com` against the
+consumer's page — so the same-origin policy blocks that reach with or without a
+sandbox. What `allow-same-origin` restores here is narrower: the frame keeps
+_its own_ origin, and with it that origin's cookies, storage and EME, and the
+ability to be addressed by and identified in the origin-checked messages above.
+It never reaches the consumer's page. Less alarming than the folklore, and by
+the same token less useful — a sandbox obliged to grant script and the frame's
+own origin has withdrawn nothing an embed of this kind was going to use.
+
+Measured against the real baseline — today's frame, which carries no sandbox at
+all — what a two-token sandbox could still withdraw here is top-level navigation
+and form submission. That is the same residual gain the Vimeo section weighs,
+neither larger nor smaller. (Reasoned from the token set rather than tested: the
+rest of what it would withhold is modals, pointer lock, orientation lock and
+downloads.)
+
+An observation, and not what the decision rests on: YouTube's own code names
+both of those tokens as things its embed needs. On the `<div>` path, which
+Playdeck does not take, the API builds the frame itself, and inside
+`if (Va.yt_embedsEnableIframeSrcWithIntent)` (`:148:347`, `Va` being `window` at
+`:145:2`) it sandboxes that frame with `allow-same-origin allow-scripts
+allow-forms allow-popups allow-popups-to-escape-sandbox
+allow-storage-access-by-user-activation` (`:149:79`), then adds
+`allow-presentation` and `allow-top-navigation` (`:149:450`). Eight tokens,
+`allow-forms` and `allow-top-navigation` among them. It is not a contract and it
+is not this frame: the branch is behind a global flag whose default this
+document did not establish, it builds a `youtube.com/embed` url rather than the
+`youtube-nocookie.com` one Playdeck writes, and it is unreachable on the iframe
+path Playdeck takes. So it is not a measurement of the gain and nothing above
+depends on it. The bridge reading is what decides this.
+
+Two parts of the Vimeo section do not transfer, so they are restated rather than
+assumed:
+
+- **DRM is live on this frame, not already off.** The Vimeo frame's `allow`
+  list deliberately omits `encrypted-media`, which is why that section can set
+  DRM aside as a capability no sandbox could regress. This frame's list carries
+  it. The whole of it, at `attachment.ts:260-263`, is `accelerometer`,
+  `autoplay`, `clipboard-write`, `encrypted-media`, `gyroscope`,
+  `picture-in-picture` and `web-share` — restated verbatim from what the API
+  writes onto the frame it builds on the `<div>` path (`:147:373`), which is
+  what the comment at `attachment.ts:256-259` claims and this reading confirms.
+  So a DRM-protected source does play here. Because `allow-same-origin` is
+  required for the bridge regardless, DRM imposes no constraint the bridge has
+  not already imposed — but it is one more live capability riding on that token
+  rather than one already withheld.
+- **The `allow` attribute and `allowfullscreen` are a separate mechanism.**
+  Permissions policy and sandbox are independent, so a sandbox does not revoke
+  `allow` grants. Fullscreen on this frame is governed by the `allowfullscreen`
+  attribute Playdeck sets at `attachment.ts:264`, not by a sandbox token in the
+  current specification. That last point is reasoned from the specification and
+  not tested here, and older engines coupled the two more tightly than the
+  specification now does.
+
+The `origin` player var is not what any of this turns on. Playdeck sets
+`origin=<the page's origin>` on the embed url (`attachment.ts:219-221`, `:249`)
+because the API sets exactly that var on its own path —
+`c.origin = window.location.protocol + "//" + window.location.host` at
+`:165:346`, alongside `c.enablejsapi` at `:165:286` — and on the adoption path
+that builder never runs, so Playdeck restates it. Note what the var is: the
+**host page's** origin, told to the frame. It is not what the gates above check;
+those check the frame's origin, taken from `src`. What the player inside the
+frame does with the var could not be read — that code ships inside the embed,
+not in this bundle — so the rationale in the comment at `attachment.ts:219-220`
+is Google's and not something this audit confirmed. What can be said is narrower
+and enough for the question here: a sandbox would not change the value Playdeck
+sends, so this var is not the thing a sandbox breaks. The frame's own origin is.
+
+Verification is one degree worse than Vimeo's, but not for the reason a count of
+specs would suggest. Four `@real` tests drive the real YouTube embed, not one,
+and `grepInvert` filters every one of them out of any run that does not set
+`PLAYDECK_REAL_PROVIDERS` (`playwright.config.ts:15`). What each would do to a
+sandbox that broke the bridge is the thing that matters, and it does not split
+the way their shapes suggest:
+
+- `e2e/youtube-real.spec.ts:11-50`, tagged `@real` (`:12-13`), **would** catch
+  it — at `:48`, because `ActivationButton` renders for every activation state
+  except `ready` (`packages/react/src/loading-error.tsx:40`), so an overlay that
+  should have gone is still there. Not at `:45`: `paused` is the initial
+  playback state (`packages/core/src/player-controller.ts:147`), so
+  `/playing|paused/` is satisfied by a player that never started.
+- `e2e/buffered-real.spec.ts:56-105`, tagged `@real` (`:57-58`), **would** catch
+  it — its awaited `whenReady()` (`:36`) never settles, and no real buffered
+  range ever arrives behind it.
+- the `youtube` leg of the two-provider loop at `e2e/reference.spec.ts:374-385`
+  (titled at `:375`) and `e2e/reference.spec.ts:391-398` **would not**, even
+  though they assert `data-provider` immediately after activation with no
+  confirmed playback — which looks like exactly the shape that would catch it.
+  `data-provider` is written when the adapter is constructed, not when the frame
+  answers (`packages/core/src/player-controller.ts:442` sets `provider`
+  alongside `activation: 'loading-provider'`), `PlayButton` renders it
+  unconditionally (`packages/react/src/transport-controls.tsx:115`), and the
+  control row it sits in is `hidden` rather than unmounted
+  (`apps/storybook/stories/reference/reference-player.tsx:381`, `:421`), which
+  `toHaveAttribute` does not care about. AirPlay and PiP are hard-coded
+  unavailable on this provider either way, so all four assertions hold on a
+  frame that never posted back. These two carry `@real` in the title rather than
+  in a `tag`, which `grepInvert` matches the same way
+  (`e2e/reference.spec.ts:17`).
+
+Two nearby files are not coverage of this at all. `e2e/a11y-media.spec.ts:27-28`
+names the story's YouTube leg but drives the local MP4 leg only, the
+`RealSources` story having started on `local` and switching only on a click
+(`apps/storybook/stories/reference/reference-player.tsx:557`). And the one
+YouTube spec that **does** run in CI is stubbed past the bridge by construction:
+`e2e/youtube.spec.ts` intercepts every YouTube request and serves a stand-in for
+the iframe API (`:61-84`), so there is no real frame and no real postMessage in
+it.
+
+So the bound is narrower than "could not be verified". Nothing in CI can verify
+a candidate `sandbox` value — what would catch a broken bridge never runs there,
+and what runs there is stubbed past the thing under test. A hand run **can**
+verify one, through the two playback-dependent specs, but only on a network
+YouTube will serve: `youtube-real.spec.ts`'s own header records that YouTube
+serves no stream to a datacenter IP, so confirmed playback never arrives there
+(`:8-10`), which is why the schedule was removed (#118). What stays genuinely
+unverifiable is that playback-dependent half on any runner — and a green hand
+run carries information where a red one does not, because the network can refuse
+the embed for reasons that have nothing to do with the attribute.
+
+So: no `sandbox` attribute on the YouTube frame, deliberately, on the same terms
+as Vimeo's and for the same underlying reason — an origin-checked postMessage
+bridge that cannot survive an opaque origin — giving up the same residual gain,
+top-level navigation and forms. The consequence is the one the Vimeo section
+states in full, with `www.youtube-nocookie.com` in place of `player.vimeo.com`,
+and so is the npm bound, with `@playdeck/provider-youtube` in place of
+`@playdeck/provider-vimeo`.
+
+Severity, and not only reach, since that is what #321 asked for. What the
+decision costs a consumer is exactly those two capabilities, exercised from a
+frame on a page that has already chosen to embed YouTube. It is not an
+escalation into the consumer's own origin — the cross-origin boundary holds with
+or without the attribute — and it is not something the consumer could withdraw
+and keep playback, because the bridge needs the two tokens that make the sandbox
+inert. So the severity is the severity of trusting YouTube's embed at all, which
+mounting the provider already is, rather than an additional risk this decision
+adds on top.
+
+Three things would reopen it:
+
+- **YouTube documents a supported `sandbox` value for the embed.** The eight
+  tokens above are read out of a minified bundle at one player revision, behind
+  a flag, on a code path Playdeck does not take. Published as a contract they
+  would be the vendor's word rather than this document's reading, and the
+  verification objection would stop applying.
+- **The real embed becomes runnable in continuous integration.** Today it is
+  not, for a reason no amount of test-writing fixes (#118).
+- **Evidence appears of the embed exercising top-level navigation against the
+  user's interest.** The gain stops being narrow and the comparison inverts, as
+  it does on the Vimeo frame.
 
 ## A note on `style-src`
 
