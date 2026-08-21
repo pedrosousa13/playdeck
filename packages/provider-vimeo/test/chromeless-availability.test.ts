@@ -23,10 +23,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// The init the probe handed to `fetch`, so a test can read the request that
+// was actually made rather than any reconstruction of it.
+const probeInit = (call = 0): RequestInit =>
+  fetchMock.mock.calls[call]![1] as RequestInit;
+
 // The signal the probe handed to `fetch`, so a test can read whether the
 // request was aborted rather than only what the probe resolved.
-const probeSignal = (call = 0): AbortSignal =>
-  (fetchMock.mock.calls[call]![1] as RequestInit).signal!;
+const probeSignal = (call = 0): AbortSignal => probeInit(call).signal!;
 
 // The verdict half of a probe result, for the tests that are about the verdict
 // alone. The completion half beside it has its own tests, at the end of this
@@ -52,7 +56,10 @@ test('reads the account tier from the oEmbed record for the watch url', async ()
   await probeFor('pro');
   expect(fetchMock).toHaveBeenCalledWith(
     'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871',
-    { signal: expect.any(AbortSignal) }
+    {
+      signal: expect.any(AbortSignal),
+      referrerPolicy: 'strict-origin-when-cross-origin'
+    }
   );
 });
 
@@ -60,8 +67,20 @@ test('carries the privacy hash of an unlisted video into the watch url', async (
   await probeFor('pro', { type: 'vimeo', videoId: '76979871', hash: 'abc123' });
   expect(fetchMock).toHaveBeenCalledWith(
     'https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F76979871%2Fabc123',
-    { signal: expect.any(AbortSignal) }
+    {
+      signal: expect.any(AbortSignal),
+      referrerPolicy: 'strict-origin-when-cross-origin'
+    }
   );
+});
+
+test('declares the referrer policy on the request it hands fetch', async () => {
+  // The two assertions above pin this key too, but only incidentally: it rides
+  // along in a whole-init comparison whose subject is the url. Named on its own
+  // here so that a later refactor of those -- a looser matcher, a shared init
+  // fixture -- cannot drop a security property without a test going red (#334).
+  await probeFor('pro');
+  expect(probeInit().referrerPolicy).toBe('strict-origin-when-cross-origin');
 });
 
 test.each(['plus', 'pro', 'business', 'premium', 'enterprise', 'custom'])(

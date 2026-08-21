@@ -78,9 +78,11 @@ Notes, per row:
   `packages/provider-vimeo/src/chromeless-availability.ts` that would reach
   `vimeo.com/api/oembed.json` is opt-in as of SIDEPRO-217: it only fires when
   `VimeoProviderOptions.customControls === true`
-  (`chromeless-availability.ts:128`), so Playdeck's own probe never fires
+  (`chromeless-availability.ts:222`), so Playdeck's own probe never fires
   uninvited — it needs the option, whether the caller builds the adapter
-  directly or reaches it through `Player.Root`'s `vimeo` bag. That is a claim
+  directly or reaches it through `Player.Root`'s `vimeo` bag. It declares a
+  referrer policy of its own on the way out, too — see the referrer section
+  below, which covers this request beside the frames. That is a claim
   about Playdeck's probe and not about `vimeo.com/api/oembed.json` traffic in
   general: the SDK reaches the same endpoint by a route of its own, with no
   option set anywhere — see the module-scope document scan below. `dnt` **is on
@@ -414,12 +416,44 @@ it, and it only counts if it is on the element before the element is in the
 document: the header leaves with the first request, so an attribute written
 after that changes nothing.
 
+Frames are not the whole list. The Vimeo oEmbed probe is the library's only
+`fetch` — grepping every package's `src` for `fetch(` and `XMLHttpRequest`
+finds nothing else — and it carries the same header on the same terms a frame
+does, so it belongs here beside them.
+
 - **Vimeo** — `strict-origin-when-cross-origin`, set by Playdeck on the frame it
   builds (`packages/provider-vimeo/src/attachment.ts:272`), before the append at
   `:278`. Vimeo receives this page's origin and not its path or query, which is
   still enough for Vimeo's own domain-restriction check. See the Vimeo note
   above for what the policy does **not** cover: the SDK sends the page's full
   URL to the frame over `postMessage` afterwards, and that is a separate switch.
+- **Vimeo's oEmbed probe** — the same policy again, and not a frame:
+  `referrerPolicy: 'strict-origin-when-cross-origin'` on the `fetch` init at
+  `packages/provider-vimeo/src/chromeless-availability.ts:89`, as of #334. A
+  `fetch` given no `referrerPolicy` inherits the **document's**, so until then
+  this request travelled under whatever the consuming page declared — the full
+  URL, path and query included, to `vimeo.com` on a page declaring
+  `unsafe-url`. An init-level policy overrides the document's exactly as a
+  frame's attribute does, which is why the same value serves. Not `no-referrer`
+  and not `origin`: the origin is what Vimeo's domain-restriction check reads,
+  per the frame bullet above, and this policy keeps it while dropping the path
+  and query that are the disclosure. The exposure was bounded by the opt-in
+  either way — the probe only fires on `customControls === true`
+  (`packages/provider-vimeo/src/chromeless-availability.ts:222`) — and the
+  declaration is read off the init `fetch` was handed by
+  `packages/provider-vimeo/test/chromeless-availability.test.ts:77-84`, rather
+  than off any restatement of it.
+
+  The SDK's own oEmbed request, the one the module-scope document scan makes,
+  is **not** covered by this and cannot be: `getOEmbedData`
+  (`@vimeo/player@2.30.4`'s `dist/player.js:876-891`) sends it over
+  `XDomainRequest` where the browser has one and `XMLHttpRequest` otherwise
+  (`:890`), to whichever host `getOembedDomain` returns (`:883`) — `vimeo.com`
+  unless the url is on one of Vimeo's custom domains. Neither transport has a
+  referrer-policy knob at all, so the request follows the page's own policy the
+  way Wistia's frame does. The page-level `Referrer-Policy` header in the
+  Wistia note below is the only remedy for that one too.
+
 - **YouTube** — the same policy, on the same terms, as of #221
   (`packages/provider-youtube/src/attachment.ts:220`, before the append at
   `:239`). Playdeck builds this frame precisely so that the attribute can be on it
@@ -460,17 +494,22 @@ after that changes nothing.
   included. No Playdeck option exists for it and none is planned — the exposure is
   the vendor element's shadow root, not a gap in this provider's options.
 
-One thing tempers all three, and it is worth knowing before treating the two
-attributes as load-bearing: browsers have defaulted to
+One thing tempers all of them, and it is worth knowing before treating the two
+attributes and the probe's init as load-bearing: browsers have defaulted to
 `strict-origin-when-cross-origin` for some years (Chrome 85, Firefox 87), so on
-a page that declares no policy of its own these attributes match the default
-rather than narrow past it. They earn their place on a page that declares
-something wider — `unsafe-url` or `no-referrer-when-downgrade`, whether by
-header or by `<meta name="referrer">` — because a frame's own attribute
-overrides the document's policy, while Wistia's frame follows it. That default
-is read off the specification and the browsers' release notes, not verified
-here; the two attributes are verified, by `e2e/youtube-real.spec.ts` against a
-real player and by each provider's unit suite.
+a page that declares no policy of its own all three match the default rather
+than narrow past it. They earn their place on a page that declares something
+wider — `unsafe-url` or `no-referrer-when-downgrade`, whether by header or by
+`<meta name="referrer">` — because a frame's own attribute overrides the
+document's policy, and a `fetch` init's `referrerPolicy` overrides it the same
+way, while Wistia's frame and the Vimeo SDK's own oEmbed request follow it.
+That default is read off the specification and the browsers' release notes, not
+verified here — and neither is the narrowing itself. What the tests check is
+that the **declaration** is made: `e2e/youtube-real.spec.ts` reads the
+`referrerpolicy` attribute off a real player's frame, and each provider's unit
+suite reads the key off the init `fetch` was handed. No test anywhere observes
+the `Referer` header that results. That declaring the policy narrows the header
+is the platform's behaviour, relied on here rather than measured here.
 
 ## When each request happens
 
