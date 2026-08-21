@@ -157,15 +157,42 @@ A play command issued against the media attached now, for which playback has
 never reached `playing` — refused, faulted, or still in flight. Whatever issued
 it counts: the API, a `PlayButton` press, or autoplay's own attempt. It is
 bookkeeping about a command rather than a fact about the player, so it lives on
-the controller and not in player state: a refusal is reported to the caller that
-issued it and to nobody else, and the one reader is the first-frame poster
-writer, which must not uncover a frame a refusal left paused (#244). Dropped by
-any provider patch that leaves playback at `playing`, and scoped to the
-generation, so attaching a provider ends it. "Confirmed" here is the
+the controller and not in player state, and the one reader is the first-frame
+poster writer, which must not uncover a frame a refusal left paused (#244).
+Dropped by any provider patch that leaves playback at `playing`, and scoped to
+the generation, so attaching a provider ends it. "Confirmed" here is the
 confirmation a Requested origin waits for — the provider reporting the change a
 command asked for — and not the published answer Echo names, which is why
 Echo's _Avoid_ list does not reach it.
+
+The in-flight half is what keeps this off player state, and it is the whole of
+what is left there: a command still settling is a property of the command and
+of nothing else. The settled refusal is a **Refused play** and is published
+(#361).
 _Avoid_: play in progress, unacknowledged play
+
+**Refused play**:
+The last play command turned down against the media attached now, published on
+player state as an origin and a `CommandFailureReason` — never the
+`PlayerError` the command result carried, because the state's one error slot is
+not a refusal's to take and presenting one is the consumer's decision. One
+field answers "was a play refused, and who asked", for every trigger, so no
+consumer assembles that answer out of two unrelated fields. It sits beside the
+autoplay state and subsumes neither `blocked` nor `failed`: autoplay reports its
+own machine, whose attempting, suppressed, started and recovered members no
+refusal record could carry, so an autoplay refused by policy shows in both and
+the `autoplay` origin is what says which it was.
+
+A refusal is a moment and a field is a condition, so what is published is the
+condition: the last play command was refused and nothing has played since.
+Cleared by the provider patch that confirms playback, whichever play started
+it, and by the provider changing — and by nothing else, because a pause, a
+seek, a stall or an error leaves a refused play exactly as refused as it was.
+That second clearing rule is where it parts company with the refused-surface
+half of a **Notice**, which survives an attach: a notice describes a consumer
+prop no provider ever saw, while this describes a command one provider turned
+down, so replacing that provider is what stops it being true.
+_Avoid_: play error, blocked play, failed play
 
 ### Adapters
 

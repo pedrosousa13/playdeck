@@ -56,19 +56,24 @@ all three. The consumer knows which one their application is in; playdeck does n
   refused autoplay or a refused play command left playback unstarted.
 - `autoplay` reaches `'blocked'` for a refusal and `'failed'` for other errors,
   distinguishable in player state.
+- `PlayerState.refusedPlay` carries the last play command that was refused, with
+  the origin that issued it, for a `PlayButton` press as much as for a
+  programmatic `play()`.
 - `PlayButton` retries from a user-origin click and works after a refusal.
 
-For a refused **autoplay**, that is enough to build any of the presentations this
-was asking for, in the consumer's own components, without playdeck choosing among
-them.
+That is enough to build any of the presentations this was asking for, in the
+consumer's own components, without playdeck choosing among them — for a refused
+autoplay and for a refused play command alike.
 
-For a refused **play command** it is not, and this file should not be read as
-claiming otherwise. A refusal there is reported to the caller of `play()` as a
-`CommandResult` and to nobody else: `playback` stays `'paused'`, `autoplay` stays
-`'idle'`, and no error is set — and `PlayButton` discards the result it gets. So a
-consumer cannot subscribe to "the press was refused" the way they can subscribe to
-`autoplay: 'blocked'`. That is a gap in the primitives by this file's own
-reopening test below, not a request for a default, and it is tracked separately.
+The second of those was not always true, and this file said so. A refusal used to
+be reported to the caller of `play()` as a `CommandResult` and to nobody else,
+and `PlayButton` discards the result it gets, so a consumer whose viewer pressed
+the button could not subscribe to "the press was refused" the way they could
+subscribe to `autoplay: 'blocked'`. That was a gap in the primitives by this
+file's own reopening test below rather than a request for a default, it was
+raised as one, and #361 closed it by publishing the refusal. Nothing about the
+decline changed: the primitive exists, and playdeck still presents nothing with
+it.
 
 ## What would reopen this
 
@@ -90,3 +95,8 @@ a default.
   about presenting _something extra_ on a refusal, not about whether the cover
   survives one. Working it is what established that the rule is by outcome
   rather than by trigger, and what surfaced the primitives gap noted above.
+- [#361](https://github.com/pedrosousa13/playdeck/issues/361) — that gap,
+  raised and closed as a gap: a refused play command reached player state
+  nowhere, so `PlayerState` gained `refusedPlay`. The reopening test above is
+  what it was measured against, and it did not reopen this file — it supplied
+  the primitive the decline assumes. This file still declines to present it.
