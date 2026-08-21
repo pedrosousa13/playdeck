@@ -44,24 +44,49 @@ refusal, ask `autoplay` about autoplay. A viewer's refused press is
 **Lifecycle.** A refusal is a moment and a field is a condition, so what is
 published is the condition: _the last play command was refused and nothing has
 played since_. It is set when a play command settles unsuccessfully, replaced by
-a later refusal, and cleared by exactly two transitions.
+a later refusal, and cleared by exactly two transitions. The first is **a
+provider patch that confirms playback** — not the play promise resolving, since
+playback is what a provider reports, and not only the patch answering the retry,
+because any play that starts clears it, autoplay's own muted recovery and the
+viewer working the provider's native controls included. That is the same site
+and the same moment at which #244's attempt record is dropped, which is
+deliberate: the two describe the same window and must not disagree about when it
+closed. The second is **the provider changing** — attach, swap and detach all
+end it, so a new source never inherits the last one's refusal, and that is where
+it parts company with a refused-URL notice, which survives an attach because a
+notice describes a consumer prop no provider ever saw while this describes a
+command one provider turned down. Nothing else clears it, and that is the point
+of stating it as a condition: a pause, a seek, a stall or a later error leaves a
+refused play exactly as refused as it was, and a consumer presenting it is not
+made to guess when to stop.
 
-- **A provider patch that confirms playback.** Not the play promise resolving —
-  playback is what a provider reports — and not only the patch answering the
-  retry: any play that starts clears it, including autoplay's own muted
-  recovery and the viewer working the provider's native controls. This is the
-  same site and the same moment at which #244's attempt record is dropped, which
-  is deliberate: the two describe the same window and must not disagree about
-  when it closed.
-- **The provider changing.** Attach, swap and detach all end it, so a new source
-  never inherits the last one's refusal. That is where it parts company with a
-  refused-URL notice, which survives an attach: a notice describes a consumer
-  prop no provider ever saw, while this describes a command one provider turned
-  down.
+**The condition holds under out-of-order settlement**, which is the part that
+takes real work, because a play command can settle long after the player has
+moved on. Each play command is recorded as its own attempt, and a refusal is
+published only where that attempt is still the one standing: a later play
+replaces it, and the patch that confirms playback clears it, so a command
+refused after another play succeeded — or after the viewer started playback from
+the provider's own controls — publishes nothing, and a pause arriving in between
+does not hand the refusal back. A refusal against media that is playing right
+now is dropped for the same reason: it would state that nothing has played since
+while something demonstrably is, and the clearing rule would take it back on
+whichever unrelated patch happened to arrive next. Publishing it anyway, on the
+grounds that a command really was refused, was the alternative, and it was
+rejected on those two grounds — a self-contradicting snapshot, and a lifetime
+decided by a `timeupdate`. Nothing is withheld from the party with a stake in
+it: the caller of every one of these commands receives the same `CommandResult`
+as before, and the field exists for the consumer who is _not_ the caller, to
+whom "your play was refused" over playing media is not a true thing to say.
 
-Nothing else clears it, and that is the point of stating it as a condition — a
-pause, a seek, a stall or a later error leaves a refused play exactly as refused
-as it was, and a consumer presenting it is not made to guess when to stop.
+**What a subscriber sees during an `'audible-then-muted'` recovery**, since it
+follows from the above: the audible refusal is published as soon as it settles,
+while `autoplay` still reads `'attempting'` and the muted retry is still in
+flight, and it clears when that retry starts playback. Both states are true when
+they are published — a play really was refused, and the machine really is still
+attempting — so a consumer presenting `refusedPlay` on its own will show a
+refusal that then goes away. `autoplay` is what says the machine has not settled
+yet; gate on it where a refusal should only be presented once nothing more is
+coming.
 
 **What did not change.** The `CommandResult` handed back to a direct caller is
 untouched, byte for byte, including the `PlayerError` a refusal carries.
