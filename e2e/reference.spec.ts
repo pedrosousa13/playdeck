@@ -53,6 +53,50 @@ const bufferedRendered = (page: Page) =>
     .poll(() => seekBufferedRange(page).count(), { timeout: 15_000 })
     .toBeGreaterThan(0);
 
+// WebKit cannot satisfy that poll for this composition's fixture, so the two
+// tests that wait on it are excluded there (#401). Measured, not assumed.
+//
+// This engine takes `tracer.webm`: Playwright's Linux WebKit has no H.264
+// decoder (`el.canPlayType('video/mp4')` is the empty string), so it falls past
+// the MP4 to the WebM #384 put behind it. For that clip WebKit populates
+// `el.buffered` on roughly HALF of loads — the first test below, run 8 times
+// sequentially on an IDLE machine, passed 4 and failed 4, while chromium went
+// 6/6 and firefox 6/6.
+//
+// On the loads where `buffered` is empty it is empty at EVERY observable
+// instant, not merely at the four the native adapter samples. An in-situ probe
+// on this same story, reading `el.buffered.length` on every
+// `requestAnimationFrame` and on 18 media events across 13 loads, measured a
+// length of 0 in 0 of ~450 frames and 0 of 708-751 `durationchange` ticks over
+// ~8s of wall clock — while `el.seekable` grew to [[0, 1.000333333]] and
+// playback ran all the way through to `ended`. And in all 7 of the loads where
+// `buffered` was ever non-empty, the `canplay` snapshot the adapter already
+// takes caught it.
+//
+// That pair of numbers is what separates this from #400 and rules out the fix
+// that issue got: publishing `buffered` from more media events buys exactly
+// zero extra passing runs here, because on a failing load there is no instant
+// to sample. Also ruled out by measurement, none of them moving the rate: clip
+// length (a generated 30s VP8 clip failed 3 of 8, the same as the 1s
+// original's 3 of 8), `Accept-Ranges`, `preload="metadata"`, which entries the
+// `<source>` set carries, the adapter's second `media.load()`, and rescuing a
+// bare load after the fact with a seek, a replay or another `load()`.
+//
+// What would reopen it: a WebKit build that reports buffered ranges for this
+// clip on every load, or a fixture this engine populates `buffered` for
+// deterministically — an H.264-capable build, which would take the MP4 instead
+// and never reach the WebM, is the likelier of the two. Deleting either skip
+// needs the same kind of evidence that put it here: at a failure rate of one in
+// two, a single green run says nothing, so repeat the run enough times to tell
+// "always" apart from "half the time".
+//
+// The two tests carrying this skip are the whole exposure. `bufferedRendered`
+// has no other callers, and this file's remaining `seek-buffered` assertions
+// read rule text out of the story's stylesheet rather than rendered ranges, so
+// they hold whether or not the engine ever reports a buffered range.
+const skipWithoutWebKitBuffered =
+  'WebKit populates el.buffered for the WebM fixture this composition selects on only about half of loads (measured: 4 of 8 sequential runs on an idle machine), and on the other half it stays empty at every observable instant, so no seek-buffered-range is ever rendered to assert on (#401).';
+
 test('the composed example plays, seeks, mutes and toggles captions on MP4', async ({
   page
 }) => {
@@ -115,8 +159,11 @@ const alphaOf = (color: string): number => {
 // assertions pin the visible result, not the rule text: a regression back to
 // "styled by nothing" is a zero height and a zero alpha here.
 test('the buffered indicator is visible and distinguishable from the unbuffered track', async ({
+  browserName,
   page
 }) => {
+  test.skip(browserName === 'webkit', skipWithoutWebKitBuffered);
+
   await page.goto(story);
   await activationButton(page).click();
   await played(page);
@@ -668,9 +715,22 @@ test('the volume slider stays operable by keyboard in both directions', async ({
 // same system canvas there, collapsing the two-tone layer back into one flat
 // band. Same emulation harness and same "assert what the user can see" shape as
 // `e2e/theme.spec.ts`, which guards none of its forced-colors tests by engine.
+// The skip below is not a departure from that — it guards the precondition, not
+// the forced-colors branch: this waits on `bufferedRendered` exactly as the
+// visibility test does, so it inherits that precondition and the identical
+// WebKit failure: measured here on its own, 8 sequential runs on an idle
+// machine gave 3 passes and 5 failures, each failure the same
+// `Expected: > 0 / Received: 0` on the range count, reached before any
+// forced-colors assertion ran. The reason is the fixture and the engine, written up
+// on `skipWithoutWebKitBuffered` above; nothing about forced colors is
+// engine-specific here, and this test returns to WebKit the moment that record
+// does.
 test('the buffered indicator stays distinguishable in forced-colors mode', async ({
+  browserName,
   page
 }) => {
+  test.skip(browserName === 'webkit', skipWithoutWebKitBuffered);
+
   await page.emulateMedia({ forcedColors: 'active' });
   await page.goto(story);
   await activationButton(page).click();
