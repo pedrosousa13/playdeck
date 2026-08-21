@@ -157,8 +157,10 @@ A play command issued against the media attached now, for which playback has
 never reached `playing` — refused, faulted, or still in flight. Whatever issued
 it counts: the API, a `PlayButton` press, or autoplay's own attempt. It is
 bookkeeping about a command rather than a fact about the player, so it lives on
-the controller and not in player state, and the one reader is the first-frame
-poster writer, which must not uncover a frame a refusal left paused (#244).
+the controller and not in player state. `hasUnconfirmedPlayAttempt` has one
+reader, the first-frame poster writer, which must not uncover a frame a refusal
+left paused (#244); the record behind it has a second, the guard that decides
+whether a settling command is still the last word on a **Refused play** (#361).
 Dropped by any provider patch that leaves playback at `playing`, and scoped to
 the generation, so attaching a provider ends it. "Confirmed" here is the
 confirmation a Requested origin waits for — the provider reporting the change a
