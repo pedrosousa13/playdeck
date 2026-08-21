@@ -923,6 +923,33 @@ test('keeps confirmed paused state when the media play command rejects', async (
   }
 });
 
+test('publishes a refused play-button press on player state', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(
+    new DOMException('Playback was blocked.', 'NotAllowedError')
+  );
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    <LegacyRoot autoplay={false} ref={handle} source="video.mp4">
+      <Player.Media />
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+
+  // The press is the whole point: `PlayButton` discards the `CommandResult` it
+  // gets back, so before #361 a consumer whose viewer clicked had nothing to
+  // subscribe to. `autoplay` stays `'idle'` because that machine never
+  // engaged, which is what makes the new field the only place to read it.
+  await waitFor(() =>
+    expect(handle.current?.getState().refusedPlay).toEqual({
+      origin: 'user',
+      reason: 'blocked'
+    })
+  );
+  expect(handle.current?.getState().autoplay).toBe('idle');
+});
+
 test('renders every explicit video source in order with its MIME type', () => {
   render(
     <LegacyRoot

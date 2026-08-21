@@ -16,6 +16,7 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStatePatch,
+  RefusedPlay,
   RefusedUrlSurface,
   TextCue
 } from './types.js';
@@ -160,6 +161,7 @@ export const createInitialPlayerState = (): PlayerState =>
     pictureInPicture: false,
     autoplay: 'idle',
     autoplayRecovered: false,
+    refusedPlay: null,
     provider: null,
     hlsEngine: null,
     quality: null,
@@ -200,11 +202,31 @@ export class PlayerController {
   #hasAutoplayConfigurationError = false;
   #autoplayConfigurationRevision = 0;
   #autoplayAttemptGeneration: number | undefined;
-  // The generation a play command was last issued for, whatever asked for it —
-  // the API, a user gesture, or autoplay's own attempt. Recorded at the issue
-  // rather than at the settlement, so an attempt still in flight counts as one:
-  // see `hasUnconfirmedPlayAttempt` (#244).
-  #playAttemptGeneration: number | undefined;
+  // The play command last issued, whatever asked for it — the API, a user
+  // gesture, or autoplay's own attempt — and `undefined` once playback has been
+  // confirmed since. Recorded at the issue rather than at the settlement, so an
+  // attempt still in flight counts as one: see `hasUnconfirmedPlayAttempt`
+  // (#244). It carries the generation it was issued for, and it is its own
+  // identity: a fresh object per command, compared by reference the way
+  // `#pendingOrigins` compares a request, so a command settling can tell that a
+  // later play replaced it or that a patch confirmed playback while it was
+  // still in flight. A generation cannot answer either question — two play
+  // commands against one provider share one — and both are the difference
+  // between a refusal that is still the last word and one that is not (#361).
+  #playAttempt: { readonly generation: number } | undefined;
+  // The refusal `PlayerState.refusedPlay` publishes, held here rather than read
+  // back off the published state, for the reason `autoplayRecovered` is derived
+  // rather than taken: `ProviderStatePatch` is a `Partial<PlayerState>`, so the
+  // key is in every patch's reach, and a provider has no way to know a command
+  // it was never told about was refused. Filling the field from this record
+  // means an adapter cannot manufacture a refusal that never happened, or erase
+  // one that did (#361).
+  //
+  // Not scoped to the generation the way `#playAttempt` is: that one is read
+  // through a method that can test it at the read, and this is copied into
+  // every snapshot, so it has to be cleared rather than merely ignored.
+  // `setProvider` is where that happens.
+  #refusedPlay: RefusedPlay | undefined;
   // Set once the muted retry of `'audible-then-muted'` is issued, and read at
   // the moment the attempt turns into `'started'`. The state flag cannot be
   // written from here directly: playback is confirmed by a provider patch, not
@@ -398,6 +420,15 @@ export class PlayerController {
     )
       return;
     this.#pendingOrigins.clear();
+    // A refusal describes the media attached now, so a new provider — or none —
+    // ends it. Deliberately unlike `#refusedUrlNotice`, which `setProvider`
+    // keeps: that one describes a consumer prop no provider ever saw, while
+    // this one describes a command a provider turned down, and the provider
+    // being replaced is what stops it from being true (#361). The state below
+    // is rebuilt from `createInitialPlayerState()`, so clearing the record here
+    // is what keeps the two in step: without it the next patch would republish
+    // a refusal by media that is no longer attached.
+    this.#refusedPlay = undefined;
     // Only an attempt that actually existed can be abandoned. Waiters
     // registered before the first attach are waiting *for* this provider, not
     // for the one being replaced, so they must survive it.
@@ -573,16 +604,24 @@ export class PlayerController {
   // Whether a play command was issued against the media attached now and
   // playback never reached `'playing'` — refused, faulted, or still in flight.
   //
-  // Not a `PlayerState` field, deliberately. A refused command is reported to
-  // the caller that issued it and to nobody else: `playback` stays `'paused'`,
-  // `autoplay` stays `'idle'` and no error is set, which is the behaviour
-  // `keeps confirmed paused state when the media play command rejects` pins. So
-  // this is bookkeeping about a command, not a fact about the player, and the
-  // one thing that needs it is `Root`'s first-frame poster writer — which must
-  // know that *something asked to play* before it uncovers a frame that a
-  // refusal left paused (#244). Putting it in the state snapshot instead would
-  // publish an attempt counter to every consumer and every subscriber, to
-  // change what exactly one internal reader does.
+  // Not a `PlayerState` field, deliberately, and still not one after #361 put
+  // the *refusal* on state as `refusedPlay`. The two are not the same fact.
+  // This one is true while a play command is still in flight, which is a
+  // property of the command and of nothing else; the one reader that needs it
+  // is `Root`'s first-frame poster writer, which must know that *something
+  // asked to play* before it uncovers a frame a refusal left paused, and must
+  // defer while the answer is still coming (#244). Publishing that would put an
+  // attempt counter in every snapshot to change what exactly one internal
+  // reader does.
+  //
+  // A refusal is where the #244 reasoning stopped holding, and #361 is what
+  // showed it. "Reported to the caller and to nobody else" is a fair account of
+  // a command while the caller is the only party with a stake in it — but a
+  // `PlayButton` press has no caller in that sense: the library issues the
+  // command on a viewer's behalf and discards the result, so the consumer who
+  // has to present the outcome never sees one. A settled refusal is therefore a
+  // fact about the player that outlives its command, and it belongs on state;
+  // an attempt still in flight is not, and does not.
   //
   // Scoped to the generation, so attaching a provider clears it: the frame that
   // decodes for freshly attached media is not the one an earlier refusal left
@@ -600,7 +639,7 @@ export class PlayerController {
   // playback confirmed in this generation means the poster is already hidden,
   // and the writer this answers only ever hides.
   hasUnconfirmedPlayAttempt = (): boolean =>
-    this.#playAttemptGeneration === this.#generation &&
+    this.#playAttempt?.generation === this.#generation &&
     this.#state.playback !== 'playing';
 
   // Resolves `true` once the provider declares that a command issued now will
@@ -866,6 +905,31 @@ export class PlayerController {
       patch.error !== null &&
       (patch.lifecycle === 'error' || patch.error.fatal);
     const nextLifecycle = patch.lifecycle ?? this.#state.lifecycle;
+    const nextPlayback = patch.playback ?? this.#state.playback;
+    // A play command stops being unconfirmed here and nowhere else: the promise
+    // it returns resolving is not playback, a provider patch reporting
+    // `'playing'` is. Dropping the record at that transition keeps
+    // `hasUnconfirmedPlayAttempt` answering for the attempt it names rather than
+    // for every later pause in the same generation (#244).
+    //
+    // A refusal it may have left goes at the same moment and for the same
+    // reason, which is what keeps `refusedPlay` a condition rather than a log:
+    // it says the last play command was refused and nothing has played since,
+    // so playback reaching `'playing'` is precisely the thing that stops it
+    // being true — whether the play that started it was the retry the consumer
+    // offered, autoplay's muted recovery, or the viewer working the provider's
+    // own controls. Nothing else clears it here: a pause, a seek, a stall or an
+    // error leaves a refused play just as refused as it was (#361).
+    //
+    // Dropping the attempt record is the other half of that, and it is what
+    // holds the condition under a settlement that arrives late: a command still
+    // in flight through this transition no longer holds the record, so the
+    // guard in `#playWithOrigin` refuses to re-arm a refusal playback has
+    // already outrun. A later pause does not give the record back.
+    if (nextPlayback === 'playing') {
+      this.#playAttempt = undefined;
+      this.#refusedPlay = undefined;
+    }
     const nextAutoplay = this.#hasAutoplayConfigurationError
       ? ('failed' as const)
       : patch.playback === 'playing' && this.#state.autoplay === 'attempting'
@@ -943,6 +1007,12 @@ export class PlayerController {
           : this.#state.autoplay === 'started'
             ? this.#state.autoplayRecovered
             : this.#autoplayRecoveryPending,
+      // Filled from the controller's own record for the same reason
+      // `autoplayRecovered` is derived here, and never taken from the patch:
+      // see `#refusedPlay`. Written on every pass rather than only where it
+      // changed, so the one clearing rule above governs the published field as
+      // well as the record.
+      refusedPlay: this.#refusedPlay ?? null,
       error: explicitProviderError
         ? freezeError(patch.error)
         : this.#hasAutoplayConfigurationError
@@ -962,14 +1032,6 @@ export class PlayerController {
             this.#refusedUrlNotice ??
             null)
     };
-    // A play command stops being unconfirmed here and nowhere else: the promise
-    // it returns resolving is not playback, a provider patch reporting
-    // `'playing'` is. Dropping the record at that transition keeps
-    // `hasUnconfirmedPlayAttempt` answering for the attempt it names rather than
-    // for every later pause in the same generation (#244).
-    if (nextState.playback === 'playing') {
-      this.#playAttemptGeneration = undefined;
-    }
     this.#setState(nextState);
   };
 
@@ -1218,18 +1280,72 @@ export class PlayerController {
   // The one funnel every play command passes through — `playWithOrigin` for the
   // API and for user gestures, `#attemptAutoplay` and `#recoverMutedAutoplay`
   // for autoplay's own — so recording the attempt here records all of them, and
-  // records it before the command is even issued.
-  #playWithOrigin = (
+  // records it before the command is even issued. The refusal a command settles
+  // on is recorded here for the same reason, on the way back out (#361).
+  #playWithOrigin = async (
     provider: ProviderAdapter,
     generation: number,
     origin: PlayerEventOrigin
   ): Promise<CommandResult> => {
-    this.#playAttemptGeneration = generation;
-    return this.#commandWithOrigin(
+    const attempt = { generation };
+    this.#playAttempt = attempt;
+    const result = await this.#commandWithOrigin(
       provider,
       { kind: 'playback', generation, origin, playback: 'playing' },
       'play'
     );
+    // The refusal is recorded on the way back out through the same funnel, so
+    // one site covers the API, a user gesture and autoplay's own attempt alike
+    // — and the caller's `CommandResult` is handed on exactly as it arrived.
+    // This publishes the refusal to consumers who did not issue the command;
+    // it does not take it away from the one who did (#361).
+    //
+    // Three things have to hold, and each one is a way the published condition
+    // — the last play command was refused and nothing has played since — can be
+    // false by the time a command settles. Commands settle out of order, so
+    // none of them can be assumed:
+    //
+    // - This is still the attempt the record names. A later play replaces the
+    //   record, so an earlier one settling afterwards is not the last command;
+    //   a patch confirming playback clears it, so a command playback outran is
+    //   not one nothing has played since. Reference identity answers both at
+    //   once, which is why the record is an object and not the generation it
+    //   carries: two plays against one provider share a generation.
+    // - The generation has not moved on. `setProvider` bumps it on every
+    //   attach, swap and detach, so a refusal that outlived its media describes
+    //   nothing a consumer could act on.
+    // - Playback is not confirmed `'playing'` right now. A `play()` refused
+    //   against media already playing — the viewer started it from the
+    //   provider's own controls — draws no patch of its own, so the attempt
+    //   record still stands, and nothing above catches it. Publishing there
+    //   would state that a play was refused and nothing is playing while
+    //   something demonstrably is, and the clearing rule would take it back on
+    //   whatever unrelated patch arrived next, which puts the lifetime of a
+    //   consumer's presentation in the hands of a `timeupdate`. The refusal is
+    //   dropped instead. It is not lost to the party with a stake in it: the
+    //   caller gets the same `CommandResult` either way, and this field exists
+    //   for the consumer who is NOT the caller, to whom "your play was refused"
+    //   over playing media is not a true thing to say (#361). The alternative —
+    //   publish it because a command really was refused — was rejected on those
+    //   two grounds, contradiction and lifetime, not on principle.
+    if (
+      !result.ok &&
+      this.#playAttempt === attempt &&
+      generation === this.#generation &&
+      this.#state.playback !== 'playing'
+    ) {
+      this.#refusedPlay = Object.freeze({ origin, reason: result.reason });
+      // Published through an empty patch, which rebuilds the snapshot from the
+      // controller's own records and fans it out: nothing about the player
+      // itself moved — playback is exactly where the refusal found it — so
+      // there is no provider patch to carry this, and `refusedPlay` is filled
+      // from `#refusedPlay` rather than from a key, so there is no key to
+      // state. `#resolveRefusedUrlNotice` reaches for the same empty patch, but
+      // only where the notice it is withdrawing does not hold the error slot;
+      // where it does, that withdrawal has a key to state and states it.
+      this.#applyPatch({});
+    }
+    return result;
   };
 
   #pauseWithOrigin = (

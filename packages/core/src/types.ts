@@ -155,6 +155,33 @@ export type PlayerCapabilities = {
   readonly customControls: Availability;
 };
 
+// A play command that was turned down, as `PlayerState.refusedPlay` publishes
+// it. It answers one question — was a play refused, and who asked for it — for
+// every trigger there is, so a consumer never assembles that answer out of two
+// unrelated fields (#361).
+//
+// `origin` is the Requested origin the command carried: `'user'` for a
+// `PlayButton` press or any other control a person operated, `'api'` for an
+// untagged public command, `'autoplay'` for autoplay's own attempt. It is what
+// separates the case this exists for — the viewer pressed play and nothing
+// happened — from a refused autoplay, with no second field to consult.
+//
+// `reason` is the `CommandFailureReason` off the `CommandResult` the caller
+// received, unchanged, so a policy refusal is not read as a provider fault.
+//
+// The `PlayerError` that result may also carry is deliberately absent. The
+// state has one error slot; a refused play must not take it, because
+// `ErrorDisplay` renders whatever is in it and presenting a refusal is exactly
+// the decision `.out-of-scope/default-presentation-on-blocked-autoplay.md`
+// declines to make on a consumer's behalf. Repeating the error here instead
+// would give one `PlayerError` two homes with two different clearing rules,
+// which is worse than not publishing the message at all: `reason` is the part
+// a consumer branches on, and the copy is theirs to write.
+export type RefusedPlay = {
+  readonly origin: PlayerEventOrigin;
+  readonly reason: CommandFailureReason;
+};
+
 export type PlayerState = {
   readonly lifecycle: 'idle' | 'loading' | 'ready' | 'error';
   readonly activation:
@@ -197,6 +224,31 @@ export type PlayerState = {
   // the in-flight retry included: the recovery is only recorded once playback
   // has started (#306).
   readonly autoplayRecovered: boolean;
+  // The last play command refused against the media attached now, and `null`
+  // while none stands. A refusal is a moment and a field is a condition, so
+  // what this states is the condition: the last play command this controller
+  // issued was refused, and nothing has played since. It is cleared by the
+  // patch that confirms playback and by the provider changing, and by nothing
+  // else — a pause, a seek, a stall or an error does not make the refusal
+  // untrue (#361).
+  //
+  // Commands settle out of order, and the condition holds through that: a
+  // refusal reported by a play that a later play replaced, or that playback
+  // was confirmed after, is never published at all — a later pause does not
+  // bring it back. Nor is one refused while playback is already `'playing'`,
+  // which would say nothing is playing while something is. The caller of such
+  // a command still receives its `CommandResult` unchanged; it is this field
+  // that declines to state a thing that has stopped being true.
+  //
+  // Beside `autoplay` rather than folded into it, and it replaces neither
+  // `'blocked'` nor `'failed'`: `autoplay` reports the autoplay machine, whose
+  // `'attempting'`, `'suppressed'`, `'started'` and recovered members are
+  // states no record of a refusal could carry, while this reports the command.
+  // An autoplay refused by policy therefore appears in both, and
+  // `origin: 'autoplay'` is what says which one it was. That is the whole
+  // story about which applies when: ask this field about the refusal, and
+  // `autoplay` about autoplay.
+  readonly refusedPlay: RefusedPlay | null;
   readonly provider: PlayerProvider | null;
   readonly hlsEngine: HlsEngine | null;
   readonly quality: PlayerQuality | null;
