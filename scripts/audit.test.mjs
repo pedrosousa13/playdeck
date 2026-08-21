@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { URL } from 'node:url';
-import { gate, parseAuditOutput, shippedVersions } from './audit.mjs';
+import {
+  flooredName,
+  gate,
+  parseAuditOutput,
+  shippedVersions,
+  workspaceOverrides,
+  workspaceSuppressions
+} from './audit.mjs';
 import { selectPublishable } from './workspace-packages.mjs';
 
 // The repository's own tree is clean in both directions, so neither direction
@@ -22,7 +29,7 @@ import { selectPublishable } from './workspace-packages.mjs';
 // fixture directory rewritten to `.`.
 /**
  * @param {string} variant
- * @returns {Omit<import('./audit.mjs').AuditInputs, 'publishable'>}
+ * @returns {Omit<import('./audit.mjs').AuditInputs, 'publishable' | 'overrides' | 'suppressions'>}
  */
 const capture = (variant) =>
   JSON.parse(
@@ -35,13 +42,31 @@ const capture = (variant) =>
     )
   );
 
-// The capture holds command output only. `publishable` is the one input
-// gather() derives rather than reads, so derive it here the same way.
+// The capture holds command output only. `publishable`, `overrides` and
+// `suppressions` are the inputs gather() derives and reads rather than
+// captures, so produce them here through the same exports it calls -- the last
+// two from the variant's own workspace file, neither of which declares any
+// override or any `auditConfig`.
 /** @param {string} variant */
 const fixture = (variant) => {
   const captured = capture(variant);
-  return { ...captured, publishable: selectPublishable(captured.workspace) };
+  const workspaceYaml = readFileSync(
+    new URL(
+      `../tests/audit/fixture/${variant}/pnpm-workspace.yaml`,
+      import.meta.url
+    ),
+    'utf8'
+  );
+  return {
+    ...captured,
+    publishable: selectPublishable(captured.workspace),
+    overrides: workspaceOverrides(workspaceYaml),
+    suppressions: workspaceSuppressions(workspaceYaml)
+  };
 };
+
+/** @param {string} report */
+const lastLine = (report) => report.slice(report.lastIndexOf('\n') + 1);
 
 // Every directory `pnpm-workspace.yaml` matches, as the capture spells them.
 /** @param {string} variant */
@@ -153,6 +178,208 @@ test('collects the transitive production closure of each publishable package', (
   );
 });
 
+// An npm alias -- `"foo": "npm:bar@1.0.0"` -- installs one package under
+// another name. pnpm reports the node under the alias and carries the package
+// actually installed in `from`, and `pnpm audit` names that package and only
+// that package in `module_name`. So the closure has to be keyed on `from`: keyed
+// on the alias, the entry cannot be joined to any advisory by construction, and
+// an advisory against something a publishable package really does ship reads as
+// `not shipped` while the gate exits 0.
+//
+// Every node below is the verbatim shape of `pnpm list --prod --no-optional
+// --depth Infinity --json` on pnpm 11.20.0, with the fields the walk does not
+// read (`resolved`, `path`) dropped.
+test('an aliased dependency is keyed on the package installed, not the alias', () => {
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'safe-name': { from: 'cookie', version: '0.4.0' }
+        }
+      }
+    ]),
+    new Map([['cookie@0.4.0', ['@playdeck/audit-fixture-publishable']]])
+  );
+});
+
+test('an advisory against an aliased dependency is reachable and fails the gate', () => {
+  // `development-only` ships one clean dependency and passes today, and its
+  // captured report carries three real advisories against shell-quote@1.7.2 --
+  // reached, in the workspace it was taken from, only through a private
+  // package. Alias that same version into the publishable package's own
+  // `dependencies` and the gate has to see it.
+  const result = gate({
+    ...developmentOnly,
+    prodTrees: [
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'safe-shell': { from: 'shell-quote', version: '1.7.2' }
+        }
+      }
+    ]
+  });
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(
+    result.advisories
+      .filter((advisory) => advisory.shipped)
+      .map((advisory) => advisory.module),
+    ['shell-quote@1.7.2', 'shell-quote@1.7.2', 'shell-quote@1.7.2']
+  );
+  // Named by the package the advisory is against, and attributed to the
+  // publishable package that reaches it -- not to the alias, which names no
+  // package at all.
+  assert.match(result.report, /SHIPPED\s+critical\s+shell-quote@1\.7\.2/);
+  assert.match(
+    result.report,
+    /reachable from: @playdeck\/audit-fixture-publishable/
+  );
+  assert.ok(!result.report.includes('safe-shell'));
+});
+
+test('an alias standing in for a vulnerable name does not join to its advisories', () => {
+  // The other direction, and the reason the alias key is not recorded
+  // alongside `from` as a second key: aliasing away from a vulnerable package
+  // to a patched fork leaves the vulnerable name as the key over a package
+  // that is not it. Recording `shell-quote@1.7.2` here would report a module
+  // this closure does not contain, and fail the gate on the change that fixed
+  // the problem.
+  const result = gate({
+    ...developmentOnly,
+    prodTrees: [
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'shell-quote': { from: 'safe-shell-quote', version: '1.7.2' }
+        }
+      }
+    ]
+  });
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(
+    result.advisories.filter((advisory) => advisory.shipped),
+    []
+  );
+});
+
+test('a scoped package is keyed on its scope in either direction across an alias', () => {
+  // A scope's `@` sits inside a package name and never separates one, so both
+  // directions have to survive: a scoped package installed under an unscoped
+  // alias, and an unscoped one installed under a scoped alias. Both shapes are
+  // real -- `"aliased-player": "npm:@vimeo/player@2.30.4"` and `"@safe/scoped":
+  // "npm:@sindresorhus/is@7.0.1"` produce exactly these nodes.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'aliased-player': { from: '@vimeo/player', version: '2.30.4' },
+          '@safe/scoped': { from: '@sindresorhus/is', version: '7.0.1' },
+          '@safe/unscoped': { from: 'cookie', version: '0.4.0' }
+        }
+      }
+    ]),
+    new Map([
+      ['@vimeo/player@2.30.4', ['@playdeck/audit-fixture-publishable']],
+      ['@sindresorhus/is@7.0.1', ['@playdeck/audit-fixture-publishable']],
+      ['cookie@0.4.0', ['@playdeck/audit-fixture-publishable']]
+    ])
+  );
+});
+
+test('a dependency installed under its own name is keyed on that name', () => {
+  // The regression the alias key is traded for. `from` equals the key on every
+  // node of this repository's own trees, so this is the shape the walk almost
+  // always meets, and keying on `from` must leave it exactly where it was.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          'hls.js': { from: 'hls.js', version: '1.6.16' },
+          '@vimeo/player': { from: '@vimeo/player', version: '2.30.4' }
+        }
+      }
+    ]),
+    new Map([
+      ['hls.js@1.6.16', ['@playdeck/audit-fixture-publishable']],
+      ['@vimeo/player@2.30.4', ['@playdeck/audit-fixture-publishable']]
+    ])
+  );
+});
+
+test('every node shape the walk meets is keyed on the package installed', () => {
+  // The four shapes `pnpm list` produces, in one tree, each with an alias on
+  // it where an alias can occur:
+  //
+  // - a workspace link, whose `from` is its own name whatever the dependency
+  //   was written as -- a `file:` value pointing at a directory resolves to a
+  //   `link:` version under the key, with `from` left on the key rather than
+  //   on the linked package's real name. Skipped either way: a link is not a
+  //   registry package and carries no advisory. What it pulls in is the point,
+  //   so the walk goes through it.
+  // - a transitive node several levels down, which carries `from` like any
+  //   other.
+  // - a deduped node, which carries `from` and drops `dependencies`.
+  // - a scoped package under an unscoped alias.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          '@playdeck/core': {
+            from: '@playdeck/core',
+            version: 'link:../core',
+            dependencies: {
+              'aliased-player': {
+                from: '@vimeo/player',
+                version: '2.30.4',
+                dependencies: {
+                  'safe-promise': {
+                    from: 'native-promise-only',
+                    version: '0.8.1'
+                  }
+                }
+              }
+            }
+          },
+          'aliased-file': { from: 'aliased-file', version: 'link:../local' },
+          'aliased-deduped': {
+            from: '@vimeo/player',
+            version: '2.30.4',
+            deduped: true,
+            dedupedDependenciesCount: 2
+          }
+        }
+      }
+    ]),
+    // No `link:` key of either kind, and the deduped node keyed on the same
+    // `name@version` its undeduped twin above produced, so the two collapse to
+    // one entry rather than to one real and one aliased.
+    new Map([
+      ['@vimeo/player@2.30.4', ['@playdeck/audit-fixture-publishable']],
+      ['native-promise-only@0.8.1', ['@playdeck/audit-fixture-publishable']]
+    ])
+  );
+});
+
+test('a node carrying no `from` is keyed on the name it is installed under', () => {
+  // `from` is on every node pnpm 11.20.0 emits, at every depth and for every
+  // shape above. The fallback is for a pnpm that stops emitting it: the join
+  // is then no worse than it was before aliases were handled at all, rather
+  // than the closure being dropped or the walk throwing.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: { 'hls.js': { version: '1.6.16' } }
+      }
+    ]),
+    new Map([['hls.js@1.6.16', ['@playdeck/audit-fixture-publishable']]])
+  );
+});
+
 test('every advisory labelled SHIPPED names the packages it is reachable from', () => {
   // The label and the list are one fact stated twice, and the report prints
   // them separately. A run reporting SHIPPED over an empty `reachable from:`
@@ -193,6 +420,351 @@ test('each capture still describes the workspace it was taken from', () => {
         .map((entry) => entry.name)
     );
   }
+});
+
+// An override is a workspace-local resolution instruction: it rewrites the very
+// graph `pnpm list --prod` reports and the very versions `pnpm audit` is asked
+// about, and it is not written into any published package.json. So where one
+// lands inside a publishable closure, the gate is measuring a graph no consumer
+// resolves and its verdict on that module means nothing. `development-only`
+// ships exactly `ms@2.1.3` and passes today, which isolates the new failure
+// from the advisory gate.
+test('a floored name inside a publishable closure fails an otherwise clean gate', () => {
+  const result = gate({
+    ...developmentOnly,
+    overrides: { 'ms@<2.1.3': '>=2.1.3' }
+  });
+  assert.equal(result.exitCode, 1);
+  // Not the advisory gate doing the failing: nothing here is reachable.
+  assert.deepEqual(
+    result.advisories.filter((advisory) => advisory.shipped),
+    []
+  );
+});
+
+test('the report names the floored module, the packages reaching it, and why the guarantee is void', () => {
+  const report = gate({
+    ...developmentOnly,
+    overrides: { 'ms@<2.1.3': '>=2.1.3' }
+  }).report;
+  assert.match(report, /FLOORED\s+ms@2\.1\.3/);
+  assert.match(report, /reachable from: @playdeck\/audit-fixture-publishable/);
+  assert.ok(report.includes('pnpm-workspace.yaml'));
+  // A floored module is a finding, printed among the advisories, and one
+  // summary closes the report -- not a second one after the first.
+  assert.equal(
+    lastLine(report),
+    "No advisory is reachable from a publishable package's dependencies. 1 module(s) above are floored. A floor does not travel to a consumer, so what a consumer resolves was never measured."
+  );
+});
+
+// The captures ship one unscoped dependency each, so the two selector shapes
+// that differ under a name comparison -- a scope's own `@`, and a key naming
+// the parent a floor applies under -- only ever reach `flooredName` through the
+// parser's own test. Drive them through the gate as well, on a tree written
+// here, so the path from an override key to a floored dependency is proved for
+// both and not only for `ms`.
+// An override value may be a `link:` spec, and pnpm then reports the
+// dependency at a `link:` version under the key's own name. `shippedVersions`
+// drops those deliberately -- a workspace link is not a registry package and
+// carries no advisory -- so the two questions need two walks: whether a
+// resolved version can carry an advisory is not whether a floor touched this
+// closure. Reading the advisory walk's output for the second question loses
+// exactly this case, and loses it silently, as a clean tree.
+test('a floored dependency that resolves to a workspace link fails the gate', () => {
+  const prodTrees = [
+    {
+      name: '@playdeck/audit-fixture-publishable',
+      dependencies: { ms: { version: 'link:../local-ms' } }
+    }
+  ];
+  // Not vacuous: the advisory walk really does come back empty for this tree.
+  assert.deepEqual(shippedVersions(prodTrees), new Map());
+  const result = gate({
+    ...developmentOnly,
+    prodTrees,
+    overrides: { ms: 'link:./local-ms' }
+  });
+  assert.equal(result.exitCode, 1);
+  assert.match(result.report, /FLOORED\s+ms@link:\.\.\/local-ms/);
+});
+
+test('a scoped dependency is floored by its scoped name', () => {
+  const result = gate({
+    ...developmentOnly,
+    prodTrees: [
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: { '@scope/pkg': { version: '1.2.3' } }
+      }
+    ],
+    overrides: { '@scope/pkg@1': '>=1.2.3' }
+  });
+  assert.equal(result.exitCode, 1);
+  assert.match(result.report, /FLOORED\s+@scope\/pkg@1\.2\.3/);
+});
+
+test('a parent>child key floors the child it names', () => {
+  const result = gate({
+    ...developmentOnly,
+    prodTrees: [
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          parent: {
+            version: '1.0.0',
+            dependencies: { child: { version: '4.5.6' } }
+          }
+        }
+      }
+    ],
+    overrides: { 'parent>child': '4.5.6' }
+  });
+  assert.equal(result.exitCode, 1);
+  // The child, reached through the parent -- not the parent the key opens with.
+  assert.match(result.report, /FLOORED\s+child@4\.5\.6/);
+  assert.ok(!result.report.includes('FLOORED      parent@'));
+});
+
+test('an override on a name outside every publishable closure changes nothing', () => {
+  // A real floor from the repository's own workspace file. `development-only`
+  // ships `ms` and nothing else, so this one rewrites no part of the closure
+  // the gate measures and the gate's answer still stands.
+  const result = gate({
+    ...developmentOnly,
+    overrides: { 'postcss@<8.5.23': '>=8.5.23' }
+  });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.report, gate(developmentOnly).report);
+});
+
+test('a workspace declaring no overrides leaves both variants as they are', () => {
+  // Neither fixture workspace has an `overrides` block, so the absence has to
+  // read as an empty map rather than throw or match everything.
+  assert.deepEqual(shipped.overrides, {});
+  assert.deepEqual(developmentOnly.overrides, {});
+  assert.equal(gate(shipped).exitCode, 1);
+  assert.equal(gate(developmentOnly).exitCode, 0);
+  for (const variant of [shipped, developmentOnly]) {
+    assert.ok(!gate(variant).report.includes('FLOORED'));
+  }
+  // Absent means absent: with nothing floored the report ends where it ended
+  // before floored modules were reported at all, on the advisory summary alone.
+  // Asserting only that no `FLOORED` line appears would still pass over a
+  // summary that had gained a second sentence counting zero of them.
+  assert.match(
+    lastLine(gate(developmentOnly).report),
+    /^No advisory is reachable from a publishable package's dependencies\.$/
+  );
+  assert.match(
+    lastLine(gate(shipped).report),
+    /^1 of \d+ advisories are reachable from a publishable package's dependencies\. Severity is not the gate; reachability is\.$/
+  );
+});
+
+test('the overrides block is read out of a workspace file, and its absence is empty', () => {
+  assert.deepEqual(
+    workspaceOverrides(
+      'packages:\n  - packages/*\noverrides:\n  postcss@<8.5.23: ">=8.5.23"\n  js-yaml@3: ">=3.15.1 <4"\n'
+    ),
+    { 'postcss@<8.5.23': '>=8.5.23', 'js-yaml@3': '>=3.15.1 <4' }
+  );
+  // The shape of both fixture workspaces, read by `fixture()` above: other
+  // keys, no `overrides`. The preceding test asserts what that absence yields
+  // for them; this fixes the shape it is read from. Nothing to intersect is an
+  // answer, not a failure.
+  assert.deepEqual(workspaceOverrides('packages:\n  - packages/*\n'), {});
+  // A file that is empty, or holds only comments, parses to null rather than
+  // to an object -- so the absence has to survive that too.
+  assert.deepEqual(workspaceOverrides(''), {});
+  assert.deepEqual(workspaceOverrides('# no settings yet\n'), {});
+});
+
+test("the repository's own workspace file really does carry overrides to intersect", () => {
+  // The synthetic strings above fix the shape; this fixes the fact. If this
+  // read ever comes back empty -- the block renamed, moved, or the parse
+  // silently failing -- the gate would report a clean tree for the same reason
+  // it did before #335, and every overlap test above would still pass.
+  const overrides = workspaceOverrides(
+    readFileSync(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8')
+  );
+  assert.ok(Object.keys(overrides).length > 0);
+  // And every key parses to a package name rather than to a fragment of its
+  // own range -- the shape a name can take, not the specific names, so a floor
+  // may be added or removed without touching this. `postcss@>=8.5.23` read by
+  // splitting on `>` yields `=8.5.23`, which this rejects.
+  for (const key of Object.keys(overrides)) {
+    assert.match(
+      flooredName(key),
+      /^(?:@[^@/\s]+\/)?[a-z0-9][^@<>=|\s/]*$/,
+      key
+    );
+  }
+});
+
+test('an override selector key names the package it floors', () => {
+  // `>` carries both meanings a key can hold -- a semver operator inside a
+  // range, and the separator between path segments -- so every shape below
+  // that contains one is a way of telling those two apart. A key whose range
+  // is written `>=` binds exactly as one written `<` does, so reading its
+  // operator as a separator would floor a package the gate then never looks
+  // for: the failure would be silent and would read as a clean tree.
+  const keys = {
+    // A range, a bare major, and no selector at all.
+    'postcss@<8.5.23': 'postcss',
+    'postcss@>=8.5.23': 'postcss',
+    'foo@>1': 'foo',
+    'foo@>=1 <2': 'foo',
+    'js-yaml@3': 'js-yaml',
+    postcss: 'postcss',
+    // The `@` of a scope opens the name; it never separates a range.
+    '@scope/pkg': '@scope/pkg',
+    '@scope/pkg@1': '@scope/pkg',
+    '@scope/p@>=1': '@scope/p',
+    // pnpm's override path syntax: the floor applies to the last segment, not
+    // to the parent it is reached through. A parent carrying its own range puts
+    // both meanings of `>` in one key, `qar@1>zoo` closing a range before the
+    // separator that follows it.
+    'parent>child@1': 'child',
+    '@scope/parent>@scope/child': '@scope/child',
+    'qar@1>zoo': 'zoo'
+  };
+  assert.deepEqual(
+    Object.fromEntries(Object.keys(keys).map((key) => [key, flooredName(key)])),
+    keys
+  );
+});
+
+// An `auditConfig` block is the other way a workspace setting voids the
+// measurement, and it is the quieter of the two: a floor at least leaves the
+// floored module in the tree for `flooredModules` to find, whereas pnpm applies
+// `ignoreGhsas` and `ignoreCves` while building the report, so what this file
+// receives is a tree with the advisory simply not in it. `development-only`
+// passes today, which isolates the new failure from the advisory gate the same
+// way the floor tests above do.
+test('an auditConfig entry fails an otherwise clean gate', () => {
+  const result = gate({
+    ...developmentOnly,
+    suppressions: [
+      { key: 'auditConfig.ignoreGhsas', identifiers: ['GHSA-vh95-rmgr-6w4m'] }
+    ]
+  });
+  assert.equal(result.exitCode, 1);
+  // Not the advisory gate doing the failing, and not the floor gate either.
+  assert.deepEqual(
+    result.advisories.filter((advisory) => advisory.shipped),
+    []
+  );
+  assert.ok(!result.report.includes('FLOORED'));
+});
+
+test('the report names the suppressed identifiers and why the count above them cannot be read', () => {
+  const report = gate({
+    ...developmentOnly,
+    suppressions: [
+      {
+        key: 'auditConfig.ignoreCves',
+        identifiers: ['CVE-2020-7598', 'CVE-2021-44906']
+      }
+    ]
+  }).report;
+  assert.match(report, /SUPPRESSED\s+auditConfig\.ignoreCves/);
+  // The identifiers themselves, so a reader can look up what was hidden rather
+  // than only learn that something was.
+  assert.ok(report.includes('CVE-2020-7598, CVE-2021-44906'));
+  assert.ok(report.includes('pnpm-workspace.yaml'));
+  assert.equal(
+    lastLine(report),
+    "No advisory is reachable from a publishable package's dependencies. 1 auditConfig entry above suppresses advisories, so the count this report opens with is not the count pnpm found."
+  );
+});
+
+test('a floor and a suppression are counted and worded separately', () => {
+  // Both at once, because they are reported through the same list and the same
+  // summary: one must not swallow the other's line or its sentence.
+  const report = gate({
+    ...developmentOnly,
+    overrides: { 'ms@<2.1.3': '>=2.1.3' },
+    suppressions: [
+      { key: 'auditConfig.ignoreGhsas', identifiers: ['GHSA-a', 'GHSA-b'] },
+      { key: 'auditConfig.ignoreCves', identifiers: ['CVE-1'] }
+    ]
+  }).report;
+  assert.match(report, /FLOORED\s+ms@2\.1\.3/);
+  assert.match(report, /SUPPRESSED\s+auditConfig\.ignoreGhsas/);
+  assert.match(report, /SUPPRESSED\s+auditConfig\.ignoreCves/);
+  assert.ok(
+    lastLine(report).endsWith(
+      '1 module(s) above are floored. A floor does not travel to a consumer, so what a consumer resolves was never measured. 2 auditConfig entries above suppress advisories, so the count this report opens with is not the count pnpm found.'
+    )
+  );
+});
+
+test('a workspace declaring no auditConfig leaves both variants as they are', () => {
+  assert.deepEqual(shipped.suppressions, []);
+  assert.deepEqual(developmentOnly.suppressions, []);
+  for (const variant of [shipped, developmentOnly]) {
+    assert.ok(!gate(variant).report.includes('SUPPRESSED'));
+  }
+  // Same reasoning as the floor case: absent means the summary is the advisory
+  // sentence alone, not one that has gained a second counting zero.
+  assert.match(
+    lastLine(gate(developmentOnly).report),
+    /^No advisory is reachable from a publishable package's dependencies\.$/
+  );
+});
+
+test('the auditConfig block is read out of a workspace file, and its absence is empty', () => {
+  assert.deepEqual(
+    workspaceSuppressions(
+      'packages:\n  - packages/*\nauditConfig:\n  ignoreGhsas:\n    - GHSA-vh95-rmgr-6w4m\n  ignoreCves:\n    - CVE-2020-7598\n'
+    ),
+    // Sorted by key, so the report does not reorder when the file does.
+    [
+      { key: 'auditConfig.ignoreCves', identifiers: ['CVE-2020-7598'] },
+      { key: 'auditConfig.ignoreGhsas', identifiers: ['GHSA-vh95-rmgr-6w4m'] }
+    ]
+  );
+  // Keyed on the block, not on the two names pnpm reads today: a key a later
+  // pnpm adds has to fail closed rather than pass unnoticed.
+  assert.deepEqual(
+    workspaceSuppressions('auditConfig:\n  ignoreSomethingNew:\n    - X-1\n'),
+    [{ key: 'auditConfig.ignoreSomethingNew', identifiers: ['X-1'] }]
+  );
+  // pnpm tests `ignoreGhsas` with `.includes`, which a bare string answers, so
+  // one suppresses for real and has to count as an entry.
+  assert.deepEqual(
+    workspaceSuppressions('auditConfig:\n  ignoreGhsas: GHSA-only-one\n'),
+    [{ key: 'auditConfig.ignoreGhsas', identifiers: ['GHSA-only-one'] }]
+  );
+  // Carrying nothing is not a suppression. An empty list hides no advisory, so
+  // failing on one would be a false alarm -- and it is no foothold either,
+  // since the change that adds the first identifier is the one that fails.
+  assert.deepEqual(
+    workspaceSuppressions('auditConfig:\n  ignoreCves: []\n'),
+    []
+  );
+  assert.deepEqual(workspaceSuppressions('auditConfig: {}\n'), []);
+  assert.deepEqual(workspaceSuppressions('auditConfig:\n  ignoreCves:\n'), []);
+  // And the shapes the overrides read has to survive too: no block, an empty
+  // file, and a file of comments, which parses to null rather than an object.
+  assert.deepEqual(workspaceSuppressions('packages:\n  - packages/*\n'), []);
+  assert.deepEqual(workspaceSuppressions(''), []);
+  assert.deepEqual(workspaceSuppressions('# no settings yet\n'), []);
+});
+
+test("the repository's own workspace file declares no audit suppression", () => {
+  // The counterpart to the overrides fact above, and the one that matters most
+  // if it ever changes: this file legitimately carries a security block, so an
+  // `auditConfig` added to it reads as routine triage rather than as a bypass.
+  // The gate would fail on it -- this says the tree is clean today, so that
+  // failure means something new rather than something already tolerated.
+  assert.deepEqual(
+    workspaceSuppressions(
+      readFileSync(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8')
+    ),
+    []
+  );
 });
 
 test('fails closed when the registry could not be reached', () => {

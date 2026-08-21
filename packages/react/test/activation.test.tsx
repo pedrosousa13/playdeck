@@ -18,6 +18,10 @@ import {
   type ProviderStateListener
 } from '@playdeck/core';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 import { useActivation } from '../src/use-activation';
@@ -199,6 +203,20 @@ const interactionFixture = (
     </Player.Viewport>
   </Player.Root>
 );
+
+// A source `detectSource` turns down: the scheme is not one this library will
+// carry (`isPermittedSourceUrl`), so detection fails and no provider is ever
+// constructed for it.
+const REFUSED_SOURCE = 'javascript:alert(1)';
+
+// What that refusal reads as. Named rather than repeated because the tests
+// below pin it four times over; it is still the whole string, compared exactly.
+// `javascript:` fails at the shared allowlist, which is `unsupported-string` --
+// the reason whose sentence names the scheme and the host (#305).
+const REFUSED_SOURCE_MESSAGE =
+  'Playdeck will not play the player source "javascript:alert(1)". ' +
+  'An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ' +
+  "See Playdeck's docs/provider-setup.md for the source forms each provider accepts.";
 
 beforeEach(() => {
   ControlledIntersectionObserver.instances = [];
@@ -1275,6 +1293,284 @@ test('interaction loading rejects autoplay before importing', async () => {
   expect(mockedLoadProvider).not.toHaveBeenCalled();
 });
 
+// #331. `detectSource` refusing a URL *is* the security control -- it is where
+// `javascript:`, `data:` and tab-split scheme smuggling are turned down
+// (`packages/core/src/source-detection.ts`). Whether that refusal is observable
+// must not depend on an unrelated prop, so all three strategies are pinned on
+// one table: `interaction` used to check the autoplay conflict alone and left a
+// poisoned `source` sitting at `activation: 'dormant', error: null`, which a
+// consumer cannot tell apart from "the user has not clicked yet".
+test.each([
+  { loading: 'eager' as const },
+  { loading: 'viewport' as const },
+  { loading: 'interaction' as const }
+])(
+  '$loading loading reports a refused source and never imports',
+  async ({ loading }) => {
+    const handle = createRef<Player.PlayerHandle>();
+    render(fixture({ loading, ref: handle, source: REFUSED_SOURCE }));
+
+    await vi.waitFor(() =>
+      expect(handle.current?.getState()).toMatchObject({
+        activation: 'error',
+        error: {
+          category: 'unsupported',
+          fatal: false,
+          message: REFUSED_SOURCE_MESSAGE,
+          // Not recoverable: a retry re-reads the same `source` prop and the
+          // allowlist refuses it again, so no press could change the outcome.
+          // This is what withholds the retry `ActivationButton` and
+          // `ErrorDisplay` would otherwise offer -- see the two tests below.
+          recoverable: false
+        },
+        lifecycle: 'error'
+      })
+    );
+    expect(mockedLoadProvider).not.toHaveBeenCalled();
+  }
+);
+
+// #305. `detectSource` distinguishes three failure reasons internally and every
+// one of them used to publish the same sentence, which named neither the
+// failure nor the value -- so a colleague who passed a Vimeo URL in a shape the
+// detector does not read was told only that the source "is not supported". Each
+// reason now reads differently and each quotes what it rejected.
+test.each([
+  {
+    // `vimeo.com` is a recognised host, but only `/<digits>` is a recognised
+    // path on it, so this is `malformed-string` rather than a URL nothing
+    // claims (`source-detection.ts:330-335`).
+    label: 'a provider host in a path shape the detector does not read',
+    source: 'https://vimeo.com/channels/staffpicks/76979871',
+    message:
+      'Playdeck could not read a video from the player source "https://vimeo.com/channels/staffpicks/76979871" — it is either not a well-formed URL, or a provider URL in a form Playdeck does not read. ' +
+      "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
+  },
+  {
+    // A well-formed https URL that no provider host matches and no file
+    // extension resolves: `unsupported-string` (`source-detection.ts:353`).
+    label: 'a URL no provider claims',
+    source: 'https://example.com/watch',
+    message:
+      'Playdeck will not play the player source "https://example.com/watch". ' +
+      'An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ' +
+      "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
+  },
+  {
+    // Not a string at all, so neither string sentence applies: the object is
+    // quoted as it was passed (`source-detection.ts:369`).
+    label: 'an explicit source object that does not validate',
+    source: { type: 'vimeo', videoId: 'not-digits' } as const,
+    message:
+      'The player source {"type":"vimeo","videoId":"not-digits"} is not a source object Playdeck accepts. ' +
+      "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
+  }
+])(
+  'eager loading names the failure for $label',
+  async ({ message, source }) => {
+    const handle = createRef<Player.PlayerHandle>();
+    render(fixture({ loading: 'eager', ref: handle, source }));
+
+    await vi.waitFor(() =>
+      expect(handle.current?.getState()).toMatchObject({
+        activation: 'error',
+        error: { category: 'unsupported', message, recoverable: false },
+        lifecycle: 'error'
+      })
+    );
+    expect(mockedLoadProvider).not.toHaveBeenCalled();
+  }
+);
+
+// The quote is bounded. `ErrorDisplay` renders the message as one paragraph
+// over the player, so a source carrying a long query string would otherwise
+// push the retry button off a small viewport. 120 code points keep the whole of
+// every form the setup document lists, and the scheme, host and path that
+// identify the mistake are all inside it.
+test('eager loading truncates a long source in the message', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  // 20 code points of origin, then 200 more: quoted to the first 120, elided.
+  render(
+    fixture({
+      loading: 'eager',
+      ref: handle,
+      source: `https://example.com/${'a'.repeat(200)}`
+    })
+  );
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        message:
+          `Playdeck will not play the player source "https://example.com/${'a'.repeat(100)}…". ` +
+          'An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ' +
+          "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
+      }
+    })
+  );
+});
+
+// The bound is counted in code points, so the cut cannot land inside a surrogate
+// pair. Slicing by code unit here would leave a lone `\ud83c`, which renders as
+// U+FFFD -- a message quoting a character the consumer never passed.
+test('eager loading truncates a long source between code points', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  // The astral character is the 120th code point, so it is the last one kept.
+  const source = `https://example.com/${'a'.repeat(99)}🎬${'b'.repeat(40)}`;
+  render(fixture({ loading: 'eager', ref: handle, source }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState().error?.message).toContain(
+      `"https://example.com/${'a'.repeat(99)}🎬…"`
+    )
+  );
+  expect(handle.current?.getState().error?.message).not.toContain('�');
+});
+
+// The message has to follow the prop. Every refusal collapses to one
+// `'unsupported-source'` session key, so nothing that keys on the source
+// changes when one refused source replaces another -- and the effect publishing
+// the refusal would not re-run to replace a message still naming the value the
+// consumer has already corrected.
+test('eager loading re-reports when one refused source replaces another', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const { rerender } = render(
+    fixture({
+      loading: 'eager',
+      ref: handle,
+      source: 'https://example.com/first'
+    })
+  );
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState().error?.message).toContain(
+      '"https://example.com/first"'
+    )
+  );
+
+  rerender(
+    fixture({
+      loading: 'eager',
+      ref: handle,
+      source: 'https://example.com/second'
+    })
+  );
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState().error?.message).toContain(
+      '"https://example.com/second"'
+    )
+  );
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// Both conditions at once. The refusal wins: it is the order `eager` and
+// `viewport` already check in, and a security-relevant refusal masked by a
+// configuration complaint is what #332 reported in the Wistia notice slot,
+// where the same order-first rule settled it.
+test('interaction reports a refused source ahead of the autoplay conflict', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    fixture({
+      autoplay: 'muted',
+      loading: 'interaction',
+      ref: handle,
+      source: REFUSED_SOURCE
+    })
+  );
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'unsupported',
+        message: REFUSED_SOURCE_MESSAGE
+      },
+      lifecycle: 'error'
+    })
+  );
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// The control must not advertise a recovery it cannot perform. `ActivationButton`
+// reads `error.recoverable` and nothing else (#198), so while the refusal was
+// `recoverable: true` this rendered an enabled "Retry loading video" that the
+// arming guard then turned into a no-op -- an affordance that lies, which is the
+// complaint #331 opens with. The refusal is `recoverable: false`, so there is no
+// retry to press: the button keeps the `error` state's colour, reads `Play video`
+// and refuses the press.
+test('interaction offers no retry for a refused source', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(interactionFixture({ ref: handle, source: REFUSED_SOURCE }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({ activation: 'error' })
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Retry loading video' })
+  ).toBeNull();
+  const button = screen.getByRole('button', { name: 'Play video' });
+  expect(button.getAttribute('aria-disabled')).toBe('true');
+  expect(button.getAttribute('data-state')).toBe('error');
+
+  // `aria-disabled`, not `disabled`, so the press is delivered and refused
+  // rather than never dispatched.
+  fireEvent.click(button);
+
+  expect(handle.current?.getState()).toMatchObject({
+    activation: 'error',
+    error: {
+      category: 'unsupported',
+      message: REFUSED_SOURCE_MESSAGE
+    },
+    lifecycle: 'error'
+  });
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// The same refusal one level below the control. A caller reaching the handle
+// directly presents no affordance, so `recoverable` says nothing about it --
+// `activateFromInteraction` refuses on the source status itself. Without that,
+// the error branch would commit to `'eligible'`, clear the error, and land the
+// player back at the `error: null` dead end #331 is about, this time behind one
+// call: the effect that published the refusal does not re-run, because none of
+// its inputs changed.
+test('interaction refuses a programmatic activation on a refused source', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(interactionFixture({ ref: handle, source: REFUSED_SOURCE }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({ activation: 'error' })
+  );
+  act(() => handle.current?.activateFromInteraction());
+
+  expect(handle.current?.getState()).toMatchObject({
+    activation: 'error',
+    error: {
+      category: 'unsupported',
+      message: REFUSED_SOURCE_MESSAGE
+    },
+    lifecycle: 'error'
+  });
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// The other half of the interaction branch, unchanged: a source that was never
+// refused still sits dormant with nothing to report until it is asked.
+test('interaction with a supported source stays dormant with no error', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'interaction', ref: handle }));
+
+  await Promise.resolve();
+  expect(handle.current?.getState()).toMatchObject({
+    activation: 'dormant',
+    error: null,
+    lifecycle: 'idle'
+  });
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
 test('Root unmount destroys its installed provider exactly once', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
@@ -2078,6 +2374,38 @@ test('LoadingIndicator does not occupy the viewport while idle, but does while l
   expect(backToIdle.style.width).toBe('1px');
 });
 
+// #305. `loadProvider` rejects for a chunk the network never delivered, a CSP
+// that refused it, a missing media mount and an adapter factory that threw, and
+// the message cannot tell those apart -- so it says which provider was being
+// loaded, which the resolved source does know, and says the reason is not
+// knowable rather than inventing one. The rejection itself stays on `cause`.
+test('names the provider a failed load was for', async () => {
+  const cause = new Error('provider import failed');
+  mockedLoadProvider.mockRejectedValueOnce(cause);
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    fixture({
+      loading: 'eager',
+      ref: handle,
+      source: 'https://vimeo.com/76979871'
+    })
+  );
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'provider',
+        cause,
+        message:
+          "Unable to load the Vimeo provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See Playdeck's docs/provider-setup.md for what to check.",
+        recoverable: true
+      },
+      lifecycle: 'error'
+    })
+  );
+});
+
 test('keeps focus and retries after loader failure', async () => {
   const current = createFakeProvider();
   mockedLoadProvider
@@ -2109,7 +2437,9 @@ test('retries an installed provider error with one queued user play', async () =
   render(interactionFixture({ ref: handle }));
 
   const button = screen.getByRole('button', { name: 'Play video' });
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
   const playWithOrigin = vi.spyOn(controller, 'playWithOrigin');
   button.focus();
   fireEvent.click(button);
@@ -2234,17 +2564,24 @@ test('usePlayerActions() reaches the same activateFromInteraction binding', asyn
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
 });
 
-// The mock-player decorator casts this same handle back to
-// `PlayerController` to reach `setProvider` directly
-// (apps/storybook/.storybook/mock-player.tsx:178, its `as PlayerController`
-// cast, reaching `:184`'s `controller.setProvider`), which is how a story
-// stages its provider. Composing the handle from the controller plus
-// `activateFromInteraction` must not lose that escape hatch.
-test('the ref handle still exposes the provider-facing setProvider escape hatch', () => {
+// The mock-player decorator (apps/storybook/.storybook/mock-player.tsx) reads
+// `INTERNAL_CONTROLLER` off this same handle to reach `setProvider`, which is
+// how a story stages its provider. This used to read "the ref handle still
+// exposes the provider-facing setProvider escape hatch" and asserted
+// `setProvider` sat on the handle directly -- the #328 leak, since every
+// consumer got it too. `setProvider` must stay off the declared surface and
+// stay reachable through the symbol, and the two halves belong in one test:
+// splitting them lets a change satisfy either alone.
+test('reaches setProvider through the internal symbol, never off the handle', () => {
   const handle = createRef<Player.PlayerHandle>();
   render(fixture({ ref: handle }));
 
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
+  expect(
+    (handle.current as unknown as Record<string, unknown>).setProvider
+  ).toBeUndefined();
   expect(controller.setProvider).toBeTypeOf('function');
   const adapter: ProviderAdapter = {
     provider: 'native',

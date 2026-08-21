@@ -1,0 +1,233 @@
+name: Install Playwright browser
+description: >-
+  Installs one Playwright browser under a time bound. firefox and webkit also
+  install their OS packages through apt, and that half is sampled so a wedge
+  leaves evidence behind.
+
+inputs:
+  browser:
+    description: Playwright browser to install (chromium, firefox or webkit).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Two paths, because only two of the three engines need anything from apt.
+    #
+    # `--with-deps` is the half that talks to apt. Playwright shells it out as
+    # `sudo -- sh -c "apt-get update&& apt-get install -y --no-install-recommends ..."`
+    # (playwright-core 1.61.1, coreBundle.js:27454-27466 and :27700-27707), and
+    # apt blocks indefinitely rather than failing. That is the wedge in #352.
+    # Without the flag an install only downloads a browser binary, and none of
+    # the apt machinery below has anything to observe.
+    #
+    # Measured for #359 on a clean `ubuntu-latest`, runner image
+    # `ubuntu24 20260810.271.1`, with `playwright install-deps --dry-run
+    # <engine>` — which, unlike the install itself, exits non-zero when
+    # packages are missing:
+    #
+    #   chromium     9 missing, every one a font or an xfont, no shared library
+    #   firefox     40 missing, media codecs among them (libavcodec60,
+    #               libavutil58, libdav1d7, libgsm1, libopus0)
+    #   webkit     181 missing
+    #
+    # The dry run alone proves nothing, because a missing dependency does not
+    # fail the install: the validation error is caught, renamed to a warning,
+    # and the process exits 0 (coreBundle.js:67954-67957). So each engine was
+    # also launched for real with nothing installed — chromium ok, firefox ok,
+    # webkit FAILED — and the two chromium suites were run in that state:
+    # `e2e --project=chromium` 75 passed, `e2e --project=visual` 15 passed.
+    #
+    # So chromium drops `--with-deps` and never calls apt. firefox and webkit
+    # keep it: webkit cannot launch without it at all, and firefox's missing
+    # set is media codecs, which a launch probe does not exercise — this is a
+    # video-player library and nothing has measured its media suites against a
+    # codec-less runner.
+    #
+    # The fonts need stating precisely, because `visual` pixel-compares
+    # committed baselines. All nine chromium is missing, in full:
+    #
+    #   fonts-freefont-ttf      Latin and Greek
+    #   fonts-ipafont-gothic    Japanese
+    #   fonts-tlwg-loma-otf     Thai
+    #   fonts-unifont           all-Unicode fallback
+    #   fonts-wqy-zenhei        Chinese
+    #   xfonts-cyrillic         Cyrillic
+    #   xfonts-encodings        X font infrastructure
+    #   xfonts-scalable         X font infrastructure
+    #   xfonts-utils            X font infrastructure
+    #
+    # Resist the shorthand that these are "the non-Latin ones". They are not:
+    # FreeFont is a Latin face and Unifont covers everything, and both were
+    # present on the runner that generated the committed baselines. What the
+    # 15/15 pass actually shows is that fontconfig resolves `visual`'s text to
+    # `fonts-liberation`, which the image still carries — it does not show that
+    # no Latin font went missing. The image also keeps
+    # `fonts-noto-color-emoji`.
+    #
+    # So the risk is narrower than "fonts are irrelevant" and wider than "only
+    # non-Latin baselines are at risk": any future baseline whose text
+    # fontconfig would resolve to one of the nine — a script none of the
+    # remaining faces cover, or a glyph Liberation lacks and FreeFont or
+    # Unifont supplied — diverges from its reference. A pixel test is exactly
+    # the kind that drifts silently rather than failing loudly, so if a
+    # baseline ever disagrees for no reason anyone can see, start here.
+    #
+    # Both paths are bounded, for different reasons and at different values.
+    #
+    # The apt path is bounded at 20 minutes. How long an install takes,
+    # measured on the install *step* of five successful runs, 30 samples: 27
+    # landed between 11s and 149s, and three succeeded only after 690s
+    # (storybook), 1004s (e2e firefox) and 1616s (package). So that is one
+    # long-tailed distribution, not a healthy state and a wedged state with a
+    # gap between them. No bound separates them.
+    #
+    # 20 minutes, therefore, is a trade and not a safe margin. It clears the
+    # 1004s case by over three minutes, but it would have killed the 1616s one,
+    # which succeeded. It cannot simply be raised: the chain has to be bound +
+    # the 30s SIGKILL grace < the step `timeout-minutes` < the job
+    # `timeout-minutes`, and `e2e` caps at 25 minutes. Composite actions cannot
+    # carry `timeout-minutes` on their own steps, so that middle limit lives at
+    # each call site.
+    #
+    # The chromium path is bounded at 10 minutes, and that one is a safety net
+    # rather than a trade. The long tail above is apt's, and there is no apt
+    # here; what is left is a few hundred megabytes off a CDN, which is under a
+    # minute on a healthy runner. The bound is kept rather than dropped because
+    # a download can still stall, and an unbounded stall is the six-hour job
+    # #351 and #352 were about — but it is sized to fire only on something
+    # genuinely stuck, so it is not the same kind of coin-flip as the 20.
+    #
+    # One attempt, no retry, on either path. No observed wedge has ever cleared
+    # on its own — 13 minutes, two hours, and 25 minutes five times — every one
+    # of them ended by a cancel or a timeout, so a second attempt inside the
+    # same job sits entirely inside the window where the wedge has never
+    # resolved. What did clear it was a fresh runner, which an in-job retry
+    # cannot give. On the apt path a retry is also counterproductive: this
+    # script runs as `runner` while apt runs as root under sudo, and a non-root
+    # process cannot signal a root one, so `timeout`'s SIGTERM fails with
+    # EPERM against that subtree. It can outlive the attempt still holding
+    # /var/lib/dpkg/lock, and a second attempt would then block on exactly that
+    # lock.
+    #
+    # DEBIAN_FRONTEND is deliberately not set on the apt path: Ubuntu's sudoers
+    # defaults to `env_reset` and does not carry it in `env_keep`, so it would
+    # be stripped before apt saw it. Playwright already passes `-y`. An
+    # interactive prompt is therefore not ruled out as the cause — the sampler
+    # below is what would show one.
+    - shell: bash
+      env:
+        BROWSER: ${{ inputs.browser }}
+      run: |
+        # chromium returns from here, before any of the apt machinery is even
+        # defined. With no apt call there is nothing for the sampler, the lock
+        # checks or the post-mortem to observe: they would print "no apt/dpkg
+        # /debconf process running" once a minute and a list of unheld apt
+        # locks at the end, which is noise shaped like evidence. The bound
+        # stays, because the download it wraps can still stall.
+        if [ "$BROWSER" = "chromium" ]; then
+          download_timeout=10m
+
+          echo "playwright install $BROWSER (no --with-deps, see #359), bounded at $download_timeout"
+          set +e
+          timeout --kill-after=30s "$download_timeout" pnpm exec playwright install "$BROWSER"
+          status=$?
+          set -e
+
+          # 124 is `timeout` ending the attempt with SIGTERM, 137 the SIGKILL
+          # that follows if it ignored that. Any other non-zero is a real
+          # download failure and speaks for itself.
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo "playwright install did not finish within $download_timeout"
+            echo "no apt is involved on this path, so the download itself is what stalled"
+          fi
+
+          exit "$status"
+        fi
+
+        attempt_timeout=20m
+
+        # `watch_apt` reads a missing `fuser` as "nobody", which would look
+        # like a free lock, so say once if it is not there.
+        command -v fuser >/dev/null 2>&1 || echo "note: fuser is not installed, so no lock holder can be reported"
+
+        # Sampled *while* the install runs. A post-mortem alone answers nothing
+        # in the stalled-mirror and prompt cases, because whatever was blocking
+        # is gone by the time the attempt ends. One block a minute while apt is
+        # alive, and one line a minute when it is not — which is itself an
+        # answer, since it means apt is not what the step is waiting on.
+        #
+        # apt's own output needs no redirect: Playwright spawns it with
+        # `stdio: "inherit"` (coreBundle.js:27466), so "Waiting for cache lock
+        # ... held by process N" lands in this log verbatim.
+        watch_apt() {
+          sleep_pid=""
+          trap 'kill "$sleep_pid" 2>/dev/null || true; exit 0' TERM
+          while true; do
+            # Backgrounded, then waited on, so the TERM above interrupts it at
+            # once. A plain `sleep` would outlive this function holding the
+            # step's stdout open, and the runner reads that stdout to EOF, so
+            # the step would linger for up to a full interval after the script
+            # had already exited.
+            sleep 60 &
+            sleep_pid=$!
+            wait "$sleep_pid" 2>/dev/null || true
+
+            stamp=$(date -u +%H:%M:%SZ)
+            # The bracketed first letters keep this grep from matching itself.
+            procs=$(ps -eo pid,ppid,etimes,stat,args | grep -E '\b([a]pt|[d]pkg|[d]ebconf|[w]hiptail|[d]ialog)\b' || true)
+            if [ -z "$procs" ]; then
+              echo "[$stamp] apt-watch: no apt/dpkg/debconf process running"
+              continue
+            fi
+            echo "[$stamp] apt-watch: apt still running (etimes is seconds alive)"
+            echo "$procs" | sed 's/^/  /'
+            for lock in /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock; do
+              printf '  %s held by pid:' "$lock"
+              sudo fuser "$lock" 2>/dev/null || printf ' nobody'
+              echo
+            done
+            # If these bytes stop growing between samples, the mirror stalled.
+            printf '  partial bytes:'
+            sudo du -sb /var/lib/apt/lists/partial /var/cache/apt/archives/partial 2>/dev/null | tr '\n' ' ' || true
+            echo
+          done
+        }
+
+        # Only reached when the bound fired. Kept in addition to the sampler
+        # because the root apt subtree can survive the timeout (see above), and
+        # if it does, this is what shows it.
+        postmortem() {
+          echo "--- processes still alive after the timeout ---"
+          ps -eo pid,ppid,etimes,stat,args | grep -E '\b([a]pt|[d]pkg|[d]ebconf|[w]hiptail|[d]ialog)\b' || echo "none"
+          echo "--- lock holders ---"
+          for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+            printf '%s: ' "$lock"
+            sudo fuser -v "$lock" 2>&1 || echo "not held"
+          done
+          echo "--- partial downloads left behind ---"
+          sudo ls -l /var/lib/apt/lists/partial /var/cache/apt/archives/partial 2>&1 || true
+        }
+
+        watch_apt &
+        watcher=$!
+        trap 'kill "$watcher" 2>/dev/null || true' EXIT
+
+        echo "playwright install --with-deps $BROWSER, bounded at $attempt_timeout"
+        set +e
+        timeout --kill-after=30s "$attempt_timeout" pnpm exec playwright install --with-deps "$BROWSER"
+        status=$?
+        set -e
+
+        kill "$watcher" 2>/dev/null || true
+        wait "$watcher" 2>/dev/null || true
+
+        # 124 is `timeout` ending the attempt with SIGTERM, 137 the SIGKILL
+        # that follows if it ignored that. Any other non-zero is a real install
+        # failure and speaks for itself.
+        if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+          echo "playwright install did not finish within $attempt_timeout"
+          postmortem
+        fi
+
+        exit "$status"

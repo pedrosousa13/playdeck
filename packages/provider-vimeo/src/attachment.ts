@@ -19,6 +19,7 @@ import {
 import type { VimeoChromelessAvailability } from './chromeless-availability.js';
 import type { VimeoChapters } from './chapters.js';
 import {
+  isSeoMetadataSuppressed,
   loadVimeoSdk,
   type VimeoSdkChapter,
   type VimeoSdkPlayer,
@@ -101,6 +102,25 @@ const chromelessProbeConfigurationNotice: PlayerError = {
   recoverable: false,
   message:
     'The chromeless-capability check could not be completed, so the customControls capability is reported as unknown.'
+};
+
+// What a `suppressSeoMetadata` request that did not take publishes. The SDK
+// reads its guard once, while the module evaluates, so only the attach that
+// performs the import can decide it — and a page that pinned the guard to
+// `false` keeps that, which suppresses nothing. Either way the embed still
+// receives this page's `window.location.href`, and the ordering bargain is
+// documented
+// (`VimeoProviderOptions.suppressSeoMetadata`) but documentation is not a
+// signal a monitoring system can consume, which is the ground #235 stood on.
+// Non-fatal: the SDK behaves as it always has and the rest of the embed is
+// untouched. Never `recoverable`: a retry re-imports nothing — the module is
+// already evaluated — so it gets the same answer (#333).
+const seoMetadataConfigurationNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  message:
+    'The suppressSeoMetadata option did not take effect, so the Vimeo SDK still sends this page url to its embeds. The SDK reads that opt-out once per page, before the first Vimeo embed loads.'
 };
 
 // The fields of the host's options the embed url carries, read when the embed
@@ -338,6 +358,33 @@ export const createVimeoAttachment = (
         suppressSeoMetadata: options.suppressSeoMetadata
       });
       if (isStale(thisGeneration)) return { ok: true };
+      // Detected by outcome, not by mechanism: suppression was asked for and
+      // the SDK's evaluation did not suppress. That covers both ways a request
+      // goes nowhere — a cached module, and a guard the page already owns,
+      // `false` included — with one test, and stays right if the loader
+      // changes. It also stays quiet when somebody else suppressed first: the
+      // request was honoured, just not by this call.
+      //
+      // `=== false`, not `!`: the loader answers `undefined` where no
+      // evaluation has decided, and an unknown must not be reported as a
+      // failure. Unreachable from here — this line is past a resolved load, so
+      // some import succeeded and recorded — but it is the difference between
+      // "not suppressed" and "no answer", and writing it out costs nothing.
+      //
+      // Emitted HERE, at the load site, and that placement is load-bearing.
+      // The controller holds one `configuration` notice per attach, filled
+      // with `??=`, so the first notice this adapter emits is the only one
+      // that ever reaches `PlayerState.error` (#332, #368). The chromeless
+      // probe's notice below is presentational; this one is a privacy control
+      // that did not apply, so it has to win. Sitting on the far side of the
+      // SDK load — which every path to the probe's emit must pass through —
+      // orders the two by construction rather than by convention (#333).
+      if (
+        options.suppressSeoMetadata === true &&
+        isSeoMetadataSuppressed() === false
+      ) {
+        emit({ error: seoMetadataConfigurationNotice });
+      }
       // No `sandbox` here, and that is a decision rather than an omission: the
       // SDK's postMessage bridge needs `allow-scripts allow-same-origin`, and a
       // sandbox carrying both is close to none (#237). The reasoning, and what
@@ -419,7 +466,10 @@ export const createVimeoAttachment = (
       // `unknown` in the ready patch below with nothing to say why, and the
       // reason is likelier to be the embedding page's own policy than
       // anything Vimeo did. A probe Vimeo answered says nothing here: the
-      // consumer has no move to make against an unusable tier (#235).
+      // consumer has no move to make against an unusable tier (#235). Emitted
+      // after the SEO-metadata notice above, deliberately: only the first
+      // notice of an attach is published, and this is the lesser of the two
+      // (#332, #333).
       if (!chromelessProbeResult.completed) {
         emit({ error: chromelessProbeConfigurationNotice });
       }

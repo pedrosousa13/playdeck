@@ -11,13 +11,16 @@ import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   type CommandResult,
-  PlayerController,
   type PlayerEventOrigin,
   type ProviderAdapter,
   type ProviderEvent,
   type ProviderStateListener,
   type ProviderStatePatch
 } from '@playdeck/core';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 
 const ok = async (): Promise<CommandResult> => ({ ok: true });
@@ -63,7 +66,9 @@ const renderGestures = (ui: React.ReactNode) => {
       {ui}
     </Player.Root>
   );
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
   const mock = createMockAdapter();
   act(() => {
     controller.setProvider(mock.adapter);

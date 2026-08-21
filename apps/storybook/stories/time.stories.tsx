@@ -10,7 +10,7 @@ const meta = {
     docs: {
       description: {
         component: [
-          '`Player.Time` displays current time and/or duration.',
+          '`Player.Time` displays current time and/or duration. On a source with no duration — a live stream, or one whose duration has not arrived — `type="duration"` and `type="remaining"` display nothing rather than `0:00`; compose a `LIVE` badge or any other fallback off `data-state="untimed"`, or pass `children`.',
           '',
           '**Usage** — compose it under `Player.Root` (a `Player.Viewport` or `Player.Controls` gives it layout context):',
           '```tsx',
@@ -21,7 +21,7 @@ const meta = {
           '</Player.Root>',
           '```',
           '',
-          '**Contract** — renders `data-playdeck-part="time"`, `data-state="timed" | "untimed"`, and `data-provider="<provider>"`.',
+          '**Contract** — renders `data-playdeck-part="time"`, `data-state="timed" | "untimed"`, and `data-provider="<provider>"`. A `<time>` element — or a `<span>` where `type="duration"` or `type="remaining"` has no duration to mark up, as above, which is keyed on the source rather than on the text being empty: `<Player.Time type="duration">LIVE</Player.Time>` on a live source is a `<span>` that displays something. Select on the part rather than the tag.',
           '',
           '**Accessibility** — text content; not an interactive control.',
           '',

@@ -49,6 +49,32 @@ consumer-supplied URL prop and provider option alike (#219, #236). A refused
 value is treated exactly as if the prop were absent — never a throw.
 _Avoid_: whitelist, sanitise, safe URL
 
+**Refused surface**:
+The name of one consumer-supplied URL prop the shared allowlist can refuse
+outside a provider, published as the closed union `RefusedUrlSurface`:
+`poster src`, `poster srcSet`, `nativePoster`, `textTracks src` and
+`mediaSession artwork`. A surface names the prop an operator has to go and fix
+and never the value that was refused, so a Notice built from one carries no
+consumer text at all. It is a prop name, not a component instance: several
+instances can refuse the same surface at once.
+_Avoid_: field, key, call site
+
+**Refused source**:
+The `source` prop turned down before any provider is constructed — by the shared
+allowlist, or by source detection failing to read a video out of it. Published
+as an `unsupported` error whose message names which of the three detection
+failures occurred **and quotes the offending value**, truncated, escaped by the
+text child that renders it. Never recoverable: the same prop re-read is refused
+by the same rules, so no control offers a retry.
+
+Quoting the value is what separates this from a **Refused surface**, and the
+reason is structural rather than a difference of opinion about disclosure. A
+source is one prop holding one value, so naming the value _is_ naming what to
+fix. A surface can be refused by several component instances at once, so no one
+value describes the refusal and the prop name is the only honest thing to
+report. Neither is a Notice: a refused source is a failure with no fall-back.
+_Avoid_: bad source, invalid URL, unsupported source
+
 **Shortcut layer**:
 The media keys `Player.Controls` owns. One binding maps keys to one action —
 `seekForward`, `toggleMuted` — and a consumer rebinds or suppresses a binding
@@ -119,6 +145,28 @@ the muted retry behind it played. Reported next to the `started` autoplay a
 recovery does not change, and reachable from the `audible-then-muted` mode only.
 _Avoid_: autoplay fallback, muted fallback
 
+**Suppressed autoplay**:
+An autoplay that stays configured and is deliberately never attempted, because
+the viewer matches `prefers-reduced-motion: reduce`. Distinct from an autoplay
+that was never configured, and from one a browser refused: nothing was asked of
+the provider at all.
+_Avoid_: skipped autoplay, disabled autoplay, cancelled autoplay
+
+**Unconfirmed play attempt**:
+A play command issued against the media attached now, for which playback has
+never reached `playing` — refused, faulted, or still in flight. Whatever issued
+it counts: the API, a `PlayButton` press, or autoplay's own attempt. It is
+bookkeeping about a command rather than a fact about the player, so it lives on
+the controller and not in player state: a refusal is reported to the caller that
+issued it and to nobody else, and the one reader is the first-frame poster
+writer, which must not uncover a frame a refusal left paused (#244). Dropped by
+any provider patch that leaves playback at `playing`, and scoped to the
+generation, so attaching a provider ends it. "Confirmed" here is the
+confirmation a Requested origin waits for — the provider reporting the change a
+command asked for — and not the published answer Echo names, which is why
+Echo's _Avoid_ list does not reach it.
+_Avoid_: play in progress, unacknowledged play
+
 ### Adapters
 
 See [ADR-0004](docs/adr/0004-cross-provider-options-live-on-root.md) for what
@@ -145,11 +193,18 @@ a `subscribe` makes at registration, which runs on the subscriber's own stack.
 _Avoid_: broadcast, notify loop
 
 **Notice**:
-A non-fatal `configuration` error a provider publishes to report a value it
-rejected, while the fall-back behaviour it degraded to stands unchanged. Held
-as controller state and surfaced on `PlayerState.error` like any other error,
-but never a failure: it never masks a standing error, and it never drives a
-transition into the error lifecycle.
+A non-fatal `configuration` error published to report a consumer-supplied value
+that was rejected, or one accepted and then impossible to apply, while the
+fall-back behaviour it degraded to stands unchanged. A provider reports one
+through a state patch; a consumer-supplied URL prop the shared allowlist refuses
+— every one except `source`, which is a **Refused source** and reports its own
+value — is reported by `reportRefusedUrl`, which names the refused surface and
+never the value, and which returns a disposer the reporter holds for as long as it keeps
+refusing that surface — so the notice stands while any reporter's registration
+stands, and is withdrawn only by the reporter that made it. Held as controller
+state and surfaced on `PlayerState.error` like any other error, but never a
+failure: it never masks a standing error, and it never drives a transition into
+the error lifecycle.
 _Avoid_: warning, soft error
 
 **Aurora**:
@@ -207,7 +262,8 @@ _Avoid_: public, released
 **Reachable**:
 An advisory whose resolved version appears in the transitive `dependencies`
 closure of at least one publishable package. What the audit gate turns on.
-Severity is a separate label and gates nothing.
+Severity is a separate label and gates nothing. A floored package fails the same
+gate on its own.
 _Avoid_: affected, vulnerable
 
 **Shipped**:
@@ -215,3 +271,37 @@ What the audit report calls a reachable advisory, against `not shipped` for one
 it prints and tolerates. A critical in the linting toolchain is not shipped; a
 low under a published package's `dependencies` is.
 _Avoid_: production, runtime
+
+**Floored**:
+A package in a publishable package's `dependencies` closure that an `overrides`
+entry in the root `pnpm-workspace.yaml` resolves — holding it to a version range,
+or replacing it outright with an alias, a tarball or a workspace link. The audit
+gate fails on one whether or not any advisory is reachable, and prints it as
+`FLOORED`: the entry governs this workspace but is written into no published
+`package.json`, so it rewrites the graph the gate measures while a consumer
+resolves something the gate never saw (#335).
+_Avoid_: overridden, pinned
+
+**Suppressed**:
+An advisory an `auditConfig` entry in the root `pnpm-workspace.yaml` removes
+from the audit report — `ignoreGhsas` by advisory id, `ignoreCves` by CVE. pnpm
+applies both while it builds the report, so a suppressed advisory is absent from
+the gate's input rather than labelled in it, and reachability cannot be computed
+for it at all. The audit gate fails on any entry carrying an identifier and
+prints it as `SUPPRESSED`. Distinct from **floored**, which changes what the
+graph resolves to; this changes what the gate is shown (#337).
+_Avoid_: ignored, allowlisted, accepted
+
+**Governed**:
+An install the root `pnpm-workspace.yaml` reaches — its advisory floors, its
+`minimumReleaseAge` cooldown and that cooldown's exclusions. The packaging
+fixture installs outside the repository, so the root file travels into the temp
+directory with it rather than the fixture being an exception (#336).
+_Avoid_: audited, protected, safe
+
+**Replayed**:
+An install that reuses a committed lockfile's resolutions instead of resolving
+afresh from the registry. `reresolvedPackages` compares the two lockfiles
+afterwards, so replay is proven per run rather than assumed of the flag that
+asked for it.
+_Avoid_: frozen, cached, pinned

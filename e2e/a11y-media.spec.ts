@@ -3,6 +3,7 @@ import {
   activationButton,
   captionsButton,
   controls,
+  loadingIndicator,
   media,
   muteButton,
   seekSliderInput
@@ -147,30 +148,119 @@ test('live regions announce state transitions only, never time updates or cues',
   // assertion below, both of which depend on this exact value.
   //
   // This was 0.4 until the self-hosted runner (slower than the previous
-  // GitHub-hosted one) started landing `installedAt` at 0.46-0.54s — past the
-  // old boundary — on real activation/decode + `page.evaluate` round-trip
-  // latency alone, well before any real work in the window below even starts.
-  // The guard's entire point is proving the observer is live strictly before
-  // the fixture's real cue transition, so the fix moves the transition itself
-  // (fixture + this constant, kept equal on purpose, see above) rather than
-  // just loosening the `toBeLessThan` check — decoupling the two would let the
-  // guard pass while the observer still missed the transition, silently
-  // reopening the exact gap this test exists to close. 0.7s clears the
-  // observed 0.46-0.54s range with comfortable headroom while still leaving a
-  // real 0.3s cue-two window inside the ~1s clip.
+  // GitHub-hosted one) started landing the observer's install position at
+  // 0.46-0.54s — past the old boundary — on real activation/decode +
+  // `page.evaluate` round-trip latency alone, well before any real work in the
+  // window below even starts. The guard's entire point is proving the observer
+  // is live strictly before the fixture's real cue transition, so that fix
+  // moved the transition itself (fixture + this constant, kept equal on
+  // purpose, see above) rather than just loosening the `toBeLessThan` check —
+  // decoupling the two would let the guard pass while the observer still
+  // missed the transition, silently reopening the exact gap this test exists
+  // to close. 0.7s still leaves a real 0.3s cue-two window inside the ~1s clip.
+  //
+  // Widening the bound was not enough, though, because widening a bound only
+  // moves a flake (#279). Measured locally at `--repeat-each=10 --workers=4`,
+  // install landed at 0.11, 0.12, 0.14, 0.16, 0.24, 0.44, 0.84, 0.84, 0.88 and
+  // 1.0 on chromium — four of ten past 0.7, one of them a clip that had
+  // already ENDED — and webkit reached 0.83. No boundary inside a ~1s clip
+  // survives that spread. So the arrangement below stopped hoping for a
+  // position and started choosing one: it lets the clip end, rewinds to 0,
+  // waits for the seek and the loading indicator to settle, and only then
+  // installs the observer and replays. This constant is no longer headroom
+  // against latency; it is purely the fixture's boundary, and the guard checks
+  // it against a window the test SET both edges of.
   const cueBoundary = 0.7;
+
+  // The window's far edge: where the playthrough poll below stops watching.
+  // Far enough past `cueBoundary` that the cue transition is behind it, short
+  // enough of the ~1s clip's end that the poll is not racing the clip stopping
+  // on its own. Named rather than inlined because the guard compares
+  // `cueBoundary` against it — that comparison is the only thing keeping the
+  // fixture's boundary and the observed window stated in terms of each other.
+  const playedThrough = 0.9;
 
   await page.goto(realSources);
   await activationButton(page).click();
   await played(page);
-  // The window starts here (after `played()`, i.e. after `currentTime > 0`)
-  // rather than before the click, because asserting on `LoadingIndicator`'s
-  // `'loading-provider'` → idle transition would race real activation/decode
-  // latency instead of the policy this test exists to check. That transition is
-  // a real, legitimate announcement (a meaningful state change, not a time or
-  // cue violation). Since #35 gave the indicator a 500ms minimum-visible floor
-  // it can land just inside this window rather than before it, so it is
-  // excluded by exact value at the assertion below rather than by position.
+  // `played()` stays because it is what proves this was a real activation of a
+  // real provider decoding real media. Everything after it is the test taking
+  // the clock away from that latency: the observed window opens much further
+  // down, so activation's own legitimate announcements — `LoadingIndicator`'s
+  // `'loading-provider'` → idle among them, a meaningful state change and not
+  // a time or cue violation — are never inside it.
+
+  // Let the ~1s clip run out first, then measure the REPLAY. Ending is the one
+  // position on this clip that arrives on its own and then stays put, so it
+  // costs nothing to wait for and it is reached from wherever activation
+  // latency happened to leave the clip — still playing, or already ended.
+  await expect
+    .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.ended), {
+      timeout: 15_000
+    })
+    .toBe(true);
+
+  // Rewind to a position the test owns. An earlier revision of this block
+  // rejected "seeking back to 0 first" on the grounds that a real seek drags
+  // its own async settling time and its knock-on `TextTrack`/
+  // `LoadingIndicator` side effects INTO the window being measured. That
+  // objection is answered by ORDERING, not by ignoring it: the seek and the
+  // loading indicator (#35, see the wait below) are both settled HERE, while
+  // nothing is observing and while the clip cannot advance, so their side
+  // effects land before the window instead of inside it. What remains inside
+  // is playback from 0 and nothing else.
+  //
+  // Every arrangement step is driven on the media element rather than through
+  // a control — this rewind, and the `play()` that opens the window alike —
+  // because a control click is a user INTERACTION, and the window below asserts
+  // silence across playback alone. `Player.PlayButton` is in this composition
+  // and `playButton` exists in `./locators`, so the element calls are a choice,
+  // not a missing locator: a click inside the window would change what the
+  // silence proves. `pause()` rides along as a belt-and-braces no-op on an
+  // already-ended element: it makes the guard's `paused` assertion below mean
+  // "the test put it there", not "the clip happened to have run out".
+  await media(page).evaluate((el: HTMLVideoElement) => {
+    el.pause();
+    el.currentTime = 0;
+  });
+  await expect
+    .poll(() =>
+      media(page).evaluate((el: HTMLVideoElement) => ({
+        currentTime: el.currentTime,
+        paused: el.paused,
+        seeking: el.seeking,
+        // HAVE_FUTURE_DATA or better means the element can resume from here
+        // without stalling, which is what keeps `state.buffering` false across
+        // the `play()` below and so keeps a `loading-indicator: Buffering`
+        // entry — a real announcement, and one this test rightly refuses to
+        // excuse — out of the window.
+        //
+        // This is why the rewind waits for the natural end rather than
+        // grabbing the clip mid-play. Measured on WebKit: a paused seek from
+        // mid-clip drops readyState to HAVE_CURRENT_DATA and it NEVER climbs
+        // back while paused (still 2 after 3s, with the whole clip already in
+        // `buffered`), so the following `play()` stalls ~1000ms — past #35's
+        // 500ms debounce, i.e. a real `loading-indicator: Buffering` in the
+        // window, reproducible on a single worker. Rewinding from the end
+        // instead keeps readyState at HAVE_ENOUGH_DATA and `play()` reaches
+        // `playing` in 8-21ms with no `waiting` at all, on all three engines.
+        canResume: el.readyState >= el.HAVE_FUTURE_DATA
+      }))
+    )
+    .toEqual({ currentTime: 0, paused: true, seeking: false, canResume: true });
+
+  // Wait the loading indicator out too, now that waiting costs no clip time.
+  // Its `'loading-provider'` → idle transition is a legitimate announcement,
+  // and #35's 500ms minimum-visible floor is what pushed it late enough to
+  // land inside the observed window, where it had to be excused by exact
+  // value and bounded to one occurrence. Dropping that exclusion was not
+  // possible while the window's start was whatever position activation latency
+  // produced: waiting the floor out THERE would have advanced `currentTime`
+  // past the cue boundary and silently dropped the cue coverage this test
+  // exists to hold. With the position pinned at 0 while paused, the floor
+  // expires before the observer exists at no cost in clip time (#279), so the
+  // window below demands silence outright instead of tolerating an entry.
+  await expect(loadingIndicator(page)).toHaveAttribute('data-state', 'idle');
 
   // Observe every live region in the tree, not a named one: a regression that
   // adds aria-live to the time display or the caption cue container has to be
@@ -228,24 +318,45 @@ test('live regions announce state transitions only, never time updates or cues',
     });
   });
 
-  // Guard against a real race: the cue boundary above falls at 0.7s, and
-  // nothing forces the observer to be live before then. Real
-  // activation-to-first-frame latency (no mock: real decode) can push
-  // installation past that boundary on a slow engine — this plan's own
-  // constraints flag WebKit as the historically slow one here, and the
-  // self-hosted runner as a slower host generally — and if it does, the cue
-  // transition already happened unobserved, "no announcements" would pass for
-  // having nothing left to see rather than the policy holding, and this test
-  // would silently degrade back into exactly the structurally-unobservable
-  // gap the dense fixture was added to close. Reading `currentTime`
-  // immediately after installing (rather than, say, seeking back to 0 first)
-  // avoids introducing a real seek's own async settling time and its
-  // knock-on `TextTrack`/`LoadingIndicator` side effects into the very window
-  // being measured; asserting on it fails loudly instead of degrading.
-  const installedAt = await media(page).evaluate(
-    (el: HTMLVideoElement) => el.currentTime
-  );
-  expect(installedAt).toBeLessThan(cueBoundary);
+  // The guard, in two halves. The observer must be live strictly before the
+  // fixture's cue transition, or the transition already happened unobserved,
+  // "no announcements" would pass for having nothing left to see rather than
+  // for the policy holding, and this test would silently degrade back into
+  // exactly the structurally-unobservable gap the dense fixture was added to
+  // close.
+  //
+  // One: the arrangement took. The position and paused flag are re-read at
+  // install time rather than assumed, so an arrangement that did not take — a
+  // seek the engine clamped elsewhere, a clip that resumed on its own — fails
+  // loudly here instead of quietly eating the cue transition. Both values were
+  // SET and then waited for above, not sampled and hoped over, so no amount of
+  // activation, decode or `page.evaluate` round-trip latency between the
+  // arrangement and here can move them.
+  //
+  // Two: the cue transition falls strictly INSIDE the window that position
+  // opens — after the start the arrangement pinned, and before
+  // `playedThrough`, where the playthrough poll stops watching. Since the
+  // start is now a constant 0, comparing it to `cueBoundary` alone would be a
+  // tautology; it is the pair of bounds that has to hold. Note what this is
+  // and is not: nothing in this file parses `captions-reference.vtt`, so a
+  // boundary edited in the fixture alone still passes here on a stale
+  // assumption. What it does catch is `cueBoundary` itself leaving the
+  // observed window in either direction — at or below the start, or at or past
+  // `playedThrough` — which would leave the rest of this test asserting
+  // silence over a window with no cue transition in it at all.
+  const installedAt = await media(page).evaluate((el: HTMLVideoElement) => ({
+    currentTime: el.currentTime,
+    paused: el.paused
+  }));
+  expect(installedAt).toEqual({ currentTime: 0, paused: true });
+  expect(cueBoundary).toBeGreaterThan(installedAt.currentTime);
+  expect(cueBoundary).toBeLessThan(playedThrough);
+
+  // Only now does the clip run, so the window covers it from its first frame.
+  // `play()` is awaited: a rejected play promise (autoplay policy, a detached
+  // element) fails the test here rather than leaving the poll below to time
+  // out on a clip that never started.
+  await media(page).evaluate((el: HTMLVideoElement) => el.play());
 
   // Play through the whole ~1s clip. `captions-reference.vtt` (this example's
   // own fixture, distinct from `captions-en.vtt`) carries two cues with a
@@ -259,7 +370,9 @@ test('live regions announce state transitions only, never time updates or cues',
     .poll(
       () =>
         media(page).evaluate(
-          (el: HTMLVideoElement) => el.ended || el.currentTime > 0.9
+          (el: HTMLVideoElement, threshold: number) =>
+            el.ended || el.currentTime > threshold,
+          playedThrough
         ),
       { timeout: 15_000 }
     )
@@ -269,29 +382,13 @@ test('live regions announce state transitions only, never time updates or cues',
     () => window.__playdeckAnnouncements
   );
 
-  // `LoadingIndicator`'s `'loading-provider'` → idle transition is the one
-  // legitimate announcement that can land in this window. It used to complete
-  // before `played()` returned; since #35 gave the indicator a 500ms
-  // minimum-visible floor, it can complete just after, inside the window.
-  //
-  // It is excluded by EXACT value rather than by part name, and bounded to one
-  // occurrence, so the exclusion stays as narrow as the thing it excuses: the
-  // empty string is the region emptying as it goes idle. A spurious
-  // `loading-indicator: Buffering`, a flapping indicator announcing idle twice,
-  // and every time-update or cue leak all still fail here.
-  //
-  // The window is NOT moved later to dodge this. Its start point is
-  // load-bearing: the `installedAt < cueBoundary` guard above proves the 0.7s
-  // cue transition is still ahead of the observer, and waiting out the floor
-  // first would advance `currentTime` past that boundary and silently drop the
-  // cue coverage this test exists to hold.
-  const idleTransition = 'loading-indicator: ';
-  expect(duringPlayback.filter((entry) => entry !== idleTransition)).toEqual(
-    []
-  );
-  expect(
-    duringPlayback.filter((entry) => entry === idleTransition).length
-  ).toBeLessThanOrEqual(1);
+  // Silence, with nothing excused. The loading indicator's one legitimate
+  // announcement was waited out above, before the observer existed, so a live
+  // region mutating at all between the first frame and the last is a failure —
+  // a `loading-indicator: Buffering` from a real stall included, which is the
+  // correct verdict: this window is supposed to be a clip that plays straight
+  // through.
+  expect(duringPlayback).toEqual([]);
 
   // A real state transition, on the other hand, announces exactly once. The
   // example's declared `<track default>` selects English on load, so the
@@ -299,8 +396,10 @@ test('live regions announce state transitions only, never time updates or cues',
   //
   // The buffer is cleared first — the observer stays installed, so the
   // assertion below is still "exactly one announcement, and it is this one",
-  // but measured over the captions click alone rather than over the whole test.
-  // Without this it would also have to carry the idle transition excused above.
+  // but measured over the captions click alone rather than over the whole
+  // test. The assertion above already proved the buffer empty, so the clear is
+  // belt-and-braces: it stops this assertion from depending on that one having
+  // held.
   await page.evaluate(() => {
     window.__playdeckAnnouncements = [];
   });

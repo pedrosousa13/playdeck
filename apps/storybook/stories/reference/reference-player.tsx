@@ -563,7 +563,33 @@ export const ReferencePlayer = ({
 };
 
 const sources = [
-  { id: 'mp4', label: 'MP4', source: '/tracer.mp4' },
+  // Two containers for one clip, MP4 first, and the ordering is the whole
+  // point: an engine with an H.264 decoder takes the MP4 and nothing about this
+  // example changes, while one without it falls through to the WebM instead of
+  // failing.
+  //
+  // That second case is not hypothetical and is not a decode failure. A
+  // Playwright Linux WebKit answers `''` for `avc1`, so it rejects an
+  // `<source type="video/mp4">` during source selection and never issues a
+  // request for it at all (`networkState` 3, `currentSrc` empty). A bare
+  // `'/tracer.mp4'` string source is stamped `video/mp4` from its extension
+  // (`packages/core/src/source-detection.ts`), so it gave that engine exactly
+  // one candidate and it was the one it would not take: the composition then
+  // sat at `activation: 'loading-provider'` forever with its whole control row
+  // `hidden`, and every e2e test over this story failed on the arrangement.
+  // A `<source>` set is what the media element already has for this, and
+  // declaring one is also the API #15 shipped for.
+  {
+    id: 'local',
+    label: 'Local',
+    source: {
+      type: 'video',
+      sources: [
+        { src: '/tracer.mp4', mimeType: 'video/mp4' },
+        { src: '/tracer.webm', mimeType: 'video/webm' }
+      ]
+    }
+  },
   {
     id: 'hls',
     label: 'HLS',
@@ -581,7 +607,7 @@ const sources = [
   readonly source: Player.RootProps['source'];
 }>;
 
-// Only the local MP4 needs a declared <track>; HLS carries its subtitles in the
+// Only the local clip needs a declared <track>; HLS carries its subtitles in the
 // manifest and the iframe providers expose their own. Declaring children on
 // Media at all is the API #15 shipped without.
 //
@@ -592,7 +618,7 @@ const sources = [
 // `captions-en.vtt` stays a single 0-5s cue for the other stories/specs that
 // use it (`fixtures-playerfixture--captions-*`, driven by
 // `e2e/captions.spec.ts`) — this file is scoped to the reference example only.
-const mp4TextTracks: Player.MediaProps['textTracks'] = [
+const localTextTracks: Player.MediaProps['textTracks'] = [
   {
     src: '/captions-reference.vtt',
     srcLang: 'en',
@@ -615,7 +641,7 @@ const mp4TextTracks: Player.MediaProps['textTracks'] = [
  * display.
  */
 export const ReferencePlayerWithSources = (): ReactElement => {
-  const [active, setActive] = useState<(typeof sources)[number]['id']>('mp4');
+  const [active, setActive] = useState<(typeof sources)[number]['id']>('local');
   const current = sources.find((entry) => entry.id === active) ?? sources[0];
 
   return (
@@ -639,7 +665,7 @@ export const ReferencePlayerWithSources = (): ReactElement => {
       </div>
       <Player.Root loading="interaction" source={current.source}>
         <ReferencePlayer
-          textTracks={current.id === 'mp4' ? mp4TextTracks : undefined}
+          textTracks={current.id === 'local' ? localTextTracks : undefined}
         />
       </Player.Root>
     </>

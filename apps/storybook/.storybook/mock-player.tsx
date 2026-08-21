@@ -53,13 +53,34 @@ export type MockPlayerParameters = {
 };
 
 /**
- * Never fetched. The decorator's root commits no source — nothing calls
- * `activateFromInteraction` on it — so `Player.Media` mounts nothing even in a
- * story whose component renders one.
+ * Never fetched. `Player.Media` renders nothing until the root it sits in has
+ * committed its source — the `sourceCommitted` gate in the react package's
+ * `viewport-media.tsx` — and under `loading="interaction"` the one thing that
+ * commits it is an `activateFromInteraction` call. So a story that never
+ * activates mounts no `<video>` and no embed, whatever it composes: the source
+ * below is read, but nothing carrying it reaches the document.
+ *
+ * `activateFromInteraction` is not unreachable here: `ActivationButton` calls
+ * it (`packages/react/src/loading-error.tsx`) and `Player/ActivationButton`'s
+ * `ActivatesOnClick` presses it. That story composes the overlay alone. The
+ * decorator-wrapped stories that do render a `Player.Media` are the
+ * `Reference/Player` set, and every one of them stages an activation through
+ * the mock instead of pressing for one — which moves the controller's state,
+ * not this root's commit. Every story that both renders media and plays it is
+ * tagged `real-playback`, and `withMockPlayer` hands those back undecorated.
+ *
+ * A reserved `.invalid` host over `https:` rather than an invented `mock:`
+ * scheme (#331): the shared allowlist refuses every scheme but `http:`,
+ * `https:` and the scheme-less forms, so `mock:` was a source the library was
+ * turning down, and every story here rode on `loading="interaction"` being the
+ * one strategy that said nothing about it. `.invalid` is reserved by RFC 2606
+ * and resolves nowhere, so the source stays as unfetchable as it reads.
  */
 const mockSource: RootProps['source'] = {
   type: 'video',
-  sources: [{ src: 'mock://playdeck/video.mp4', mimeType: 'video/mp4' }]
+  sources: [
+    { src: 'https://provider.invalid/mock-video.mp4', mimeType: 'video/mp4' }
+  ]
 };
 
 /**
@@ -171,9 +192,31 @@ export const useMockPlayer = (parameters: MockPlayerParameters) => {
       !dimensions
     )
       return;
-    // Player.Root's imperative handle is its PlayerController; the cast opens
-    // the provider-facing surface (setProvider) that PlayerHandle omits.
-    const controller = handleRef.current as PlayerController | null;
+    // The handle carries exactly what `PlayerHandle` declares, and
+    // `setProvider`/`configureAutoplay` are deliberately not on it (#328).
+    // Staging a fake provider is the one job that needs the controller itself,
+    // and this is the one sanctioned way back to it.
+    //
+    // The symbol is spelled out rather than imported so that this file keeps
+    // consuming `@playdeck/react` through its package entry, the way an
+    // outside consumer does, instead of reaching into `packages/react/src/`
+    // for a module (`internal-controller.ts`) that entry deliberately does not
+    // export. That is a convention and not a rule here -- eslint.config.js
+    // scopes `no-restricted-imports` to `stories/reference/**`, so nothing
+    // would stop a deep import from this directory. It is what the global
+    // symbol registry buys: the hatch has one name, the string below, and
+    // naming it is the whole of reaching it -- no deep import here, no new
+    // published export there, and grepping the string puts both ends on
+    // screen.
+    //
+    // Misspell it and this reads `undefined` and the mock is never staged, so
+    // the story gets a player with no provider. `mock-player.contract.test.ts`
+    // catches that in the node suite rather than the e2e run: its `seekTo`
+    // cases drive a real `Player.Root` through this hook, and go red with
+    // `reason: 'not-ready'` -- measured by mangling the string, not assumed.
+    const controller = (
+      handleRef.current as unknown as Record<symbol, PlayerController> | null
+    )?.[Symbol.for('playdeck.internal.controller')];
     if (!controller) return;
     const mock = createMockAdapter(
       playResult ?? { ok: true },

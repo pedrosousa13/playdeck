@@ -16,6 +16,7 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStatePatch,
+  RefusedUrlSurface,
   TextCue
 } from './types.js';
 
@@ -27,6 +28,7 @@ import {
   freezeError,
   notifySafely,
   orderedRanges,
+  standingRefusedUrlNotice,
   toProviderError,
   unsubscribeSafely
 } from './safety.js';
@@ -80,6 +82,44 @@ const noticeIn = (patch: ProviderStatePatch): PlayerError | undefined =>
   patch.lifecycle !== 'error'
     ? patch.error
     : undefined;
+
+// Read at the decision point rather than subscribed to, and read off
+// `globalThis` rather than off a DOM lib core does not compile against: an
+// environment with no `matchMedia` — server rendering, a worker, an older
+// engine — simply does not match, and autoplay proceeds as it did before #311.
+// A media query that never matches does not apply, so nothing here raises the
+// browser-support floor.
+//
+// No `MediaQueryList` subscription, deliberately. This would be the codebase's
+// first, and the case does not need one: a viewer who turns reduced motion *on*
+// mid-session is honoured by every player that has not yet decided, and one who
+// turns it *off* does not get video retroactively starting at them, which is
+// the better of the two behaviours anyway (#311).
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+// Only an exact `true` suppresses, and a `matchMedia` that throws or answers
+// with something other than a `MediaQueryList` is treated as not matching —
+// the same outcome as an absent one, which is the documented behaviour for
+// every environment that cannot answer the query.
+//
+// Not defensiveness for its own sake: `#synchronizeAutoplay` runs with no `try`
+// around it, so a throw out of here escaped the autoplay decision entirely and
+// surfaced as a player-level `provider` error — `lifecycle: 'error'` and no
+// playback, a broken player rather than an unsuppressed one. A host page that
+// patches `matchMedia` (a polyfill, a test harness, a browser extension) is
+// ordinary, and a reduced-motion check must never be the thing that takes a
+// player down (#311).
+const prefersReducedMotion = (): boolean => {
+  const scope = globalThis as {
+    matchMedia?: (query: string) => { matches?: unknown } | undefined;
+  };
+  if (typeof scope.matchMedia !== 'function') return false;
+  try {
+    return scope.matchMedia(REDUCED_MOTION_QUERY)?.matches === true;
+  } catch {
+    return false;
+  }
+};
 
 const notReady: Availability = freezeAvailability({
   status: 'unknown',
@@ -155,10 +195,16 @@ export class PlayerController {
   #generation = 0;
   #autoplayMode: AutoplayMode = false;
   #autoplayControlledMuted: boolean | undefined;
+  #autoplayIgnoreReducedMotion = false;
   #captionRenderer: 'custom' | 'native' = 'custom';
   #hasAutoplayConfigurationError = false;
   #autoplayConfigurationRevision = 0;
   #autoplayAttemptGeneration: number | undefined;
+  // The generation a play command was last issued for, whatever asked for it —
+  // the API, a user gesture, or autoplay's own attempt. Recorded at the issue
+  // rather than at the settlement, so an attempt still in flight counts as one:
+  // see `hasUnconfirmedPlayAttempt` (#244).
+  #playAttemptGeneration: number | undefined;
   // Set once the muted retry of `'audible-then-muted'` is issued, and read at
   // the moment the attempt turns into `'started'`. The state flag cannot be
   // written from here directly: playback is confirmed by a provider patch, not
@@ -179,19 +225,131 @@ export class PlayerController {
   // attach would otherwise flap the slot — and it is dropped with the provider
   // that reported it (#235).
   #configurationNotice: PlayerError | undefined;
+  // How many reporters currently stand behind each refused surface — the live
+  // answer, not a log of what was once refused. Keyed by surface because the
+  // notice is chosen by surface, counted because a surface is a PROP NAME and
+  // several independent component instances can hold that same prop at once.
+  // A boolean per surface cannot express that: two `PosterImage`s under one
+  // `Player.Root` are two reporters, and the permitted one's report would
+  // withdraw the poisoned one's notice, so half the render orders would refuse
+  // in total silence — the exact A09 failure #330 exists to fix (#345).
+  //
+  // Scoped to the controller rather than to a provider, unlike
+  // `#configurationNotice`. That is not a difference in how long a rejection is
+  // interesting, it is a difference in what the rejection is about:
+  // `#configurationNotice` describes one provider's own configuration and is
+  // dropped with that provider, while a refused `poster src` describes a
+  // consumer prop the provider knows nothing about. In the ordinary React
+  // ordering the poster renders and reports BEFORE the provider module has
+  // finished loading, so a provider-scoped record would be wiped by the very
+  // next attach, before anything could observe it.
+  //
+  // A surface with no standing reporter is deleted rather than left at zero, so
+  // the map's size is bounded by the number of surfaces actually refused right
+  // now and does not grow as component instances churn.
+  #refusedUrlReports = new Map<RefusedUrlSurface, number>();
+  // The notice `#refusedUrlReports` currently publishes, cached rather than
+  // rebuilt at each read: the state carries it by reference, and a fresh object
+  // per `#applyPatch` would make every unrelated patch look like a change of
+  // error to a subscriber comparing identity. Resolved in `#applyPatch` and in
+  // `#withHeldConfiguration`, never left in a patch (#330).
+  #refusedUrlNotice: PlayerError | undefined;
+
+  // The detection half of the refusal at the five consumer-supplied URL props
+  // #320 routed through `isPermittedSourceUrl` and left silent. The refusal
+  // itself is unchanged: the value is still dropped exactly as an absent prop
+  // would be, and this reports it without throwing, without touching the
+  // lifecycle and without changing what renders (#320, #330).
+  //
+  // A REGISTRATION, not a setter: the caller says "I am refusing this surface"
+  // and holds the returned disposer for as long as that stays true. The notice
+  // stands while any registration for any surface stands, so a refusal is
+  // withdrawn only by the reporter that made it — never by a sibling that
+  // happens to hold a permitted value for the same prop. A per-prop boolean
+  // could not express that, and the withdrawal it would get wrong is not a rare
+  // one: two `PosterImage`s under one root is an ordinary responsive-poster
+  // tree.
+  //
+  // Withdrawable at all, rather than fire-once, because a notice that could
+  // never be cleared is a permanent false positive: a consumer who replaced a
+  // poisoned CMS value with a good one would keep the error forever, and an
+  // operator who cannot clear a security notice learns to ignore all of them.
+  //
+  // The disposer shape is what makes the React call sites correct by
+  // construction — each is `return controller.reportRefusedUrl(surface)` from an
+  // effect, so the registration is per instance, is torn down on unmount and on
+  // the value turning permitted, and leaks nothing. See `useRefusedUrlReport`
+  // (`packages/react/src/player-context.ts`).
+  //
+  // Takes the surface, never the value — see `RefusedUrlSurface`.
+  reportRefusedUrl = (surface: RefusedUrlSurface): (() => void) => {
+    this.#refusedUrlReports.set(
+      surface,
+      (this.#refusedUrlReports.get(surface) ?? 0) + 1
+    );
+    this.#resolveRefusedUrlNotice();
+    // Idempotent, because the disposer leaves the library: `reportRefusedUrl`
+    // is public on `PlayerController`, so anything holding the controller can
+    // register and then run the disposer twice. A second run must not decrement
+    // a count another live reporter owns, which would withdraw a refusal that
+    // still stands. Neither call site here gets there — React never repeats an
+    // effect cleanup, and `bindMediaSession` nulls its own handle inside
+    // `release()` — so the guard is defensive for those two, and it is what
+    // makes the disposer safe to hand any further out.
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      const standing = (this.#refusedUrlReports.get(surface) ?? 0) - 1;
+      if (standing > 0) this.#refusedUrlReports.set(surface, standing);
+      else this.#refusedUrlReports.delete(surface);
+      this.#resolveRefusedUrlNotice();
+    };
+  };
+
+  #resolveRefusedUrlNotice = (): void => {
+    const next = standingRefusedUrlNotice(this.#refusedUrlReports);
+    // The one gate, and it covers every inert registration: a second reporter
+    // joining a surface that already stands, and a surface joining or leaving
+    // BELOW the one already published. Neither changes what the single error
+    // slot can say, and the call sites are React effects and a media-session
+    // binding that run for reasons having nothing to do with the value — so an
+    // inert registration has to stay free of a rebuilt snapshot and a fan-out to
+    // every subscriber. Compared by identity, which holds because
+    // `standingRefusedUrlNotice` returns one shared value per surface rather
+    // than a fresh object.
+    if (next === this.#refusedUrlNotice) return;
+    const published = this.#refusedUrlNotice;
+    this.#refusedUrlNotice = next;
+    // `#applyPatch` reads an absent `error` key as "keep whatever the slot
+    // holds", and what it holds may be the notice being withdrawn — so a
+    // withdrawal has to be stated, or the stale notice is carried forward as
+    // though a patch had set it. Clearing to `null` loses nothing: `#applyPatch`
+    // refills the slot from `#configurationNotice` and the new
+    // `#refusedUrlNotice` in the same pass. Where the slot holds something else,
+    // that something outranks this notice and an empty patch leaves it alone.
+    this.#applyPatch(this.#state.error === published ? { error: null } : {});
+  };
 
   configureAutoplay = (
     mode: AutoplayMode,
     options: AutoplayConfigurationOptions = {}
   ): void => {
+    // Normalized to a boolean before it is compared, unlike `controlledMuted`:
+    // an absent opt-out and an explicit `false` mean the same thing, so treating
+    // them as different values here would re-run the configuration for nothing
+    // (#311).
+    const ignoreReducedMotion = options.ignoreReducedMotion ?? false;
     if (
       mode === this.#autoplayMode &&
-      options.controlledMuted === this.#autoplayControlledMuted
+      options.controlledMuted === this.#autoplayControlledMuted &&
+      ignoreReducedMotion === this.#autoplayIgnoreReducedMotion
     )
       return;
     const hadConfigurationError = this.#hasAutoplayConfigurationError;
     this.#autoplayMode = mode;
     this.#autoplayControlledMuted = options.controlledMuted;
+    this.#autoplayIgnoreReducedMotion = ignoreReducedMotion;
     this.#hasAutoplayConfigurationError =
       mode === 'muted' && options.controlledMuted === false;
     this.#autoplayConfigurationRevision += 1;
@@ -266,17 +424,18 @@ export class PlayerController {
     if (generation !== this.#generation) return;
     this.#provider = provider;
     // A notice describes one provider's configuration, so it goes with that
-    // provider — on a swap and on a detach alike (#235).
+    // provider — on a swap and on a detach alike (#235). `#refusedUrlNotice` is
+    // deliberately NOT cleared here: it describes a consumer prop no provider
+    // ever saw, and clearing it would drop the report on the very attach that
+    // normally follows it (#330).
     this.#configurationNotice = undefined;
     if (!provider) {
-      this.#setState(
-        this.#withAutoplayConfiguration(createInitialPlayerState())
-      );
+      this.#setState(this.#withHeldConfiguration(createInitialPlayerState()));
       return;
     }
 
     this.#setState(
-      this.#withAutoplayConfiguration({
+      this.#withHeldConfiguration({
         ...createInitialPlayerState(),
         lifecycle: 'loading',
         activation: 'loading-provider',
@@ -410,6 +569,39 @@ export class PlayerController {
   };
 
   getState = (): PlayerState => this.#state;
+
+  // Whether a play command was issued against the media attached now and
+  // playback never reached `'playing'` — refused, faulted, or still in flight.
+  //
+  // Not a `PlayerState` field, deliberately. A refused command is reported to
+  // the caller that issued it and to nobody else: `playback` stays `'paused'`,
+  // `autoplay` stays `'idle'` and no error is set, which is the behaviour
+  // `keeps confirmed paused state when the media play command rejects` pins. So
+  // this is bookkeeping about a command, not a fact about the player, and the
+  // one thing that needs it is `Root`'s first-frame poster writer — which must
+  // know that *something asked to play* before it uncovers a frame that a
+  // refusal left paused (#244). Putting it in the state snapshot instead would
+  // publish an attempt counter to every consumer and every subscriber, to
+  // change what exactly one internal reader does.
+  //
+  // Scoped to the generation, so attaching a provider clears it: the frame that
+  // decodes for freshly attached media is not the one an earlier refusal left
+  // paused, and it must keep hiding the poster on its own.
+  //
+  // The record is dropped in `#applyPatch` by any patch that leaves playback at
+  // `'playing'` — not only by the one that first reports it — so a viewer who
+  // pauses confirmed playback does not re-arm this; without that, it would
+  // answer "not playing since some play was issued" rather than what it is
+  // named for. The `playback` term covers the window before such a patch lands:
+  // a `play()` issued against media already playing draws none of its own, so
+  // its record stands until an unrelated one arrives, and the term is what
+  // answers false meanwhile. Should playback drop to `'paused'` inside that
+  // window instead, the record does answer true, and that cannot cost anything:
+  // playback confirmed in this generation means the poster is already hidden,
+  // and the writer this answers only ever hides.
+  hasUnconfirmedPlayAttempt = (): boolean =>
+    this.#playAttemptGeneration === this.#generation &&
+    this.#state.playback !== 'playing';
 
   // Resolves `true` once the provider declares that a command issued now will
   // land and stick, and `false` once an attempt that existed is abandoned —
@@ -761,13 +953,36 @@ export class PlayerController {
           : // A notice waits behind whatever the slot already holds, not only
             // behind a fatal one: the `provider` error a refused autoplay
             // attempt publishes keeps the slot too, and the notice becomes
-            // visible when it clears (#235).
-            (errorBeforeNotice ?? this.#configurationNotice ?? null)
+            // visible when it clears (#235). A refused consumer URL waits
+            // behind a provider's own notice in turn — the provider reported
+            // something about the source that is about to play, and this one is
+            // about a decorative prop (#330).
+            (errorBeforeNotice ??
+            this.#configurationNotice ??
+            this.#refusedUrlNotice ??
+            null)
     };
+    // A play command stops being unconfirmed here and nowhere else: the promise
+    // it returns resolving is not playback, a provider patch reporting
+    // `'playing'` is. Dropping the record at that transition keeps
+    // `hasUnconfirmedPlayAttempt` answering for the attempt it names rather than
+    // for every later pause in the same generation (#244).
+    if (nextState.playback === 'playing') {
+      this.#playAttemptGeneration = undefined;
+    }
     this.#setState(nextState);
   };
 
-  #withAutoplayConfiguration = (state: PlayerState): PlayerState =>
+  // The two configurations that outlive a provider — the autoplay conflict and
+  // a refused consumer URL — re-applied over a state rebuilt from scratch. Not
+  // `#configurationNotice`, which is held in a field too but belongs to one
+  // provider and is cleared immediately above the call site. `setProvider`
+  // resets to `createInitialPlayerState()` without going through `#applyPatch`,
+  // so these two would otherwise be dropped on every attach — which for a
+  // refused consumer URL is the common case, not an edge one, because the
+  // poster reports before the provider loads (#330). The two are ranked as
+  // `#applyPatch` ranks them.
+  #withHeldConfiguration = (state: PlayerState): PlayerState =>
     this.#hasAutoplayConfigurationError
       ? {
           ...state,
@@ -775,7 +990,9 @@ export class PlayerController {
           autoplayRecovered: false,
           error: autoplayConfigurationError()
         }
-      : state;
+      : this.#refusedUrlNotice
+        ? { ...state, error: this.#refusedUrlNotice }
+        : state;
 
   #synchronizeAutoplay = (): void => {
     const provider = this.#provider;
@@ -797,6 +1014,31 @@ export class PlayerController {
     const mode = this.#autoplayMode;
     const revision = this.#autoplayConfigurationRevision;
     this.#autoplayAttemptGeneration = generation;
+    // The attempt is declined here, at the one place an attempt is made, and
+    // nowhere near `configureAutoplay` — because what keeps the poster over the
+    // frame through a suppression is not this field at all, and is not a check
+    // for `'suppressed'` anywhere. Two things upstream in React do it, and both
+    // are silent about the states they cover: `Root`'s `loadeddata` gate reads
+    // the `autoplay` *prop*, so that prop must keep arriving un-cleared; and
+    // that gate early-returns on every autoplay state that is not `'started'`
+    // rather than naming the ones it covers, so `'suppressed'` keeps the poster
+    // up by falling through it, exactly as `'idle'` and `'blocked'` do.
+    //
+    // Implement suppression by having a consumer or `Root` pass
+    // `autoplay={false}`, or teach that early return to enumerate states, and
+    // the gate opens on a paused first frame with no cover over it and no
+    // gesture that put it there — #242, arriving by a different route. What
+    // guards the pair is the react test `keeps the poster visible when a frame
+    // decodes under %s suppressed autoplay` (#311).
+    //
+    // Below every other guard rather than above them, deliberately: a player
+    // that would not have autoplayed anyway must keep reporting why it did not,
+    // so `'suppressed'` never stands in for a mode that was never set, for the
+    // configuration error, or for an activation that never got there.
+    if (!this.#autoplayIgnoreReducedMotion && prefersReducedMotion()) {
+      this.#applyPatch({ autoplay: 'suppressed' });
+      return;
+    }
     this.#autoplayRecoveryPending = false;
     this.#applyPatch({ autoplay: 'attempting' });
     if (!this.#isCurrentAutoplayAttempt(provider, generation, revision, mode))
@@ -973,16 +1215,22 @@ export class PlayerController {
     mode === this.#autoplayMode &&
     !this.#hasAutoplayConfigurationError;
 
+  // The one funnel every play command passes through — `playWithOrigin` for the
+  // API and for user gestures, `#attemptAutoplay` and `#recoverMutedAutoplay`
+  // for autoplay's own — so recording the attempt here records all of them, and
+  // records it before the command is even issued.
   #playWithOrigin = (
     provider: ProviderAdapter,
     generation: number,
     origin: PlayerEventOrigin
-  ): Promise<CommandResult> =>
-    this.#commandWithOrigin(
+  ): Promise<CommandResult> => {
+    this.#playAttemptGeneration = generation;
+    return this.#commandWithOrigin(
       provider,
       { kind: 'playback', generation, origin, playback: 'playing' },
       'play'
     );
+  };
 
   #pauseWithOrigin = (
     provider: ProviderAdapter,

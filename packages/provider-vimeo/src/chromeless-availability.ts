@@ -76,7 +76,17 @@ const chromelessAvailability = async (
       `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(
         vimeoWatchUrl(source)
       )}`,
-      { signal }
+      // The same policy both embed iframes declare, set here for the same
+      // reason: an init-level policy overrides the document's the way a
+      // frame's attribute does, and without one this request travels under
+      // whatever the consumer's page declares. On a page declaring something
+      // wider than the modern browser default — `unsafe-url`, say — that hands
+      // vimeo.com this page's path and query in the `Referer` header (#334).
+      // Not `no-referrer` or `origin`: the origin is what Vimeo's
+      // domain-restriction check reads (see "What referrer each embed sends"
+      // in docs/third-party-requests.md), and this policy keeps it while
+      // dropping the path and query that are the disclosure.
+      { signal, referrerPolicy: 'strict-origin-when-cross-origin' }
     );
     responded = true;
     if (!response.ok) return completed(providerCheck);

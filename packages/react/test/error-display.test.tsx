@@ -11,12 +11,15 @@ import { createRef, type ReactNode } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   type CommandResult,
-  PlayerController,
   type PlayerError,
   type ProviderAdapter,
   type ProviderStateListener,
   type ProviderStatePatch
 } from '@playdeck/core';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 
 const ok = async (): Promise<CommandResult> => ({ ok: true });
@@ -54,7 +57,9 @@ const renderWithPlayer = (ui: ReactNode, initial?: ProviderStatePatch) => {
       {ui}
     </Player.Root>
   );
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
   const mock = createMockAdapter();
   act(() => {
     controller.setProvider(mock.adapter);
@@ -291,8 +296,8 @@ describe('ErrorDisplay and a non-fatal configuration notice', () => {
 
   // The clause that is easy to drop. `useActivation` publishes a
   // `configuration` error with `activation: 'error'` for `loading="interaction"`
-  // with autoplay (`use-activation.ts:458-463`) and for viewport activation
-  // without a `Player.Viewport` (`:477-480`). Both mean the player will never
+  // with autoplay (`use-activation.ts:510-515`) and for viewport activation
+  // without a `Player.Viewport` (`:535-538`). Both mean the player will never
   // load, so both are failures however non-fatal the record is — and without
   // this the consumer would see a dead player and no error at all, which is the
   // defect #319 exists to remove rather than to relocate.

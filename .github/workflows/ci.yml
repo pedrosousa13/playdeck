@@ -15,17 +15,54 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Measured wall times on a healthy run (2026-08-19): audit 21s, unit 35s,
-# static 54s, visual 57s, storybook 64s, package 113s, e2e firefox 160s,
-# chromium 162s, webkit 232s. The timeouts below are several times those, so
-# they never fire on a slow-but-working run.
+# Measured wall times on a healthy run (2026-08-20, run 32337178101): audit
+# 12s, unit 31s, visual 37s, storybook 37s, static 52s, package 70s, e2e
+# chromium 84s, firefox 115s, webkit 178s. These are whole-job times, install
+# step included. The timeouts below are several times those, so they never
+# fire on a run that is merely slow.
 #
-# They exist for the failure mode that actually happened: six jobs sat on
+# Re-measured because #359 moved four of them. The figures they replace, taken
+# on 2026-08-19 before that change, were visual 57s, storybook 64s, package
+# 113s and chromium 162s — every one of those jobs installed OS packages then
+# and does not now, so the old numbers describe a workflow that no longer
+# exists. audit, unit, static, firefox and webkit were not changed by #359, so
+# the movement in those is ordinary run-to-run variance and is what the spread
+# here looks like.
+#
+# The one part that does not respect those figures is `playwright install`
+# when it also installs OS packages, whose apt half has a long tail — see
+# .github/actions/playwright-install. That is what the step-level bound there
+# is for.
+#
+# They exist for the failure mode that actually happened: six job runs sat on
 # `playwright install --with-deps`, which shells out to apt and blocks
 # indefinitely rather than failing, for two hours. Without an explicit
 # `timeout-minutes` a job inherits GitHub's six-hour default, so a wedged
-# runner reads as "still running" for most of a working day. A red X in
-# fifteen minutes is the whole point.
+# runner reads as "still running" for most of a working day. A job that goes
+# red on its own is the whole point.
+#
+# Four of those six no longer touch apt. #359 measured that on this runner
+# image chromium is missing no shared library at all — only fonts and X font
+# utilities — so the action drops `--with-deps` for chromium, and
+# `e2e (chromium)`, `visual`, `package` and `storybook` now download a browser
+# binary and nothing else. `e2e (firefox)` and `e2e (webkit)` still install OS
+# packages, so the apt exposure is cut from six job runs to two rather than
+# removed, and every timeout below stays as it was. Which nine packages those
+# are, and what their absence means for `visual`'s baselines, is in that
+# action rather than repeated here.
+#
+# These job timeouts are the outermost of three limits and the one that should
+# never fire. The install runs through `.github/actions/playwright-install`,
+# which bounds it — 20 minutes when it calls apt, 10 when it only downloads a
+# binary — and, on the apt path, samples what apt is doing while it runs and
+# prints a post-mortem if the bound fires. That action states both bounds and
+# how they were sized, so the numbers are not repeated here; the
+# `timeout-minutes` on the four install steps below sits between the two.
+#
+# All four keep 22. That is deliberately slack wherever chromium is installed,
+# since the action's own 10-minute bound always fires first there: lowering the
+# step limit would change no behaviour, and one number across every call site
+# is easier to keep true than a per-browser one. See #352 and #359.
 
 jobs:
   static:
@@ -56,6 +93,48 @@ jobs:
   # severity. Severity was the wrong axis: it fired hardest on the linting
   # toolchain, which never ships, and stayed quiet about a published
   # package's own runtime tree. See scripts/audit.mjs.
+  #
+  # That argument stopped at the workflow file, and the same bypass sits one
+  # level below it: the verdict is `node scripts/audit.mjs`, an ordinary file
+  # the same pull request can edit. Turning `process.exit(result.exitCode)`
+  # into `process.exit(0)` leaves the `audit` context arriving, running and
+  # green. So the authoritative run below takes the gate's *source* from
+  # `main` rather than from the pull request.
+  #
+  # What that is, exactly, because it is narrower than "the gate is pinned":
+  # pinned logic over unpinned inputs. `main` supplies the source. The pull
+  # request still supplies everything that source consumes — the tree being
+  # measured, the `node_modules` it imports from, and the pnpm that corepack
+  # resolves from its `packageManager`. So it defeats an edit to
+  # `scripts/audit.mjs`, and that is the whole of what it defeats. Two
+  # residuals are known and filed rather than papered over: `main`'s copy
+  # executes pull-request-authored dependency code, since `yaml` resolves into
+  # this tree (#372), and the publishable boundary the gate measures against is
+  # itself declared in pull-request-owned manifests (#373).
+  #
+  # A third was closed rather than filed, and is why pinning is worth having:
+  # an `auditConfig` block in `pnpm-workspace.yaml` makes pnpm drop advisories
+  # from `pnpm audit --json` before either copy of the gate reads it, so it
+  # needed no edit to `audit.mjs` at all. `scripts/audit.mjs` now fails on one.
+  # The two halves reinforce each other: that guard living on `main` is what
+  # makes it unremovable by the pull request it judges, and the pinned run is
+  # what carries it there.
+  #
+  # Both copies run, and either one failing fails the job. That is three
+  # properties rather than one:
+  #   - a pull request that weakens the gate still faces `main`'s copy;
+  #   - a pull request that legitimately improves the gate still gets its own
+  #     new version exercised, so the improvement stays testable in the pull
+  #     request that makes it;
+  #   - a pull request that breaks the gate is caught by its own copy failing.
+  #
+  # This is friction and not a fix, and is worth having on those terms. A pull
+  # request can still edit this file and take the pinned run out. What it buys
+  # is that neutering the gate is now a diff to a workflow file rather than
+  # one character inside a script — the same argument the paragraph above
+  # makes for `audit` being a job, carried one level down.
+  # scripts/verify-packaging.mjs and scripts/check-bundle-budgets.mjs are
+  # editable in-band the same way and are not covered here. See #337.
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -67,7 +146,47 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:audit
+      # `actions/checkout` is shallow and fetches only the ref under test, so
+      # `main` is not in this clone and `origin/main` does not exist here —
+      # hence the explicit fetch, read back through `FETCH_HEAD`.
+      #
+      # `scripts/audit.mjs` resolves both the repository root and
+      # `pnpm-workspace.yaml` relative to its own location, so a copy exactly
+      # one level below the root measures *this* pull request's tree while
+      # executing *main*'s logic; `yaml` resolves upward into this tree's
+      # `node_modules`. `--strip-components=1` is what puts `scripts/*` at
+      # `.gate/*` rather than `.gate/scripts/*`. The whole directory is copied
+      # rather than the two files it imports today, so `main`'s import closure
+      # stays complete even if a pull request deletes a module it needs.
+      #
+      # `pipefail` and the `rm -rf` both bound what runs when the extraction
+      # does not. The default step shell is `bash -e {0}`, where a pipeline's
+      # status is its *last* command's, so `tar` alone decides that line — and
+      # GNU tar's verdict on degenerate input is not uniform: measured, it
+      # exits 2 on empty stdin but 0 on a well-formed empty archive. Rather
+      # than rest on which of those a broken `git archive` happens to produce,
+      # `pipefail` makes `git archive`'s own failure the pipeline's.
+      #
+      # `rm -rf` closes a substitution the extraction cannot. `git archive`
+      # overwrites only the paths `main`'s `scripts/` actually carries, so
+      # anything else a pull request committed under `.gate/` survives it —
+      # and `.gate/node_modules/yaml/` is the one that bites, because Node
+      # resolves a bare import from the nearest `node_modules` upward. A
+      # committed one is found before this tree's, and `main`'s gate would
+      # then parse `pnpm-workspace.yaml` with pull-request code.
+      - name: Audit — main's copy of the gate
+        run: |
+          set -o pipefail
+          git fetch --depth=1 origin main
+          rm -rf .gate
+          mkdir -p .gate
+          git archive FETCH_HEAD scripts | tar -x --strip-components=1 -C .gate
+          node .gate/audit.mjs
+      # Runs even when the pinned copy above failed, so one run never hides
+      # the other's verdict: the two disagreeing is the interesting case.
+      - name: Audit — this pull request's copy of the gate
+        if: ${{ !cancelled() }}
+        run: pnpm test:audit
 
   unit:
     runs-on: ubuntu-latest
@@ -82,11 +201,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
-  # a11y-media.spec.ts's cue-boundary guard (installedAt < cueBoundary) proves
-  # the mutation observer installs before the fixture's real cue transition; it
-  # is not a player performance budget. The fixture's cue boundary
-  # (captions-reference.vtt, 0.7s) and the matching JS constant carry the
-  # headroom that keeps the guard honest on a slower host. See
+  # a11y-media.spec.ts arranges its live-region window instead of racing it:
+  # since #279 the clip is rewound to 0 and settled there before the mutation
+  # observer installs, so nothing in that test is a margin against runner speed,
+  # and none of it was ever a player performance budget. See
   # e2e/a11y-media.spec.ts for the full rationale.
   e2e:
     runs-on: ubuntu-latest
@@ -114,9 +232,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` installs the browser's OS packages, which a hosted
-      # runner image does not carry for every engine.
-      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: ${{ matrix.browser }}
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=${{ matrix.browser }}
@@ -145,9 +264,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` installs the browser's OS packages, which a hosted
-      # runner image does not carry for every engine.
-      - run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: chromium
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=visual
@@ -165,6 +285,14 @@ jobs:
   # pnpm@10.34.5 in package.json: pnpm 11's SQLite store index failed this job
   # with `[ERR_SQLITE_ERROR] attempt to write a readonly database`, and 10.34.5
   # predates that index entirely.
+  #
+  # That root pin does not reach the fixture install, which is the half of this
+  # that was never true: the fixture is copied to an OS temp directory, where
+  # corepack finds no manifest above it and falls back to whatever pnpm is
+  # latest that day. `tests/packaging/fixture/package.json` therefore repeats
+  # the same `packageManager`, and that is also what keeps the fixture's
+  # committed lockfile replayed rather than re-resolved under a newer
+  # `lockfileVersion`. See #336.
   package:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -183,9 +311,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` installs the browser's OS packages, which a hosted
-      # runner image does not carry for every engine.
-      - run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: chromium
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
       # and hit that cache instead of rebuilding from scratch.
@@ -210,9 +339,14 @@ jobs:
   # documents the gap. The `hls-paths` job that gated the macOS run went with
   # it, having nothing left to gate.
 
+  # 25 rather than 20: the install step is bounded at 22 minutes (see
+  # .github/actions/playwright-install), and a 20-minute job cap left no room
+  # above it. This job's own install measured 690s on a successful run, so 20
+  # was tight for it regardless — though that 690s was apt, which this job no
+  # longer calls now that chromium installs without `--with-deps`.
   storybook:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: corepack enable
@@ -228,8 +362,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      # `--with-deps` installs the browser's OS packages, which a hosted
-      # runner image does not carry for every engine.
-      - run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: chromium
       - run: pnpm --filter @playdeck/storybook build
       - run: pnpm test:storybook

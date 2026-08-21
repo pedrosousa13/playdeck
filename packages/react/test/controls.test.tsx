@@ -13,7 +13,6 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   type Availability,
   type CommandResult,
-  PlayerController,
   type PlayerCapabilities,
   type PlayerEventOrigin,
   type ProviderAdapter,
@@ -21,6 +20,10 @@ import {
   type ProviderStateListener,
   type ProviderStatePatch
 } from '@playdeck/core';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 
 const available: Availability = { status: 'available' };
@@ -72,7 +75,9 @@ const renderWithPlayer = (ui: ReactNode, initial?: ProviderStatePatch) => {
       {ui}
     </Player.Root>
   );
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
   const mock = createMockAdapter();
   act(() => {
     controller.setProvider(mock.adapter);
@@ -1310,6 +1315,178 @@ describe('SeekSlider', () => {
   });
 });
 
+// Both sliders render what the media publishes, and a range input keeps only
+// the values its own `step` grid can express: the HTML value sanitisation
+// algorithm clamps into `[min, max]` and snaps to the nearest step. A value that
+// does not survive that is a value React's tracker and the DOM disagree about
+// from then on, and React drops the next change event that lands on the string
+// the tracker kept -- so the press behind it issues no command while every other
+// signal says it was seen (#277).
+//
+// WHAT THIS ENVIRONMENT CAN AND CANNOT SEE. happy-dom does not implement value
+// sanitisation at all: measured, `input.step = '1'` then `input.value = '0.75'`
+// reads back `'0.75'`, where every real engine keeps `'1'`. So nothing here can
+// observe the snap, and a test written to watch the DOM correct us would pass
+// against any implementation whatsoever (#333). What these tests assert instead
+// is the half that is ours and that this environment does render faithfully:
+// the string the library hands the input is already one the grid can express,
+// and the valuetext read out beside it agrees with it. The other half -- that
+// the string then survives a real input untouched, leaving the tracker in sync
+// -- needs an engine, and is pinned by `ShortWindowSnapsToItsStep` in
+// `apps/storybook/stories/seek-slider.stories.tsx`, whose play function runs in
+// chromium.
+describe('slider values are snapped onto the step grid they render with', () => {
+  const seekReady = (patch: ProviderStatePatch = {}): ProviderStatePatch => ({
+    ...capabilities({ seek: available }),
+    duration: 1,
+    currentTime: 0,
+    ...patch
+  });
+
+  // The reference clip is ~1s and the default step is 1s, which leaves the seek
+  // input two values it can express. Nothing else in the suite runs a window
+  // that short, and it is where this was measured.
+  test('a fractional time past the halfway mark renders as the window end', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.6 }));
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect((slider as HTMLInputElement).value).toBe('1');
+    // And the valuetext is the thumb's position, not the media's: reading
+    // `0:00` here while the thumb sits hard right is the mismatch VolumeSlider's
+    // percentage has always been careful to avoid.
+    expect(attr(slider, 'aria-valuetext')).toBe('0:01 of 0:01');
+  });
+
+  test('a fractional time below the halfway mark renders as the window start', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.4 }));
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect((slider as HTMLInputElement).value).toBe('0');
+    expect(attr(slider, 'aria-valuetext')).toBe('0:00 of 0:01');
+  });
+
+  // Ties go to the higher value, which is what the sanitisation algorithm does.
+  test('a time exactly between two steps rounds up', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.5 }));
+    expect(
+      (screen.getByRole('slider', { name: 'Seek' }) as HTMLInputElement).value
+    ).toBe('1');
+  });
+
+  test('a consumer step is the grid, not the default one', () => {
+    renderWithPlayer(
+      <Player.SeekSlider inputProps={{ step: 0.25 }} />,
+      seekReady({ currentTime: 0.6 })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(attr(slider, 'step')).toBe('0.25');
+    expect((slider as HTMLInputElement).value).toBe('0.5');
+  });
+
+  // `step="any"` is the attribute asking for no grid at all, so every value is
+  // one the input can express and nothing should be moved.
+  test('step="any" leaves the published time alone', () => {
+    renderWithPlayer(
+      <Player.SeekSlider inputProps={{ step: 'any' }} />,
+      seekReady({ currentTime: 0.6 })
+    );
+    expect(
+      (screen.getByRole('slider', { name: 'Seek' }) as HTMLInputElement).value
+    ).toBe('0.6');
+  });
+
+  // A live DVR window starts past zero, and the step grid starts with it: the
+  // values a range input can express are `min + n * step`, not multiples of the
+  // step. Snapping to the latter would move the thumb by up to a whole step and
+  // leave the same disagreement behind on every live player.
+  test('a window starting past zero puts the grid on its own start', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({
+        duration: null,
+        currentTime: 14,
+        seekable: [{ start: 12.3, end: 20.3 }]
+      })
+    );
+    const slider = screen.getByRole('slider', { name: 'Seek' });
+    expect(attr(slider, 'min')).toBe('12.3');
+    expect((slider as HTMLInputElement).value).toBe('14.3');
+  });
+
+  // The last stop short of the maximum, rather than a step past it: 1.6 is
+  // nearer to 2 than to 1, and 2 is outside the window.
+  test('a window the grid cannot reach the end of stops at its last step', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady({ duration: 1.6, currentTime: 1.6 })
+    );
+    expect(
+      (screen.getByRole('slider', { name: 'Seek' }) as HTMLInputElement).value
+    ).toBe('1');
+  });
+
+  test('a published volume off the 0.05 grid renders on it', () => {
+    renderWithPlayer(<Player.VolumeSlider />, {
+      ...withVolume(available),
+      volume: 0.37,
+      muted: false
+    });
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    expect((slider as HTMLInputElement).value).toBe('0.35');
+    expect(attr(slider, 'aria-valuetext')).toBe('35%');
+  });
+
+  // Floating-point drift is the volume control's own way onto an unrenderable
+  // value: a chain of 0.05 decrements does not land on the grid it started on.
+  test('a volume drifted off the grid in floating point renders back onto it', () => {
+    renderWithPlayer(<Player.VolumeSlider />, {
+      ...withVolume(available),
+      volume: 0.7999999999999999,
+      muted: false
+    });
+    expect(
+      (screen.getByRole('slider', { name: 'Volume' }) as HTMLInputElement).value
+    ).toBe('0.8');
+  });
+
+  // Rebuilt from the step index rather than accumulated: `7 * 0.05` is
+  // `0.35000000000000003`, which is a step mismatch of its own.
+  test('a snapped volume is not itself off the grid in floating point', () => {
+    renderWithPlayer(<Player.VolumeSlider />, {
+      ...withVolume(available),
+      volume: 0.34,
+      muted: false
+    });
+    const value = (
+      screen.getByRole('slider', { name: 'Volume' }) as HTMLInputElement
+    ).value;
+    expect(value).toBe('0.35');
+    expect(Number(value) * 100).toBe(35);
+  });
+
+  test('a consumer volume step is the grid', () => {
+    renderWithPlayer(<Player.VolumeSlider step={0.25} />, {
+      ...withVolume(available),
+      volume: 0.6,
+      muted: false
+    });
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    expect(attr(slider, 'step')).toBe('0.25');
+    expect((slider as HTMLInputElement).value).toBe('0.5');
+  });
+});
+
+// Compile-time guard: `TimeProps['ref']` is `Ref<HTMLElement>` rather than
+// `Ref<HTMLTimeElement>`, because the untimed state renders a `<span>` (#248)
+// and TypeScript cannot catch the swap on its own -- `HTMLSpanElement` declares
+// no member `HTMLElement` does not, so `HTMLTimeElement` is structurally
+// assignable to it. The widening must cost a consumer nothing, so every ref
+// shape written against the old declaration has to keep assigning.
+const verifyTimeRefStaysAssignable = (): Player.TimeProps[] => [
+  { ref: createRef<HTMLTimeElement>() },
+  { ref: (element: HTMLTimeElement | null) => void element },
+  { ref: createRef<HTMLElement>() },
+  { ref: null }
+];
+
 describe('Time', () => {
   test('formats the current time by default', () => {
     renderWithPlayer(<Player.Time />, { currentTime: 75, duration: 100 });
@@ -1350,6 +1527,150 @@ describe('Time', () => {
       duration: 100
     });
     expect(screen.getByText('-1:10')).toBeDefined();
+  });
+
+  test('renders no duration and no remaining time on an untimed source', () => {
+    // `0:00` here reads as a zero-length video (#248). The part stays in the
+    // DOM, so `data-state` is still the signal a consumer composes a `LIVE`
+    // badge off, and every other hook has to survive with it.
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 42, duration: null, provider: 'native' }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.textContent).toBe('');
+    expect(attr(duration ?? null, 'data-state')).toBe('untimed');
+    expect(attr(duration ?? null, 'data-time-type')).toBe('duration');
+    expect(attr(duration ?? null, 'data-provider')).toBe('native');
+    expect(remaining?.textContent).toBe('');
+    expect(attr(remaining ?? null, 'data-state')).toBe('untimed');
+    expect(attr(remaining ?? null, 'data-time-type')).toBe('remaining');
+    expect(attr(remaining ?? null, 'data-provider')).toBe('native');
+  });
+
+  test('renders no duration and no remaining time on a live stream', () => {
+    // An infinite duration is what a live HLS stream publishes, and it is
+    // untimed by the same rule a null one is.
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 42, duration: Number.POSITIVE_INFINITY }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.textContent).toBe('');
+    expect(attr(duration ?? null, 'data-state')).toBe('untimed');
+    expect(remaining?.textContent).toBe('');
+    expect(attr(remaining ?? null, 'data-state')).toBe('untimed');
+  });
+
+  test('still formats the elapsed time on an untimed source', () => {
+    renderWithPlayer(<Player.Time />, { currentTime: 75, duration: null });
+    const time = screen.getByText('1:15');
+    expect(time.tagName).toBe('TIME');
+    expect(attr(time, 'data-state')).toBe('untimed');
+    expect(attr(time, 'datetime')).toBe('PT75S');
+  });
+
+  test('renders a span rather than an empty time on an untimed source', () => {
+    // A `<time>` with neither a `datetime` nor a parseable time is not a time
+    // at all, and `PT0S` would restate the zero the text stopped claiming.
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 42, duration: null }
+    );
+    for (const time of container.querySelectorAll(
+      '[data-playdeck-part="time"]'
+    )) {
+      expect(time.tagName).toBe('SPAN');
+      expect(time.hasAttribute('datetime')).toBe(false);
+    }
+  });
+
+  test('carries the machine-readable seconds on a timed source', () => {
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 30, duration: 100 }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.tagName).toBe('TIME');
+    expect(duration?.textContent).toBe('1:40');
+    expect(attr(duration ?? null, 'datetime')).toBe('PT100S');
+    expect(remaining?.tagName).toBe('TIME');
+    expect(remaining?.textContent).toBe('-1:10');
+    expect(attr(remaining ?? null, 'datetime')).toBe('PT70S');
+  });
+
+  test('still times a genuine zero-second source', () => {
+    // A finite `0` is a measurement, not a missing one, so `0:00` is the
+    // truth here and the element stays a `<time>`.
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      { currentTime: 0, duration: 0 }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.tagName).toBe('TIME');
+    expect(duration?.textContent).toBe('0:00');
+    expect(attr(duration ?? null, 'data-state')).toBe('timed');
+    expect(attr(duration ?? null, 'datetime')).toBe('PT0S');
+    expect(remaining?.textContent).toBe('0:00');
+    expect(attr(remaining ?? null, 'data-state')).toBe('timed');
+  });
+
+  test('renders consumer children on an untimed source', () => {
+    renderWithPlayer(<Player.Time type="duration">LIVE</Player.Time>, {
+      currentTime: 42,
+      duration: null
+    });
+    const time = screen.getByText('LIVE');
+    expect(attr(time, 'data-state')).toBe('untimed');
+  });
+
+  test('keeps a consumer dateTime out of the DOM on an untimed source', () => {
+    // The library owns the attribute in both states. On the `<time>` it wins by
+    // ordering; the `<span>` writes none, so an unstripped consumer value would
+    // reach the DOM and restate the zero-duration claim #248 removed, in the
+    // form a machine parses rather than the one a viewer reads.
+    const { container } = renderWithPlayer(
+      <Player.Time dateTime="PT30S" type="duration" />,
+      { currentTime: 42, duration: null }
+    );
+    const time = container.querySelector('[data-playdeck-part="time"]')!;
+    expect(time.tagName).toBe('SPAN');
+    expect(time.hasAttribute('datetime')).toBe(false);
+  });
+
+  test('hands the untimed span back through a ref', () => {
+    const ref = createRef<HTMLElement>();
+    const { container } = renderWithPlayer(
+      <Player.Time ref={ref} type="duration" />,
+      { currentTime: 42, duration: null }
+    );
+    expect(ref.current).toBe(
+      container.querySelector('[data-playdeck-part="time"]')
+    );
+    expect(verifyTimeRefStaysAssignable).toBeTypeOf('function');
   });
 });
 
@@ -1610,6 +1931,255 @@ describe('Controls container and scoped shortcuts', () => {
     }
     expect(slider.value).toBe('1');
     expect(attr(slider, 'aria-valuetext')).toBe('100%');
+  });
+
+  // #274. The thumb sits on the muted zero, so an arrow that stepped the
+  // published volume would move from a number nothing on screen shows — and a
+  // downward step from it would land above zero and turn the sound back on.
+  test('unmutes on ArrowUp while muted and steps no volume', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    expect(fireEvent.keyDown(region, { key: 'ArrowUp' })).toBe(false);
+    expect(spies.unmute).toHaveBeenCalledTimes(1);
+    // `muted` and `volume` are independent, so the unmute alone restores the
+    // published 0.5. Asking for 0.55 as well would be a step the user never
+    // made, from a base they were never shown: the volume asked for is that
+    // same 0.5, which moves the player nowhere and records where the unmute is
+    // going for whatever is pressed next.
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.5]]);
+    expect(slider.value).toBe('0.5');
+  });
+
+  test('compounds a second ArrowUp pressed while muted inside one round trip', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    // The player publishes nothing between the two presses, so `muted` is
+    // still true on the second. Reading the muted branch again there would
+    // unmute twice and step nothing, and the user would land on the 0.5 they
+    // started from — the press lost inside one round trip #271 was filed over.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    expect(slider.value).toBe('0.55');
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.5], [0.55]]);
+  });
+
+  test('compounds a second ArrowUp muted at a published volume inside the echo tolerance', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true, volume: 0.02 })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    // The drain reconciles against the muted published volume, which reads 0
+    // however loud the player is. Answering a request for 0.02 with it would
+    // release the base the unmute recorded and leave the press after this one
+    // back in the muted branch, unmuting again and stepping nothing.
+    //
+    // `'0'` and not `'0.02'`: a range input stepping by 0.05 has no 0.02 to
+    // show, and rendering one is what used to poison React's value tracker.
+    // The thumb is not what discriminates a held base from a released one here
+    // — both would sit at 0 — so the two assertions below are: a released base
+    // would put the press after this one back in the muted branch and issue
+    // 0.5, not 0.07.
+    await act(async () => {});
+    expect(slider.value).toBe('0');
+
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    expect(slider.value).toBe('0.05');
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.02], [0.07]]);
+  });
+
+  test('holds the restored level to the deadline when the unmute is refused', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    spies.unmute.mockResolvedValue({ ok: false, reason: 'unsupported' });
+    region.focus();
+
+    vi.useFakeTimers();
+    // The two commands are independent, so a refused `unmute()` leaves the
+    // accepted `setVolume(0.5)` standing and the request with it.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.5]]);
+    expect(slider.value).toBe('0.5');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(slider.value).toBe('0.5');
+
+    // The player never unmutes, so nothing it publishes can answer a request
+    // above zero and the drain's deadline is the only thing left to release it.
+    // For that window the thumb shows the level the unmute was restoring on a
+    // player that is still silent. Accepted rather than papered over: an unmute
+    // that is going to be refused is refused everywhere, so the alternative is
+    // reading the refusal back into the request, and the deadline already
+    // exists to cover every other command a provider accepts and never answers.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(slider.value).toBe('0');
+
+    vi.useRealTimers();
+  });
+
+  test('does nothing at all on ArrowDown while muted, and still owns the key', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    // The player is already silent, so "quieter" has nothing to do — but the
+    // key is still the layer's under ADR-0005, and a false return is what keeps
+    // a focused range input from stepping itself instead.
+    expect(fireEvent.keyDown(region, { key: 'ArrowDown' })).toBe(false);
+    slider.focus();
+    expect(fireEvent.keyDown(slider, { key: 'ArrowDown' })).toBe(false);
+    expect(spies.unmute).not.toHaveBeenCalled();
+    expect(spies.mute).not.toHaveBeenCalled();
+    await act(async () => {});
+    expect(spies.setVolume).not.toHaveBeenCalled();
+    expect(slider.value).toBe('0');
+  });
+
+  test('steps to one increment on ArrowUp muted at a published zero', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true, volume: 0 })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    region.focus();
+
+    // Unmuting alone would restore a published zero and leave the press looking
+    // dead, so this is the one muted case that moves the volume too.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    expect(spies.unmute).toHaveBeenCalledTimes(1);
+    expect(slider.value).toBe('0.05');
+
+    // And the press after it compounds on that request rather than being
+    // swallowed by a `muted` the player has not answered for yet: the thumb is
+    // showing 0.05, so that is the number the arrow acts on.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    expect(slider.value).toBe('0.1');
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.05], [0.1]]);
+  });
+
+  test('steps down on ArrowDown while muted over an outstanding change', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.VolumeSlider />
+      </Player.Controls>,
+      controlsState({ muted: true })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const slider = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="volume-slider"]'
+    )!;
+    // Dragged up off the muted zero to 0.3, which the player has not answered
+    // for yet, so the thumb shows 0.3 while `muted` is still true.
+    fireEvent.change(slider, { target: { value: '0.3' } });
+    expect(slider.value).toBe('0.3');
+    region.focus();
+
+    // 0.3 is what the control is showing, so that is what the arrow acts on:
+    // stepping down from it is the same principle that keeps a muted arrow off
+    // the published volume, and the no-op above applies only where the thumb is
+    // on the muted zero.
+    fireEvent.keyDown(region, { key: 'ArrowDown' });
+    expect(slider.value).toBe('0.25');
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.3], [0.25]]);
+  });
+
+  test('leaves the volume arrows to the page while the capability is unavailable', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState({
+        ...capabilities({
+          seek: available,
+          setVolume: unavailable,
+          fullscreen: available
+        }),
+        muted: true
+      })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    region.focus();
+    // The gate runs ahead of preventDefault (ADR-0005), so a key the layer
+    // cannot act on is left whole — the muted branch included.
+    expect(fireEvent.keyDown(region, { key: 'ArrowUp' })).toBe(true);
+    expect(fireEvent.keyDown(region, { key: 'ArrowDown' })).toBe(true);
+    expect(spies.unmute).not.toHaveBeenCalled();
+    expect(spies.setVolume).not.toHaveBeenCalled();
   });
 
   test('reconciles the volume request while no volume slider is mounted', async () => {

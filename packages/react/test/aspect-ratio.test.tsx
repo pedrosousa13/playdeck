@@ -15,6 +15,10 @@ import {
   type MediaDimensions,
   type ProviderAdapter
 } from '@playdeck/core';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 import { createFakeProvider } from './fixtures/fake-provider';
@@ -68,7 +72,9 @@ const renderPlayer = (
       {children}
     </Player.Root>
   );
-  return handle.current as unknown as PlayerController;
+  return (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
 };
 
 test('publishes the intrinsic aspect ratio onto the viewport', () => {

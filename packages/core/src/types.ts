@@ -26,6 +26,25 @@ export type PlayerError = {
   readonly cause?: unknown;
 };
 
+// The consumer-supplied URL props the shared allowlist governs outside a
+// provider — the five surfaces #320 routed through `isPermittedSourceUrl` and
+// left silent. Named for the prop the consumer wrote, because the prop is what
+// the operator has to go and fix.
+//
+// A closed union rather than a `string`, deliberately. `reportRefusedUrl` is
+// reached from React components holding the value that was just refused, and a
+// free-form parameter is an open invitation to pass it along "for context" —
+// which would put attacker-controlled text into an error a monitor may log and
+// `ErrorDisplay` may render. The type makes that impossible rather than
+// discouraged, and the notice message is built in core from this key alone
+// (#330).
+export type RefusedUrlSurface =
+  | 'poster src'
+  | 'poster srcSet'
+  | 'nativePoster'
+  | 'textTracks src'
+  | 'mediaSession artwork';
+
 export type TextTrackKind = 'subtitles' | 'captions';
 export type TextTrackReadiness = 'idle' | 'loading' | 'loaded' | 'error';
 export type CaptionRendering = 'custom' | 'native' | 'provider' | 'unavailable';
@@ -78,6 +97,11 @@ export type AutoplayMode = false | 'muted' | 'audible' | 'audible-then-muted';
 
 export type AutoplayConfigurationOptions = {
   readonly controlledMuted?: boolean;
+  // Opts out of the `prefers-reduced-motion: reduce` suppression, so a
+  // configured autoplay is attempted whatever the viewer asked for. Named for
+  // what it does rather than for the case it enables, so a consumer reading the
+  // call site sees a deliberate accessibility trade-off (#311).
+  readonly ignoreReducedMotion?: boolean;
 };
 
 export type Availability =
@@ -155,7 +179,17 @@ export type PlayerState = {
   readonly playbackRate: number;
   readonly fullscreen: boolean;
   readonly pictureInPicture: boolean;
-  readonly autoplay: 'idle' | 'attempting' | 'started' | 'blocked' | 'failed';
+  // `'suppressed'` means configured but deliberately not attempted, because the
+  // viewer matches `prefers-reduced-motion: reduce` and the player was not told
+  // to ignore it. It is a member of its own because `'idle'` already covers "no
+  // autoplay configured", so without it a consumer cannot tell a suppressed
+  // autoplay from one that never existed. Only the attempt is declined, so a
+  // consumer reading this state gets a new member to handle and no behaviour
+  // change anywhere else: the React poster gate never enumerated the autoplay
+  // states, so `'suppressed'` falls through it and holds the poster over the
+  // frame exactly as `'blocked'` does (#311).
+  readonly autoplay:
+    'idle' | 'attempting' | 'started' | 'blocked' | 'failed' | 'suppressed';
   // True only where `autoplay` is `'started'` because an audible attempt was
   // refused by policy and the muted retry of `'audible-then-muted'` is what
   // played. It is what tells a deliberate muted autoplay apart from a recovered

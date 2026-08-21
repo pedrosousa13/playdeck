@@ -274,8 +274,8 @@ const errorOverlayStyle: CSSProperties = {
 // The lifecycle clause is the one that is easy to drop and must not be. A
 // `configuration` error is NOT always a notice: `useActivation` publishes one
 // with `activation: 'error'` for `loading="interaction"` with autoplay
-// (`use-activation.ts:458-463`) and for viewport activation without a
-// `Player.Viewport` (`:477-480`). Both mean the player will never load, so both
+// (`use-activation.ts:510-515`) and for viewport activation without a
+// `Player.Viewport` (`:535-538`). Both mean the player will never load, so both
 // have to keep the overlay — without this clause they would render as an
 // invisible notice and the consumer would see a dead player and no error at
 // all, which is the defect this change exists to remove.

@@ -15,7 +15,8 @@ import {
   useId,
   useState,
   useSyncExternalStore,
-  type ComponentPropsWithRef
+  type ComponentPropsWithRef,
+  type Ref
 } from 'react';
 
 const formatTime = (totalSeconds: number): string => {
@@ -27,6 +28,66 @@ const formatTime = (totalSeconds: number): string => {
   return hours > 0
     ? `${hours}:${pad(minutes)}:${pad(seconds)}`
     : `${minutes}:${pad(seconds)}`;
+};
+
+// How many digits sit after the point, including the ones `String` hides in
+// exponent form (it switches to it below 1e-6).
+const decimalPlaces = (value: number): number => {
+  const text = String(value);
+  const exponent = text.indexOf('e');
+  const mantissa = exponent === -1 ? text : text.slice(0, exponent);
+  const point = mantissa.indexOf('.');
+  const digits = point === -1 ? 0 : mantissa.length - point - 1;
+  if (exponent === -1) return digits;
+  return Math.max(0, digits - Number(text.slice(exponent + 1)));
+};
+
+// The value a range input will actually keep, which is not always the value it
+// is handed: the HTML value sanitisation algorithm clamps into `[min, max]` and
+// then snaps to the nearest `step`, ties going to the higher.
+//
+// A controlled input handed a value it cannot keep desynchronises React's value
+// tracker from the DOM — React's tracker records the string React assigned, the
+// input records the string it kept — and React drops a change event whose new
+// value equals what the tracker holds. The press behind that event then issues
+// no command at all, while every other signal says it was seen: the thumb moves,
+// the keydown fires, and only the media never arrives.
+//
+// Neither slider below can assume it is handed a step-valid value, because both
+// render what the media publishes rather than what the user chose. Measured on
+// the ~1s reference clip, where the default 1s step leaves the seek input two
+// values it can keep: React assigns `0.505738182`, the input keeps `1`, the
+// tracker keeps `0.505738182`, and `End` from there moves nothing and seeks
+// nowhere on all three engines. A volume arrow chain drifts off its 0.05 grid in
+// floating point the same way. Snapping here is what keeps the string React
+// assigns and the string the input keeps the same string.
+//
+// It renders only. Nothing downstream reads it: a command carries the value read
+// back off the DOM, and the preview policy compares against what was requested.
+const snapToStep = (
+  value: number,
+  min: number,
+  max: number,
+  step: number | string | undefined
+): number => {
+  const clamped = Math.min(Math.max(value, min), max);
+  const size = typeof step === 'number' ? step : Number(step);
+  // `step="any"` parses to `NaN`, which is the attribute asking for no grid at
+  // all — the one case where any value is one the input can keep.
+  if (!Number.isFinite(size) || size <= 0) return clamped;
+  // Rebuilt from the step index rather than accumulated, and rounded to the
+  // grid's own precision: `7 * 0.05` is `0.35000000000000003`, a step mismatch
+  // of its own that would leave behind exactly the desync this exists to avoid.
+  const places = Math.min(
+    Math.max(decimalPlaces(size), decimalPlaces(min)),
+    20
+  );
+  const on = (index: number): number =>
+    Number((min + index * size).toFixed(places));
+  const nearest = on(Math.round((clamped - min) / size));
+  // A grid whose last stop falls short of the maximum stops there rather than
+  // stepping past it, which is what the sanitisation algorithm does too.
+  return nearest <= max ? nearest : on(Math.floor((max - min) / size));
 };
 
 export type PlayButtonProps = ComponentPropsWithRef<'button'>;
@@ -131,10 +192,11 @@ export const VolumeSlider = ({
     volumeRequest.getRequested
   );
   if (status !== 'available') return null;
+  const grid = step ?? 0.05;
   // A request outranks the muted zero. Dragging up while muted unmutes, but
   // `muted` stays true until the player publishes the unmute, so rendering the
   // zero here would swallow that drag exactly as a lagging volume does.
-  const value = requested ?? (muted ? 0 : volume);
+  const value = snapToStep(requested ?? (muted ? 0 : volume), 0, 1, grid);
   // Read off the value the thumb is showing, so assistive technology is never
   // told something the sighted user is being shown the opposite of.
   const percent = Math.round(value * 100);
@@ -157,7 +219,7 @@ export const VolumeSlider = ({
         if (muted && next > 0) void controller.unmute();
         volumeRequest.request(next);
       }}
-      step={step ?? 0.05}
+      step={grid}
       style={{ ...controlTargetStyle, ...style }}
       type="range"
       value={value}
@@ -385,11 +447,13 @@ export const SeekSlider = ({
   const min = window ? window.start : 0;
   const max = window ? window.end : 0;
   const span = max - min;
+  // The step the input will actually be rendered with, since `inputProps`
+  // overrides the default below and the value has to be snapped to whichever
+  // grid wins.
+  const grid = inputProps?.step ?? 1;
   // A held preview is clamped like media time is: the window it was asked
   // against can have moved on before the seek was answered.
-  const value = window
-    ? Math.min(Math.max(preview ?? currentTime, min), max)
-    : 0;
+  const value = window ? snapToStep(preview ?? currentTime, min, max, grid) : 0;
   // The geometry below is `aria-hidden`, so this description is the extent's
   // only route to assistive technology (#189) — read on demand, never a live
   // region, because `buffered` moves many times a second.
@@ -428,8 +492,8 @@ export const SeekSlider = ({
       </div>
       <input
         aria-label="Seek"
-        step={1}
         {...inputProps}
+        step={grid}
         aria-describedby={describedBy}
         aria-disabled={window ? undefined : true}
         aria-valuetext={
@@ -465,27 +529,92 @@ export const SeekSlider = ({
   );
 };
 
-export type TimeProps = ComponentPropsWithRef<'time'> & {
+// `ref` is widened past `HTMLTimeElement` because the element is not fixed: the
+// untimed branch below renders a `<span>`, so a ref declared as a `<time>` was
+// handed something that is not one. TypeScript could not catch it —
+// `HTMLSpanElement` declares no member `HTMLElement` does not, so
+// `HTMLTimeElement` is structurally assignable to it and the swap type-checked
+// silently while `ref.current.dateTime` read `undefined` at runtime. The
+// declared surface has to be honest about what it hands back, on #356's
+// reasoning. Nothing a consumer writes breaks: property covariance and
+// parameter bivariance keep both `useRef<HTMLTimeElement>(null)` and
+// `(el: HTMLTimeElement | null) => void` assignable. What goes is `.dateTime`
+// autocomplete off the ref — the one member this component does not guarantee.
+export type TimeProps = Omit<ComponentPropsWithRef<'time'>, 'ref'> & {
+  readonly ref?: Ref<HTMLElement>;
   readonly type?: 'current' | 'duration' | 'remaining';
 };
 
-export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
+export const Time = ({
+  children,
+  ref,
+  type = 'current',
+  ...props
+}: TimeProps) => {
   const { currentTime, duration, provider } = usePlayerState((state) => ({
     currentTime: state.currentTime,
     duration: state.duration,
     provider: state.provider
   }));
   const hasDuration = typeof duration === 'number' && Number.isFinite(duration);
+  // `null` for a total this source does not have — a live stream, or one whose
+  // duration has not arrived. `0` was the defect (#248): `formatTime(0)` renders
+  // `0:00`, and a viewer reads a zero-length video rather than an untimed one.
+  // `current` never reaches it, because `currentTime` means the same thing on a
+  // live source as on a VOD one, so a `current` instance is always the `<time>`
+  // below.
   const seconds =
     type === 'duration'
       ? hasDuration
         ? duration
-        : 0
+        : null
       : type === 'remaining'
         ? hasDuration
           ? Math.max(0, duration - currentTime)
-          : 0
+          : null
         : currentTime;
+
+  // Not a `<time>`: there is no time here to mark up. Keeping the element and
+  // emptying it would leave a `<time>` with neither a `datetime` nor parseable
+  // time-string content, which its own rule forbids, and the `PT0S` that would
+  // make it conformant is the same zero-duration claim the text just stopped
+  // making. ADR-0002 rules that an unknown measurement removes the published
+  // property rather than publishing a zero or an empty value; that ADR governs a
+  // CSS custom property rather than an element, but it is the shape this file
+  // already keeps for something it has not measured — `bufferedShare` returns
+  // `null` rather than `0`, and `SeekSlider` then leaves the
+  // `seek-buffered-description` element out instead of rendering an empty one.
+  //
+  // Every hook is repeated onto the `<span>`, because they are the whole
+  // affordance: `data-state="untimed"` is what a consumer hangs a `LIVE` badge,
+  // an em dash or an elapsed-time fallback off, in their own layout rather than
+  // one this library materialises inside their design. The known cost is a
+  // consumer selector written `time[data-playdeck-part="time"]`, which stops
+  // matching in this state — the part attribute is the documented hook, not the
+  // tag name.
+  if (seconds === null) {
+    // The library owns `datetime` in both states. The `<time>` below writes its
+    // own after the spread and so always outranked a consumer's, but a `<span>`
+    // writes none, so an unstripped `dateTime` prop would reach the DOM here and
+    // restate — in the form a machine parses — the zero-duration claim the text
+    // has just stopped making.
+    const untimedProps = { ...props };
+    delete untimedProps.dateTime;
+
+    return (
+      <span
+        {...untimedProps}
+        ref={ref}
+        data-provider={provider ?? undefined}
+        data-playdeck-part="time"
+        data-state="untimed"
+        data-time-type={type}
+      >
+        {children}
+      </span>
+    );
+  }
+
   const formatted = formatTime(seconds);
   const display =
     type === 'remaining' && seconds > 0 ? `-${formatted}` : formatted;
@@ -493,6 +622,12 @@ export const Time = ({ children, type = 'current', ...props }: TimeProps) => {
   return (
     <time
       {...props}
+      // Narrowed back for this branch only. `Ref<HTMLElement>` is a declaration
+      // about what a holder may rely on, not about what arrives: here the
+      // element is a `<time>`, so an `HTMLTimeElement` is what the ref receives.
+      // The cast writes a subtype into a wider slot, which is the safe
+      // direction; TypeScript refuses it only because a ref object is mutable.
+      ref={ref as Ref<HTMLTimeElement>}
       dateTime={`PT${Math.max(0, Math.floor(seconds))}S`}
       data-provider={provider ?? undefined}
       data-playdeck-part="time"

@@ -52,10 +52,16 @@ describe('withMockPlayer tag gate', () => {
  * can keep the gate honest.
  */
 
-/** Never fetched: `Player.Root` commits no source unless something activates it. */
+/**
+ * Never fetched: `Player.Root` commits no source unless something activates it.
+ * The same reserved `.invalid` host the decorator uses, and for the same reason
+ * (#331) — an invented `mock:` scheme is one the shared allowlist refuses.
+ */
 const source: RootProps['source'] = {
   type: 'video',
-  sources: [{ src: 'mock://playdeck/video.mp4', mimeType: 'video/mp4' }]
+  sources: [
+    { src: 'https://provider.invalid/mock-video.mp4', mimeType: 'video/mp4' }
+  ]
 };
 
 /**

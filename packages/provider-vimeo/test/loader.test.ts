@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
+  isSeoMetadataSuppressed,
   loadVimeoSdk,
   resetVimeoSdkLoader,
   type VimeoSdkConstructor,
@@ -11,6 +12,7 @@ import {
 declare global {
   interface Window {
     VimeoSeoMetadataAppended?: boolean;
+    VimeoCheckedUrlTimeParam?: boolean;
   }
 }
 
@@ -19,8 +21,73 @@ const seoGuard = (): unknown =>
     ? window.VimeoSeoMetadataAppended
     : 'unset';
 
+const urlTimeGuard = (): unknown =>
+  'VimeoCheckedUrlTimeParam' in window
+    ? window.VimeoCheckedUrlTimeParam
+    : 'unset';
+
 const fakeConstructor = (): VimeoSdkConstructor =>
   class {} as unknown as VimeoSdkConstructor;
+
+// What one evaluation of the fake SDK module observed and did.
+type Evaluation = {
+  // The guard as `initAppendVideoMetadata` found it.
+  readonly guard: unknown;
+  // Whether that installed the `window.location.href` `message` listener.
+  readonly listenerInstalled: boolean;
+};
+
+// An importer that evaluates the way the real module does. `@vimeo/player`'s
+// module scope calls `initAppendVideoMetadata()` (`dist/player.js:2827`), which
+// returns early on a truthy guard and otherwise WRITES the guard `true` and
+// then installs the listener (`:993-1016`).
+//
+// That write is the whole reason this fake exists. Without it every load leaves
+// the guard exactly as Playdeck left it, so a suppression check that reads the
+// global after the load looks correct here and is a no-op in a browser, where
+// the SDK has made every outcome truthy. A double that diverges in the one
+// behaviour under test is not a double (#333).
+const fakeSdkImport = (): {
+  readonly importSdk: () => Promise<VimeoSdkModule>;
+  readonly evaluations: Evaluation[];
+} => {
+  const evaluations: Evaluation[] = [];
+  return {
+    evaluations,
+    importSdk: async () => {
+      const globals = window as unknown as Record<string, unknown>;
+      const listenerInstalled = !globals.VimeoSeoMetadataAppended;
+      evaluations.push({ guard: seoGuard(), listenerInstalled });
+      if (listenerInstalled) globals.VimeoSeoMetadataAppended = true;
+      return { default: fakeConstructor() };
+    }
+  };
+};
+
+// The same double, for the other module-scope call. `checkUrlTimeParam()`
+// (`dist/player.js:1018`, reached from `:2827`) returns early on a truthy
+// guard and otherwise WRITES the guard `true` and then installs the `message`
+// listener that turns a `vimeo_t_<videoId>` on the page url into a
+// `setCurrentTime` on the embed. The write matters here for the same reason it
+// does above: without it every outcome reads falsy afterwards, and a test that
+// looked at the global rather than at what the evaluation saw would pass on a
+// page whose listener is live (#329, #333).
+const fakeUrlTimeSdkImport = (): {
+  readonly importSdk: () => Promise<VimeoSdkModule>;
+  readonly evaluations: Evaluation[];
+} => {
+  const evaluations: Evaluation[] = [];
+  return {
+    evaluations,
+    importSdk: async () => {
+      const globals = window as unknown as Record<string, unknown>;
+      const listenerInstalled = !globals.VimeoCheckedUrlTimeParam;
+      evaluations.push({ guard: urlTimeGuard(), listenerInstalled });
+      if (listenerInstalled) globals.VimeoCheckedUrlTimeParam = true;
+      return { default: fakeConstructor() };
+    }
+  };
+};
 
 type Deferred<Value> = {
   promise: Promise<Value>;
@@ -44,6 +111,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete window.VimeoSeoMetadataAppended;
+  delete window.VimeoCheckedUrlTimeParam;
 });
 
 test('shares a single in-flight SDK load between concurrent calls', async () => {
@@ -96,40 +164,179 @@ test('contains a synchronously throwing importer in the returned promise', async
   ).resolves.toBeDefined();
 });
 
+// --- the seo-metadata guard ---
+//
+// Asserted at module evaluation rather than after the load, because after the
+// load there is nothing left to see: the SDK writes the guard `true` on its way
+// to installing the listener, so every one of these cases ends up truthy. What
+// Playdeck did or refused to do is only observable in the instant before the
+// import, which is where `evaluations` looks.
+
 test('sets the SDK seo-metadata guard before the import runs', async () => {
-  const seenDuringImport: unknown[] = [];
-  const importSdk = vi.fn(async () => {
-    seenDuringImport.push(seoGuard());
-    return { default: fakeConstructor() };
-  });
+  const { evaluations, importSdk } = fakeSdkImport();
 
   await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
 
-  expect(seenDuringImport).toEqual([true]);
+  expect(evaluations).toEqual([{ guard: true, listenerInstalled: false }]);
 });
 
 test('writes nothing to the seo-metadata guard when suppression is off', async () => {
-  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
-
-  await loadVimeoSdk(importSdk);
-  expect(seoGuard()).toBe('unset');
+  const first = fakeSdkImport();
+  await loadVimeoSdk(first.importSdk);
+  expect(first.evaluations).toEqual([
+    { guard: 'unset', listenerInstalled: true }
+  ]);
 
   resetVimeoSdkLoader();
-  await loadVimeoSdk(importSdk, { suppressSeoMetadata: false });
-  expect(seoGuard()).toBe('unset');
+  delete window.VimeoSeoMetadataAppended;
+  const second = fakeSdkImport();
+  await loadVimeoSdk(second.importSdk, { suppressSeoMetadata: false });
+  expect(second.evaluations).toEqual([
+    { guard: 'unset', listenerInstalled: true }
+  ]);
 });
 
 test('leaves a seo-metadata guard the page already set, in either direction', async () => {
-  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+  const pinnedFalse = fakeSdkImport();
+  window.VimeoSeoMetadataAppended = false;
+  await loadVimeoSdk(pinnedFalse.importSdk, { suppressSeoMetadata: true });
+  // Untouched by Playdeck, so the SDK found the `false` the page set and
+  // installed its listener — the observable proof nothing overwrote it.
+  expect(pinnedFalse.evaluations).toEqual([
+    { guard: false, listenerInstalled: true }
+  ]);
+
+  resetVimeoSdkLoader();
+  const pinnedTrue = fakeSdkImport();
+  window.VimeoSeoMetadataAppended = true;
+  await loadVimeoSdk(pinnedTrue.importSdk, { suppressSeoMetadata: true });
+  expect(pinnedTrue.evaluations).toEqual([
+    { guard: true, listenerInstalled: false }
+  ]);
+});
+
+// --- what a caller is told about its own request (#333) ---
+//
+// The predicate reports the page's outcome, not this call's mechanism, so both
+// ways a request goes nowhere answer the same. Every case below asserts it
+// against `listenerInstalled` from the same load: the listener is the thing
+// that actually sends `window.location.href`, so "suppressed" can only mean
+// "no listener", and tying the two together is what stops the predicate
+// drifting into reporting something easier to compute than the truth.
+
+test('answers nothing before any load has decided', () => {
+  expect(isSeoMetadataSuppressed()).toBeUndefined();
+});
+
+test('reports suppression once a load has applied it', async () => {
+  const { evaluations, importSdk } = fakeSdkImport();
+
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(evaluations[0]?.listenerInstalled).toBe(false);
+  expect(isSeoMetadataSuppressed()).toBe(true);
+});
+
+test('reports no suppression after a load that did not ask for it', async () => {
+  const { evaluations, importSdk } = fakeSdkImport();
+
+  await loadVimeoSdk(importSdk);
+
+  expect(evaluations[0]?.listenerInstalled).toBe(true);
+  expect(isSeoMetadataSuppressed()).toBe(false);
+});
+
+// The SDK's own write is what makes this case the trap. The first load leaves
+// the guard `true` with the listener live, so a predicate that read the global
+// here would answer "suppressed" for a page that is sending its url.
+test('reports no suppression for a request that arrived at the cached SDK', async () => {
+  const { evaluations, importSdk } = fakeSdkImport();
+
+  await loadVimeoSdk(importSdk);
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(evaluations).toHaveLength(1);
+  expect(evaluations[0]?.listenerInstalled).toBe(true);
+  expect(seoGuard()).toBe(true);
+  expect(isSeoMetadataSuppressed()).toBe(false);
+});
+
+test('reports suppression for a request the earlier load already honoured', async () => {
+  const { evaluations, importSdk } = fakeSdkImport();
+
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(evaluations[0]?.listenerInstalled).toBe(false);
+  expect(isSeoMetadataSuppressed()).toBe(true);
+});
+
+test('reports no suppression when the page pinned the guard to false', async () => {
+  const { evaluations, importSdk } = fakeSdkImport();
 
   window.VimeoSeoMetadataAppended = false;
   await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
-  expect(seoGuard()).toBe(false);
+
+  expect(evaluations[0]?.listenerInstalled).toBe(true);
+  // The SDK overwrote the page's `false` on its way in. A live read would call
+  // this suppressed; the recorded answer does not.
+  expect(seoGuard()).toBe(true);
+  expect(isSeoMetadataSuppressed()).toBe(false);
+});
+
+// Truthy, not `=== true`: `initAppendVideoMetadata` returns early on any truthy
+// value, so a page that set the guard to one has suppression in effect.
+test('reports suppression for a truthy guard the page set itself', async () => {
+  const { evaluations, importSdk } = fakeSdkImport();
+
+  (window as unknown as Record<string, unknown>).VimeoSeoMetadataAppended = 1;
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(evaluations[0]?.listenerInstalled).toBe(false);
+  expect(isSeoMetadataSuppressed()).toBe(true);
+});
+
+test('answers nothing when the only load rejected', async () => {
+  const importSdk = vi
+    .fn<() => Promise<VimeoSdkModule>>()
+    .mockRejectedValue(new Error('The network dropped the SDK request.'));
+
+  await expect(
+    loadVimeoSdk(importSdk, { suppressSeoMetadata: true })
+  ).rejects.toThrow('The network dropped the SDK request.');
+
+  expect(isSeoMetadataSuppressed()).toBeUndefined();
+});
+
+// A retry after a failure re-imports, and its evaluation is the one that
+// decided. The guard Playdeck wrote before the failed attempt is still there,
+// so the retry finds it truthy and suppression holds.
+test('answers from the retry that succeeded after a failed load', async () => {
+  const retry = fakeSdkImport();
+  const importSdk = vi
+    .fn<() => Promise<VimeoSdkModule>>()
+    .mockRejectedValueOnce(new Error('The network dropped the SDK request.'))
+    .mockImplementationOnce(retry.importSdk);
+
+  await expect(
+    loadVimeoSdk(importSdk, { suppressSeoMetadata: true })
+  ).rejects.toThrow('The network dropped the SDK request.');
+  expect(isSeoMetadataSuppressed()).toBeUndefined();
+
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(retry.evaluations[0]?.listenerInstalled).toBe(false);
+  expect(isSeoMetadataSuppressed()).toBe(true);
+});
+
+test('resetVimeoSdkLoader clears the recorded suppression answer', async () => {
+  const { importSdk } = fakeSdkImport();
+
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+  expect(isSeoMetadataSuppressed()).toBe(true);
 
   resetVimeoSdkLoader();
-  window.VimeoSeoMetadataAppended = true;
-  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
-  expect(seoGuard()).toBe(true);
+  expect(isSeoMetadataSuppressed()).toBeUndefined();
 });
 
 test('resetVimeoSdkLoader clears the cached SDK', async () => {
@@ -139,4 +346,104 @@ test('resetVimeoSdkLoader clears the cached SDK', async () => {
   resetVimeoSdkLoader();
   await loadVimeoSdk(importSdk);
   expect(importSdk).toHaveBeenCalledTimes(2);
+});
+
+// --- the url-time guard (#329) ---
+//
+// Asserted at module evaluation for the same reason as the guard above: the SDK
+// writes this one `true` on its way to installing the listener, so afterwards
+// every outcome reads truthy and the global says nothing about whether a
+// listener exists.
+
+test('sets the SDK url-time guard before the import runs, with no option asked for', async () => {
+  const { evaluations, importSdk } = fakeUrlTimeSdkImport();
+
+  await loadVimeoSdk(importSdk);
+
+  expect(evaluations).toEqual([{ guard: true, listenerInstalled: false }]);
+});
+
+// The whole point of it being always-on: `suppressSeoMetadata` is the only
+// option this loader takes, and neither value of it reaches this guard.
+test('sets the url-time guard whatever the seo-metadata option says', async () => {
+  for (const suppressSeoMetadata of [true, false] as const) {
+    resetVimeoSdkLoader();
+    delete window.VimeoSeoMetadataAppended;
+    delete window.VimeoCheckedUrlTimeParam;
+    const { evaluations, importSdk } = fakeUrlTimeSdkImport();
+
+    await loadVimeoSdk(importSdk, { suppressSeoMetadata });
+
+    expect(evaluations).toEqual([{ guard: true, listenerInstalled: false }]);
+  }
+});
+
+// Non-clobbering, on the same terms as the seo guard. A page that pinned this
+// to `false` is deliberately re-enabling `vimeo_t_` deep links on its own page,
+// and that is the only escape hatch there is from a page-wide switch with no
+// option behind it.
+test('leaves a url-time guard the page already set, in either direction', async () => {
+  const pinnedFalse = fakeUrlTimeSdkImport();
+  window.VimeoCheckedUrlTimeParam = false;
+  await loadVimeoSdk(pinnedFalse.importSdk);
+  // Untouched by Playdeck, so the SDK found the `false` the page set and
+  // installed its listener — the observable proof nothing overwrote it.
+  expect(pinnedFalse.evaluations).toEqual([
+    { guard: false, listenerInstalled: true }
+  ]);
+
+  resetVimeoSdkLoader();
+  delete window.VimeoCheckedUrlTimeParam;
+  const pinnedTrue = fakeUrlTimeSdkImport();
+  window.VimeoCheckedUrlTimeParam = true;
+  await loadVimeoSdk(pinnedTrue.importSdk);
+  expect(pinnedTrue.evaluations).toEqual([
+    { guard: true, listenerInstalled: false }
+  ]);
+});
+
+// The cached-module case, which for `suppressSeoMetadata` is a reportable gap
+// and here is not. Every load asks for this guard, so the load that imports
+// always asks — there is no way for a later call to arrive at an evaluated
+// module carrying a request the importing call did not make. Nothing is left
+// for a recorded answer to tell anyone, which is why the loader keeps none.
+test('the importing load is the one that sets the url-time guard, and it always asks', async () => {
+  const { evaluations, importSdk } = fakeUrlTimeSdkImport();
+
+  await loadVimeoSdk(importSdk);
+  await loadVimeoSdk(importSdk, { suppressSeoMetadata: true });
+
+  expect(evaluations).toHaveLength(1);
+  expect(evaluations[0]?.listenerInstalled).toBe(false);
+});
+
+// A failed import evaluated nothing, but the write happened before it and is
+// not rolled back — so the retry finds the guard truthy and no listener is
+// installed on the evaluation that does count.
+test('a retry after a failed load still finds the url-time guard set', async () => {
+  const retry = fakeUrlTimeSdkImport();
+  const importSdk = vi
+    .fn<() => Promise<VimeoSdkModule>>()
+    .mockRejectedValueOnce(new Error('The network dropped the SDK request.'))
+    .mockImplementationOnce(retry.importSdk);
+
+  await expect(loadVimeoSdk(importSdk)).rejects.toThrow(
+    'The network dropped the SDK request.'
+  );
+  await loadVimeoSdk(importSdk);
+
+  expect(retry.evaluations).toEqual([
+    { guard: true, listenerInstalled: false }
+  ]);
+});
+
+// The two guards are independent globals, and writing one must not disturb the
+// other — the seo guard stays an option, and this one stays unconditional.
+test('the two module-scope guards do not interfere', async () => {
+  const importSdk = vi.fn(async () => ({ default: fakeConstructor() }));
+
+  await loadVimeoSdk(importSdk);
+
+  expect(seoGuard()).toBe('unset');
+  expect(urlTimeGuard()).toBe(true);
 });

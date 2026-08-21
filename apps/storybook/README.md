@@ -42,13 +42,35 @@ the test origin.
 
 ## Fixture media
 
-`public/` holds the clips the `Real playback/*` stories play. Both are one
-second, 30fps, video-only H.264 with `+faststart`, so they behave identically
-offline and in CI.
+`public/` holds the clips the `Real playback/*` stories play. All are one
+second, 30fps and video-only, so they behave identically offline and in CI; the
+two MP4s are H.264 with `+faststart`.
 
 - `tracer.mp4` — 320×180 (16:9). It arrived whole in the commit that added it
   and how it was produced is recorded nowhere, which is why the next entry
   exists.
+- `tracer.webm` — 320×180 (16:9), 8,863 bytes, VP8. The same clip as
+  `tracer.mp4`, transcoded from it, and the reference example offers both as one
+  `<source>` set with the MP4 first.
+
+  It exists for engines with no H.264 decoder, and specifically for a locally
+  installed Playwright Linux WebKit, which answers `''` for `avc1`. That engine
+  does not fail to decode an MP4 — it rejects a `<source type="video/mp4">`
+  during source selection and never requests it (`networkState` 3), so a lone
+  MP4 left the reference composition stuck at `activation: 'loading-provider'`
+  with its control row `hidden` and every e2e test over it failing on the
+  arrangement. With the WebM behind it, `e2e/reference.spec.ts` and
+  `e2e/rapid-slider-presses.spec.ts` run locally on all three engines. HLS still
+  does need the codec, so the HLS swap remains CI-only.
+
+  Reproduce it with:
+
+  ```sh
+  ffmpeg -y -i public/tracer.mp4 \
+    -c:v libvpx -b:v 48k -deadline best -cpu-used 0 -an \
+    public/tracer.webm
+  ```
+
 - `tracer-portrait.mp4` — 360×640 (9:16), 8,373 bytes. Added for
   `Real playback/AspectRatio`, which needs a source that is visibly not 16:9.
   9:16 rather than the issue's 1080×1920 because only the ratio is load-bearing

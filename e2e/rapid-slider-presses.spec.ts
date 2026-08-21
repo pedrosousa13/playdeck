@@ -14,11 +14,10 @@ import {
 // nothing here waits for the media element to go quiet first — a test that only
 // passes because it waited proves the opposite of what this file is for.
 //
-// WebKit, for whoever meets a red run on it: CI has now run all four of these
-// on that engine, and three of them are excluded from it as a result. Each of
-// the three is skipped at the top of its own test with the issue it is waiting
-// on. The volume `End`/`Home`/`End` gesture passed cleanly there and still runs
-// on all three engines.
+// WebKit, for whoever meets a red run on it: CI has run all four of these on
+// that engine, and three of them are excluded from it as a result. Each of the
+// three is skipped at the top of its own test with the issue that accounts for
+// it. The volume `End`/`Home`/`End` gesture runs on all three engines.
 //
 // The two arrow gestures were flaky on WebKit and are excluded under #278.
 // Playwright's injected key events return to WebKit's task queue between one
@@ -33,25 +32,123 @@ import {
 // defect against the pre-fix source (`[1, 1, 1]`, the player left silent) and
 // pass against this one.
 //
-// The seek gesture failed outright and is excluded under #277, which is not a
-// harness limitation but a suspected WebKit-only defect in the library. Its
-// `shown` assertion passed — `[0, 1, 0]`, every press seen, the optimistic
-// render working — and what failed is that the media never arrived: the input
-// was polled 14 times across 5 seconds and read `"0"` every time, and since
-// `useSeekPreview` holds a requested value for 2000ms after the chain drains, a
-// seek that had been issued would have shown. The third `End` issued no seek
-// request at all. Arrangement explanations were tried on local WebKit and ruled
-// out. That is the engine where #271's own seek failure was first seen, so what
-// is set aside there is an open bug and not a quirk of this file.
+// The seek gesture failed outright on the WebKit leg under #277 and was
+// excluded from it. Its `shown` assertion passed — `[0, 1, 0]`, every press
+// seen, the optimistic render working — and what failed is that the media never
+// arrived: the input was polled 14 times across 5 seconds and read `"0"` every
+// time, and since `useSeekPreview` holds a requested value for 2000ms after the
+// chain drains, a seek that had been issued would have shown. That was read at
+// the time as the third `End` issuing no seek request at all. That reading was
+// wrong: with the media element instrumented, the third press does issue its
+// seek, and what the poll caught is one of the two failure modes below.
 //
-// None of this could be settled before CI, and still cannot be settled here: a
-// locally installed Playwright Linux WebKit has no H.264 (`canPlayType` for
-// `avc1` is empty), so the composed example never reaches activation `ready`,
-// hides its whole control row, and every test in this file fails on the
-// arrangement — identically with main's `packages/react` in place, and the
-// archive records the same for the rest of the media suite. CI installs the
-// codec set alongside the browser (`playwright install --with-deps` in
-// `.github/workflows/ci.yml`), so CI is where WebKit evidence has to come from.
+// It ran on WebKit again under #384, as an experiment rather than a claim that
+// the defect was gone, and the experiment came back negative. The same
+// assertion failed with the same values — `"1"` expected, `"0"` read. It was
+// flaky rather than cleanly red: it failed a first attempt and passed a later
+// one, so the leg was green and the failure was visible only in the log. It is
+// excluded from WebKit again for that reason, under #344's criterion 18 — a
+// green run has to mean every test passed on its first attempt, and a
+// knowingly-flaky test on `main` spends a retry and hides the next flake behind
+// itself, which is how this defect stayed unnoticed in the first place.
+//
+// What the experiment bought is one mechanism struck off, not a cause. The
+// control used to hand its input values the input cannot keep — a ~1s window
+// under the default 1s step leaves it two — which desynchronises React's value
+// tracker from the DOM permanently, and React then drops a change event whose
+// value matches what the tracker holds. That was the only mechanism anyone had
+// that produces this exact shape; #384 fixed it at the source in `SeekSlider`
+// and the failure survived it, so it is not the cause.
+//
+// Ruled out and carried forward: the media element, the command path, a bare
+// range input, and the spacing of the presses. And it has NEVER been reproduced
+// on a local WebKit — ~70 runs of exactly this gesture across congestion burns
+// of 0 to 400, a `currentTime` setter answering up to 400ms late so all three
+// presses genuinely land inside one round trip, and one and four workers, all
+// green.
+//
+// The instrumentation was then built and run on the CI leg — per press, the
+// `input`/`change` events, the DOM value, `input._valueTracker.getValue()` and
+// a `MutationObserver` over the input's attributes, alongside a probe on the
+// media element recording every `currentTime` assignment and every seek event.
+// It took three CI runs on the diagnostic branch below, and they are not
+// interchangeable. Run `32399893169` ran the gesture once, before sampling
+// existed, and was green: what it bought is the healthy WebKit control trace,
+// in which the presses land ~56ms apart (2646, 2704, 2758) against ~4ms on
+// chromium (1110, 1115, 1118). Run `32400760686` sampled the gesture 15 times
+// with `retries: 0`, instrumenting the input and React layer only, and 4 of
+// those samples failed (samples 2, 3, 5 and 9). Run `32402015727` sampled 15
+// times the same way with the media-element probe added: 10 failed and 5
+// passed. So two of the three runs sampled, at 4 of 15 and then 10 of 15 first
+// attempts, and the single attempt an ordinary run gives this gesture was
+// never going to catch it reliably.
+//
+// This header used to predict the opposite, and the prediction is corrected
+// here rather than dropped: whoever re-enabled the gesture to collect the
+// instrumentation was told to expect it to pass most attempts. With the media
+// probe installed it failed 10 of 15.
+//
+// It is a WebKit bug, and there is nothing in this library to fix. That rests
+// on run `32402015727` alone, since it is the only one that watched the media
+// element. All 15 of its samples, failing and passing alike, issued the
+// identical four `currentTime` assignments — `0` (this test's own parking
+// assignment), then `1`, `0`, `1`. What differed was WebKit's final `seeked`.
+// Nine of its ten failures were examined — eight in one batch comparison, plus
+// sample 1 read on its own, leaving sample 0 unexamined — and every one of the
+// nine reported `currentTime: 0`, the superseded target; all five passes
+// reported `currentTime: 1`. Sample 1's tail, verbatim: `setCurrentTime to:1
+// from:0` / `setCurrentTime to:0 from:1` / `setCurrentTime to:1 from:0` /
+// `seeking currentTime:1` / `seeked currentTime:0`. WebKit accepts the third
+// assignment, reports `currentTime` as `1` and fires `seeking` at `1`, and then
+// completes the seek at `0` — resolving the in-flight seek to the superseded
+// position and discarding the newer request it had already reported as the
+// official playback position. The media element is in the ruled-out list above;
+// that entry no longer holds.
+//
+// So the third press does issue its seek. In every failing sample that was
+// examined it fired a complete `keydown`, `input` and `change`, against
+// `max="1"`, `data-state="ready"`, a connected node and focus still on the seek
+// input, with the change carrying `value:"1"` and `tracked:"1"`. That rules
+// out: React's `_valueTracker` dedupe, since every press produced both an
+// `input` and a `change`; a null seek window, the `max` blip to `0` this header
+// used to name as the remaining suspect, since `max` never left `"1"` and
+// `data-state` never left `ready`; focus loss and node replacement, since
+// neither happened; and press spacing once more, since a sample failed with
+// 53-59ms gaps, the same spacing as samples that passed.
+//
+// Two failure modes have been seen, and they are NOT established as one cause.
+// Run `32400760686` produced both: sample 3 failed `toHaveValue("1")` reading
+// `"0"`, which is the mode the original sighting above records, while samples
+// 2, 5 and 9 failed the `currentTime` assertion with the input correctly
+// reading `"1"`. Both sit downstream of the same WebKit behaviour — the media
+// parks at `0` either way — but what selects between them was never
+// instrumented. One unexamined path, a hypothesis and not a finding:
+// `createCommandChain` calls `onDrained(ok)` when the chain empties and
+// `useSeekPreview` clears the requested value at once when `ok` is false, so a
+// command counted as failed would release the preview immediately and drop the
+// control to `"0"` instead of holding `"1"` until the echo deadline.
+//
+// The gesture therefore stays excluded from WebKit permanently. #344's
+// criterion 18 is still what requires the exclusion, on the same grounds as
+// above; what has changed is that it is no longer pending an investigation,
+// because the cause is an engine bug this library cannot fix. The diagnostic
+// branch `pedrosousa13/issue-277-on-webkit-the-third-of-three` (PR #386,
+// closed) and the three run IDs above are what is left to re-read the traces
+// from.
+//
+// This no longer has to wait for CI. It used to: every test in this file failed
+// on the arrangement locally, and the reason recorded here was that a locally
+// installed Playwright Linux WebKit has no H.264. That reason was wrong, and it
+// cost this issue its whole "CI only" framing. The engine never got as far as a
+// decoder. `'/tracer.mp4'` was stamped `video/mp4` from its extension and
+// rendered as a lone `<source type="video/mp4">`, which WebKit rejects during
+// source selection — `networkState` 3, `currentSrc` empty, no request issued at
+// all — so the composition sat at `activation: 'loading-provider'` with its
+// control row `hidden`. The reference example now offers the same clip as both
+// MP4 and WebM (`stories/reference/reference-player.tsx`), an engine with an
+// H.264 decoder still takes the MP4, and this file runs on a locally installed
+// WebKit. HLS is the one thing that genuinely does need the codec, so
+// `e2e/reference.spec.ts`'s HLS swap is still CI-only.
 
 const story = '/iframe.html?id=reference-player--real-sources&viewMode=story';
 
@@ -393,7 +490,7 @@ test('the seek control keeps End, Home and End pressed inside one round trip', a
 }) => {
   test.skip(
     browserName === 'webkit',
-    'On WebKit the third press issues no seek at all, an open library defect rather than a limit of this file (#277).'
+    'WebKit intermittently resolves a rapid seek sequence to the superseded target rather than the last one requested, parking the media at the start of the window instead of arriving at its end (#277).'
   );
 
   await page.goto(story);
@@ -434,11 +531,10 @@ test('the seek control keeps End, Home and End pressed inside one round trip', a
   await outranTheEcho(page);
 
   await expect(seekSliderInput(page)).toHaveValue('1');
-  // `>= 1` rather than exactly 1: chromium and firefox report exactly 1, while
-  // WebKit's currentTime after arriving at the end settles a fraction past it
-  // (1.000122584-1.000185166). The tolerance is kept while #277 holds this
-  // test off WebKit, so it is right again the day it goes back
-  // (e2e/reference.spec.ts).
+  // `>= 1` rather than exactly 1: chromium and firefox report exactly 1, and
+  // WebKit settles a fraction past the end on arrival
+  // (1.000122584-1.000185166) (e2e/reference.spec.ts). WebKit is the engine the
+  // tolerance was widened for, and the one now excluded from this test.
   await expect
     .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
     .toBeGreaterThanOrEqual(1);

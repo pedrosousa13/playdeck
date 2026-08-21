@@ -10,7 +10,9 @@ import {
   type PlayerSource
 } from '@playdeck/core';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
+import { INTERNAL_CONTROLLER } from './internal-controller.js';
 import {
+  collectPlayerActions,
   PlayerContext,
   PosterContext,
   type PlayerHandle
@@ -83,6 +85,19 @@ export type RootProps = NativePlaybackOptions &
     readonly mediaMetadata?: MediaMetadataInput | null;
     readonly defaultPlaybackRate?: number;
     readonly defaultVolume?: number;
+    /**
+     * Attempt `autoplay` even where the viewer matches
+     * `prefers-reduced-motion: reduce`. Playdeck otherwise starts no playback of
+     * its own for such a viewer: an `eager` or `viewport` autoplay is declined
+     * at the attempt, the player reaches `autoplay: 'suppressed'`, and the
+     * poster stays over the frame exactly as it does for a refused attempt.
+     *
+     * Defaults to `false`, and named for what it does rather than for the case
+     * it enables, so a call site setting it reads as the deliberate
+     * accessibility trade-off it is. Where `matchMedia` is unavailable the query
+     * cannot match and this prop changes nothing.
+     */
+    readonly ignoreReducedMotion?: boolean;
     readonly muted?: boolean;
     readonly onMutedChange?: (muted: boolean) => void;
     readonly onPlaybackRateChange?: (playbackRate: number) => void;
@@ -120,6 +135,7 @@ export const Root = ({
   defaultPlaybackRate = 1,
   defaultVolume = 1,
   endTime,
+  ignoreReducedMotion = false,
   loadMargin = '200px 0px',
   loadThreshold = 0,
   loading = 'viewport',
@@ -162,7 +178,11 @@ export const Root = ({
   const mutedChangeCallback = useRef(onMutedChange);
   const volumeChangeCallback = useRef(onVolumeChange);
   const playbackRateChangeCallback = useRef(onPlaybackRateChange);
-  const autoplayConfiguration = useRef({ autoplay, muted });
+  const autoplayConfiguration = useRef({
+    autoplay,
+    ignoreReducedMotion,
+    muted
+  });
   const pendingMuted = useRef<Reconciliation<boolean> | undefined>(undefined);
   const pendingVolume = useRef<Reconciliation<number> | undefined>(undefined);
   const pendingPlaybackRate = useRef<Reconciliation<number> | undefined>(
@@ -192,7 +212,7 @@ export const Root = ({
   mutedChangeCallback.current = onMutedChange;
   volumeChangeCallback.current = onVolumeChange;
   playbackRateChangeCallback.current = onPlaybackRateChange;
-  autoplayConfiguration.current = { autoplay, muted };
+  autoplayConfiguration.current = { autoplay, ignoreReducedMotion, muted };
   mediaMetadataSeed.current = mediaMetadata;
   /* eslint-enable react-hooks/refs */
 
@@ -377,7 +397,8 @@ export const Root = ({
       }
       ensurePreferenceSubscription();
       controller.configureAutoplay(autoplayConfiguration.current.autoplay, {
-        controlledMuted: autoplayConfiguration.current.muted
+        controlledMuted: autoplayConfiguration.current.muted,
+        ignoreReducedMotion: autoplayConfiguration.current.ignoreReducedMotion
       });
       if (!(media instanceof HTMLVideoElement)) {
         // Embed mounts have no seedable element properties, so replay the
@@ -460,11 +481,28 @@ export const Root = ({
       // keep hiding on the first frame. The attempt provably cannot have begun
       // this early -- `useActivation` prepares the media
       // (`use-activation.ts:627`) before `setProvider` (`:652`), and
-      // `#synchronizeAutoplay` (`player-controller.ts:631-651`) declines to
-      // apply `'attempting'` until there is a provider and a ready activation.
+      // `#synchronizeAutoplay` in `player-controller.ts` declines to apply
+      // `'attempting'` until there is a provider and a ready activation.
       // So the immediate call below for media that attaches already decodable
       // reads `'idle'` whatever the mode is, as does a `loadeddata` arriving
       // before the provider's `load()`.
+      //
+      // All of which is about an attempt autoplay is going to make. None of it
+      // can see one a *command* already made, and under `autoplay={false}` the
+      // gate above has no mode to read at all -- so a `play()` the browser
+      // refused with `NotAllowedError` left exactly the paused, uncovered frame
+      // described above, reached by a command instead of by autoplay (#244).
+      // Hence the second gate, on the same allow-list terms as the first: a
+      // command was issued for this media and playback never confirmed, so
+      // defer, refused or merely still in flight.
+      //
+      // The controller answers it rather than `Root` counting its own calls,
+      // because `Root` cannot see the calls that matter: `PlayButton` and every
+      // `usePlayerActions` consumer reach `controller.play` straight from the
+      // context, never through this component. It answers false again once a
+      // patch confirms playback -- the controller drops the record there, so a
+      // pause after confirmed playback does not re-arm it -- which leaves the
+      // `'started'` fall-through above reachable and unchanged.
       const onLoadedData = () => {
         const autoplayState = controller.getState().autoplay;
         if (
@@ -473,6 +511,7 @@ export const Root = ({
         ) {
           return;
         }
+        if (controller.hasUnconfirmedPlayAttempt()) return;
         if (
           currentMedia.current === media &&
           providerSourceTransition.current === attachedSourceTransition
@@ -577,20 +616,52 @@ export const Root = ({
     source: detectedSource
   });
 
-  // The handle is still the controller instance -- `Object.assign` mutates
-  // and returns it rather than spreading into a copy -- so the Storybook
-  // mock-player decorator and the off-screen-pause contract test, which both
-  // cast this same ref back to `PlayerController` to reach `setProvider`/
-  // `configureAutoplay` directly, keep resolving against the real controller.
-  // `activateFromInteraction` is an activation concern `useActivation` owns,
-  // not a controller method, so it joins the instance here rather than
-  // widening `PlayerController`'s own surface.
+  // The handle is a fresh object carrying exactly what `PlayerHandle`
+  // declares, never the controller instance. `Object.assign(controller, ...)`
+  // used to stand here, and it mutates and returns its target, so the ref
+  // handed out the whole `PlayerController` -- `setProvider`, `setActivation`,
+  // `configureAutoplay` and the `*WithOrigin` commands included. The narrowing
+  // was a TypeScript fiction one cast wide open, which let anyone holding the
+  // ref swap the provider out from under the player (#328).
+  //
+  // The three read members are named here; the rest come from
+  // `player-context.ts`'s `collectPlayerActions`, the single list
+  // `usePlayerActions` also builds from, so the two surfaces cannot drift.
+  // `activateFromInteraction` rides along from `useActivation` rather than
+  // widening `PlayerController` itself, as it is an activation concern the
+  // controller has no concept of. Guarded by index.test.tsx's "hands back only
+  // the declared PlayerHandle surface through the ref".
+  //
+  // `INTERNAL_CONTROLLER` is the one deliberate exception: the Storybook
+  // mock-player decorator and this package's test render helpers stage a fake
+  // provider, which needs the controller itself. It is a registered symbol
+  // (`internal-controller.ts` says why), named rather than stumbled into.
+  //
+  // Defined rather than written as a `[INTERNAL_CONTROLLER]: controller`
+  // property in the literal, because `Object.defineProperty` defaults to
+  // non-enumerable and a plain symbol property does not. Object spread copies
+  // enumerable *symbol* keys -- unlike `Object.keys` and `JSON.stringify`,
+  // which drop symbols outright -- so a first-party wrapper narrowing the
+  // handle with `{...ref.current}` before handing it to a vendor overlay, the
+  // exact shape #328's failure scenario describes, would otherwise hand over
+  // the whole controller with it. Pinned by index.test.tsx's "keeps the
+  // internal controller hatch out of every enumeration of the handle".
   useImperativeHandle(
     ref,
     () =>
-      Object.assign(controller, {
-        activateFromInteraction: activation.activateFromInteraction
-      }),
+      Object.defineProperty(
+        {
+          getState: controller.getState,
+          subscribe: controller.subscribe,
+          on: controller.on,
+          ...collectPlayerActions(
+            controller,
+            activation.activateFromInteraction
+          )
+        },
+        INTERNAL_CONTROLLER,
+        { value: controller }
+      ),
     [activation.activateFromInteraction, controller]
   );
   const registerActivationMedia = activation.registerMedia;
@@ -617,8 +688,11 @@ export const Root = ({
   }, [controller, detachPreparedMedia]);
 
   useEffect(() => {
-    controller.configureAutoplay(autoplay, { controlledMuted: muted });
-  }, [autoplay, controller, muted]);
+    controller.configureAutoplay(autoplay, {
+      controlledMuted: muted,
+      ignoreReducedMotion
+    });
+  }, [autoplay, controller, ignoreReducedMotion, muted]);
 
   useEffect(() => {
     controller.setCaptionRenderer(captionRenderer ?? 'custom');

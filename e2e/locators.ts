@@ -33,6 +33,9 @@ export const muteButton = (page: Page) =>
 export const captionsButton = (page: Page) =>
   page.locator('[data-playdeck-part="captions-button"]');
 
+export const loadingIndicator = (page: Page) =>
+  page.locator('[data-playdeck-part="loading-indicator"]');
+
 // `CaptionsMenu` is a preset assembly over `SettingsMenu`, so TWO elements
 // carry `data-playdeck-part="settings-menu-trigger"` in this composition. The
 // part alone is a strict-mode ambiguity; the aria-label disambiguates without

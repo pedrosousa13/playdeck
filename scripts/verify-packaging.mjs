@@ -7,11 +7,18 @@
 // New workspace packages are covered automatically: package discovery comes
 // from scripts/workspace-packages.mjs, the single definition of "publishable"
 // this repo has. Nothing here is hardcoded to today's package names.
+//
+// The fixture install is the one in this repository that runs outside the
+// workspace, and #336 is the record of what that cost. It now replays
+// tests/packaging/fixture/pnpm-lock.yaml under a copy of the root
+// pnpm-workspace.yaml; `--update-fixture-lockfile` regenerates that lockfile
+// and does nothing else.
 
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import {
+  copyFileSync,
   cpSync,
   mkdtempSync,
   readFileSync,
@@ -22,6 +29,10 @@ import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
+import {
+  fixtureWorkspaceYaml,
+  reresolvedPackages
+} from './packaging-fixture.mjs';
 import { publishablePackages } from './workspace-packages.mjs';
 
 const console = globalThis.console;
@@ -29,6 +40,7 @@ const process = globalThis.process;
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const fixtureTemplate = join(repoRoot, 'tests/packaging/fixture');
+const fixtureLockfile = join(fixtureTemplate, 'pnpm-lock.yaml');
 
 /**
  * @typedef {import('./workspace-packages.mjs').PublishablePackage} PublishablePackage
@@ -234,6 +246,49 @@ async function main() {
   }
 }
 
+// The fixture is copied out of the repository, so the root
+// `pnpm-workspace.yaml` stops governing it -- no advisory floors, no
+// `minimumReleaseAge` cooldown, none of its exclusions. This puts the root file
+// itself in the temp directory, minus the member globs and plus the tarball
+// overrides, so the one install that then executes what it resolved is held to
+// the same rules as every other install here. See #336, and
+// scripts/packaging-fixture.mjs for why it is derived rather than transcribed.
+/**
+ * @param {string} fixtureDir
+ * @param {Readonly<Record<string, string>>} tarballSpecs
+ */
+const writeFixtureWorkspace = (fixtureDir, tarballSpecs) =>
+  writeFileSync(
+    join(fixtureDir, 'pnpm-workspace.yaml'),
+    fixtureWorkspaceYaml(
+      readFileSync(join(repoRoot, 'pnpm-workspace.yaml'), 'utf8'),
+      tarballSpecs
+    )
+  );
+
+// Regenerates `tests/packaging/fixture/pnpm-lock.yaml` from the fixture's own
+// manifest, under the same synthesised workspace file the verification run
+// uses -- so the versions it pins are the ones the advisory floors and the
+// cooldown allow, and a lockfile resolved unfloored is never what gets
+// replayed. Run it after changing the fixture's dependencies, or after a root
+// floor moves one of them; delete the lockfile first to re-resolve the whole
+// closure rather than only what the manifest changed.
+//
+// The `@playdeck/*` tarballs are deliberately absent: their specs are per-run
+// temp paths, so anything they pin would be stale the moment it was written.
+function updateFixtureLockfile() {
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'playdeck-packaging-lock-'));
+  try {
+    cpSync(fixtureTemplate, fixtureDir, { recursive: true });
+    writeFixtureWorkspace(fixtureDir, {});
+    run('pnpm', ['install', '--lockfile-only'], { cwd: fixtureDir });
+    copyFileSync(join(fixtureDir, 'pnpm-lock.yaml'), fixtureLockfile);
+    console.log(`\nWrote ${fixtureLockfile}`);
+  } finally {
+    rmSync(fixtureDir, { recursive: true, force: true });
+  }
+}
+
 /**
  * @param {readonly PublishablePackage[]} packages
  * @param {string} tarballDir
@@ -257,21 +312,30 @@ async function runFixture(packages, tarballDir) {
     Object.assign(manifest.dependencies, tarballSpecs);
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
-    // Packages depend on each other by workspace name (e.g. @playdeck/react
-    // depends on @playdeck/core). `pnpm pack` rewrites those to plain semver
-    // ranges, which don't exist on the real registry. Force every internal
-    // dependency, however deep, to resolve to the tarball being tested.
-    const overridesYaml = [
-      'overrides:',
-      ...Object.entries(tarballSpecs).map(
-        ([name, spec]) => `  ${JSON.stringify(name)}: ${JSON.stringify(spec)}`
-      ),
-      ''
-    ].join('\n');
-    writeFileSync(join(fixtureDir, 'pnpm-workspace.yaml'), overridesYaml);
+    writeFixtureWorkspace(fixtureDir, tarballSpecs);
 
     console.log('\n--- Installing packed tarballs into the fixture ---');
+    // `--no-frozen-lockfile` is a necessity, not a convenience: the
+    // `@playdeck/*` specs above are `file:` paths into a per-run temp directory
+    // and carry the version under test, so no committed lockfile can satisfy
+    // `--frozen-lockfile` exactly. Everything else is replayed from
+    // `tests/packaging/fixture/pnpm-lock.yaml`, and the check below is what
+    // proves it rather than assuming it.
     run('pnpm', ['install', '--no-frozen-lockfile'], { cwd: fixtureDir });
+
+    const reresolved = reresolvedPackages(
+      readFileSync(fixtureLockfile, 'utf8'),
+      readFileSync(join(fixtureDir, 'pnpm-lock.yaml'), 'utf8')
+    );
+    if (reresolved.length > 0) {
+      throw new Error(
+        `The fixture install did not replay ${fixtureLockfile}. It resolved:\n` +
+          `${reresolved.map((entry) => `  ${entry}`).join('\n')}\n` +
+          'Either the fixture manifest changed without the lockfile being ' +
+          'regenerated (node scripts/verify-packaging.mjs ' +
+          '--update-fixture-lockfile), or pnpm stopped replaying it.'
+      );
+    }
 
     console.log('\n--- Building the fixture ---');
     run('pnpm', ['run', 'build'], { cwd: fixtureDir });
@@ -355,7 +419,11 @@ async function smokeTest(distDir) {
 }
 
 try {
-  await main();
+  if (process.argv.includes('--update-fixture-lockfile')) {
+    updateFixtureLockfile();
+  } else {
+    await main();
+  }
 } catch (error) {
   // Not every throw is an Error -- a spawned tool that rejects with a string
   // used to print an empty line and exit 1 with no reason given.

@@ -8,7 +8,7 @@ import {
   type Ref
 } from 'react';
 import { permittedUrl } from './permitted-url.js';
-import { usePlayer } from './player-context.js';
+import { useRefusedUrlReport, usePlayer } from './player-context.js';
 
 export type ViewportProps = ComponentPropsWithRef<'div'>;
 
@@ -171,8 +171,52 @@ export const Media = ({
   'aria-label': ariaLabel,
   ...rest
 }: MediaProps) => {
-  const { controls, preload, registerMedia, source, sourceCommitted } =
-    usePlayer();
+  const {
+    controller,
+    controls,
+    preload,
+    registerMedia,
+    source,
+    sourceCommitted
+  } = usePlayer();
+  // Both filters run here, above every early return, because the report below
+  // is a hook and a hook cannot sit after one. That also settles a question
+  // worth stating: a refused `nativePoster` or text track is reported for an
+  // embed source too, where neither prop would have been rendered at all. The
+  // detection is about the consumer's value, not about which branch consumed
+  // it -- the CMS field is poisoned whichever provider the source resolves to
+  // (#330).
+  const nativePosterSrc = permittedUrl(nativePoster);
+  const nativePosterRefused =
+    nativePoster !== undefined && nativePosterSrc === undefined;
+  // Filtered before the map, not inside it: a rejected entry's `key` (derived
+  // from its own un-resolved `src`) never needs computing, and the
+  // survivors' keys stay stable across renders that only add or remove a
+  // rejected entry (#236). Goes through `permittedUrl` (`permitted-url.ts`),
+  // this package's one check-then-resolve helper against the shared
+  // allowlist, rather than calling `isPermittedSourceUrl` and
+  // `resolveNetworkPath` separately here -- the exact duplication
+  // `permitted-url.ts` was extracted to end. It also guards a `src` that is
+  // `undefined` at runtime rather than throwing: the declared `string` type
+  // only binds a caller that is type-checked, and the #224 comment above
+  // records the same gap for untyped CMS data walking past a declared type.
+  const permittedTextTracks = textTracks?.flatMap((track) => {
+    const resolvedSrc = permittedUrl(track.src);
+    return resolvedSrc !== undefined ? [{ ...track, resolvedSrc }] : [];
+  });
+  // `permittedTextTracks` is `undefined` exactly when `textTracks` is, and is a
+  // subset of it otherwise, so a shorter list is the only way a track can have
+  // been refused. Read through the optional chain rather than defaulted to a
+  // length of zero: with no `textTracks` at all there is nothing to have
+  // refused, so the guard already covers that case and a fallback would only
+  // state one that cannot arise.
+  const textTrackRefused =
+    textTracks !== undefined &&
+    permittedTextTracks?.length !== textTracks.length;
+  // One registration per surface, each standing only while THIS `Media` refuses
+  // that surface -- see `useRefusedUrlReport` (`player-context.ts`) (#330).
+  useRefusedUrlReport(controller, 'nativePoster', nativePosterRefused);
+  useRefusedUrlReport(controller, 'textTracks src', textTrackRefused);
   // Merge the consumer ref onto the internal registration inside one callback
   // ref (rather than Viewport's stable-callback + separate `[ref]` effect):
   // Media is committed-source-gated and mounts its <video> late, so a `[ref]`
@@ -257,22 +301,6 @@ export const Media = ({
     delete (passthrough as Record<string, unknown>)[excluded.toLowerCase()];
   }
 
-  // Filtered before the map, not inside it: a rejected entry's `key` (derived
-  // from its own un-resolved `src`) never needs computing, and the
-  // survivors' keys stay stable across renders that only add or remove a
-  // rejected entry (#236). Goes through `permittedUrl` (`permitted-url.ts`),
-  // this package's one check-then-resolve helper against the shared
-  // allowlist, rather than calling `isPermittedSourceUrl` and
-  // `resolveNetworkPath` separately here -- the exact duplication
-  // `permitted-url.ts` was extracted to end. It also guards a `src` that is
-  // `undefined` at runtime rather than throwing: the declared `string` type
-  // only binds a caller that is type-checked, and the #224 comment above
-  // records the same gap for untyped CMS data walking past a declared type.
-  const permittedTextTracks = textTracks?.flatMap((track) => {
-    const resolvedSrc = permittedUrl(track.src);
-    return resolvedSrc !== undefined ? [{ ...track, resolvedSrc }] : [];
-  });
-
   return (
     <video
       playsInline
@@ -289,7 +317,7 @@ export const Media = ({
       // shared allowlist that gates a source URL, applied to this
       // consumer-supplied prop through `permittedUrl` (`permitted-url.ts`)
       // rather than forked into a second scheme test (#236).
-      poster={permittedUrl(nativePoster)}
+      poster={nativePosterSrc}
       preload={preload}
       ref={mediaRef}
       style={{ ...nativeMediaStyle, ...style }}

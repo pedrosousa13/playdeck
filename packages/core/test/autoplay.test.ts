@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import {
   PlayerController,
   type AutoplayMode,
@@ -70,6 +70,22 @@ const deferred = <Value>() => {
 };
 
 const flushCommands = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+// This file runs in the node environment, so `matchMedia` is absent unless a
+// test puts one there — which is the "no `matchMedia`" case of #311, and the
+// reason every other test in this file keeps attempting autoplay unchanged.
+const stubReducedMotion = (matches: boolean): string[] => {
+  const queries: string[] = [];
+  vi.stubGlobal('matchMedia', (query: string) => {
+    queries.push(query);
+    return { matches };
+  });
+  return queries;
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 test('does not attempt autoplay when it is disabled', () => {
   const mode: AutoplayMode = false;
@@ -802,4 +818,185 @@ test('issues no muted-autoplay play before load either', async () => {
   expect(eager.calls.indexOf('play')).toBeGreaterThan(
     eager.calls.indexOf('load')
   );
+});
+
+test('suppresses the autoplay attempt when the viewer asked for reduced motion', async () => {
+  const queries = stubReducedMotion(true);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await flushCommands();
+
+  expect(queries).toEqual(['(prefers-reduced-motion: reduce)']);
+  expect(fake.calls).toEqual([]);
+  expect(controller.getState()).toMatchObject({
+    autoplay: 'suppressed',
+    autoplayRecovered: false,
+    error: null
+  });
+});
+
+test('suppresses a muted autoplay before it mutes anything', async () => {
+  stubReducedMotion(true);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('muted');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await flushCommands();
+
+  expect(fake.calls).toEqual([]);
+  expect(controller.getState().autoplay).toBe('suppressed');
+});
+
+test('attempts autoplay under reduced motion when the consumer opts out', async () => {
+  stubReducedMotion(true);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible', { ignoreReducedMotion: true });
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+
+  fake.emit({ playback: 'playing' }, playEvent);
+  expect(controller.getState().autoplay).toBe('started');
+});
+
+test('attempts autoplay where the reduced-motion query does not match', async () => {
+  stubReducedMotion(false);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+  expect(controller.getState().autoplay).toBe('attempting');
+});
+
+// The support floor is not raised by this: a media query that never matches
+// simply does not apply, so an environment with no `matchMedia` at all — server
+// rendering included — autoplays exactly as it did before #311.
+test('attempts autoplay where matchMedia is unavailable', async () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+});
+
+// A `matchMedia` that is present but broken must fail the same way an absent one
+// does — the query does not match, autoplay proceeds — and must never take the
+// player down with it. `#synchronizeAutoplay` has no `try` around it, so a throw
+// out of the preference read escaped as a player-level `provider` error: the
+// viewer got `lifecycle: 'error'` and no playback at all, from a media query.
+// A host page that patches `matchMedia` (a polyfill, a test harness, an
+// extension) is not exotic, and a reduced-motion check is the last thing that
+// should be able to break a player (#311).
+test.each([
+  [
+    'throws',
+    () => {
+      throw new Error('matchMedia is not available');
+    }
+  ],
+  ['returns undefined', () => undefined],
+  ['returns an object with no matches', () => ({})],
+  ['returns a truthy non-boolean matches', () => ({ matches: 'yes' })]
+])('attempts autoplay where matchMedia %s', async (_label, implementation) => {
+  vi.stubGlobal('matchMedia', implementation);
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(fake.provider);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await vi.waitFor(() => expect(fake.calls).toEqual(['play']));
+  expect(controller.getState()).toMatchObject({
+    autoplay: 'attempting',
+    lifecycle: 'ready',
+    error: null
+  });
+});
+
+// The preference is read once per decision, not subscribed to. A player that
+// has already decided keeps its decision; the next source reads the query
+// again, which is what makes a mid-session change reach the players that have
+// yet to decide (#311).
+test('reads the reduced-motion query again for the next source', async () => {
+  const queries = stubReducedMotion(true);
+  const first = createProvider();
+  const second = createProvider();
+  const controller = new PlayerController();
+  controller.configureAutoplay('audible');
+  controller.setProvider(first.provider);
+  first.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+  await flushCommands();
+  expect(controller.getState().autoplay).toBe('suppressed');
+
+  vi.unstubAllGlobals();
+  stubReducedMotion(false);
+  controller.setProvider(second.provider);
+  second.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+
+  await vi.waitFor(() => expect(second.calls).toEqual(['play']));
+  expect(queries).toEqual(['(prefers-reduced-motion: reduce)']);
+});
+
+// #244: `hasUnconfirmedPlayAttempt` answers `Root`'s first-frame poster writer,
+// and it has to mean "an attempt is still waiting on confirmation" rather than
+// "not playing since some play was issued". A record left standing past the
+// patch that confirms playback would answer for every later pause in the same
+// generation, and would swallow the `'started'` fall-through the writer's first
+// gate depends on.
+test('drops the play attempt once a patch confirms playback', async () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+
+  await controller.play();
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(true);
+
+  // Nothing is asserted between these two emits on purpose: while playback
+  // reads `'playing'` the predicate answers false on its own term whether or
+  // not the record was dropped, so an assertion there would pin nothing. The
+  // pause is what tells the two apart, and the assertion after it is what pins
+  // the drop.
+  fake.emit({ playback: 'playing' }, playEvent);
+  fake.emit({ playback: 'paused' });
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(false);
+});
+
+// The other half of the same rule, and the one #244 is filed for: nothing
+// confirmed this attempt, so the record stands for the rest of the generation.
+// A pause reported after the refusal must not clear it -- the media is still
+// sitting on the frame the refusal left paused, and the poster has to stay over
+// it however many patches arrive afterwards.
+test('keeps the play attempt standing when a refusal is followed by a pause', async () => {
+  const fake = createProvider({
+    play: async () => ({ ok: false, reason: 'blocked' })
+  });
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+  fake.emit({ lifecycle: 'ready', activation: 'ready' }, readyEvent);
+
+  const result = await controller.play();
+  expect(result).toMatchObject({ ok: false });
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(true);
+
+  fake.emit({ playback: 'paused' });
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(true);
+
+  // Scoped to the generation: freshly attached media has no attempt of its own,
+  // and its first decoded frame must go back to hiding the poster unaided.
+  controller.setProvider(createProvider().provider);
+  expect(controller.hasUnconfirmedPlayAttempt()).toBe(false);
 });

@@ -93,7 +93,7 @@ State and contract: `PlayerState`, `PlayerCapabilities`, `Availability`,
 `CommandResult`, `CommandFailureReason`, `PlaybackState`, `PlayerProvider`,
 `PlayerQuality`, `TimeRange`, `TextTrack`, `TextTrackKind`,
 `TextTrackReadiness`, `TextCue`, `CaptionRendering`, `Chapter`, `ChapterInput`,
-`PlayerLiveState`, `PlayerError`, `PlayerErrorCategory`,
+`PlayerLiveState`, `PlayerError`, `PlayerErrorCategory`, `RefusedUrlSurface`,
 `PreProviderActivation`.
 
 Events: `PlayerEvent`, `PlayerEventType`, `PlayerEventDetailMap`,
@@ -123,7 +123,8 @@ id are all recognised; anything else fails with `malformed-string`,
 provider to fail later. Wistia is the one exception, because it also serves
 plain media files on its own hosts: a Wistia URL that is not an embed shape is
 still read by file extension, so its HLS manifests and direct deliveries resolve
-as `hls` and `video`.
+as `hls` and `video`. Every accepted form, per provider, is listed in
+[Provider setup](../../docs/provider-setup.md).
 
 <!-- example:core-source-detection -->
 

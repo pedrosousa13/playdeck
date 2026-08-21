@@ -21,6 +21,10 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { PlayerController, type ProviderAdapter } from '@playdeck/core';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import * as Player from '../src/index';
 
 vi.mock('../src/provider-loaders', async () => {
@@ -72,6 +76,15 @@ class ImmediateIntersectionObserver implements IntersectionObserver {
 beforeEach(() => {
   vi.stubGlobal('IntersectionObserver', ImmediateIntersectionObserver);
 });
+
+// The controller the ref's handle carries, for the optimistic-request tests
+// that spy on a command to count what `Root`'s controlled-prop effects sent.
+// The handle is a fresh object holding the controller's methods, not the
+// controller (#328), so a spy installed on the handle would replace a property
+// nothing calls and count zero. The controller is the object those effects
+// reach for, so it is the object to watch; see internal-controller.ts.
+const controllerOf = (handle: Player.PlayerHandle | null): PlayerController =>
+  (handle as unknown as InternalControllerAccess)[INTERNAL_CONTROLLER];
 
 const LegacyRoot = ({ loading = 'eager', ...props }: Player.RootProps) => (
   <Player.Root {...props} loading={loading} />
@@ -143,6 +156,13 @@ const verifyProviderOptionExclusions = (): Player.PlayerProviderOptions[] => [
   // @ts-expect-error use Root's own endTime prop instead of the wistia bag.
   { wistia: { endTime: 20 } }
 ];
+
+// The preference is an OS setting no test environment exposes, so the query is
+// stubbed rather than driven: what matters is that the controller reads it at
+// the moment it decides whether to attempt (#311).
+const stubReducedMotion = (matches: boolean): void => {
+  vi.stubGlobal('matchMedia', () => ({ matches }));
+};
 
 const confirmMetadataReady = (media: HTMLVideoElement): void => {
   Object.defineProperty(media, 'readyState', {
@@ -388,8 +408,8 @@ test('supersedes a delayed muted confirmation after a rapid controlled reversal'
   );
   const { rerender } = render(player(false));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const mute = vi.spyOn(handle.current!, 'mute');
-  const unmute = vi.spyOn(handle.current!, 'unmute');
+  const mute = vi.spyOn(controllerOf(handle.current), 'mute');
+  const unmute = vi.spyOn(controllerOf(handle.current), 'unmute');
 
   rerender(player(true));
   rerender(player(false));
@@ -423,7 +443,7 @@ test('supersedes a delayed volume confirmation after a rapid controlled reversal
   );
   const { rerender } = render(player(0.7));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const setVolume = vi.spyOn(handle.current!, 'setVolume');
+  const setVolume = vi.spyOn(controllerOf(handle.current), 'setVolume');
 
   rerender(player(0.2));
   rerender(player(0.7));
@@ -456,7 +476,10 @@ test('supersedes a delayed rate confirmation after a rapid controlled reversal',
   );
   const { rerender } = render(player(1.25));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const setPlaybackRate = vi.spyOn(handle.current!, 'setPlaybackRate');
+  const setPlaybackRate = vi.spyOn(
+    controllerOf(handle.current),
+    'setPlaybackRate'
+  );
 
   rerender(player(2));
   rerender(player(1.25));
@@ -494,7 +517,7 @@ test('clears retired volume targets when queued confirmations coalesce to the la
   );
   const { rerender } = render(player(0.7));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const setVolume = vi.spyOn(handle.current!, 'setVolume');
+  const setVolume = vi.spyOn(controllerOf(handle.current), 'setVolume');
 
   rerender(player(0.2));
   rerender(player(0.5));
@@ -534,7 +557,10 @@ test('clears repeated retired rate targets after the latest active confirmation'
   );
   const { rerender } = render(player(1));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const setPlaybackRate = vi.spyOn(handle.current!, 'setPlaybackRate');
+  const setPlaybackRate = vi.spyOn(
+    controllerOf(handle.current),
+    'setPlaybackRate'
+  );
 
   rerender(player(2));
   rerender(player(1));
@@ -576,8 +602,8 @@ test('clears retired muted targets when a reversal confirmation coalesces to cur
   );
   const { rerender } = render(player(false));
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  const mute = vi.spyOn(handle.current!, 'mute');
-  const unmute = vi.spyOn(handle.current!, 'unmute');
+  const mute = vi.spyOn(controllerOf(handle.current), 'mute');
+  const unmute = vi.spyOn(controllerOf(handle.current), 'unmute');
 
   rerender(player(true));
   rerender(player(false));
@@ -753,6 +779,60 @@ test.each([
 
   await waitFor(() =>
     expect(screen.getByRole('button').dataset.autoplayState).toBe(state)
+  );
+});
+
+// Both strategies, because the rule #311 settled on is "Playdeck never starts
+// playback on its own when the viewer asked for reduced motion" -- not "not
+// below the fold". `'interaction'` is the third strategy and cannot appear
+// here: it rejects autoplay as a configuration error before anything attaches
+// (`use-activation.ts:98`).
+test.each([['eager'], ['viewport']] as const)(
+  'suppresses %s autoplay when the viewer asked for reduced motion',
+  async (loading) => {
+    stubReducedMotion(true);
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockResolvedValue(undefined);
+    render(
+      <Player.Root autoplay="audible" loading={loading} source="/reduced.mp4">
+        <Player.Viewport>
+          <Player.Media />
+        </Player.Viewport>
+        <Player.PlayButton />
+      </Player.Root>
+    );
+
+    confirmMetadataReady(screen.getByLabelText('Playdeck media'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button').dataset.autoplayState).toBe(
+        'suppressed'
+      )
+    );
+    expect(play).not.toHaveBeenCalled();
+  }
+);
+
+test('attempts autoplay under reduced motion once the consumer opts out', async () => {
+  stubReducedMotion(true);
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+    this: HTMLMediaElement
+  ) {
+    this.dispatchEvent(new Event('play'));
+    return Promise.resolve();
+  });
+  render(
+    <LegacyRoot autoplay="audible" ignoreReducedMotion source="/opted-out.mp4">
+      <Player.Media />
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+
+  confirmMetadataReady(screen.getByLabelText('Playdeck media'));
+
+  await waitFor(() =>
+    expect(screen.getByRole('button').dataset.autoplayState).toBe('started')
   );
 });
 
@@ -973,11 +1053,93 @@ test('exposes stable actions and a ref handle backed by the Root controller', ()
   expect(verifyProviderOptionExclusions).toBeTypeOf('function');
 });
 
-test('keeps the imperative handle backed by the full PlayerController', () => {
-  // The Storybook mock-player decorator (apps/storybook/.storybook/
-  // mock-player.tsx) casts PlayerHandle to PlayerController to reach the
-  // provider-facing surface (setProvider, configureAutoplay). This pins that
-  // invariant: the handle must remain the controller instance itself.
+test('hands back only the declared PlayerHandle surface through the ref', () => {
+  // #328: the handle used to BE the controller instance -- `Object.assign`
+  // mutates and returns its target -- so `PlayerHandle`'s narrowing lived in
+  // the type system alone and every provider-facing method was reachable at
+  // runtime by anyone holding the ref. This pins the runtime surface to the
+  // declared one, member by member, so a regression fails loudly rather than
+  // silently re-widening the public API.
+  const declaredMembers = [
+    'getState',
+    'subscribe',
+    'on',
+    'activateFromInteraction',
+    'play',
+    'pause',
+    'togglePlayback',
+    'seekTo',
+    'seekBy',
+    'selectQuality',
+    'mute',
+    'unmute',
+    'toggleMuted',
+    'setVolume',
+    'setPlaybackRate',
+    'selectTextTrack',
+    'setCaptionRenderer',
+    'requestFullscreen',
+    'exitFullscreen',
+    'requestPictureInPicture',
+    'exitPictureInPicture',
+    'showAirPlayPicker',
+    'retry',
+    'whenReady'
+  ];
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
+      {null}
+    </Player.Root>
+  );
+  const surface = handle.current as unknown as Record<string, unknown>;
+
+  expect(surface).toBeDefined();
+  for (const member of declaredMembers) {
+    expect(surface[member]).toBeTypeOf('function');
+  }
+  expect(Object.keys(surface).sort()).toEqual([...declaredMembers].sort());
+
+  // The provider-facing surface, asserted absent one member at a time: a set
+  // comparison would report a single opaque diff, and each of these is its own
+  // escalation from "drive the player" to "swap what the player is playing".
+  expect(surface.setProvider).toBeUndefined();
+  expect(surface.setActivation).toBeUndefined();
+  expect(surface.configureAutoplay).toBeUndefined();
+  expect(surface.subscribeDimensions).toBeUndefined();
+  expect(surface.subscribeCues).toBeUndefined();
+  expect(surface.getActiveCues).toBeUndefined();
+  // Landed after this test was first written (#330) and correctly left out of
+  // `PlayerHandle`: publishing a refused-URL notice is the React layer's job,
+  // not a consumer command. Named here because the `Object.keys` equality
+  // above already covers it -- the point of this block is that each new
+  // controller member gets looked at, and this is the one that proved a member
+  // can arrive between the narrowing and the fix.
+  expect(surface.reportRefusedUrl).toBeUndefined();
+  // The second member to arrive after the narrowing (#244), and the same
+  // judgement: `Root`'s first-frame poster writer asks the controller whether a
+  // play command is still waiting on confirmation, which is bookkeeping about a
+  // command and not a player command a consumer issues.
+  expect(surface.hasUnconfirmedPlayAttempt).toBeUndefined();
+  expect(surface.playWithOrigin).toBeUndefined();
+  expect(surface.pauseWithOrigin).toBeUndefined();
+  expect(surface.togglePlaybackWithOrigin).toBeUndefined();
+  expect(surface.seekToWithOrigin).toBeUndefined();
+  expect(surface.seekByWithOrigin).toBeUndefined();
+  expect(handle.current).not.toBeInstanceOf(PlayerController);
+});
+
+test('reaches the live controller through the internal symbol hatch', () => {
+  // The one deliberate way back to the provider-facing surface the handle no
+  // longer carries (#328). The Storybook mock-player decorator
+  // (apps/storybook/.storybook/mock-player.tsx) and this package's test render
+  // helpers stage a provider through it; a registered `Symbol.for` key rather
+  // than a new package export, so the hatch is greppable by its one name and
+  // costs no published surface. This used to read "keeps the imperative handle
+  // backed by the full PlayerController" and asserted the handle *was* the
+  // controller -- the leak itself, since the whole controller then rode along
+  // for every consumer. The hatch must resolve to the real, live controller:
+  // an unrelated instance would satisfy the type and drive nothing.
   const handle = createRef<Player.PlayerHandle>();
   render(
     <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
@@ -985,8 +1147,14 @@ test('keeps the imperative handle backed by the full PlayerController', () => {
     </Player.Root>
   );
 
-  expect(handle.current).toBeInstanceOf(PlayerController);
-  const controller = handle.current as unknown as PlayerController;
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
+
+  expect(controller).toBeInstanceOf(PlayerController);
+  // Same object the handle's own members are plucked from, so commands sent
+  // through the hatch and through the declared surface hit one player.
+  expect(controller.play).toBe(handle.current?.play);
   const adapter: ProviderAdapter = {
     provider: 'native',
     attach: () => undefined,
@@ -1002,6 +1170,44 @@ test('keeps the imperative handle backed by the full PlayerController', () => {
     controller.setProvider(undefined);
   });
   expect(controller.getState().activation).toBe('dormant');
+});
+
+test('keeps the internal controller hatch out of every enumeration of the handle', () => {
+  // The hatch is a symbol key so that it is invisible to the ways code walks
+  // an object: a consumer logging, serializing or copying the handle must not
+  // find a whole `PlayerController` hanging off it, and "the declared surface
+  // is all that is enumerable" is the claim this issue is really about (#328).
+  // Being a symbol buys two of the three: `Object.keys` and `JSON.stringify`
+  // drop symbol keys outright, and would still drop them if someone
+  // "simplified" the property back into the object literal. Object spread does
+  // NOT -- it copies enumerable symbol keys, measured, which is why `Root`
+  // defines the key with `Object.defineProperty` (non-enumerable by default)
+  // instead. Spread is the one that matters most: a wrapper that narrows the
+  // handle with `{...ref.current}` before passing it on is precisely #328's
+  // failure scenario, and it would have carried the controller across.
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
+      {null}
+    </Player.Root>
+  );
+  const surface = handle.current as unknown as Record<string, unknown>;
+
+  expect(Object.keys(surface)).not.toContain('controller');
+  expect(JSON.stringify(surface)).toBe('{}');
+  expect(Object.getOwnPropertySymbols({ ...surface })).toEqual([]);
+  expect(
+    Object.values(surface).every((value) => typeof value === 'function')
+  ).toBe(true);
+  expect(
+    Object.entries(surface).some(
+      ([, value]) => value instanceof PlayerController
+    )
+  ).toBe(false);
+
+  // ...and the hatch is genuinely there to be found by anything that names the
+  // symbol, so the assertions above are about visibility, not absence.
+  expect(Object.getOwnPropertySymbols(surface)).toEqual([INTERNAL_CONTROLLER]);
 });
 
 test('throws a clear error when player hooks are used outside Root', () => {
@@ -1811,6 +2017,198 @@ test('keeps the poster visible when cached media attaches under refused autoplay
       .parentElement?.getAttribute('data-state')
   ).toBe('visible');
 });
+
+// #244: the #242 gate keys on the configured autoplay *mode*, so it is inert
+// for `autoplay={false}`. A programmatic `play()` can be refused with
+// `NotAllowedError` exactly as an autoplay attempt can, and the media still
+// decodes a frame afterwards. This probes whether that refusal leaves the same
+// paused, uncovered first frame #242 fixed.
+test('keeps the poster visible when a frame decodes after a refused programmatic play', async () => {
+  const { Poster } = posterPrimitives;
+  const handle = createRef<Player.PlayerHandle>();
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, 'play')
+    .mockRejectedValue(
+      new DOMException('Playback blocked.', 'NotAllowedError')
+    );
+  render(
+    <LegacyRoot autoplay={false} ref={handle} source="/refused.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Refused play poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+
+  confirmMetadataReady(media);
+  const result = await act(async () => handle.current?.play());
+
+  // The refusal was issued and observed: the command failed, and playback never
+  // reached `'playing'`, so nothing hid the poster on the way here.
+  expect(play).toHaveBeenCalledOnce();
+  expect(result).toMatchObject({ ok: false });
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(screen.getByRole('button').dataset.autoplayState).toBe('idle');
+  expect(
+    screen
+      .getByText('Refused play poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+
+  fireEvent.loadedData(media);
+
+  // Playback is still `'paused'`, so the `playing` subscription -- the only
+  // other writer that hides the poster -- cannot have run: whatever the poster
+  // reads now was written by the `loadeddata` handler.
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(
+    screen
+      .getByText('Refused play poster')
+      .parentElement?.getAttribute('data-state')
+  ).toBe('visible');
+});
+
+// #244, arriving as a race: `loadeddata` can land while the `play()` promise is
+// still in flight. The frame is paused for the same reason it is in the test
+// above -- the refusal is simply not told yet -- and hiding the poster on the
+// decode leaves the rejection that follows with no way to put the cover back.
+test('keeps the poster visible when a frame decodes while a refused play is still in flight', async () => {
+  const { Poster } = posterPrimitives;
+  const handle = createRef<Player.PlayerHandle>();
+  let refuse!: (reason: unknown) => void;
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockReturnValue(
+    new Promise<void>((_, reject) => {
+      refuse = reject;
+    })
+  );
+  render(
+    <LegacyRoot autoplay={false} ref={handle} source="/in-flight.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>In-flight play poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const posterState = (): string | null | undefined =>
+    screen
+      .getByText('In-flight play poster')
+      .parentElement?.getAttribute('data-state');
+
+  confirmMetadataReady(media);
+  const attempt = handle.current!.play();
+
+  // The decode lands first, with the command unsettled: nothing yet says the
+  // frame will ever play, so nothing may uncover it.
+  fireEvent.loadedData(media);
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
+
+  refuse(new DOMException('Playback blocked.', 'NotAllowedError'));
+  const result = await act(async () => attempt);
+
+  expect(result).toMatchObject({ ok: false });
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
+});
+
+// #244 names two triggers, and the two tests above drive only the ref handle.
+// This is the other one, and the one a viewer actually reaches: a `PlayButton`
+// press goes to `togglePlaybackWithOrigin` on the controller it reads from
+// context, so it never passes through `Root` at all. The path is the reason the
+// controller answers the gate rather than `Root` counting its own calls, and
+// nothing pinned that the press records an attempt the way the handle does.
+test('keeps the poster visible when a frame decodes after a refused PlayButton press', async () => {
+  const { Poster } = posterPrimitives;
+  const handle = createRef<Player.PlayerHandle>();
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, 'play')
+    .mockRejectedValue(
+      new DOMException('Playback blocked.', 'NotAllowedError')
+    );
+  render(
+    <LegacyRoot autoplay={false} ref={handle} source="/refused-press.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Refused press poster</span>
+        </Poster>
+      </Player.Viewport>
+      <Player.PlayButton />
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const posterState = (): string | null | undefined =>
+    screen
+      .getByText('Refused press poster')
+      .parentElement?.getAttribute('data-state');
+
+  confirmMetadataReady(media);
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+  });
+
+  expect(play).toHaveBeenCalledOnce();
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
+
+  fireEvent.loadedData(media);
+
+  // Playback never left `'paused'`, so the `playing` subscription cannot have
+  // written anything: the poster's state here is the `loadeddata` handler's.
+  expect(handle.current?.getState().playback).toBe('paused');
+  expect(posterState()).toBe('visible');
+});
+
+// The constraint #311 is most likely to break silently, and nothing in the
+// gate below names `'suppressed'`. The poster stays up because the `autoplay`
+// prop reaches `Root` un-cleared and because the `loadeddata` gate early-returns
+// on every autoplay state that is not `'started'` -- a suppression falls through
+// it the way a refusal does. Pass `autoplay={false}` under reduced motion, or
+// narrow that early return to the states it means, and the gate opens on a
+// paused first frame -- #242, with a different cause. This is the test that
+// fails when either half goes.
+test.each([['eager'], ['viewport']] as const)(
+  'keeps the poster visible when a frame decodes under %s suppressed autoplay',
+  async (loading) => {
+    stubReducedMotion(true);
+    const { Poster } = posterPrimitives;
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    render(
+      <Player.Root autoplay="audible" loading={loading} source="/reduced.mp4">
+        <Player.Viewport>
+          <Player.Media />
+          <Poster>
+            <span>Suppressed autoplay poster</span>
+          </Poster>
+        </Player.Viewport>
+        <Player.PlayButton />
+      </Player.Root>
+    );
+    const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+
+    confirmMetadataReady(media);
+    await waitFor(() =>
+      expect(screen.getByRole('button').dataset.autoplayState).toBe(
+        'suppressed'
+      )
+    );
+    fireEvent.loadedData(media);
+
+    expect(
+      screen
+        .getByText('Suppressed autoplay poster')
+        .parentElement?.getAttribute('data-state')
+    ).toBe('visible');
+  }
+);
 
 test('keeps the poster visible while the muted autoplay retry is in flight', async () => {
   const { Poster } = posterPrimitives;
