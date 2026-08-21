@@ -20,13 +20,13 @@ The measurements, against a faithful model of the shortcut layer's base read and
 command chain's trailing-edge coalescing, 12 repetitions per cell, counting answers
 received by the last press:
 
-| congestion burn | keys | webkit | chromium | firefox |
-| --- | --- | --- | --- | --- |
-| 0 | 24 | 12/12 fail | 12/12 fail | 11/12 fail |
-| 5 | 24 | 12/12 fail | 0/12 | 8/12 fail |
-| 15 | 24 | 12/12 fail | **0/12** | **0/12** |
-| 50 | 24 | 10/12 fail | **0/12** | **0/12** |
-| 50 | 5 | 10/12 fail | **0/12** | **0/12** |
+| congestion burn | keys | webkit     | chromium   | firefox    |
+| --------------- | ---- | ---------- | ---------- | ---------- |
+| 0               | 24   | 12/12 fail | 12/12 fail | 11/12 fail |
+| 5               | 24   | 12/12 fail | 0/12       | 8/12 fail  |
+| 15              | 24   | 12/12 fail | **0/12**   | **0/12**   |
+| 50              | 24   | 10/12 fail | **0/12**   | **0/12**   |
+| 50              | 5    | 10/12 fail | **0/12**   | **0/12**   |
 
 Chromium and Firefox are clean at every burn from 15 upward and at every burst length.
 **WebKit fails at every setting including a burn of 0**, so congestion is not the cause
