@@ -714,8 +714,9 @@ test('the volume slider stays operable by keyboard in both directions', async ({
 // able to absorb the original defect: both background-colors resolve to the
 // same system canvas there, collapsing the two-tone layer back into one flat
 // band. Same emulation harness and same "assert what the user can see" shape as
-// `e2e/theme.spec.ts`, which guards none of its forced-colors tests by engine —
-// and nor does the skip below. It waits on `bufferedRendered` exactly as the
+// `e2e/theme.spec.ts`, which guards none of its forced-colors tests by engine.
+// The skip below is not a departure from that — it guards the precondition, not
+// the forced-colors branch: this waits on `bufferedRendered` exactly as the
 // visibility test does, so it inherits that precondition and the identical
 // WebKit failure: measured here on its own, 8 sequential runs on an idle
 // machine gave 3 passes and 5 failures, each failure the same
