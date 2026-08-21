@@ -121,8 +121,10 @@ export const createNativeAttachment = (
     Number.isFinite(media.duration) ? media.duration : null;
 
   // The value last put on the wire, so `durationchange` can tell news from
-  // noise. `undefined` only before the attach snapshot, which every listener
-  // is added ahead of.
+  // noise. `undefined` only until the attach snapshot writes it. `attach()`
+  // adds the listeners before it takes that snapshot, so the unset window is
+  // real; what keeps a handler out of it is that nothing between those two
+  // statements dispatches a media event.
   let lastDuration: number | null | undefined;
 
   const emitMediaState = (originalEvent?: Event): void => {
@@ -198,14 +200,15 @@ export const createNativeAttachment = (
   // `0` as the only value on the grid, which makes the control inoperable
   // rather than merely mis-scaled (#400).
   //
-  // A narrow patch rather than a second `emitMediaState` call, the shape
-  // `progress` already uses for `buffered`. Republishing the snapshot was the
-  // obvious reading of the issue's suggestion and is rejected on two counts:
-  // it rebuilds `capabilities` and restates `lifecycle`/`activation`, fields
-  // this event has no news about and other seams own the timing of — and
-  // `durationchange` also fires from the media load algorithm, with
-  // `readyState` back at 0, so a retry would walk a ready player back to
-  // `loading` on its way through. One event, one key.
+  // A narrow patch rather than a second `emitMediaState` call — the shape
+  // `progress`, `volumechange` and `ratechange` already use: a patch carrying
+  // what the event reports and nothing else, which is one key here and two in
+  // `progress`. Republishing the snapshot was the obvious reading of the
+  // issue's suggestion and is rejected on two counts: it rebuilds
+  // `capabilities` and restates `lifecycle`/`activation`, fields this event has
+  // no news about and other seams own the timing of — and `durationchange` also
+  // fires from the media load algorithm, with `readyState` back at 0, so a
+  // retry would walk a ready player back to `loading` on its way through.
   //
   // Silent when the published value held, the rule `emitLiveUpdate` already
   // follows: a live stream fires `durationchange` for a duration that
@@ -215,10 +218,12 @@ export const createNativeAttachment = (
   // duration is what `computeLiveState` reads.
   //
   // `seekable` is deliberately left out of that key. For a finite duration
-  // `seekWindow` reads the duration and ignores the window entirely, and for
-  // the live DVR case that does read it, `progress` is the event that reports
-  // the window moving and already publishes it on every one. A duration
-  // changing says nothing about the window that a `progress` has not said.
+  // above zero `seekWindow` reads the duration and ignores the window entirely
+  // — it guards on `duration > 0`, so a finite `0` falls through to the
+  // seekable branch — and for the live DVR case that does read it, `progress`
+  // is the event that reports the window moving and already publishes it on
+  // every one. A duration changing says nothing about the window that a
+  // `progress` has not said.
   const onDurationChange = (): void => {
     const duration = publishedDuration();
     if (duration === lastDuration) {
