@@ -13,10 +13,11 @@ import { useState, type ReactElement } from 'react';
  * children.
  */
 
-// Layout only. `@playdeck/react/theme.css` is deliberately not mounted: the only
-// per-story way to mount it reaches into `packages/`, which this directory may
-// not do, and a plain side-effect import would leak the theme into every other
-// story's document.
+// Layout, plus the slider appearance the unmounted theme would otherwise have
+// supplied (#191). `@playdeck/react/theme.css` is deliberately not mounted: the
+// only per-story way to mount it reaches into `packages/`, which this directory
+// may not do, and a plain side-effect import would leak the theme into every
+// other story's document.
 const layoutCss = `
 /* This whole block is one JS template literal (it is delimited by the
    backtick right above). Do not put a backtick anywhere in here, including
@@ -90,6 +91,92 @@ const layoutCss = `
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;
+}
+/* Sliders. Both halves of #191 (which absorbed #192) live here, because both
+   are the same omission: the primitives hand these parts geometry and nothing
+   else. SeekSlider gives the buffered container no box at all, and each range
+   inside it position: absolute plus an inline-axis left/width pair - so
+   untouched they are 0px-tall transparent boxes. The two range inputs get a
+   target floor and nothing else, and not the same floor: VolumeSlider is
+   itself the input and takes both axes (minWidth and minHeight 44), while the
+   seek input takes minHeight 44 alone, with no minWidth, plus a width: 100%.
+   Untouched, both are whatever bare native slider the engine draws.
+
+   Thickness and colour follow packages/react/theme.css, which this story still
+   does not mount for the reasons at the top of this file. It is the source of
+   truth to copy from, not to import - and nothing here is added back to it.
+
+   Copied in the var(--token, fallback) form the theme writes, not as the
+   resolved literal. The toolbar Theme toggle DOES apply to this story, and
+   theme.css ships inside @layer playdeck (ADR-0001), so these unlayered rules beat
+   it: written as literals, these would be the only parts of the composition
+   deaf to the token channel with the toggle on. Every fallback here is the
+   theme's own, so unthemed rendering is unchanged.
+
+   Vertical margins are deliberately left alone, unlike the theme, which zeroes
+   them. The native range input carries a 2px UA margin on every engine, and
+   that margin is part of what both control rows are currently sized by, so
+   zeroing it would shrink both - and this change is not allowed to move them.
+   It is the whole story only for the button row (measured on chromium: 48px =
+   the 44px target floor plus the two margins). The seek row is taller than
+   that margin box - 50px on chromium, 52px on firefox - because SeekSlider's
+   root is a block box whose only in-flow child is the inline-level input, so
+   its height is a line box: the root's own strut hangs its descent below the
+   input's baseline. That residue is engine font metrics, which nothing here
+   sets. e2e/reference.spec.ts pins the criterion by deleting these rules from
+   the live sheet and re-measuring, rather than by naming either number. */
+.playdeck-example [data-playdeck-part='seek-buffered'] {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 50%;
+  block-size: var(--playdeck-slider-thickness, 0.25rem);
+  translate: 0 -50%;
+  border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+  background-color: var(--playdeck-color-track, rgb(255 255 255 / 0.3));
+  /* Absolute here and static on the input next to it, so this layer paints
+     ABOVE the control it describes no matter the DOM order - a stacking
+     context paints its in-flow content before its positioned descendants.
+     pointer-events is therefore load-bearing rather than tidy: without it the
+     layer swallows the seek it is drawn to describe. */
+  pointer-events: none;
+}
+/* No position: absolute here. SeekSlider already sets it inline on every range
+   (ADR-0001), and an inline value cannot be beaten from a stylesheet anyway, so
+   restating it would be dead CSS. inset-block and the two paint properties are
+   NOT inline, which is why they are. */
+.playdeck-example [data-playdeck-part='seek-buffered-range'] {
+  inset-block: 0;
+  border-radius: inherit;
+  background-color: var(--playdeck-color-buffered, rgb(255 255 255 / 0.5));
+}
+.playdeck-example [data-playdeck-part='seek-slider-input'],
+.playdeck-example [data-playdeck-part='volume-slider'] {
+  accent-color: var(--playdeck-color-accent, #3ea6ff);
+  background-color: transparent;
+  cursor: pointer;
+}
+/* An explicit size rather than the UA default, which is not even the same
+   number across engines (measured: 129px on chromium, 160px on firefox).
+   flex: 0 0 auto matches the buttons in this row: the row wraps rather than
+   squeezes, so nothing in it should shrink below its own target size. */
+.playdeck-example [data-playdeck-part='volume-slider'] {
+  flex: 0 0 auto;
+  inline-size: 5rem;
+}
+/* Forced colours replaces both background-colors above with the same system
+   canvas, which would collapse the buffered layer back into one flat invisible
+   band - the very defect being fixed, for the users least able to absorb it.
+   The same outlined-track/filled-range treatment the shipped theme gives these
+   parts. The range inputs need no counterpart: nothing above hand-rolls a
+   thumb or a track, so they keep the UA own forced-colors handling. */
+@media (forced-colors: active) {
+  .playdeck-example [data-playdeck-part='seek-buffered'] {
+    border: 1px solid canvastext;
+    background-color: canvas;
+  }
+  .playdeck-example [data-playdeck-part='seek-buffered-range'] {
+    background-color: canvastext;
+  }
 }
 .playdeck-example button {
   flex: 0 0 auto;
