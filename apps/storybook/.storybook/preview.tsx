@@ -26,7 +26,13 @@ const preview: Preview = {
   initialGlobals: { theme: 'headless' },
   parameters: {
     a11y: {
-      // Fail the Vitest story test when axe reports a violation.
+      // Fail the Vitest story test when axe reports a violation. Vitest never
+      // loads a URL, so this role is untouched by `e2e/a11y.spec.ts`, which
+      // appends `globals=a11y.manual:!true` to its story URLs to keep the
+      // addon's axe-core out of the Playwright scan's frame (#346). That spec
+      // depends on the addon's `a11y.manual` global, so anything here that
+      // touches the `a11y` globals — an `initialGlobals: { a11y: … }`, a
+      // `globalTypes.a11y` — belongs in that spec's reasoning too.
       test: 'error'
     },
     options: {

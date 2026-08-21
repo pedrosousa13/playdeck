@@ -18,8 +18,67 @@ import {
 // kept separate on purpose: a flake there must never read as a regression
 // here, or vice versa. `!test` excludes a story from the Vitest run only —
 // Storybook dev serves all of them, so Playwright can drive them too.
+//
+// `globals=a11y.manual:!true` switches `@storybook/addon-a11y`'s automatic
+// scan off for these page loads only (#346). Two axe-cores otherwise share one
+// `window.axe`: `@axe-core/playwright` 4.12.1 (pinned exactly in the root
+// `package.json`) evaluates its own copy into the page at the start of
+// `analyze()` and then calls `window.axe.runPartial()` (`dist/index.mjs`),
+// while the addon does `(await import('axe-core')).default`, and that module
+// publishes itself on `window.axe` as it evaluates. Whichever lands last owns
+// the slot, so the Playwright scan can end up driving the addon's instance.
+// Two things then go wrong on it: axe-core's re-entrancy guard throws "Axe is
+// already running" if the addon's `axe.run()` is still in flight, and the
+// addon's `axe.reset()` / `axe.configure()` rewrite the rule config the scan
+// is about to run under. The first is the loud failure; the second would
+// quietly change what "zero violations" means here.
+//
+// That `import('axe-core')` sits at exactly one site in the addon, the top of
+// its `run`, and the global gates the `afterEach` that reaches it. `run` has
+// one other caller that never consults the global — `channel.on(EVENTS.MANUAL,
+// …)`, the manager's on-demand rescan — so the global is not a proof that a
+// second axe-core cannot load; it is the one remaining route, and it is dead
+// on this one. These tests navigate to a bare `/iframe.html` with no Storybook
+// manager peer, so nothing emits that event.
+//
+// The interleaving above was established by execution rather than by reading
+// stacks — an execution probe recorded the order in the page under load
+// (injection, the addon's module assigned over it, the addon's run starting,
+// `runPartial` reaching its guard) and its output is recorded on #346.
+//
+// The addon's copy is Vite's dep-cache build (that mechanic is explained in
+// `e2e/hls.spec.ts`), which is how a failing stack tells the two apart: the
+// throw arrives from `/sb-vite/deps/axe-core.js` inside
+// `AxeBuilder.runPartialRecursive`. Every count below was taken on chromium
+// only, at `--workers=4 --retries=0`: with the global, `--repeat-each=20` over
+// this whole file is 320/320 green; with the global deleted, and again with
+// the string spelling below, `-g "no accessibility violations"
+// --repeat-each=8` threw it on 1 and on 3 of 64 scans. Rare, load-sensitive,
+// and not fixed by spelling the global wrong. The global itself ships on all
+// three engines, and #346 logged a flaky webkit leg too (run `32179180786`),
+// but no equivalent count was taken on firefox or webkit.
+//
+// `!true` is Storybook's URL encoding for the boolean. `a11y.manual:true`
+// resolves to the *string* `"true"`, which the addon's
+// `globals.a11y?.manual !== true` gate does not match, so it leaves the scan
+// running — that gate is in `@storybook/addon-a11y` 10.5.3 (pinned exactly in
+// `apps/storybook/package.json`), `dist/_browser-chunks/chunk-P5J2FJ2Z.js`.
+// `scan` below asserts the value the preview resolved, not the URL text.
+//
+// The limit of that assertion, stated plainly: it proves the URL global
+// resolved to `true`, not that the addon still gates on it. Storybook's
+// `GlobalsStore.filterAllowedGlobals` allowlists URL globals by *top-level*
+// key only, and merges them shallowly, so a future `@storybook/addon-a11y`
+// that renamed `manual` while keeping `a11y` in its `initialGlobals` would
+// still resolve this URL to `a11y.manual === true` — pin green, addon scanning
+// again, flake back, and nothing here asserting otherwise. Only `a11y` leaving
+// the addon's `initialGlobals` altogether fails loudly.
+//
+// Nothing else about the addon changes: `pnpm test:storybook` drives the
+// stories through Vitest and never loads a URL, so the `a11y: { test: 'error' }`
+// role documented in `apps/storybook/.storybook/preview.tsx` is untouched.
 const story = (id: string) =>
-  `/iframe.html?id=reference-player--${id}&viewMode=story`;
+  `/iframe.html?id=reference-player--${id}&viewMode=story&globals=a11y.manual:!true`;
 
 const composition = story('composition');
 
@@ -110,8 +169,61 @@ const states: ReadonlyArray<{
 // not of playdeck — and a consumer's real page owns them, not a story fragment.
 // "Zero violations" below is therefore a claim about this subtree, not about
 // the host page.
-const scan = (page: Page) =>
-  new AxeBuilder({ page }).include('[data-playdeck-part="viewport"]').analyze();
+const scan = async (page: Page) => {
+  // The pin for `globals=a11y.manual:!true` on `story()` above. It reads the
+  // resolved global rather than `window.axe`, because the ordering that
+  // actually collides is the one where the addon's module lands *after*
+  // `analyze()` injects — so at this point there is nothing on `window.axe` to
+  // see. Measured over the same 64 scans as above: a `'axe' in window` check
+  // here fired on 3 of the 64 runs with the global removed, on 0 of 64 with the
+  // string spelling, and on none of the four runs that went on to hit the
+  // guard. The assertion below fails 64 of 64 in both cases.
+  //
+  // `__STORYBOOK_PREVIEW__.storyStoreValue.userGlobals` is a Storybook
+  // internal (`storybook` 10.5.3, pinned exactly in
+  // `apps/storybook/package.json`, `dist/_browser-chunks/chunk-SNLGT2ZI.js`;
+  // no public equivalent) holding the globals the URL resolved to — the same
+  // object `getStoryContext` merges into what the addon reads. The story has
+  // already rendered by the time `scan` runs, so this is a settled value and
+  // not a race. Four readings: `true` is the working state, `"true"` is the
+  // string spelling, `false` is the addon's own declared default and means no
+  // global reached the preview, and `undefined` means the access chain itself
+  // no longer resolves — the internal was renamed or moved by a Storybook
+  // upgrade, and the URL is not the thing to look at. Every hop is optional
+  // for that last reading's sake: an unguarded `.get()` would throw a
+  // `TypeError` inside `page.evaluate` and the message below would never run.
+  // It covers the URL lever only; a story-level `globals` override would not
+  // show up here, and no story in this suite sets one.
+  const manual = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __STORYBOOK_PREVIEW__?: {
+            storyStoreValue?: {
+              userGlobals?: {
+                get?: () => { a11y?: { manual?: unknown } } | undefined;
+              };
+            };
+          };
+        }
+      ).__STORYBOOK_PREVIEW__?.storyStoreValue?.userGlobals?.get?.()?.a11y
+        ?.manual
+  );
+  expect(
+    manual,
+    `@storybook/addon-a11y gates its automatic scan on ` +
+      `\`globals.a11y.manual !== true\`, so the story URL's ` +
+      `\`globals=a11y.manual:!true\` must resolve to the boolean \`true\` in ` +
+      `the preview. \`false\` or \`"true"\` means the URL global is wrong; ` +
+      `\`undefined\` means ` +
+      `\`__STORYBOOK_PREVIEW__.storyStoreValue.userGlobals.get()\` no longer ` +
+      `resolves, so check that Storybook internal rather than the URL`
+  ).toBe(true);
+
+  return await new AxeBuilder({ page })
+    .include('[data-playdeck-part="viewport"]')
+    .analyze();
+};
 
 for (const state of states) {
   test(`no accessibility violations in the ${state.name} state`, async ({
