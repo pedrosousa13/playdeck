@@ -192,6 +192,12 @@ That second clearing rule is where it parts company with the refused-surface
 half of a **Notice**, which survives an attach: a notice describes a consumer
 prop no provider ever saw, while this describes a command one provider turned
 down, so replacing that provider is what stops it being true.
+
+Commands settle out of order, and the condition survives that: a refusal a later
+play replaced, one playback was confirmed after, and one refused while media is
+already playing are all dropped rather than published, because each would state
+a thing that had stopped being true. The caller of such a command still receives
+its command result — this term names what is published, not what is reported.
 _Avoid_: play error, blocked play, failed play
 
 ### Adapters

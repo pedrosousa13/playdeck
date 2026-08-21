@@ -232,6 +232,14 @@ export type PlayerState = {
   // else — a pause, a seek, a stall or an error does not make the refusal
   // untrue (#361).
   //
+  // Commands settle out of order, and the condition holds through that: a
+  // refusal reported by a play that a later play replaced, or that playback
+  // was confirmed after, is never published at all — a later pause does not
+  // bring it back. Nor is one refused while playback is already `'playing'`,
+  // which would say nothing is playing while something is. The caller of such
+  // a command still receives its `CommandResult` unchanged; it is this field
+  // that declines to state a thing that has stopped being true.
+  //
   // Beside `autoplay` rather than folded into it, and it replaces neither
   // `'blocked'` nor `'failed'`: `autoplay` reports the autoplay machine, whose
   // `'attempting'`, `'suppressed'`, `'started'` and recovered members are
