@@ -26,6 +26,14 @@ primitive may render several — `ErrorDisplay` renders `error`, `error-message`
 and `error-retry` — so a part name is not a primitive's name.
 _Avoid_: element, node, slot
 
+**Thumb**:
+The grip a user drags on either slider. The browser renders it inside the native
+range input, so it is not a part: it carries no `data-playdeck-part`, and the
+theme reaches it only through `::-webkit-slider-thumb`. Its fill belongs to
+`accent-color` and cannot be addressed on its own, which is why the theme colours
+its ring (`--playdeck-color-thumb-ring`) rather than the thumb itself.
+_Avoid_: handle, knob, scrubber
+
 **Viewport**:
 The player's own bounding box, rendered by `Player.Viewport`, which every
 overlay positions against. Not the browser viewport.

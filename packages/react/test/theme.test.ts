@@ -58,9 +58,9 @@ describe('theme contract', () => {
   // The declared browser support floor (Chrome/Edge 99, Firefox 97, Safari and
   // iOS 15.4) is set by the newest CSS feature in this file, which today is
   // `@layer`. Nothing recomputes that when a rule is added, so this freezes the
-  // inventory instead: a new at-rule, functional pseudo-class or CSS function
-  // fails here, and moving the floor becomes a deliberate act with a docs
-  // change attached rather than a side effect of a styling tweak.
+  // inventory instead: a new at-rule, functional pseudo-class, pseudo-element or
+  // CSS function fails here, and moving the floor becomes a deliberate act with
+  // a docs change attached rather than a side effect of a styling tweak.
   //
   // This gates the inventory, not a feature-to-version mapping -- no caniuse
   // dataset to refresh, nothing that rots.
@@ -71,6 +71,9 @@ describe('theme contract', () => {
     const pseudoFunctions = new Set(
       [...withoutComments.matchAll(/:([a-z-]+)\(/g)].map(([, name]) => name)
     );
+    const pseudoElements = new Set(
+      [...withoutComments.matchAll(/::([a-z-]+)/g)].map(([, name]) => name)
+    );
     const functions = new Set(
       [...withoutComments.matchAll(/(?<![\w-:])([a-z-]+)\(/g)]
         .map(([, name]) => name)
@@ -79,6 +82,13 @@ describe('theme contract', () => {
 
     expect([...atRules].sort()).toEqual(['layer', 'media']);
     expect([...pseudoFunctions].sort()).toEqual(['where']);
+    // Vendor-prefixed and never standardised, so it has no Baseline date to
+    // move the floor with -- but Blink and WebKit have both shipped it since
+    // long before Chrome 99 and Safari 15.4, and neither has an unprefixed
+    // spelling to migrate to. Gecko's `::-moz-range-thumb` is deliberately
+    // absent: it honours no paint property while the native appearance is on,
+    // so a rule naming it would be dead CSS (#190).
+    expect([...pseudoElements].sort()).toEqual(['-webkit-slider-thumb']);
     // `calc` and `linear-gradient` are far below the floor (IE9 and Safari 6.1
     // respectively) and do not set it; they are listed because this asserts the
     // whole inventory, not a subset -- a subset check would let a new feature
@@ -104,6 +114,15 @@ describe('theme contract', () => {
         previous = stripped;
         stripped = stripped.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '');
       } while (stripped !== previous);
+      // The one documented exemption (#190): a native range input's thumb is
+      // reachable only through a pseudo-element, and Selectors 4 forbids a
+      // pseudo-element inside `:where()`, so the thumb-ring rule cannot be
+      // specificity-zero. It carries that pseudo-element's own (0,0,1), which
+      // any single consumer class outranks, and rule 1 -- the cascade layer --
+      // still makes unlayered consumer CSS win outright. Removed by exact name,
+      // so any other pseudo-element, and every class, id, attribute or type
+      // selector left outside a `:where()`, still fails below.
+      stripped = stripped.replace(/::-webkit-slider-thumb/g, '');
       return /[.#[]|::?[a-z]|[a-z]/i.test(stripped.replace(/[\s,>+~*]/g, ''));
     });
     expect(offenders).toEqual([]);
@@ -293,6 +312,10 @@ describe('slider non-text contrast', () => {
     parseColor(tokenDefault('--playdeck-color-accent')),
     backdrop
   );
+  const ring = over(
+    parseColor(tokenDefault('--playdeck-color-thumb-ring')),
+    backdrop
+  );
 
   const ratios = {
     'track vs backdrop': contrast(track, backdrop),
@@ -300,29 +323,56 @@ describe('slider non-text contrast', () => {
     'buffered vs backdrop': contrast(buffered, backdrop),
     'accent vs backdrop': contrast(accent, backdrop),
     'accent vs track': contrast(accent, track),
-    'accent vs buffered': contrast(accent, buffered)
+    'accent vs buffered': contrast(accent, buffered),
+    'ring vs track': contrast(ring, track),
+    'ring vs buffered': contrast(ring, buffered),
+    'accent vs ring': contrast(accent, ring)
   };
 
   // What is asserted, and what is not.
   //
   // The scrubbable track against the ground behind it, and the loaded range
   // against the unfilled track, are the two boundaries a low-vision user needs
-  // to read off this control, and both hold under any resolution of the third.
+  // to read off the bar itself.
   //
-  // Neither accent boundary is asserted, and that is a stated limit of this
-  // check rather than a gap to be closed later. Both are arithmetically out of
-  // reach while the accent token stays `#3ea6ff`, whose relative luminance is
-  // 0.3552: a colour it clears 3:1 against has to sit at or below a luminance
-  // of 0.0851, and the floor above puts the track at or above 0.10 and the
-  // buffered range at or above 0.40. Raising the accent's own contrast against
-  // them is what the third target of #190 asked for, and it is unreachable from
-  // this side -- against opaque white, the brightest the buffered range could
-  // ever be, the accent still measures only 2.59:1.
+  // The thumb is the third, and it is carried by the ring rather than by the
+  // accent fill. That is the resolution of #190 and it is arithmetic, not
+  // preference: `#3ea6ff` has a relative luminance of 0.3552, and to clear 3:1
+  // against the buffered range a colour must sit at or above 1.4440 or at or
+  // below 0.1160 -- and 1.4440 is brighter than white, whose luminance is 1.0.
+  // No accent value satisfies both surfaces, so the boundary is supplied by
+  // `--playdeck-color-thumb-ring` and the accent stays free to be a brand
+  // colour. 1.4.11 asks for contrast on the visual information that identifies
+  // the component, which a boundary supplies as well as a fill does.
   //
-  // So they are measured and reported below at their real values (accent vs
-  // track 2.59:1, accent vs buffered 1.23:1), and moving either needs a
-  // maintainer decision about the accent token itself, recorded on #190.
-  const asserted = ['track vs backdrop', 'buffered vs track'] as const;
+  // The two accent-vs-surface ratios stay measured and stated below at their
+  // real, failing values, because the fill really does sit at 2.59:1 and 1.23:1
+  // and hiding that would misrepresent what ships. They are not asserted
+  // because they are unreachable, not because they are unimportant -- what is
+  // asserted instead is that the ring clears both surfaces and that the fill
+  // stays legible inside its own ring.
+  //
+  // What the three ring ratios do not add. `--playdeck-color-thumb-ring`
+  // defaults to `#000`, which is also the `--playdeck-color-backdrop` default,
+  // so today `ring vs track`, `ring vs buffered` and `accent vs ring` are
+  // numerically the same three figures as `track vs backdrop`, `buffered vs
+  // backdrop` and `accent vs backdrop` above them. They still earn their place
+  // -- they pin a second token, and they diverge the moment either default
+  // moves -- but they are not three independent measurements today, and reading
+  // them as such overstates how much of the control is covered.
+  //
+  // Two boundaries nothing here measures. The thumb is taller than the 0.25rem
+  // track, so the ring's outer edge meets the control scrim rather than either
+  // slider surface, and no pair of tokens describes that. And the volume slider
+  // carries the same ring while the theme paints it no track at all, so every
+  // ratio above describes the seek slider only.
+  const asserted = [
+    'track vs backdrop',
+    'buffered vs track',
+    'ring vs track',
+    'ring vs buffered',
+    'accent vs ring'
+  ] as const;
 
   test('every asserted boundary clears the 3:1 floor', () => {
     const belowFloor = asserted
@@ -350,7 +400,10 @@ describe('slider non-text contrast', () => {
       'buffered vs backdrop': '9.96:1',
       'accent vs backdrop': '8.10:1',
       'accent vs track': '2.59:1',
-      'accent vs buffered': '1.23:1'
+      'accent vs buffered': '1.23:1',
+      'ring vs track': '3.13:1',
+      'ring vs buffered': '9.96:1',
+      'accent vs ring': '8.10:1'
     });
   });
 });
