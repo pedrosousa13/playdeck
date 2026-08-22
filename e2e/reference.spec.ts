@@ -25,9 +25,51 @@ const story = '/iframe.html?id=reference-player--real-sources&viewMode=story';
 // hand in Task 4). So `data-state="playing"` is a state the clip leaves on its
 // own within ~2s, and asserting it is a race. `currentTime > 0` is the
 // race-free way to say "it actually played" — it stays true once ended.
+//
+// 15s rather than `expect.poll`'s default 5s, which WebKit under contention ran
+// out of (#408). Instrumented to poll the element directly for up to 60s so no
+// timeout truncated the tail, 384 invocations on `--project=webkit` under
+// `--repeat-each=8 --workers=4` took a median of 2916ms and a worst case of
+// 6263ms — 13 runs over 5s, 1 over 6s, none over 7s.
+//
+// Which measures what the wait needs HERE, and 10s would fit that data as well
+// as 15s does. The extra margin is for the machine this was not measured on:
+// CI's contention profile is different and unmeasured, and the 6263ms above is
+// one laptop's tail, not a bound. What the margin costs is worth naming, since
+// it is not nothing — the wedge below fails at the timeout rather than before
+// it, so every wedged run now burns 15s instead of 10s. At ~1% of runs that was
+// judged the cheaper side to be wrong on. The number matching
+// `bufferedRendered`'s is a convenience, not the reason; that one is for a
+// different signal and was not the basis for this.
+//
+// A longer wait is not the whole story. 4 of those 384 never started at all:
+// the element reached `readyState 4`, fully buffered, and sat at `currentTime`
+// 0 for the entire 60s, which no timeout value can wait out (#411). So this
+// lowers the failure rate rather than ending it, and a `played()` timeout from
+// here on is worth reading as that wedge rather than as 15s being too short.
+//
+// Reconciled against the 30s per-test budget in `playwright.config.ts`, which
+// both other 15s bounds in this file justify themselves against: the pointer
+// test below now carries this bound AND `seekableThrough`'s, and the 26s of
+// `settledAt` and polls the latter counts comes after both. Those upper bounds
+// have summed past 30s since long before this change, and cannot all be spent —
+// measured across 512 runs, that test ran 9.6s at the median and 22.2s at its
+// worst. They exist to fail a wedged element rather than to be waited out, so
+// reaching either means the test timeout arrives first and the diagnosis is
+// #411 rather than a budget to re-cut.
+//
+// `a11y-media.spec.ts` and `rapid-slider-presses.spec.ts` keep their own copies
+// of this helper and carry the same timeout with a pointer back here, rather
+// than a third copy of the reasoning. Folding the three into one shared helper
+// is a wider change than #408 asked for.
 const played = (page: Page) =>
   expect
-    .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
+    .poll(
+      () => media(page).evaluate((el: HTMLVideoElement) => el.currentTime),
+      {
+        timeout: 15_000
+      }
+    )
     .toBeGreaterThan(0);
 
 // The buffered layer only renders once `PlayerState.buffered` is non-empty, and

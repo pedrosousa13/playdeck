@@ -34,9 +34,20 @@ const realSources = story('real-sources');
 // Both local fixtures are ~1 second long, so `data-state="playing"` is a state
 // the clip leaves on its own and asserting it is a race. `currentTime > 0` is
 // race-free: it stays true once ended.
+//
+// 15s rather than `expect.poll`'s 5s default, for the reason and the numbers
+// recorded on `played()` in `e2e/reference.spec.ts`: WebKit under contention
+// ran the default out (#408). Nothing was measured against this file, so a
+// failure here past 15s is worth reading as the never-starts wedge (#411),
+// which no timeout can wait out — rather than as 15s being too short.
 const played = (page: Page) =>
   expect
-    .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
+    .poll(
+      () => media(page).evaluate((el: HTMLVideoElement) => el.currentTime),
+      {
+        timeout: 15_000
+      }
+    )
     .toBeGreaterThan(0);
 
 test('keyboard shortcuts reach the media element, not just the DOM', async ({

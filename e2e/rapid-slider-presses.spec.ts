@@ -155,9 +155,22 @@ const story = '/iframe.html?id=reference-player--real-sources&viewMode=story';
 // Both local fixtures are ~1 SECOND long, so `data-state="playing"` is a state
 // the clip leaves on its own and asserting it is a race; `currentTime > 0` is
 // the race-free way to say "it actually played" (e2e/reference.spec.ts).
+//
+// 15s rather than `expect.poll`'s 5s default, for the reason and the numbers
+// recorded on `played()` there too: WebKit under contention ran the default out
+// (#408). The one call site below sits in a test this file skips on WebKit
+// (#277), so #408's fix cannot reach it — this carries the timeout to keep the
+// three copies of the helper identical, and it starts mattering only if that
+// exclusion lifts. Past 15s, read it as the wedge (#411) rather than a short
+// wait.
 const played = (page: Page) =>
   expect
-    .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.currentTime))
+    .poll(
+      () => media(page).evaluate((el: HTMLVideoElement) => el.currentTime),
+      {
+        timeout: 15_000
+      }
+    )
     .toBeGreaterThan(0);
 
 type PressRecord = {
