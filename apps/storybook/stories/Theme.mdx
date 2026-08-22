@@ -63,7 +63,11 @@ whatever its specificity, so your own rules win by default — no `!important`, 
 ordering games, no `:not()` tricks.
 
 **Every selector is wrapped in `:where()`,** which contributes zero specificity.
-A single class of your own outranks any rule in the file.
+A single class of your own outranks any rule in the file. One rule cannot reach
+zero: the slider thumb's ring needs a pseudo-element, and Selectors 4 forbids one
+inside `:where()`, so that rule carries the pseudo-element's own (0,0,1). Your
+single class is (0,1,0), so it still outranks it — and the cascade layer above
+decides it either way.
 
 {/* example:ignore two lines demonstrating the cascade rule itself; there is no part and no stylesheet behind them */}
 
@@ -100,17 +104,17 @@ Baseline in May 2023, later than the floor Playdeck declares (Chrome 99, Firefox
 Safari 15.4). Use it if your target is newer — nothing in the theme requires or
 prevents either.
 
-| Group     | Tokens                                                                                                                                                                                             |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Color     | `--playdeck-color-surface`, `--playdeck-color-on-surface`, `--playdeck-color-accent`, `--playdeck-color-track`, `--playdeck-color-buffered`, `--playdeck-color-focus`, `--playdeck-color-backdrop` |
-| Type      | `--playdeck-font-family`, `--playdeck-font-size`, `--playdeck-font-size-small`, `--playdeck-line-height`                                                                                           |
-| Spacing   | `--playdeck-space-1`, `--playdeck-space-2`, `--playdeck-space-3`                                                                                                                                   |
-| Shape     | `--playdeck-radius`, `--playdeck-radius-large`                                                                                                                                                     |
-| Controls  | `--playdeck-control-size`, `--playdeck-control-icon-size`, `--playdeck-control-hover`, `--playdeck-slider-thickness`                                                                               |
-| Overlays  | `--playdeck-overlay-opacity`, `--playdeck-overlay-scrim`                                                                                                                                           |
-| Motion    | `--playdeck-transition-duration`, `--playdeck-transition-easing`                                                                                                                                   |
-| Safe area | `--playdeck-safe-bottom`, `--playdeck-safe-left`, `--playdeck-safe-right`                                                                                                                          |
-| Poster    | `--playdeck-poster-fit`, `--playdeck-poster-position`                                                                                                                                              |
+| Group     | Tokens                                                                                                                                                                                                                            |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Color     | `--playdeck-color-surface`, `--playdeck-color-on-surface`, `--playdeck-color-accent`, `--playdeck-color-track`, `--playdeck-color-buffered`, `--playdeck-color-thumb-ring`, `--playdeck-color-focus`, `--playdeck-color-backdrop` |
+| Type      | `--playdeck-font-family`, `--playdeck-font-size`, `--playdeck-font-size-small`, `--playdeck-line-height`                                                                                                                          |
+| Spacing   | `--playdeck-space-1`, `--playdeck-space-2`, `--playdeck-space-3`                                                                                                                                                                  |
+| Shape     | `--playdeck-radius`, `--playdeck-radius-large`                                                                                                                                                                                    |
+| Controls  | `--playdeck-control-size`, `--playdeck-control-icon-size`, `--playdeck-control-hover`, `--playdeck-slider-thickness`                                                                                                              |
+| Overlays  | `--playdeck-overlay-opacity`, `--playdeck-overlay-scrim`                                                                                                                                                                          |
+| Motion    | `--playdeck-transition-duration`, `--playdeck-transition-easing`                                                                                                                                                                  |
+| Safe area | `--playdeck-safe-bottom`, `--playdeck-safe-left`, `--playdeck-safe-right`                                                                                                                                                         |
+| Poster    | `--playdeck-poster-fit`, `--playdeck-poster-position`                                                                                                                                                                             |
 
 **`--playdeck-control-size` has a floor.** The 44×44 px minimum touch target is
 enforced by the primitives with an inline `min-width`/`min-height`, so a smaller

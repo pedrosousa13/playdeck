@@ -9,7 +9,11 @@
  *      cascade layer whatever its specificity, so your own rules win by
  *      default — no `!important`, no ordering games.
  *   2. Every selector is wrapped in `:where()`, which contributes zero
- *      specificity. A single class of your own outranks any rule below.
+ *      specificity. A single class of your own outranks any rule below. One
+ *      rule cannot reach zero: the slider thumb's ring needs a pseudo-element,
+ *      and Selectors 4 forbids one inside `:where()`, so that rule carries the
+ *      pseudo-element's own (0,0,1). A class still outranks it, and rule 1
+ *      still decides it either way.
  *   3. Every token is read as `var(--name, default)` and is never declared by
  *      this file. That matters: a declaration block here (even on the player)
  *      would beat a value you set on an ancestor, because a declaration always
@@ -24,6 +28,7 @@
  *                --playdeck-color-accent        #3ea6ff
  *                --playdeck-color-track         rgb(255 255 255 / 0.36)
  *                --playdeck-color-buffered      rgb(255 255 255 / 0.7)
+ *                --playdeck-color-thumb-ring    #000
  *                --playdeck-color-focus         #fff
  *                --playdeck-color-backdrop      #000
  *   Typography   --playdeck-font-family         system-ui stack
@@ -261,6 +266,20 @@
 
   :where([data-playdeck-part='volume-slider']) {
     inline-size: 5rem;
+  }
+
+  /* The thumb's boundary, not its fill (#190). No `--playdeck-color-accent`
+   * value clears 3:1 against both the track and the buffered range, so a ring
+   * supplies the boundary the fill cannot; `test/theme.test.ts` computes the
+   * ratios. `outline` rather than `box-shadow`, which WebKit ignores here, and
+   * no `appearance: none`, which would unpaint the whole control. Gecko honours
+   * neither on `::-moz-range-thumb`, so there is no rule to write for it.
+   */
+  :where(
+    [data-playdeck-part='seek-slider-input'],
+    [data-playdeck-part='volume-slider']
+  )::-webkit-slider-thumb {
+    outline: 2px solid var(--playdeck-color-thumb-ring, #000);
   }
 
   /* ---- menus ------------------------------------------------------------- */
