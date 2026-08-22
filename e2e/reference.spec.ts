@@ -53,6 +53,56 @@ const bufferedRendered = (page: Page) =>
     .poll(() => seekBufferedRange(page).count(), { timeout: 15_000 })
     .toBeGreaterThan(0);
 
+// Writing a position onto the media element assumes the element can already
+// reach it, and on WebKit it often cannot yet. This engine parses `tracer.webm`
+// incrementally and reports a duration that grows as it goes, `el.seekable`
+// with it. A `currentTime` write is clamped into `seekable` — the same
+// arithmetic `withinMediaBounds` does (provider-native/adapter-values.ts:132)
+// — so writing 1 into a partly-parsed element lands at whatever the window
+// extends to at that instant. That clamp then puts the playhead exactly at the
+// leading edge, WebKit fires `seeking`/`seeked`/`ended`, the network state goes
+// to `stalled`, and the duration stays frozen there for good: the element never
+// recovers, so a later wait on the written position runs its whole timeout out
+// (#407).
+//
+// Measured, not assumed. Over 60 instrumented WebKit runs, read at the instant
+// of the write: all 19 that passed had `duration` and the window extent at
+// 1.000000, and all 41 that failed had a partial duration between 0.0407 and
+// 0.5641 with the extent equal to it — separation with no overlap. `readyState`
+// would not have caught it, so this does not wait on one: those failures
+// included `readyState === 4` sitting alongside a duration of 0.0407.
+//
+// The extent rather than `duration`, because the extent is what the write is
+// clamped against, and taken across every range the way `seekWindow` takes it
+// (react/src/transport-controls.tsx:247-258) rather than off the last one
+// alone. The clip is left playing across the wait: the measured loads keep
+// progressing and reach 1.000000 while playing, and it is the clamped write,
+// not playback, that freezes them.
+//
+// 15s for the same reason `bufferedRendered` takes it, but it is an upper bound
+// rather than headroom — reached, it would exhaust the 30s per-test budget in
+// `playwright.config.ts` before reporting, because this test spends 26s more on
+// `settledAt` and its polls. Measured across 512 runs under
+// `--repeat-each=8 --workers=4`, the pointer test ran 9.6s at the median and
+// 22.2s at its worst, so the bound is there to fail a wedged element rather
+// than to be waited out.
+const seekableThrough = (page: Page, seconds: number) =>
+  expect
+    .poll(
+      () =>
+        media(page).evaluate((el: HTMLVideoElement) =>
+          el.seekable.length === 0
+            ? 0
+            : Math.max(
+                ...Array.from({ length: el.seekable.length }, (_, index) =>
+                  el.seekable.end(index)
+                )
+              )
+        ),
+      { timeout: 15_000 }
+    )
+    .toBeGreaterThanOrEqual(seconds);
+
 // WebKit cannot satisfy that poll for this composition's fixture, so the two
 // tests that wait on it are excluded there (#401). Measured, not assumed.
 //
@@ -583,6 +633,11 @@ test('both range controls stay operable by pointer', async ({ page }) => {
   // this 1.000s fixture the input has exactly two reachable values; settling
   // at "1" says the click below is a real change rather than a no-op that
   // fires no event.
+  //
+  // And the element has to be able to reach 1 before it is told to, which on
+  // WebKit is not a given — `seekableThrough` above is that precondition, and
+  // carries why (#407).
+  await seekableThrough(page, 1);
   await media(page).evaluate((el: HTMLVideoElement) => {
     el.pause();
     el.currentTime = 1;
