@@ -5,6 +5,11 @@
 import { readFile } from 'node:fs/promises';
 import { URL } from 'node:url';
 import { describe, expect, test } from 'vitest';
+// The WCAG maths lives in one module because `e2e/thumb-contrast.spec.ts`
+// measures the same boundaries from rendered pixels (#190), and the two answers
+// only mean anything side by side if the formula behind them is literally the
+// same one.
+import { contrast, over, parseColor } from './contrast';
 
 // Enforces the theme contract from issue #10: consumers must be able to restyle
 // everything without specificity fights or forks. Two CSS tools make that work,
@@ -82,13 +87,27 @@ describe('theme contract', () => {
 
     expect([...atRules].sort()).toEqual(['layer', 'media']);
     expect([...pseudoFunctions].sort()).toEqual(['where']);
-    // Vendor-prefixed and never standardised, so it has no Baseline date to
-    // move the floor with -- but Blink and WebKit have both shipped it since
-    // long before Chrome 99 and Safari 15.4, and neither has an unprefixed
-    // spelling to migrate to. Gecko's `::-moz-range-thumb` is deliberately
-    // absent: it honours no paint property while the native appearance is on,
-    // so a rule naming it would be dead CSS (#190).
-    expect([...pseudoElements].sort()).toEqual(['-webkit-slider-thumb']);
+    // All four are vendor-prefixed and never standardised, so none has a
+    // Baseline date to move the floor with -- but every engine has shipped its
+    // own family since long before Chrome 99, Firefox 97 and Safari 15.4, and
+    // none has an unprefixed spelling to migrate to.
+    //
+    // The three `::-moz-*` names were absent until #190's Gecko half, on the
+    // stated grounds that `::-moz-range-thumb` "honours no paint property while
+    // the native appearance is on, so a rule naming it would be dead CSS".
+    // Pixel-differencing real Firefox builds disproved that. It honours no
+    // `outline` and no `box-shadow`, which is what had been probed; it does
+    // honour `background-color`, `border` and its own box metrics. What is true
+    // is the consequence: the first paint property to reach any part of a range
+    // input switches Gecko's native widget off for the whole control, so the
+    // track and the `accent-color` progress fill have to be drawn here too.
+    // That is why three names arrived together rather than one.
+    expect([...pseudoElements].sort()).toEqual([
+      '-moz-range-progress',
+      '-moz-range-thumb',
+      '-moz-range-track',
+      '-webkit-slider-thumb'
+    ]);
     // `calc` and `linear-gradient` are far below the floor (IE9 and Safari 6.1
     // respectively) and do not set it; they are listed because this asserts the
     // whole inventory, not a subset -- a subset check would let a new feature
@@ -114,15 +133,27 @@ describe('theme contract', () => {
         previous = stripped;
         stripped = stripped.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '');
       } while (stripped !== previous);
-      // The one documented exemption (#190): a native range input's thumb is
-      // reachable only through a pseudo-element, and Selectors 4 forbids a
-      // pseudo-element inside `:where()`, so the thumb-ring rule cannot be
-      // specificity-zero. It carries that pseudo-element's own (0,0,1), which
-      // any single consumer class outranks, and rule 1 -- the cascade layer --
-      // still makes unlayered consumer CSS win outright. Removed by exact name,
-      // so any other pseudo-element, and every class, id, attribute or type
-      // selector left outside a `:where()`, still fails below.
-      stripped = stripped.replace(/::-webkit-slider-thumb/g, '');
+      // The documented exemption (#190): a native range input's thumb, track
+      // and progress fill are reachable only through pseudo-elements, and
+      // Selectors 4 forbids a pseudo-element inside `:where()`, so the rules
+      // that paint the thumb's ring cannot be specificity-zero. Each carries
+      // its pseudo-element's own (0,0,1), which any single consumer class
+      // outranks, and rule 1 -- the cascade layer -- still makes unlayered
+      // consumer CSS win outright.
+      //
+      // Widened from `::-webkit-slider-thumb` alone when Gecko's half of #190
+      // landed: Gecko honours neither `outline` nor `box-shadow` on its thumb,
+      // so the ring costs a redraw of all three of its parts. Still removed by
+      // exact name, one name at a time, so any OTHER pseudo-element -- and
+      // every class, id, attribute or type selector left outside a `:where()`
+      // -- still fails below.
+      for (const exempt of [
+        '::-webkit-slider-thumb',
+        '::-moz-range-track',
+        '::-moz-range-progress',
+        '::-moz-range-thumb'
+      ])
+        stripped = stripped.split(exempt).join('');
       return /[.#[]|::?[a-z]|[a-z]/i.test(stripped.replace(/[\s,>+~*]/g, ''));
     });
     expect(offenders).toEqual([]);
@@ -176,6 +207,44 @@ describe('theme contract', () => {
     expect(withoutComments).toMatch(/@media\s*\(\s*forced-colors\s*:\s*active/);
   });
 
+  // #190's Gecko half works by switching that engine's native range widget off,
+  // and forced colors is the mode where the widget was the only thing painting
+  // the control in the user's own palette. Unguarded, the Gecko volume slider
+  // flattened to `Canvas` -- the progress fill and the unfilled track alike at
+  // `rgb(255 255 255)`, 1.00:1, so the slider stated no value at all.
+  // `e2e/thumb-contrast.spec.ts` measures that from rendered pixels; this
+  // asserts the structural reason for it, which costs no browser and fails in
+  // the same edit.
+  test('leaves the Gecko slider parts native in forced-colors mode', () => {
+    const query = /@media\s*\(\s*forced-colors\s*:\s*none\s*\)/.exec(
+      withoutComments
+    );
+    expect(query).not.toBeNull();
+
+    // Walk to the `}` that closes the query, so "inside it" is the block and
+    // not everything after the preamble.
+    const start = query!.index;
+    let depth = 0;
+    let end = withoutComments.indexOf('{', start);
+    for (; end < withoutComments.length; end++) {
+      if (withoutComments[end] === '{') depth++;
+      else if (withoutComments[end] === '}' && --depth === 0) break;
+    }
+
+    const names = [
+      '::-moz-range-track',
+      '::-moz-range-progress',
+      '::-moz-range-thumb'
+    ];
+    const guarded = withoutComments.slice(start, end + 1);
+    expect(names.filter((name) => guarded.includes(name))).toEqual(names);
+    // And nowhere outside it, or the query is decorative: one unguarded paint
+    // property on any part is enough to switch the whole native widget off.
+    const elsewhere =
+      withoutComments.slice(0, start) + withoutComments.slice(end + 1);
+    expect(names.filter((name) => elsewhere.includes(name))).toEqual([]);
+  });
+
   test('is reachable as @playdeck/react/theme.css and shipped in the tarball', async () => {
     const manifest = JSON.parse(
       await readFile(new URL('../package.json', import.meta.url), 'utf8')
@@ -205,8 +274,6 @@ describe('theme contract', () => {
 // *closer* to its surround over any brighter frame: these ratios are a ceiling,
 // not a typical case. Widening the target to a worst-case video ground is a
 // deliberate, recorded simplification of #190, not an oversight here.
-
-type Rgba = { red: number; green: number; blue: number; alpha: number };
 
 /**
  * The default a token is read with, taken from the shipped file rather than
@@ -244,58 +311,6 @@ const tokenDefault = (name: string): string => {
       }`
     );
   return [...defaults][0];
-};
-
-const parseColor = (value: string): Rgba => {
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value);
-  if (hex !== null) {
-    const digits = hex[1];
-    const channel = (index: number): number =>
-      digits.length === 3
-        ? Number.parseInt(digits[index].repeat(2), 16) / 255
-        : Number.parseInt(digits.slice(index * 2, index * 2 + 2), 16) / 255;
-    return { red: channel(0), green: channel(1), blue: channel(2), alpha: 1 };
-  }
-  const rgb = /^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\/\s*([\d.]+)\s*\)$/i.exec(
-    value
-  );
-  if (rgb !== null)
-    return {
-      red: Number(rgb[1]) / 255,
-      green: Number(rgb[2]) / 255,
-      blue: Number(rgb[3]) / 255,
-      alpha: Number(rgb[4])
-    };
-  throw new Error(`theme.css: cannot parse the colour default \`${value}\``);
-};
-
-/** Source-over composite of a translucent colour onto an opaque ground. */
-const over = (color: Rgba, ground: Rgba): Rgba => {
-  if (ground.alpha !== 1)
-    throw new Error('the ground colour must be opaque to composite against');
-  const blend = (top: number, bottom: number): number =>
-    top * color.alpha + bottom * (1 - color.alpha);
-  return {
-    red: blend(color.red, ground.red),
-    green: blend(color.green, ground.green),
-    blue: blend(color.blue, ground.blue),
-    alpha: 1
-  };
-};
-
-/** WCAG 2.x relative luminance. */
-const luminance = ({ red, green, blue }: Rgba): number => {
-  const linear = (channel: number): number =>
-    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue);
-};
-
-/** WCAG 2.x contrast ratio, `(L1 + 0.05) / (L2 + 0.05)`. */
-const contrast = (one: Rgba, other: Rgba): number => {
-  const [lighter, darker] = [luminance(one), luminance(other)].sort(
-    (a, b) => b - a
-  );
-  return (lighter + 0.05) / (darker + 0.05);
 };
 
 describe('slider non-text contrast', () => {
@@ -364,8 +379,18 @@ describe('slider non-text contrast', () => {
   // Two boundaries nothing here measures. The thumb is taller than the 0.25rem
   // track, so the ring's outer edge meets the control scrim rather than either
   // slider surface, and no pair of tokens describes that. And the volume slider
-  // carries the same ring while the theme paints it no track at all, so every
-  // ratio above describes the seek slider only.
+  // is painted a track by this file on Gecko only (`::-moz-range-track`, #190),
+  // so on Blink and WebKit what sits beside its thumb is the engine's own
+  // unfilled track and no token describes it.
+  //
+  // What none of it measures is a rendered pixel. Every ratio here composites
+  // token defaults; the engines composite something else. Each paints its own
+  // native track under this file's `seek-buffered` bar, and that bar is
+  // absolutely positioned while the input is not, so on Blink and Gecko the
+  // bar paints OVER the control and lifts the whole thumb -- ring included --
+  // towards white. That overlay defect is owned by #415.
+  // `e2e/thumb-contrast.spec.ts` measures what is actually on screen and records
+  // how far apart the two answers are.
   const asserted = [
     'track vs backdrop',
     'buffered vs track',

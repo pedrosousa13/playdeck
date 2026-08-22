@@ -9,11 +9,12 @@
  *      cascade layer whatever its specificity, so your own rules win by
  *      default — no `!important`, no ordering games.
  *   2. Every selector is wrapped in `:where()`, which contributes zero
- *      specificity. A single class of your own outranks any rule below. One
- *      rule cannot reach zero: the slider thumb's ring needs a pseudo-element,
- *      and Selectors 4 forbids one inside `:where()`, so that rule carries the
- *      pseudo-element's own (0,0,1). A class still outranks it, and rule 1
- *      still decides it either way.
+ *      specificity. A single class of your own outranks any rule below. Four
+ *      rules cannot reach zero: the slider thumb's ring needs pseudo-elements
+ *      (one on Blink and WebKit, three on Gecko), and Selectors 4 forbids one
+ *      inside `:where()`, so those rules carry the pseudo-element's own
+ *      (0,0,1). A class still outranks them, and rule 1 still decides it either
+ *      way.
  *   3. Every token is read as `var(--name, default)` and is never declared by
  *      this file. That matters: a declaration block here (even on the player)
  *      would beat a value you set on an ancestor, because a declaration always
@@ -271,15 +272,88 @@
   /* The thumb's boundary, not its fill (#190). No `--playdeck-color-accent`
    * value clears 3:1 against both the track and the buffered range, so a ring
    * supplies the boundary the fill cannot; `test/theme.test.ts` computes the
-   * ratios. `outline` rather than `box-shadow`, which WebKit ignores here, and
-   * no `appearance: none`, which would unpaint the whole control. Gecko honours
-   * neither on `::-moz-range-thumb`, so there is no rule to write for it.
+   * ratios and `e2e/thumb-contrast.spec.ts` measures the painted pixels.
+   *
+   * Blink and WebKit: `outline` rather than `box-shadow`, which WebKit ignores
+   * here, and no `appearance: none`, which would unpaint the whole control.
    */
   :where(
     [data-playdeck-part='seek-slider-input'],
     [data-playdeck-part='volume-slider']
   )::-webkit-slider-thumb {
     outline: 2px solid var(--playdeck-color-thumb-ring, #000);
+  }
+
+  /* Gecko needs the three rules below instead, and needs all three of them.
+   *
+   * `outline` and `box-shadow` on `::-moz-range-thumb` are no-ops there —
+   * measured by pixel-differencing real builds, not inferred. The only
+   * properties that reach the thumb are paint properties, and Gecko's native
+   * theming is all-or-nothing: the first paint property to land on any part of
+   * a range input switches the native widget off for the WHOLE control, so
+   * `accent-color` stops filling the progress and the native track stops
+   * painting too. Colouring the thumb alone therefore does not add a ring to
+   * the shipped slider, it deletes the slider and leaves a ring.
+   *
+   * So the ring costs a redraw of all three parts, and the three rules are one
+   * unit: deleting any of them unpaints that part rather than falling back to
+   * the native rendering. They read the tokens the rest of this file already
+   * reads, so one consumer value still restyles every engine.
+   *
+   * `::-moz-*` is inert on Blink and WebKit (measured: zero differing pixels
+   * across the frame), so no engine query guards these three.
+   *
+   * A forced-colors query does, and it is load-bearing rather than tidiness.
+   * Switching Gecko's native widget off also gives up the forced-colors
+   * rendering that came with it, and nothing in the block at the foot of this
+   * file maps a range part, so the whole control flattens to `Canvas`. Measured
+   * on the volume slider in Firefox under `forced-colors: active`, with these
+   * rules unguarded: the progress fill and the unfilled track both paint
+   * `rgb(255 255 255)` — one colour, so the slider states no value at all — and
+   * the thumb paints `rgb(240 240 240)` inside a `rgb(153 153 153)` border,
+   * 1.14:1 and 2.85:1 against the canvas. Left native, the same slider paints a
+   * `rgb(0 0 0)` fill against a `rgb(233 233 237)` track, 17.34:1. So the ring,
+   * which exists to buy contrast, is dropped in the one mode where the platform
+   * already supplies more of it than the ring can. `e2e/thumb-contrast.spec.ts`
+   * measures both modes.
+   *
+   * `(forced-colors: none)` rather than `not (forced-colors: active)`, because
+   * the two differ where it matters here. The negated form is Media Queries 4
+   * syntax, and an engine that cannot parse the preamble drops the ring
+   * outright; `forced-colors: none` is plain `feature: value`, which every
+   * engine parses, and it is false only where the feature is implemented —
+   * Firefox 89, below this file's declared floor of Firefox 97.
+   */
+  @media (forced-colors: none) {
+    :where(
+      [data-playdeck-part='seek-slider-input'],
+      [data-playdeck-part='volume-slider']
+    )::-moz-range-track {
+      block-size: var(--playdeck-slider-thickness, 0.25rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      background-color: var(--playdeck-color-track, rgb(255 255 255 / 0.36));
+    }
+
+    :where(
+      [data-playdeck-part='seek-slider-input'],
+      [data-playdeck-part='volume-slider']
+    )::-moz-range-progress {
+      block-size: var(--playdeck-slider-thickness, 0.25rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      background-color: var(--playdeck-color-accent, #3ea6ff);
+    }
+
+    :where(
+      [data-playdeck-part='seek-slider-input'],
+      [data-playdeck-part='volume-slider']
+    )::-moz-range-thumb {
+      box-sizing: border-box;
+      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      border: 2px solid var(--playdeck-color-thumb-ring, #000);
+      border-radius: 50%;
+      background-color: var(--playdeck-color-accent, #3ea6ff);
+    }
   }
 
   /* ---- menus ------------------------------------------------------------- */
@@ -429,5 +503,19 @@
     :where([data-playdeck-part='seek-buffered-range']) {
       background-color: canvastext;
     }
+
+    /* Neither slider input appears above, and neither should. A range input's
+     * parts are the engine's in this mode: leave the native widget alone and
+     * the user's own palette reaches the track, the fill and the thumb without
+     * this file naming a system colour for any of them. The `::-moz-*` rules
+     * are held out of this mode for exactly that reason, and the measurement
+     * that says so is with them.
+     *
+     * One part of the seek slider is still unreadable here, and it is not the
+     * input: `seek-buffered` is opaque `canvas` in this mode and paints over
+     * the control, so the thumb reaches no pixel on any engine and the bar
+     * shows a loaded range but not the current position. That is the overlay
+     * defect, owned by #415, not something this block can map its way out of.
+     */
   }
 }

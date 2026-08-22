@@ -29,9 +29,15 @@ _Avoid_: element, node, slot
 **Thumb**:
 The grip a user drags on either slider. The browser renders it inside the native
 range input, so it is not a part: it carries no `data-playdeck-part`, and the
-theme reaches it only through `::-webkit-slider-thumb`. Its fill belongs to
-`accent-color` and cannot be addressed on its own, which is why the theme colours
-its ring (`--playdeck-color-thumb-ring`) rather than the thumb itself.
+theme reaches it only through a pseudo-element — `::-webkit-slider-thumb` on
+Blink and WebKit, `::-moz-range-thumb` on Gecko. On Blink and WebKit its fill
+belongs to `accent-color` and cannot be addressed on its own, which is why the
+theme colours its ring (`--playdeck-color-thumb-ring`) rather than the thumb
+itself. On Gecko the ring costs more: styling any part of a range input turns the
+native widget off for the whole control, so there the theme draws the thumb
+whole — its fill as well as its ring — plus that engine's track and progress
+fill. It draws none of them in forced-colors mode, where the native widget is
+left on so the user's palette reaches the control.
 _Avoid_: handle, knob, scrubber
 
 **Viewport**:
