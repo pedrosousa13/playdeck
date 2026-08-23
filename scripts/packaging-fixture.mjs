@@ -8,7 +8,10 @@
 // advisory floor behind it -- followed immediately by `pnpm run build`, which
 // executes what it resolved.
 
-import { parse, parseDocument } from 'yaml';
+// Not `yaml` directly: scripts/verify-packaging.mjs imports this file, and a
+// pinned run of it resolves a bare specifier out of the tree it is judging
+// unless something stops it. gate-parser.mjs is what stops it (#372).
+import { parse, parseDocument } from './gate-parser.mjs';
 
 /**
  * The synthesised `pnpm-workspace.yaml` for the temp fixture: the root file

@@ -69,7 +69,10 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
-import { parse } from 'yaml';
+// Not `yaml` directly: a pinned run of this file resolves a bare specifier out
+// of the tree it is judging unless something stops it, and gate-parser.mjs is
+// what stops it (#372).
+import { parse } from './gate-parser.mjs';
 import {
   publishableBaseline,
   selectPublishable,
