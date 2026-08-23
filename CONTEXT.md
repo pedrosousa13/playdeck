@@ -349,6 +349,20 @@ prints it as `SUPPRESSED`. Distinct from **floored**, which changes what the
 graph resolves to; this changes what the gate is shown (#337).
 _Avoid_: ignored, allowlisted, accepted
 
+**Departed**:
+A package publishable on `main` and not publishable in the tree under test —
+its manifest gained `private`, or `pnpm-workspace.yaml` stopped matching its
+directory. The audit gate computes `main`'s publishable set from `main`'s own
+manifests through the same one definition and fails naming every departure as
+`DEPARTED`: what left is still on the registry and consumers still resolve it,
+so every advisory reachable only through it went unmeasured. Only a boundary
+that shrank counts; a widened one is a new package. A deliberate departure
+needs an explicit override to land, since it fails the gate until it is on
+`main` and cannot reach `main` without landing. Distinct from **suppressed**,
+which changes what the gate is shown; this changes what the gate is drawn
+around (#373).
+_Avoid_: unpublished, withdrawn, removed
+
 **Governed**:
 An install the root `pnpm-workspace.yaml` reaches — its advisory floors, its
 `minimumReleaseAge` cooldown and that cooldown's exclusions. The packaging

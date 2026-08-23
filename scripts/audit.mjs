@@ -37,6 +37,20 @@
 // the gate was not shown, so it reports the entry and fails rather than passing
 // off the remainder as the whole. See workspaceSuppressions.
 //
+// The third is not a workspace setting but the boundary itself. Reachability
+// is measured from the publishable packages, and which packages those are is
+// declared in manifests this pull request owns: adding `private: true` to a
+// shipped package's package.json, or dropping a glob from
+// `pnpm-workspace.yaml`'s `packages:` list, takes it out of the boundary and
+// reclassifies every advisory reachable only through it from shipped to not
+// shipped -- with the dependency tree untouched. Pinning the gate's source to
+// `main` (#337) does not reach it, because both copies compute the boundary
+// from this tree and so agree on the narrowed one: it is a change to the
+// gate's input, not to its logic. So the boundary is compared against `main`'s
+// own, computed by this same definition of publishable from `main`'s
+// manifests, and a package that left it fails the gate by name. See
+// departedPackages and gather.
+//
 // `pnpm audit --prod` is not the same boundary and is not used: a private
 // integration fixture in this workspace declares its framework under
 // `dependencies`, so a workspace-root production audit counts a test
@@ -56,7 +70,11 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { parse } from 'yaml';
-import { selectPublishable, workspaceProjects } from './workspace-packages.mjs';
+import {
+  publishableBaseline,
+  selectPublishable,
+  workspaceProjects
+} from './workspace-packages.mjs';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -86,7 +104,11 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  * derives from them -- which package boundary reachability is drawn around --
  * and the `overrides` block gather() reads from `pnpm-workspace.yaml`, keyed by
  * pnpm selector.
- * @typedef {{ workspace: WorkspaceProject[]; publishable: PublishablePackage[]; prodTrees: ProjectTree[]; audit: AuditReport; overrides: Readonly<Record<string, string>>; suppressions: AuditSuppression[] }} AuditInputs
+ *
+ * `baseline` is that same boundary computed from `main`'s manifests, or null
+ * when there is none to compare against. Null is the developer's path and only
+ * the developer's path; CI always supplies one. See gather.
+ * @typedef {{ workspace: WorkspaceProject[]; publishable: PublishablePackage[]; baseline: PublishablePackage[] | null; prodTrees: ProjectTree[]; audit: AuditReport; overrides: Readonly<Record<string, string>>; suppressions: AuditSuppression[] }} AuditInputs
  * @typedef {{ severity: string; module: string; advisoryId: string; title: string; url: string; shipped: boolean; reachableFrom: string[]; paths: string[] }} ClassifiedAdvisory
  *
  * One `name@version` in a publishable package's closure whose name an override
@@ -214,6 +236,37 @@ export const workspaceSuppressions = (workspaceYaml) => {
     }))
     .filter((entry) => entry.identifiers.length > 0)
     .sort((a, b) => a.key.localeCompare(b.key));
+};
+
+/**
+ * The packages publishable on `main` that are not publishable here.
+ *
+ * One direction only. A boundary that shrank is a departure and fails: what
+ * left it is still on the registry, consumers still resolve it, and this gate
+ * has stopped measuring it. A boundary that widened is a new package, which is
+ * how a package arrives and hides nothing. Unchanged is the ordinary case and
+ * says nothing at all. A package absent from `main` cannot have departed from
+ * it, which falls out of comparing in this direction rather than needing a
+ * rule of its own.
+ *
+ * Compared by name rather than by path or version: a package that moved
+ * directory or changed version is the same package, still shipping under the
+ * same name to the same consumers, and neither is a narrowing of the boundary.
+ *
+ * Both sides are `selectPublishable`'s output, so the two things a pull
+ * request can change -- an entry's `private` field, and whether `pnpm list -r`
+ * reports the entry at all -- both arrive here as a name that is missing from
+ * `current`. Neither route needs its own case.
+ * @param {readonly PublishablePackage[]} baseline
+ * @param {readonly PublishablePackage[]} current
+ * @returns {string[]}
+ */
+export const departedPackages = (baseline, current) => {
+  const present = new Set(current.map((pkg) => pkg.name));
+  return baseline
+    .map((pkg) => pkg.name)
+    .filter((name) => !present.has(name))
+    .sort();
 };
 
 // Inside a range, a `>` is a semver operator, and these are the characters one
@@ -405,6 +458,7 @@ const flooredModules = (overrides, prodTrees) => {
  * @param {readonly string[]} publishable
  * @param {readonly FlooredModule[]} floored
  * @param {readonly AuditSuppression[]} suppressions
+ * @param {readonly string[]} departed
  */
 const formatReport = (
   advisories,
@@ -412,7 +466,8 @@ const formatReport = (
   importers,
   publishable,
   floored,
-  suppressions
+  suppressions,
+  departed
 ) => {
   const shippedCount = advisories.filter((advisory) => advisory.shipped).length;
   const lines = [
@@ -451,7 +506,20 @@ const formatReport = (
       `              set in pnpm-workspace.yaml, which drops these advisories from the audit report before this gate reads it`
     );
   }
-  if (advisories.length + floored.length + suppressions.length > 0)
+  // A departure is a finding about the boundary the two lines at the top of
+  // this report are drawn around, so it names the package that left it rather
+  // than only reporting that the count moved -- otherwise a reader has to diff
+  // two trees of manifests to find out what stopped being measured.
+  for (const name of departed) {
+    lines.push(
+      `DEPARTED     ${name}`,
+      `              publishable on main and not publishable here, so every advisory reachable only through it has gone unmeasured above`
+    );
+  }
+  if (
+    advisories.length + floored.length + suppressions.length + departed.length >
+    0
+  )
     lines.push('');
 
   const summary = [
@@ -471,6 +539,11 @@ const formatReport = (
         : `${suppressions.length} auditConfig entries above suppress advisories, so the count this report opens with is not the count pnpm found.`
     );
   }
+  if (departed.length > 0) {
+    summary.push(
+      `${departed.length} package(s) above are publishable on main and are not publishable here, so this report measures a narrower boundary than the one consumers resolve.`
+    );
+  }
   lines.push(summary.join(' '));
   return lines.join('\n');
 };
@@ -482,6 +555,7 @@ const formatReport = (
 export const gate = ({
   workspace,
   publishable,
+  baseline,
   prodTrees,
   audit,
   overrides,
@@ -489,6 +563,12 @@ export const gate = ({
 }) => {
   const advisories = classify(audit, shippedVersions(prodTrees));
   const floored = flooredModules(overrides, prodTrees);
+  // No baseline means no comparison, and no line about one either: a developer
+  // running this locally has no `main` manifests to compare against and should
+  // see the report they saw before this existed. That is safe only because CI
+  // never takes this branch -- gather() throws rather than passing null when it
+  // was asked for a baseline and could not read one.
+  const departed = baseline ? departedPackages(baseline, publishable) : [];
   return {
     report: formatReport(
       advisories,
@@ -496,17 +576,22 @@ export const gate = ({
       workspace.length,
       publishable.map((pkg) => pkg.name),
       floored,
-      suppressions
+      suppressions,
+      departed
     ),
     advisories,
     // A suppression fails on its own, and unlike a floor it is not scoped to a
     // publishable closure: an advisory pnpm removed from the report cannot be
     // tested for reachability, because it is not there to test. There is
-    // nothing to intersect, so there is nothing to narrow this to.
+    // nothing to intersect, so there is nothing to narrow this to. A departure
+    // fails on its own for the same reason from the other side -- what left
+    // the boundary took its closure out of the reachability walk with it, so
+    // there is again nothing to intersect.
     exitCode:
       advisories.some((advisory) => advisory.shipped) ||
       floored.length > 0 ||
-      suppressions.length > 0
+      suppressions.length > 0 ||
+      departed.length > 0
         ? 1
         : 0
   };
@@ -559,9 +644,27 @@ const gather = () => {
     'utf8'
   );
 
+  // The boundary comparison (#373) needs `main`'s manifests, which only CI has
+  // fetched, so CI points this at the directory it extracted them into and a
+  // developer machine leaves the variable unset and compares nothing.
+  //
+  // Set means mandatory. `publishableBaseline` throws when the directory is
+  // missing, empty or carries no workspace file, rather than shrugging and
+  // returning nothing to compare -- a gate that skips itself when its baseline
+  // is absent is a bypass, and a bypass is the thing this comparison exists to
+  // close. Unset is the only silence, and CI never leaves it unset.
+  //
+  // What remains, stated rather than hidden: a pull request can edit
+  // `.github/workflows/ci.yml` and drop the variable, which is the same
+  // residual the pinned run already carries ("A pull request can still edit
+  // this file and take the pinned run out"). Neutering this is a diff to a
+  // workflow file, not a field in a manifest.
+  const baselineDir = process.env.PLAYDECK_PUBLISHABLE_BASELINE;
+
   return {
     workspace,
     publishable,
+    baseline: baselineDir ? publishableBaseline(baselineDir) : null,
     prodTrees,
     audit: parseAuditOutput(output),
     overrides: workspaceOverrides(workspaceYaml),

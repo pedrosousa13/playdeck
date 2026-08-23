@@ -13,3 +13,8 @@ test-results/
 # and run from there. Never committed: a copy that lived in the tree would be
 # editable by the pull request it judges, which is the whole point of it.
 .gate/
+# main's manifests and workspace file, fetched by the same job and the same
+# fetch, and the publishable boundary the gate compares against (#373). Never
+# committed, for the same reason: a copy in the tree would be the pull
+# request's declaration of what main publishes.
+.gate-baseline/

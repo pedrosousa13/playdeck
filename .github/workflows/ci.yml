@@ -106,11 +106,17 @@ jobs:
   # request still supplies everything that source consumes — the tree being
   # measured, the `node_modules` it imports from, and the pnpm that corepack
   # resolves from its `packageManager`. So it defeats an edit to
-  # `scripts/audit.mjs`, and that is the whole of what it defeats. Two
-  # residuals are known and filed rather than papered over: `main`'s copy
-  # executes pull-request-authored dependency code, since `yaml` resolves into
-  # this tree (#372), and the publishable boundary the gate measures against is
-  # itself declared in pull-request-owned manifests (#373).
+  # `scripts/audit.mjs`, and that is the whole of what it defeats. One residual
+  # is known and filed rather than papered over: `main`'s copy executes
+  # pull-request-authored dependency code, since `yaml` resolves into this tree
+  # (#372).
+  #
+  # A second is closed rather than open, and it is an input rather than logic:
+  # the publishable boundary the gate measures against is declared in
+  # pull-request-owned manifests (#373), which pinning cannot reach because
+  # both copies read the same manifests and agree on the narrowed boundary. It
+  # is fetched from `main` alongside the source below and compared, and the
+  # gate fails when a package left it.
   #
   # A third was closed rather than filed, and is why pinning is worth having:
   # an `auditConfig` block in `pnpm-workspace.yaml` makes pnpm drop advisories
@@ -174,18 +180,98 @@ jobs:
       # resolves a bare import from the nearest `node_modules` upward. A
       # committed one is found before this tree's, and `main`'s gate would
       # then parse `pnpm-workspace.yaml` with pull-request code.
+      #
+      # `.gate-baseline/` answers the second residual named above (#373): the
+      # publishable boundary both gates measure against is declared in
+      # manifests the pull request owns, and pinning does not reach it because
+      # both copies of the gate read the same pull-request-owned manifests and
+      # so agree on a narrowed boundary. So `main`'s boundary is materialised
+      # here and the gate compares against it, failing when a package left it.
+      #
+      # Manifests and the workspace file, and nothing else — no lockfile, no
+      # install, no `node_modules`. `pnpm list -r --depth -1 --json` answers
+      # from that alone, which is what keeps this to one `git archive` off the
+      # fetch already above rather than a second checkout. That property is
+      # pnpm's rather than ours, so scripts/workspace-packages.test.mjs builds
+      # a tree with the enumeration below — every tracked `package.json` plus
+      # `pnpm-workspace.yaml`, 18 manifests today — and runs a real invocation
+      # against it.
+      #
+      # Every `package.json` in the tree is taken, not only the ones today's
+      # globs match: which paths are in the workspace is precisely what the
+      # comparison must not let the pull request decide, and the extra
+      # manifests (the audit and packaging fixtures) sit outside `main`'s
+      # `packages:` list and are inert. Inert is what makes taking all of them
+      # safe rather than an aside, so the same test asserts it: the seven
+      # fixture manifests are in that tree and are not projects in it.
+      #
+      # The enumeration is NUL-delimited from end to end — `-z` on `ls-tree`,
+      # `grep -z`, `xargs -0` — because `git ls-tree` C-quotes any path that is
+      # not printable ASCII (`core.quotePath`), which leaves a quoted string
+      # that no longer ends in `package.json` for a line-oriented `grep` to
+      # miss, and an unquoted `$(…)` word-splits a path holding a space into
+      # two pathspecs. Neither is reachable in this tree today. Both would
+      # narrow the baseline being compared against, which is the direction that
+      # goes quiet rather than red.
+      #
+      # It also puts every stage inside the pipeline, where `pipefail` can see
+      # it. The `$(git ls-tree … | grep …)` this replaced was a command
+      # substitution, and a substitution's exit status is what neither `set -e`
+      # nor `pipefail` inspects: a failing `git ls-tree`, or a `grep` matching
+      # nothing, left `git archive` with `pnpm-workspace.yaml` alone and the
+      # step walked on into `node .gate/audit.mjs`. That still failed closed,
+      # and by the least legible error of the three available. Measured: `pnpm
+      # list -r` over a workspace whose globs match no manifest prints nothing
+      # and exits 0, so `workspaceProjects` dies inside `JSON.parse` with
+      # "Unexpected end of JSON input" — not `publishableBaseline`'s guard,
+      # which the workspace file being there satisfies, and not
+      # `selectPublishable`'s "No publishable workspace packages were
+      # discovered" either, which nothing reaches. None of that points an
+      # operator at the extraction. Now `grep`'s exit 1 fails the line it went
+      # wrong on.
+      #
+      # `-i` covers the one way `xargs` hands `tar` something other than a
+      # single archive: given more paths than one command line holds it runs
+      # `git archive` a second time, and GNU tar stops at the first archive's
+      # end-of-archive marker unless told to read past it. 18 manifests are
+      # nowhere near that limit, but the failure it would produce is a partial
+      # baseline and not an error, so it is closed by a flag rather than by the
+      # argument that it cannot happen.
+      #
+      # The comparison is against `main`'s *tip*, which is what `--depth=1`
+      # fetches, and not against the merge base. Intended, not an oversight: a
+      # branch behind `main` is judged against the boundary as it stands now,
+      # which is the boundary consumers resolve — and the merge base would need
+      # history this clone deliberately does not have.
+      #
+      # `PLAYDECK_PUBLISHABLE_BASELINE` is set on both runs below. Set means
+      # the comparison is mandatory: `scripts/audit.mjs` fails when the
+      # directory is missing, empty or carries no workspace file rather than
+      # skipping quietly, because a gate that skips itself when its baseline is
+      # absent is another bypass. Unset — a developer running `pnpm test:audit`
+      # — compares nothing and prints nothing new. A pull request can still
+      # edit this file and drop the variable, the same residual the paragraphs
+      # above accept for the pinned run itself.
       - name: Audit — main's copy of the gate
+        env:
+          PLAYDECK_PUBLISHABLE_BASELINE: ${{ github.workspace }}/.gate-baseline
         run: |
           set -o pipefail
           git fetch --depth=1 origin main
-          rm -rf .gate
-          mkdir -p .gate
+          rm -rf .gate .gate-baseline
+          mkdir -p .gate .gate-baseline
           git archive FETCH_HEAD scripts | tar -x --strip-components=1 -C .gate
+          git ls-tree -r -z --name-only FETCH_HEAD \
+            | grep -zE '(^|/)package\.json$' \
+            | xargs -0 git archive FETCH_HEAD pnpm-workspace.yaml \
+            | tar -x -i -C .gate-baseline
           node .gate/audit.mjs
       # Runs even when the pinned copy above failed, so one run never hides
       # the other's verdict: the two disagreeing is the interesting case.
       - name: Audit — this pull request's copy of the gate
         if: ${{ !cancelled() }}
+        env:
+          PLAYDECK_PUBLISHABLE_BASELINE: ${{ github.workspace }}/.gate-baseline
         run: pnpm test:audit
 
   unit:
