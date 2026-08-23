@@ -140,7 +140,9 @@ jobs:
   # one character inside a script — the same argument the paragraph above
   # makes for `audit` being a job, carried one level down.
   # scripts/verify-packaging.mjs and scripts/check-bundle-budgets.mjs are
-  # editable in-band the same way and are not covered here. See #337.
+  # editable in-band the same way. They were left out of #337 so that one
+  # worked example could land before the pattern spread; the `package` job now
+  # runs both from `main`'s copy on this same mechanism (#376).
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -379,6 +381,13 @@ jobs:
   # the same `packageManager`, and that is also what keeps the fixture's
   # committed lockfile replayed rather than re-resolved under a newer
   # `lockfileVersion`. See #336.
+  #
+  # `timeout-minutes` stays at 30 even though #376 made that harness run twice,
+  # which is the obvious thing to check when a job's most expensive step
+  # doubles. Measured across three `main` runs: `pnpm test:packages` took 15s,
+  # 20s and 20s inside whole jobs of 57s, 61s and 65s. A second run of it, plus
+  # a second run of a budget check that costs about a second, leaves this job
+  # comfortably under two minutes against a thirty-minute cap.
   package:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -403,10 +412,136 @@ jobs:
           browser: chromium
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
-      # and hit that cache instead of rebuilding from scratch.
+      # and hit that cache instead of rebuilding from scratch. It also has to
+      # precede every gate run below, pinned or not: both gates read what this
+      # step produced, and `main`'s copies read it through the same paths this
+      # pull request's copies do.
       - run: pnpm build
-      - run: pnpm test:packages
-      - run: pnpm test:budgets
+      # `main`'s copies of the two gate scripts this job runs. The `audit` job
+      # above carries the full argument for taking a gate's *source* from
+      # `main`; this is that mechanism applied to the two scripts #337
+      # deliberately left behind, one worked example having landed first
+      # (#376). The short form: `scripts/verify-packaging.mjs` and
+      # `scripts/check-bundle-budgets.mjs` are ordinary files the pull request
+      # they judge can edit, and softening either one's failure path — the
+      # `process.exit(1)` the packaging harness ends on, the `throw` the budget
+      # check ends on — leaves both of this job's checks arriving, running and
+      # green.
+      #
+      # Every line below is the `audit` job's, for the reasons set out there at
+      # length and repeated here only in brief. `actions/checkout` is shallow
+      # and fetches only the ref under test, so `main` is not in this clone and
+      # `origin/main` does not exist here — hence the explicit fetch, read back
+      # through `FETCH_HEAD`. `pipefail` makes a failed `git archive` the
+      # pipeline's failure instead of leaving the verdict to `tar`, whose
+      # treatment of degenerate input is not uniform. `rm -rf` removes whatever
+      # a pull request committed under `.gate/` that the extraction would not
+      # overwrite, `.gate/node_modules/` above all: Node resolves a bare import
+      # from the nearest `node_modules` upward, and `verify-packaging.mjs`
+      # imports `@playwright/test` that way. `--strip-components=1` is what
+      # puts `scripts/*` at `.gate/*` rather than `.gate/scripts/*`, which is
+      # what leaves the copy exactly one level below the repository root — the
+      # depth both scripts resolve their paths from, and the whole reason they
+      # transfer here unchanged. The directory is copied whole rather than
+      # file by file so `main`'s import closure stays complete even if a pull
+      # request deletes a module it needs.
+      #
+      # One extraction rather than one per pinned run: both runs read the same
+      # directory, and re-fetching between them would buy a second network
+      # round trip and a second way to fail without changing a line of what
+      # executes.
+      #
+      # What this is, in the same terms the `audit` job uses: pinned logic over
+      # unpinned inputs. `main` supplies the two scripts. The pull request still
+      # supplies the tree they measure, the `node_modules` they import from
+      # (#372 — and the packaging harness is the sharper case of that residual,
+      # since it drives a real browser through pull-request-installed
+      # Playwright), the fixture under `tests/packaging/`, and the pnpm that
+      # corepack resolves from `packageManager`. None of those are folded in
+      # here; #372 and #374 hold them.
+      #
+      # One residual that would otherwise belong in that list is already closed,
+      # elsewhere: the publishable boundary `verify-packaging.mjs` draws is
+      # declared in pull-request-owned manifests, which pinning cannot reach
+      # because both copies read the same manifests and agree on a narrowed one.
+      # `scripts/workspace-packages.mjs` is the single definition of that
+      # boundary and the packaging harness and the audit gate both import it, so
+      # the `audit` job materialising `main`'s boundary and failing on a
+      # departure (#373) covers this job too. Hence no baseline here.
+      - name: Fetch main's copy of the gate scripts
+        run: |
+          set -o pipefail
+          git fetch --depth=1 origin main
+          rm -rf .gate
+          mkdir -p .gate
+          git archive FETCH_HEAD scripts | tar -x --strip-components=1 -C .gate
+      # `verify-packaging.mjs` resolves the repository root from its own module
+      # URL and builds every fixture at an absolute `tmpdir()` path, so a copy
+      # in `.gate/` packs and installs *this* pull request's packages while
+      # executing *main*'s logic. Its local imports — `./workspace-packages.mjs`
+      # and `./packaging-fixture.mjs` — ride along in the whole-directory copy.
+      #
+      # `node .gate/verify-packaging.mjs` and not `pnpm test:packages`, here and
+      # for the budget check below. That is the point rather than a shortcut:
+      # `package.json`'s `test:packages` and `test:budgets` entries are
+      # themselves pull-request-owned, so routing the pinned run through one
+      # would hand straight back the bypass this closes — the gate's source
+      # would come from `main` and the choice of what to run would not.
+      #
+      # `!cancelled()` here as well as on the three gate steps below it, so all
+      # four run whatever the step before them did. On this first one it decides
+      # what happens when the fetch above fails: the pinned run no longer skips,
+      # it runs and dies on a missing `.gate/`. Nothing new is caught by that —
+      # a failed fetch already reddens the job on its own — but the failure is
+      # loud and lands in the step whose input is missing, rather than that step
+      # vanishing from the log as a skip. It is one step further than the
+      # `audit` job goes, whose first pinned run keeps the default `success()`,
+      # and the difference is deliberate: this job runs four gate steps in
+      # sequence rather than two, so a skip early in the chain hides more.
+      - name: Packaging — main's copy of the gate
+        if: ${{ !cancelled() }}
+        run: node .gate/verify-packaging.mjs
+      # Runs even when the pinned copy above failed, so one run never hides the
+      # other's verdict: the two disagreeing is the interesting case. Both
+      # copies run and either failing fails the job, which is the same three
+      # properties the `audit` job lists — a weakened gate still faces `main`'s
+      # copy, a legitimately improved one is still exercised by the pull request
+      # that improves it, and a broken one is caught by its own copy failing.
+      - name: Packaging — this pull request's copy of the gate
+        if: ${{ !cancelled() }}
+        run: pnpm test:packages
+      # `check-bundle-budgets.mjs` reaches every one of its targets through
+      # `new URL(path, import.meta.url)`, and `.gate/` sits at the same depth as
+      # `scripts/`, so each of those relative paths resolves from `.gate/` to
+      # exactly the file it resolves to from `scripts/`. Seven of the eight are
+      # build outputs at `../packages/*/dist/index.js`, the ones `pnpm build`
+      # above produced; the eighth is `../packages/react/theme.css`, which is
+      # neither under `dist/` nor built at all — it is plain CSS the package
+      # ships as-is, so the pinned run measures the file this pull request
+      # committed. Both shapes resolve identically from either directory, which
+      # is the only property this step needs. Nothing else in the script is
+      # location-sensitive.
+      #
+      # The same `!cancelled()`, and here is the concrete instance of why every
+      # gate step in this job carries it: under the default `success()` a red
+      # packaging step above would skip the budget gate outright, and a gate
+      # that a neighbouring failure can silence is one more thing a pull request
+      # can aim at.
+      - name: Bundle budgets — main's copy of the gate
+        if: ${{ !cancelled() }}
+        run: node .gate/check-bundle-budgets.mjs
+      - name: Bundle budgets — this pull request's copy of the gate
+        if: ${{ !cancelled() }}
+        run: pnpm test:budgets
+      # These two keep the default `success()`, so any of the four gate steps
+      # above failing skips them. #376 widened when that happens rather than
+      # introducing it: the pinned copies can now fail where before only the
+      # pull request's own two steps could, which includes the case the comments
+      # above call the interesting one — `main`'s copy failing while the pull
+      # request's copy passes. Left on `success()` on purpose. They are not
+      # gates this issue pins, the job is already failing by the time they would
+      # be skipped, and running more of a job that is going red anyway proves
+      # nothing. Widening them would be a decision about different steps.
       - run: pnpm test:bundle
       - run: pnpm test:integrations
 
