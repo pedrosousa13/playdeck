@@ -43,3 +43,11 @@ introduced by the notices #235 added. A consumer who was relying on a
 It lands as `minor` rather than `patch`: nothing about the API changed, but what
 the component puts on screen did, and a released behaviour change should not
 arrive as a patch.
+
+**Superseded in this release by #368.** The third caller named above as the
+trigger for lifting the rule arrived in the same release: `#applyPatch`
+classifies the error already standing in the slot. So `isNotice` lives in
+`@playdeck/core` now and is exported, `ErrorDisplay` imports it rather than
+mirroring `noticeIn`, and this release does add to that package's public
+surface. What the component renders is unchanged — the same category, `fatal`
+and lifecycle clauses, applied to the same published error.

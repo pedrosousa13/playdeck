@@ -12,6 +12,15 @@ export type PlayerErrorCategory =
   | 'policy'
   | 'unsupported';
 
+// How much a Notice matters when two of them contend for the single error slot.
+// `'protective'` means a control that protects the viewer fired — an untrusted
+// URL was blocked, a privacy opt-out did not take — and `'presentational'` means
+// a cosmetic option was ignored and the fall-back is what the viewer sees. Two
+// levels and no more: the one question the slot has to answer is which of two
+// notices an operator most needs to hear, and a third level would only invite a
+// judgement call at each notice site (#368).
+export type PlayerErrorSeverity = 'protective' | 'presentational';
+
 export type PlayerError = {
   readonly category: PlayerErrorCategory;
   readonly fatal: boolean;
@@ -22,6 +31,15 @@ export type PlayerError = {
   // retry re-runs the same rejected configuration and republishes the same
   // error (#198).
   readonly recoverable: boolean;
+  // What the slot ranks two Notices by, and read nowhere else — a category that
+  // is not a notice never contends for the slot against one, so nothing is
+  // gained by rating a decode failure. Optional deliberately: `PlayerError`
+  // carries every category, and a provider outside this repo emits notices
+  // through the same patch, so an absent severity has to keep working. It is
+  // read as `'presentational'` — the level that displaces nothing — because a
+  // notice that has not claimed to protect anyone must not outrank one that has
+  // (#368).
+  readonly severity?: PlayerErrorSeverity;
   readonly message: string;
   readonly cause?: unknown;
 };

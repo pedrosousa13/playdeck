@@ -253,7 +253,15 @@ refusing that surface — so the notice stands while any reporter's registration
 stands, and is withdrawn only by the reporter that made it. Held as controller
 state and surfaced on `PlayerState.error` like any other error, but never a
 failure: it never masks a standing error, and it never drives a transition into
-the error lifecycle.
+the error lifecycle. There is one slot and no event carries the loser, so two
+notices standing at once are ranked rather than ordered: each declares a
+severity — `protective` where a control that protects the viewer fired, an
+untrusted URL blocked or a privacy opt-out that did not take, and
+`presentational` where a cosmetic option was ignored — and the highest severity
+holds the slot whatever order the two arrived in. A tie is settled by a fixed
+precedence rather than by arrival: the notice already standing in the slot, then
+the provider's own notice, then a refused consumer URL. A notice that declares no
+severity is read as presentational, so it displaces nothing.
 _Avoid_: warning, soft error
 
 **Aurora**:

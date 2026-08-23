@@ -44,6 +44,51 @@ const posterNotice: PlayerError = {
   message: 'The poster option was rejected, so no poster was applied.'
 };
 
+// The two levels a notice is ranked by, on the shapes the adapters actually
+// emit. A notice that says a control protecting the viewer fired — an untrusted
+// URL blocked, a privacy opt-out that did not take — outranks one that says a
+// presentational option was ignored, whichever of them was emitted first
+// (#368). `hostNotice` and `posterNotice` above deliberately carry no severity
+// at all: an out-of-repo adapter may emit a notice without one, and the tests
+// that use them are what says an absent severity is read as the presentational
+// level rather than as an error.
+const privacyNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  severity: 'protective',
+  message: 'The suppressSeoMetadata option did not take effect.'
+};
+
+const refusedPosterNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  severity: 'protective',
+  message: 'The poster option was rejected: expected a permitted source URL.'
+};
+
+const cosmeticNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  severity: 'presentational',
+  message: 'The playerColor option was rejected: expected a CSS hex colour.'
+};
+
+// What nothing in this repo can construct and an untyped adapter can still emit:
+// a notice claiming a level `PlayerErrorSeverity` does not name. Built through a
+// cast because the type is exactly what keeps it out of this repo, and the input
+// this pins arrives from outside it — the same reason `hostNotice` above carries
+// no severity at all (#368).
+const inventedSeverityNotice = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  severity: 'critical',
+  message: 'The theme option was rejected, so the default theme was used.'
+} as unknown as PlayerError;
+
 const providerFault: PlayerError = {
   category: 'provider',
   fatal: false,
@@ -127,7 +172,11 @@ test('does not let a notice displace a fatal error that already stands', () => {
   });
 });
 
-test('holds the first notice and ignores a later one', () => {
+// Two notices carrying no severity tie, and a tie keeps the incumbent. This is
+// the anti-flapping property the slot has always had, and the one the `??=` it
+// replaces was really about: the slot must not change its mind while a single
+// attach is still reporting (#235, #368).
+test('holds the first of two notices declaring no severity', () => {
   const fake = createProvider();
   const controller = new PlayerController();
   controller.setProvider(fake.provider);
@@ -141,6 +190,135 @@ test('holds the first notice and ignores a later one', () => {
 
   expect(controller.getState().error).toMatchObject(hostNotice);
 });
+
+// The severity decides the slot and the arrival order does not. The cosmetic
+// notice is emitted first and is already published, so the protective one has
+// to displace a notice that STANDS — the second assertion is the held record,
+// the first is the published slot, and both have to move (#368).
+test('lets a protective notice displace a presentational one emitted first', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: cosmeticNotice });
+  fake.emit({ error: privacyNotice });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+});
+
+// The other half of the same rule: a presentational notice arriving after a
+// protective one changes nothing. Ranking has to be a comparison rather than a
+// "latest wins" overwrite, or the slot would flap on every attach that reports
+// its security-relevant refusal first (#368).
+test('leaves a standing protective notice alone when a presentational one follows', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: privacyNotice });
+  fake.emit({ error: cosmeticNotice });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+});
+
+// Ties are settled by arrival, at the explicit levels as well as at the absent
+// ones: two protective refusals in one attach must not trade the slot back and
+// forth, because a notice that changes wording for a reason the operator cannot
+// see is unreadable to a monitoring system — the same ground
+// `REFUSED_URL_SURFACE_RANK` stands on (#330, #368).
+test('keeps the first of two notices of equal severity', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: privacyNotice });
+  fake.emit({ error: refusedPosterNotice });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+});
+
+// A severity the rank does not name is the lowest level, exactly as an absent
+// one is, rather than a level of its own above every other. Nothing here can
+// emit one, and an untyped adapter outside this repo can, so the rank has to
+// hold against it: read with `indexOf` it would have answered `-1`, which sorts
+// ABOVE `'protective'`, and an invented level would have masked the refusal that
+// blocked an untrusted URL — the masking this change exists to remove, back
+// through the one input the types do not reach (#368).
+test('does not let an unrecognised severity displace a protective notice', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: privacyNotice });
+  fake.emit({ error: inventedSeverityNotice });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+});
+
+// The property the whole change exists to establish, pinned here rather than in
+// each provider's suite: which notice a consumer sees is a function of what was
+// refused and of nothing else, so the order an adapter happens to run its checks
+// in stops being load-bearing. One row per pair a provider can emit inside a
+// single attach — a provider that gains a third notice adds its new pairs here.
+// The messages are copied from the adapters so a row names the case it stands
+// for; only the severities decide (#368).
+const PROVIDER_NOTICE_PAIRS: ReadonlyArray<
+  readonly [string, PlayerError, PlayerError]
+> = [
+  [
+    'Vimeo: SEO metadata against the chromeless probe',
+    privacyNotice,
+    {
+      category: 'configuration',
+      fatal: false,
+      recoverable: false,
+      severity: 'presentational',
+      message:
+        'The chromeless-capability check could not be completed, so the customControls capability is reported as unknown.'
+    }
+  ],
+  ['Wistia: poster against playerColor', refusedPosterNotice, cosmeticNotice]
+];
+
+test.each(PROVIDER_NOTICE_PAIRS)(
+  'resolves %s to the same notice whichever order the checks emit them in',
+  (_pair, protective, presentational) => {
+    const forwards = createProvider();
+    const forwardsController = new PlayerController();
+    forwardsController.setProvider(forwards.provider);
+    forwards.emit({ error: protective });
+    forwards.emit({ error: presentational });
+    forwards.emit({ lifecycle: 'ready', activation: 'ready' });
+
+    const backwards = createProvider();
+    const backwardsController = new PlayerController();
+    backwardsController.setProvider(backwards.provider);
+    backwards.emit({ error: presentational });
+    backwards.emit({ error: protective });
+    backwards.emit({ lifecycle: 'ready', activation: 'ready' });
+
+    expect(backwardsController.getState().error).toEqual(
+      forwardsController.getState().error
+    );
+    expect(forwardsController.getState().error).toMatchObject(protective);
+  }
+);
 
 test('outranks a held notice with the muted-autoplay conflict', () => {
   const fake = createProvider();
@@ -496,33 +674,49 @@ test('does not let a refused-URL notice displace a standing error', () => {
   });
 });
 
-// Characterizes the single slot as it stands, and does not fix it. A refused
-// consumer URL published first keeps the slot against a provider's own notice,
-// the same first-one-wins that #332 reported between two provider notices. This
-// change makes that masking reachable from one more direction.
-//
-// #332 is closed, but it was settled by ordering rather than by arbitration:
-// Wistia now checks the security-relevant option first, so its own two notices
-// no longer mask. That fixes the instance and leaves the mechanism, and this
-// path is not covered by it — nothing orders a refused-URL notice against a
-// provider's. Ranking the two is #368.
-test('a refused-URL notice published first masks a later provider notice (#332)', () => {
+// The masking path #332 characterized from one more direction, and what #368
+// settles. A refused consumer URL published first used to keep the slot against
+// any provider notice at all, by standing in it; now the two are ranked. Every
+// refused-URL notice is protective — the shared allowlist blocked an untrusted
+// URL — so a presentational provider notice never takes the slot from one, at
+// the moment it arrives or at the ready patch that resolves both together.
+test('keeps a refused-URL notice over a presentational provider notice', () => {
   const fake = createProvider();
   const controller = new PlayerController();
 
   controller.reportRefusedUrl('poster src');
   const refused = controller.getState().error;
   controller.setProvider(fake.provider);
-  fake.emit({ error: hostNotice });
+  fake.emit({ error: cosmeticNotice });
 
   expect(controller.getState().error).toMatchObject(refused!);
 
-  // The provider notice is held, not lost: the ready patch clears the slot
-  // before it is refilled, and the provider's notice outranks the refused URL
-  // the moment both are resolved together.
   fake.emit({ lifecycle: 'ready', activation: 'ready' });
 
-  expect(controller.getState().error).toMatchObject(hostNotice);
+  expect(controller.getState().error).toMatchObject(refused!);
+});
+
+// Where the two tie — and a provider's own protective notice against a refused
+// consumer URL is the common tie — the provider's wins, which is what the
+// `#configurationNotice ?? #refusedUrlNotice` order has always expressed: the
+// provider reported something about the source that is about to play, and the
+// refused URL is about a prop beside it (#330). The tie is settled only where
+// both are resolved together: until then the published notice is the incumbent,
+// because a tie never displaces what already stands.
+test('gives a provider notice the slot over an equally protective refused URL', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+
+  controller.reportRefusedUrl('poster src');
+  const refused = controller.getState().error;
+  controller.setProvider(fake.provider);
+  fake.emit({ error: privacyNotice });
+
+  expect(controller.getState().error).toMatchObject(refused!);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
 });
 
 test('publishes the refused-URL notice frozen', () => {

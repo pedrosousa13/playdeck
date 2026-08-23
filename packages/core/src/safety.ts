@@ -2,6 +2,8 @@ import type {
   Availability,
   PlayerCapabilities,
   PlayerError,
+  PlayerErrorSeverity,
+  PlayerState,
   ProviderAdapter,
   RefusedUrlSurface,
   TimeRange
@@ -79,11 +81,18 @@ export const autoplayConfigurationError = (): PlayerError =>
 // effects whose order depends on where a consumer placed `PosterImage` and on
 // whether the pass is a mount or an update, and a notice that changed wording
 // for that reason would be unreadable to a monitoring system.
+//
+// All five are `'protective'`, without exception and whatever the surface
+// decorates: what each of them reports is the shared allowlist blocking an
+// untrusted URL, which is a security control firing and not a presentation
+// option being ignored. So none of them can be pushed out of the slot by a
+// provider reporting a cosmetic rejection (#368).
 const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
   'poster src': freezeError({
     category: 'configuration',
     fatal: false,
     recoverable: false,
+    severity: 'protective',
     message:
       'The poster src URL was rejected, so no poster image was requested.'
   }),
@@ -91,6 +100,7 @@ const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
     category: 'configuration',
     fatal: false,
     recoverable: false,
+    severity: 'protective',
     message:
       'A poster srcSet candidate URL was rejected, so that candidate was dropped.'
   }),
@@ -98,6 +108,7 @@ const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
     category: 'configuration',
     fatal: false,
     recoverable: false,
+    severity: 'protective',
     message:
       'The nativePoster URL was rejected, so no poster attribute was set.'
   }),
@@ -105,6 +116,7 @@ const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
     category: 'configuration',
     fatal: false,
     recoverable: false,
+    severity: 'protective',
     message:
       'A textTracks src URL was rejected, so that text track was dropped.'
   }),
@@ -112,6 +124,7 @@ const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
     category: 'configuration',
     fatal: false,
     recoverable: false,
+    severity: 'protective',
     message:
       'A mediaSession artwork src URL was rejected, so that artwork entry was dropped.'
   })
@@ -154,6 +167,94 @@ export const standingRefusedUrlNotice = (
   );
   return surface === undefined ? undefined : REFUSED_URL_NOTICES[surface];
 };
+
+// Whether an error is a Notice, per CONTEXT.md: a non-fatal `configuration`
+// error reporting a value that was rejected, while the fall-back it degraded to
+// stands unchanged. Nothing stopped working, which is what separates it from a
+// failure — it must not drive the lifecycle, and a consumer must not render it
+// as one (#235, #319).
+//
+// The lifecycle clause is the one that is easy to drop and must not be. A
+// `configuration` error is NOT always a notice: `useActivation` publishes one
+// with `activation: 'error'` for `loading="interaction"` with autoplay and for
+// viewport activation without a `Player.Viewport`, and both mean the player will
+// never load, so both have to keep the overlay.
+//
+// Lives here, and is exported, because the rule now has three readers and two
+// packages: `noticeIn` classifies a `ProviderStatePatch` on its way in,
+// `#applyPatch` classifies the error already standing in the slot, and
+// `ErrorDisplay` classifies the published `PlayerState.error` on its way out.
+// Those are one rule seen from three sides, and the third copy is what
+// `loading-error.tsx` said would be the one too many (#368).
+//
+// Takes the lifecycle beside the error rather than reading it off a state,
+// because two of the three callers hold a patch whose `lifecycle` key may be
+// absent — an absent one says nothing about the error and leaves the clause
+// unmet, exactly as a non-error lifecycle does.
+export const isNotice = (
+  error: PlayerError,
+  lifecycle: PlayerState['lifecycle'] | undefined
+): boolean =>
+  error.category === 'configuration' && !error.fatal && lifecycle !== 'error';
+
+// Ranked highest first, like `REFUSED_URL_SURFACE_RANK` above and coupled to its
+// union by the same `RankOf`, so a level added to `PlayerErrorSeverity` fails to
+// compile until it has been placed against the others. Highest first because a
+// notice's rank IS its index in this array: a lower index is a higher severity,
+// which is what makes the comparison in `mostImportantNotice` a `<`, and it puts
+// the level an operator most needs to hear at the top of the list. Reordering
+// these two entries reverses which notice the slot keeps, and nothing else has
+// to change for it to (#368).
+const NOTICE_SEVERITY_RANK = [
+  'protective',
+  'presentational'
+] as const satisfies RankOf<PlayerErrorSeverity>;
+
+// The rank a notice carries, where a severity this array does not name is the
+// lowest level. One rule covering two cases rather than two special cases: an
+// absent severity, which `PlayerError.severity` documents, and an unrecognised
+// one, which arrives the same way — a provider outside this repo emits notices
+// through the same patch and nothing type-checks its JS — so both are settled by
+// the single question of whether the value is one of the levels at all.
+//
+// `indexOf` on its own would not settle the second. It answers `-1`, and `-1`
+// ranks ABOVE `'protective'`, so a notice declaring a level this repo never
+// defined would take the slot from a refusal that blocked an untrusted URL —
+// the masking #368 exists to remove, back through the one input nobody in this
+// repo writes (#368).
+const severityRank = (notice: PlayerError): number => {
+  const rank = NOTICE_SEVERITY_RANK.findIndex(
+    (level) => level === notice.severity
+  );
+  return rank === -1 ? NOTICE_SEVERITY_RANK.length - 1 : rank;
+};
+
+// Which of the notices offered here the single error slot should carry: the
+// highest-severity one, and where several tie, the FIRST one offered. Both
+// halves are load-bearing.
+//
+// Severity first, because the slot holds one notice and the losers are never
+// published anywhere — a refusal that protects a viewer's privacy or blocks an
+// untrusted URL has to outrank one reporting that a presentational option was
+// ignored, whichever of them the adapter's checks happened to reach first
+// (#332, #368).
+//
+// The tie to the first offered, because the callers offer the standing notice
+// ahead of the newly reported one: an equal notice must not displace what is
+// already published, or a single attach reporting two rejections would flap the
+// slot and a monitoring system would read two different messages for one
+// configuration (#235).
+export const mostImportantNotice = (
+  ...notices: ReadonlyArray<PlayerError | undefined>
+): PlayerError | undefined =>
+  notices.reduce<PlayerError | undefined>(
+    (held, candidate) =>
+      candidate !== undefined &&
+      (held === undefined || severityRank(candidate) < severityRank(held))
+        ? candidate
+        : held,
+    undefined
+  );
 
 export const destroyProviderSafely = (provider: ProviderAdapter): void => {
   try {

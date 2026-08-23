@@ -608,9 +608,11 @@ export const useActivation = (
     // one security control this library applies to a source, and `setActivation`
     // carries one error. A configuration complaint about an unrelated prop
     // masking that refusal is what #332 reported in the Wistia notice slot,
-    // where a cosmetic `playerColor` rejection suppressed a rejected poster
-    // until the same order-first rule settled it there; the refusal wins here
-    // so it is never the second thing a consumer is told. Neither error is
+    // where a cosmetic `playerColor` rejection suppressed a rejected poster.
+    // That slot is now ranked by the severity each notice declares (#368);
+    // `setActivation` ranks nothing, so here the check order is still what
+    // decides, and the refusal is checked first so it is never the second thing
+    // a consumer is told. Neither error is
     // lost: this effect re-runs on both `currentKey` and
     // `options.autoplay`, so a consumer who fixes the source is told about the
     // autoplay conflict next (#331).

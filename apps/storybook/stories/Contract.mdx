@@ -36,6 +36,10 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   Notices from elsewhere are withdrawn on their own terms: a provider's goes
   with its provider, and a configuration conflict's goes when the configuration
   changes.
+  There is one error slot and no event carries the notice that loses it, so an
+  attach rejecting two values puts only one of them in the DOM: the one of
+  higher severity — a control that protects the viewer fired, rather than a
+  cosmetic option ignored — whatever order the two were reported in (#368).
   A failure — including a non-fatal `provider`, `policy` or `unsupported` one —
   still renders `error` with its overlay and its retry.
 - **`time` shows nothing where the source has no duration.** `data-state` on

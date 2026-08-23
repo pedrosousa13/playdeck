@@ -677,6 +677,7 @@ test('reports a chromeless probe that never reached Vimeo as a configuration not
         category: 'configuration',
         fatal: false,
         recoverable: false,
+        severity: 'presentational',
         message: expect.stringContaining('could not be completed')
       }
     }
@@ -739,6 +740,7 @@ test('reports a probe given up on at its deadline as a configuration notice', as
         category: 'configuration',
         fatal: false,
         recoverable: false,
+        severity: 'presentational',
         message: expect.stringContaining('could not be completed')
       }
     }
@@ -829,6 +831,7 @@ test('reports a suppression request that did not take as a configuration notice'
         category: 'configuration',
         fatal: false,
         recoverable: false,
+        severity: 'protective',
         message: expect.stringContaining('did not take effect')
       }
     }
@@ -878,15 +881,13 @@ test('reports no notice when the option is omitted entirely', async () => {
 });
 
 // What a host actually shows an operator. The controller holds ONE
-// `configuration` notice per attach, filled with `??=`, so the first notice
-// this adapter emits is the only one that ever reaches `PlayerState.error`
-// (`packages/core/src/player-controller.ts`, `#configurationNotice`) — the
-// second is dropped with the provider and never told later either (#332,
-// #368). An ineffective privacy control has to beat a chromeless probe that
-// could not report a presentational capability, and the SDK load sits before
-// the probe's verdict on every path, so the order holds by construction. The
-// two tests below are what says so: move the emit past the probe and the first
-// of them fails.
+// `configuration` notice per attach (`packages/core/src/player-controller.ts`,
+// `#configurationNotice`) and the loser is dropped with the provider, never told
+// later either — so an ineffective privacy control has to beat a chromeless
+// probe that could not report a presentational capability. What decides that is
+// the severity each notice carries, and no longer which of them the adapter
+// emitted first (#332, #368). The two tests below assert the outcome an operator
+// sees, which is the part that has to hold whatever order the checks end up in.
 const publishedNotice = async (
   options: VimeoProviderOptions
 ): Promise<string | undefined> => {

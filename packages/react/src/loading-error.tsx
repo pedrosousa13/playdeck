@@ -1,4 +1,4 @@
-import type { PlayerError, PlayerState } from '@playdeck/core';
+import { isNotice, type PlayerError } from '@playdeck/core';
 import { usePlayer, usePlayerState } from './player-context.js';
 import {
   useEffect,
@@ -254,37 +254,6 @@ const errorOverlayStyle: CSSProperties = {
   zIndex: 40
 };
 
-// A Notice, per CONTEXT.md: a non-fatal `configuration` error a provider
-// publishes to report a value it rejected, while the fall-back behaviour it
-// degraded to stands unchanged. Nothing stopped working, so it must not be
-// rendered as a failure (#319).
-//
-// The predicate mirrors `noticeIn` at `packages/core/src/player-controller.ts`,
-// deliberately rather than importing it: that one classifies a
-// `ProviderStatePatch` on its way in, this one classifies the published
-// `PlayerState.error` on its way out, and they are the same rule seen from two
-// sides. If a third caller ever needs it, lift it into core rather than adding
-// a third copy.
-//
-// This gates on notice-ness and NOT on `fatal`. `fatal: false` also covers
-// `toProviderError` (`provider`, and `recoverable: true`, so it offers a
-// retry), Wistia's `policy` refusal and its `unsupported` refusal — every one
-// of them a real failure that keeps the overlay.
-//
-// The lifecycle clause is the one that is easy to drop and must not be. A
-// `configuration` error is NOT always a notice: `useActivation` publishes one
-// with `activation: 'error'` for `loading="interaction"` with autoplay
-// (`use-activation.ts:510-515`) and for viewport activation without a
-// `Player.Viewport` (`:535-538`). Both mean the player will never load, so both
-// have to keep the overlay — without this clause they would render as an
-// invisible notice and the consumer would see a dead player and no error at
-// all, which is the defect this change exists to remove.
-const isNotice = (
-  error: PlayerError,
-  lifecycle: PlayerState['lifecycle']
-): boolean =>
-  error.category === 'configuration' && !error.fatal && lifecycle !== 'error';
-
 export const ErrorDisplay = ({
   children,
   style,
@@ -298,6 +267,22 @@ export const ErrorDisplay = ({
   const { controller } = usePlayer();
   if (!error) return null;
 
+  // A Notice, per CONTEXT.md: a non-fatal `configuration` error reporting a
+  // value that was rejected, while the fall-back behaviour it degraded to stands
+  // unchanged. Nothing stopped working, so it must not be rendered as a failure
+  // (#319). The rule is `isNotice` in core, which this asks of the published
+  // error the same way the controller asks it of an incoming patch — one rule,
+  // one answer, and the copy this file used to keep is gone (#368).
+  //
+  // It gates on notice-ness and NOT on `fatal`. `fatal: false` also covers
+  // `toProviderError` (`provider`, and `recoverable: true`, so it offers a
+  // retry), Wistia's `policy` refusal and its `unsupported` refusal — every one
+  // of them a real failure that keeps the overlay. The lifecycle clause inside
+  // `isNotice` is what keeps `useActivation`'s two `configuration` errors under
+  // the overlay as well: both mean the player will never load, so rendering
+  // either as an invisible notice would leave the consumer a dead player and no
+  // error at all.
+  //
   // No `role="alert"`, no geometry, no stacking: a consumer composes where this
   // goes, and a player that is still working is never covered by it. `children`
   // still receives it, so a consumer who renders both through one component
