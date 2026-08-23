@@ -320,7 +320,10 @@ _Avoid_: public, released
 An advisory whose resolved version appears in the transitive `dependencies`
 closure of at least one publishable package. What the audit gate turns on.
 Severity is a separate label and gates nothing. A floored package fails the same
-gate on its own.
+gate on its own. The closure is everything a publishable package transitively
+reaches, not everything pnpm chose to print beneath it: a subtree printed once
+and marked `deduped` at every later occurrence is spliced back in, so where pnpm
+printed it no longer decides which packages are named as reaching it (#377).
 _Avoid_: affected, vulnerable
 
 **Shipped**:
