@@ -10,5 +10,15 @@
     "tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo/e2e.tsbuildinfo"
   },
   "references": [{ "path": "../packages/react" }],
-  "include": [".", "../playwright.config.ts"]
+  // `contrast.ts` is listed by hand rather than reached through a project
+  // reference: it belongs to `packages/react/tsconfig.test.json`, which is a
+  // `noEmit` project and so cannot be referenced. Both projects type-check the
+  // same source file, which is the point — `thumb-contrast.spec.ts` measures the
+  // boundaries `theme.test.ts` computes, and the two are only comparable while
+  // one module does the WCAG maths for both (#190).
+  "include": [
+    ".",
+    "../playwright.config.ts",
+    "../packages/react/test/contrast.ts"
+  ]
 }
