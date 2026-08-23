@@ -11,6 +11,11 @@ export default tseslint.config(
       '**/storybook-static/**',
       'playwright-report/**',
       'test-results/**',
+      // Gitignored, unlike the two entries below — and not redundant for it.
+      // Flat config does not read .gitignore, so without this the scratch
+      // files a session writes are linted as project source and fail that
+      // session's own gate (#410).
+      '.scratch/**',
       '.superpowers/**',
       'docs/superpowers/plans/**',
       // MPEG-TS media segments share the .ts extension with TypeScript.
