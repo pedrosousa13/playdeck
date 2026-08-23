@@ -126,11 +126,20 @@ const sourceFromFileExtension = (
   return undefined;
 };
 
+// The no-cookie host is here in both spellings, as every other host in this
+// list with a `www.` form is. It joins the full hosts rather than the short
+// ones, which is what gives it the `/embed/` path and the other full-host
+// shapes (#379). Detection carries no host and needs none: a `YouTubeSource`
+// is an id, and the provider already requests the no-cookie origin whenever no
+// `host` option is given (`packages/provider-youtube/src/index.ts`'s
+// `DEFAULT_HOST`).
 const isYouTubeHost = (hostname: string): boolean =>
   hostname === 'youtube.com' ||
   hostname === 'www.youtube.com' ||
   hostname === 'm.youtube.com' ||
   hostname === 'music.youtube.com' ||
+  hostname === 'youtube-nocookie.com' ||
+  hostname === 'www.youtube-nocookie.com' ||
   hostname === 'youtu.be' ||
   hostname === 'www.youtu.be';
 
@@ -154,7 +163,13 @@ const sourceFromYouTubeUrl = (url: URL): YouTubeSource | undefined => {
     url.hostname === 'youtu.be' || url.hostname === 'www.youtu.be';
   const watchVideoIds = url.searchParams.getAll('v');
   const shortUrlMatch = /^\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
-  const embeddedVideoMatch = /^\/(?:embed|shorts)\/([A-Za-z0-9_-]+)$/.exec(
+  // `live` sits in this alternation rather than in a pattern of its own: it is
+  // the canonical URL for a live broadcast and reads `/<path>/<id>` exactly as
+  // the other two do, so it is one more spelling of a shape already here
+  // (#379). The alternation is what holds it to one segment; the full-host
+  // bound is the `isShortUrl` ternary below, which never reads this match on a
+  // short host.
+  const embeddedVideoMatch = /^\/(?:embed|live|shorts)\/([A-Za-z0-9_-]+)$/.exec(
     url.pathname
   );
   const videoId = isShortUrl
@@ -175,9 +190,17 @@ const sourceFromVimeoUrl = (url: URL): VimeoSource | undefined => {
   const playerMatch = /^\/video\/(\d+)(?:\/([A-Za-z0-9]+))?$/.exec(
     url.pathname
   );
-  const canonicalMatch = /^\/(\d+)$/.exec(url.pathname);
-  const videoId = isPlayerUrl ? playerMatch?.[1] : canonicalMatch?.[1];
-  const pathHash = isPlayerUrl ? playerMatch?.[2] : undefined;
+  // The canonical host reads the same optional trailing hash segment the
+  // player path above does, because `https://vimeo.com/<id>/<hash>` is the
+  // share link Vimeo hands out for an unlisted video (#379). Both patterns feed
+  // one `pathMatch`, so the hash reaches the returned source: a form that
+  // detected it and dropped it would build a player that cannot load the video
+  // and report nothing. The hash is an optional *group*, not an optional slash:
+  // `/<id>/` and `/<id>//<hash>` stay unmatched, as does a third segment.
+  const canonicalMatch = /^\/(\d+)(?:\/([A-Za-z0-9]+))?$/.exec(url.pathname);
+  const pathMatch = isPlayerUrl ? playerMatch : canonicalMatch;
+  const videoId = pathMatch?.[1];
+  const pathHash = pathMatch?.[2];
   const queryHashes = url.searchParams.getAll('h');
   const queryHash = queryHashes.length === 1 ? queryHashes[0] : undefined;
 
