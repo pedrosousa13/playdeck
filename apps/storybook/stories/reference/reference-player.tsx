@@ -1,6 +1,6 @@
 import type { PlayerQuality } from '@playdeck/core';
 import * as Player from '@playdeck/react';
-import { useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 /**
  * The reference composition: one player assembled only from public
@@ -190,6 +190,32 @@ const layoutCss = `
 .playdeck-example button:hover {
   background: rgba(232, 237, 244, 0.16);
 }
+/* Opens upward from the trigger, which is the right placement wherever there is
+   room above it — and often there is not. The trigger sits in a control bar
+   that can be almost the whole player: measured at a 320px browser viewport, a
+   154px bar inside a 162px box leaves 66px above the trigger for a menu that
+   wants 202, so the box was placed 124px above the top of the DOCUMENT, where
+   nothing reaches it — the page does not scroll (scrollHeight equals
+   clientHeight) and overflow-y below only moves content inside a box that is
+   itself off-screen (#413).
+
+   No rule here can tell that, and the reason is worth stating: what the menu
+   needs is the distance from its trigger up to the top of the player, and CSS
+   has no way to ask for it. max-height bounds how tall the box is, not where it
+   is put. A percentage measures the containing block, which is the trigger's own
+   44px wrapper (SettingsMenu sets position: relative inline). A cq unit measures
+   the container's width. None of the three moves with the trigger.
+
+   A width breakpoint is not a stand-in either, and that was measured rather than
+   assumed: the placement fails wherever the button row wraps, which is as much a
+   function of text size as of width. Off the top of the document at 320, 375 and
+   420; again from 440 through 500, where the row wraps a second time; and again
+   at 640 with text at 200%, at -164. So the correction is measured at runtime in
+   ReferencePlayer below and written back as an inline translate, plus a
+   max-height on the box this rule makes a scroller.
+   This rule is the placement that correction starts from, and stays untouched
+   wherever the menu already fits — every width at or above 520 with text at
+   100%, the visual baseline in e2e/visual.spec.ts among them. */
 .playdeck-example-menu {
   position: absolute;
   bottom: calc(100% + 0.25rem);
@@ -467,10 +493,116 @@ export const ReferencePlayer = ({
   // fixed in core, so either shape is correct now.
   const overlayOwnsViewport = state.activation !== 'ready' || state.errored;
 
+  // #413. The stylesheet opens both menus upward from their trigger, and where
+  // that does not fit it puts the box outside the player and off the top of the
+  // document, with items nothing can reach. The comment on
+  // `.playdeck-example-menu` above carries why no rule can decide this: the one
+  // quantity the placement depends on — how far the trigger is below the top of
+  // the player — is not a quantity CSS can read. So it is measured here and
+  // written back, which is what a positioning library would do for a consumer
+  // that reached for one.
+  //
+  // Two corrections, in this order: bound the box to the Viewport's height,
+  // then slide whatever still hangs over its top edge back down. Together they
+  // keep the menu inside the Viewport, which is the boundary that matters
+  // rather than the browser viewport — `.playdeck-example` is `overflow:
+  // hidden`, so an item outside it is painted nowhere even when its rect is
+  // on-screen.
+  //
+  // Found by part rather than by class, so the CaptionsMenu preset's content is
+  // covered as well: it renders `SettingsMenuContent` itself and takes no
+  // className from here. That is also why the height bound is conditional. A
+  // bound costs reachability nothing only where the box can scroll to what the
+  // bound cuts off, and only the settings menu can: `.playdeck-example-menu`
+  // carries `overflow-y: auto`, the captions menu takes no className from here
+  // and so computes `overflow-y: visible` (measured). Bounding that one would
+  // clip items with no way to reach them — the very unreachability #413 is
+  // about. So the computed value is read and a non-scroller keeps its natural
+  // height, with only the shift applied to it. The limit that leaves is real
+  // and cannot be papered over here: a non-scrolling menu taller than the
+  // Viewport still cannot fit inside it. Today none is — the captions menu is a
+  // static, in-flow box in the control row with one text track — and giving it
+  // the composition's scrolling presentation is a separate change.
+  //
+  // Both properties are cleared before measuring, so each pass reads the
+  // stylesheet's own placement rather than the previous pass's answer and can
+  // run as often as it likes. Neither is written back when the menu already
+  // fits, which is why nothing changes above the widths where it does not.
+  const frameRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (frame === null) return undefined;
+    const fit = (): void => {
+      const menus = frame.querySelectorAll<HTMLElement>(
+        '[data-playdeck-part="settings-menu"]'
+      );
+      if (menus.length === 0) return;
+      const viewport = frame.querySelector('[data-playdeck-part="viewport"]');
+      if (viewport === null) return;
+      const bounds = viewport.getBoundingClientRect();
+      for (const menu of menus) {
+        menu.style.maxHeight = '';
+        menu.style.translate = '';
+        const natural = menu.getBoundingClientRect();
+        const style = globalThis.getComputedStyle(menu);
+        // Only a box that scrolls may be shortened: see above.
+        const scrolls =
+          style.overflowY === 'auto' || style.overflowY === 'scroll';
+        const height = scrolls
+          ? Math.min(natural.height, bounds.height)
+          : natural.height;
+        if (height < natural.height) {
+          // `max-height` applies to the content box here — nothing in this
+          // composition resets `box-sizing` — so the menu's own padding and
+          // border have to come off any height written back to it. The computed
+          // `height` is the used content height, so the difference is exactly
+          // that chrome, whether or not the box is currently bounded.
+          const chrome = natural.height - Number.parseFloat(style.height);
+          menu.style.maxHeight = `${height - chrome}px`;
+        }
+        // The box is anchored at its bottom, so bounding its height moves its
+        // top down by the same amount. What is left over is the shift.
+        const shift = Math.max(bounds.top - (natural.bottom - height), 0);
+        if (shift > 0) menu.style.translate = `0 ${shift}px`;
+      }
+    };
+    // A menu exists in the DOM only while it is open (`SettingsMenuContent`
+    // renders null otherwise), so mounting one is a child-list mutation. The
+    // callback is a microtask, which runs before the frame is painted — the
+    // corrected box is the first one drawn, not a second one after a flash.
+    const opened = new MutationObserver(fit);
+    opened.observe(frame, { childList: true, subtree: true });
+    // And the room can change under an open menu. What is observed is the
+    // frame, the size container the room is a function of: the Viewport is its
+    // only child and is `width: 100%` over a locked ratio, so the two are the
+    // same box (measured at 320 and at 400, closed and with either menu open —
+    // 288x162, 288x199, 368x207), and the frame's inline size is also what the
+    // `@container` fold in the stylesheet above keys off, which decides how many
+    // entries the settings menu has. Every change to the room above a trigger
+    // therefore passes through it.
+    //
+    // Observing it is only safe because a pass cannot resize it. `translate`
+    // never affects layout, and the one menu a pass gives a `max-height` to is
+    // `position: absolute`, so its height reaches nothing outside itself
+    // (measured: bounding it fires neither a frame nor a Viewport observer,
+    // while doing the same to the in-flow captions menu fires both — that menu
+    // is left alone for the reason above, which closes this loop as well).
+    //
+    // That leaves one gap — a text-size change at a width where the Viewport is
+    // ratio-locked resizes the menu without resizing the frame — which no test
+    // covers and which the next open corrects.
+    const resized = new ResizeObserver(fit);
+    resized.observe(frame);
+    return () => {
+      opened.disconnect();
+      resized.disconnect();
+    };
+  }, []);
+
   return (
     <>
       <style>{layoutCss}</style>
-      <div className="playdeck-example-frame">
+      <div className="playdeck-example-frame" ref={frameRef}>
         <Player.Viewport className="playdeck-example">
           <Player.Poster>
             <Player.PosterImage
