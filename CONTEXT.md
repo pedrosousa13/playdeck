@@ -366,6 +366,22 @@ which changes what the gate is shown; this changes what the gate is drawn
 around (#373).
 _Avoid_: unpublished, withdrawn, removed
 
+**Gate runtime**:
+The `node_modules` a pinned gate resolves its third-party imports from, placed
+next to `main`'s copy of the gate scripts rather than borrowed from the tree
+under test. Pinning a gate pins its source, and a bare specifier is not source:
+Node resolves one by walking `node_modules` upward, which lands in the pull
+request's own install, so a redirected name runs the pull request's code inside
+`main`'s gate. CI puts `yaml` there at the version `main` pins — by `npm pack`
+and a tarball extraction rather than an install, for reasons
+`.github/workflows/ci.yml` records — and names the directory in
+`PLAYDECK_GATE_MODULES`; `scripts/gate-parser.mjs` resolves the specifier
+without loading it and fails unless the answer sits inside that directory, so a
+gate that fell back to the tree's copy goes red rather than quiet (#372).
+`@playwright/test`, which the packaging harness drives a browser through, is not
+provided for the gate and is the open half.
+_Avoid_: vendored, bundled
+
 **Governed**:
 An install the root `pnpm-workspace.yaml` reaches — its advisory floors, its
 `minimumReleaseAge` cooldown and that cooldown's exclusions. The packaging
