@@ -113,6 +113,19 @@ const centreRow = async (page: Page, selector: string): Promise<Row> => {
 };
 
 /**
+ * Measured ratios as one line, for the message of the assertion that reads them.
+ *
+ * The house style in this file is to state numbers a reviewer can check rather
+ * than only booleans, and the two tests below no longer pin every boundary to a
+ * literal — so the figures have to travel with the failure instead of being
+ * inferable from which key of a diff went red.
+ */
+const state = (ratios: Record<string, number>): string =>
+  Object.entries(ratios)
+    .map(([boundary, ratio]) => `${boundary} ${ratio.toFixed(2)}:1`)
+    .join(', ');
+
+/**
  * The volume slider at exactly half, which is why this story and not another:
  * at 50% a range input's thumb centre lands on the track's centre on every
  * engine, whatever thumb width that engine chose. So the thumb is found by
@@ -156,30 +169,36 @@ test('the volume thumb ring clears 3:1 against the surfaces beside it', async ({
     'ring vs fill': contrast(ring, row.at(0.22)),
     'ring vs unfilled track': contrast(ring, row.at(0.85))
   };
-  const clears = Object.fromEntries(
-    Object.entries(ratios).map(([boundary, ratio]) => [boundary, ratio >= 3])
-  );
+  const measured = state(ratios);
 
-  // Stated per engine rather than asserted as one floor, because the two
-  // boundaries have different owners.
+  // Asserted per OWNER rather than per engine, because only the pixels this
+  // theme paints are this repo's to hold to a floor. Both measurements travel
+  // with either assertion, in `measured`.
   //
-  // The fill is the theme's: `accent-color` on Blink and WebKit, the
-  // hand-drawn `::-moz-range-progress` on Gecko. It clears everywhere —
-  // measured 8.10:1 on all three, the same figure the token arithmetic gives.
+  // The fill is the theme's everywhere: `accent-color` on Blink and WebKit, the
+  // hand-drawn `::-moz-range-progress` on Gecko. It clears on all three —
+  // measured 8.10:1, the same figure the token arithmetic gives.
   //
   // The unfilled track is the theme's on Gecko ONLY. #190's Gecko half has to
   // draw the whole control there (native theming is all-or-nothing), so the
   // theme paints `--playdeck-color-track` and the ring measures 3.55:1 against
-  // it. Blink and WebKit keep their own unfilled track, which the theme never
-  // colours for this slider — Blink paints `rgb(59 59 59)` over the story's
-  // ground for 1.87:1, WebKit paints near the ground itself for 1.07:1. Neither
-  // is a regression from #414; neither was ever passing. Closing them means
-  // drawing the control by hand on all three engines, which is a decision #190
-  // explicitly did not take.
-  expect(clears).toEqual({
-    'ring vs fill': true,
-    'ring vs unfilled track': browserName === 'firefox'
-  });
+  // it. That pixel is ours, so its floor is asserted.
+  //
+  // Blink and WebKit keep their own unfilled track, which the theme never
+  // colours for this slider, so that ratio is stated here and not pinned. It was
+  // pinned, as `browserName === 'firefox'`, and the same literal one test down
+  // is what failed on CI: how light a native track renders is a property of the
+  // engine build and the runner, not of this repo, and the WebKit that paints it
+  // near the story's own ground locally (1.07:1) painted it light enough on
+  // GitHub's runner to clear 3:1. Blink measured 1.87:1 over `rgb(59 59 59)`
+  // here. Neither figure is a regression from #414 and neither was ever passing;
+  // closing them for real means drawing the control by hand on all three
+  // engines, which is a decision #190 explicitly did not take.
+  expect(ratios['ring vs fill'], measured).toBeGreaterThanOrEqual(3);
+  if (browserName === 'firefox')
+    expect(ratios['ring vs unfilled track'], measured).toBeGreaterThanOrEqual(
+      3
+    );
 });
 
 test('the seek thumb ring is veiled by the theme bar painted over it', async ({
@@ -198,9 +217,6 @@ test('the seek thumb ring is veiled by the theme bar painted over it', async ({
     'ring vs unfilled track': contrast(ring, row.at(0.55)),
     'ring vs loaded range': contrast(ring, row.at(0.7))
   };
-  const clears = Object.fromEntries(
-    Object.entries(ratios).map(([boundary, ratio]) => [boundary, ratio >= 3])
-  );
 
   // Recorded as failing rather than left unmeasured, because it is the part of
   // #190 that no ring colour can fix and the arithmetic in `theme.test.ts` says
@@ -218,18 +234,31 @@ test('the seek thumb ring is veiled by the theme bar painted over it', async ({
   // a floor under how dark the ring can land and a ceiling under how light, and
   // 3:1 sits outside both.
   //
-  // WebKit fails the same two boundaries for the opposite reason — there the bar
-  // does not reach the screen at all, so the ring is a true `#000` against an
-  // unfilled native track that is near-black itself, 1.07:1 both times.
+  // WebKit misses the same two boundaries for the opposite reason: there the bar
+  // does not reach the screen at all (#191, #192), so the ring is a true `#000`
+  // and what sits beside it is WebKit's OWN unfilled track, which the theme
+  // never colours.
+  //
+  // Which is why the two boundaries are no longer pinned to a boolean each. They
+  // were, and it cost a CI failure: how light that native WebKit track renders
+  // is a property of the engine build and the runner, not of this repo — near
+  // the story's own ground locally, where the ring measured 1.07:1 against it,
+  // and light enough on GitHub's runner for the same ring on the same commit to
+  // clear 3:1. Same engine, opposite booleans. Keying the table by `browserName`
+  // does not fix that; it only moves the flake to the next runner or the next
+  // WebKit release. So what is asserted is the one thing that is a property of
+  // OUR code on every engine — the seek slider does not clear 3:1 on BOTH sides
+  // of its thumb, i.e. it is not 1.4.11-compliant — while the two ratios that
+  // got it there are stated in the message rather than frozen.
   //
   // Clearing this needs `appearance: none` and a hand-drawn control on all three
   // engines, which #190 named and did not take. The `seek-buffered` overlay that
-  // puts the veil there is now owned by #415. Until then this assertion is the
-  // record that the token ratios and the painted ones disagree.
-  expect(clears).toEqual({
-    'ring vs unfilled track': false,
-    'ring vs loaded range': false
-  });
+  // puts the veil there is now owned by #415, and this assertion is what has to
+  // go red the day #415 makes the slider compliant.
+  expect(
+    Object.values(ratios).every((ratio) => ratio >= 3),
+    `the seek slider clears 3:1 on both sides of its thumb, which #415 owns and this test exists to catch: ${state(ratios)}`
+  ).toBe(false);
 });
 
 /**
