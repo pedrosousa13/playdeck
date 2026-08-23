@@ -128,10 +128,17 @@ const isHexColor = (value: string): boolean =>
 // rejection (#198). Names the option and what was expected rather than
 // echoing the rejected value, the same posture as the YouTube adapter's
 // `hostConfigurationNotice` (#235).
+//
+// The two are ranked apart, and that is what decides which one an operator is
+// shown when an attach rejects both. A colour that failed its hex check left the
+// player wearing Wistia's own; a poster that failed the shared allowlist is an
+// untrusted URL this adapter refused to hand the element, which is a security
+// control firing (#368).
 const playerColorConfigurationNotice: PlayerError = {
   category: 'configuration',
   fatal: false,
   recoverable: false,
+  severity: 'presentational',
   message: 'The playerColor option was rejected: expected a CSS hex colour.'
 };
 
@@ -139,6 +146,7 @@ const posterConfigurationNotice: PlayerError = {
   category: 'configuration',
   fatal: false,
   recoverable: false,
+  severity: 'protective',
   message: 'The poster option was rejected: expected a permitted source URL.'
 };
 
@@ -371,14 +379,17 @@ export const createWistiaAttachment = (
     // its check is dropped onto that same path, and now also reported as a
     // notice (#235).
     //
-    // `poster` is checked BEFORE `playerColor`, and that order is load-bearing.
-    // The controller holds one `configuration` notice per attach, filled with
-    // `??=`, so the first notice emitted here is the only one that ever reaches
-    // `PlayerState.error` — and it is dropped with the provider, so the second
-    // is never reported later either. Checking the cosmetic colour first
-    // therefore suppressed this security-relevant refusal every time, not
-    // sometimes. Neither attribute depends on the other, so ordering them by
-    // what an operator most needs to hear costs nothing (#332).
+    // `poster` is checked BEFORE `playerColor`, and that order used to be
+    // load-bearing: the controller holds one `configuration` notice per attach
+    // and filled it with `??=`, so the first notice emitted here was the only
+    // one that ever reached `PlayerState.error` — and it is dropped with the
+    // provider, so the second was never reported later either. Checking the
+    // cosmetic colour first therefore suppressed this security-relevant refusal
+    // every time, not sometimes (#332). The slot is now ranked by the severity
+    // each notice carries, so the poster's refusal takes it from the colour's
+    // whichever check runs first (#368). The order stays as it is because
+    // neither attribute depends on the other and reading them worst-first still
+    // matches what an operator most needs to hear.
     //
     // This check applies the shared allowlist (`isPermittedSourceUrl`,
     // `@playdeck/core`) rather than restating a rule of its own. That allowlist

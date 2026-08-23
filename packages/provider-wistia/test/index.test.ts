@@ -489,8 +489,9 @@ test('does not publish a notice for a valid poster', async () => {
 
 // One bad presentation option must not fail playback: the drop is silent and
 // the rest of the attach runs, so the player still reaches ready. Both
-// rejections are emitted (#235) — the controller keeps only the first, which
-// is why the emission order below is asserted rather than the set (#332).
+// rejections are emitted (#235) — the controller keeps only one of them, and
+// this is what says the adapter still reports both to anyone reading the patches
+// (#332, #368).
 test('reaches ready with the dropped presentation options unset, and publishes a notice for each rejection', async () => {
   const result = await setup({
     options: { playerColor: 'red', poster: 'javascript:alert(1)' }
@@ -526,12 +527,13 @@ test('sets both presentation attributes when the colour and the poster are valid
 });
 
 // What a host actually shows an operator. The controller holds ONE
-// `configuration` notice per attach, filled with `??=`, so the first rejection
-// this adapter emits is the only one that ever reaches `PlayerState.error`
-// (`packages/core/src/player-controller.ts`, `#configurationNotice`) — it is
-// dropped with the provider, so the second is not told later either. The three
-// tests below are what holds `buildElement`'s poster-before-playerColor order
-// in place: swap the two blocks back and the first of them fails (#332).
+// `configuration` notice per attach (`packages/core/src/player-controller.ts`,
+// `#configurationNotice`) and the loser is dropped with the provider, so it is
+// not told later either. Which of the two rejections wins is decided by the
+// severity each one carries — the poster's refusal is `'protective'` and the
+// colour's is `'presentational'` — and no longer by which check `buildElement`
+// runs first (#332, #368). The three tests below assert the outcome an operator
+// sees, which is the part that has to hold whatever order the checks end up in.
 const publishedNotice = async (
   options: WistiaProviderOptions
 ): Promise<string | undefined> => {

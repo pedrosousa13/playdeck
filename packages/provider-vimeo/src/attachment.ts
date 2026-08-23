@@ -96,10 +96,16 @@ const loadFailure = (cause: unknown): PlayerError => {
 // is the embedding page's own Content-Security-Policy refusing `vimeo.com`,
 // and a notice that echoed the refusal back would only repeat what the page
 // already decided (#235).
+//
+// `'presentational'`: what went unreported is a capability the consumer styles
+// its own controls from, and nothing about the viewer was left unprotected. It
+// is the level that yields the slot to any protective notice the same attach
+// raises (#368).
 const chromelessProbeConfigurationNotice: PlayerError = {
   category: 'configuration',
   fatal: false,
   recoverable: false,
+  severity: 'presentational',
   message:
     'The chromeless-capability check could not be completed, so the customControls capability is reported as unknown.'
 };
@@ -115,10 +121,16 @@ const chromelessProbeConfigurationNotice: PlayerError = {
 // Non-fatal: the SDK behaves as it always has and the rest of the embed is
 // untouched. Never `recoverable`: a retry re-imports nothing — the module is
 // already evaluated — so it gets the same answer (#333).
+//
+// `'protective'`: a privacy opt-out the consumer asked for did not take, and
+// this page's url keeps reaching the embed. That is a control that fired for
+// the viewer, so it outranks any presentational notice the same attach raises,
+// whichever of them was emitted first (#368).
 const seoMetadataConfigurationNotice: PlayerError = {
   category: 'configuration',
   fatal: false,
   recoverable: false,
+  severity: 'protective',
   message:
     'The suppressSeoMetadata option did not take effect, so the Vimeo SDK still sends this page url to its embeds. The SDK reads that opt-out once per page, before the first Vimeo embed loads.'
 };
@@ -371,14 +383,15 @@ export const createVimeoAttachment = (
       // some import succeeded and recorded — but it is the difference between
       // "not suppressed" and "no answer", and writing it out costs nothing.
       //
-      // Emitted HERE, at the load site, and that placement is load-bearing.
-      // The controller holds one `configuration` notice per attach, filled
-      // with `??=`, so the first notice this adapter emits is the only one
-      // that ever reaches `PlayerState.error` (#332, #368). The chromeless
-      // probe's notice below is presentational; this one is a privacy control
-      // that did not apply, so it has to win. Sitting on the far side of the
-      // SDK load — which every path to the probe's emit must pass through —
-      // orders the two by construction rather than by convention (#333).
+      // Emitted HERE, at the load site, on the far side of the SDK load that
+      // every path to the chromeless probe's emit passes through. That
+      // placement no longer decides anything: the controller holds one
+      // `configuration` notice per attach and ranks the candidates for it by
+      // severity, so this one — a privacy control that did not apply — takes
+      // the slot from the probe's presentational notice whichever of the two
+      // is emitted first (#332, #368). The order is kept because it is where
+      // the answer is known and costs nothing, not because the outcome rests
+      // on it (#333).
       if (
         options.suppressSeoMetadata === true &&
         isSeoMetadataSuppressed() === false
@@ -466,10 +479,11 @@ export const createVimeoAttachment = (
       // `unknown` in the ready patch below with nothing to say why, and the
       // reason is likelier to be the embedding page's own policy than
       // anything Vimeo did. A probe Vimeo answered says nothing here: the
-      // consumer has no move to make against an unusable tier (#235). Emitted
-      // after the SEO-metadata notice above, deliberately: only the first
-      // notice of an attach is published, and this is the lesser of the two
-      // (#332, #333).
+      // consumer has no move to make against an unusable tier (#235). Still
+      // emitted after the SEO-metadata notice above, though the controller no
+      // longer publishes an attach's notices by arrival: this one is
+      // `'presentational'` and the one above is `'protective'`, which is what
+      // decides the slot now (#332, #333, #368).
       if (!chromelessProbeResult.completed) {
         emit({ error: chromelessProbeConfigurationNotice });
       }

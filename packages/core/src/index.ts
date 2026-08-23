@@ -13,6 +13,7 @@ export type {
   PlayerCapabilities,
   PlayerError,
   PlayerErrorCategory,
+  PlayerErrorSeverity,
   PlayerEvent,
   PlayerEventDetailMap,
   PlayerEventFor,
@@ -56,9 +57,15 @@ export { deriveLiveState, liveStateEqual } from './live-state.js';
 export type { LiveDerivationInput } from './live-state.js';
 
 // Public because every provider package fans out to its own subscribers and
-// owes them the same isolation the controller gives its own (#233). The rest of
-// `safety.ts` is controller-internal and stays unexported.
-export { notifySafely } from './safety.js';
+// owes them the same isolation the controller gives its own (#233).
+//
+// `isNotice` is public for a different reason: a Notice is a concept the whole
+// library shares, and telling one from a failure is a rule with a clause that is
+// easy to drop — `ErrorDisplay` rendering the published error asks it the same
+// question the controller asks of an incoming patch, and the two must never
+// answer differently (#368). The rest of `safety.ts` is controller-internal and
+// stays unexported.
+export { isNotice, notifySafely } from './safety.js';
 
 export {
   detectSource,

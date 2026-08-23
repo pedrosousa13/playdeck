@@ -130,10 +130,16 @@ const resolveHost = (
 // (#198). Names the option rather than echoing the rejected value, which is
 // exactly what a misconfigured `host` would have disclosed the page to
 // (`attachment.ts:193`'s `origin` player var).
+//
+// `'protective'`: the rejected value is a host this adapter refused to embed
+// from, so the notice reports a control that fired rather than an option that
+// went unapplied. This adapter emits no second notice today, and the level is
+// what keeps that true if it ever does (#368).
 const hostConfigurationNotice: PlayerError = {
   category: 'configuration',
   fatal: false,
   recoverable: false,
+  severity: 'protective',
   message: 'The host option was rejected, so the default host was used.'
 };
 

@@ -33,3 +33,12 @@ mask anything.
 It lands as `minor` rather than `patch` for the reason #319 did: no API
 changed, but what a released package reports did, and a behaviour change should
 not arrive as a patch.
+
+**Superseded in this release by #368.** The controller no longer decides its one
+notice slot by arrival. `PlayerError` carries a `severity` and the highest one
+holds the slot, so the ranking weighed and declined above is what shipped — in
+the same release as this. The ordering here is still correct and stays exactly
+as it is: the poster refusal is `protective` and the colour refusal
+`presentational`, so "first" and "most important" agree. It is simply no longer
+what the outcome rests on, and Wistia is no longer the only provider that can
+emit two notices in one attach.

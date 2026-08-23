@@ -27,6 +27,8 @@ import {
   freezeAvailability,
   freezeCapabilities,
   freezeError,
+  isNotice,
+  mostImportantNotice,
   notifySafely,
   orderedRanges,
   standingRefusedUrlNotice,
@@ -75,12 +77,12 @@ const isSeekEvent = (event: ProviderEvent): boolean =>
 // A provider reporting that it rejected a consumer-supplied option and carried
 // on with a safe default. Non-fatal and outside the error lifecycle, which is
 // what separates it from a failure: nothing stopped working, so it must not
-// reach `explicitProviderError` and drive lifecycle or activation (#235).
+// reach `explicitProviderError` and drive lifecycle or activation (#235). The
+// rule itself is `isNotice` in `safety.ts`, which `#applyPatch` and
+// `ErrorDisplay` ask the same question of; this is the patch-shaped reading of
+// it (#368).
 const noticeIn = (patch: ProviderStatePatch): PlayerError | undefined =>
-  patch.error &&
-  patch.error.category === 'configuration' &&
-  !patch.error.fatal &&
-  patch.lifecycle !== 'error'
+  patch.error && isNotice(patch.error, patch.lifecycle)
     ? patch.error
     : undefined;
 
@@ -239,13 +241,17 @@ export class PlayerController {
   // while `load()` is only queued once `attach()` returns (#87).
   #loadedGeneration: number | undefined;
   #pendingOrigins = new Map<PendingOriginKind, PendingOrigin>();
-  // The provider's first configuration rejection, held as controller state the
-  // way `#hasAutoplayConfigurationError` holds the autoplay conflict: the state
-  // has one error slot, so a notice left in the patch would be cleared by the
-  // next patch that omits an `error` key, and would overwrite an error that
-  // actually stopped playback. First one wins — two rejections in the same
-  // attach would otherwise flap the slot — and it is dropped with the provider
-  // that reported it (#235).
+  // The provider's most important configuration rejection, held as controller
+  // state the way `#hasAutoplayConfigurationError` holds the autoplay conflict:
+  // the state has one error slot, so a notice left in the patch would be cleared
+  // by the next patch that omits an `error` key, and would overwrite an error
+  // that actually stopped playback. It is dropped with the provider that
+  // reported it (#235).
+  //
+  // Which of an attach's rejections that is, is decided by severity and not by
+  // arrival — see the fill site in `setProvider`. A tie keeps the one already
+  // held, so two rejections in the same attach still cannot flap the slot
+  // (#368).
   #configurationNotice: PlayerError | undefined;
   // How many reporters currently stand behind each refused surface — the live
   // answer, not a log of what was once refused. Keyed by surface because the
@@ -511,8 +517,25 @@ export class PlayerController {
         // `#applyPatch` decides whether it is published, the same way the
         // autoplay conflict is recorded by `configureAutoplay` and resolved
         // there (#235).
+        //
+        // Compare-and-replace, not the `??=` this was until #368: an adapter
+        // that reports two rejections in one attach had the first of them keep
+        // the slot for good, so a cosmetic option rejected early silenced a
+        // security- or privacy-relevant refusal reported after it, and nothing
+        // carried the loser. The incumbent is offered first, so only a strictly
+        // higher severity takes the slot and a tie leaves it where it is —
+        // which is the anti-flapping property `??=` was really providing, kept
+        // without the ordering debt it charged every adapter for.
+        //
+        // Frozen before it is offered rather than after it has won: the value
+        // being ranked is the value that will be held, so nothing a provider
+        // can still rewrite is compared, held or published.
         const notice = noticeIn(patch);
-        if (notice) this.#configurationNotice ??= freezeError(notice);
+        if (notice)
+          this.#configurationNotice = mostImportantNotice(
+            this.#configurationNotice,
+            freezeError(notice)
+          );
         // The confirmed origin joins the patch rather than being derived from
         // the pending record inside `#applyPatch`: the patch is consumed once,
         // and both the event above and the state below have to read the same
@@ -937,10 +960,8 @@ export class PlayerController {
         : acceptAutoplay
           ? (patch.autoplay ?? this.#state.autoplay)
           : this.#state.autoplay;
-    // What the patch alone says the slot should hold. A held notice fills in
-    // only where this is `null`: it is the least important thing the slot can
-    // carry, so it may take the slot but never take it from something else
-    // (#235).
+    // What the patch alone says the slot should hold, before the held notices
+    // are considered (#235).
     const errorBeforeNotice =
       patch.lifecycle === 'ready' && patch.error === undefined
         ? null
@@ -949,6 +970,26 @@ export class PlayerController {
           : patch.error === null
             ? null
             : freezeError(patch.error);
+    // The one question that decides how the value above is resolved, because
+    // `errorBeforeNotice` covers two unlike things. A failure — fatal, the
+    // `provider` fault a refused autoplay attempt publishes, anything under
+    // `lifecycle: 'error'` — keeps the slot by standing in it, and a notice
+    // still waits behind it exactly as it did before #368: nothing about a
+    // rejected option outranks something that stopped working.
+    //
+    // A notice that stands is a different matter. It is a candidate among the
+    // held notices rather than the winner by position, or the arrival order the
+    // fill site stopped honouring would come straight back in through the
+    // published slot: the presentational notice published first would be the
+    // incumbent, and the protective one that displaced it in
+    // `#configurationNotice` would never reach a consumer. It is offered first,
+    // so a tie still leaves it standing (#368).
+    const standingFailure =
+      errorBeforeNotice !== null && !isNotice(errorBeforeNotice, nextLifecycle)
+        ? errorBeforeNotice
+        : null;
+    const standingNotice =
+      standingFailure === null ? (errorBeforeNotice ?? undefined) : undefined;
     const nextState: PlayerState = {
       ...this.#state,
       ...patch,
@@ -1020,16 +1061,25 @@ export class PlayerController {
             this.#state.error?.category !== 'configuration'
             ? this.#state.error
             : autoplayConfigurationError()
-          : // A notice waits behind whatever the slot already holds, not only
-            // behind a fatal one: the `provider` error a refused autoplay
-            // attempt publishes keeps the slot too, and the notice becomes
-            // visible when it clears (#235). A refused consumer URL waits
-            // behind a provider's own notice in turn — the provider reported
-            // something about the source that is about to play, and this one is
-            // about a decorative prop (#330).
-            (errorBeforeNotice ??
-            this.#configurationNotice ??
-            this.#refusedUrlNotice ??
+          : // A notice waits behind whatever failure the slot already holds,
+            // not only behind a fatal one: the `provider` error a refused
+            // autoplay attempt publishes keeps the slot too, and the notice
+            // becomes visible when it clears (#235).
+            //
+            // The notices themselves are ranked rather than ordered, so which
+            // one a consumer sees is a function of what was refused and of
+            // nothing else (#368). Where they tie, the order they are offered
+            // in decides, and it is the order this always expressed: what
+            // already stands, then the provider's own notice, then a refused
+            // consumer URL — the provider reported something about the source
+            // that is about to play, and that one is about a prop beside it
+            // (#330).
+            (standingFailure ??
+            mostImportantNotice(
+              standingNotice,
+              this.#configurationNotice,
+              this.#refusedUrlNotice
+            ) ??
             null)
     };
     this.#setState(nextState);

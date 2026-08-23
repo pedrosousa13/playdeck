@@ -73,6 +73,7 @@ out when a command will land; `activation` is not a substitute for either.
 | `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults.   |
 | `resolveNetworkPath`         | Normalises a protocol-relative URL (`//host/...`) to `https:`; returns every other value unchanged.            |
 | `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                        |
+| `isNotice`                   | Whether a published error is a notice — a rejected value reported while the player carried on — or a failure.  |
 | `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.            |
 | `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                    |
 | `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                             |
@@ -93,8 +94,8 @@ State and contract: `PlayerState`, `PlayerCapabilities`, `Availability`,
 `CommandResult`, `CommandFailureReason`, `PlaybackState`, `PlayerProvider`,
 `PlayerQuality`, `TimeRange`, `TextTrack`, `TextTrackKind`,
 `TextTrackReadiness`, `TextCue`, `CaptionRendering`, `Chapter`, `ChapterInput`,
-`PlayerLiveState`, `PlayerError`, `PlayerErrorCategory`, `RefusedPlay`,
-`RefusedUrlSurface`, `PreProviderActivation`.
+`PlayerLiveState`, `PlayerError`, `PlayerErrorCategory`, `PlayerErrorSeverity`,
+`RefusedPlay`, `RefusedUrlSurface`, `PreProviderActivation`.
 
 Events: `PlayerEvent`, `PlayerEventType`, `PlayerEventDetailMap`,
 `PlayerEventFor`, `PlayerEventOrigin`.
@@ -211,10 +212,21 @@ always the caller's own object.
 `createInitialPlayerState()` is the state a controller starts from — what to
 render on a server, and what a test fixture should begin with.
 
+`isNotice()` answers the question any consumer rendering `PlayerState.error`
+itself has to ask first: is this a notice — a value the player rejected while it
+carried on with a fall-back — or a failure? It is the same rule the controller
+and `ErrorDisplay` apply, so a custom error surface classifies an error exactly
+as the bundled one does.
+
 <!-- example:core-state -->
 
 ```ts
-import { createInitialPlayerState, textTrackLabel } from '@playdeck/core';
+import {
+  createInitialPlayerState,
+  isNotice,
+  textTrackLabel,
+  type PlayerState
+} from '@playdeck/core';
 
 // The state a controller starts from. Safe to render on a server, where no
 // provider exists yet — and the same state a test fixture should start from.
@@ -226,6 +238,13 @@ console.log(initial.capabilities.seek.status); // 'unknown', not 'unavailable'
 // A control reading an `unknown` capability renders nothing rather than
 // something disabled: the answer is not "no", it is "not yet".
 export const seekIsUndecided = initial.capabilities.seek.status === 'unknown';
+
+// Whether the published error is a notice — a rejected option reported while
+// the player carries on with a fall-back — rather than something that stopped
+// playback. Ask before covering the player: a notice must never be rendered as
+// a failure, and only the lifecycle beside it tells the two apart.
+export const rendersAsFailure = (state: PlayerState): boolean =>
+  state.error !== null && !isNotice(state.error, state.lifecycle);
 
 // The label a provider should publish for a track, given the track's own label
 // and its language. Falls back to the language's own name, then to 'Unknown'.

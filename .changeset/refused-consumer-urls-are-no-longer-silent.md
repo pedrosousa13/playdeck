@@ -63,3 +63,13 @@ does not settle it.
 `PosterImage` reads the player context optionally rather than through
 `usePlayer()`, so a poster rendered outside `Player.Root` keeps working and
 simply has nothing to report to.
+
+**Superseded in this release by #368.** The single error slot no longer decides
+by arrival, and the later patch anticipated above is in this same release: a
+notice declares a `severity` and the highest one holds the slot. All five
+refused-URL notices are `protective` — what each reports is the shared allowlist
+blocking an untrusted URL — so a cosmetic provider notice never takes the slot
+from one, whichever of the two arrived first. Where a provider's own notice ties,
+a fixed precedence settles it rather than arrival: what already stands, then the
+provider's notice, then the refused URL. The rank among the five surfaces
+described above is untouched.
