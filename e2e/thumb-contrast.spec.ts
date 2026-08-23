@@ -6,15 +6,19 @@ import {
 } from '../packages/react/test/contrast';
 
 /**
- * WCAG 2.2 AA 1.4.11 on the slider thumb, measured from rendered pixels (#190).
+ * WCAG 2.2 AA 1.4.11 on the slider thumb, measured from rendered pixels (#190,
+ * #415).
  *
  * `packages/react/test/theme.test.ts` already composites the theme's token
  * defaults and asserts the same 3:1 floor. This file exists because that
- * arithmetic describes a slider no engine paints: both sliders are native range
- * inputs, every engine paints its own track and thumb underneath (or through)
- * whatever the theme says, and the ring's whole job is to survive that. A rule
- * that is a no-op on the target engine is the failure mode #190 is about, and
- * only a screenshot can tell.
+ * arithmetic can describe a slider no engine paints. Both sliders are native
+ * range inputs, and how much of each one the theme has taken over differs: the
+ * volume slider keeps Blink's and WebKit's own track and thumb with a ring added
+ * to it, so what the theme declares has to survive being painted through, while
+ * the seek slider is drawn by the theme on all three engines because nothing
+ * else stopped its own loaded-range indicator painting over the control. A rule
+ * that is a no-op on the target engine, or a layer that composites over the one
+ * below it, is invisible to arithmetic. Only a screenshot can tell.
  *
  * The maths is imported from the unit test's module rather than restated, so
  * the two numbers are comparable by construction.
@@ -23,9 +27,10 @@ import {
  * mechanism that mounts `theme.css` (`apps/storybook/.storybook/theme.tsx`).
  *
  * The `forced colors` block at the foot of the file measures the same two
- * sliders again with the system palette in force, because #190's Gecko half
- * works by switching that engine's native widget off — and a native widget is
- * where forced-colors rendering came from for free.
+ * sliders again with the system palette in force, because both of the above work
+ * by switching an engine's native widget off — and a native widget is where
+ * forced-colors rendering came from for free. Neither is applied in that mode,
+ * and that block is what says so from pixels.
  */
 
 const themedStory = (id: string): string =>
@@ -51,8 +56,24 @@ type Row = {
  * `animations: 'disabled'` because Playwright then finishes any running CSS
  * animation before capturing, rather than catching the theme's opacity
  * transition part-way and measuring a colour nothing ever settles on.
+ *
+ * `rowSelector` names the element whose centre picks the row, when that is not
+ * the element being clipped. The seek slider needs the distinction: what is
+ * sampled has to be the whole control, thumb included, so the clip is the
+ * input — but the two surfaces the thumb is measured against are painted by
+ * `seek-buffered`, a 4px bar that does NOT sit on the input's own centre line.
+ * Measured on this story, as row offsets inside the input's box: the bar
+ * occupies rows 22-25 on Blink and Gecko and rows 23-26 on WebKit, against an
+ * input centre of row 22. Sampling the input's centre therefore reads the
+ * engine's own track on WebKit and never the theme's bar at all, which is how
+ * "the bar does not reach the screen on WebKit" was concluded in #190. It does;
+ * it is one pixel lower than the row that was being read.
  */
-const centreRow = async (page: Page, selector: string): Promise<Row> => {
+const centreRow = async (
+  page: Page,
+  selector: string,
+  rowSelector: string = selector
+): Promise<Row> => {
   const locator = page.locator(selector);
   await expect(locator).toBeVisible();
   const box = (await locator.boundingBox())!;
@@ -62,12 +83,16 @@ const centreRow = async (page: Page, selector: string): Promise<Row> => {
     width: Math.round(box.width),
     height: Math.round(box.height)
   };
+  const rowBox = (await page.locator(rowSelector).boundingBox())!;
+  // Where the sampled row sits inside the clip, 0..1, so the decoder needs no
+  // knowledge of the device pixel ratio to place it.
+  const rowFraction = (rowBox.y + rowBox.height / 2 - clip.y) / clip.height;
   const shot = await page.screenshot({ animations: 'disabled', clip });
 
   const decoder = await page.context().newPage();
   await decoder.goto('about:blank');
   const image = await decoder.evaluate(
-    async (source) => {
+    async ({ source, fraction }) => {
       const element = new Image();
       await new Promise((resolve, reject) => {
         element.addEventListener('load', resolve);
@@ -79,11 +104,17 @@ const centreRow = async (page: Page, selector: string): Promise<Row> => {
       canvas.height = element.naturalHeight;
       const context = canvas.getContext('2d')!;
       context.drawImage(element, 0, 0);
-      const row = Math.round(canvas.height / 2);
+      const row = Math.min(
+        Math.max(Math.round(fraction * canvas.height), 0),
+        canvas.height - 1
+      );
       const { data } = context.getImageData(0, row, canvas.width, 1);
       return { width: canvas.width, channels: [...data] };
     },
-    `data:image/png;base64,${shot.toString('base64')}`
+    {
+      source: `data:image/png;base64,${shot.toString('base64')}`,
+      fraction: rowFraction
+    }
   );
   await decoder.close();
 
@@ -201,64 +232,118 @@ test('the volume thumb ring clears 3:1 against the surfaces beside it', async ({
     );
 });
 
-test('the seek thumb ring is veiled by the theme bar painted over it', async ({
+test('the seek slider clears 3:1 on both sides of its thumb and across its loaded edge', async ({
   page
 }) => {
   await page.goto(themedStory('player-seekslider--with-buffered-ranges'));
-  const row = await centreRow(page, '[data-playdeck-part="seek-slider-input"]');
+  // Clipped on the input so the thumb is in frame, sampled on the row through
+  // the middle of `seek-buffered` — see `centreRow`. Both surfaces the thumb is
+  // measured against live in that 4px bar and nowhere else, so it is the only
+  // row on which the question this test asks is even well posed.
+  const row = await centreRow(
+    page,
+    '[data-playdeck-part="seek-slider-input"]',
+    '[data-playdeck-part="seek-buffered"]'
+  );
   // Value 30 of 100, buffered 0..45 and 60..80. A range thumb's centre sits at
-  // `half + fraction * (width - thumb)`, over a thumb 16-18px wide. Blink and
-  // WebKit pick that width themselves; on Gecko it is no longer the engine's,
-  // it is this theme's — `--playdeck-slider-thickness * 4`, 16px (#190). The
-  // three agree closely enough that on this story's 432px input 30% lands at
-  // 133 ± 0.3 on all of them.
+  // `half + fraction * (width - thumb)`, over a thumb 16px wide —
+  // `--playdeck-slider-thickness * 4`, this theme's on every engine now (#415)
+  // rather than only on Gecko (#190). On this story's 432px input 30% lands at
+  // 133 ± 0.3.
   const ring = row.darkestAround(8.5 + 0.3 * (row.widthPx - 17), 12);
   const ratios = {
     'ring vs unfilled track': contrast(ring, row.at(0.55)),
-    'ring vs loaded range': contrast(ring, row.at(0.7))
+    'ring vs loaded range': contrast(ring, row.at(0.7)),
+    'loaded range vs unfilled track': contrast(row.at(0.7), row.at(0.55))
   };
+  const measured = state(ratios);
 
-  // Recorded as failing rather than left unmeasured, because it is the part of
-  // #190 that no ring colour can fix and the arithmetic in `theme.test.ts` says
-  // the opposite.
+  // This test recorded the opposite until #415: it asserted that the seek
+  // slider does NOT clear 3:1 on both sides of its thumb, because it could not.
+  // `SeekSlider` renders `seek-buffered` before the input and this theme made
+  // it `position: absolute` while leaving the input in flow, so the theme's own
+  // translucent bar painted OVER the native control — white at 0.36 alpha, and
+  // a second white at 0.7 wherever a range was loaded. A `#000` ring reached the
+  // screen as `rgb(206 206 206)` under two veils on all three engines, and the
+  // engine's own track was under the bar as well, lifting the surround with it.
+  // Measured on this row before the change, which is what this test reported
+  // when it was written against it:
   //
-  // `SeekSlider` renders `seek-buffered` before the input, and this theme makes
-  // it `position: absolute` while leaving the input in flow. A positioned
-  // element paints after an in-flow one, so the theme's own translucent bar
-  // paints OVER the native control on Blink and Gecko: white at 0.36 alpha, and
-  // a second white at 0.7 wherever a range is loaded. That lifts every pixel of
-  // the thumb, ring included, towards white before anyone sees it. A `#000` ring
-  // reaches the screen as `rgb(92 92 92)` under one veil and `rgb(206 206 206)`
-  // under two, against a track lifted the same way — measured 2.48:1 and 1.11:1
-  // on Blink, 1.75:1 and 1.20:1 on Gecko. No ring colour escapes: the veil puts
-  // a floor under how dark the ring can land and a ceiling under how light, and
-  // 3:1 sits outside both.
+  //     chromium  ring/track 2.48  ring/loaded 1.11  loaded/track 2.76
+  //     firefox   ring/track 3.76  ring/loaded 1.03  loaded/track 3.86
+  //     webkit    ring/track 3.76  ring/loaded 1.03  loaded/track 3.86
   //
-  // WebKit misses the same two boundaries for the opposite reason: there the bar
-  // does not reach the screen at all (#191, #192), so the ring is a true `#000`
-  // and what sits beside it is WebKit's OWN unfilled track, which the theme
-  // never colours.
+  // The third column is the half no ring colour could have reached: on Blink the
+  // bar composited over an OPAQUE native track (`rgb(59 59 59)`), which lifted
+  // the unfilled bar to `rgb(129 129 129)` and left the loaded/unloaded boundary
+  // at 2.76:1 — a failure of the loaded indicator itself, not of the thumb.
   //
-  // Which is why the two boundaries are no longer pinned to a boolean each. They
-  // were, and it cost a CI failure: how light that native WebKit track renders
-  // is a property of the engine build and the runner, not of this repo — near
-  // the story's own ground locally, where the ring measured 1.07:1 against it,
-  // and light enough on GitHub's runner for the same ring on the same commit to
-  // clear 3:1. Same engine, opposite booleans. Keying the table by `browserName`
-  // does not fix that; it only moves the flake to the next runner or the next
-  // WebKit release. So what is asserted is the one thing that is a property of
-  // OUR code on every engine — the seek slider does not clear 3:1 on BOTH sides
-  // of its thumb, i.e. it is not 1.4.11-compliant — while the two ratios that
-  // got it there are stated in the message rather than frozen.
+  // What clears all three is the theme drawing the seek control rather than
+  // decorating the engine's: `appearance: none`, the bar behind the input as its
+  // track, and the thumb hand-drawn on all three engines. Every pixel compared
+  // below is then painted from `theme.css`'s own tokens, which is why the three
+  // engines now agree exactly rather than to a band — 3.55, 13.73 and 3.86 on
+  // chromium, firefox and webkit alike, on all four rows of the bar and not only
+  // on the one sampled here.
   //
-  // Clearing this needs `appearance: none` and a hand-drawn control on all three
-  // engines, which #190 named and did not take. The `seek-buffered` overlay that
-  // puts the veil there is now owned by #415, and this assertion is what has to
-  // go red the day #415 makes the slider compliant.
+  // The figures are stated in the message rather than pinned to literals, for
+  // the reason the volume test above records: a pinned literal here cost a CI
+  // failure once, when the surround was the engine's own track and not ours. It
+  // is ours now, so the numbers are stable — but the floor is what 1.4.11 asks
+  // for, and the floor is what is asserted.
+  const belowFloor = Object.entries(ratios).filter(([, ratio]) => ratio < 3);
   expect(
-    Object.values(ratios).every((ratio) => ratio >= 3),
-    `the seek slider clears 3:1 on both sides of its thumb, which #415 owns and this test exists to catch: ${state(ratios)}`
-  ).toBe(false);
+    belowFloor.map(([boundary]) => boundary),
+    measured
+  ).toEqual([]);
+
+  // Two boundaries the three ratios above do not cross, recorded rather than
+  // left silent.
+  //
+  // `seek-progress` is #415's own new surface — the span of the window before
+  // the position, which is what `accent-color` used to paint before the native
+  // widget went off. It ends at 30% on this story, and the samples above are
+  // 0.55 and 0.70, both to the right of that edge, so nothing above measures the
+  // played fill against anything. Sampled at 0.10, inside the span and clear of
+  // the thumb at ~0.27..0.34:
+  //
+  //     played fill vs loaded range     1.69:1
+  //     played fill vs unfilled track   2.28:1
+  //
+  // Both are below the 3:1 floor, and neither is new arithmetic: they are the
+  // same pair `theme.test.ts` has stated all along as `accent vs buffered` and
+  // `accent vs track`, 1.65:1 and 2.59:1 over the theme's own backdrop default.
+  // What #415 changed is whose pixel the fill is — this file's `seek-progress`
+  // rather than an engine's `accent-color` seen through a translucent bar — so
+  // the arithmetic and the screen now describe the same surface, and the three
+  // engines agree on it. Closing the gap means moving
+  // `--playdeck-color-accent`, which #415 puts out of scope, and 1.4.11 is
+  // already satisfied at the thumb by the ring rather than by the fill — see the
+  // long note in `theme.test.ts` for why no accent value clears both surfaces at
+  // once.
+  //
+  // Pinned rather than floored, because there is no floor here to assert: what
+  // is worth catching is the figure moving without anyone saying so. Pinning is
+  // safe here for the reason it was not in the volume test above — every pixel
+  // in both pairs is painted from `theme.css`'s own tokens over this story's
+  // ground, none of it is an engine's native track, and the three engines
+  // measured 1.6947 and 2.2805 alike.
+  const played = row.at(0.1);
+  const unmeasured = {
+    'played fill vs loaded range': contrast(played, row.at(0.7)),
+    'played fill vs unfilled track': contrast(played, row.at(0.55))
+  };
+  expect(
+    Object.fromEntries(
+      Object.entries(unmeasured).map(([boundary, ratio]) => [
+        boundary,
+        `${ratio.toFixed(2)}:1`
+      ])
+    )
+  ).toEqual({
+    'played fill vs loaded range': '1.69:1',
+    'played fill vs unfilled track': '2.28:1'
+  });
 });
 
 /**
@@ -272,7 +357,10 @@ test('the seek thumb ring is veiled by the theme bar painted over it', async ({
  * `::-moz-*` rules unguarded the whole Gecko control flattened to `Canvas` —
  * measured on the volume slider, which is the one of the two this is visible on,
  * before the `(forced-colors: none)` query went on those rules. The seek slider
- * cannot show it either way, for the reason the second test below records.
+ * cannot show it either way, for the reason the second test below records — and
+ * #415's rules sit inside the same query for the same reason, so this mode is
+ * the one place the seek slider is still the engine's control under the theme's
+ * opaque bar.
  *
  * Chromium and Firefox only. WebKit matches `(forced-colors: active)` under
  * Playwright's emulation but does not substitute the palette with it: measured
@@ -325,10 +413,20 @@ test.describe('forced colors', () => {
     // And the position the user is actually at reaches no pixel. In this mode
     // `seek-buffered` is an opaque `canvas` bar rather than a translucent one,
     // so instead of veiling the native control it hides it outright, on every
-    // engine and on both sides of #190. The thumb's centre samples the same
-    // colour as a point in the loaded range well clear of it, which is the
-    // assertion that there is nothing there. #415 owns that overlay; #190
-    // neither caused this nor can reach it.
+    // engine. The thumb's centre samples the same colour as a point in the
+    // loaded range well clear of it, which is the assertion that there is
+    // nothing there.
+    //
+    // Still true after #415, and deliberately. That change put the bar behind
+    // the input everywhere else by making the theme draw the control, and both
+    // halves of it are held out of this mode: `theme.css` records the two
+    // measurements that say why, and they are the same trade #190 refused —
+    // positioning the input here hands the row to the engine's own opaque track
+    // and takes the assertion above from 21.00:1 to 1.00:1, and drawing the
+    // control here flattens Gecko's thumb to under 3:1 against the canvas. The
+    // pair of assertions in this test is what keeps that decision honest: the
+    // first is the half worth more than the second, and the second is the cost,
+    // stated rather than left silent.
     const thumbCentre = 8.5 + 0.3 * (row.widthPx - 17);
     expect(row.at(thumbCentre / row.widthPx)).toEqual(loaded);
   });

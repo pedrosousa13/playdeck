@@ -30,14 +30,19 @@ _Avoid_: element, node, slot
 The grip a user drags on either slider. The browser renders it inside the native
 range input, so it is not a part: it carries no `data-playdeck-part`, and the
 theme reaches it only through a pseudo-element — `::-webkit-slider-thumb` on
-Blink and WebKit, `::-moz-range-thumb` on Gecko. On Blink and WebKit its fill
-belongs to `accent-color` and cannot be addressed on its own, which is why the
-theme colours its ring (`--playdeck-color-thumb-ring`) rather than the thumb
-itself. On Gecko the ring costs more: styling any part of a range input turns the
-native widget off for the whole control, so there the theme draws the thumb
-whole — its fill as well as its ring — plus that engine's track and progress
-fill. It draws none of them in forced-colors mode, where the native widget is
-left on so the user's palette reaches the control.
+Blink and WebKit, `::-moz-range-thumb` on Gecko. How much of it the theme draws
+depends on how much of the control it has had to take over. On the volume
+slider, which nothing is painted over, Blink and WebKit keep their native thumb
+and the theme adds only its ring (`--playdeck-color-thumb-ring`), because the
+fill belongs to `accent-color` and cannot be addressed on its own; Gecko gets
+the thumb drawn whole — fill as well as ring — plus that engine's track and
+progress fill, because styling any part of a range input there turns the native
+widget off for the whole control. On the seek slider the theme draws the thumb
+whole on all three engines: the loaded-range indicator sits in the same 4px band
+and one of the two has to be behind the other, and an engine's own track is what
+hides the indicator once the input is on top. It draws none of it in
+forced-colors mode, where the native widget is left on so the user's palette
+reaches the control.
 _Avoid_: handle, knob, scrubber
 
 **Viewport**:
