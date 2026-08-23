@@ -216,3 +216,153 @@ describe('clamp', () => {
     expect(boundary.clamp(20, 0)).toBe(20);
   });
 });
+
+// The floor and ceiling applied to a position that simply *arrived*, rather
+// than one Playdeck asked for (#381). `clamp` answers for a command; this
+// answers for a report.
+describe('correction', () => {
+  test.each<[string, number, number | undefined]>([
+    ['below the start', 1, 5],
+    ['at the start', 5, undefined],
+    ['inside the window', 12, undefined],
+    ['at the end', 20, undefined],
+    ['past the end', 25, 20]
+  ])('corrects a reported time %s', (_label, time, expected) => {
+    const boundary = createTimeBoundary({ startTime: 5, endTime: 20 });
+    expect(boundary.correction(30, time)).toBe(expected);
+  });
+
+  // The natural end of the media is the platform's own event to report, which
+  // is the same gate `atEnd` applies. Nothing above the window is corrected
+  // when the window has no end of its own.
+  test.each<[string, number]>([
+    ['at the duration', 30],
+    ['past the duration', 31]
+  ])('corrects nothing %s with no endTime', (_label, time) => {
+    const boundary = createTimeBoundary({ startTime: 5 });
+    expect(boundary.correction(30, time)).toBeUndefined();
+  });
+
+  test('corrects nothing at all with no window', () => {
+    const boundary = createTimeBoundary({});
+    expect(boundary.correction(30, 0)).toBeUndefined();
+    expect(boundary.correction(30, 31)).toBeUndefined();
+  });
+
+  test('corrects to the duration-clamped start', () => {
+    const boundary = createTimeBoundary({ startTime: 90 });
+    expect(boundary.correction(60, 10)).toBe(60);
+    expect(boundary.correction(60, 60)).toBeUndefined();
+  });
+
+  test('corrects to the duration-clamped end', () => {
+    const boundary = createTimeBoundary({ startTime: 5, endTime: 90 });
+    expect(boundary.correction(60, 70)).toBe(60);
+  });
+
+  // A report can arrive non-finite — YouTube's `getCurrentTime()` answers NaN
+  // before its player is ready. Only NaN has no answer: nothing can be placed
+  // against it, so the arithmetic would answer NaN itself, which is not a fixed
+  // point. The infinities are ordered and answer like any other position
+  // outside the window.
+  test.each<[string, number, number | undefined]>([
+    ['NaN, which nothing can be compared against', Number.NaN, undefined],
+    ['Infinity, which is past the end', Number.POSITIVE_INFINITY, 20],
+    ['-Infinity, which is below the start', Number.NEGATIVE_INFINITY, 5]
+  ])('corrects a reported %s', (_label, time, expected) => {
+    const boundary = createTimeBoundary({ startTime: 5, endTime: 20 });
+    expect(boundary.correction(30, time)).toBe(expected);
+  });
+
+  // Above the window with no `endTime` the natural end is the platform's own
+  // event, and Infinity is above every window.
+  test('corrects nothing for a reported Infinity with no endTime', () => {
+    const boundary = createTimeBoundary({ startTime: 5 });
+    expect(boundary.correction(30, Number.POSITIVE_INFINITY)).toBeUndefined();
+  });
+
+  // The two must agree rather than double-correct: a command the clamp already
+  // pulled into the window reports a position this leaves alone.
+  test.each<[string, number]>([
+    ['below the start', 0],
+    ['past the end', 45]
+  ])(
+    'needs no second correction after clamping a command %s',
+    (_label, time) => {
+      const boundary = createTimeBoundary({ startTime: 5, endTime: 20 });
+      expect(boundary.correction(30, boundary.clamp(30, time))).toBeUndefined();
+    }
+  );
+
+  // What breaks the feedback loop: every correction is a fixed point, so the
+  // report the corrective seek produces asks for no correction of its own.
+  test.each<[string, number | undefined, number | undefined, number]>([
+    ['below a start', 5, undefined, 1],
+    ['below a start inside a window', 5, 20, 1],
+    ['past an end', 5, 20, 25],
+    ['below a start past the duration', 90, undefined, 1],
+    ['below a start past a duration-clamped end', 90, 120, 1]
+  ])(
+    'answers nothing for its own correction %s',
+    (_label, startTime, endTime, time) => {
+      const boundary = createTimeBoundary({ startTime, endTime });
+      const corrected = boundary.correction(60, time);
+      expect(corrected).toBeDefined();
+      expect(boundary.correction(60, corrected!)).toBeUndefined();
+    }
+  );
+
+  // The same property, swept rather than sampled, because the case that broke
+  // it was one no named case reached. Over every combination of window,
+  // duration and reported time — the non-finite ones included — wherever this
+  // answers a position, that position must be one it answers nothing for.
+  test('answers nothing for its own correction, over every window', () => {
+    const startTimes = [0, 5, 20, 1e9];
+    const endTimes = [undefined, 0.5, 30, 1e9];
+    const durations: (number | null | undefined)[] = [
+      null,
+      undefined,
+      0,
+      10,
+      30,
+      120,
+      Number.POSITIVE_INFINITY,
+      Number.NaN
+    ];
+    const times = [
+      -100,
+      -1,
+      0,
+      0.001,
+      4.999,
+      5,
+      19.999,
+      20,
+      29.999,
+      30,
+      30.001,
+      119,
+      1e9,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      Number.NaN
+    ];
+
+    const unstable: string[] = [];
+    for (const startTime of startTimes)
+      for (const endTime of endTimes) {
+        const boundary = createTimeBoundary({ startTime, endTime });
+        for (const duration of durations)
+          for (const time of times) {
+            const corrected = boundary.correction(duration, time);
+            if (corrected === undefined) continue;
+            const again = boundary.correction(duration, corrected);
+            if (again !== undefined)
+              unstable.push(
+                `[${startTime}, ${String(endTime)}] duration ${String(duration)}: ${time} -> ${corrected} -> ${again}`
+              );
+          }
+      }
+    expect(unstable).toEqual([]);
+  });
+});

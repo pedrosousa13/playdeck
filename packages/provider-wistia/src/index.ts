@@ -49,8 +49,11 @@ export type WistiaProviderOptions = {
    * Stop playback at this offset and publish `ended` there, rather than at the
    * media's own end. Aurora has no end mechanism to hand this to, so the
    * adapter enforces it from Wistia's `time-update` reports — the same posture
-   * the native provider takes. An end that is not finite, or not above the
-   * sanitised `startTime`, is no end; one past the duration is clamped to it.
+   * the native provider takes: at the boundary it pauses the player, seeks the
+   * playhead back onto it and publishes `ended` there (#381), the seek being
+   * what answers the overshoot Aurora's own report cadence leaves. An end that
+   * is not finite, or not above the sanitised `startTime`, is no end; one past
+   * the duration is clamped to it.
    * Documented like `loop` below: this is where the setting is implemented,
    * `Root` folds its own prop in, and `PlayerProviderOptions` omits the key so
    * the two cannot both be written (ADR-0004).
@@ -72,12 +75,14 @@ export type WistiaProviderOptions = {
   readonly swatch?: boolean;
   readonly poster?: string;
   /**
-   * Begin playback at this offset. Written onto the element as the
-   * `current-time` attribute for the load, and seeked to on the handle once
-   * the player is ready — the attribute is a hint, the seek is the authority.
-   * A start that is not finite, or not above zero, is no start. With `loop`,
-   * the restart returns here rather than to zero. Same ADR-0004 posture as
-   * `endTime` above.
+   * Begin playback at this offset, and the floor the playhead is held above.
+   * Written onto the element as the `current-time` attribute for the load, and
+   * seeked to on the handle once the player is ready — the attribute is a hint,
+   * the seek is the authority. Since #381 a reported position below it is
+   * pulled back to it as well, whatever moved the playhead: an SDK-side seek,
+   * or the viewer dragging Aurora's own scrub bar. A start that is not finite,
+   * or not above zero, is no start. With `loop`, the restart returns here
+   * rather than to zero. Same ADR-0004 posture as `endTime` above.
    */
   readonly startTime?: number;
   readonly transparentLetterbox?: boolean;

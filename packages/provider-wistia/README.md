@@ -139,9 +139,16 @@ origins list and what a page's CSP has to allow.
   end counterpart at all: the adapter watches `time-update`, and at the end
   boundary it pauses the player and publishes `ended` with the playhead pinned
   to the boundary. The pause that end caused publishes no `paused` state. The
-  playhead can overshoot the boundary by up to one Wistia time report; it is
-  pinned in what is published rather than seeked back, because a corrective
-  seek would be a visible backward jump.
+  playhead can overshoot the boundary by up to one Wistia time report, and it is
+  seeked back onto it, so what is on screen and what is published agree (#381).
+- **`startTime` is a floor, not just where playback starts.** A reported
+  position below it is pulled back to it, whatever moved the playhead — an
+  SDK-side seek, or the viewer dragging Aurora's own scrub bar. `seeked` is
+  corrected as well as `time-update`, because a paused player reports no time
+  update after a seek. A `seekTo` or `seekBy` below the start is clamped to the
+  same value, so the two agree rather than correcting one position twice, and a
+  correction never triggers another: the position it seeks to is one the window
+  accepts (#381).
 - **`loop` composes with both.** `end-video-behavior="loop"` stays set, so
   Wistia still owns the restart; the adapter only corrects where it lands. With
   a `startTime`, a wrap returns to that offset rather than to zero, and no

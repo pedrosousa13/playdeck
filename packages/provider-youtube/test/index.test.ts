@@ -1654,8 +1654,9 @@ test('play after a boundary end resumes from the start boundary', async () => {
   harness.fireStateChange(playerStates.PAUSED);
 
   const resumed = provider.play?.();
-  // Twice: the initial positioning at ready, and this restart.
-  expect(harness.player.seekTo).toHaveBeenCalledTimes(2);
+  // Three times: the initial positioning at ready, the seek back onto the end
+  // boundary the poll overshot (#381), and this restart.
+  expect(harness.player.seekTo).toHaveBeenCalledTimes(3);
   expect(harness.player.seekTo).toHaveBeenLastCalledWith(5, true);
   expect(patches).toContainEqual({ currentTime: 5 });
   expect(harness.player.playVideo).toHaveBeenCalledTimes(1);
@@ -1693,6 +1694,105 @@ test('play after the media ends naturally resumes from the start boundary', asyn
 
   harness.fireStateChange(playerStates.PLAYING);
   await expect(resumed).resolves.toEqual({ ok: true });
+});
+
+// --- the start boundary is a floor, not a load position (#381) ---
+// It used to be applied once, at ready, and nothing re-applied it. Both ends of
+// the window are corrected through one predicate now, `@playdeck/core`'s
+// `correction`, which the Vimeo and Wistia ports consult identically. The poll
+// is the only report YouTube gives, so it is the only place a position that
+// arrived without a Playdeck command can be seen — including the viewer's own
+// drag of YouTube's scrub bar under `controls: true`.
+
+test('pulls a polled position below the start boundary back into the window', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    startTime: 20
+  });
+  harness.fireStateChange(playerStates.PLAYING);
+
+  await pollAt(harness, 5);
+
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(20, true);
+  expect(patches).toContainEqual({ currentTime: 20 });
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ currentTime: 5 })
+  );
+});
+
+// A correction issues a seek, the seek is reported by the next poll, and that
+// report must not correct again: `correction` answers undefined for its own
+// target.
+test('does not correct the position its own correction produced', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    startTime: 20
+  });
+  harness.fireStateChange(playerStates.PLAYING);
+  await pollAt(harness, 5);
+
+  await pollAt(harness, 20);
+
+  // The positioning seek at ready, then the one correction.
+  expect(harness.player.seekTo).toHaveBeenCalledTimes(2);
+  expect(patches).toContainEqual(expect.objectContaining({ currentTime: 20 }));
+});
+
+// The seek clamp already pulls a *commanded* position into the window, so the
+// report it lands on must not be corrected on top of it. The two agree by
+// construction — every `correction` answer is the `clamp` of the same time —
+// and this is the assertion that keeps them agreeing, matching the Vimeo and
+// Wistia ports test for test.
+test('does not correct a seek command the clamp already pulled in', async () => {
+  vi.useFakeTimers();
+  const { harness, patches, provider } = await readyAdapter('M7lc1UVf-VE', {
+    startTime: 20,
+    endTime: 40
+  });
+  harness.fireStateChange(playerStates.PLAYING);
+
+  await expect(provider.seekTo?.(0)).resolves.toEqual({ ok: true });
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(20, true);
+
+  await pollAt(harness, 20);
+
+  // The positioning seek at ready and the clamped command, and nothing behind
+  // them: the poll that reports where the clamp landed answers no correction.
+  expect(harness.player.seekTo).toHaveBeenCalledTimes(2);
+  expect(patches).toContainEqual(expect.objectContaining({ currentTime: 20 }));
+});
+
+// The end of the window, through the same predicate. The poll notices the
+// boundary only after it has passed, so the pause lands with the playhead
+// already outside the window; pinning the report alone left a frame outside it
+// on screen while `currentTime` said the boundary.
+test('seeks the playhead back onto the end boundary it overshot', async () => {
+  vi.useFakeTimers();
+  const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
+    endTime: 20
+  });
+  harness.fireStateChange(playerStates.PLAYING);
+
+  await pollAt(harness, 20.2);
+
+  expect(harness.player.pauseVideo).toHaveBeenCalledTimes(1);
+  expect(harness.player.seekTo).toHaveBeenLastCalledWith(20, true);
+  expect(patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 20
+  });
+});
+
+test('issues no corrective seek for a report that lands on the end boundary', async () => {
+  vi.useFakeTimers();
+  const { harness } = await readyAdapter('M7lc1UVf-VE', { endTime: 20 });
+  harness.fireStateChange(playerStates.PLAYING);
+
+  await pollAt(harness, 20);
+
+  expect(harness.player.pauseVideo).toHaveBeenCalledTimes(1);
+  expect(harness.player.seekTo).not.toHaveBeenCalled();
 });
 
 test('a seek past the end boundary clamps rather than ending playback', async () => {

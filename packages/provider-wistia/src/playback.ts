@@ -327,11 +327,23 @@ export const createWistiaPlayback = (
           emit({ currentTime, buffering: false });
           return;
         }
+        // A position the window refuses — below the start floor — rather than
+        // the platform's loop landing at zero. Playback is left alone: nothing
+        // stopped, so nothing has to be started again (#381).
+        if (verdict.kind === 'correct') {
+          player.time(currentTime);
+          emit({ currentTime });
+          return;
+        }
         if (verdict.kind === 'end') {
-          // The playhead is pinned to the boundary rather than seeked back to
-          // it: the overshoot is at most one report, and a corrective seek
-          // would be a visible backward jump.
+          // The overshoot is corrected rather than only pinned in the report
+          // (#381): Aurora reports on its own cadence, so the pause lands after
+          // the player has already run past the boundary, and pinning alone
+          // left a frame outside the window on screen for as long as the player
+          // stayed there while `currentTime` said the boundary. The pause goes
+          // first so the seek is not overtaken by playback.
           player.pause();
+          if (verdict.correction !== undefined) player.time(verdict.correction);
           emit(
             { playback: 'ended', buffering: false, currentTime },
             providerEvent('ended', undefined)
@@ -341,7 +353,17 @@ export const createWistiaPlayback = (
         emit({ currentTime });
       },
       onSeeked: (player, detail) => {
-        currentTime = readTime(player);
+        const reported = readTime(player);
+        // The window applies to a seek nobody here asked for as well — the
+        // viewer dragging Aurora's own scrub bar below the start floor (#381).
+        // A paused player reports no `time-update` after a seek, so it is
+        // corrected here rather than waited for, and before it is published so
+        // the state never carries a position outside the window. The seek this
+        // issues reports back to this same handler, where `correction` answers
+        // undefined for its own target and the echo publishes plainly.
+        const corrected = boundary.correction(duration, reported);
+        if (corrected !== undefined) player.time(corrected);
+        currentTime = corrected ?? reported;
         // A seek back inside the window reopens it, so the next report is an
         // ordinary one rather than a suppressed post-boundary one.
         if (!boundary.isAtEnd(duration, currentTime)) boundary.clearEnded();

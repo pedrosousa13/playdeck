@@ -188,11 +188,29 @@ test('the guard closes the repeat-ready path', async ({ page }) => {
 });
 
 // The same repeat `ready` on a page that opted out — the failure being closed,
-// spelled out. Nothing pulls the playhead back, and the divergence is the sharp
-// part: the embed sits at 45 while Playdeck goes on publishing 20, so the
-// window it was asked to confine playback to is broken with no report saying
-// so. That divergence is #381; the guard keeps it out of reach rather than
-// fixing it.
+// spelled out. Nothing pulls the playhead back: the embed sits at 45 while
+// Playdeck goes on publishing 20, and the guard is what keeps that out of
+// reach.
+//
+// #381 HAS LANDED AND DOES NOT CLOSE THIS, which is recorded here rather than
+// left to be rediscovered. `startTime` is now a floor on reported positions,
+// but 45 is *inside* the window this story configures (`startTime: 20`, no
+// `endTime`), so `correction` answers undefined for it — there is nothing
+// outside the window to pull back to. The issue framed the 45-against-20
+// reading as the window being broken; what is broken is the mirror, and its
+// cause sits one seam below the boundary. The SDK forwards the url parameter as
+// the raw *string* it matched (`@vimeo/player@2.30.4/dist/player.js:1052`,
+// `player.setCurrentTime(sec)`), this stub echoes that string back on `seeked`
+// and `timeupdate`, and the port's `numberField` drops a non-numeric `seconds`
+// — so the adapter never learns the playhead moved and keeps publishing its own
+// last position. Measured 2026-08-23, chromium: coerce the stub's
+// `state.currentTime` to a number and the published position follows to 45 with
+// no corrective seek issued at all, which is #381 agreeing that 45 is in the
+// window rather than failing to fire.
+//
+// So this stays a #329 test, and the assertions below stay as they were. The
+// floor #381 added answers a different position — one *below* 20 — which this
+// path does not produce.
 test('a page that opts out is left at the crafted position by a repeat ready', async ({
   page
 }) => {

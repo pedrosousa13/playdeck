@@ -15,11 +15,27 @@ export type NativePlaybackOptions = {
    * every provider since #214 -- the three embeds declare the key on their own
    * options bags and enforce the boundary themselves, and `Root` folds the prop
    * into whichever bag the detected source belongs to. This declaration is the
-   * native and HLS route to the same prop, and the semantics below are the
-   * contract all five providers implement — with one native divergence since
-   * #411: a `startTime` of 0 now writes no position at all, so a live source
+   * native and HLS route to the same prop, and two divergences from the embeds
+   * are declared here rather than left to be discovered.
+   *
+   * Since #411, a `startTime` of 0 writes no position at all, so a live source
    * whose seekable window starts above 0 is left wherever the engine put it
    * rather than clamped back to the start of its DVR window.
+   *
+   * DECLARED DIVERGENCE FROM THE EMBEDS, since #381. There the start is a
+   * *floor* on every reported position: a playhead that arrives below it
+   * without a Playdeck command -- an SDK-side seek, the platform's own scrub
+   * bar -- is seeked back into the window. Here it is applied once per load, by
+   * `applyInitialPosition` below, and nothing re-applies it, so a viewer who
+   * seeks below the start stays there. `seekTo` and `seekBy` are clamped into
+   * the window on all five providers, so only the uncommanded positions differ.
+   * Native was out of scope for #381 for the reason it was for #214: its
+   * boundary state machine is entangled with `HTMLVideoElement.seekable` --
+   * `withinMediaBounds` reads the seekable ranges, and a live source's window
+   * slides -- so a floor here is a decision about DVR windows rather than the
+   * same one the embeds took. The end of the window does *not* diverge: this
+   * seam writes `media.currentTime = endTime` at the boundary and since #381
+   * every embed seeks back onto it too.
    */
   readonly startTime?: number;
   /**

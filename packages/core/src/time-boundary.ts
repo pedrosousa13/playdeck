@@ -73,7 +73,54 @@ export type TimeBoundary = {
   // Clamps a requested time into the window. Providers use it for `seekTo` and
   // `seekBy`; passing `undefined` as the duration leaves the seek unbounded
   // above when no `endTime` is set.
+  //
+  // Answers `NaN` for a `NaN` time, deliberately, and this is the one place it
+  // and `correction` diverge. This answers for a position Playdeck was *asked*
+  // to go to: all three ports reject a non-finite command with `provider-error`
+  // before they reach here, and having no `undefined` in its answer this could
+  // only substitute some in-window position for the nonsense one — turning a
+  // command that should be refused into a seek that quietly moves the playhead
+  // somewhere nobody named. `NaN` in, `NaN` out keeps it refusable. Nor can it
+  // feed the loop `correction` guards against: what this answers is a seek, and
+  // the report that seek produces is `correction`'s question, not this one's.
   readonly clamp: (duration: number | null | undefined, time: number) => number;
+  // Where a *reported* position has to be moved to for the window to hold, or
+  // undefined when it needs no move. `clamp` answers for a position Playdeck
+  // was asked to go to; this answers for one that simply arrived — an SDK-side
+  // seek, a repeat `ready`, a viewer dragging the platform's own scrub bar —
+  // and it is what makes `startTime` a floor rather than a position applied
+  // once at adopt (#381).
+  //
+  // A behaviour change for shipped consumers, decided deliberately: a viewer
+  // who seeks below the start is pulled back, because `startTime` is the window
+  // playback is confined to and `seekTo`/`seekBy` are already clamped into it.
+  //
+  // The two agree by construction rather than by coincidence: every answer here
+  // is the `clamp` of the same time, so a command the clamp already pulled into
+  // the window reports a position this leaves alone instead of correcting it a
+  // second time. Above the window it answers only where `atEnd` does — with no
+  // `endTime`, the natural end of the media stays the platform's own event and
+  // is nothing for the window to seek back from.
+  //
+  // WHAT BREAKS THE FEEDBACK LOOP: every answer is a fixed point. Move the
+  // playhead to it and the report that move produces is inside the window and
+  // equal to the target, so this answers undefined and the port publishes an
+  // ordinary report. One out-of-window position therefore costs at most one
+  // corrective seek, however many reports of it arrive.
+  //
+  // That holds because every answer is a *finite* position, and one reported
+  // time has to be excluded by hand for it to: a reported `NaN` compares false
+  // against everything including itself, so the clamp would answer `NaN` — a
+  // seek to `NaN`, reported back as `NaN`, corrected again, without end. So a
+  // `NaN` report answers undefined and nothing moves. It is not a theoretical
+  // input: YouTube's `getCurrentTime()` answers `NaN` before its player is
+  // ready and the poll passes it straight here. The infinities need no such
+  // exception — they are ordered, so a reported `Infinity` answers the
+  // effective end or nothing and a reported `-Infinity` answers the start.
+  readonly correction: (
+    duration: number | null | undefined,
+    time: number
+  ) => number | undefined;
 };
 
 const finiteOrUndefined = (
@@ -139,6 +186,26 @@ export const createTimeBoundary = (options: {
         start(duration),
         effectiveEnd === undefined ? time : Math.min(time, effectiveEnd)
       );
+    },
+    correction: (duration, time) => {
+      // The one reported position with no answer. `NaN` is unordered, so every
+      // comparison below is false for it: `atEnd` reads it as inside the
+      // window, `Math.max` propagates it, and `target === time` is false even
+      // when the target *is* the time. The answer would be a seek to `NaN`,
+      // whose report is another `NaN` — the feedback loop, arriving through the
+      // one input the arithmetic cannot place. Undefined instead: the port
+      // publishes the report and moves nothing, which is what it did before
+      // #381. The infinities are ordered and need no exception here; each of
+      // them already answers a finite target, or nothing.
+      if (Number.isNaN(time)) return undefined;
+      // `atEnd` is only ever true with an effective end, so the fallback does
+      // not run; it is what keeps the target a plain number. Below the window
+      // the target is the start, and a time already inside it is its own
+      // target — which is how a position needing nothing answers undefined.
+      const target = atEnd(duration, time)
+        ? (end(duration) ?? time)
+        : Math.max(start(duration), time);
+      return target === time ? undefined : target;
     }
   };
 };

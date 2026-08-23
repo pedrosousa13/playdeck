@@ -30,8 +30,17 @@ import { createTimeBoundary, type TimeBoundary } from '@playdeck/core';
 export type WistiaBoundaryVerdict =
   // The window wrapped: seek to `time` and publish it, rather than the report.
   | { readonly kind: 'restart'; readonly time: number }
-  // The end boundary was reached for the first time: `time` is the boundary.
-  | { readonly kind: 'end'; readonly time: number }
+  // The end boundary was reached for the first time: `time` is the boundary,
+  // and `correction` is where the playhead has to be moved for the window to
+  // hold — undefined when the report landed on the boundary exactly (#381).
+  | {
+      readonly kind: 'end';
+      readonly time: number;
+      readonly correction: number | undefined;
+    }
+  // A position the window refuses rather than one the platform's loop produced:
+  // seek to `time`, publish it, and leave playback alone (#381).
+  | { readonly kind: 'correct'; readonly time: number }
   // A further report from beyond an end already published. Say nothing.
   | { readonly kind: 'suppress' }
   // An ordinary in-window report.
@@ -65,6 +74,19 @@ export type WistiaBoundary = {
     duration: number | null,
     time: number
   ) => WistiaBoundaryVerdict;
+  // Where a position the adapter never asked for has to be moved to for the
+  // window to hold, or undefined when it needs no move — `@playdeck/core`'s
+  // shared `correction`, which the Vimeo and YouTube ports consult too. The
+  // time reports go through `reviewTime`, which asks this; `seeked` asks it
+  // directly, because a paused player reports no time update after a seek.
+  //
+  // Gated on the attachment being positioned, for the reason the wrap guard
+  // is: a player that has not been positioned yet is loading, and correcting
+  // it would fight the initial seek.
+  readonly correction: (
+    duration: number | null,
+    time: number
+  ) => number | undefined;
   // What the player's own `ended` means. Answers the position to correct to,
   // or `undefined` to publish the end as before — in which case it latches
   // `hasEnded`, so the next `play()` replays the window. Whether there is
@@ -91,9 +113,16 @@ export const createWistiaBoundary = (
   const isAtEnd = (duration: number | null, time: number): boolean =>
     bounds.atEnd(duration, time);
 
+  const correction = (
+    duration: number | null,
+    time: number
+  ): number | undefined =>
+    positioned ? bounds.correction(duration, time) : undefined;
+
   return {
     startAt,
     isAtEnd,
+    correction,
     clamp: (duration, time) => bounds.clamp(duration, time),
     hasEnded: () => ended,
     clearEnded: () => {
@@ -112,13 +141,23 @@ export const createWistiaBoundary = (
         ended = true;
         // `isAtEnd` is only ever true with an effective end, so the fallback
         // does not run; it is what keeps the verdict's time a plain number.
-        return { kind: 'end', time: bounds.end(duration) ?? time };
+        return {
+          kind: 'end',
+          time: bounds.end(duration) ?? time,
+          correction: correction(duration, time)
+        };
       }
       // The wrap guard, shared with the YouTube and Vimeo ports so the three
-      // cannot drift apart on which start they compare against.
+      // cannot drift apart on which start they compare against. It answers
+      // first, so a looping player is corrected by the loop concept exactly as
+      // it was and the floor below never sees the wrap.
       if (bounds.atWrap(duration, time, { loop, positioned })) {
         return { kind: 'restart', time: startAt(duration) };
       }
+      // The start boundary is a floor, so a report below it is pulled back
+      // whatever put it there (#381).
+      const corrected = correction(duration, time);
+      if (corrected !== undefined) return { kind: 'correct', time: corrected };
       ended = false;
       return { kind: 'report', time };
     },

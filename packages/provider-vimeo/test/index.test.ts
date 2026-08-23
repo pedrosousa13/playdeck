@@ -2987,6 +2987,159 @@ test('resumes from the start boundary after the embed ends naturally', async () 
   expect(player.play).toHaveBeenCalled();
 });
 
+// --- the start boundary is a floor, not a load position (#381) ---
+// It used to be applied once, by `adopt`, and nothing re-applied it: any later
+// cause of a below-start position left the playhead outside the window with
+// `currentTime` still reporting the old one. Both ends are corrected through
+// one predicate now, `@playdeck/core`'s `correction`.
+
+test('pulls a time report below the start boundary back into the window', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('timeupdate', { duration: 60, percent: 0.05, seconds: 3 });
+
+  expect(player.setCurrentTime).toHaveBeenCalledWith(20);
+  expect(patches.at(-1)).toMatchObject({ currentTime: 20 });
+});
+
+// A position that arrives without a Playdeck command at all: #381's repeat
+// `ready`, where the SDK's own `vimeo_t_` listener moved the playhead and the
+// adapter was never asked. A paused embed reports no `timeupdate` after such a
+// seek, so the correction cannot wait for one.
+test('pulls an SDK-side seek below the start boundary back into the window', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('seeked', { duration: 60, percent: 0.08, seconds: 5 });
+
+  expect(player.setCurrentTime).toHaveBeenCalledWith(20);
+  expect(patches.at(-1)).toMatchObject({ seeking: false, currentTime: 20 });
+});
+
+// The behaviour change this issue settled: the viewer's own seek is pulled back
+// too, because `startTime` is the window playback is confined to.
+test("pulls a viewer's own seek below the start boundary back into the window", async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('seeking', { duration: 60, percent: 0.05, seconds: 3 });
+  player.emit('seeked', { duration: 60, percent: 0.05, seconds: 3 });
+
+  expect(player.setCurrentTime).toHaveBeenCalledTimes(1);
+  expect(player.setCurrentTime).toHaveBeenCalledWith(20);
+  expect(patches.at(-1)).toMatchObject({ seeking: false, currentTime: 20 });
+});
+
+// The dangerous one. A correction issues a seek, the seek reports back, and
+// that report must not correct again — `correction` answers undefined for its
+// own target, so the echo publishes as an ordinary report.
+test('does not correct the position its own correction produced', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.emit('timeupdate', { duration: 60, percent: 0.05, seconds: 3 });
+  player.setCurrentTime.mockClear();
+  const corrected = patches.length;
+
+  player.emit('seeked', { duration: 60, percent: 0.33, seconds: 20 });
+  player.emit('timeupdate', { duration: 60, percent: 0.33, seconds: 20 });
+
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+  expect(patches.slice(corrected)).toEqual([
+    { seeking: false, currentTime: 20 },
+    { currentTime: 20, duration: 60 }
+  ]);
+});
+
+// The seek clamp already pulls a *commanded* position into the window, so the
+// report it lands on must not be corrected on top of it.
+test('does not correct a seek command the clamp already pulled in', async () => {
+  const { patches, provider, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 20, endTime: 40 }
+  });
+  const player = sdk.instances[0]!;
+
+  await provider.seekTo(0);
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(20);
+  player.setCurrentTime.mockClear();
+  player.emit('seeked', { duration: 60, percent: 0.33, seconds: 20 });
+
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+  expect(patches.at(-1)).toMatchObject({ seeking: false, currentTime: 20 });
+});
+
+// The end boundary, through the same predicate: the pause lands after the
+// embed has already run past the boundary, so the playhead is seeked back onto
+// it rather than left showing a frame outside the window with `currentTime`
+// saying otherwise.
+test('seeks the playhead back onto the end boundary it overshot', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 10, endTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('timeupdate', { duration: 60, percent: 0.34, seconds: 20.4 });
+
+  expect(player.pause).toHaveBeenCalled();
+  expect(player.setCurrentTime).toHaveBeenCalledWith(20);
+  expect(patches.at(-1)).toMatchObject({
+    playback: 'ended',
+    currentTime: 20
+  });
+
+  // And the seek back reports itself, which must not end the window twice.
+  player.setCurrentTime.mockClear();
+  player.emit('seeked', { duration: 60, percent: 0.34, seconds: 20 });
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+});
+
+test('issues no corrective seek for a report that lands on the end boundary', async () => {
+  const { sdk } = await setup({
+    fake: { duration: 60 },
+    options: { endTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+
+  player.emit('timeupdate', { duration: 60, percent: 0.34, seconds: 20 });
+
+  expect(player.pause).toHaveBeenCalled();
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+});
+
+// With no `endTime` the natural end of the media is Vimeo's own event to
+// report, so nothing above the window is corrected.
+test('corrects nothing past the duration when no end boundary is set', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 10 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('timeupdate', { duration: 60, percent: 1, seconds: 60 });
+
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+  expect(patches.at(-1)).toEqual({ currentTime: 60, duration: 60 });
+});
+
 test('clamps a seek to the window instead of crossing the end boundary', async () => {
   const { patches, provider, sdk } = await setup({
     fake: { duration: 60 },

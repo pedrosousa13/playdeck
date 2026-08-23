@@ -39,13 +39,16 @@ export type YouTubeBoundaryDeps = {
 // positioning flag, and the resume generation that makes a superseded loop
 // restart inert (mirroring `provider-native/src/playback.ts:91-114`).
 //
-// One divergence from native is deliberate. Native sets
-// `media.currentTime = endTime` at the boundary; polling at 250 ms can only
-// notice the boundary after it has passed, so a corrective seek would be a
-// visible backward jump plus a postMessage round trip. The emitted
-// `currentTime` is pinned to the boundary instead and the playhead is left
-// where the player stopped it. Frame-accurate enforcement is out of scope
-// (#214).
+// Native sets `media.currentTime = endTime` at the boundary, and this seam does
+// the same now: the emitted `currentTime` is pinned to the boundary and the
+// playhead is seeked back onto it. #214 pinned the report alone, on the grounds
+// that a corrective seek was a visible backward jump plus a postMessage round
+// trip — but leaving the playhead where the player stopped it left a frame
+// outside the window on screen for as long as it stayed there, with
+// `currentTime` reporting the boundary, which is a jump the viewer never gets
+// back from (#381). Frame-accurate enforcement is still out of scope: polling at
+// 250 ms can only notice the boundary after it has passed, so the frames between
+// the two are shown either way.
 export type YouTubeBoundary = {
   // The whole-second `start` player var, or undefined when there is no start.
   // A load hint only: it saves loading from zero, and the seek below is still
@@ -114,6 +117,18 @@ export const createYouTubeBoundary = (
 
   const startOf = (current: YouTubeBoundaryPlayer | undefined): number =>
     bounds.start(durationOf(current));
+
+  // Where a position the adapter never asked for has to be moved to for the
+  // window to hold, or undefined when it needs no move — `@playdeck/core`'s
+  // shared `correction`, which the Vimeo and Wistia ports consult and gate the
+  // same way. Gated on the attachment being positioned, for the reason the wrap
+  // guard is: a player that has not been positioned yet is still loading, and
+  // correcting it would fight the initial seek.
+  const correctionFor = (
+    duration: number | undefined,
+    time: number
+  ): number | undefined =>
+    positioned ? bounds.correction(duration, time) : undefined;
 
   // Seeks and reports the intended position: a read-back would still return
   // the pre-seek time, and the poll does not run while the player is paused.
@@ -188,8 +203,16 @@ export const createYouTubeBoundary = (
         // Polling stops here; the PLAYING branch starts it again on a resume.
         timeUpdates.stop();
         const end = bounds.end(duration) ?? time;
+        // The overshoot is corrected rather than only pinned in the report
+        // (#381). The poll can only notice the boundary after it has passed, so
+        // the pause lands with the playhead already outside the window, and
+        // pinning alone left a frame outside it on screen for as long as the
+        // player stayed there while `currentTime` said the boundary. The pause
+        // goes first so the seek is not overtaken by playback.
+        const overshoot = correctionFor(duration, time);
         try {
           current?.pauseVideo();
+          if (overshoot !== undefined) current?.seekTo(overshoot, true);
         } catch {
           // The end is published whether or not the pause landed.
         }
@@ -201,9 +224,29 @@ export const createYouTubeBoundary = (
         return false;
       }
       // The wrap guard, shared with the Vimeo and Wistia ports so the three
-      // cannot drift apart on which start they compare against.
+      // cannot drift apart on which start they compare against. It answers
+      // first, so a looping player is corrected by the loop concept exactly as
+      // it was and the floor below never sees the wrap.
       if (current && bounds.atWrap(duration, time, { loop, positioned })) {
         restartFromBoundary(current);
+        return false;
+      }
+      // The start boundary is a floor rather than a position applied once at
+      // ready (#381), so a polled position below it is pulled back whatever put
+      // it there — including the viewer's own drag of YouTube's scrub bar under
+      // `controls: true`, which reaches this adapter as nothing but a position.
+      // Playback is left alone: nothing stopped, so nothing has to be started
+      // again, which is what separates this from the wrap restart above.
+      //
+      // The correction cannot chase itself: `correction` answers undefined for
+      // the position it just asked for, so the poll that reads the seek back
+      // publishes an ordinary report. The one exposure left is this seam's
+      // standing one — `getCurrentTime()` reads stale for a tick after a
+      // command, the same way it does for the wrap restart — and a stale read
+      // costs a repeat of the identical seek and patch, never a divergent one.
+      const corrected = correctionFor(duration, time);
+      if (current && corrected !== undefined) {
+        moveTo(current, corrected, { currentTime: corrected });
         return false;
       }
       boundaryEnded = false;

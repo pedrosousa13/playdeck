@@ -48,9 +48,12 @@ export type VimeoProviderOptions = {
    */
   readonly loop?: boolean;
   /**
-   * Where playback begins, in seconds. Written to the embed url as a `#t=`
-   * load hint and then seeked to once the player is ready, which is what
-   * actually holds. A non-finite or non-positive value is no start.
+   * Where playback begins, in seconds, and the floor it is held above. Written
+   * to the embed url as a `#t=` load hint and then seeked to once the player is
+   * ready; since #381 a reported position below it is pulled back to it as
+   * well, whatever moved the playhead — an SDK-side seek, a repeat `ready`, or
+   * the viewer dragging Vimeo's own scrub bar. A non-finite or non-positive
+   * value is no start.
    *
    * Like `loop`, `Root`'s `startTime` prop is folded into this bag by
    * `packages/react/src/root.tsx`, so `PlayerProviderOptions` omits the key
@@ -59,10 +62,12 @@ export type VimeoProviderOptions = {
   readonly startTime?: number;
   /**
    * Where playback ends, in seconds. Vimeo has no end mechanism of its own, so
-   * this adapter enforces it: reaching the boundary publishes `ended`, or
-   * restarts from `startTime` when `loop` is on. An end that is not finite, or
-   * not above the sanitised start, is no end; one past the duration is clamped
-   * to it.
+   * this adapter enforces it: reaching the boundary pauses the embed, seeks the
+   * playhead back onto the boundary and publishes `ended` there (#381) — Vimeo
+   * reports time on its own cadence, so the playhead has already run past it by
+   * then — or restarts from `startTime` when `loop` is on. An end that is not
+   * finite, or not above the sanitised start, is no end; one past the duration
+   * is clamped to it.
    *
    * Folded in from `Root`'s `endTime` prop and omitted from
    * `PlayerProviderOptions` the same way `loop` and `startTime` are (ADR-0004).
