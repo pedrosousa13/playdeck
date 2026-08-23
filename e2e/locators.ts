@@ -40,18 +40,25 @@ export const loadingIndicator = (page: Page) =>
 // carry `data-playdeck-part="settings-menu-trigger"` in this composition. The
 // part alone is a strict-mode ambiguity; the aria-label disambiguates without
 // falling back to Playwright's substring name matching.
+//
+// These three are exported as selector strings as well as locators: a spec that
+// measures geometry in `page.evaluate` needs the string, and deriving both from
+// one constant keeps the disambiguation above in one place.
+export const settingsTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Settings"]';
+
 export const settingsTrigger = (page: Page) =>
-  page.locator(
-    '[data-playdeck-part="settings-menu-trigger"][aria-label="Settings"]'
-  );
+  page.locator(settingsTriggerSelector);
+
+export const captionsTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Captions"]';
 
 export const captionsTrigger = (page: Page) =>
-  page.locator(
-    '[data-playdeck-part="settings-menu-trigger"][aria-label="Captions"]'
-  );
+  page.locator(captionsTriggerSelector);
 
-export const settingsMenu = (page: Page) =>
-  page.locator('[data-playdeck-part="settings-menu"]');
+export const settingsMenuSelector = '[data-playdeck-part="settings-menu"]';
+
+export const settingsMenu = (page: Page) => page.locator(settingsMenuSelector);
 
 export const controls = (page: Page) =>
   page.locator('[data-playdeck-part="controls"]');
