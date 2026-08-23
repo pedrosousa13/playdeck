@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { URL } from 'node:url';
 import {
+  departedPackages,
   flooredName,
   gate,
   parseAuditOutput,
@@ -29,7 +30,7 @@ import { selectPublishable } from './workspace-packages.mjs';
 // fixture directory rewritten to `.`.
 /**
  * @param {string} variant
- * @returns {Omit<import('./audit.mjs').AuditInputs, 'publishable' | 'overrides' | 'suppressions'>}
+ * @returns {Omit<import('./audit.mjs').AuditInputs, 'publishable' | 'baseline' | 'overrides' | 'suppressions'>}
  */
 const capture = (variant) =>
   JSON.parse(
@@ -46,7 +47,10 @@ const capture = (variant) =>
 // `suppressions` are the inputs gather() derives and reads rather than
 // captures, so produce them here through the same exports it calls -- the last
 // two from the variant's own workspace file, neither of which declares any
-// override or any `auditConfig`.
+// override or any `auditConfig`. `baseline` is null because there is no
+// baseline on the ordinary path: gather() reads one only when CI points it at
+// `main`'s manifests (#373), and every assertion below that leaves it null is
+// asserting what a developer running `pnpm test:audit` sees.
 /** @param {string} variant */
 const fixture = (variant) => {
   const captured = capture(variant);
@@ -60,6 +64,7 @@ const fixture = (variant) => {
   return {
     ...captured,
     publishable: selectPublishable(captured.workspace),
+    baseline: null,
     overrides: workspaceOverrides(workspaceYaml),
     suppressions: workspaceSuppressions(workspaceYaml)
   };
@@ -790,4 +795,200 @@ test('fails closed when the audit printed something that is not a report', () =>
     /could not be read/
   );
   assert.throws(() => parseAuditOutput('{}'), /could not be read/);
+});
+
+// The boundary this gate measures against is declared by the pull request it
+// judges (#373), so it is compared against `main`'s. Both sides run through
+// `selectPublishable`, so these listings are the two inputs that definition
+// reads -- the entry's `private` field, and whether the entry is in the
+// listing at all -- which are the two routes a pull request has to narrow the
+// boundary without touching a single dependency.
+const mainListing = [
+  { name: 'playdeck', path: '/w', private: true },
+  {
+    name: '@playdeck/core',
+    version: '0.1.0',
+    path: '/w/packages/core',
+    private: false
+  },
+  {
+    name: '@playdeck/react',
+    version: '0.1.0',
+    path: '/w/packages/react',
+    private: false
+  }
+];
+
+test('a package the pull request marked private has left the boundary', () => {
+  // The first route: one field, no change to any dependency. Every advisory
+  // reachable only through @playdeck/core is reclassified from shipped to not
+  // shipped, and before this the gate reported the narrower tree as clean.
+  const marked = mainListing.map((entry) =>
+    entry.name === '@playdeck/core' ? { ...entry, private: true } : entry
+  );
+  assert.deepEqual(
+    departedPackages(selectPublishable(mainListing), selectPublishable(marked)),
+    ['@playdeck/core']
+  );
+});
+
+test('a package a removed workspace glob dropped from the listing has left the boundary', () => {
+  // The second route, by a different door and to the same place: the manifest
+  // is untouched and still says `private: false`, but `pnpm-workspace.yaml` no
+  // longer matches its directory, so `pnpm list -r` never reports it and the
+  // boundary loses it just the same.
+  assert.deepEqual(
+    departedPackages(
+      selectPublishable(mainListing),
+      selectPublishable(
+        mainListing.filter((entry) => entry.name !== '@playdeck/react')
+      )
+    ),
+    ['@playdeck/react']
+  );
+});
+
+test('a new publishable package has not narrowed the boundary', () => {
+  // Widening is the ordinary way a package is added and is not a departure:
+  // nothing that was measured has stopped being measured.
+  assert.deepEqual(
+    departedPackages(selectPublishable(mainListing), [
+      ...selectPublishable(mainListing),
+      {
+        name: '@playdeck/provider-hls',
+        version: '0.1.0',
+        path: '/w/packages/provider-hls',
+        private: false
+      }
+    ]),
+    []
+  );
+});
+
+test('an unchanged boundary reports no departure', () => {
+  assert.deepEqual(
+    departedPackages(
+      selectPublishable(mainListing),
+      selectPublishable(mainListing)
+    ),
+    []
+  );
+  // And a package that was never on `main` cannot have departed from it: the
+  // comparison runs in one direction only, so a name only `current` carries is
+  // not a name `baseline` lost.
+  assert.deepEqual(
+    departedPackages(
+      selectPublishable(
+        mainListing.filter((entry) => entry.name !== '@playdeck/react')
+      ),
+      selectPublishable(mainListing)
+    ),
+    []
+  );
+});
+
+test('a departed package fails an otherwise clean gate', () => {
+  // `development-only` passes today, which isolates this failure from the
+  // advisory gate the same way the floor and suppression tests above do.
+  const result = gate({
+    ...developmentOnly,
+    baseline: [
+      ...developmentOnly.publishable,
+      {
+        name: '@playdeck/audit-fixture-departed',
+        version: '0.0.0',
+        path: './packages/departed',
+        private: false
+      }
+    ]
+  });
+  assert.equal(result.exitCode, 1);
+  // Not the advisory gate, not the floor gate, and not the suppression gate.
+  assert.deepEqual(
+    result.advisories.filter((advisory) => advisory.shipped),
+    []
+  );
+  assert.ok(!result.report.includes('FLOORED'));
+  assert.ok(!result.report.includes('SUPPRESSED'));
+});
+
+test('the report names the packages that left the boundary and why that voids it', () => {
+  const report = gate({
+    ...developmentOnly,
+    baseline: [
+      ...developmentOnly.publishable,
+      {
+        name: '@playdeck/audit-fixture-departed',
+        version: '0.0.0',
+        path: './packages/departed',
+        private: false
+      },
+      {
+        name: '@playdeck/audit-fixture-unglobbed',
+        version: '0.0.0',
+        path: './packages/unglobbed',
+        private: false
+      }
+    ]
+  }).report;
+  // Named, not counted: "the set shrank" leaves a reader to diff two manifests
+  // to find out which package stopped being measured.
+  assert.match(report, /DEPARTED\s+@playdeck\/audit-fixture-departed/);
+  assert.match(report, /DEPARTED\s+@playdeck\/audit-fixture-unglobbed/);
+  assert.equal(
+    lastLine(report),
+    "No advisory is reachable from a publishable package's dependencies. 2 package(s) above are publishable on main and are not publishable here, so this report measures a narrower boundary than the one consumers resolve."
+  );
+});
+
+test('a widened boundary passes', () => {
+  const result = gate({
+    ...developmentOnly,
+    baseline: developmentOnly.publishable,
+    publishable: [
+      ...developmentOnly.publishable,
+      {
+        name: '@playdeck/audit-fixture-new',
+        version: '0.0.0',
+        path: './packages/new',
+        private: false
+      }
+    ]
+  });
+  assert.equal(result.exitCode, 0);
+  assert.ok(!result.report.includes('DEPARTED'));
+});
+
+test('an unchanged boundary adds nothing to the report', () => {
+  // The comparison runs here -- `baseline` is set -- and still prints nothing,
+  // so a CI run against an unmoved boundary reads exactly as it did before
+  // this existed. Byte-identical to the no-baseline report is the assertion
+  // that catches a summary sentence counting zero departures.
+  for (const variant of [shipped, developmentOnly]) {
+    assert.equal(
+      gate({ ...variant, baseline: variant.publishable }).report,
+      gate(variant).report
+    );
+  }
+  assert.equal(
+    gate({ ...developmentOnly, baseline: developmentOnly.publishable })
+      .exitCode,
+    0
+  );
+});
+
+test('no baseline runs no comparison', () => {
+  // The local path: `pnpm test:audit` on a developer machine has no `main`
+  // manifests to compare against, and must stay usable. Skipping is safe only
+  // because CI never takes it -- when the environment variable is set, a
+  // baseline that cannot be read is an error rather than an absent one. See
+  // gather() in audit.mjs and publishableBaseline in workspace-packages.mjs.
+  for (const variant of [shipped, developmentOnly]) {
+    assert.equal(variant.baseline, null);
+    assert.ok(!gate(variant).report.includes('DEPARTED'));
+  }
+  assert.match(
+    lastLine(gate(developmentOnly).report),
+    /^No advisory is reachable from a publishable package's dependencies\.$/
+  );
 });

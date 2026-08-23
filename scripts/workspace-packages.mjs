@@ -8,6 +8,8 @@
 // workspace package is covered the moment it exists.
 
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * A project entry from `pnpm list -r --depth -1 --json`. The workspace root
@@ -46,3 +48,34 @@ export const workspaceProjects = (repoRoot) =>
 /** @param {string} repoRoot */
 export const publishablePackages = (repoRoot) =>
   selectPublishable(workspaceProjects(repoRoot));
+
+/**
+ * The publishable set of a tree that is not the working one -- `main`'s, in
+ * the audit gate's boundary comparison (#373). The same discovery and the same
+ * rule as above, deliberately: the comparison is only worth anything if both
+ * sides are computed by one definition of publishable, so this adds a guard
+ * and nothing else.
+ *
+ * The guard is what stops the comparison from quietly becoming a no-op.
+ * `pnpm list -r` run from a directory with no `pnpm-workspace.yaml` searches
+ * *upward* for one: measured, an empty directory inside this repository yields
+ * this repository's own projects. A baseline that failed to materialise --
+ * fetch skipped, archive empty, path misspelled -- would then be compared
+ * against itself, agree, and report a boundary that had not moved. That is the
+ * exact failure this comparison exists to catch, so a baseline directory that
+ * carries no workspace file is an error rather than an empty answer.
+ *
+ * `pnpm list -r --depth -1 --json` needs no lockfile, no `node_modules` and no
+ * install: the manifests and the workspace file are enough, which is what lets
+ * the CI step build this directory with a single `git archive`.
+ * @param {string} baselineDir
+ * @returns {PublishablePackage[]}
+ */
+export const publishableBaseline = (baselineDir) => {
+  if (!existsSync(join(baselineDir, 'pnpm-workspace.yaml'))) {
+    throw new Error(
+      `The publishable baseline at ${baselineDir} carries no pnpm-workspace.yaml, so no boundary could be read from it.`
+    );
+  }
+  return publishablePackages(baselineDir);
+};
