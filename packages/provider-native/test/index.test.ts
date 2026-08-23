@@ -183,6 +183,144 @@ test('clamps an initial start boundary to finite media duration', async () => {
   expect(media.currentTime).toBe(5);
 });
 
+// Records every write to `currentTime` while answering reads from `position`,
+// so a test can tell "the element ended up at 0" from "nothing asked it to go
+// to 0" — the distinction #411 turns on, and one `expect(media.currentTime)`
+// cannot make.
+const trackPosition = (
+  media: HTMLVideoElement,
+  position: number
+): { rewind: () => void; writes: number[] } => {
+  const writes: number[] = [];
+  Object.defineProperty(media, 'currentTime', {
+    configurable: true,
+    get: () => position,
+    set: (value: number) => {
+      writes.push(value);
+      position = value;
+    }
+  });
+  return {
+    // The media load algorithm returns the playhead to 0 without any script
+    // writing it, and `media.load()` is a stub in this DOM, so a test that
+    // reloads has to say so itself.
+    rewind: () => {
+      position = 0;
+    },
+    writes
+  };
+};
+
+// #411: the initial position was written on EVERY native load, the default
+// `startTime` of 0 included, where the value asked for is the one the load
+// algorithm has already put there. A same-value write is not a no-op — it
+// starts a seek — and #407 measured what a seek into a partly-parsed WebKit
+// element costs: the duration freezes, the element never recovers, and the
+// player sits at 0:00 with the clip fully buffered behind it.
+test('writes no initial position for the default zero start', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+});
+
+// The same holds for an `endTime`-only boundary, which leaves `startTime` at
+// its default: the start of the window is still where the element already is.
+test('writes no initial position for an end boundary alone', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { endTime: 12 });
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+});
+
+// A real `startTime` still reaches the element — the skip above is about the
+// write that cannot move the playhead, not about the feature.
+test('still writes a real initial start position exactly once', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 4 });
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([4]);
+});
+
+// And a `startTime` the element is already sitting on is the zero case in
+// disguise: same value, same seek, same hazard, so it is skipped on the value
+// rather than on `startTime === 0`.
+test('writes no initial position the element already holds', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  const { writes } = trackPosition(media, 4);
+  const provider = createNativeProvider(media, { startTime: 4 });
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+});
+
+// A retry reloads the source, and `media.load()` puts the playhead back at 0,
+// so the reload gets the same treatment the first load did: the real start is
+// re-applied, the zero start still writes nothing.
+test('re-applies a real start position after a retry, and only that', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  vi.spyOn(media, 'load').mockImplementation(() => undefined);
+  const { rewind, writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 4 });
+  await provider.attach();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  await provider.retry?.();
+  rewind();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([4, 4]);
+});
+
+// A live source is the one case where the skipped write was not a same-value
+// write, so it is the one place the behaviour visibly changes. `startTime` 0
+// asks for 0, `withinMediaBounds` clamps that into the seekable window, and a
+// DVR window that starts above 0 has no point at 0 — so the clamp used to
+// return the back of the window and every load rewound the viewer there, off
+// the live edge. Skipping the write leaves the engine's own position, which
+// for a live stream is that edge. Asserted here because nothing else does:
+// `e2e/live.spec.ts` asserts `at-edge` for hls.js, which held either way, and
+// its native-HLS live test is skipped off macOS.
+test('writes no initial position into a live seekable window', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[100, 200]])
+  });
+  const { writes } = trackPosition(media, 200);
+  const provider = createNativeProvider(media);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+  expect(media.currentTime).toBe(200);
+});
+
 test('ends playback at the configured end boundary without looping', async () => {
   const media = document.createElement('video');
   const pause = vi.spyOn(media, 'pause');
