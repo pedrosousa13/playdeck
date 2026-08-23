@@ -772,6 +772,36 @@ test('volume commands convert the 0-1 contract onto the YouTube 0-100 scale', as
   });
 });
 
+test('reports a muted volume-arrow press as the one change it makes', async () => {
+  const { events, fake, provider } = createAdapter();
+  await provider.attach();
+  await provider.load();
+  const harness = fake.players[0]!;
+  // A muted player at half volume: the ready snapshot adopts both, so the
+  // mirrors start where the press finds them.
+  harness.muted = true;
+  harness.volume = 50;
+  harness.fireReady();
+  const before = events.filter(({ type }) => type === 'volumechange').length;
+
+  // The command pair a muted `ArrowUp` issues (#274): the unmute that restores
+  // the sound, and the volume request that records the level it is restoring
+  // to. The second asks for the volume the adapter already holds, so it is
+  // silent here and on every other adapter. The unmute is the one real change,
+  // and every other adapter reports it once too — through its event path
+  // rather than its command path: native's element fires `volumechange` for
+  // the `muted` assignment and HLS inherits that, Vimeo's `volumechange`
+  // subscription carries the muted half, and Wistia's is `mute-change`. One
+  // press, one real change, one event, on all five (#365).
+  await expect(provider.unmute?.()).resolves.toEqual({ ok: true });
+  await expect(provider.setVolume?.(0.5)).resolves.toEqual({ ok: true });
+
+  expect(harness.player.setVolume).toHaveBeenCalledWith(50);
+  expect(
+    events.filter(({ type }) => type === 'volumechange').length - before
+  ).toBe(1);
+});
+
 test('commands emit intended values instead of stale YouTube read-backs', async () => {
   const { harness, patches, provider } = await readyAdapter();
 
