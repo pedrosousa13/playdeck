@@ -63,7 +63,25 @@ test.each([
   ['music watch', 'https://music.youtube.com/watch?v=dQw4w9WgXcQ'],
   ['short URL', 'https://youtu.be/dQw4w9WgXcQ'],
   ['embed', 'https://www.youtube.com/embed/dQw4w9WgXcQ'],
-  ['shorts', 'https://www.youtube.com/shorts/dQw4w9WgXcQ']
+  ['shorts', 'https://www.youtube.com/shorts/dQw4w9WgXcQ'],
+  // `/live/` is the canonical URL for a live broadcast, so it reads on the
+  // full hosts exactly as `/embed/` and `/shorts/` above do (#379).
+  ['live', 'https://www.youtube.com/live/dQw4w9WgXcQ'],
+  ['bare-host live', 'https://youtube.com/live/dQw4w9WgXcQ'],
+  // The privacy-preserving host, accepted in both spellings the other host
+  // pairs are listed in. Detection carries no host -- a `YouTubeSource` is an
+  // id and nothing else -- and it does not need to: the provider already
+  // *requests* the no-cookie origin whenever no `host` option is given
+  // (`packages/provider-youtube/src/index.ts`'s `DEFAULT_HOST`, pinned by
+  // `packages/provider-youtube/test/index.test.ts`'s 'creates the player
+  // against the privacy-enhanced host without autoplay'). So a consumer who
+  // chose this host for privacy gets the origin they chose, and accepting it
+  // here cannot hand them the cookie-bearing one (#379).
+  ['no-cookie embed', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'],
+  [
+    'bare-host no-cookie embed',
+    'https://youtube-nocookie.com/embed/dQw4w9WgXcQ'
+  ]
 ])('detects YouTube %s URLs', (_form, input) => {
   expect(expectDetected(input).source).toEqual({
     type: 'youtube',
@@ -75,13 +93,35 @@ test.each([
   ['canonical', 'https://vimeo.com/123456789', undefined],
   ['player', 'https://player.vimeo.com/video/123456789', undefined],
   ['path hash', 'https://player.vimeo.com/video/123456789/a1b2c3', 'a1b2c3'],
-  ['query hash', 'https://vimeo.com/123456789?h=a1b2c3', 'a1b2c3']
+  ['query hash', 'https://vimeo.com/123456789?h=a1b2c3', 'a1b2c3'],
+  // The share link Vimeo hands out for an unlisted video, and the form a
+  // consumer copies out of Vimeo's own UI. The hash rides the same trailing
+  // segment the `player.vimeo.com` path above already reads, so it is one form
+  // on two hosts rather than a second way to spell a hash (#379).
+  ['canonical path hash', 'https://vimeo.com/123456789/a1b2c3', 'a1b2c3']
 ])('detects Vimeo %s URLs', (_form, input, hash) => {
   expect(expectDetected(input).source).toEqual({
     type: 'vimeo',
     videoId: '123456789',
     ...(hash ? { hash } : {})
   });
+});
+
+// Detecting the share link is worth nothing on its own: a source that carried
+// the id without the hash would build a player that cannot load the unlisted
+// video and would report no error at all, which is worse than the refusal it
+// replaced. So the three forms of the same unlisted video must resolve to one
+// identical source, not merely all succeed (#379).
+test('carries the unlisted hash from the share link exactly as the older forms do', () => {
+  const expected = { type: 'vimeo', videoId: '123456789', hash: 'a1b2c3' };
+
+  for (const input of [
+    'https://vimeo.com/123456789/a1b2c3',
+    'https://vimeo.com/123456789?h=a1b2c3',
+    'https://player.vimeo.com/video/123456789/a1b2c3'
+  ]) {
+    expect(expectDetected(input).source).toEqual(expected);
+  }
 });
 
 test('uses the query Vimeo privacy hash when both supported hash forms are present', () => {
@@ -170,6 +210,11 @@ test.each([
   'mailto:clip.mp4',
   'ftp://host/clip.mp4',
   'https://notyoutube.com/watch?v=dQw4w9WgXcQ',
+  // The no-cookie host joined the host list by exact spelling, so a look-alike
+  // that merely contains it -- as a prefix, or as a label of a longer name --
+  // is still no YouTube host at all (#379).
+  'https://evil-youtube-nocookie.com/embed/dQw4w9WgXcQ',
+  'https://youtube-nocookie.com.evil.test/embed/dQw4w9WgXcQ',
   'https://vimeo.com.evil/123456789',
   'https://notwistia.com/medias/oifkgmxnkb',
   'https://wistia.com.evil.test/medias/oifkgmxnkb'
@@ -196,10 +241,27 @@ test.each([
   'https://youtube.com//embed//abc123',
   'https://youtu.be//abc123',
   'https://www.youtube.com/embed/%zz',
+  // `/live/` joined the shapes the full hosts read, and joined them on the
+  // full hosts only and in the one-segment form only -- the same two bounds
+  // `/embed/` and `/shorts/` above are already held to (#379).
+  'https://www.youtube.com/live/',
+  'https://www.youtube.com/live/dQw4w9WgXcQ/ignored',
+  'https://youtu.be/live/dQw4w9WgXcQ',
+  // A bare id path stays refused on the no-cookie host, and the reason moved
+  // with the host list: the host is recognised now, so the path is what fails
+  // and this reads `malformed-string` rather than `unsupported-string` --
+  // which is how `https://www.youtube.com/<id>` already read (#379).
+  'https://youtube-nocookie.com/dQw4w9WgXcQ',
   'https://player.vimeo.com/123456789',
   'https://vimeo.com/video/123456789',
-  'https://vimeo.com/123456789/ignored',
   'https://vimeo.com//123456789',
+  // The canonical host now reads a trailing hash segment, so these pin what
+  // that optional group does *not* admit: an empty hash, a doubled slash, a
+  // character outside the hash alphabet, and a third segment (#379).
+  'https://vimeo.com/123456789/',
+  'https://vimeo.com/123456789//a1b2c3',
+  'https://vimeo.com/123456789/abc-123',
+  'https://vimeo.com/123456789/a1b2c3/ignored',
   'https://player.vimeo.com/video/123456789/pathhash/ignored',
   'https://player.vimeo.com//video//123456789//privatehash',
   'https://player.vimeo.com/video/123456789/%zz',

@@ -59,11 +59,11 @@ is accepted inside an explicit `{ type: 'video' }` object, and only there — se
 
 ## YouTube
 
-Six hosts, and the path shapes differ between two groups of them:
+Eight hosts, and the path shapes differ between two groups of them:
 
 - the **short hosts** — `youtu.be` and `www.youtu.be`;
-- the **full hosts** — `youtube.com`, `www.youtube.com`, `m.youtube.com` and
-  `music.youtube.com`.
+- the **full hosts** — `youtube.com`, `www.youtube.com`, `m.youtube.com`,
+  `music.youtube.com`, `youtube-nocookie.com` and `www.youtube-nocookie.com`.
 
 A video id is `[A-Za-z0-9_-]+`. Accepted path shapes:
 
@@ -71,8 +71,14 @@ A video id is `[A-Za-z0-9_-]+`. Accepted path shapes:
 | -------------------------------------- | ----------- |
 | `https://www.youtube.com/watch?v=<id>` | full hosts  |
 | `https://www.youtube.com/embed/<id>`   | full hosts  |
+| `https://www.youtube.com/live/<id>`    | full hosts  |
 | `https://www.youtube.com/shorts/<id>`  | full hosts  |
 | `https://youtu.be/<id>`                | short hosts |
+
+`/live/` is the canonical URL for a live broadcast. The privacy-preserving
+`youtube-nocookie.com` is a full host like any other, so
+`https://www.youtube-nocookie.com/embed/<id>` — the form that host actually
+serves — is read, and so are the other full-host shapes on it.
 
 Non-obvious, and accepted: any other query parameter is ignored, so
 `…/watch?v=<id>&t=42&list=<playlist>` resolves to that video — the timestamp and
@@ -84,25 +90,28 @@ as the id**, whatever it says. `https://youtu.be/watch?v=<id>` therefore
 resolves — to the video id `watch`, not to `<id>` — and fails at YouTube rather
 than here. On a short host, pass only `https://youtu.be/<id>`.
 
-Refused — the first four because the shape is not one of the four above, the
-last because the host is not one of the six:
+Refused, because the shape is not one of the five above:
 
 - `https://www.youtube.com/<id>` — a bare id path is read on the short hosts
   only.
-- `https://youtu.be/embed/<id>`, `https://www.youtu.be/shorts/<id>` — `/embed/`
-  and `/shorts/` are read on the full hosts only, and this holds for both short
-  hosts.
-- `https://www.youtube.com/live/<id>`, `/playlist?list=…`, `/@handle` — no
-  shape reads them.
+- `https://youtu.be/embed/<id>`, `https://www.youtu.be/shorts/<id>`,
+  `https://youtu.be/live/<id>` — `/embed/`, `/live/` and `/shorts/` are read on
+  the full hosts only, and this holds for both short hosts.
+- `https://www.youtube.com/live/<id>/<anything>` — each of the three path
+  shapes reads one segment after it and nothing more.
+- `/playlist?list=…`, `/@handle` — no shape reads them.
 - `https://www.youtube.com/watch?v=<a>&v=<b>` — two `v` parameters are
   ambiguous, so it fails here rather than in the provider.
-- `https://www.youtube-nocookie.com/embed/<id>` — that host is where the embed
-  is _served_, chosen by the `host` option below. It is not a source host.
 
 `providerOptions.youtube` accepts `host` and `loadIframeApi`. `host` moves the
 embed off the privacy-enhanced `https://www.youtube-nocookie.com` default, which
 is a privacy trade to make deliberately; only `https://www.youtube.com` and that
-default are honoured, and any other value falls back rather than throwing.
+default are honoured, and any other value falls back rather than throwing. A
+source URL never chooses that origin — a detected YouTube source is a video id
+and nothing else — so a `youtube-nocookie.com` source URL is not a second way to
+set `host`. It does not need to be: the default embed origin already _is_ the
+no-cookie one, so a source copied from that host loads from that host unless
+`host` moves it.
 `loadIframeApi` supplies the iframe API yourself instead of fetching
 `https://www.youtube.com/iframe_api`. See
 [Third-party requests and CSP](third-party-requests.md) for what a page's CSP
@@ -155,18 +164,30 @@ shapes:
 | Form                                         | Host                         |
 | -------------------------------------------- | ---------------------------- |
 | `https://vimeo.com/<id>`                     | `vimeo.com`, `www.vimeo.com` |
+| `https://vimeo.com/<id>/<hash>`              | `vimeo.com`, `www.vimeo.com` |
 | `https://player.vimeo.com/video/<id>`        | `player.vimeo.com`           |
 | `https://player.vimeo.com/video/<id>/<hash>` | `player.vimeo.com`           |
 | any of the above with `?h=<hash>`            | either                       |
 
-An unlisted video's hash reaches the embed whichever way it arrives. Where both
-arrive, the `?h=` query hash wins over the path hash.
+`https://vimeo.com/<id>/<hash>` is the share link Vimeo hands out for an
+unlisted video — what you copy out of Vimeo's own UI. An unlisted video's hash
+reaches the embed whichever way it arrives. Where both arrive, the `?h=` query
+hash wins over the path hash.
+
+Non-obvious, and a trap: the **whole segment after the id is taken as the
+hash**, whatever it says. A real Vimeo page such as
+`https://vimeo.com/<id>/likes` or `https://vimeo.com/<id>/settings` therefore
+resolves — to that video with the hash `likes` or `settings` — and the embed
+fails at Vimeo rather than here. A hash is not distinguishable from any other
+alphanumeric segment, on this host or on `player.vimeo.com`, where it has always
+read this way. Pass `https://vimeo.com/<id>` for a public video.
 
 Refused:
 
-- `https://vimeo.com/<id>/<hash>` — the share link Vimeo hands out for an
-  unlisted video. On `vimeo.com` only `/<id>` is read, so pass the hash as
-  `https://vimeo.com/<id>?h=<hash>` or use the `player.vimeo.com` form.
+- `https://vimeo.com/<id>/`, `https://vimeo.com/<id>//<hash>`,
+  `https://vimeo.com/<id>/<hash>/<anything>` — the hash is a whole segment of
+  `[A-Za-z0-9]`, so an empty one, a doubled slash and a third segment all miss
+  the shape above.
 - `https://vimeo.com/channels/<channel>/<id>`,
   `https://vimeo.com/groups/<group>/videos/<id>`,
   `https://vimeo.com/ondemand/<slug>` — none is `/<id>`.
