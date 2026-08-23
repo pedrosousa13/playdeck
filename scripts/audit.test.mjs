@@ -192,8 +192,12 @@ test('collects the transitive production closure of each publishable package', (
 // `not shipped` while the gate exits 0.
 //
 // Every node below is the verbatim shape of `pnpm list --prod --no-optional
-// --depth Infinity --json` on pnpm 11.20.0, with the fields the walk does not
-// read (`resolved`, `path`) dropped.
+// --depth Infinity --json` on pnpm 11.20.0, with the fields these assertions do
+// not turn on dropped -- `resolved`, which the walk never reads, and `path`,
+// which it does read on every node, both for the `descended` guard and to join
+// a deduped node back to its subtree (#377), but which changes nothing here:
+// these trees carry no deduped node to join and no repeated node for the guard
+// to stop.
 test('an aliased dependency is keyed on the package installed, not the alias', () => {
   assert.deepEqual(
     shippedVersions([
@@ -382,6 +386,254 @@ test('a node carrying no `from` is keyed on the name it is installed under', () 
       }
     ]),
     new Map([['hls.js@1.6.16', ['@playdeck/audit-fixture-publishable']]])
+  );
+});
+
+// pnpm prints each physical package's subtree once. Every later occurrence is
+// marked `deduped` and carries no `dependencies` at all -- only a
+// `dedupedDependenciesCount` -- so a walk that reads `dependencies` alone has
+// nothing to descend and loses the whole closure beneath that node, for that
+// owner (#377). `--depth Infinity` does not prevent it.
+//
+// The nodes below carry `path` because that is the key the subtree is looked up
+// under. It is the one field every deduped node has: the two the current tree
+// produces for a workspace link carry `path` and no `resolved` at all.
+test('a deduped node is descended by splicing in the subtree pnpm printed elsewhere', () => {
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/provider-vimeo',
+        path: '/w/packages/provider-vimeo',
+        dependencies: {
+          '@vimeo/player': {
+            from: '@vimeo/player',
+            version: '2.30.4',
+            path: '/w/node_modules/.pnpm/@vimeo+player@2.30.4/node_modules/@vimeo/player',
+            dependencies: {
+              'native-promise-only': {
+                from: 'native-promise-only',
+                version: '0.8.1',
+                path: '/w/node_modules/.pnpm/native-promise-only@0.8.1/node_modules/native-promise-only'
+              }
+            }
+          }
+        }
+      },
+      {
+        name: '@playdeck/react',
+        path: '/w/packages/react',
+        dependencies: {
+          '@vimeo/player': {
+            from: '@vimeo/player',
+            version: '2.30.4',
+            path: '/w/node_modules/.pnpm/@vimeo+player@2.30.4/node_modules/@vimeo/player',
+            deduped: true,
+            dedupedDependenciesCount: 1
+          }
+        }
+      }
+    ]),
+    // `@playdeck/react` reaches the polyfill through the deduped node and is an
+    // owner of it, exactly as `@playdeck/provider-vimeo` is.
+    new Map([
+      ['@vimeo/player@2.30.4', ['@playdeck/provider-vimeo', '@playdeck/react']],
+      [
+        'native-promise-only@0.8.1',
+        ['@playdeck/provider-vimeo', '@playdeck/react']
+      ]
+    ])
+  );
+});
+
+test('a package whose only dependency is a deduped workspace link is named on what the link reaches', () => {
+  // The thinnest shape the under-reporting takes. A deduped node can be a
+  // workspace link -- two of the three this repository produces are -- and a
+  // link is not recorded as a module, so before the splice a package whose sole
+  // dependency is one recorded an empty closure and was named on nothing.
+  //
+  // Empty for that owner, not for the gate. `@playdeck/provider-hls` carries
+  // the full print, is publishable like every root here, and recorded
+  // `shell-quote` on its own; the map is a union, so `shipped` was true either
+  // way and no advisory read `not shipped`. What was wrong, and what this pins,
+  // is which packages the `reachable from:` line names (#377).
+  //
+  // Also the reason the `descended` set that bounds the walk is per owner rather
+  // than shared. Shared, `@playdeck/react` would claim the subtree first and
+  // `@playdeck/provider-hls` would be skipped over it, losing the owner the
+  // walk used to get right.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/react',
+        path: '/w/packages/react',
+        dependencies: {
+          '@playdeck/provider-native': {
+            from: '@playdeck/provider-native',
+            version: 'link:../provider-native',
+            path: '/w/packages/provider-native',
+            deduped: true,
+            dedupedDependenciesCount: 1
+          }
+        }
+      },
+      {
+        name: '@playdeck/provider-hls',
+        path: '/w/packages/provider-hls',
+        dependencies: {
+          '@playdeck/provider-native': {
+            from: '@playdeck/provider-native',
+            version: 'link:../provider-native',
+            path: '/w/packages/provider-native',
+            dependencies: {
+              'shell-quote': {
+                from: 'shell-quote',
+                version: '1.7.2',
+                path: '/w/node_modules/.pnpm/shell-quote@1.7.2/node_modules/shell-quote'
+              }
+            }
+          }
+        }
+      }
+    ]),
+    // Neither `link:` version is a key: a link is still walked through and
+    // still not recorded, spliced or not.
+    new Map([
+      ['shell-quote@1.7.2', ['@playdeck/react', '@playdeck/provider-hls']]
+    ])
+  );
+});
+
+test('an advisory reached through a deduped node names every package that reaches it', () => {
+  // `development-only` carries three real advisories against shell-quote@1.7.2
+  // and passes today because nothing publishable reaches that version. Put it
+  // one level under a deduped node and both packages have to be named -- the
+  // attribution line is what an operator reads to decide what to do about the
+  // advisory, and it is the line the elided subtree shortens.
+  const link = {
+    from: '@playdeck/audit-fixture-internal',
+    version: 'link:../internal',
+    path: '/w/packages/internal'
+  };
+  const result = gate({
+    ...developmentOnly,
+    prodTrees: [
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        path: '/w/packages/publishable',
+        dependencies: {
+          '@playdeck/audit-fixture-internal': {
+            ...link,
+            deduped: true,
+            dedupedDependenciesCount: 1
+          }
+        }
+      },
+      {
+        name: '@playdeck/audit-fixture-second',
+        path: '/w/packages/second',
+        dependencies: {
+          '@playdeck/audit-fixture-internal': {
+            ...link,
+            dependencies: {
+              'shell-quote': {
+                from: 'shell-quote',
+                version: '1.7.2',
+                path: '/w/node_modules/.pnpm/shell-quote@1.7.2/node_modules/shell-quote'
+              }
+            }
+          }
+        }
+      }
+    ]
+  });
+  assert.equal(result.exitCode, 1);
+  assert.match(
+    result.report,
+    /reachable from: @playdeck\/audit-fixture-publishable, @playdeck\/audit-fixture-second/
+  );
+  // The owner the walk already got right keeps its place; splicing adds owners
+  // and takes none away.
+  assert.deepEqual(
+    result.advisories
+      .filter((advisory) => advisory.shipped)
+      .map((advisory) => advisory.reachableFrom),
+    [
+      ['@playdeck/audit-fixture-publishable', '@playdeck/audit-fixture-second'],
+      ['@playdeck/audit-fixture-publishable', '@playdeck/audit-fixture-second'],
+      ['@playdeck/audit-fixture-publishable', '@playdeck/audit-fixture-second']
+    ]
+  );
+});
+
+test('a deduped node pointing back at a subtree already descended does not recur forever', () => {
+  // Splicing is what makes this reachable: before it, the tree pnpm printed was
+  // finite by construction and the walk could not revisit anything. A spliced
+  // subtree can carry a deduped node naming a package the walk is already
+  // inside, and the walk would then splice that one in too, forever.
+  //
+  // The `descended` set is keyed on `path` -- the same key the splice joins on, and
+  // the identity of the physical package. Two nodes at one path have one
+  // subtree, so a second descent can record nothing the first did not, and
+  // skipping it costs nothing. That bounds the work at one descent per distinct
+  // path per owner rather than one per route to it.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        path: '/w/packages/publishable',
+        dependencies: {
+          alpha: {
+            from: 'alpha',
+            version: '1.0.0',
+            path: '/w/node_modules/.pnpm/alpha@1.0.0/node_modules/alpha',
+            dependencies: {
+              beta: {
+                from: 'beta',
+                version: '2.0.0',
+                path: '/w/node_modules/.pnpm/beta@2.0.0/node_modules/beta',
+                dependencies: {
+                  alpha: {
+                    from: 'alpha',
+                    version: '1.0.0',
+                    path: '/w/node_modules/.pnpm/alpha@1.0.0/node_modules/alpha',
+                    deduped: true,
+                    dedupedDependenciesCount: 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]),
+    new Map([
+      ['alpha@1.0.0', ['@playdeck/audit-fixture-publishable']],
+      ['beta@2.0.0', ['@playdeck/audit-fixture-publishable']]
+    ])
+  );
+});
+
+test('a deduped node carrying no path is recorded and left undescended', () => {
+  // `path` is on every node pnpm 11.20.0 emits. The fallback is for a pnpm that
+  // stops emitting it, or for a deduped node naming a subtree that is not in
+  // these trees at all: there is then nothing to join on and nothing to splice,
+  // so the walk is left exactly where it was before this rather than throwing
+  // or dropping the closure.
+  assert.deepEqual(
+    shippedVersions([
+      {
+        name: '@playdeck/audit-fixture-publishable',
+        dependencies: {
+          '@vimeo/player': {
+            from: '@vimeo/player',
+            version: '2.30.4',
+            deduped: true,
+            dedupedDependenciesCount: 2
+          }
+        }
+      }
+    ]),
+    new Map([['@vimeo/player@2.30.4', ['@playdeck/audit-fixture-publishable']]])
   );
 });
 

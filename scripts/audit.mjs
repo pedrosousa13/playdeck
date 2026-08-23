@@ -96,9 +96,10 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  * `link:<relative path>`. `from` is the name of the package actually
  * installed, which is the key's own name except under an npm alias. A node
  * pnpm has already printed in full elsewhere is marked `deduped` and carries no
- * `dependencies`.
- * @typedef {{ version: string; from?: string; deduped?: boolean; dedupedDependenciesCount?: number; dependencies?: Record<string, DependencyNode> }} DependencyNode
- * @typedef {{ name: string; dependencies?: Record<string, DependencyNode> }} ProjectTree
+ * `dependencies`. `path` is the directory the package was installed in, and is
+ * how a deduped node is joined back to the one carrying its subtree (#377).
+ * @typedef {{ version: string; from?: string; path?: string; deduped?: boolean; dedupedDependenciesCount?: number; dependencies?: Record<string, DependencyNode> }} DependencyNode
+ * @typedef {{ name: string; path?: string; dependencies?: Record<string, DependencyNode> }} ProjectTree
  *
  * The three captured pnpm outputs the gate reads, plus the one thing gather()
  * derives from them -- which package boundary reachability is drawn around --
@@ -122,6 +123,67 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 // Report order only. The gate does not read it.
 const SEVERITY_ORDER = ['critical', 'high', 'moderate', 'low', 'info'];
+
+/**
+ * Every subtree `pnpm list` printed, keyed by the directory the node carrying
+ * it was installed in.
+ *
+ * pnpm prints a physical package's subtree once. Every later occurrence of it
+ * anywhere in the output -- in the same tree or in another one -- is marked
+ * `deduped` and carries no `dependencies` at all, only a
+ * `dedupedDependenciesCount`. So a walk that reads `dependencies` alone has
+ * nothing to descend into and loses the whole closure beneath that node for
+ * whichever package met it, and `--depth Infinity` does not prevent it (#377).
+ * This index is what the walk joins a deduped node back to.
+ *
+ * Keyed on `path` rather than on `resolved`, for two reasons. `path` is the one
+ * field every deduped node carries: two of the three this repository's trees
+ * produce are workspace links, and a link node has a `path` -- the linked
+ * directory -- and no `resolved` at all, so a join on `resolved` alone would
+ * silently skip exactly the nodes a link's closure hangs under. And `path` is
+ * the finer identity of the two even where both are present: it is pnpm's
+ * virtual-store directory, which carries the peer-dependency suffix, so two
+ * peer variants of one version -- same tarball, same `resolved`, different
+ * resolved dependencies -- are two paths and one `resolved`. Joining on
+ * `resolved` would hand a node the other variant's subtree.
+ *
+ * That second reason is forward-looking where the first is measured, and the
+ * two should not be read in one breath. It is a property of how pnpm names the
+ * virtual store, not something these trees exhibit: the publishable packages'
+ * prod trees hold zero peer-suffixed paths as the graph resolves today. The
+ * store does carry them: the directory
+ * `typescript-eslint@8.65.0_eslint@10.7.0_typescript@6.0.3` exists, but as a
+ * devDependency, which this gate never walks. So the key is chosen to survive
+ * the first peer-suffixed path that reaches a publishable closure, not to fix
+ * one already there.
+ *
+ * The project roots are indexed alongside the nodes beneath them, because a
+ * deduped node naming a workspace package may have its only full copy at the
+ * root of that package's own tree rather than nested in another's.
+ *
+ * A node with no `dependencies` offers no subtree and is not indexed, which
+ * covers every deduped node: pnpm omits the key outright on one. So what wins
+ * is the first occurrence carrying `dependencies` rather than the first
+ * occurrence -- one without them is skipped before the index is written -- and
+ * that is the copy pnpm printed in full.
+ * @param {readonly ProjectTree[]} prodTrees
+ * @returns {Map<string, Record<string, DependencyNode>>}
+ */
+const printedSubtrees = (prodTrees) => {
+  /** @type {Map<string, Record<string, DependencyNode>>} */
+  const subtrees = new Map();
+
+  /** @param {ProjectTree | DependencyNode} node */
+  const index = (node) => {
+    if (!node.dependencies) return;
+    if (node.path !== undefined && !subtrees.has(node.path))
+      subtrees.set(node.path, node.dependencies);
+    for (const child of Object.values(node.dependencies)) index(child);
+  };
+
+  for (const project of prodTrees) index(project);
+  return subtrees;
+};
 
 /**
  * Every `name@version` in the transitive `dependencies` closure of each
@@ -148,33 +210,86 @@ const SEVERITY_ORDER = ['critical', 'high', 'moderate', 'low', 'info'];
  * The fallback to the key is for a pnpm that stops emitting it: the join is
  * then no worse than it was before this, rather than throwing or dropping the
  * closure.
+ *
+ * A node pnpm marked `deduped` carries no `dependencies`, so its subtree is
+ * taken from `printedSubtrees` and walked as though it had been printed here
+ * (#377). Without that the closure stops at the deduped node and everything
+ * beneath it goes unrecorded for that owner.
+ *
+ * What that costs is attribution and only attribution: the `reachable from:`
+ * line an operator reads to decide what to do about an advisory named fewer
+ * packages than actually reach the module. The `shipped` boolean was correct
+ * throughout, and why is worth stating here, because it is the non-obvious part
+ * and because the scarier claim -- that a module could read `not shipped` -- is
+ * what a later reader will otherwise put back. gather() filters `pnpm list` to
+ * every publishable package, so every root of `prodTrees` is publishable. A
+ * node marked `deduped` is one pnpm printed in full elsewhere in that same
+ * output, and a deduped node carries no `dependencies` and so has no printed
+ * descendants -- which puts that full copy under a chain of ordinary nodes
+ * hanging off one of those publishable roots, a chain the walk descended even
+ * before this. The map is a union over owners, so every module was already
+ * recorded against at least one publishable package and `shipped` was never
+ * wrongly `false`. Measured over this repository's trees: the splice gains zero
+ * module keys and two owner entries.
+ *
+ * A wrong verdict needs the full copy to sit under a root that is not
+ * publishable, which listing a whole workspace unfiltered can produce and this
+ * gate's invocation cannot.
  * @param {readonly ProjectTree[]} prodTrees
  * @returns {Map<string, string[]>}
  */
 export const shippedVersions = (prodTrees) => {
   /** @type {Map<string, string[]>} */
   const shipped = new Map();
+  const subtrees = printedSubtrees(prodTrees);
 
   /**
    * @param {Record<string, DependencyNode> | undefined} dependencies
    * @param {string} owner
+   * @param {Set<string>} descended Paths this owner's walk is already inside or
+   *   past. Splicing makes a repeat possible, so this is what bounds the work.
    */
-  const walk = (dependencies, owner) => {
+  const walk = (dependencies, owner, descended) => {
     for (const [name, node] of Object.entries(dependencies ?? {})) {
       // A workspace link is not a registry package and can carry no advisory
       // of its own. What it pulls in transitively is what matters, so keep
-      // walking through it.
+      // walking through it -- a deduped link included, which is why the splice
+      // below is not conditional on the node being recorded here.
       if (!node.version.startsWith('link:')) {
         const module = `${node.from ?? name}@${node.version}`;
         const owners = shipped.get(module) ?? [];
         if (!owners.includes(owner)) owners.push(owner);
         shipped.set(module, owners);
       }
-      walk(node.dependencies, owner);
+      // Recording happens above whatever this decides, so a path met twice is
+      // still recorded on both visits -- only the descent is skipped. Keyed on
+      // `path`, the physical package's identity and the same key the splice
+      // joins on: two nodes at one path have one subtree, so a second descent
+      // can record nothing the first did not. Per owner rather than shared,
+      // because the map this builds is per-owner attribution and a shared set
+      // would let whichever package reached a subtree first take it from the
+      // rest.
+      //
+      // Every route back into a subtree the walk is already inside runs through
+      // a deduped node, and a deduped node is joined by `path`, so this bounds
+      // the walk at one descent per distinct path per owner. A node with no
+      // `path` cannot be joined and so cannot be spliced; what it carries is
+      // the literal subtree pnpm printed, which is finite.
+      if (node.path !== undefined) {
+        if (descended.has(node.path)) continue;
+        descended.add(node.path);
+      }
+      walk(
+        node.dependencies ??
+          (node.path === undefined ? undefined : subtrees.get(node.path)),
+        owner,
+        descended
+      );
     }
   };
 
-  for (const project of prodTrees) walk(project.dependencies, project.name);
+  for (const project of prodTrees)
+    walk(project.dependencies, project.name, new Set());
   return shipped;
 };
 
@@ -421,6 +536,25 @@ const classify = (audit, shipped) =>
  * gate reports holds. Where one does appear, both inputs the gate joins were
  * produced under that floor and neither can describe the un-floored version, so
  * the hits are reported and the gate fails.
+ *
+ * What remains, stated rather than hidden: this walk still has the blind spot
+ * `shippedVersions` had before #377, and keeps it deliberately. It reads
+ * `node.dependencies` and nothing else, so a node pnpm marked `deduped` --
+ * which carries none -- stops it, and every name beneath that node goes
+ * unmatched for whichever package met it. #377 is scoped to the reachability
+ * closure and to changing no verdict, so the splice is not repeated here.
+ *
+ * The cost is the same shape as it was there, and safe for the same reason. The
+ * `FLOORED ... reachable from:` line under-reports its owners. The verdict does
+ * not move: every root of `prodTrees` is publishable and a deduped node has no
+ * printed descendants, so the full copy of any elided subtree hangs off a
+ * publishable root through ordinary nodes this walk does descend, and `hits` is
+ * a union over owners -- a floored name anywhere in the printed output is a hit
+ * from somebody and still fails the gate. Not inert for want of overrides,
+ * either: `pnpm-workspace.yaml` declares six. None of the six names appears in
+ * any publishable closure as the graph resolves today, and splicing the elided
+ * subtrees in over these trees gains no `name@version` at all -- only the same
+ * two owner entries #377 gained.
  * @param {Readonly<Record<string, string>>} overrides
  * @param {readonly ProjectTree[]} prodTrees
  * @returns {FlooredModule[]}
