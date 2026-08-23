@@ -9,9 +9,10 @@ test-results/
 .turbo/
 .scratch/
 .factory/journal.json
-# main's copy of scripts/, fetched by the `audit` job in .github/workflows/ci.yml
-# and run from there. Never committed: a copy that lived in the tree would be
-# editable by the pull request it judges, which is the whole point of it.
+# main's copy of scripts/, fetched by the `audit` and `package` jobs in
+# .github/workflows/ci.yml and run from there. Never committed: a copy that
+# lived in the tree would be editable by the pull request it judges, which is
+# the whole point of it.
 .gate/
 # main's manifests and workspace file, fetched by the same job and the same
 # fetch, and the publishable boundary the gate compares against (#373). Never
