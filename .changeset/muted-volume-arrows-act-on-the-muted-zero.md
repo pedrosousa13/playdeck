@@ -87,3 +87,12 @@ It lands as `minor` rather than `patch`: no API changed, but what a released
 version does with two keys did. A consumer who relied on `ArrowDown` unmuting,
 or on a muted `ArrowUp` landing one step above the remembered volume, sees
 different behaviour.
+
+**Superseded in this release by #365.** The extra YouTube event described above
+never ships: the fix it was tracked under landed in the same release, so the
+adapter no longer emits a volume intent for a `setVolume` that moves neither the
+volume nor the muted flag. A muted `ArrowUp` publishes one `volumechange` on
+YouTube, from the unmute, exactly as it does on the other four providers. The
+paragraph's account of those four is corrected there too: Vimeo and Wistia
+publish nothing for an accepted volume command at all, and what they emit on a
+refused `setVolume` is a capability downgrade rather than a volume.
