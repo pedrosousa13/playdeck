@@ -85,15 +85,24 @@ Non-obvious, and accepted: any other query parameter is ignored, so
 the playlist are dropped rather than refusing the URL. Use `Root`'s `startTime`
 prop for an offset.
 
-Non-obvious, and a trap: on a short host the **whole first path segment is taken
-as the id**, whatever it says. `https://youtu.be/watch?v=<id>` therefore
-resolves — to the video id `watch`, not to `<id>` — and fails at YouTube rather
-than here. On a short host, pass only `https://youtu.be/<id>`.
+Non-obvious, and accepted: on a short host the whole path segment is the id, so
+a segment that fits `[A-Za-z0-9_-]+` is read as one unless it is a full-host
+path keyword — those five are refused, and are the next entry below. Everything
+else resolves, so `watchAgain1`, `rewatching1` and `watch-later` are ordinary
+ids and resolve as themselves.
 
 Refused, because the shape is not one of the five above:
 
 - `https://www.youtube.com/<id>` — a bare id path is read on the short hosts
   only.
+- `https://youtu.be/watch?v=<id>` — a short host with a **full-host path
+  keyword** as its only segment: `watch`, `embed`, `live`, `shorts` or
+  `playlist`, in any case. This one combines the two forms and is the likeliest
+  to be written by hand. It used to resolve, to the video id `watch` rather than
+  to `<id>`, and then fail at YouTube rather than here; it is refused now, so
+  the refusal names the URL and the `v` parameter is never mistaken for
+  something this form reads. On a short host, pass only
+  `https://youtu.be/<id>`.
 - `https://youtu.be/embed/<id>`, `https://www.youtu.be/shorts/<id>`,
   `https://youtu.be/live/<id>` — `/embed/`, `/live/` and `/shorts/` are read on
   the full hosts only, and this holds for both short hosts.
