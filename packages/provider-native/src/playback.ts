@@ -16,7 +16,10 @@ export type NativePlaybackOptions = {
    * options bags and enforce the boundary themselves, and `Root` folds the prop
    * into whichever bag the detected source belongs to. This declaration is the
    * native and HLS route to the same prop, and the semantics below are the
-   * contract all five providers implement.
+   * contract all five providers implement — with one native divergence since
+   * #411: a `startTime` of 0 now writes no position at all, so a live source
+   * whose seekable window starts above 0 is left wherever the engine put it
+   * rather than clamped back to the start of its DVR window.
    */
   readonly startTime?: number;
   /**
@@ -49,7 +52,11 @@ export type NativePlayback = {
   readonly setVolume: (volume: number) => Promise<CommandResult>;
   readonly setPlaybackRate: (rate: number) => Promise<CommandResult>;
   readonly retry: () => Promise<CommandResult>;
-  // Applies the configured start position once, when metadata first allows it.
+  // Considers the configured start position once per load, when metadata first
+  // allows it, and applies it only when the write can move the playhead
+  // somewhere the caller asked for: a `startTime` of 0 and a `startTime` the
+  // element already holds are both left alone. See the definition for why a
+  // write the element could satisfy for free is not free.
   readonly applyInitialPosition: () => void;
   // Invalidates any deferred loop replay; called on destroy.
   readonly cancelPendingReplay: () => void;
@@ -292,16 +299,62 @@ export const createNativePlayback = (
         media.load();
       });
     },
+    // Runs once, on the first `loadedmetadata` after each load. Writes only
+    // when the write can move the playhead somewhere the caller asked for.
+    //
+    // A `currentTime` write that asks for the position the element already
+    // holds is not a no-op: it starts a seek, and #407 measured what a seek
+    // into a partly-parsed WebKit element costs. The write is clamped into
+    // `seekable`, which on a source still being parsed reaches a fraction of
+    // the clip, so the playhead lands exactly on the leading edge; WebKit then
+    // fires `seeking`, `seeked` and `ended` from there, the network goes to
+    // `stalled`, and the duration stays frozen at that fraction for good —
+    // those are the observed events (e2e/reference.spec.ts:98-115).
+    //
+    // The element also ends up paused, and that last step is INFERRED, not
+    // observed: no run captured `paused === true` at `currentTime === 0`, and
+    // the reproduced wedges all kept `paused === false`. The inference is
+    // sound because both halves of it are measured separately — #411 trapped
+    // `HTMLMediaElement.prototype.pause` across 200 contended WebKit runs and
+    // recorded no JS call in any of them, the ordinary end-of-clip pause
+    // included, so the engine pauses at end of media unaided; and the write
+    // above is what puts the element at end of media.
+    //
+    // This ran on EVERY native load before #411, the default `startTime` of 0
+    // included. What was measured is the element's state at `loadedmetadata`,
+    // which is when this runs, rather than at the instant of the write the way
+    // #407 measured: on a progressively parsed WebM the parse reports a
+    // duration that grows and playback has caught up with it, so metadata
+    // arrives with `currentTime === duration` and `ended` already true — e.g.
+    // `{paused: false, readyState: 4, currentTime: 0.000887, duration:
+    // 0.000887, ended: true}`, seen repeatedly, with no run count recorded.
+    // The counted evidence is a small arm rather than that one: serving the
+    // WebM in trickled chunks so the parse lags playback, 3 of 3 runs wedged
+    // at `currentTime 0` with the duration frozen at 0.0039 with this write in
+    // place, and 0 of 3 with it suppressed, each of those playing through to
+    // 1.000.
+    //
+    // The result a viewer saw was a clip that loaded completely and sat at
+    // 0:00, with `playback: 'ended'` published for a clip that never showed a
+    // frame.
     applyInitialPosition: () => {
       if (positioned) return;
       positioned = true;
+      // Nothing to apply without a start offset. The media load algorithm has
+      // already put the playhead at 0, and if metadata arrives after playback
+      // has begun, writing 0 is not applying a start position — it is
+      // rewinding playback that already happened.
+      if (startTime === 0) return;
       const initialPosition = withinMediaBounds(
         media,
         startTime,
         startTime,
         endTime
       );
-      if (initialPosition !== undefined) media.currentTime = initialPosition;
+      if (initialPosition === undefined) return;
+      // The same rule for a real start the element is already sitting on.
+      if (initialPosition === media.currentTime) return;
+      media.currentTime = initialPosition;
     },
     cancelPendingReplay: () => {
       ++replayGeneration;
