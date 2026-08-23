@@ -89,6 +89,27 @@ test.each([
   });
 });
 
+// The short hosts refuse a full-host path keyword as an id (#395), and that
+// refusal keys on membership of the keyword set and on nothing else -- not on
+// length, and not on whether a segment looks id-like. An id that extends a
+// keyword, contains one, or is separated from one by a hyphen is an ordinary id
+// and still reads, and so is a single character: this library constrains an id
+// to `[A-Za-z0-9_-]+` and nothing more. YouTube's own ids are 11 characters,
+// which is why no real id can collide with a keyword, but that is a fact about
+// YouTube that `isYouTubeVideoId` deliberately does not enforce -- the `w` row
+// below is what pins the non-enforcement.
+test.each([
+  ['an id extending a keyword', 'watchAgain1'],
+  ['an id containing a keyword', 'rewatching1'],
+  ['an id a hyphen separates from a keyword', 'watch-later'],
+  ['a single-character id', 'w']
+])('detects a short-host YouTube URL carrying %s', (_form, videoId) => {
+  expect(expectDetected(`https://youtu.be/${videoId}`).source).toEqual({
+    type: 'youtube',
+    videoId
+  });
+});
+
 test.each([
   ['canonical', 'https://vimeo.com/123456789', undefined],
   ['player', 'https://player.vimeo.com/video/123456789', undefined],
@@ -247,6 +268,51 @@ test.each([
   'https://www.youtube.com/live/',
   'https://www.youtube.com/live/dQw4w9WgXcQ/ignored',
   'https://youtu.be/live/dQw4w9WgXcQ',
+  // A short-host path is one segment and that segment is the id, so a full-host
+  // path keyword arriving there is a URL that combined the two forms rather
+  // than an id at all. `https://youtu.be/watch?v=<id>` used to *detect*, with
+  // the video id `watch`: the segment is a valid id shape, so the `v` parameter
+  // carrying the real id was never consulted and the consumer got a player that
+  // failed at YouTube with no Playdeck error at all (#395). Refused rather than
+  // interpreted -- reading `v=` here would teach a URL form YouTube does not
+  // serve -- and refused for every keyword the full hosts read as a path, on
+  // both short hosts, with a query and without.
+  'https://youtu.be/watch?v=dQw4w9WgXcQ',
+  'https://www.youtu.be/watch?v=dQw4w9WgXcQ',
+  'https://youtu.be/watch',
+  'https://www.youtu.be/watch',
+  'https://youtu.be/embed',
+  'https://www.youtu.be/embed',
+  'https://youtu.be/live',
+  'https://www.youtu.be/live',
+  'https://youtu.be/shorts',
+  'https://www.youtu.be/shorts',
+  // `/playlist?list=<id>` is a full-host path this detector reads no video out
+  // of, so a full host refuses it already; it is in the keyword set for the
+  // short hosts, where the segment would otherwise be taken as the video id
+  // `playlist` -- the same silent failure `watch` had, and the one the id
+  // `playlist` names most plainly (#395).
+  'https://youtu.be/playlist?list=PL123',
+  'https://www.youtu.be/playlist?list=PL123',
+  'https://youtu.be/playlist',
+  'https://www.youtu.be/playlist',
+  // The keyword comparison is case-insensitive on the short hosts and the
+  // full-host `/watch` comparison is not, and the two are not in tension: the
+  // first row below is the full host refusing `/Watch` loudly already, which is
+  // what makes case-sensitivity safe there, while on a short host the same
+  // spelling *succeeded*, with an id no video answers to. Case-insensitivity
+  // cannot cost a real id -- the comparison is still the whole segment, so an
+  // id of any length but a keyword's four to eight characters is untouched
+  // however it is cased (#395).
+  'https://www.youtube.com/Watch?v=dQw4w9WgXcQ',
+  'https://youtu.be/Watch',
+  'https://youtu.be/WATCH',
+  'https://youtu.be/wAtCh?v=dQw4w9WgXcQ',
+  'https://www.youtu.be/Watch',
+  'https://youtu.be/ShOrTs',
+  'https://youtu.be/EMBED',
+  'https://youtu.be/LiVe',
+  'https://youtu.be/PlAyLiSt?list=PL123',
   // A bare id path stays refused on the no-cookie host, and the reason moved
   // with the host list: the host is recognised now, so the path is what fails
   // and this reads `malformed-string` rather than `unsupported-string` --
