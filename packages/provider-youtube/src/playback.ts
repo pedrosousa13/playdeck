@@ -298,6 +298,34 @@ export const createYouTubePlayback = ({
           // (`provider-native`, `:129-131`; Vimeo `onPlay`; Wistia `onPlay`).
           boundary.clearEnded();
           settlePendingPlays({ ok: true });
+          // Re-reading the duration here is load-bearing rather than
+          // defensive, and it is the whole of the correction this adapter
+          // needs. Measured August 2026 over 7 loads of 4 videos — a 22-minute
+          // VOD, a 1h56m VOD, a 5h03m VOD and a 24/7 DVR live stream —
+          // instrumented at the IFrame API seam, subscribed to all six player
+          // callbacks with `getDuration()` polled alongside them. Every load
+          // revised its duration exactly once, and always here: `onReady`
+          // answers a whole-second metadata duration and the exact media
+          // duration replaces it at the transition to PLAYING, which on the
+          // short video fell between the 903ms and 935ms marks of the load. So
+          // the revision is under a second in magnitude, arrives before the
+          // first frame is far along, and this branch already publishes it —
+          // no listener beyond it was called for. Nothing revised
+          // after the first PLAYING in any load, including a 120s VOD soak
+          // spanning a seek, a buffering cycle and `ended`, and a 150s live
+          // soak. Seven loads bound what was seen rather than what the API can
+          // do, and the measurement itself is recorded on #403.
+          //
+          // The live stream is the informative negative. #400's severe native
+          // defect needed a duration that GROWS while the media is read; this
+          // DVR stream answered a fixed 446416.9 for 150s while the playhead
+          // advanced 150 seconds, so YouTube's live duration behaves as a
+          // snapshot rather than a value tracking the edge, and the shape that
+          // left `SeekSlider` inoperable there does not arise. The residual is
+          // a player cued and never played: it holds `onReady`'s rounded
+          // integer (1344 against a true 1343.661, unchanged over 60s) because
+          // the correction rides PLAYING. Off by up to a second on a `max` in
+          // the thousands, which is cosmetic.
           const duration = current.getDuration();
           emit(
             {
