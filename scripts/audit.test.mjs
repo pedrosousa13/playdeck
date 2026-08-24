@@ -8,6 +8,7 @@ import {
   gate,
   parseAuditOutput,
   shippedVersions,
+  unreportedAdvisories,
   workspaceOverrides,
   workspaceSuppressions
 } from './audit.mjs';
@@ -1242,5 +1243,233 @@ test('no baseline runs no comparison', () => {
   assert.match(
     lastLine(gate(developmentOnly).report),
     /^No advisory is reachable from a publishable package's dependencies\.$/
+  );
+});
+
+// `pnpm audit --json` answers the same question twice: `advisories` lists them
+// and `metadata.vulnerabilities` counts them per severity. Anything that
+// suppresses an advisory -- `auditConfig`, or a command-line filter no
+// workspace file records -- removes it from the list and leaves the count
+// where it was, so the two halves of one report disagree and the gate reads
+// only the half that was emptied. Both captured trees agree exactly, which is
+// what makes the disagreement worth failing on.
+// A list carrying one advisory per severity named, each a real captured
+// advisory relabelled: the comparison reads `severity` and counts entries, so
+// the rest of the shape is the capture's rather than invented here.
+/** @param {readonly string[]} severities */
+const listing = (severities) => {
+  const [advisory] = Object.values(developmentOnly.audit.advisories);
+  return Object.fromEntries(
+    severities.map((severity, index) => [index, { ...advisory, severity }])
+  );
+};
+
+test('a severity the metadata counts higher than the list carries is reported', () => {
+  assert.deepEqual(
+    unreportedAdvisories({
+      advisories: listing(['critical', 'critical', 'moderate']),
+      metadata: {
+        vulnerabilities: {
+          info: 0,
+          low: 0,
+          moderate: 2,
+          high: 1,
+          critical: 3
+        },
+        totalDependencies: 6
+      }
+    }),
+    // In the report's own order, and carrying both sides of each comparison:
+    // "something was hidden" without the counts leaves an operator no way to
+    // tell how much. `high` counts one the list does not carry either.
+    [
+      { severity: 'critical', counted: 3, carried: 2 },
+      { severity: 'high', counted: 1, carried: 0 },
+      { severity: 'moderate', counted: 2, carried: 1 }
+    ]
+  );
+});
+
+test('an info advisory the metadata still counts is not unreported', () => {
+  // The exclusion the whole shape was chosen for. pnpm drops an `info`
+  // advisory from the list while `metadata.info` goes on counting it, so
+  // comparing that severity would fire on an ordinary tree and fail every
+  // pull request.
+  assert.deepEqual(
+    unreportedAdvisories({
+      advisories: {},
+      metadata: {
+        vulnerabilities: { info: 4, low: 0, moderate: 0, high: 0, critical: 0 },
+        totalDependencies: 6
+      }
+    }),
+    []
+  );
+});
+
+test('a severity the report does not order is not compared', () => {
+  // The residual, pinned rather than left to be discovered: the compared set
+  // is derived from SEVERITY_ORDER, so a severity a later pnpm invents is
+  // counted by the metadata and compared against nothing.
+  assert.deepEqual(
+    unreportedAdvisories({
+      advisories: {},
+      metadata: {
+        vulnerabilities: { catastrophic: 2 },
+        totalDependencies: 6
+      }
+    }),
+    []
+  );
+});
+
+test('a list carrying everything the metadata counted reports nothing', () => {
+  // Both captures, which agree exactly per severity -- the measurement this
+  // comparison rests on. If either ever stops agreeing, the comparison is
+  // unsound and this says so before it starts failing pull requests.
+  for (const variant of [shipped, developmentOnly]) {
+    assert.deepEqual(unreportedAdvisories(variant.audit), []);
+  }
+});
+
+// `development-only` agrees with its own metadata and passes today, so raising
+// a count is the whole change: the advisory list is left exactly as pnpm
+// returned it, which is what a suppression leaves behind.
+/** @param {Record<string, number>} vulnerabilities */
+const counting = (vulnerabilities) => ({
+  ...developmentOnly,
+  audit: {
+    ...developmentOnly.audit,
+    metadata: { ...developmentOnly.audit.metadata, vulnerabilities }
+  }
+});
+
+const counted = developmentOnly.audit.metadata.vulnerabilities;
+
+test('metadata accounting for an advisory the list does not carry fails an otherwise clean gate', () => {
+  const result = gate(counting({ ...counted, critical: counted.critical + 1 }));
+  assert.equal(result.exitCode, 1);
+  // None of the other four doing the failing: nothing here is reachable, no
+  // override, no `auditConfig`, no baseline.
+  assert.deepEqual(
+    result.advisories.filter((advisory) => advisory.shipped),
+    []
+  );
+  assert.ok(!result.report.includes('FLOORED'));
+  assert.ok(!result.report.includes('SUPPRESSED'));
+  assert.ok(!result.report.includes('DEPARTED'));
+});
+
+test('every severity the report orders except info fails the gate when unreported', () => {
+  // The compared set, exercised one severity at a time rather than trusted to
+  // a second list written down here: whatever `SEVERITY_ORDER` holds is what
+  // the gate compares, minus `info`.
+  for (const severity of ['critical', 'high', 'moderate', 'low']) {
+    assert.equal(
+      gate(counting({ ...counted, [severity]: counted[severity] + 1 }))
+        .exitCode,
+      1,
+      severity
+    );
+  }
+  // And the exclusion, at the gate rather than at the function: an `info`
+  // advisory is dropped from the list while `metadata.info` still counts it, so
+  // comparing it would fail every pull request on an ordinary tree.
+  const result = gate(counting({ ...counted, info: counted.info + 3 }));
+  assert.equal(result.exitCode, 0);
+  assert.ok(!result.report.includes('UNREPORTED'));
+});
+
+test('the report names each severity hidden from the list and the count on both sides', () => {
+  const report = gate(
+    counting({ ...counted, moderate: counted.moderate + 2, low: 1 })
+  ).report;
+  // Both sides of each comparison, so an operator can tell how much was hidden
+  // and at what severity -- not merely that something was.
+  assert.match(
+    report,
+    /UNREPORTED\s+moderate\s+metadata counts 3, the advisory list carries 1/
+  );
+  assert.match(
+    report,
+    /UNREPORTED\s+low\s+metadata counts 1, the advisory list carries 0/
+  );
+  // In the report's own severity order, moderate before low.
+  assert.ok(
+    report.indexOf('UNREPORTED   moderate') < report.indexOf('UNREPORTED   low')
+  );
+  assert.equal(
+    lastLine(report),
+    "No advisory is reachable from a publishable package's dependencies. 2 severity level(s) above count advisories this report's own list does not carry, so something dropped advisories before this gate read them."
+  );
+});
+
+test('a suppression no workspace file records still fails through the metadata', () => {
+  // The mechanism-independence this exists for. `pnpm audit --audit-level
+  // critical` truncates the list to the criticals and leaves the metadata
+  // whole, and no `pnpm-workspace.yaml` records it -- so `workspaceSuppressions`
+  // sees nothing and the report otherwise reads as a clean, narrower tree.
+  const result = gate({
+    ...developmentOnly,
+    audit: {
+      ...developmentOnly.audit,
+      advisories: Object.fromEntries(
+        Object.entries(developmentOnly.audit.advisories).filter(
+          ([, advisory]) => advisory.severity === 'critical'
+        )
+      )
+    }
+  });
+  assert.equal(result.exitCode, 1);
+  // Nothing was written into the workspace file, so the guard that watches it
+  // has nothing to report and cannot be what failed this.
+  assert.deepEqual(developmentOnly.suppressions, []);
+  assert.ok(!result.report.includes('SUPPRESSED'));
+  assert.match(
+    result.report,
+    /UNREPORTED\s+high\s+metadata counts 1, the advisory list carries 0/
+  );
+  assert.match(
+    result.report,
+    /UNREPORTED\s+moderate\s+metadata counts 1, the advisory list carries 0/
+  );
+});
+
+test('an unreported severity with no advisory beside it is still separated from the summary', () => {
+  // The thinnest report this class can produce: pnpm returned no advisory at
+  // all and the metadata still counts one. The blank line before the summary
+  // keys on the findings above it, and this is the only one of the five that
+  // can be the sole finding in a report with an empty advisory list.
+  const report = gate({
+    ...developmentOnly,
+    audit: {
+      ...developmentOnly.audit,
+      advisories: {},
+      metadata: {
+        ...developmentOnly.audit.metadata,
+        vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 1 }
+      }
+    }
+  }).report;
+  assert.match(
+    report,
+    /UNREPORTED\s+critical\s+metadata counts 1, the advisory list carries 0/
+  );
+  assert.equal(report.split('\n').at(-2), '');
+});
+
+test('a report agreeing with its own metadata adds nothing', () => {
+  // Absent means absent, the same way it does for a floor and a suppression:
+  // no line, and no summary sentence counting zero of them.
+  for (const variant of [shipped, developmentOnly]) {
+    assert.ok(!gate(variant).report.includes('UNREPORTED'));
+  }
+  assert.match(
+    lastLine(gate(developmentOnly).report),
+    /^No advisory is reachable from a publishable package's dependencies\.$/
+  );
+  assert.match(
+    lastLine(gate(shipped).report),
+    /^1 of \d+ advisories are reachable from a publishable package's dependencies\. Severity is not the gate; reachability is\.$/
   );
 });
