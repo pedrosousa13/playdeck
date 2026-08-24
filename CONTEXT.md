@@ -117,6 +117,20 @@ that control's own domain sets, and so releases it. A request nothing echoes is
 released by its deadline instead.
 _Avoid_: confirmation, acknowledgement
 
+**Derived step**:
+The seek slider's default `step`, computed from the seek window rather than
+fixed: `min(1, span / 20)`, so a window of 20s or more keeps the one second it
+always rendered, and a shorter one gains positions instead of collapsing onto
+its two ends — where a `Home` or `End` press from mid-clip moved nothing and
+raised no event at all (#383). A default and not a rule: `inputProps.step` still
+wins, and whichever of the two is in force is the **effective step**, which the
+echo tolerance takes half of. A window with no extent to divide — one that has
+not arrived, a zero-length one, or the infinity a live source publishes for its
+duration — steps by that same second. Distinct from the shortcut layer's seek
+distance, which is a fixed five seconds through `seekBy` and is not derived from
+anything (ADR-0005).
+_Avoid_: granularity, resolution, increment, tick
+
 **Requested origin**:
 Where a command the library issued came from — a control a person operated, an
 untagged public command, an autoplay attempt. Held from the moment the command
