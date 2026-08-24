@@ -3,7 +3,11 @@ import * as Player from '@playdeck/react';
 export const Clip = () => (
   <Player.Root source="https://example.com/clip.mp4">
     <Player.Viewport>
-      <Player.Media />
+      <Player.Media
+        textTracks={[
+          { src: '/captions.en.vtt', srcLang: 'en', label: 'English' }
+        ]}
+      />
       <Player.Poster>
         <Player.PosterImage alt="" src="/poster.jpg" />
       </Player.Poster>
