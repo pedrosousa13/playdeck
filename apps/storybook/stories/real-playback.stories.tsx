@@ -1,11 +1,12 @@
 import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
+import { assetUrl } from './asset-url';
 
 const Stage = ({ children }: { readonly children: ReactNode }) => (
   <Player.Viewport style={{ width: 640, height: 360, background: '#0b0e13' }}>
     <Player.Poster>
-      <Player.PosterImage src="/poster.svg" />
+      <Player.PosterImage src={assetUrl('poster.svg')} />
     </Player.Poster>
     {children}
     <Player.ActivationButton aria-label="Load and play" />
@@ -31,7 +32,7 @@ type Story = StoryObj;
 
 export const NativeMp4: Story = {
   render: () => (
-    <Player.Root loading="interaction" source="/tracer.mp4">
+    <Player.Root loading="interaction" source={assetUrl('tracer.mp4')}>
       <Stage>
         <Player.Media />
       </Stage>
@@ -43,7 +44,11 @@ export const HlsVodNative: Story = {
   render: () => (
     <Player.Root
       loading="interaction"
-      source={{ type: 'hls', src: '/hls/master.m3u8', engine: 'native' }}
+      source={{
+        type: 'hls',
+        src: assetUrl('hls/master.m3u8'),
+        engine: 'native'
+      }}
     >
       <Stage>
         <Player.Media />
@@ -56,7 +61,11 @@ export const HlsVodHlsJs: Story = {
   render: () => (
     <Player.Root
       loading="interaction"
-      source={{ type: 'hls', src: '/hls/master.m3u8', engine: 'hls.js' }}
+      source={{
+        type: 'hls',
+        src: assetUrl('hls/master.m3u8'),
+        engine: 'hls.js'
+      }}
     >
       <Stage>
         <Player.Media />

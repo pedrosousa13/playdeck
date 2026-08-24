@@ -1,6 +1,7 @@
 import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { withCss } from '../.storybook/theme';
+import { assetUrl } from './asset-url';
 // The one consumer rule these stories exist to show, read as text so what is
 // mounted here is the same file the Contract docs page prints. `?raw` and not
 // `?inline` for the reason spelled out in play-button.stories.tsx: a production
@@ -11,8 +12,8 @@ import aspectRatioCss from '../../../examples/css-media-aspect-ratio.css?raw';
 // apps/storybook/README.md for how the portrait one was generated. They differ
 // only in shape (360x640 against 320x180), which is the whole experiment: one
 // rule, and the box follows whichever source is behind it.
-const PORTRAIT_SOURCE = '/tracer-portrait.mp4';
-const LANDSCAPE_SOURCE = '/tracer.mp4';
+const PORTRAIT_SOURCE = assetUrl('tracer-portrait.mp4');
+const LANDSCAPE_SOURCE = assetUrl('tracer.mp4');
 
 /**
  * One player, given a width and nothing else. `loading="eager"` with

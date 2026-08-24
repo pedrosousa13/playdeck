@@ -74,15 +74,22 @@ provider reaches and what a page's Content-Security-Policy has to allow for it.
 ## Docs
 
 The Storybook workbench is the documentation, with every primitive staged
-against a mock provider plus real-playback stories:
+against a mock provider plus real-playback stories. It is published from `main`
+at <https://pedrosousa13.github.io/playdeck/>, so reading it needs no clone. The
+same pages run against your own working tree with:
 
 ```sh
 pnpm --filter @playdeck/storybook dev
 ```
 
-**Overview/Introduction**, **Overview/Contract** (the data-attribute and `style`
-contract), **Overview/Capabilities matrix** (what each provider reports),
-**Overview/Captions** and **Overview/Theme**.
+[**Overview/Introduction**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-introduction--docs),
+[**Overview/Contract**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-contract--docs)
+(the data-attribute and `style` contract),
+[**Overview/Capabilities matrix**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-capabilities-matrix--docs)
+(what each provider reports),
+[**Overview/Captions**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-captions--docs)
+and
+[**Overview/Theme**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-theme--docs).
 
 [Provider setup](docs/provider-setup.md) lists the source values each provider
 accepts and the ones it refuses, plus each provider's own options.
@@ -193,8 +200,9 @@ apply, so they are progressive enhancement rather than requirements.
 React 19 is a separate peer requirement (`react` and `react-dom` `>=19 <20`).
 
 The reference example in the workbench uses `@container`, which is newer than
-this floor. It is a Storybook composition, not published code — see **Reference
-example** in the workbench docs.
+this floor. It is a Storybook composition, not published code — see
+[**Overview/Reference example**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-reference-example--docs)
+in the workbench docs.
 
 ## License
 
