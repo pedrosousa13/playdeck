@@ -1308,21 +1308,50 @@ test('publishes an empty buffered when no non-empty reading came before it', asy
 
 // A DVR window slides: it drops ranges off its start as it moves, and every
 // step of it is a non-empty reading. Nothing here may be mistaken for the
-// empty case.
-test('publishes every step of a sliding buffered window', async () => {
+// empty case. Live by construction — an endless raw duration and a seekable
+// window that moves with the buffered one — so the rule is exercised on the
+// path a DVR stream actually takes, not on a finite element that merely slides.
+test('publishes every step of a sliding buffered window on a live element', async () => {
   const { media, setBuffered } = videoWithMutableBuffered([[0, 30]]);
+  let seekable = createTimeRanges([[0, 30]]);
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    get: () => seekable
+  });
+  // Both windows move together, the way a DVR stream's do: the seekable end is
+  // what `deriveLiveState` measures the edge from, so a buffered window sliding
+  // on its own would leave the derivation reading a stationary stream.
+  const slideTo = (start: number, end: number): void => {
+    setBuffered([[start, end]]);
+    seekable = createTimeRanges([[start, end]]);
+  };
   const provider = createNativeProvider(media);
   const patches = collectPatches(provider);
   await provider.attach();
+
+  // The attach snapshot is what shows the element reached the live path at all
+  // — a normalized `null` duration alongside a derived `live`. Without it the
+  // assertion below would pass on any element that happens to slide.
+  expect(patches.at(-1)).toMatchObject({
+    duration: null,
+    live: { isLive: true }
+  });
   patches.length = 0;
 
   media.dispatchEvent(new Event('progress'));
-  setBuffered([[10, 40]]);
+  slideTo(10, 40);
+  media.dispatchEvent(new Event('progress'));
+  slideTo(20, 50);
   media.dispatchEvent(new Event('progress'));
 
   expect(publishedBuffered(patches)).toEqual([
     [{ start: 0, end: 30 }],
-    [{ start: 10, end: 40 }]
+    [{ start: 10, end: 40 }],
+    [{ start: 20, end: 50 }]
   ]);
 });
 
@@ -1371,4 +1400,27 @@ test('native stops observing emptied after destroy', async () => {
   media.dispatchEvent(new Event('emptied'));
 
   expect(patches).toEqual([]);
+});
+
+// The reset on a source change carries no code of its own, and this is the
+// reason: the record belongs to the attachment, not to the element. A source
+// switch builds a new provider over the same media element, so the one that
+// follows retains nothing from the one before it and an empty reading from it
+// is the answer rather than a withheld key. A record hoisted anywhere wider
+// than the attachment factory would let the second provider inherit the
+// first's ranges and go silent here, with nothing else to catch it.
+test('gives a provider built after a swap a fresh buffered record', async () => {
+  const { media, setBuffered } = videoWithMutableBuffered([[0, 4]]);
+  const first = createNativeProvider(media);
+  const firstPatches = collectPatches(first);
+  await first.attach();
+  expect(publishedBuffered(firstPatches)).toEqual([[{ start: 0, end: 4 }]]);
+  await first.destroy();
+
+  setBuffered([]);
+  const second = createNativeProvider(media);
+  const secondPatches = collectPatches(second);
+  await second.attach();
+
+  expect(publishedBuffered(secondPatches)).toEqual([[]]);
 });

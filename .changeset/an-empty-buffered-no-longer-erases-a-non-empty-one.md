@@ -9,12 +9,13 @@ whatever `media.buffered` read at that instant on the wire, unconditionally. An
 empty `TimeRanges` therefore erased ranges the player had already been told about
 (#405).
 
-**An empty reading is ambiguous and the element cannot disambiguate it.** No ranges
-means one of two things — "nothing is buffered" and "not telling you" — and WebKit
-means the second. Its buffered window for the ~1s tracer clip is transient: it opens
-while the element parses and closes again when parsing finishes, with the data
-plainly still there. Measured in situ under
-[#401](https://github.com/pedrosousa13/playdeck/issues/401), 2 of 13 loads:
+**An empty reading is ambiguous and the element gives no way to disambiguate it.** No
+ranges means one of two things — "nothing is buffered" and "not telling you" — and
+WebKit means the second often enough to matter. Measured in situ on 2026-08-21 under
+[#401](https://github.com/pedrosousa13/playdeck/issues/401), over 13 sequential loads
+of the reference composition on the maintainer's machine: on 2 of them WebKit opened a
+buffered window for the ~1s WebM tracer clip while it parsed and closed it again when
+parsing finished, with the data still there and still playable.
 
 ```
 run 6:  1942 progress   elBuf=[[0,0.357423974]] rs=2 ns=2 dom=1   <- window open, range rendered
@@ -23,7 +24,9 @@ run 6:  1942 progress   elBuf=[[0,0.357423974]] rs=2 ns=2 dom=1   <- window open
 ```
 
 A buffered indicator that had rendered correctly disappeared, and
-`PlayerState.buffered` reported less than the player had already been told.
+`PlayerState.buffered` reported less than the player had already been told. On 6 of the
+other 11 loads the window never opened at any observable instant — a different problem,
+and one no adapter change reaches.
 
 **What ships: within one source, an empty reading is _unknown_ rather than _none_.**
 The adapter records the ranges it last put on the wire and withholds the `buffered`
@@ -48,15 +51,19 @@ builds a new provider over state rebuilt from `createInitialPlayerState()`, so t
 record is fresh by construction.
 
 **A seek is deliberately not a reset point.** Clearing on "a seek outside the known
-buffered range" was the proposed third rule, and it was measured before being wired:
-chromium, firefox and webkit, three runs each, a 600 s clip served through a
-range-honouring server throttled to 250 KiB/s so only ~4% of it was ever buffered.
-`buffered` never read empty after any seek on any engine. The old ranges were
-retained verbatim — the leading range's `end` was bit-for-bit identical before and
-after — with a new disjoint range added at the target, and seeking back into the
-retained range was served with **zero HTTP traffic** on firefox and webkit and
-without a re-fetch on chromium. The retained ranges were not merely reported, they
-were still true, so that rule would have discarded real data. It is not implemented.
+buffered range" was the proposed third rule, and it was measured before being wired.
+Measured 2026-08-24 on the maintainer's machine: chromium, firefox and webkit, three
+runs each, a 600 s clip served through a range-honouring local server throttled to
+250 KiB/s so only ~4% of it was ever buffered when the seek went out.
+
+`buffered` never read empty after any seek on any engine. The old ranges were retained
+verbatim — the leading range's `end` was bit-for-bit identical before and after — with
+a new disjoint range added at the target, and seeking back into the retained range was
+served with **zero HTTP traffic** on firefox and webkit and without a re-fetch on
+chromium. The retained ranges were not merely reported, they were still true, so that
+rule would have discarded real data. It is not implemented, and
+[#405](https://github.com/pedrosousa13/playdeck/issues/405) carries the full traces
+for anyone who wants to re-measure.
 
 **What did not change.** `seekable` is published on every `progress` exactly as
 before — only `buffered` carries the ambiguity. A non-empty reading is published
@@ -64,11 +71,12 @@ whenever it arrives, unchanged or not: the record suppresses the empty-over-non-
 case and nothing else. A DVR window that slides, dropping ranges off its start, is
 non-empty at every step and is published like any other reading.
 
-**This does not fix
-[#401](https://github.com/pedrosousa13/playdeck/issues/401),** and the buffered
-indicator's WebKit exclusion stays closed. This accounts for 2 of 13 measured loads;
-in the other 6 failing loads `buffered` was never populated at any observable instant,
-which no adapter change can help.
+**The buffered indicator's WebKit skip is untouched.**
+[#401](https://github.com/pedrosousa13/playdeck/issues/401) closed by adding that skip,
+and this change is not grounds for removing it: the loads it addresses are the ones
+where WebKit reported a window and withdrew it, not the ones where it never reported
+anything, and `e2e/reference.spec.ts`'s `skipWithoutWebKitBuffered` describes the
+second. Removing the skip needs its own evidence, of the kind that put it there.
 
 It lands as `minor` rather than `patch` for the reason `native-duration-no-longer-latches`
 did: no API moved, but published state did, and a consumer asserting on the provider

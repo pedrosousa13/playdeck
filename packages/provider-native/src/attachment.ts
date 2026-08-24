@@ -128,19 +128,25 @@ export const createNativeAttachment = (
   // statements dispatches a media event.
   let lastDuration: number | null | undefined;
 
-  // The buffered ranges last put on the wire, so an empty reading can be told
-  // from an empty buffer. An element reporting no ranges is saying one of two
-  // things it has no way to distinguish — "nothing is buffered" and "not
-  // telling you" — and WebKit says the second: on the repo's ~1s tracer clip
-  // its buffered window opens while it parses and closes again when parsing
-  // finishes, with the data plainly still there, so a `progress` reading empty
-  // took an already-rendered indicator back off the DOM and walked
-  // `PlayerState.buffered` back below what the player had been told (#401,
-  // #405). Within one attachment an empty reading is therefore treated as
-  // unknown and its key withheld, which `#applyPatch` resolves by retaining
-  // what it already holds. Withheld rather than ignored outright, and scoped to
-  // one source with an explicit reset point below, because eviction is real —
-  // on another engine an empty reading genuinely can mean none.
+  // The buffered ranges last put on the wire — what `CONTEXT.md` calls the
+  // **Buffered window**. An element reporting no ranges is saying one of two
+  // things it gives no way to tell apart, "nothing is buffered" and "not
+  // telling you", so this adapter answers for it: within one attachment an
+  // empty reading is treated as unknown and its key is withheld from the patch,
+  // which `#applyPatch` resolves by retaining the ranges it already holds.
+  // Withheld rather than ignored outright, and scoped to one source with an
+  // explicit reset point below, because eviction is real — an empty reading
+  // genuinely can mean none.
+  //
+  // What made the ambiguity concrete: on some loads of the ~1s WebM tracer clip
+  // WebKit opened a buffered window while it parsed and closed it again when
+  // parsing finished, with the data still there and still playable, so a
+  // `progress` reading empty took an already-rendered indicator back off the
+  // DOM and walked `PlayerState.buffered` back below what the player had been
+  // told. Measured in situ 2026-08-21, on 2 of 13 sequential loads of the
+  // reference composition on the maintainer's machine; on 6 of the others the
+  // window never opened at any observable instant, which is #401's subject and
+  // is not what this rule addresses (#401, #405).
   //
   // Starts at `[]`, the value `createInitialPlayerState()` holds, so the record
   // mirrors the controller from before the first patch.
@@ -274,22 +280,24 @@ export const createNativeAttachment = (
   // The one point inside an attachment where an empty buffer is news rather
   // than silence. `emptied` fires from the media load algorithm, which empties
   // the element's buffer as it runs, so here the ranges are gone rather than
-  // merely unreported and the retained value has to go with them. A seek is not
-  // such a point and deliberately has no branch here: measured across chromium,
-  // firefox and webkit on a throttled 600 s clip, `buffered` never read empty
-  // after a seek — the engines kept the old ranges verbatim and added a
-  // disjoint one at the target, and seeking back into a retained range was
-  // served with no network traffic at all, so a seek-based clear would discard
-  // data that is still true (#405).
+  // merely unreported and the retained value goes with them.
+  //
+  // A seek is deliberately not such a point. Engines carry their ranges across
+  // one — the old ranges stay, a disjoint range is added at the target, and a
+  // seek back into a retained range plays from it without refetching — so
+  // clearing on a seek would discard ranges that are still true. #405 records
+  // the measurement behind that.
   //
   // Silent when the record was already empty, the rule `onDurationChange` and
   // `emitLiveUpdate` follow: `load()` calls `media.load()`, so every ordinary
   // load fires this, and a patch restating a value that never moved is the
-  // empty patch the review of #361 refused.
+  // empty patch the review of #361 refused. Through `syncLive` like every other
+  // emitter here, because the load algorithm empties the seekable window too
+  // and liveness is derived from it.
   const onEmptied = (): void => {
     if (lastBuffered.length === 0) return;
     lastBuffered = [];
-    emit({ buffered: [] });
+    emit(syncLive({ buffered: [] }));
   };
   const onVolumeChange = (originalEvent: Event): void =>
     emit(
