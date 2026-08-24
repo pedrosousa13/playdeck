@@ -1,12 +1,12 @@
 # Provider setup
 
 Which source values each provider accepts, what each provider's own options are,
-and a working player per provider. Read against
-`packages/core/src/source-detection.ts` — the detector itself, not a provider's
-own documentation — because a form a provider publishes is not a form this
-library reads. The refused forms are named alongside the accepted ones: a setup
-guide that lists a form the detector turns down is worse than one that lists
-fewer. Every claim here was checked by running the detector, not by reading it.
+and a working player per provider. These are `detectSource`'s rules, not a
+provider's own documentation, because a form a provider publishes is not a form
+this library reads. The refused forms are named alongside the accepted ones: a
+setup guide that lists a form the detector turns down is worse than one that
+lists fewer. Every claim here was checked by running the detector, not by
+reading it.
 
 Nothing here is an install step. `@playdeck/react` depends on all five provider
 packages and imports each one dynamically, so a YouTube or Vimeo source needs no
