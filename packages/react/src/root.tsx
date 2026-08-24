@@ -9,7 +9,6 @@ import {
   type MediaSessionLike,
   type PlayerSource
 } from '@playdeck/core';
-import type { NativePlaybackOptions } from '@playdeck/provider-native';
 import { INTERNAL_CONTROLLER } from './internal-controller.js';
 import {
   collectPlayerActions,
@@ -48,8 +47,62 @@ type SourceTransition = {
   readonly key: string;
 };
 
-export type PlayerActivationProps = {
-  readonly loading?: import('./use-activation.js').PlayerLoadingStrategy;
+// Every prop `Root` accepts, declared here rather than assembled from an
+// intersection at the use site. The shape is what a consumer's compiler prints
+// when a prop is misspelled or invented: TypeScript flattens an intersection
+// and then elides the members, so `NativePlaybackOptions & PlayerActivationProps
+// & {...}` reported the rejected prop and gave no way to find the right one
+// (#440). A single object type keeps its alias through that flattening, so the
+// error names `RootProps` -- an exported name whose declaration a consumer can
+// open -- rather than a shape with sixteen of its members elided.
+//
+// The cost is that `loop`, `startTime` and `endTime` are declared here as well
+// as in `@playdeck/provider-native`, whose `NativePlaybackOptions` this type
+// used to intersect. `test/root-props.test.ts` fails `pnpm typecheck` if those
+// two declarations ever disagree.
+//
+// Their prose is split rather than copied, so that there is less left to drift
+// than the types the test pins: the JSDoc here is the consumer-facing summary
+// and states only what holds on all five providers, while the mechanism behind
+// each rule -- including why a zero `startTime` is not written -- is owned by
+// `provider-native/src/playback.ts` and is not repeated here.
+export type RootProps = {
+  readonly autoplay?: AutoplayMode;
+  readonly captionRenderer?: 'custom' | 'native';
+  readonly children: ReactNode;
+  /**
+   * Let the provider draw its own controls. Unset and `false` both mean a
+   * chromeless player, which is where Playdeck's own composed `Player.Controls`
+   * belongs; `true` hands the surface to the provider and Playdeck draws nothing
+   * over it. Reaches Vimeo and YouTube through their embeds and native/HLS
+   * through the video element's own `controls` attribute.
+   */
+  readonly controls?: boolean;
+  readonly defaultMuted?: boolean;
+  readonly mediaMetadata?: MediaMetadataInput | null;
+  readonly defaultPlaybackRate?: number;
+  readonly defaultVolume?: number;
+  /**
+   * End playback at this offset in seconds, publishing `ended` there rather
+   * than at the end of the media. Works the same on every provider: each
+   * adapter enforces the boundary itself rather than handing it to a platform's
+   * own end mechanism. An end that is not finite, or not above the sanitised
+   * `startTime`, is no end at all.
+   */
+  readonly endTime?: number;
+  /**
+   * Attempt `autoplay` even where the viewer matches
+   * `prefers-reduced-motion: reduce`. Playdeck otherwise starts no playback of
+   * its own for such a viewer: an `eager` or `viewport` autoplay is declined
+   * at the attempt, the player reaches `autoplay: 'suppressed'`, and the
+   * poster stays over the frame exactly as it does for a refused attempt.
+   *
+   * Defaults to `false`, and named for what it does rather than for the case
+   * it enables, so a call site setting it reads as the deliberate
+   * accessibility trade-off it is. Where `matchMedia` is unavailable the query
+   * cannot match and this prop changes nothing.
+   */
+  readonly ignoreReducedMotion?: boolean;
   readonly loadMargin?: string;
   /**
    * Under `loading: 'viewport'`, the fraction of the player's box that must be
@@ -65,51 +118,40 @@ export type PlayerActivationProps = {
    * instead, the same fallback the default already is for every other box.
    */
   readonly loadThreshold?: number;
+  readonly loading?: import('./use-activation.js').PlayerLoadingStrategy;
+  /**
+   * Restart the media when it ends. Works the same on every provider. With a
+   * `startTime`, the restart returns there rather than to zero.
+   */
+  readonly loop?: boolean;
+  readonly muted?: boolean;
+  readonly onMutedChange?: (muted: boolean) => void;
+  readonly onPlaybackRateChange?: (playbackRate: number) => void;
+  readonly onVolumeChange?: (volume: number) => void;
+  readonly playbackRate?: number;
   readonly preload?: import('./use-activation.js').PlayerPreload;
+  // Compared by value, not by reference, so an inline literal is safe to
+  // pass: see `providerOptionsEqual` in `use-activation.ts`.
+  readonly providerOptions?: PlayerProviderOptions;
+  readonly ref?: Ref<PlayerHandle>;
+  readonly source: PlayerSource;
+  /**
+   * Start playback at this offset in seconds. Works the same on every provider.
+   * A value that is not finite, or not above zero, is no start at all — zero
+   * asks for the start the media would have had anyway, so the playhead is left
+   * wherever the provider put it rather than written to.
+   */
+  readonly startTime?: number;
+  readonly volume?: number;
 };
 
-export type RootProps = NativePlaybackOptions &
-  PlayerActivationProps & {
-    readonly autoplay?: AutoplayMode;
-    readonly captionRenderer?: 'custom' | 'native';
-    readonly children: ReactNode;
-    /**
-     * Let the provider draw its own controls. Unset and `false` both mean a
-     * chromeless player, which is where Playdeck's own composed `Player.Controls`
-     * belongs; `true` hands the surface to the provider and Playdeck draws nothing
-     * over it. Reaches Vimeo and YouTube through their embeds and native/HLS
-     * through the video element's own `controls` attribute.
-     */
-    readonly controls?: boolean;
-    readonly defaultMuted?: boolean;
-    readonly mediaMetadata?: MediaMetadataInput | null;
-    readonly defaultPlaybackRate?: number;
-    readonly defaultVolume?: number;
-    /**
-     * Attempt `autoplay` even where the viewer matches
-     * `prefers-reduced-motion: reduce`. Playdeck otherwise starts no playback of
-     * its own for such a viewer: an `eager` or `viewport` autoplay is declined
-     * at the attempt, the player reaches `autoplay: 'suppressed'`, and the
-     * poster stays over the frame exactly as it does for a refused attempt.
-     *
-     * Defaults to `false`, and named for what it does rather than for the case
-     * it enables, so a call site setting it reads as the deliberate
-     * accessibility trade-off it is. Where `matchMedia` is unavailable the query
-     * cannot match and this prop changes nothing.
-     */
-    readonly ignoreReducedMotion?: boolean;
-    readonly muted?: boolean;
-    readonly onMutedChange?: (muted: boolean) => void;
-    readonly onPlaybackRateChange?: (playbackRate: number) => void;
-    readonly onVolumeChange?: (volume: number) => void;
-    readonly playbackRate?: number;
-    // Compared by value, not by reference, so an inline literal is safe to
-    // pass: see `providerOptionsEqual` in `use-activation.ts`.
-    readonly providerOptions?: PlayerProviderOptions;
-    readonly ref?: Ref<PlayerHandle>;
-    readonly source: PlayerSource;
-    readonly volume?: number;
-  };
+// The activation props on their own, for a wrapper that forwards them without
+// taking the rest of `Root`'s surface. Derived from `RootProps` rather than
+// declared beside it so there is no second copy to drift.
+export type PlayerActivationProps = Pick<
+  RootProps,
+  'loadMargin' | 'loadThreshold' | 'loading' | 'preload'
+>;
 
 type Reconciliation<Value> = { value: Value };
 

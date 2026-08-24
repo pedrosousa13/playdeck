@@ -8,24 +8,35 @@ import {
   type EmitProviderState
 } from './adapter-values.js';
 
+// `loop`, `startTime` and `endTime` are Playdeck's own props on `Player.Root`
+// and work the same on every provider (ADR-0004): the three embeds declare them
+// on their own option bags, and this type is where the native and HLS adapters
+// implement them. `Root` folds its props into the bag belonging to the detected
+// source's provider -- an embed bag, or this one -- so none of these is a
+// second place a `Player.Root` consumer writes the setting.
 export type NativePlaybackOptions = {
+  /**
+   * Restart the media when it ends. With a `startTime`, the restart returns
+   * there rather than to zero.
+   */
   readonly loop?: boolean;
   /**
-   * Start playback at this offset in seconds. `Root`'s `startTime` prop reaches
-   * every provider since #214 -- the three embeds declare the key on their own
-   * options bags and enforce the boundary themselves, and `Root` folds the prop
-   * into whichever bag the detected source belongs to. This declaration is the
-   * native and HLS route to the same prop, and the semantics below are the
-   * contract all five providers implement — with one native divergence since
-   * #411: a `startTime` of 0 now writes no position at all, so a live source
-   * whose seekable window starts above 0 is left wherever the engine put it
-   * rather than clamped back to the start of its DVR window.
+   * Start playback at this offset in seconds. A value that is not finite, or
+   * not above zero, is no start at all.
+   *
+   * Zero is a real value to write on a media element and it is deliberately not
+   * written. The media load algorithm has already put the playhead at zero, so
+   * the write can only take effect where something else moved it -- and on a
+   * live source whose seekable window starts above zero that means pulling it
+   * back to the start of the DVR window, which is not what asking for the start
+   * of the media meant.
    */
   readonly startTime?: number;
   /**
-   * End playback at this offset in seconds. Reaches every provider since #214,
-   * on the same terms as `startTime` above: adapter-enforced everywhere, never
-   * handed to a platform's own end mechanism.
+   * End playback at this offset in seconds, publishing `ended` there rather
+   * than at the media's own end. The adapter enforces the boundary itself and
+   * never hands it to the element's own end mechanism. An end that is not
+   * finite, or not above the sanitised `startTime`, is no end at all.
    */
   readonly endTime?: number;
 };
