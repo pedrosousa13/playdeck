@@ -1,5 +1,255 @@
 # @playdeck/provider-vimeo
 
+## 0.2.0
+
+### Minor Changes
+
+- ea664ad: `PlayerState.error` now keeps the most important **Notice** of an attach rather
+  than the first one reported (#368).
+
+  A notice is a non-fatal `configuration` error reporting a value that was
+  rejected while the fall-back it degraded to stands unchanged. The state has one
+  error slot and no event carries the loser, so an adapter that rejects two
+  options in one attach has one of them silenced for good — and until now that was
+  whichever it happened to check first. A cosmetic refusal reported early
+  therefore hid a security- or privacy-relevant one reported after it: exactly
+  what #332 fixed for Wistia by reordering two checks, a fix that held the
+  instance and left the mechanism.
+
+  Notices are now ranked. `PlayerError` carries an optional
+  `severity: PlayerErrorSeverity` — `'protective'` where a control that protects
+  the viewer fired (an untrusted URL blocked, a privacy opt-out that did not
+  take), `'presentational'` where a cosmetic option was ignored — and the slot
+  keeps the highest severity whatever order the notices arrived in. Ties are
+  settled by a fixed precedence rather than by arrival — the notice already
+  standing in the slot, then the provider's own notice, then a refused consumer
+  URL, the order #330 recorded — so a single attach still cannot flap the slot.
+  The rule governs a provider's notice against a refused consumer URL as well,
+  which was the one masking path #332 never covered: a refused URL is protective,
+  so a cosmetic provider notice no longer takes the slot from one, and where the
+  two tie and are resolved in the same pass the provider's own notice wins.
+
+  The field is optional and an absent severity ranks as `'presentational'`, so a
+  provider adapter outside this repo emitting a notice without one keeps working
+  and displaces nothing. Every notice this repo emits declares one: the five
+  refused-URL surfaces, Wistia's `poster` and YouTube's `host` and Vimeo's
+  ineffective `suppressSeoMetadata` are protective; Wistia's `playerColor` and
+  Vimeo's incomplete chromeless probe are presentational.
+
+  **No message changed and no notice stopped being emitted.** What changed is
+  which of two an operator observes where an attach reports both. The
+  hand-placed orders that used to carry this — Wistia's poster-before-colour,
+  Vimeo's suppression-before-probe — are correct and stay as they are; they are
+  simply no longer what the outcome rests on.
+
+  `@playdeck/core` also exports `isNotice(error, lifecycle)`, the one rule that
+  tells a notice from a failure. The controller and `ErrorDisplay` both apply it,
+  and a consumer rendering `PlayerState.error` itself can now classify an error
+  exactly as the bundled surface does instead of restating the rule.
+
+  `@playdeck/core` and the three provider packages land as `minor` rather than
+  `patch` for the reason #319 and #332 did: no API was removed or narrowed, but
+  what a released package reports did — an attach that rejects two options now
+  surfaces the other one of them — and a behaviour change should not arrive as a
+  patch. Core carries public additions besides, which `minor` answers to on their
+  own: `PlayerErrorSeverity`, the optional `severity` field on `PlayerError`, and
+  the `isNotice` export.
+
+  `@playdeck/react` takes `patch` because nothing it renders moved.
+  `ErrorDisplay` gave up its own copy of the notice rule for core's `isNotice`,
+  which is the same three clauses in the same order, so every error classifies
+  exactly as it did and every overlay falls exactly where it fell; the
+  `use-activation.ts` change is comments only, and `setActivation` still ranks
+  nothing. What a React consumer observes differently is state core publishes, and
+  it arrives through the dependency rather than from this package.
+
+- 07180ca: The Vimeo provider now switches off the `@vimeo/player` SDK's `vimeo_t_`
+  url-parameter seek, on every page, before the SDK is imported (#329).
+
+  The SDK's module scope calls `checkUrlTimeParam()`, which installs a `window`
+  `message` listener. On a recognised embed's `ready` it resolves that frame's
+  video id, greps the **top-level page url** for `vimeo_t_<videoId>`, and calls
+  `setCurrentTime` with what it finds. The command input is therefore the
+  consumer's own query string, which any third party can supply by handing a
+  victim a link to the consumer's own page. Playdeck now sets the SDK's own guard,
+  `window.VimeoCheckedUrlTimeParam`, before the import — the same mechanism
+  `suppressSeoMetadata` already uses for `VimeoSeoMetadataAppended`.
+
+  **The page-wide cost, plainly: this disables `vimeo_t_` seeking for every Vimeo
+  embed on the page, including ones Playdeck did not create.** A page that wants
+  that behaviour back can set `window.VimeoCheckedUrlTimeParam = false` itself
+  before Playdeck loads; the write is one-way and non-clobbering, so a value the
+  page already owns is kept in either direction.
+
+  **The severity, stated without inflation in either direction.** The listener
+  does install, and it does issue an attacker-chosen seek on every `ready` — a
+  `?vimeo_t_76979871=45` becomes `setCurrentTime(45)` on the embed, confirmed
+  against the shipped SDK in Chromium, Firefox and WebKit. But at first load it
+  does not reach the viewer: both chains start from the same embed `ready`, the
+  SDK's needs one round trip and the adapter's own positioning seek needs at least
+  two, so the adapter's lands last and `startTime` survives. Measured against the
+  real Vimeo embed, it did — 78 samples over 8s read the configured start in both
+  a control and a crafted run. So this is defence against the repeat-`ready` path,
+  where the SDK's permanent listener answers a second `ready` that `adopt` does
+  not, and against an ordering nothing on either side of the bridge promises. It
+  is not a fix for a live first-load exploit, because there was not one.
+
+  `startTime` itself is unchanged, and so is `@playdeck/core`'s time boundary. It
+  is still applied once, at ready, and nothing re-applies it — the underlying
+  property that makes any below-start position stick, whatever put it there. That
+  is #381, along with the `endTime` overshoot in the same family.
+
+  Always on rather than an option, and the difference from `suppressSeoMetadata`
+  is the reason. Both guards are page-wide, but suppressing SEO metadata withholds
+  something Vimeo legitimately wants, so it is a trade a consumer should choose.
+  Here nothing legitimate is withheld: Playdeck owns the playhead through
+  `startTime`, and the input is attacker-supplied. A default that leaves it live
+  means the consumer who never learns the option exists is the one who gets hit.
+
+  No companion to `isSeoMetadataSuppressed` is added, deliberately. That predicate
+  exists because suppression is an _option_: the call that imports may not have
+  asked for it while a later one does, and the later one reaches an evaluated
+  module where its request can achieve nothing, silently. There is no such
+  asymmetry here — every load asks, so the importing load always asks, and a
+  second call has nothing to achieve and therefore nothing to report. `loadVimeoSdk`
+  keeps its signature and the vendor global stays named in the one module that
+  already owns the other.
+
+  `e2e/vimeo-url-time-param.spec.ts` covers it against the shipped SDK, with only
+  the far side of the postMessage bridge stubbed and served at the real
+  `player.vimeo.com` origin — the same posture that settled #333. The mechanism it
+  closes is proved by the tests that opt out of the guard, which is also what
+  proves a page's own value is not overwritten.
+
+  It lands as `minor` rather than `patch` for the reason #331, #332 and #333 did:
+  no API changed, but what a released package does to a page-wide global did, and
+  a behaviour change should not arrive as a patch.
+
+- 8157f0a: The Vimeo provider now reports a `suppressSeoMetadata` request that did not
+  take, as a non-fatal `configuration` Notice on `PlayerState.error` (#333).
+
+  `suppressSeoMetadata` is a privacy control: it stops the `@vimeo/player` SDK
+  answering a recognised embed's readiness handshake with `window.location.href`,
+  path and query included. It works by setting a `window` guard the SDK reads
+  while its module evaluates, and the module is imported once per page — so only
+  the attach that performs the import decides it. A second player asking for
+  suppression after a first one loaded without it got nothing, and was told
+  nothing, while every other consumer option that degrades publishes a Notice
+  (#235, #318). This one degraded to the **unsafe** default in silence.
+
+  **The ordering is not fixed, because it cannot be.** The SDK reads the guard as
+  it evaluates; a request arriving later is too late by construction. What lands
+  is the missing signal, and nothing about when suppression applies has changed.
+
+  The check is by outcome, not by mechanism: suppression was asked for, and the
+  SDK's module evaluation did not suppress. That covers both ways a request goes
+  nowhere — a module already imported, and a page that set the guard itself,
+  `false` included — with one condition, and it stays quiet when somebody else
+  suppressed first, because then the request was honoured.
+
+  The outcome cannot be read off `window` afterwards, which is the subtlety the
+  whole change turns on. On the branch that installs the listener the SDK also
+  writes the guard `true` (`dist/player.js:999`), so once the module has
+  evaluated every case is truthy — suppressed and sending alike. The answer is
+  therefore recorded in the importing call, from what the guard held in the
+  instant before the import, and a new `isSeoMetadataSuppressed` predicate in the
+  loader reports that record. It answers `undefined` until a load has resolved, so
+  "no evaluation has decided" is never reported as a failure. The vendor global's
+  name stays in the one module that already owns it, and `loadVimeoSdk` keeps its
+  signature.
+
+  Vimeo now has two Notices, and the controller keeps one per attach — the first
+  emitted wins and the rest are dropped with the provider (#332, #368). This one
+  is emitted at the SDK load, which every path to the chromeless probe's Notice
+  runs through, so the privacy report beats the presentational one by
+  construction rather than by convention. The placement is commented as
+  load-bearing and pinned by a test that fails if the emit moves past the probe.
+
+  `e2e/vimeo-seo-metadata.spec.ts` covers it against the real SDK, which is the
+  only place the vendor's own write to the guard is in play, and the loader's
+  test doubles now perform that write the way module evaluation does.
+
+  It lands as `minor` rather than `patch` for the reason #319 and #332 did: no
+  API changed, but what a released package reports did, and a behaviour change
+  should not arrive as a patch.
+
+- a30e040: YouTube and Vimeo now bound the wait for their embed to become ready. Neither
+  did: YouTube reached `ready` only from the iframe API's `onReady` callback and
+  Vimeo only after `player.ready()` resolved, and neither armed a timer for the
+  case where that callback or promise never arrives. A blocked embed therefore
+  parked the player in `loading` for ever with `error: null` — so neither
+  `ErrorDisplay` nor `ActivationButton` engaged, because both gate on
+  `activation === 'error'` — and on YouTube every `whenReady()` call added a
+  resolve function that never settled, while its own comment claimed it "never
+  hangs on an outcome".
+
+  The triggering condition is ordinary rather than exotic: a page CSP without
+  `frame-src www.youtube-nocookie.com` or `player.vimeo.com`, an extension or DNS
+  blocking the frame, a captive portal, or a vendor frame that loads but never
+  posts back.
+
+  Both now fail the attach after fifteen seconds with a `provider` error that is
+  `recoverable`, naming the embed rather than the API — the actionable cause is
+  almost always the consumer's own CSP. Fifteen seconds matches the Wistia
+  adapter, which already shipped exactly this backstop and states the reasoning:
+  it is a "that is never coming" bound rather than a performance budget, so a slow
+  connection is never reported as a failure.
+
+  The new deadlines are distinct from every timer that already existed and did not
+  cover this. YouTube's `API_READY_TIMEOUT_MS` bounds the iframe API _script_
+  initialising and its `PLAYBACK_CONFIRMATION_TIMEOUT_MS` bounds a play command;
+  Vimeo's `CHROMELESS_PROBE_TIMEOUT_MS` bounds the oEmbed probe alone. Both
+  packages export the new `PLAYER_READY_TIMEOUT_MS`.
+
+  Vimeo keeps declaring `commandsReady` at player construction rather than at
+  `player.ready()`. That was deliberate — the SDK queues calls it receives
+  beforehand, and waiting for `ready()` was one of the two hangs that closed an
+  earlier attempt — and it is not a substitute for bounding the wait.
+
+### Patch Changes
+
+- The Vimeo oEmbed probe now declares `referrerPolicy:
+'strict-origin-when-cross-origin'` on its `fetch` (#394, part of #334).
+
+  The library's only `fetch` carried `{ signal }` and nothing else, so the request
+  travelled under whatever policy the consumer's page declared. On a page declaring
+  something wider than the modern browser default, that hands `vimeo.com` the
+  page's path and query in the `Referer` header — an order number, a customer id, a
+  search term.
+
+  This repo had already decided that exposure is worth an explicit override: it
+  builds both embed iframes itself so a `referrerpolicy` attribute can be on the
+  element before it enters the document. An init-level policy overrides the
+  document's the same way, and the referrer section of
+  `docs/third-party-requests.md` enumerated only the three iframes — so the probe's
+  silence read as an oversight rather than a weighed acceptance.
+
+  Not `no-referrer` and not `origin`: the origin is what Vimeo's domain-restriction
+  check reads, as that section already records for the frames. This policy keeps
+  the origin while dropping the path and query, which are the actual disclosure,
+  and it is what both iframes already declare.
+
+  **What this does not claim.** The tests check that the declaration is made, at the
+  element and in the init. No test observes the `Referer` that results — the
+  narrowing is the platform's behaviour, relied on rather than measured. The test
+  reads the init `fetch` was handed rather than any reconstruction of it, and pins
+  the key on its own: a sibling issue's fix was a no-op in production because its
+  measurement came from a test double that had diverged from the real path, and the
+  fakes shared the divergence, so the whole gate passed. The Vimeo SDK's own oEmbed
+  call is unaffected and uncovered — it goes out over `XDomainRequest` or
+  `XMLHttpRequest`, neither of which has a referrer-policy knob.
+
+  `patch`: no public surface moved.
+
+- Updated dependencies [ecfef8b]
+- Updated dependencies [b5fa01a]
+- Updated dependencies [5ae1450]
+- Updated dependencies [727a376]
+- Updated dependencies [6910f1c]
+- Updated dependencies [ea664ad]
+- Updated dependencies [8624a2e]
+  - @playdeck/core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

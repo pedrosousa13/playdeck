@@ -1,5 +1,208 @@
 # @playdeck/provider-youtube
 
+## 0.2.0
+
+### Minor Changes
+
+- ea664ad: `PlayerState.error` now keeps the most important **Notice** of an attach rather
+  than the first one reported (#368).
+
+  A notice is a non-fatal `configuration` error reporting a value that was
+  rejected while the fall-back it degraded to stands unchanged. The state has one
+  error slot and no event carries the loser, so an adapter that rejects two
+  options in one attach has one of them silenced for good — and until now that was
+  whichever it happened to check first. A cosmetic refusal reported early
+  therefore hid a security- or privacy-relevant one reported after it: exactly
+  what #332 fixed for Wistia by reordering two checks, a fix that held the
+  instance and left the mechanism.
+
+  Notices are now ranked. `PlayerError` carries an optional
+  `severity: PlayerErrorSeverity` — `'protective'` where a control that protects
+  the viewer fired (an untrusted URL blocked, a privacy opt-out that did not
+  take), `'presentational'` where a cosmetic option was ignored — and the slot
+  keeps the highest severity whatever order the notices arrived in. Ties are
+  settled by a fixed precedence rather than by arrival — the notice already
+  standing in the slot, then the provider's own notice, then a refused consumer
+  URL, the order #330 recorded — so a single attach still cannot flap the slot.
+  The rule governs a provider's notice against a refused consumer URL as well,
+  which was the one masking path #332 never covered: a refused URL is protective,
+  so a cosmetic provider notice no longer takes the slot from one, and where the
+  two tie and are resolved in the same pass the provider's own notice wins.
+
+  The field is optional and an absent severity ranks as `'presentational'`, so a
+  provider adapter outside this repo emitting a notice without one keeps working
+  and displaces nothing. Every notice this repo emits declares one: the five
+  refused-URL surfaces, Wistia's `poster` and YouTube's `host` and Vimeo's
+  ineffective `suppressSeoMetadata` are protective; Wistia's `playerColor` and
+  Vimeo's incomplete chromeless probe are presentational.
+
+  **No message changed and no notice stopped being emitted.** What changed is
+  which of two an operator observes where an attach reports both. The
+  hand-placed orders that used to carry this — Wistia's poster-before-colour,
+  Vimeo's suppression-before-probe — are correct and stay as they are; they are
+  simply no longer what the outcome rests on.
+
+  `@playdeck/core` also exports `isNotice(error, lifecycle)`, the one rule that
+  tells a notice from a failure. The controller and `ErrorDisplay` both apply it,
+  and a consumer rendering `PlayerState.error` itself can now classify an error
+  exactly as the bundled surface does instead of restating the rule.
+
+  `@playdeck/core` and the three provider packages land as `minor` rather than
+  `patch` for the reason #319 and #332 did: no API was removed or narrowed, but
+  what a released package reports did — an attach that rejects two options now
+  surfaces the other one of them — and a behaviour change should not arrive as a
+  patch. Core carries public additions besides, which `minor` answers to on their
+  own: `PlayerErrorSeverity`, the optional `severity` field on `PlayerError`, and
+  the `isNotice` export.
+
+  `@playdeck/react` takes `patch` because nothing it renders moved.
+  `ErrorDisplay` gave up its own copy of the notice rule for core's `isNotice`,
+  which is the same three clauses in the same order, so every error classifies
+  exactly as it did and every overlay falls exactly where it fell; the
+  `use-activation.ts` change is comments only, and `setActivation` still ranks
+  nothing. What a React consumer observes differently is state core publishes, and
+  it arrives through the dependency rather than from this package.
+
+- a30e040: YouTube and Vimeo now bound the wait for their embed to become ready. Neither
+  did: YouTube reached `ready` only from the iframe API's `onReady` callback and
+  Vimeo only after `player.ready()` resolved, and neither armed a timer for the
+  case where that callback or promise never arrives. A blocked embed therefore
+  parked the player in `loading` for ever with `error: null` — so neither
+  `ErrorDisplay` nor `ActivationButton` engaged, because both gate on
+  `activation === 'error'` — and on YouTube every `whenReady()` call added a
+  resolve function that never settled, while its own comment claimed it "never
+  hangs on an outcome".
+
+  The triggering condition is ordinary rather than exotic: a page CSP without
+  `frame-src www.youtube-nocookie.com` or `player.vimeo.com`, an extension or DNS
+  blocking the frame, a captive portal, or a vendor frame that loads but never
+  posts back.
+
+  Both now fail the attach after fifteen seconds with a `provider` error that is
+  `recoverable`, naming the embed rather than the API — the actionable cause is
+  almost always the consumer's own CSP. Fifteen seconds matches the Wistia
+  adapter, which already shipped exactly this backstop and states the reasoning:
+  it is a "that is never coming" bound rather than a performance budget, so a slow
+  connection is never reported as a failure.
+
+  The new deadlines are distinct from every timer that already existed and did not
+  cover this. YouTube's `API_READY_TIMEOUT_MS` bounds the iframe API _script_
+  initialising and its `PLAYBACK_CONFIRMATION_TIMEOUT_MS` bounds a play command;
+  Vimeo's `CHROMELESS_PROBE_TIMEOUT_MS` bounds the oEmbed probe alone. Both
+  packages export the new `PLAYER_READY_TIMEOUT_MS`.
+
+  Vimeo keeps declaring `commandsReady` at player construction rather than at
+  `player.ready()`. That was deliberate — the SDK queues calls it receives
+  beforehand, and waiting for `ready()` was one of the two hangs that closed an
+  earlier attempt — and it is not a substitute for bounding the wait.
+
+- 9874c90: The YouTube provider now publishes `volumechange` — and the state patch beside
+  it — only when the volume or the muted flag it was handed differs from the one
+  it is already holding. It published both for every accepted `mute`, `unmute` and
+  `setVolume`, whether or not the value moved, so an event reported a change the
+  media never made (#365).
+
+  The helper that emits the pair compared nothing, and could not: each of the
+  three commands overwrote the known value first and then asked for the emit, so
+  by the time the comparison would have run, the value to compare against was
+  gone. It now takes the values it is about to publish as arguments and does the
+  assignment itself, which is what puts the current and the next values in the
+  same place at the same time.
+
+  **Why this was YouTube's alone.** It was the only adapter that treated an
+  accepted command as an event. The native provider assigns the media element's
+  `volume` and emits nothing of its own — the element fires `volumechange` only on
+  a real change, so a redundant command there is genuinely inert — and HLS
+  delegates to it. Vimeo and Wistia publish nothing at all for an accepted volume
+  command. The only thing either emits off one is a **capability downgrade** —
+  `{ capabilities }`, carrying no volume — when `setVolume` comes back refused as
+  `unsupported`, and `mute`/`unmute` emit nothing on any refusal. #365's
+  description said the two "re-emit only when the SDK refuses a command, to snap
+  consumer state back off a change that did not land"; neither re-emits a volume,
+  and the point that reading was reaching for — that no other adapter turns an
+  accepted command into a volume event — holds without it. Nothing
+  downstream absorbed the difference: `PlayerController` fans every provider event
+  straight out to the registered listeners rather than deduping them, and that is
+  deliberately still true. A general filter in the controller would have masked
+  the same defect wherever else it appeared.
+
+  **Where a consumer will notice it.** A muted volume-arrow press. `Player.Controls`
+  records the level an unmute is restoring as a volume request (#274), which at a
+  nonzero published volume asks the player for the volume it already holds. That
+  second command moves no state value on any provider and is silent on all five,
+  YouTube now included. The unmute is the one real change in the pair, and every
+  other provider does publish exactly one event for it — through its element or
+  SDK event path rather than its command path. Native's `muted = false` makes the
+  element fire `volumechange`, and HLS inherits that; Vimeo's attachment
+  subscribes to the SDK's `volumechange`, which is where the muted half arrives,
+  which is why it re-reads `getMuted()` on every fire; Wistia's subscribes to
+  `mute-change`. So the count to match here was one, not zero: YouTube fired the
+  unmute's event and then a second, value-identical one off the redundant
+  `setVolume`, and now fires the one. One press, one real change, one event, on
+  every provider. That is the extra event
+  [#274](https://github.com/pedrosousa13/playdeck/issues/274)'s changeset stated
+  so it would not be silent in the meantime; it is gone.
+
+  **This removes events, and that is the direction that needs the care.** A
+  consumer counting `volumechange` — analytics, telemetry, anything persisting the
+  volume on the event rather than on a state diff — counted more volume changes on
+  YouTube than the viewer made, and now counts what the other four providers
+  count. A consumer treating the event as an acknowledgement that a command was
+  carried out is the one that has to look: it never was that. The command result
+  is what answers a command, and it is unchanged here — an accepted no-op still
+  resolves `{ ok: true }`, it simply publishes nothing. The event says the volume
+  moved, and now it only fires when it did.
+
+  **The commands themselves still reach the player.** `mute()`, `unMute()` and
+  `setVolume()` are called on the iframe API whether or not the mirror moves, and
+  that call is load-bearing rather than defensive. `adoptVolume` reads `isMuted()`
+  and `getVolume()` back off the player at ready, and nothing re-reads it after
+  that — there is no volume event to subscribe to and no volume poll — so
+  re-asserting a mirror the command did not move is the only mechanism that
+  re-converges a player whose volume has drifted from it. Nothing else would
+  notice until the next `onReady`. Only the report is suppressed.
+
+  **Rounding is untouched, and the comparison is deliberately not made on it.**
+  The player is sent a rounded `0-100` integer while the mirror keeps the
+  unrounded clamped `0-1` value, so `setVolume(0.501)` and `setVolume(0.502)` are
+  two distinct requests that land on the same player step, and both are still
+  published. The comment on `emitVolumeIntent` carries the reasoning, next to the
+  comparison it governs.
+
+  **Nothing was silenced that the platform reports.** The IFrame Player API
+  publishes no volume event of its own to arrive through this path: its event set
+  is `onReady`, `onStateChange`, `onPlaybackQualityChange`, `onPlaybackRateChange`,
+  `onError` and `onApiChange`, and the adapter subscribes to five of those and to
+  nothing else. Volume is readable only through the `isMuted()` and `getVolume()`
+  getters, which is why these mirrors exist at all. The adapter does read them:
+  `adoptVolume` runs at ready and the ready patch publishes what it found, so a
+  volume the viewer set in YouTube's own chrome before that point does reach a
+  consumer. What has never existed is an ongoing report — a change made in that
+  chrome mid-session is not observed until the next ready adopt, which was as
+  true before this change as after it.
+
+  It lands as `minor` rather than `patch` for the reason
+  [#400](https://github.com/pedrosousa13/playdeck/issues/400)'s duration fix did:
+  no API moved, but what a released version puts on the provider stream did, and a
+  consumer asserting on that stream sees a difference. Here the difference is a
+  subtraction, which is the stronger case of the two — a consumer counting these
+  events gets a smaller number from the same session. `patch` answers to a defect
+  fix behind a surface whose behaviour did not change, and this one's did.
+  `major` would ask a consumer to do something before upgrading; there is nothing
+  to do, and at `0.x` the `minor` slot is where an intentional behaviour change
+  belongs.
+
+### Patch Changes
+
+- Updated dependencies [ecfef8b]
+- Updated dependencies [b5fa01a]
+- Updated dependencies [5ae1450]
+- Updated dependencies [727a376]
+- Updated dependencies [6910f1c]
+- Updated dependencies [ea664ad]
+- Updated dependencies [8624a2e]
+  - @playdeck/core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
