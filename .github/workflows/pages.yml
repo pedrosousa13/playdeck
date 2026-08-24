@@ -3,17 +3,18 @@ name: Pages
 # The Storybook workbench is the documentation — `README.md` says so — and
 # until this file existed the only way to read it was to clone the monorepo and
 # run a full workspace install, which somebody who ran `pnpm add @playdeck/react`
-# has no reason and no instruction to do (#435). This publishes the same static
-# build `ci.yml`'s `storybook` job already produces, so that claim is true for a
-# consumer who has only ever seen npm.
+# has no reason and no instruction to do (#435). Publishing it makes that claim
+# true for a consumer who has only ever seen npm.
+#
+# The build here is `ci.yml`'s `storybook` build with `PLAYDECK_BASE_PATH` set,
+# and differs from it in exactly that: a Pages project site is served from a
+# subpath, so the story fixtures resolve against one. See the build step below.
 #
 # `main` only. A repository has one Pages site, so deploying a branch would
 # overwrite the published documentation with unreviewed content; `ci.yml`'s
 # `storybook` job already proves on every pull request that this build still
 # succeeds, which is the part a pull request needs. `workflow_dispatch` is here
-# to re-publish without an empty commit — note that GitHub only offers the
-# button for workflows present on the default branch, so it is undispatchable
-# until this file has merged once.
+# to re-publish without an empty commit.
 on:
   push:
     branches: [main]
@@ -24,10 +25,9 @@ on:
 permissions:
   contents: read
 
-# `cancel-in-progress: false` deliberately, unlike `ci.yml`, and for the same
-# shape of reason `release.yml` gives: `deploy-pages` hands the artifact to the
-# Pages service and then polls it, so cancelling a run mid-deploy abandons a
-# deployment that is already happening rather than preventing one. Two merges
+# `cancel-in-progress: false` deliberately, unlike `ci.yml`, and for the reason
+# `release.yml` gives for the same setting: the tail of this job publishes, and
+# a publish interrupted partway is worse than a publish that waited. Two merges
 # landing together cost a queued run, which is the cheaper failure.
 concurrency:
   group: pages
@@ -35,11 +35,17 @@ concurrency:
 
 jobs:
   deploy:
+    # Only runs where the Pages site exists. `release.yml` guards its
+    # publishing jobs the same way and for the same reason: a fork inheriting
+    # this file should not act on its own repository as a side effect of being
+    # a fork.
+    if: github.repository == 'pedrosousa13/playdeck'
     runs-on: ubuntu-latest
     # Install plus `storybook build` and nothing else — no browsers, no
-    # packaging harness. Measured locally at 11s for the build alone on a warm
-    # `node_modules`; 15 is several times an install-included run, in the same
-    # spirit as the bounds in `ci.yml`.
+    # packaging harness. `ci.yml` records its `storybook` job at 37s whole-job,
+    # install included (2026-08-20, run 32337178101); this job does the same
+    # work plus an upload, so 15 minutes is several times it, in the same
+    # spirit as the bounds there.
     timeout-minutes: 15
     permissions:
       # Naming a job-level `permissions` block replaces the workflow's rather
@@ -64,18 +70,18 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # `enablement: true` so the repository's Pages state is declared here
-      # rather than in a settings click nobody can review or reproduce.
-      #
-      # The one thing in this file that cannot be proven before it merges, so
-      # it is stated rather than assumed: the action's own documentation says
+      # `enablement: true` declares the repository's Pages state here rather
+      # than leaving it to a settings click nobody can review, but it is a
+      # fallback and not the mechanism: the action's own documentation says
       # enablement "requires a token other than GITHUB_TOKEN", because
       # `POST /repos/{owner}/{repo}/pages` wants `administration: write` and a
-      # workflow `permissions:` block has no way to grant that. If the first
-      # run fails on this step, enable Pages once by hand — Settings → Pages →
-      # Source: GitHub Actions — after which `findOrCreatePagesSite` finds the
-      # existing site and never reaches the create call again. Nothing else in
-      # this workflow depends on the flag.
+      # workflow `permissions:` block has no way to grant that.
+      #
+      # The site was created out of band before this workflow first ran, with
+      # `build_type: workflow`, so `findOrCreatePagesSite` finds an existing
+      # site and never reaches the create call. The flag is kept for the case
+      # where that site is ever deleted, where it will work only if the run is
+      # given a token that can administer the repository.
       - id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
         with:

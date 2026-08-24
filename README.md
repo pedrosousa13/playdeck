@@ -75,7 +75,8 @@ provider reaches and what a page's Content-Security-Policy has to allow for it.
 
 The Storybook workbench is the documentation, with every primitive staged
 against a mock provider plus real-playback stories. It is published from `main`
-at <https://pedrosousa13.github.io/playdeck/>, so reading it needs no clone. The
+at [pedrosousa13.github.io/playdeck](https://pedrosousa13.github.io/playdeck/), so
+reading it needs no clone. The
 same pages run against your own working tree with:
 
 ```sh

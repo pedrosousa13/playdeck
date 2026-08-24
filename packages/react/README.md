@@ -14,7 +14,8 @@ but loaded lazily — a consumer playing only MP4 ships no YouTube, Vimeo, Wisti
 or hls.js code in its initial graph, and makes no provider network requests.
 
 Every primitive below is staged, running, in the Storybook workbench at
-<https://pedrosousa13.github.io/playdeck/>. That is where the full styling
+[pedrosousa13.github.io/playdeck](https://pedrosousa13.github.io/playdeck/). That is
+where the full styling
 contract ([**Overview/Contract**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-contract--docs))
 and the caption guidance ([**Overview/Captions**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-captions--docs))
 live.

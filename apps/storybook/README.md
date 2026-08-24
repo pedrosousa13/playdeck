@@ -11,7 +11,7 @@ the test origin.
 - `pnpm dev` — workbench at `http://localhost:6006`.
 - `pnpm build` — static build (also part of the root `pnpm build`). This is
   what `.github/workflows/pages.yml` publishes from `main` to
-  <https://pedrosousa13.github.io/playdeck/>.
+  [pedrosousa13.github.io/playdeck](https://pedrosousa13.github.io/playdeck/).
 - `pnpm test` — run every story as a browser test (root: `pnpm test:storybook`).
 
 A GitHub Pages project site is served from `/playdeck/`, not from `/`, so the

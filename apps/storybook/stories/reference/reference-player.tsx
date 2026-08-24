@@ -13,8 +13,9 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
  * children.
  */
 
-// The same resolver as `stories/asset-url.ts`, restated here because this
-// directory may not import from outside itself. The fixtures below are served
+// The same resolver as `stories/asset-url.ts`, restated here because the lint
+// rule scoping this directory denies relative imports that leave it. The
+// fixtures below are served
 // from the workbench's own base path, which is `/` on the dev server and under
 // Vitest and `/playdeck/` on the hosted build — a root-absolute literal 404s
 // there (#435). `import.meta.env.BASE_URL` is Vite's name for that prefix and
