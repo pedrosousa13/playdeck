@@ -142,7 +142,19 @@ jobs:
       # (`const npm = npmPath ?? "npm"`). So the npm upgraded here is the npm
       # that performs the publish and mints the OIDC token. pnpm needs no
       # trusted-publishing support of its own, and 10.34.5 has none.
-      - run: npm install -g npm@latest
+      #
+      # Pinned, not `@latest`, and the pin is the point rather than the version.
+      # This was the one npm-registry resolution in this job carrying no pin, no
+      # lockfile and no cooldown, in a repository that pins the actions by SHA,
+      # pnpm by the `packageManager` hash and the dependency closure by
+      # `minimumReleaseAge` -- and it is the step that mints the publish
+      # credential, in the only job granted `id-token: write`. An unreviewed
+      # major arriving here arrives on the credential path. `@latest` left npm
+      # 11 on 2026-07-08, after the step was written against 11.x.
+      #
+      # 11.19.0 clears the 11.5.1 floor above. Moving to 12.x is a change of its
+      # own and wants its own dry run, not a resolution nobody chose.
+      - run: npm install -g npm@11.19.0
       # Printed, not assumed: a version below 11.5.1 here is the difference
       # between a working publish and an unauthenticated one.
       - run: npm --version
