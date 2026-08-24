@@ -1,5 +1,23 @@
 # @playdeck/provider-hls
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [ecfef8b]
+- Updated dependencies [b5fa01a]
+- Updated dependencies [a7b73f7]
+- Updated dependencies [ca47d59]
+- Updated dependencies [cf13c02]
+- Updated dependencies [5ae1450]
+- Updated dependencies [3300d23]
+- Updated dependencies [727a376]
+- Updated dependencies [6910f1c]
+- Updated dependencies [ea664ad]
+- Updated dependencies [8624a2e]
+  - @playdeck/core@0.2.0
+  - @playdeck/provider-native@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

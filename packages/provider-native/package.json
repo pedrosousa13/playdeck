@@ -1,6 +1,6 @@
 {
   "name": "@playdeck/provider-native",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "HTMLMediaElement provider for Playdeck: progressive files and native HLS.",
   "keywords": [
     "media",
