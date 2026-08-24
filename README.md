@@ -9,6 +9,14 @@ not compose — and every control is gated on what the active provider can
 actually do, so a control whose command cannot be honoured is absent rather than
 present and disabled.
 
+Install `@playdeck/react`. It is the only package a consumer installs:
+
+```sh
+pnpm add @playdeck/react
+```
+
+`react` and `react-dom` are peer dependencies, at `>=19 <20`.
+
 <!-- example:quickstart -->
 
 ```tsx
@@ -32,6 +40,16 @@ export const Clip = () => (
 ```
 
 <!-- /example -->
+
+The primitives set the geometry they need inline, so the player works with no
+stylesheet at all — what it lacks is appearance. The default theme is one
+optional import:
+
+<!-- example:ignore one import line; the theme.css subpath export and its presence in the tarball are gated by packages/react/test/theme.test.ts -->
+
+```ts
+import '@playdeck/react/theme.css';
+```
 
 A YouTube or Vimeo source is the same prop and nothing else — no extra package,
 no registration: `source="https://www.youtube.com/watch?v=dQw4w9WgXcQ"`,
@@ -198,7 +216,8 @@ bound only by that.
 where support arrived later — a media query that never matches simply does not
 apply, so they are progressive enhancement rather than requirements.
 
-React 19 is a separate peer requirement (`react` and `react-dom` `>=19 <20`).
+React is a separate peer requirement rather than a browser one; its range is
+given with the [install command](#playdeck) at the top of this file.
 
 The reference example in the workbench uses `@container`, which is newer than
 this floor. It is a Storybook composition, not published code — see
