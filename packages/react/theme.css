@@ -277,17 +277,8 @@
    * Blink and WebKit: `outline` rather than `box-shadow`, which WebKit ignores
    * here.
    *
-   * The selector names both sliders and, outside forced colors, only the volume
-   * one still keeps what this rule declares. That slider rides Blink's and
-   * WebKit's native widget: nothing is painted over it, so it has no reason to
-   * give the widget up, and `appearance: none` here would unpaint the whole
-   * control. The seek slider had a reason. Its loaded-range indicator shares the
-   * same 4px band as the control and one of the two has to paint behind the
-   * other, which no rule can arrange while the native track is still on (#415).
-   * So the block further down, inside `@media (forced-colors: none)`, sets
-   * `appearance: none` on `seek-slider-input` and redraws that thumb whole —
-   * fill and ring — and its `outline: none` is what takes this declaration back
-   * off it. In forced colors those rules do not apply and this one still does.
+   * The volume slider keeps this. The seek slider drops the native widget below
+   * and rings its thumb with a border, so its `outline: none` takes it back off.
    */
   :where(
     [data-playdeck-part='seek-slider-input'],
@@ -367,60 +358,13 @@
       background-color: var(--playdeck-color-accent, #3ea6ff);
     }
 
-    /* The seek slider is drawn rather than decorated, on all three engines
-     * (#415), and it is held out of forced colors for the same reason the three
-     * rules above are.
-     *
-     * `SeekSlider` renders `seek-buffered` before the input, and the rule near
-     * the top of this section makes that bar `position: absolute` while the
-     * input stays in flow. A positioned element paints after in-flow content, so
-     * the theme's own translucent bar painted OVER the control it annotates —
-     * white at 0.36 alpha, and a second white at 0.7 wherever a range is loaded
-     * — and lifted every pixel of the thumb towards white. Measured on
-     * `player-seekslider--with-buffered-ranges`, sampling the row through the
-     * middle of the bar: a `#000` ring reached the screen as `rgb(206 206 206)`
-     * and cleared 1.11:1 (Blink), 1.03:1 (Gecko) and 1.03:1 (WebKit) against the
-     * loaded range.
-     *
-     * `position: relative` on the input puts it back on top of the bar, and on
-     * its own that only trades the defect for the engine's track hiding the
-     * indicator. Measured with nothing else changed, as loaded against unfilled
-     * over the bar's own four rows:
-     *
-     *     chromium  1.00:1 on all four   an opaque native track over it
-     *     firefox   2.10:1 on the two `::-moz-range-track` covers, 3.86:1 below
-     *     webkit    3.49:1 on the two its translucent track covers, 3.86:1 below
-     *
-     * A boundary that holds on some rows of a 4px bar and not others is not a
-     * boundary; which two rows an engine happens to cover is its own business
-     * and moves with its build.
-     *
-     * So the input's own track has to stop painting, and while the native
-     * appearance is on, no rule can make it. Measured on both engines that have
-     * one: a `::-webkit-slider-runnable-track` with `background-color:
-     * transparent` and no `appearance: none` beside it changes not a single
-     * pixel of the frame. `appearance: none` is the mechanism, not a preference.
-     * Unprefixed, and no `-webkit-appearance` beside it: the unprefixed property
-     * arrived in Safari 15.4, which is this file's declared floor already and is
-     * where `@layer` puts it, so nothing here moves the floor.
-     *
-     * It costs two things, and both are paid for below. The thumb stops being
-     * painted at all, so `::-webkit-slider-thumb` carries `::-moz-range-thumb`'s
-     * declarations to the letter and one 16px control is drawn on all three
-     * engines. And `accent-color` stops filling the progress with no
-     * pseudo-element on Blink or WebKit to replace it, which is why
-     * `seek-progress` is an element the primitive positions, as the loaded
-     * ranges already are.
-     *
-     * No `::-webkit-slider-runnable-track` rule: measured with and without one,
-     * the frame is byte-identical on Blink and WebKit once `appearance: none` is
-     * set, because a track with no background paints nothing and the thumb
-     * centres itself on it either way.
-     *
-     * The volume slider is deliberately untouched. Nothing is painted over it,
-     * so it has no overlay defect, and the boundary it has left is against the
-     * engine's own unfilled track rather than against anything this file paints.
-     */
+    /* `seek-buffered` is positioned and paints over the input; `position:
+     * relative` fixes that, and then the engine's own track hides the loaded
+     * range instead. Only `appearance: none` stops that track painting (#415),
+     * at the cost of the native thumb — redrawn below — and of `accent-color`'s
+     * progress fill, which has no pseudo-element on Blink or WebKit: hence
+     * `seek-progress` as an element. Held out of forced colors like the three
+     * rules above; the volume slider keeps the native widget. */
     :where([data-playdeck-part='seek-slider-input']) {
       position: relative;
       appearance: none;
@@ -437,19 +381,16 @@
       box-sizing: border-box;
       inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
       block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
-      /* The ring is this border, not the `outline` the rule above gives both
-       * thumbs. Both apply, and measured together they draw a 2px border inside
-       * a 2px outline: a 20px seek thumb beside Gecko's 16px one, which is the
-       * inconsistency the rest of this block exists to remove. */
+      /* The ring is this border; the `outline` above also applies, and the two
+       * together draw a 20px thumb beside Gecko's 16px. */
       outline: none;
       border: 2px solid var(--playdeck-color-thumb-ring, #000);
       border-radius: 50%;
       background-color: var(--playdeck-color-accent, #3ea6ff);
     }
 
-    /* Gecko's own track and progress fill, silenced for this one input so the
-     * bar behind it is the track and `seek-progress` is the fill. Both are still
-     * drawn for the volume slider by the shared rules above. */
+    /* Gecko's own track and fill, silenced for this input only: the bar behind
+     * it is the track and `seek-progress` is the fill. Volume keeps both. */
     :where([data-playdeck-part='seek-slider-input'])::-moz-range-track,
     :where([data-playdeck-part='seek-slider-input'])::-moz-range-progress {
       background-color: transparent;
@@ -616,28 +557,10 @@
      * the control, so the thumb reaches no pixel on any engine and the bar
      * shows a loaded range but not the current position.
      *
-     * #415 fixed that everywhere else and deliberately did not fix it here,
-     * because both ways of reaching it cost more than they buy. Measured under
-     * `forced-colors: active` on `player-seekslider--with-buffered-ranges`,
-     * across the bar's own rows:
-     *
-     *   - Positioning the input above the bar, which is what works outside this
-     *     mode, hands the row to the engine's own opaque track. The loaded
-     *     range goes from 21.00:1 against the unfilled one to 1.00:1 on
-     *     Chromium and to 1.00:1 on three of the bar's four rows on Firefox:
-     *     the indicator stops stating anything at all, for the users least able
-     *     to absorb that.
-     *   - Drawing the control by hand here as well restores the bar on Chromium
-     *     but flattens Gecko exactly as the block above records: the hand-drawn
-     *     thumb measured 2.05:1 to 2.85:1 against the canvas where the native
-     *     one is emphatic. That is the trade #190 already refused, on the same
-     *     measurement.
-     *
-     * So this mode keeps the rendering it had, defect included, rather than
-     * exchanging a hidden thumb for a silent loaded range or a flattened
-     * control. `e2e/thumb-contrast.spec.ts` asserts both halves of what is left
-     * — that the loaded ranges still read, and that the thumb does not — so the
-     * gap has a live record rather than a silence.
+     * #415 fixed that everywhere else and deliberately not here: putting the
+     * input above the bar hands the row to the engine's opaque track, silencing
+     * the loaded range, and hand-drawing the control flattens Gecko against the
+     * canvas — the trade #190 refused. `e2e/thumb-contrast.spec.ts` covers it.
      */
   }
 }
