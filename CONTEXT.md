@@ -366,6 +366,19 @@ which changes what the gate is shown; this changes what the gate is drawn
 around (#373).
 _Avoid_: unpublished, withdrawn, removed
 
+**Unreported**:
+A severity at which `pnpm audit`'s `metadata.vulnerabilities` counts more
+advisories than the same report's `advisories` list carries. pnpm does not
+decrement the counts when something drops an advisory from the list, so the
+report contradicts itself and the count is evidence of an advisory the gate was
+never shown. The audit gate compares the two halves per severity — every
+severity the report orders except `info`, which pnpm drops from the list on an
+ordinary tree — and fails naming each one and both counts as `UNREPORTED`.
+Distinct from **suppressed**, which names the workspace setting that hid the
+advisory; this needs no setting at all and catches a command-line
+`--audit-level` just the same (#374).
+_Avoid_: miscounted, undercounted, missing
+
 **Gate runtime**:
 The `node_modules` a pinned gate resolves its third-party imports from, placed
 next to `main`'s copy of the gate scripts rather than borrowed from the tree

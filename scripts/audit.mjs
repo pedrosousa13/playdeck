@@ -9,7 +9,7 @@
 // `dependencies` -- at any severity. Everything else is printed, labelled
 // "not shipped", and left alone, whatever its severity.
 //
-// Two things besides an advisory fail it, and both are settings in
+// Four things besides an advisory fail it. The first two are settings in
 // `pnpm-workspace.yaml` rather than anything pnpm reported. The first is an
 // `overrides` entry whose package name lands inside a publishable
 // package's dependency closure. The two inputs the gate joins are both
@@ -50,6 +50,18 @@
 // own, computed by this same definition of publishable from `main`'s
 // manifests, and a package that left it fails the gate by name. See
 // departedPackages and gather.
+//
+// The fourth is the report disagreeing with itself. `pnpm audit --json` states
+// what it found twice -- once as the `advisories` list, and once as
+// per-severity counts in `metadata.vulnerabilities` -- and only the first is
+// rebuilt when something suppresses an advisory. The count that was not
+// decremented is then evidence of an advisory this file was never shown, which
+// is the one signal here that does not depend on how the advisory was hidden:
+// the `auditConfig` check above watches one block of one file, and
+// `pnpm audit --audit-level critical` truncates the list exactly the same way
+// with nothing written down anywhere. So the two halves are compared per
+// severity and a mismatch fails, whatever produced it. See
+// unreportedAdvisories.
 //
 // `pnpm audit --prod` is not the same boundary and is not used: a private
 // integration fixture in this workspace declares its framework under
@@ -122,10 +134,26 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  * One `auditConfig` entry, as the key it was written under and the identifiers
  * it carries.
  * @typedef {{ key: string; identifiers: string[] }} AuditSuppression
+ *
+ * One severity at which the report contradicts itself: `counted` is what
+ * `metadata.vulnerabilities` accounts for there, `carried` is how many
+ * advisories the list actually holds at it.
+ * @typedef {{ severity: string; counted: number; carried: number }} UnreportedSeverity
  */
 
-// Report order only. The gate does not read it.
+// Report order, and the set the metadata cross-check compares over. The
+// ordering itself is still cosmetic -- no verdict turns on which severity sorts
+// first -- but the membership is not: see unreportedAdvisories.
 const SEVERITY_ORDER = ['critical', 'high', 'moderate', 'low', 'info'];
+
+// The severities `unreportedAdvisories` compares, derived from the report order
+// above so the two cannot drift apart. `info` is excluded because pnpm drops an
+// `info` advisory from `advisories` while `metadata.info` goes on counting it,
+// so comparing that severity would fire on an ordinary tree and fail every pull
+// request -- the false positive, not a suppression.
+const COUNTED_SEVERITIES = SEVERITY_ORDER.filter(
+  (severity) => severity !== 'info'
+);
 
 /**
  * Every subtree `pnpm list` printed, keyed by the directory the node carrying
@@ -387,6 +415,63 @@ export const departedPackages = (baseline, current) => {
     .sort();
 };
 
+/**
+ * Every severity at which `metadata.vulnerabilities` accounts for more
+ * advisories than `advisories` carries.
+ *
+ * `pnpm audit --json` answers the same question twice. `advisories` lists them
+ * and `metadata.vulnerabilities` counts them per severity, and the second half
+ * is not recomputed when something removes an advisory from the first: measured
+ * on pnpm 10.34.5, an `auditConfig.ignoreGhsas` that dropped one moderate and
+ * one critical from the list left the metadata reading the full
+ * `{moderate: 6, high: 4, critical: 2}`. So the report contradicts itself, and
+ * the gate above reads only the half that was emptied.
+ *
+ * That makes this the one check here that is independent of the mechanism.
+ * `workspaceSuppressions` watches one file for one block, which is the only
+ * place a suppression can be written down and not the only place it can come
+ * from: `pnpm audit --audit-level critical` truncated the same list to
+ * `{critical: 2}` with the metadata again unmoved, and no workspace file
+ * records that at all. Whatever hid the advisory, the count it did not
+ * decrement is still in the report.
+ *
+ * Sound because the metadata counts advisories rather than findings or paths:
+ * on a tree whose 12 advisories carried 19 findings across 21 dependency paths,
+ * `metadata.vulnerabilities` read exactly the per-severity advisory counts. (It
+ * counts findings instead when pnpm is invoked from outside the workspace with
+ * `-C`. `pnpm()` above always runs with cwd at the repository root, so the gate
+ * is always in the advisory-counting mode.)
+ *
+ * Compared per severity rather than as one total, which the sum agrees with and
+ * cannot: the list is always a subset of what the metadata counted, so no
+ * severity can over-count in the other direction and cancel another out, and a
+ * non-empty result here is a non-empty result there. What per-severity buys is
+ * the failure being able to name the severity and both counts, so an operator
+ * can tell what was hidden rather than only that something was.
+ *
+ * What remains, stated rather than hidden: a severity outside `SEVERITY_ORDER`
+ * is not compared, so a name a later pnpm invents can be counted by the metadata
+ * and hidden from the list with nothing here noticing. Widening the comparison
+ * to every key the metadata carries is what would close it, and that is exactly
+ * what `info` shows is unsafe -- the two captured fixtures and a clean tree all
+ * agree per severity today, and any key whose halves disagree by construction
+ * turns this gate into a blanket failure. The set is pinned to the severities
+ * the report orders for that reason.
+ * @param {AuditReport} audit
+ * @returns {UnreportedSeverity[]}
+ */
+export const unreportedAdvisories = ({ advisories, metadata }) => {
+  /** @type {Map<string, number>} */
+  const carried = new Map();
+  for (const advisory of Object.values(advisories))
+    carried.set(advisory.severity, (carried.get(advisory.severity) ?? 0) + 1);
+  return COUNTED_SEVERITIES.map((severity) => ({
+    severity,
+    counted: metadata.vulnerabilities[severity] ?? 0,
+    carried: carried.get(severity) ?? 0
+  })).filter((entry) => entry.counted > entry.carried);
+};
+
 // Inside a range, a `>` is a semver operator, and these are the characters one
 // can follow: the `@` that opens the range, whitespace, and semver's own
 // operators and separators. Everywhere else a `>` ends a path segment.
@@ -596,6 +681,7 @@ const flooredModules = (overrides, prodTrees) => {
  * @param {readonly FlooredModule[]} floored
  * @param {readonly AuditSuppression[]} suppressions
  * @param {readonly string[]} departed
+ * @param {readonly UnreportedSeverity[]} unreported
  */
 const formatReport = (
   advisories,
@@ -604,7 +690,8 @@ const formatReport = (
   publishable,
   floored,
   suppressions,
-  departed
+  departed,
+  unreported
 ) => {
   const shippedCount = advisories.filter((advisory) => advisory.shipped).length;
   const lines = [
@@ -653,8 +740,22 @@ const formatReport = (
       `              publishable on main and not publishable here, so every advisory reachable only through it has gone unmeasured above`
     );
   }
+  // An unreported severity is a finding about the report itself, like a
+  // suppression, and says the same thing from the other side: this one is what
+  // the report's own metadata still counts, whatever removed the advisory and
+  // whether or not any workspace setting records it.
+  for (const entry of unreported) {
+    lines.push(
+      `UNREPORTED   ${entry.severity.padEnd(8)}  metadata counts ${entry.counted}, the advisory list carries ${entry.carried}`,
+      `              the report contradicts itself, so advisories were dropped from it before this gate read them`
+    );
+  }
   if (
-    advisories.length + floored.length + suppressions.length + departed.length >
+    advisories.length +
+      floored.length +
+      suppressions.length +
+      departed.length +
+      unreported.length >
     0
   )
     lines.push('');
@@ -679,6 +780,11 @@ const formatReport = (
   if (departed.length > 0) {
     summary.push(
       `${departed.length} package(s) above are publishable on main and are not publishable here, so this report measures a narrower boundary than the one consumers resolve.`
+    );
+  }
+  if (unreported.length > 0) {
+    summary.push(
+      `${unreported.length} severity level(s) above count advisories this report's own list does not carry, so something dropped advisories before this gate read them.`
     );
   }
   lines.push(summary.join(' '));
@@ -706,6 +812,7 @@ export const gate = ({
   // never takes this branch -- gather() throws rather than passing null when it
   // was asked for a baseline and could not read one.
   const departed = baseline ? departedPackages(baseline, publishable) : [];
+  const unreported = unreportedAdvisories(audit);
   return {
     report: formatReport(
       advisories,
@@ -714,7 +821,8 @@ export const gate = ({
       publishable.map((pkg) => pkg.name),
       floored,
       suppressions,
-      departed
+      departed,
+      unreported
     ),
     advisories,
     // A suppression fails on its own, and unlike a floor it is not scoped to a
@@ -723,12 +831,16 @@ export const gate = ({
     // nothing to intersect, so there is nothing to narrow this to. A departure
     // fails on its own for the same reason from the other side -- what left
     // the boundary took its closure out of the reachability walk with it, so
-    // there is again nothing to intersect.
+    // there is again nothing to intersect. An unreported severity fails on its
+    // own for the first reason again, and does not
+    // depend on either of the other two having been detected: what it counts is
+    // an advisory that is not in the report to be classified, however it left.
     exitCode:
       advisories.some((advisory) => advisory.shipped) ||
       floored.length > 0 ||
       suppressions.length > 0 ||
-      departed.length > 0
+      departed.length > 0 ||
+      unreported.length > 0
         ? 1
         : 0
   };
