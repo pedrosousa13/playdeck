@@ -1187,3 +1187,240 @@ test('a throwing dimension listener does not starve the listeners behind it', ()
 
   expect(seen.at(-1)).toEqual({ width: 1080, height: 1920 });
 });
+
+// --- an empty buffered reading is unknown, not none (#405) ---
+
+// An element revises `buffered` between events, which is the whole of what
+// #405 is about: a reading is a reading, not a verdict.
+const videoWithMutableBuffered = (
+  initial: ReadonlyArray<readonly [number, number]>
+): {
+  media: HTMLVideoElement;
+  setBuffered: (ranges: ReadonlyArray<readonly [number, number]>) => void;
+} => {
+  const media = document.createElement('video');
+  let buffered = createTimeRanges(initial);
+  Object.defineProperty(media, 'buffered', {
+    configurable: true,
+    get: () => buffered
+  });
+  return {
+    media,
+    setBuffered: (ranges) => void (buffered = createTimeRanges(ranges))
+  };
+};
+
+// Only the patches that carried the key: an omitted `buffered` and a published
+// `[]` are the two outcomes under test, and `patch.buffered` alone reads
+// `undefined` for both.
+const publishedBuffered = (
+  patches: ReadonlyArray<Record<string, unknown>>
+): unknown[] =>
+  patches.filter((patch) => 'buffered' in patch).map((patch) => patch.buffered);
+
+const collectPatches = (
+  provider: ProviderAdapter
+): Array<Record<string, unknown>> => {
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch as Record<string, unknown>));
+  return patches;
+};
+
+// The measured WebKit sequence from #405: a `progress` renders a range, the
+// next `progress` reads empty while the data is plainly still there, and the
+// `canplay` behind it took the indicator off the DOM.
+test('never republishes an empty buffered over a non-empty one', async () => {
+  const { media, setBuffered } = videoWithMutableBuffered([[0, 0.357423974]]);
+  const provider = createNativeProvider(media);
+  const patches = collectPatches(provider);
+  await provider.attach();
+  patches.length = 0;
+
+  media.dispatchEvent(new Event('progress'));
+  setBuffered([]);
+  media.dispatchEvent(new Event('progress'));
+  media.dispatchEvent(new Event('canplay'));
+
+  expect(publishedBuffered(patches)).toEqual([
+    [{ start: 0, end: 0.357423974 }]
+  ]);
+});
+
+// `seekable` is not ambiguous and is not suppressed: `progress` is the event
+// that reports the window moving, so it reports it on every one.
+test('still publishes seekable on a progress whose buffered is withheld', async () => {
+  const { media, setBuffered } = videoWithMutableBuffered([[0, 4]]);
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 12]])
+  });
+  const provider = createNativeProvider(media);
+  const patches = collectPatches(provider);
+  await provider.attach();
+  patches.length = 0;
+
+  setBuffered([]);
+  media.dispatchEvent(new Event('progress'));
+
+  expect(patches).toEqual([{ seekable: [{ start: 0, end: 12 }] }]);
+});
+
+// The snapshot path — `canplay` and `loadedmetadata` reach `emitMediaState` —
+// follows the same rule, and drops only the one key.
+test('omits buffered from the media-state snapshot rather than emptying it', async () => {
+  const { media, setBuffered } = videoWithMutableBuffered([[0, 4]]);
+  const provider = createNativeProvider(media);
+  const patches = collectPatches(provider);
+  await provider.attach();
+  patches.length = 0;
+
+  setBuffered([]);
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  const snapshot = patches.at(-1)!;
+  expect(snapshot).not.toHaveProperty('buffered');
+  expect(snapshot).toMatchObject({
+    lifecycle: expect.any(String),
+    activation: expect.any(String),
+    currentTime: expect.any(Number),
+    duration: null,
+    seekable: expect.any(Array),
+    muted: expect.any(Boolean),
+    volume: expect.any(Number),
+    playbackRate: expect.any(Number),
+    capabilities: expect.any(Object)
+  });
+});
+
+// Firefox publishes several empty readings at `readyState` 0, before it has
+// anything to report, and those are correct: with no non-empty reading behind
+// it, empty is the answer.
+test('publishes an empty buffered when no non-empty reading came before it', async () => {
+  const { media } = videoWithMutableBuffered([]);
+  const provider = createNativeProvider(media);
+  const patches = collectPatches(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('progress'));
+
+  expect(publishedBuffered(patches)).toEqual([[], []]);
+});
+
+// A DVR window slides: it drops ranges off its start as it moves, and every
+// step of it is a non-empty reading. Nothing here may be mistaken for the
+// empty case. Live by construction — an endless raw duration and a seekable
+// window that moves with the buffered one — so the rule is exercised on the
+// path a DVR stream actually takes, not on a finite element that merely slides.
+test('publishes every step of a sliding buffered window on a live element', async () => {
+  const { media, setBuffered } = videoWithMutableBuffered([[0, 30]]);
+  let seekable = createTimeRanges([[0, 30]]);
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    get: () => seekable
+  });
+  // Both windows move together, the way a DVR stream's do: the seekable end is
+  // what `deriveLiveState` measures the edge from, so a buffered window sliding
+  // on its own would leave the derivation reading a stationary stream.
+  const slideTo = (start: number, end: number): void => {
+    setBuffered([[start, end]]);
+    seekable = createTimeRanges([[start, end]]);
+  };
+  const provider = createNativeProvider(media);
+  const patches = collectPatches(provider);
+  await provider.attach();
+
+  // The attach snapshot is what shows the element reached the live path at all
+  // — a normalized `null` duration alongside a derived `live`. Without it the
+  // assertion below would pass on any element that happens to slide.
+  expect(patches.at(-1)).toMatchObject({
+    duration: null,
+    live: { isLive: true }
+  });
+  patches.length = 0;
+
+  media.dispatchEvent(new Event('progress'));
+  slideTo(10, 40);
+  media.dispatchEvent(new Event('progress'));
+  slideTo(20, 50);
+  media.dispatchEvent(new Event('progress'));
+
+  expect(publishedBuffered(patches)).toEqual([
+    [{ start: 0, end: 30 }],
+    [{ start: 10, end: 40 }],
+    [{ start: 20, end: 50 }]
+  ]);
+});
+
+// `emptied` is the reset point: it fires from the media load algorithm, where
+// the buffer is gone rather than merely unreported.
+test('clears the published buffered on emptied', async () => {
+  const { media, setBuffered } = videoWithMutableBuffered([[0, 4]]);
+  const provider = createNativeProvider(media);
+  const patches = collectPatches(provider);
+  await provider.attach();
+  patches.length = 0;
+
+  setBuffered([]);
+  media.dispatchEvent(new Event('emptied'));
+
+  expect(publishedBuffered(patches)).toEqual([[]]);
+});
+
+// `attachment.load()` calls `media.load()`, so `emptied` fires on every
+// ordinary load. Announcing an empty buffered that was already empty is the
+// empty patch this adapter refuses everywhere else.
+test('stays silent on emptied when nothing non-empty was published', async () => {
+  const { media } = videoWithMutableBuffered([]);
+  const provider = createNativeProvider(media);
+  const patches = collectPatches(provider);
+  await provider.attach();
+  patches.length = 0;
+
+  media.dispatchEvent(new Event('emptied'));
+
+  expect(publishedBuffered(patches)).toEqual([]);
+});
+
+// `addListeners`/`removeListeners` mirror each other; an `emptied` listener
+// added to only one keeps the destroyed provider publishing off the element.
+test('native stops observing emptied after destroy', async () => {
+  const { media, setBuffered } = videoWithMutableBuffered([[0, 4]]);
+  vi.spyOn(media, 'load').mockImplementation(() => undefined);
+  const provider = createNativeProvider(media);
+  const patches = collectPatches(provider);
+  await provider.attach();
+  await provider.destroy();
+  patches.length = 0;
+
+  setBuffered([]);
+  media.dispatchEvent(new Event('emptied'));
+
+  expect(patches).toEqual([]);
+});
+
+// The reset on a source change carries no code of its own, and this is the
+// reason: the record belongs to the attachment, not to the element. A source
+// switch builds a new provider over the same media element, so the one that
+// follows retains nothing from the one before it and an empty reading from it
+// is the answer rather than a withheld key. A record hoisted anywhere wider
+// than the attachment factory would let the second provider inherit the
+// first's ranges and go silent here, with nothing else to catch it.
+test('gives a provider built after a swap a fresh buffered record', async () => {
+  const { media, setBuffered } = videoWithMutableBuffered([[0, 4]]);
+  const first = createNativeProvider(media);
+  const firstPatches = collectPatches(first);
+  await first.attach();
+  expect(publishedBuffered(firstPatches)).toEqual([[{ start: 0, end: 4 }]]);
+  await first.destroy();
+
+  setBuffered([]);
+  const second = createNativeProvider(media);
+  const secondPatches = collectPatches(second);
+  await second.attach();
+
+  expect(publishedBuffered(secondPatches)).toEqual([[]]);
+});
