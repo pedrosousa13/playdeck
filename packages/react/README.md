@@ -30,7 +30,11 @@ import * as Player from '@playdeck/react';
 export const Clip = () => (
   <Player.Root source="https://example.com/clip.mp4">
     <Player.Viewport>
-      <Player.Media />
+      <Player.Media
+        textTracks={[
+          { src: '/captions.en.vtt', srcLang: 'en', label: 'English' }
+        ]}
+      />
       <Player.Poster>
         <Player.PosterImage alt="" src="/poster.jpg" />
       </Player.Poster>
@@ -59,6 +63,14 @@ export const Clip = () => (
 `{ type: 'hls' | 'video' | 'youtube' | 'vimeo' | 'wistia', ... }` object. See
 [Provider setup](../../docs/provider-setup.md) for which URL forms each provider
 accepts, which it refuses, and what each provider's `providerOptions` are.
+
+`textTracks` is a prop on `Player.Media`, not on `Player.Root`. It takes an
+array of `{ src, srcLang, label, kind?, default? }`, where `kind` is
+`'captions'` or `'subtitles'` and `default` selects that track on load. Tracks
+you supply this way reach native playback and the HLS provider's native engine;
+everywhere else only the captions a provider discovers for itself are
+available. Selection, discovery and what `Player.Captions` renders are covered
+in [**Overview/Captions**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-captions--docs).
 
 Optional stylesheet with the default look:
 
