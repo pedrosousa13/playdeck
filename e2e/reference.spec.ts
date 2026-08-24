@@ -772,6 +772,134 @@ test('the seek slider stays operable by keyboard in both directions', async ({
     .toBe(0);
 });
 
+declare global {
+  interface Window {
+    // Installed by the mid-clip presses below, and their way back out.
+    playdeckSeekInputEvents?: number;
+    playdeckMediaSeeks?: number;
+  }
+}
+
+// #383, and the half of "operable by keyboard" the test above cannot reach: it
+// presses End from 0 and Home from the end, both of them positions the thumb
+// reaches under any step, so the press always had somewhere to go. From
+// mid-clip it did not. Measured on chromium, firefox and webkit alike with the
+// media parked at 0.6 on this ~1s clip: a whole-second step against a `[0, 1]`
+// window left the input two values it could keep, 0.6 rounded to the upper one,
+// and the input was therefore already at its maximum — so End moved nothing,
+// fired neither `input` nor `change`, and issued no seek. Nothing was swallowed
+// by the library; the press never became an event at all. Home below the
+// halfway mark was the mirror image, against the minimum.
+//
+// The step is derived from the window now (`min(1, span / 20)`, so 0.05 here),
+// which is what makes mid-clip a position the thumb can be at and the press one
+// with somewhere to go. An engine is the whole point: happy-dom neither
+// sanitises a range input's value nor implements its key handling, so whether a
+// press becomes an event is not a question the node suite can be asked.
+//
+// What these assert is that the press was issued as a seek, and NOT where the
+// playhead settles afterwards. They asserted the latter first, and CI WebKit
+// failed the End direction outright on all three attempts: `currentTime` read
+// `0` every time, while the input-event counter below passed on the same
+// attempts — so the press did become an event and did reach the player, and
+// only the playhead assertion failed. Local WebKit passes both directions. The
+// pre-existing `operable by keyboard` test above carries the identical
+// `toBeGreaterThanOrEqual(1)` after its own End press and went flaky on that
+// same CI run, so the assertion is fragile on this engine independently of
+// #383. This engine takes the WebM fixture and behaves differently across loads
+// for it (#401, measured above); `el.seekable` populating and playback running
+// through to `ended` are recorded there, so the seek window is not the variable.
+//
+// The `seeking` counter is the stronger statement, not the weaker one: it says
+// the media element acted on a seek, which is the criterion's own wording —
+// "issues a seek rather than producing no event at all" — and it holds wherever
+// the engine leaves the playhead.
+//
+// Park, check the thumb is where the media is, install both counters, press,
+// and assert the press became an input event and a seek. That is the whole of
+// what each direction has to show, so the tests below are one call each.
+const pressFromMidClip = async (
+  page: Page,
+  parkAt: number,
+  key: 'End' | 'Home'
+): Promise<void> => {
+  await page.goto(story);
+  await activationButton(page).click();
+  await played(page);
+
+  // Paused as well as parked, for the reason the tests above pause: a running
+  // 1.000s clip reaches the end on its own.
+  await media(page).evaluate((el: HTMLVideoElement, time: number) => {
+    el.pause();
+    el.currentTime = time;
+  }, parkAt);
+  // Approximate rather than an exact string, because the derived step is a
+  // function of a fixture duration this test does not pin. What it has to
+  // exclude is the defect: a thumb pinned to an end of the window, which
+  // `toBe('1')` and `toBe('0')` were the measured readings of.
+  await expect
+    .poll(() => seekSliderInput(page).inputValue().then(Number))
+    .toBeCloseTo(parkAt, 1);
+
+  await seekSliderInput(page).focus();
+  // Installed last, immediately before the press, and zeroing as it attaches.
+  // The parking assignment above raises a `seeking` of its own, and this is what
+  // keeps it out of the count: by here the thumb poll has seen the player
+  // publish the time the media reported for that seek, so it has already
+  // completed. Measured on the pre-#383 source with the poll removed, WebKit
+  // counted a stray `seeking` on the Home leg — with zero input events beside
+  // it, which is the shape of the parking seek and not of a press.
+  const installed = await page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    );
+    const el = document.querySelector<HTMLVideoElement>(
+      '[data-playdeck-part="media"]'
+    );
+    if (input === null || el === null) return false;
+    window.playdeckSeekInputEvents = 0;
+    window.playdeckMediaSeeks = 0;
+    const count = () => {
+      window.playdeckSeekInputEvents =
+        (window.playdeckSeekInputEvents ?? 0) + 1;
+    };
+    input.addEventListener('input', count);
+    input.addEventListener('change', count);
+    el.addEventListener('seeking', () => {
+      window.playdeckMediaSeeks = (window.playdeckMediaSeeks ?? 0) + 1;
+    });
+    return true;
+  });
+  // A counter that was never installed reads 0 below, which is the failure
+  // these tests are looking for. It has to be a failure of the press instead.
+  expect(installed).toBe(true);
+
+  await page.keyboard.press(key);
+
+  // The press became an event at all — the measurement's `0 input events, 0
+  // change events` is what this refuses...
+  await expect
+    .poll(() => page.evaluate(() => window.playdeckSeekInputEvents ?? 0))
+    .toBeGreaterThan(0);
+  // ...and the seek behind it reached the media element, which is the half a
+  // press that moved nothing could never produce.
+  await expect
+    .poll(() => page.evaluate(() => window.playdeckMediaSeeks ?? 0))
+    .toBeGreaterThan(0);
+};
+
+test('End from mid-clip seeks rather than landing on the value the thumb already holds', async ({
+  page
+}) => {
+  await pressFromMidClip(page, 0.6, 'End');
+});
+
+test('Home from mid-clip seeks rather than landing on the value the thumb already holds', async ({
+  page
+}) => {
+  await pressFromMidClip(page, 0.4, 'Home');
+});
+
 test('the volume slider stays operable by keyboard in both directions', async ({
   page
 }) => {

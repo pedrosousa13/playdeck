@@ -31,7 +31,9 @@ const meta = {
           '',
           '**Stalls** — `data-buffering` is a separate axis from `data-state`: it reports a stall, `data-state` reports whether a seek window exists. It is debounced (500ms before a stall is admitted, 500ms held once admitted) so a short rebuffer never twitches the slider; `state.buffering` remains the raw signal. The slider stays interactive during a stall — seeking away is how a user escapes one.',
           '',
-          '**Accessibility** — a range control; arrow keys seek. Inside a `Player.Controls` region the shortcut layer owns them, so `ArrowLeft`/`ArrowRight` seek 5s and `ArrowUp`/`ArrowDown` adjust the volume; on its own the input steps by its `step` of 1s on all four. `Home` and `End` stay native either way. In `data-state="idle"` it announces itself `aria-disabled` with an `aria-valuetext` of `Unavailable`. The buffered geometry stays `aria-hidden`; its text equivalent is `seek-buffered-description`, a visually hidden share of the seek window (`45% loaded`) referenced by `aria-describedby`. It is not a live region, and it is absent rather than zero wherever nothing is measured.',
+          '**Accessibility** — a range control; arrow keys seek. Inside a `Player.Controls` region the shortcut layer owns them, so `ArrowLeft`/`ArrowRight` seek 5s and `ArrowUp`/`ArrowDown` adjust the volume; on its own the input steps by its own `step` on all four. `Home` and `End` stay native either way. In `data-state="idle"` it announces itself `aria-disabled` with an `aria-valuetext` of `Unavailable`. The buffered geometry stays `aria-hidden`; its text equivalent is `seek-buffered-description`, a visually hidden share of the seek window (`45% loaded`) referenced by `aria-describedby`. It is not a live region, and it is absent rather than zero wherever nothing is measured.',
+          '',
+          '**Step** — the default is derived from the seek window: `min(1, span / 20)`, so twenty positions on a short clip and the same 1s it has always been on anything 20s or longer. A `step` through `inputProps` overrides it.',
           '',
           '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.',
           '',
@@ -222,8 +224,8 @@ export const CapabilityAbsent: Story = {
 };
 
 /**
- * A seek window short enough that the default 1s step can only express its two
- * ends — the ~1s reference clip is one — and a position between them.
+ * A seek window short enough that a 1s step could only express its two ends —
+ * the ~1s reference clip is one — showing a position between them.
  *
  * This runs in a real engine, and that is the whole reason it is a story rather
  * than a node test. A range input keeps only the values its `step` grid can
@@ -233,24 +235,35 @@ export const CapabilityAbsent: Story = {
  * cannot see that happen and a test written there to watch it would pass
  * against any implementation whatsoever.
  *
- * The two assertions are the input's view and the library's view of the same
- * value, and the point is that they agree. They used to not: the library
+ * Past the step it renders, the assertions are the input's view and the
+ * library's view of the same value, and the point is that they agree. They
+ * used to not: the library
  * rendered `0.6`, the engine kept `1`, and React's value tracker went on
  * holding `'0.6'` — so React would drop the next change event that landed on
  * `0.6`, and the press behind it issued no seek at all while every other signal
  * said it had been seen (#277).
  *
- * What it does NOT do is give the control more positions. A window this short
- * still has only the two, so a press asking for the end while the thumb is
- * already there moves nothing and seeks nowhere on every engine, and the
- * valuetext below reads `0:01` for the whole second half of the clip. That is
- * #383, and it needs a decision about the step rather than about the value.
+ * The value they agree on is now `0.6` rather than `1`. The step is derived
+ * from the window — `min(1, span / 20)`, so 0.05 here — and a window this short
+ * has twenty positions instead of two (#383). Before that, the thumb sat hard
+ * right and the valuetext read `0:01 of 0:01` for the whole second half of the
+ * clip; the read-out still describes the thumb rather than the media, and the
+ * thumb is now where the media is.
  */
-export const ShortWindowSnapsToItsStep: Story = {
+export const ShortWindowDerivesItsStep: Story = {
   parameters: ready({ seek: available }, { currentTime: 0.6, duration: 1 }),
   play: async ({ canvas }) => {
     const slider = await canvas.findByRole('slider', { name: 'Seek' });
-    await expect((slider as HTMLInputElement).value).toBe('1');
-    await expect(slider).toHaveAttribute('aria-valuetext', '0:01 of 0:01');
+    await expect(slider).toHaveAttribute('step', '0.05');
+    await expect((slider as HTMLInputElement).value).toBe('0.6');
+    await expect(slider).toHaveAttribute('aria-valuetext', '0:00 of 0:01');
   }
 };
+
+// A `Home` or `End` press from mid-clip is the other half of #383 — whether the
+// press becomes an event at all — and it cannot be staged here. Storybook's
+// `userEvent` simulates events in the document rather than driving the engine's
+// own input, so a range input's native `End` handling is not exercised: it
+// refuses the press outright ("Not implemented. The result of this interaction
+// is unreliable."). Those tests live in Playwright, over this same window, in
+// `e2e/reference.spec.ts`.

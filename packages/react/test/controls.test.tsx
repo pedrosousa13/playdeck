@@ -1332,7 +1332,7 @@ describe('SeekSlider', () => {
 // the string the library hands the input is already one the grid can express,
 // and the valuetext read out beside it agrees with it. The other half -- that
 // the string then survives a real input untouched, leaving the tracker in sync
-// -- needs an engine, and is pinned by `ShortWindowSnapsToItsStep` in
+// -- needs an engine, and is pinned by `ShortWindowDerivesItsStep` in
 // `apps/storybook/stories/seek-slider.stories.tsx`, whose play function runs in
 // chromium.
 describe('slider values are snapped onto the step grid they render with', () => {
@@ -1343,32 +1343,27 @@ describe('slider values are snapped onto the step grid they render with', () => 
     ...patch
   });
 
-  // The reference clip is ~1s and the default step is 1s, which leaves the seek
-  // input two values it can express. Nothing else in the suite runs a window
-  // that short, and it is where this was measured.
-  test('a fractional time past the halfway mark renders as the window end', () => {
-    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.6 }));
+  // The reference clip is ~1s, and the step it renders is derived from that
+  // window: `min(1, span / 20)`, so 0.05 here (#383). Nothing else in the
+  // suite runs a window that short, and it is where this was measured.
+  test('a time off the derived grid renders on it', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.6042 }));
     const slider = screen.getByRole('slider', { name: 'Seek' });
-    expect((slider as HTMLInputElement).value).toBe('1');
-    // And the valuetext is the thumb's position, not the media's: reading
-    // `0:00` here while the thumb sits hard right is the mismatch VolumeSlider's
-    // percentage has always been careful to avoid.
-    expect(attr(slider, 'aria-valuetext')).toBe('0:01 of 0:01');
-  });
-
-  test('a fractional time below the halfway mark renders as the window start', () => {
-    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.4 }));
-    const slider = screen.getByRole('slider', { name: 'Seek' });
-    expect((slider as HTMLInputElement).value).toBe('0');
+    expect((slider as HTMLInputElement).value).toBe('0.6');
+    // And the valuetext is the thumb's position, not the media's, which is the
+    // mismatch VolumeSlider's percentage has always been careful to avoid. On
+    // this grid the two are hundredths of a second apart and floor alike;
+    // before the step was derived the thumb was snapped to the end of the
+    // window and this read `0:01 of 0:01` for the whole second half of the clip.
     expect(attr(slider, 'aria-valuetext')).toBe('0:00 of 0:01');
   });
 
   // Ties go to the higher value, which is what the sanitisation algorithm does.
   test('a time exactly between two steps rounds up', () => {
-    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.5 }));
+    renderWithPlayer(<Player.SeekSlider />, seekReady({ currentTime: 0.625 }));
     expect(
       (screen.getByRole('slider', { name: 'Seek' }) as HTMLInputElement).value
-    ).toBe('1');
+    ).toBe('0.65');
   });
 
   test('a consumer step is the grid, not the default one', () => {
@@ -1408,19 +1403,24 @@ describe('slider values are snapped onto the step grid they render with', () => 
     );
     const slider = screen.getByRole('slider', { name: 'Seek' });
     expect(attr(slider, 'min')).toBe('12.3');
-    expect((slider as HTMLInputElement).value).toBe('14.3');
+    // The window spans 8s, so it steps by 0.4: 13.9 is `12.3 + 4 * 0.4`. A grid
+    // on the multiples of the step instead would land on 14.
+    expect((slider as HTMLInputElement).value).toBe('13.9');
   });
 
-  // The last stop short of the maximum, rather than a step past it: 1.6 is
-  // nearer to 2 than to 1, and 2 is outside the window.
+  // The last stop short of the maximum, rather than a step past it: 100.6 is
+  // nearer to 101 than to 100, and 101 is outside the window. It takes a window
+  // long enough to keep the one-second step to reach this at all — the derived
+  // step is the span divided by twenty, which by construction reaches the
+  // end of the window it was derived from.
   test('a window the grid cannot reach the end of stops at its last step', () => {
     renderWithPlayer(
       <Player.SeekSlider />,
-      seekReady({ duration: 1.6, currentTime: 1.6 })
+      seekReady({ duration: 100.6, currentTime: 100.6 })
     );
     expect(
       (screen.getByRole('slider', { name: 'Seek' }) as HTMLInputElement).value
-    ).toBe('1');
+    ).toBe('100');
   });
 
   test('a published volume off the 0.05 grid renders on it', () => {
@@ -1471,6 +1471,236 @@ describe('slider values are snapped onto the step grid they render with', () => 
     const slider = screen.getByRole('slider', { name: 'Volume' });
     expect(attr(slider, 'step')).toBe('0.25');
     expect((slider as HTMLInputElement).value).toBe('0.5');
+  });
+});
+
+// The seek slider's step is a default derived from the window it renders --
+// `min(1, span / 20)` -- rather than a fixed second. Any window of 20s or more
+// divides to at least a second, so every normal-length clip keeps exactly the
+// grid it always had and only a window short enough for a second to be coarse
+// gets a finer one. The echo tolerance is half of whichever step is in force,
+// which on those same normal-length clips is the half-second it always was
+// (#383).
+//
+// The divisor is what bounds how far the tolerance can move, and that is what
+// chose it: the tolerance absorbs provider behaviour -- a seek landing on the
+// nearest keyframe, an iframe bridge reporting time back quantised -- and a
+// tolerance below a provider's own reporting precision reads a correct seek as
+// unanswered and holds the preview for the whole `ECHO_DEADLINE_MS`. Twenty
+// keeps every clip of 20s or more on exactly the bound the old constant had,
+// so only a genuinely short window is exposed to a tighter one at all.
+describe('the seek step is derived from the window it renders', () => {
+  const seekReady = (
+    duration: number | null,
+    patch: ProviderStatePatch = {}
+  ): ProviderStatePatch => ({
+    ...capabilities({ seek: available }),
+    duration,
+    currentTime: 0,
+    ...patch
+  });
+
+  const seekSlider = (): HTMLInputElement =>
+    screen.getByRole('slider', { name: 'Seek' }) as HTMLInputElement;
+
+  test('a window around a second long offers twenty steps, not one', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady(1));
+    const slider = seekSlider();
+    expect(attr(slider, 'step')).toBe('0.05');
+    // The measurement the issue is about, counted in steps across the window
+    // rather than in values the input can hold — one more than this, since both
+    // ends count. A whole-second step left this window a single step: the two
+    // ends and nothing between them, so no press in between could be expressed.
+    const steps =
+      (Number(attr(slider, 'max')) - Number(attr(slider, 'min'))) /
+      Number(attr(slider, 'step'));
+    expect(steps).toBe(20);
+  });
+
+  test('the thumb tracks a short window instead of jumping at its halfway mark', () => {
+    const { emit } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady(1, { currentTime: 0.25 })
+    );
+    const slider = seekSlider();
+    expect(slider.value).toBe('0.25');
+    // The two sides of the halfway mark, which a whole-second step rendered as
+    // the two ends of the window.
+    emit({ currentTime: 0.45 });
+    expect(slider.value).toBe('0.45');
+    emit({ currentTime: 0.55 });
+    expect(slider.value).toBe('0.55');
+    emit({ currentTime: 0.95 });
+    expect(slider.value).toBe('0.95');
+  });
+
+  // Pointer scrubbing is what the step actually governs (ADR-0005), so the
+  // criterion is that it is never made coarser. It is met by construction
+  // rather than by measurement: at a span of 20 the derivation is exactly 1,
+  // and the cap holds it there for every longer window.
+  test('a clip long enough for a second to be fine keeps the second it had', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady(20));
+    expect(attr(seekSlider(), 'step')).toBe('1');
+    cleanup();
+    renderWithPlayer(<Player.SeekSlider />, seekReady(3600));
+    expect(attr(seekSlider(), 'step')).toBe('1');
+  });
+
+  test('a window that has not arrived yet steps by a second rather than by nothing', () => {
+    renderWithPlayer(<Player.SeekSlider />, seekReady(null, { seekable: [] }));
+    const slider = seekSlider();
+    expect(attr(slider, 'step')).toBe('1');
+    expect(attr(slider, 'aria-valuetext')).toBe('Unavailable');
+  });
+
+  // What Safari publishes for a live HLS stream. An infinite span reaches the
+  // second by the cap rather than by the fallback -- `Infinity / 20` is
+  // `Infinity` and `Math.min(1, Infinity)` is 1 -- which is the same answer the
+  // longest finite window gets, and the right one: there is no extent to divide.
+  test('an infinite duration steps by a second rather than by infinity', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady(Number.POSITIVE_INFINITY, { currentTime: 30 })
+    );
+    const slider = seekSlider();
+    expect(attr(slider, 'step')).toBe('1');
+    expect(slider.value).toBe('30');
+  });
+
+  test('a live DVR window derives its step from the extent it can scrub', () => {
+    renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady(null, {
+        currentTime: 24,
+        seekable: [{ start: 20, end: 30 }]
+      })
+    );
+    expect(attr(seekSlider(), 'step')).toBe('0.5');
+  });
+
+  test('a seek that lands visibly wrong on a short window has not answered it', async () => {
+    const { emit } = renderWithPlayer(<Player.SeekSlider />, seekReady(1));
+    const slider = seekSlider();
+
+    fireEvent.change(slider, { target: { value: '0.5' } });
+    await act(async () => {});
+    // A fifth of the whole clip away from what was asked for. Under the fixed
+    // half-second this answered the request, released the preview and showed
+    // the media's position as though the user had chosen it.
+    emit({ currentTime: 0.3 });
+    expect(slider.value).toBe('0.5');
+  });
+
+  test('a seek that lands within half a step on a short window answers it', async () => {
+    const { emit } = renderWithPlayer(<Player.SeekSlider />, seekReady(1));
+    const slider = seekSlider();
+
+    fireEvent.change(slider, { target: { value: '0.5' } });
+    await act(async () => {});
+    // Within 0.025 of what was asked for, which is half of this window's 0.05
+    // step: near enough to be the provider answering rather than missing.
+    emit({ currentTime: 0.52 });
+    expect(slider.value).toBe('0.5');
+    // Released, and not merely showing the same number: playback runs on and
+    // the thumb goes with it.
+    emit({ currentTime: 0.7 });
+    expect(slider.value).toBe('0.7');
+  });
+
+  test('a long clip does not widen its tolerance with its window', async () => {
+    const { emit } = renderWithPlayer(<Player.SeekSlider />, seekReady(3600));
+    const slider = seekSlider();
+
+    fireEvent.change(slider, { target: { value: '1800' } });
+    await act(async () => {});
+    // 0.6s out: past the half-second this tolerance has always been, and it
+    // must stay past it however long the clip is.
+    emit({ currentTime: 1800.6 });
+    emit({ currentTime: 1900 });
+    expect(slider.value).toBe('1800');
+  });
+
+  test('a consumer step drives the echo tolerance, not the derived one', async () => {
+    const { emit } = renderWithPlayer(
+      <Player.SeekSlider inputProps={{ step: 0.1 }} />,
+      seekReady(100, { currentTime: 30 })
+    );
+    const slider = seekSlider();
+
+    fireEvent.change(slider, { target: { value: '75' } });
+    await act(async () => {});
+    // Half of the consumer's tenth-second step is 0.05, so 0.4s out answers
+    // nothing -- where half of the derived second would have called it
+    // answered and reverted the thumb.
+    emit({ currentTime: 75.4 });
+    expect(slider.value).toBe('75');
+  });
+
+  // Time formatting floors, and it describes the thumb rather than the media --
+  // the deliberate policy the volume percentage shares, and out of scope here.
+  // A finer step moves the thumb onto the media's own position, so the read-out
+  // now floors that instead of the end of the window it was snapped to.
+  test('the read-out floors the finer thumb position across a short window', () => {
+    const { emit } = renderWithPlayer(
+      <Player.SeekSlider />,
+      seekReady(1, { currentTime: 0.6 })
+    );
+    const slider = seekSlider();
+    expect(attr(slider, 'aria-valuetext')).toBe('0:00 of 0:01');
+    // Still the clip's first second at 0.97, where a whole-second step had been
+    // announcing its last one since 0.5. The thumb turns over to the end of the
+    // window half a step out, at 0.975.
+    emit({ currentTime: 0.97 });
+    expect(attr(slider, 'aria-valuetext')).toBe('0:00 of 0:01');
+    emit({ currentTime: 1 });
+    expect(attr(slider, 'aria-valuetext')).toBe('0:01 of 0:01');
+  });
+
+  // ADR-0005 states the arrow distance as a fixed distance through `seekBy`,
+  // and a derived step must not reach it. The 100s clip is covered by the
+  // shortcut suite below; this is the clip whose step is now a twentieth of
+  // what it was.
+  test('the arrow seek distance is five seconds on a one-second clip too', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.SeekSlider />
+      </Player.Controls>,
+      seekReady(1)
+    );
+    const input = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    )!;
+    input.focus();
+
+    // `fireEvent` returns false for an event whose default was prevented,
+    // which is the layer owning the key rather than the input stepping.
+    expect(fireEvent.keyDown(input, { key: 'ArrowRight' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenCalledWith(5);
+  });
+
+  // The capability-gated fallback ADR-0005 describes -- gating runs before the
+  // default is prevented, so an unavailable `seek` leaves the arrows to step a
+  // focused range input natively. It cannot reach this control on any clip
+  // length: the same capability gates the control out of the tree entirely, so
+  // there is no seek input left to step.
+  test('an unavailable seek capability leaves no seek input for the arrows to step', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.SeekSlider />
+      </Player.Controls>,
+      { ...capabilities({ seek: unavailable }), duration: 1, currentTime: 0 }
+    );
+    expect(
+      container.querySelector('[data-playdeck-part="seek-slider-input"]')
+    ).toBeNull();
+
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    region.focus();
+    // Left to the page, and there is nothing of ours for it to land on.
+    expect(fireEvent.keyDown(region, { key: 'ArrowRight' })).toBe(true);
+    expect(spies.seekBy).not.toHaveBeenCalled();
   });
 });
 
