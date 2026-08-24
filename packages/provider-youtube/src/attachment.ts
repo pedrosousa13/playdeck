@@ -177,6 +177,9 @@ export const createYouTubeAttachment = (
         // moment a command lands (#69).
         commandsReady: true,
         currentTime,
+        // Whole-second, and knowingly so: the exact duration arrives later and
+        // is republished by the PLAYING branch of `onPlayerStateChange`, whose
+        // comment carries the measurement behind both publishes.
         duration: Number.isFinite(duration) && duration > 0 ? duration : null,
         muted,
         volume,

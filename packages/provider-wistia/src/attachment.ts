@@ -587,6 +587,30 @@ export const createWistiaAttachment = (
       activeApi = api;
       wireEvents(element, api, thisGeneration);
       emitDimensions(api.videoWidth(), api.videoHeight());
+      // Settled before this read can happen, so the single publisher it looks
+      // like is not the latch it looks like. Wistia fetches the media JSON
+      // carrying the duration before the embed initialises, and the value is
+      // final by `embedded` — earlier than `api-ready`, which is the first
+      // moment this adapter holds an API to read it from. Measured August 2026
+      // over 4 loads of 4 VOD medias (115.434s, 126.459s, 74.4896s and
+      // 20.2703s), 45 seconds each, by hooking `EventTarget.prototype`'s
+      // `dispatchEvent` to catch every event the element dispatches — 19
+      // distinct names — reading `duration()` on each and polling at 250ms
+      // besides. Every load showed exactly two duration transitions, `null`
+      // then the final value, and no revision after it (#403). So on that path
+      // `loaded-metadata` is a no-op republish rather than a correction: it
+      // rebuilds `seekable` from the same formula `adopt` already applied to
+      // the same number, making its patch identical to the one spread in here.
+      // It stays because it is the one publisher positioned to carry a
+      // revision if one ever arrived.
+      //
+      // Two residuals, both worth a reader's suspicion. Four loads bound the
+      // VOD case rather than the API: no revision was observed, which is not
+      // the same as Wistia being unable to issue one. And Wistia LiveStream
+      // was NOT measured at all, so live is an unanswered question here rather
+      // than a negative result — and it is the case that would matter, since a
+      // duration growing toward a live edge is precisely what a read taken
+      // once at ready cannot follow.
       const duration = api.duration();
       const playbackPatch = playback.adopt(api, {
         duration: Number.isFinite(duration) && duration > 0 ? duration : null,
