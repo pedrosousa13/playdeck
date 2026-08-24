@@ -2,7 +2,8 @@ import type {
   MediaDimensions,
   PlayerCapabilities,
   PlayerLiveState,
-  ProviderStatePatch
+  ProviderStatePatch,
+  TimeRange
 } from '@playdeck/core';
 import { deriveLiveState, liveStateEqual, notifySafely } from '@playdeck/core';
 import {
@@ -127,6 +128,34 @@ export const createNativeAttachment = (
   // statements dispatches a media event.
   let lastDuration: number | null | undefined;
 
+  // The buffered ranges last put on the wire, so an empty reading can be told
+  // from an empty buffer. An element reporting no ranges is saying one of two
+  // things it has no way to distinguish — "nothing is buffered" and "not
+  // telling you" — and WebKit says the second: on the repo's ~1s tracer clip
+  // its buffered window opens while it parses and closes again when parsing
+  // finishes, with the data plainly still there, so a `progress` reading empty
+  // took an already-rendered indicator back off the DOM and walked
+  // `PlayerState.buffered` back below what the player had been told (#401,
+  // #405). Within one attachment an empty reading is therefore treated as
+  // unknown and its key withheld, which `#applyPatch` resolves by retaining
+  // what it already holds. Withheld rather than ignored outright, and scoped to
+  // one source with an explicit reset point below, because eviction is real —
+  // on another engine an empty reading genuinely can mean none.
+  //
+  // Starts at `[]`, the value `createInitialPlayerState()` holds, so the record
+  // mirrors the controller from before the first patch.
+  let lastBuffered: ReadonlyArray<TimeRange> = [];
+
+  // The `buffered` key for an outgoing patch, or no key at all. Every publisher
+  // of `buffered` goes through this; nothing else may read `media.buffered`
+  // onto the wire.
+  const syncBuffered = (): { buffered?: ReadonlyArray<TimeRange> } => {
+    const buffered = toRanges(media.buffered);
+    if (buffered.length === 0 && lastBuffered.length > 0) return {};
+    lastBuffered = buffered;
+    return { buffered };
+  };
+
   const emitMediaState = (originalEvent?: Event): void => {
     lastDuration = publishedDuration();
     emit(
@@ -136,7 +165,7 @@ export const createNativeAttachment = (
           media.readyState >= HAVE_METADATA ? 'ready' : 'loading-provider',
         currentTime: media.currentTime,
         duration: lastDuration,
-        buffered: toRanges(media.buffered),
+        ...syncBuffered(),
         seekable: toRanges(media.seekable),
         muted: media.muted,
         volume: media.volume,
@@ -233,13 +262,35 @@ export const createNativeAttachment = (
     lastDuration = duration;
     emit(syncLive({ duration }));
   };
+  // `seekable` on every one of these, withheld or not: only `buffered` carries
+  // the ambiguity, and `progress` is the event that reports the window moving.
   const onProgress = (): void =>
     emit(
       syncLive({
-        buffered: toRanges(media.buffered),
+        ...syncBuffered(),
         seekable: toRanges(media.seekable)
       })
     );
+  // The one point inside an attachment where an empty buffer is news rather
+  // than silence. `emptied` fires from the media load algorithm, which empties
+  // the element's buffer as it runs, so here the ranges are gone rather than
+  // merely unreported and the retained value has to go with them. A seek is not
+  // such a point and deliberately has no branch here: measured across chromium,
+  // firefox and webkit on a throttled 600 s clip, `buffered` never read empty
+  // after a seek — the engines kept the old ranges verbatim and added a
+  // disjoint one at the target, and seeking back into a retained range was
+  // served with no network traffic at all, so a seek-based clear would discard
+  // data that is still true (#405).
+  //
+  // Silent when the record was already empty, the rule `onDurationChange` and
+  // `emitLiveUpdate` follow: `load()` calls `media.load()`, so every ordinary
+  // load fires this, and a patch restating a value that never moved is the
+  // empty patch the review of #361 refused.
+  const onEmptied = (): void => {
+    if (lastBuffered.length === 0) return;
+    lastBuffered = [];
+    emit({ buffered: [] });
+  };
   const onVolumeChange = (originalEvent: Event): void =>
     emit(
       { muted: media.muted, volume: media.volume },
@@ -270,6 +321,7 @@ export const createNativeAttachment = (
     media.addEventListener('seeked', onSeeked);
     media.addEventListener('timeupdate', onTimeUpdate);
     media.addEventListener('progress', onProgress);
+    media.addEventListener('emptied', onEmptied);
     media.addEventListener('volumechange', onVolumeChange);
     media.addEventListener('ratechange', onRateChange);
     media.addEventListener('error', onError);
@@ -302,6 +354,7 @@ export const createNativeAttachment = (
     media.removeEventListener('seeked', onSeeked);
     media.removeEventListener('timeupdate', onTimeUpdate);
     media.removeEventListener('progress', onProgress);
+    media.removeEventListener('emptied', onEmptied);
     media.removeEventListener('volumechange', onVolumeChange);
     media.removeEventListener('ratechange', onRateChange);
     media.removeEventListener('error', onError);

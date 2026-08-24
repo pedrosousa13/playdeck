@@ -167,6 +167,24 @@ The source whose media element may mount, because its activation identity
 matches the one activation committed to.
 _Avoid_: eligible media
 
+**Buffered window**:
+What `PlayerState.buffered` reports — the ranges a provider has said are
+loaded, and deliberately not an instantaneous mirror of what its media element
+reads. An element reporting no ranges is saying one of two things it cannot
+distinguish, "nothing is buffered" and "not telling you", and engines say the
+second: WebKit opens a window while it parses the reference clip and closes it
+again when parsing finishes, with the data plainly still there. So within one
+source an empty reading is treated as _unknown_ rather than _none_, and the
+last non-empty ranges stand (#401, #405). Reset only where an empty buffer is
+news — the media load algorithm running, which fires `emptied`, and the source
+changing, which builds a new provider over state rebuilt from scratch. A seek
+is not such a point: every engine measured keeps its ranges across one and
+serves a seek back into them without touching the network, so clearing there
+would discard ranges that are still true. A window that merely moves — a DVR
+window dropping ranges off its start — is non-empty at every step and is
+published like any other reading.
+_Avoid_: buffer, buffer level, download progress
+
 **Recovered autoplay**:
 Playback that started only because the audible attempt was refused by policy and
 the muted retry behind it played. Reported next to the `started` autoplay a
