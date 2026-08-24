@@ -9,8 +9,19 @@ the test origin.
 ## Commands
 
 - `pnpm dev` — workbench at `http://localhost:6006`.
-- `pnpm build` — static build (also part of the root `pnpm build`).
+- `pnpm build` — static build (also part of the root `pnpm build`). This is
+  what `.github/workflows/pages.yml` publishes from `main` to
+  [pedrosousa13.github.io/playdeck](https://pedrosousa13.github.io/playdeck/).
 - `pnpm test` — run every story as a browser test (root: `pnpm test:storybook`).
+
+A GitHub Pages project site is served from `/playdeck/`, not from `/`, so the
+deploy sets `PLAYDECK_BASE_PATH` and the fixtures under `public/` are addressed
+through `stories/asset-url.ts` rather than by a root-absolute literal. To
+reproduce the hosted build locally:
+
+```sh
+PLAYDECK_BASE_PATH=/playdeck/ pnpm build
+```
 
 ## Story conventions
 

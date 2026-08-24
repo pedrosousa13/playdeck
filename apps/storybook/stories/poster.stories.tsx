@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { ReactNode } from 'react';
 import { withCss } from '../.storybook/theme';
+import { assetUrl } from './asset-url';
 // The stylesheet the Styled story mounts, read as text so the same string is
 // both what renders and what the docs block below prints. `?raw` and not
 // `?inline` for the reason spelled out in play-button.stories.tsx: a production
@@ -66,7 +67,7 @@ export const Styled: Story = {
   render: () => (
     <Frame>
       <Player.Poster>
-        <Player.PosterImage src="/poster.svg" />
+        <Player.PosterImage src={assetUrl('poster.svg')} />
       </Player.Poster>
     </Frame>
   ),

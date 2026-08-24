@@ -1,11 +1,12 @@
 import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
+import { assetUrl } from './asset-url';
 
 const Stage = ({ children }: { readonly children: ReactNode }) => (
   <Player.Viewport style={{ width: 640, height: 360, background: '#0b0e13' }}>
     <Player.Poster>
-      <Player.PosterImage src="/poster.svg" />
+      <Player.PosterImage src={assetUrl('poster.svg')} />
     </Player.Poster>
     {children}
     <Player.ActivationButton aria-label="Load and play" />
@@ -19,7 +20,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`). Click the activation overlay to load. HLS/live/native are local fixtures; YouTube, Vimeo and Wistia hit the network.'
+          'Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`). Click the activation overlay to load. HLS/live/native are local fixtures; YouTube, Vimeo and Wistia hit the network. **Live HLS is the exception on the published workbench:** its playlist is synthesized by a dev-server plugin rather than served as a file, so that story loads only when you run the workbench yourself.'
       }
     }
   }
@@ -31,7 +32,7 @@ type Story = StoryObj;
 
 export const NativeMp4: Story = {
   render: () => (
-    <Player.Root loading="interaction" source="/tracer.mp4">
+    <Player.Root loading="interaction" source={assetUrl('tracer.mp4')}>
       <Stage>
         <Player.Media />
       </Stage>
@@ -43,7 +44,11 @@ export const HlsVodNative: Story = {
   render: () => (
     <Player.Root
       loading="interaction"
-      source={{ type: 'hls', src: '/hls/master.m3u8', engine: 'native' }}
+      source={{
+        type: 'hls',
+        src: assetUrl('hls/master.m3u8'),
+        engine: 'native'
+      }}
     >
       <Stage>
         <Player.Media />
@@ -56,7 +61,11 @@ export const HlsVodHlsJs: Story = {
   render: () => (
     <Player.Root
       loading="interaction"
-      source={{ type: 'hls', src: '/hls/master.m3u8', engine: 'hls.js' }}
+      source={{
+        type: 'hls',
+        src: assetUrl('hls/master.m3u8'),
+        engine: 'hls.js'
+      }}
     >
       <Stage>
         <Player.Media />
@@ -65,11 +74,23 @@ export const HlsVodHlsJs: Story = {
   )
 };
 
+// The only fixture here that a server has to synthesize rather than serve:
+// `.storybook/live-playlist-plugin.ts` answers `/live/index.m3u8` from
+// `configureServer` and `configurePreviewServer`, so it exists on the dev
+// server and under `storybook preview` and is absent from a static build. This
+// story therefore cannot load on the published workbench, which is a static
+// build (#435). It is left pointing at the same path rather than given a
+// stand-in, because a recorded playlist would not be live and the story exists
+// to exercise a moving window.
 export const LiveHls: Story = {
   render: () => (
     <Player.Root
       loading="interaction"
-      source={{ type: 'hls', src: '/live/index.m3u8', engine: 'hls.js' }}
+      source={{
+        type: 'hls',
+        src: assetUrl('live/index.m3u8'),
+        engine: 'hls.js'
+      }}
     >
       <Stage>
         <Player.Media />

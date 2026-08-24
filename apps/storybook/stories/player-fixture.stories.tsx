@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { assetUrl } from './asset-url';
 
 declare global {
   interface Window {
@@ -223,7 +224,7 @@ const LiveControls = () => {
 
 const captionTextTracks: Player.MediaProps['textTracks'] = [
   {
-    src: '/captions-en.vtt',
+    src: assetUrl('captions-en.vtt'),
     srcLang: 'en',
     label: 'English',
     kind: 'captions',
@@ -270,9 +271,9 @@ const PlayerFixture = ({
 
   const initialSource: Player.RootProps['source'] =
     sourceKey === 'hls'
-      ? { type: 'hls', src: '/hls/master.m3u8', engine: hlsEngine }
+      ? { type: 'hls', src: assetUrl('hls/master.m3u8'), engine: hlsEngine }
       : sourceKey === 'live'
-        ? { type: 'hls', src: '/live/index.m3u8', engine: hlsEngine }
+        ? { type: 'hls', src: assetUrl('live/index.m3u8'), engine: hlsEngine }
         : (vimeoSource ??
           (sourceChange
             ? 'https://provider.invalid/source-a.mp4'
@@ -280,7 +281,7 @@ const PlayerFixture = ({
               ? 'https://provider.invalid/tracer.mp4'
               : activationSource === 'youtube'
                 ? youtubeExampleUrl
-                : '/tracer.mp4'));
+                : assetUrl('tracer.mp4')));
 
   const replacementSource = sourceChange
     ? 'https://provider.invalid/source-b.mp4'
@@ -303,7 +304,11 @@ const PlayerFixture = ({
           title: 'Playdeck tracer',
           artist: 'Playdeck',
           artwork: [
-            { src: '/poster.svg', sizes: '1280x720', type: 'image/svg+xml' }
+            {
+              src: assetUrl('poster.svg'),
+              sizes: '1280x720',
+              type: 'image/svg+xml'
+            }
           ]
         }}
         preload={preload}
@@ -338,8 +343,8 @@ const PlayerFixture = ({
               loading="eager"
               objectPosition="30% 40%"
               sizes="(max-width: 48rem) 100vw, 48rem"
-              src="/poster.svg"
-              srcSet="/poster.svg 640w, /poster.svg 1280w"
+              src={assetUrl('poster.svg')}
+              srcSet={`${assetUrl('poster.svg')} 640w, ${assetUrl('poster.svg')} 1280w`}
               width={1280}
             />
           </Player.Poster>

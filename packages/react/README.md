@@ -13,6 +13,13 @@ React 19 is a peer dependency. Provider packages are pulled in as dependencies
 but loaded lazily — a consumer playing only MP4 ships no YouTube, Vimeo, Wistia
 or hls.js code in its initial graph, and makes no provider network requests.
 
+Every primitive below is staged, running, in the Storybook workbench at
+[pedrosousa13.github.io/playdeck](https://pedrosousa13.github.io/playdeck/). That is
+where the full styling
+contract ([**Overview/Contract**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-contract--docs))
+and the caption guidance ([**Overview/Captions**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-captions--docs))
+live.
+
 ## Usage
 
 <!-- example:react-composition -->
@@ -335,7 +342,7 @@ derived state) and, on provider-bound controls, `data-provider`. Style and query
 against those rather than internal class names. Geometry a primitive sets on
 itself is a default your `style` prop overrides; state-derived properties are
 the primitive's own. The full contract is in the workbench docs under
-**Overview/Contract**.
+[**Overview/Contract**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-contract--docs).
 
 ## Browser support
 

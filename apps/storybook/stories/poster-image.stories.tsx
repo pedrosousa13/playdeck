@@ -2,6 +2,7 @@ import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { ReactNode } from 'react';
+import { assetUrl } from './asset-url';
 
 const Frame = ({ children }: { readonly children: ReactNode }) => (
   <Player.Viewport style={{ width: 480, height: 270, background: '#0b0e13' }}>
@@ -81,7 +82,7 @@ export const Loaded: Story = {
   render: () => (
     <Frame>
       <Player.Poster>
-        <Player.PosterImage src="/poster.svg" />
+        <Player.PosterImage src={assetUrl('poster.svg')} />
       </Player.Poster>
     </Frame>
   ),
