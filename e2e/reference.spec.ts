@@ -563,9 +563,9 @@ test('both range controls carry the composition own presentation', async ({
 // `Expected: 0 / Received: 1` — which is where the timings above were measured.
 // The later webkit flake, at the seek End with `Expected: >= 1 / Received: 0`,
 // has the same shape: a gesture that left the media element where it was.
-// Its mechanism is NOT measured here — WebKit does not run on the maintainer's
-// machine (it fails at `played()` on clean main), so that one was never
-// reproduced.
+// Its mechanism is NOT measured here — that flake was never reproduced, so the
+// shape above is read across from the chromium diagnosis rather than measured
+// on WebKit.
 //
 // A single `toHaveValue` sample cannot rule the window out, because the sample
 // can land before the stale restore does. So no gesture below rests on one
