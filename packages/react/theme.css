@@ -9,9 +9,9 @@
  *      cascade layer whatever its specificity, so your own rules win by
  *      default — no `!important`, no ordering games.
  *   2. Every selector is wrapped in `:where()`, which contributes zero
- *      specificity. A single class of your own outranks any rule below. Four
- *      rules cannot reach zero: the slider thumb's ring needs pseudo-elements
- *      (one on Blink and WebKit, three on Gecko), and Selectors 4 forbids one
+ *      specificity. A single class of your own outranks any rule below. Six
+ *      rules cannot reach zero: a range input's thumb, track and progress fill
+ *      are reachable only through pseudo-elements, and Selectors 4 forbids one
  *      inside `:where()`, so those rules carry the pseudo-element's own
  *      (0,0,1). A class still outranks them, and rule 1 still decides it either
  *      way.
@@ -275,7 +275,10 @@
    * ratios and `e2e/thumb-contrast.spec.ts` measures the painted pixels.
    *
    * Blink and WebKit: `outline` rather than `box-shadow`, which WebKit ignores
-   * here, and no `appearance: none`, which would unpaint the whole control.
+   * here.
+   *
+   * The volume slider keeps this. The seek slider drops the native widget below
+   * and rings its thumb with a border, so its `outline: none` takes it back off.
    */
   :where(
     [data-playdeck-part='seek-slider-input'],
@@ -353,6 +356,44 @@
       border: 2px solid var(--playdeck-color-thumb-ring, #000);
       border-radius: 50%;
       background-color: var(--playdeck-color-accent, #3ea6ff);
+    }
+
+    /* `seek-buffered` is positioned and paints over the input; `position:
+     * relative` fixes that, and then the engine's own track hides the loaded
+     * range instead. Only `appearance: none` stops that track painting (#415),
+     * at the cost of the native thumb — redrawn below — and of `accent-color`'s
+     * progress fill, which has no pseudo-element on Blink or WebKit: hence
+     * `seek-progress` as an element. Held out of forced colors like the three
+     * rules above; the volume slider keeps the native widget. */
+    :where([data-playdeck-part='seek-slider-input']) {
+      position: relative;
+      appearance: none;
+    }
+
+    :where([data-playdeck-part='seek-progress']) {
+      inset-block: 0;
+      border-radius: inherit;
+      background-color: var(--playdeck-color-accent, #3ea6ff);
+    }
+
+    :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
+      appearance: none;
+      box-sizing: border-box;
+      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      /* The ring is this border; the `outline` above also applies, and the two
+       * together draw a 20px thumb beside Gecko's 16px. */
+      outline: none;
+      border: 2px solid var(--playdeck-color-thumb-ring, #000);
+      border-radius: 50%;
+      background-color: var(--playdeck-color-accent, #3ea6ff);
+    }
+
+    /* Gecko's own track and fill, silenced for this input only: the bar behind
+     * it is the track and `seek-progress` is the fill. Volume keeps both. */
+    :where([data-playdeck-part='seek-slider-input'])::-moz-range-track,
+    :where([data-playdeck-part='seek-slider-input'])::-moz-range-progress {
+      background-color: transparent;
     }
   }
 
@@ -514,8 +555,12 @@
      * One part of the seek slider is still unreadable here, and it is not the
      * input: `seek-buffered` is opaque `canvas` in this mode and paints over
      * the control, so the thumb reaches no pixel on any engine and the bar
-     * shows a loaded range but not the current position. That is the overlay
-     * defect, owned by #415, not something this block can map its way out of.
+     * shows a loaded range but not the current position.
+     *
+     * #415 fixed that everywhere else and deliberately not here: putting the
+     * input above the bar hands the row to the engine's opaque track, silencing
+     * the loaded range, and hand-drawing the control flattens Gecko against the
+     * canvas — the trade #190 refused. `e2e/thumb-contrast.spec.ts` covers it.
      */
   }
 }

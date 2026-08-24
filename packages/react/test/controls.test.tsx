@@ -621,6 +621,25 @@ describe('SeekSlider', () => {
     expect(range.style.width).toBe('25%');
   });
 
+  // The played span is a part rather than the input's own filled part, because
+  // the theme turns the native range widget off to stop it painting over the
+  // loaded ranges, and that takes `accent-color` with it on Blink and WebKit
+  // (#415). Its width is the primitive's arithmetic, so it is asserted here.
+  test('sizes the played span relative to a live DVR window', () => {
+    const { container } = renderWithPlayer(
+      <Player.SeekSlider />,
+      liveWindow({ currentTime: 50 })
+    );
+    const progress = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="seek-progress"]'
+    )!;
+    // Offset, not raw time: window span 60 from 20, position 50, so the span
+    // runs from the window's start to (50-20)/60=50%. Reading `currentTime`
+    // against the duration instead would put it at 83%.
+    expect(progress.style.left).toBe('0px');
+    expect(progress.style.width).toBe('50%');
+  });
+
   const noWindow = (patch: ProviderStatePatch = {}): ProviderStatePatch => ({
     ...capabilities({ seek: available }),
     duration: null,
@@ -660,6 +679,15 @@ describe('SeekSlider', () => {
     expect(slider.hasAttribute('disabled')).toBe(false);
     (slider as HTMLInputElement).focus();
     expect(document.activeElement).toBe(slider);
+  });
+
+  test('renders no played span when no seek window exists', () => {
+    const { container } = renderWithPlayer(<Player.SeekSlider />, noWindow());
+    // There is no span for it to be a fraction of, and a zero-width bar pinned
+    // to the left edge would still read as a position the player does not have.
+    expect(
+      container.querySelector('[data-playdeck-part="seek-progress"]')
+    ).toBeNull();
   });
 
   test('issues no seek command on change when no seek window exists', () => {

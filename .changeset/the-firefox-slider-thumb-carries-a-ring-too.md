@@ -52,19 +52,36 @@ on its target engine cannot do.
 **Two boundaries this does not clear, both now measured and recorded rather than
 implied.** On Blink and WebKit the volume slider's unfilled track is the
 engine's own and the theme never colours it, so the ring reads 1.87:1 and 1.07:1
-there. And on the seek slider no engine clears either boundary: `SeekSlider`
-renders `seek-buffered` before the input and this file positions it absolutely
-while the input stays in flow, so the theme's own translucent bar paints over
-the native control on Blink and Gecko and lifts the whole thumb towards white —
-a `#000` ring reaches the screen as `rgb(92 92 92)` under one veil and
-`rgb(206 206 206)` under two. No ring colour escapes that, because the veil puts
-a floor under how dark the ring can land and a ceiling under how light. WebKit
-fails the same two for the opposite reason: the bar never reaches the screen
-there, and the unfilled native track is near-black already. That overlay is
-owned by #415 — in forced-colors mode it is opaque rather than translucent and
-hides the seek thumb outright, on every engine and on both sides of this change.
+there. And the seek slider fails the loaded-range boundary on all three engines,
+and the unfilled-track one on Blink: `SeekSlider` renders `seek-buffered` before
+the input and this file positions it absolutely while the input stays in flow,
+so the theme's own translucent bar paints over the native control and lifts the
+whole thumb towards white — a `#000` ring reaches the screen as `rgb(92 92 92)`
+under one veil and `rgb(206 206 206)` under two. No ring colour escapes that,
+because the veil puts a floor under how dark the ring can land and a ceiling
+under how light. WebKit was read wrong at first: the bar sits one pixel lower
+than the input's own centre line there, so a sample taken on that centre line
+met the engine's near-black native track and never the bar. It reaches the
+screen on WebKit like everywhere else, and `e2e/thumb-contrast.spec.ts` picks
+its row from `seek-buffered` rather than from the input for that reason. That
+overlay is owned by #415 — in forced-colors mode it is opaque rather than
+translucent and hides the seek thumb outright, on every engine and on both sides
+of this change.
 
 Those are the ratios the token arithmetic in `packages/react/test/theme.test.ts`
 cannot see, and both test files now say so. Clearing them means `appearance:
 none` and a hand-drawn control on all three engines, which is a larger change
 than #190 decided on.
+
+**Superseded in this release by #415.** That larger change arrived in the same
+release, for the overlay rather than for the ring: the seek slider takes
+`appearance: none`, the bar behind the input becomes its track, and the thumb is
+hand-drawn on all three engines. Both of that slider's boundaries clear there
+now — 3.55:1 against the unfilled track and 13.73:1 against a loaded range, the
+same figure on Chromium, Firefox and WebKit, because every pixel in each pair is
+painted from this file's own tokens. What it costs is `accent-color` on the seek
+slider: Blink and WebKit lose it there with the native widget, as Gecko already
+had. The volume slider is untouched by that change and its two boundaries stand
+as measured above — nothing is painted over that control, so it had no overlay
+to remove — and forced colors is unchanged, so the opaque overlay named above
+still hides the seek thumb there.
