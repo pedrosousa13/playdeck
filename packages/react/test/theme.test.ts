@@ -406,7 +406,7 @@ describe('slider non-text contrast', () => {
   // stays legible inside its own ring.
   //
   // Since #415 those two are also the boundaries of a part in their own right.
-  // The seek slider's played fill is no longer `accent-color` on an engine's
+  // The seek slider's played span is no longer `accent-color` on an engine's
   // native widget but `seek-progress`, an element the primitive positions and
   // this file paints `--playdeck-color-accent`, so `accent vs track` and
   // `accent vs buffered` describe its two edges exactly. Neither figure moved

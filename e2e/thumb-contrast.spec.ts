@@ -65,9 +65,7 @@ type Row = {
  * Measured on this story, as row offsets inside the input's box: the bar
  * occupies rows 22-25 on Blink and Gecko and rows 23-26 on WebKit, against an
  * input centre of row 22. Sampling the input's centre therefore reads the
- * engine's own track on WebKit and never the theme's bar at all, which is how
- * "the bar does not reach the screen on WebKit" was concluded in #190. It does;
- * it is one pixel lower than the row that was being read.
+ * engine's own track on WebKit and never the theme's bar at all.
  */
 const centreRow = async (
   page: Page,
@@ -300,15 +298,14 @@ test('the seek slider clears 3:1 on both sides of its thumb and across its loade
   // Two boundaries the three ratios above do not cross, recorded rather than
   // left silent.
   //
-  // `seek-progress` is #415's own new surface — the span of the window before
-  // the position, which is what `accent-color` used to paint before the native
-  // widget went off. It ends at 30% on this story, and the samples above are
-  // 0.55 and 0.70, both to the right of that edge, so nothing above measures the
-  // played fill against anything. Sampled at 0.10, inside the span and clear of
-  // the thumb at ~0.27..0.34:
+  // `seek-progress` is #415's own new surface — the played span, which is what
+  // `accent-color` used to paint before the native widget went off. It ends at
+  // 30% on this story, and the samples above are 0.55 and 0.70, both to the
+  // right of that edge, so nothing above measures the played span against
+  // anything. Sampled at 0.10, inside it and clear of the thumb at ~0.27..0.34:
   //
-  //     played fill vs loaded range     1.69:1
-  //     played fill vs unfilled track   2.28:1
+  //     played span vs loaded range     1.69:1
+  //     played span vs unfilled track   2.28:1
   //
   // Both are below the 3:1 floor, and neither is new arithmetic: they are the
   // same pair `theme.test.ts` has stated all along as `accent vs buffered` and
@@ -330,8 +327,8 @@ test('the seek slider clears 3:1 on both sides of its thumb and across its loade
   // measured 1.6947 and 2.2805 alike.
   const played = row.at(0.1);
   const unmeasured = {
-    'played fill vs loaded range': contrast(played, row.at(0.7)),
-    'played fill vs unfilled track': contrast(played, row.at(0.55))
+    'played span vs loaded range': contrast(played, row.at(0.7)),
+    'played span vs unfilled track': contrast(played, row.at(0.55))
   };
   expect(
     Object.fromEntries(
@@ -341,8 +338,8 @@ test('the seek slider clears 3:1 on both sides of its thumb and across its loade
       ])
     )
   ).toEqual({
-    'played fill vs loaded range': '1.69:1',
-    'played fill vs unfilled track': '2.28:1'
+    'played span vs loaded range': '1.69:1',
+    'played span vs unfilled track': '2.28:1'
   });
 });
 

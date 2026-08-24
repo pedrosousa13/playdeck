@@ -1,5 +1,5 @@
 ---
-'@playdeck/react': patch
+'@playdeck/react': minor
 ---
 
 The seek slider's loaded-range indicator no longer paints over the control it
@@ -58,3 +58,8 @@ rather than over the ground behind it, because that is where it paints. No
 assertion is weakened: `buffered vs track` moves from 3.18:1 to 4.26:1 and `ring
 vs buffered` from 9.96:1 to 13.35:1, and the seek-slider pixel test that recorded
 the failing state now records the fixed one.
+
+It lands as `minor` rather than `patch`: `seek-progress` is a new part, so this
+package's public surface grew, and `patch` would hide an additive API change.
+`major` is not meant — nothing a consumer wrote stops working, and at `0.x` the
+`minor` slot is where an intentional addition belongs.

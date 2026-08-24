@@ -45,6 +45,17 @@ forced-colors mode, where the native widget is left on so the user's palette
 reaches the control.
 _Avoid_: handle, knob, scrubber
 
+**Played span**:
+The stretch of the seek window between its start and the current position,
+rendered as the `seek-progress` part. An element the primitive places and CSS
+paints, rather than the input's own filled part: the theme turns the native
+range widget off so the loaded-range indicator can sit behind the input, and
+that takes `accent-color` with it on Blink and WebKit, neither of which offers a
+pseudo-element for a range's filled part (#415). Not the progress fill, which is
+`::-moz-range-progress` — the engine's own, and still what draws the volume
+slider's on Gecko.
+_Avoid_: played fill, progress fill, elapsed bar
+
 **Viewport**:
 The player's own bounding box, rendered by `Player.Viewport`, which every
 overlay positions against. Not the browser viewport.

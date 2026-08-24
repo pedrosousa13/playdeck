@@ -550,12 +550,12 @@ export const SeekSlider = ({
               />
             ))
           : null}
-        {/* The window before the position, after the loaded ranges so it paints
-            over them. An element rather than the input's own filled part,
-            because the theme has to turn the native range widget off to stop it
-            painting over this layer (#415), and turning it off takes
-            `accent-color` with it on Blink and WebKit, which offer no
-            pseudo-element for a range's filled part to draw it back. Sized like
+        {/* The played span, after the loaded ranges so it paints over them. An
+            element rather than the input's own filled part, because the theme
+            has to turn the native range widget off to stop it painting over
+            this layer (#415), and turning it off takes `accent-color` with it
+            on Blink and WebKit, which offer no pseudo-element for a range's
+            filled part to draw it back. Sized like
             the ranges beside it: positioned here, painted by CSS, `aria-hidden`
             with the rest of the geometry — `seek-buffered-description` is what
             reaches assistive technology. */}

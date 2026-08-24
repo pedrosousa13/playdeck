@@ -418,8 +418,8 @@
      * centres itself on it either way.
      *
      * The volume slider is deliberately untouched. Nothing is painted over it,
-     * so it has no overlay defect, and #190 measured its remaining boundary as
-     * the engine's own unfilled track rather than this file's.
+     * so it has no overlay defect, and the boundary it has left is against the
+     * engine's own unfilled track rather than against anything this file paints.
      */
     :where([data-playdeck-part='seek-slider-input']) {
       position: relative;
@@ -427,7 +427,6 @@
     }
 
     :where([data-playdeck-part='seek-progress']) {
-      position: absolute;
       inset-block: 0;
       border-radius: inherit;
       background-color: var(--playdeck-color-accent, #3ea6ff);
