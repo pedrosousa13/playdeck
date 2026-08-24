@@ -5,8 +5,8 @@ provider reaches, when each request leaves the page relative to `Player.Root`'s
 `loading` prop, and what a Content-Security-Policy for that page has to allow.
 This is the honest accounting the [Honesty about
 providers](../README.md#honesty-about-providers) section in the root README
-points to — read against the loaders and attachment builders themselves, not
-against provider documentation.
+points to: what the loaders and attachment builders do, not what a provider's
+own documentation says.
 
 Every origin below was confirmed by reading the source cited next to it, with
 one exception, cited as such where it appears:
