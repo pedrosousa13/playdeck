@@ -618,13 +618,15 @@ test('both range controls carry the composition own presentation', async ({
 //
 // What the control side does NOT rest on is `bounds`. That constrains the media
 // element's own value independently of the control, so the two halves are
-// established separately rather than each from the other — but both seek call
-// sites pass `{ min: 1, max: Infinity }`, a floor and not a pin, so it is not
-// what makes the control side tight. The two conditions above are. And half a
-// step still rejects a control a whole step or more from the target, which is
-// every stale reading the helper exists to catch: the shape it was written for
-// is a control reading 1 while the media reads 0, a full window apart and
-// nowhere near any tolerance.
+// established separately rather than each from the other — and the two seek
+// call sites do not even agree on its shape: the pointer test passes the closed
+// window `{ min: 0.9, max: 1 }` and the keyboard test the floor
+// `{ min: 1, max: Infinity }`. Neither is ever read against `input.value`, so
+// neither is what makes the control side tight. The two conditions above are.
+// And half a step still rejects a control a whole step or more from the
+// target, which is every stale reading the helper exists to catch: the shape it
+// was written for is a control reading 1 while the media reads 0, a full window
+// apart and nowhere near any tolerance.
 //
 // The grid is read back off the input rather than recomputed here, and
 // deliberately not re-derived from the window: a check that reimplemented
@@ -765,20 +767,20 @@ test('both range controls stay operable by pointer', async ({ page }) => {
   // 0.95 rather than the far end, which is where this line started and what it
   // was written to use. The far end is exactly `duration`, and a seek to
   // exactly `duration` is the one position this fixture cannot be relied on to
-  // reach in Playwright's Linux WebKit. Measured over 50 unretried runs
-  // (`--repeat-each=25 --retries=0`, #470): the write itself always took — 25
-  // of 25 read back exactly 1 in the statement after the assignment, on a
-  // source whose duration and seekable window had both reached 1.000000 — and
-  // then the seek the engine started for it landed at 0.000000 on 9 of those 25
-  // runs, `seeking` reporting 1.000000 and `seeked` 0.000000 a few
-  // milliseconds behind it. Nothing in the page put the playhead back: a
-  // `currentTime` accessor trap installed before the story's own script ran
-  // recorded exactly one write on the failing runs, the test's. So the target
-  // is the whole of the variable, and this test never needed the furthest one
-  // — only one far enough from the minimum to make the click below a real
-  // change. `.out-of-scope/webkit-end-of-media-seek.md` carries the rest, and
-  // the keyboard test below, which cannot move its target off `max`, carries
-  // the skip this retarget avoids needing.
+  // reach in Playwright's Linux WebKit. Measured on CI 2026-08-25 over 50
+  // unretried runs (`--repeat-each=25 --retries=0`, #470): the write itself
+  // always took — 25 of 25 read back exactly 1 in the statement after the
+  // assignment, on a source whose duration and seekable window had both
+  // reached 1.000000 — and then the seek the engine started for it landed at
+  // 0.000000 on 9 of those 25 runs, `seeking` reporting 1.000000 and `seeked`
+  // 0.000000 a few milliseconds behind it. Nothing in the page put the
+  // playhead back: a `currentTime` accessor trap installed before the story's
+  // own script ran recorded exactly one write on the failing runs, the
+  // test's. So the target is the whole of the variable, and this test never
+  // needed the furthest one — only one far enough from the minimum to make the
+  // click below a real change. `.out-of-scope/webkit-end-of-media-seek.md`
+  // carries the rest, and the keyboard test below, which cannot move its
+  // target off `max`, carries the skip this retarget avoids needing.
   //
   // And the element has to be able to reach that position before it is told to,
   // which on WebKit is not a given — `seekableThrough` above is that
@@ -793,11 +795,11 @@ test('both range controls stay operable by pointer', async ({ page }) => {
   // One derived step either side of the target, both ends measured rather than
   // picked for comfort. Every engine parks the playhead at exactly 0.95 for
   // this write — 6 of 6 on webkit, 4 of 4 on chromium and 4 of 4 on firefox,
-  // run locally on an idle machine, each reading 0.95 against a grid the input
-  // reported as min=0 step=0.05 max=1. The slack is a whole step and not the
-  // half `settledAt` allows the control, because a frame-boundary snap on a
-  // re-encoded fixture is bounded by a frame and a frame at any ordinary rate
-  // is longer than half a step's 25ms. What the lower bound must not do is
+  // run locally on an idle machine 2026-08-25, each reading 0.95 against a grid
+  // the input reported as min=0 step=0.05 max=1. The slack is a whole step and
+  // not the half `settledAt` allows the control, because a frame-boundary snap
+  // on a re-encoded fixture is bounded by a frame and a frame at any ordinary
+  // rate is longer than half a step's 25ms. What the lower bound must not do is
   // admit 0, which is exactly where the defect above lands: 0.9 is eighteen
   // steps clear of it. And the bound is closed at the top, where the far end
   // needed `max: Infinity` — WebKit settles a fraction PAST 1 once the clip
@@ -851,24 +853,30 @@ test('both range controls stay operable by pointer', async ({ page }) => {
 // And End is what puts this test out of WebKit's reach, where the pointer test
 // above only had to move its target. `End` asks a range input for its `max`,
 // and `SeekSlider`'s `max` IS the duration, so this leg cannot ask for anything
-// but the position #470 measured as non-deterministic on this engine: 7 of 25
-// unretried runs read the playhead at 0 after a press whose seek the library
-// had already issued and the element had already accepted. There is no
-// narrower exclusion, and it was looked for. The control is not an independent
-// witness here: its `value` comes from `PlayerState.currentTime` with
-// `useSeekPreview` holding the requested value only until the published state
-// answers for it (`react/src/optimistic-request.ts`), so on a failing run the
-// seek succeeds, the element publishes 0, the preview is released and the
-// control follows the media back down — which is what the pointer test's own
-// failure string reported, `control 0 (target 1) / media 0`. An assertion on
-// the control alone would therefore fail on exactly the runs the media
-// assertion fails on, and the `Home` half degrades the other way: with the
-// playhead already at 0, `toBe(0)` after `Home` is a check that cannot fail.
-// The reasoning is the one `.out-of-scope/webkit-buffered-ranges.md` applies to
-// relaxed assertions — a guard that cannot refuse the defect it exists for is
-// worth nothing — so the whole test goes rather than half of it.
+// but the position #470 measured as non-deterministic on this engine: on CI
+// 2026-08-25, 7 of 25 unretried runs read the playhead at 0 after a press whose
+// seek the library had already issued and the element had already accepted.
+// There is no narrower exclusion, and it was looked for. The control is not an
+// independent witness here: its `value` comes from `PlayerState.currentTime`
+// with `useSeekPreview` holding the requested value only until the published
+// state answers for it (`packages/react/src/optimistic-request.ts`), so on a
+// failing run the seek succeeds, the element publishes 0, the preview is
+// released and the control follows the media back down — which is what the
+// pointer test's own failure string reported, `control 0 (target 1) / media 0`.
+// An assertion on the control alone would therefore fail on exactly the runs
+// the media assertion fails on. The `Home` half degrades the other way, and
+// worse: on a defective run the playhead is already at 0 when `Home` is
+// pressed, so the control already sits at its minimum, the press produces no
+// `input` event, and `toBe(0)` passes. A kept-`Home` variant would go green
+// PRECISELY on the runs where the defect fired — a silent false pass, not a
+// flake. (On the runs where `End` works the playhead is at 1 and the same
+// assertion is perfectly live, so it is not a check that can never fail; it is
+// one that stops being able to fail exactly when it is needed.) The reasoning
+// is the one `.out-of-scope/webkit-buffered-ranges.md` applies to relaxed
+// assertions — a guard that cannot refuse the defect it exists for is worth
+// nothing — so the whole test goes rather than half of it.
 const skipWithoutWebKitEndOfMediaSeek =
-  'End necessarily targets the seek slider max, which is the duration, and a seek to exactly the duration resolves at 0 on this engine for the WebM fixture this composition selects (measured: 7 of 25 unretried CI runs). See .out-of-scope/webkit-end-of-media-seek.md (#470).';
+  'End necessarily targets the seek slider max, which is the duration, and a seek to exactly the duration resolves at 0 on this engine for the WebM fixture this composition selects (measured 2026-08-25: 7 of 25 unretried CI runs). See .out-of-scope/webkit-end-of-media-seek.md (#470).';
 
 test('the seek slider stays operable by keyboard in both directions', async ({
   browserName,
@@ -903,14 +911,13 @@ test('the seek slider stays operable by keyboard in both directions', async ({
   // Home a real change: the position Home asks for is the one the press before
   // it moved away from, so a control still holding it would swallow the press.
   //
-  // The upper bound is left open to match the poll above it, which asks for
-  // `>= 1` — the two are one assertion about the same press and would not be
-  // worth reading if they disagreed about what the end of the clip is. It was
-  // opened for WebKit, which settles a fraction past 1 at the end of this
-  // fixture (observed 1.000122584-1.000185166; see the comment on the MP4 test
-  // above) where Chromium and Firefox report exactly 1, and the skip above now
-  // keeps WebKit off this line — but "reached the end" is a floor on every
-  // engine, which is the reading the MP4 test takes as well.
+  // The upper bound was opened for WebKit's end-of-clip overshoot: it settles a
+  // fraction past 1 at the end of this fixture (observed
+  // 1.000122584-1.000185166; see the comment on the MP4 test above) where
+  // Chromium and Firefox report exactly 1. The skip above now keeps WebKit off
+  // this line, and the two engines that reach it report exactly 1, so the slack
+  // guards nothing. It is left open deliberately: tightening it to `max: 1`
+  // would be a strictness change #470 did not ask for.
   await settledAt(page, 'seek-slider-input', 1, 'currentTime', {
     min: 1,
     max: Infinity
@@ -957,11 +964,12 @@ declare global {
 // same CI run, so the assertion was fragile on this engine independently of
 // #383. #470 has since measured what that fragility is: a seek to exactly
 // `duration` resolves at 0.000000 on this engine for the WebM fixture this
-// composition selects, on 7 of 25 unretried runs, with the library's write and
-// the element's own `seeking` both reporting 1.000000 first. That is why the
-// test above now carries a WebKit skip and these two do not — the seek window
-// is not the variable, `el.seekable` having reached 1.000000 on every one of
-// those runs, and neither is anything the library does.
+// composition selects, on 7 of 25 unretried CI runs on 2026-08-25, with the
+// library's write and the element's own `seeking` both reporting 1.000000
+// first. That is why the test above now carries a WebKit skip and these two do
+// not — the seek window is not the variable, `el.seekable` having reached
+// 1.000000 on every one of those runs, and neither is anything the library
+// does.
 //
 // The `seeking` counter is the stronger statement, not the weaker one: it says
 // the media element acted on a seek, which is the criterion's own wording —

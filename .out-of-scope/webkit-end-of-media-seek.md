@@ -13,8 +13,9 @@ than assumed.
 The write is not dropped. The **seek that follows it** is what fails, and the two are
 separable because they were separated.
 
-A CI measurement of 50 unretried WebKit runs (`--repeat-each=25 --retries=0`, the
-configured `retries: 2` being what reports this defect's rate as zero) established:
+A CI measurement of 50 unretried WebKit runs, made 2026-08-25
+(`--repeat-each=25 --retries=0`, the configured `retries: 2` being what reports this
+defect's rate as zero), established:
 
 - **The write always takes.** On the pointer test, a reading taken inside the same
   `evaluate` one statement after `el.currentTime = 1` — where no task, no microtask
@@ -48,6 +49,13 @@ affected is unmeasured, and could not be measured here: no H.264-capable WebKit 
 available in this environment.** Nothing in this record says real Safari is
 unaffected; that is not established either way.
 
+**Whether `paused` and `ended` are also necessary conditions is unmeasured.** #470
+asked about a seek to exactly the end "while paused, on an element that has already
+played through". What was isolated is the target position and nothing else: every run
+in the measurement was paused and had played through, so neither of those two was
+ever varied, and this evidence cannot say whether they are part of the trigger or
+merely how the tests happen to be written.
+
 ## Why the obvious workarounds were rejected
 
 **A library workaround** — clamping a requested position near `duration` down to
@@ -75,9 +83,14 @@ the element publishes `0`, the preview is released and the control follows the m
 back down — which is exactly what the pointer test's own failure string reported:
 `control 0 (target 1) / media 0`. So a control-only assertion after `End` would fail
 on precisely the runs the media assertion fails on. The `Home` half degrades the
-other way: with the playhead already sitting at 0, `toBe(0)` after `Home` is a check
-that cannot fail. A guard that cannot refuse the defect it exists for is worth
-nothing, the same reasoning as
+other way, and worse: on a defective run the playhead is already at 0 when `Home` is
+pressed, so the control already sits at its minimum, the press produces no `input`
+event, and `toBe(0)` passes. A kept-`Home` variant would go green **precisely on the
+runs where the defect fired** — a silent false pass, not a flake, which is a worse
+failure than the one being avoided. On the runs where `End` works the playhead is at
+1 and that same assertion is perfectly live, so this is not a check that can never
+fail; it is one that stops being able to fail exactly when it is needed. A guard that
+cannot refuse the defect it exists for is worth nothing, the same reasoning as
 [webkit-key-event-round-trip](./webkit-key-event-round-trip.md) and as this
 directory's [buffered-ranges record](./webkit-buffered-ranges.md).
 
@@ -98,9 +111,9 @@ claim and ADR-0005 names those two keys as what keeps each slider operable.
 retargeted rather than excluded: it now settles the seek slider at `0.95` — a stop on
 the control's derived grid, 19 of 20 steps from the minimum its click asks for —
 instead of at `1`. All three engines park the playhead at exactly `0.95` for that
-write (measured locally on an idle machine: webkit 6 of 6, chromium 4 of 4, firefox 4
-of 4), so WebKit keeps its coverage of "a pointer click reaches the media element".
-Only the end-of-media target was ever the problem.
+write (measured 2026-08-25, locally on an idle machine: webkit 6 of 6, chromium 4 of
+4, firefox 4 of 4), so WebKit keeps its coverage of "a pointer click reaches the
+media element". Only the end-of-media target was ever the problem.
 
 **The mid-clip `End`/`Home` tests below it** (#383) run on WebKit and assert that the
 press became an `input` event and a media `seeking`, deliberately not where the
@@ -116,7 +129,10 @@ a fixture this engine seeks to the end deterministically — an H.264-capable
 Playwright WebKit, which would take the MP4 and never reach the WebM, is the likelier
 of the two, and would also answer the MP4 question this record has to leave open.
 Evidence that the defect reaches real Safari, or any engine on the MP4 leg, would
-reopen it from the other direction and would be a different record.
+reopen it from the other direction and would be a different record. So would a
+reproduction on a playing element, or on one that has not played through: those are
+the two conditions of #470's hypothesis this work never varied, and either result
+would say the trigger is wider than the target position this record pins it to.
 
 Either way the check is the one that produced this record: at roughly one failure in
 three, a single green run proves nothing and the configured `retries: 2` turns the
@@ -128,5 +144,9 @@ whole thing green, so the runs have to be repeated with retries disabled and cou
 - #470 — "A `currentTime` write is dropped on a fully-parsed WebKit source, and the
   playhead reads 0". The title states the conclusion this record refutes: the write is
   not dropped, and the issue is kept under its original name rather than renamed after
-  the fact. The full measurement, including
-  the accessor-trap output and the per-run event logs, lives on that issue.
+  the fact. The issue carries the write-up and representative excerpts of the
+  accessor-trap output and the per-run event logs. It does not carry the raw logs:
+  those were written to a gitignored `.scratch/issue-470-measurement/` and to a CI
+  artifact that expires, and the workflow that produced them has since been deleted.
+  So the measurement is not reproducible from the repo as it stands — repeating it
+  means rebuilding that workflow from the recipe above.
