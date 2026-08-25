@@ -52,6 +52,12 @@ export const play = (): Promise<unknown> => controller.play();
   `startTime`/`endTime` you configured. A seek with nowhere legal to land is
   refused with `provider-error` rather than snapped somewhere outside your
   bounds.
+- **A `startTime` the source cannot be positioned at** publishes a non-fatal
+  `configuration` notice on `PlayerState.error` rather than disappearing. The
+  offset is applied once, when metadata arrives, and a source whose seekable
+  window does not reach it yet leaves the playhead elsewhere; the notice is how
+  you tell that apart from a setting you mis-wired. It does not make the offset
+  apply.
 - **`selectQuality`** is `unavailable` with reason `source`: the browser picks
   its own rendition for native HLS and there is nothing to enumerate. It is not
   `unknown`, because that would promise an answer that never comes.

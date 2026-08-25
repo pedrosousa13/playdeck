@@ -393,8 +393,8 @@ test('reports a start position clamped into a partly-parsed window', async () =>
 // The third refusal shape, and the one where nothing is written because no
 // seekable range intersects the configured window at all: a declared duration
 // of 10 with the window only parsed to 8.734 leaves `withinMediaBounds`
-// answering `undefined` for a start above the edge. Reported here, not fixed —
-// the fix is #466.
+// answering `undefined` for a start above the edge. The offset is still
+// dropped here — what is asserted is that the drop is now reported.
 test('reports a start position no seekable range could satisfy', async () => {
   const media = document.createElement('video');
   Object.defineProperty(media, 'duration', { configurable: true, value: 10 });

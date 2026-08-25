@@ -31,16 +31,13 @@ export type NativePlaybackOptions = {
    * back to the start of the DVR window, which is not what asking for the start
    * of the media meant.
    *
-   * A start the source cannot be positioned at is not dropped in silence. Since
-   * #418 the provider publishes a non-fatal `configuration` notice on
-   * `PlayerState.error` — presentational, so a protective notice from the same
-   * attach outranks it — and leaves the playhead wherever this load left it,
-   * which is the clamped position where one was written and the element's own
-   * starting position where none was. The commonest cause is a WebKit element
-   * that reports a zero
-   * duration and an empty seekable window until it has played: 51 of 60
-   * measured loads asking for 5s on a 10s clip stayed at 0. The notice reports
-   * that; it does not make the offset apply.
+   * A start the source cannot be positioned at is not dropped in silence, since
+   * #418. The provider publishes a non-fatal `configuration` notice on
+   * `PlayerState.error` -- presentational, so a protective notice from the same
+   * attach outranks it -- and leaves the playhead wherever this load left it:
+   * the clamped position where one was written, the element's own starting
+   * position where none was. The notice reports the refusal; it does not make
+   * the offset apply.
    *
    * DECLARED DIVERGENCE FROM THE EMBEDS, since #381. There the start is a
    * *floor* on every reported position: a playhead that arrives below it
@@ -67,20 +64,26 @@ export type NativePlaybackOptions = {
   readonly endTime?: number;
 };
 
-// What a `startTime` the source could not be positioned at publishes. The
-// offset is still not applied — that is #465 — but the drop is no longer
-// silent, which is what #418 reported: measured over 60 real WebKit loads with
-// `startTime: 5` on a 10s clip, 51 of them dropped the offset and the consumer
-// was told nothing. Non-fatal: the media plays, from wherever this load left
-// the playhead. Never `recoverable`: the remedy is a change the consumer
+// What a `startTime` the source could not be positioned at publishes. Reporting
+// the refusal is the whole of it: the offset is still not applied, and the
+// notice is what turns a start that vanished into a start the consumer can see
+// was refused. Non-fatal, because the media plays — from wherever this load
+// left the playhead. Never `recoverable`: the remedy is a change the consumer
 // makes, so a retry re-runs the same configuration against the same source and
 // reaches the same answer (#198).
 //
-// Static, like every other notice here, and deliberately naming neither the
-// requested offset nor the position reached. Both are already on
-// `PlayerState.currentTime` and in the consumer's own props, and a message that
-// re-worded itself per load would be unreadable to a monitoring system — the
-// ground #330 stood on.
+// The shape that motivated it, measured on 2026-08-23 against Playwright's
+// Linux WebKit, 6 parallel workers, a 10s WebM trickled so the parse lags
+// playback, `startTime: 5`: of 60 loads, 51 arrived at `loadedmetadata` with a
+// zero `duration` and an empty `seekable` and dropped the offset, 8 applied it,
+// and 1 wrote nothing for an unrelated reason. Chromium and Firefox were not
+// run in that arm, so it says nothing about them; a contradicting result is one
+// where a paused WebKit element reports a seekable window before it has played.
+//
+// The message is static and names neither the requested offset nor the position
+// reached — both are already on `PlayerState.currentTime` and in the consumer's
+// own props, and a message that re-worded itself per load would be unreadable
+// to a monitoring system, the ground #330 stood on.
 //
 // `'presentational'`: a start offset that did not apply left nothing about the
 // viewer unprotected, so it must yield the notice slot to any protective notice
@@ -91,7 +94,7 @@ const startTimeConfigurationNotice: PlayerError = {
   recoverable: false,
   severity: 'presentational',
   message:
-    'The configured startTime could not be applied to this source, so playback begins somewhere other than the position that was asked for.'
+    'The configured startTime could not be applied: the seekable window did not reach it, so playback begins at a different position.'
 };
 
 export type NativePlaybackDeps = {
