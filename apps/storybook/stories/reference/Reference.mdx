@@ -218,15 +218,17 @@ Two axe runners, deliberately. `.storybook/preview.tsx` sets
 for **every** story, primitive and composed — that is the authoring-time gate,
 and it is Chromium-only because `apps/storybook/vitest.config.ts` pins one
 browser instance. `e2e/a11y.spec.ts` adds `@axe-core/playwright` over the
-composed example's eight states in Chromium, Firefox and WebKit, scoped to
+composed example's nine states in Chromium, Firefox and WebKit, scoped to
 `[data-playdeck-part="viewport"]` so Storybook's own iframe chrome can never enter
 a result.
 
-The eight states are six stories: `Composition` is genuinely both _paused_ and
+The nine states are six stories: `Composition` is genuinely both _paused_ and
 _captions-on_, and _menu-open_ is that same story with the menu opened by the
-spec. `Idle`, `Playing`, `BlockedAutoplay` and `ErrorState` stage the rest
-through the mock decorator. `GlobalShortcuts` is the eighth, added by #181: the
-same composition with `Player.Controls global`, so the shortcut map sits on
+spec — as is _captions-menu-open_, the ninth, added by #419 because this spec
+had only ever opened the settings menu. `Idle`, `Playing`, `BlockedAutoplay` and
+`ErrorState` stage the rest through the mock decorator. `GlobalShortcuts`, the
+eighth and added by #181, is the same composition with
+`Player.Controls global`, so the shortcut map sits on
 `document` rather than on the region. It is scanned because the issue requires
 an accessibility check over a composition using global mode, and no axe run had
 ever seen that mode — **not** because axe adjudicates SC 2.1.4 Character Key
@@ -263,22 +265,31 @@ this subtree, not about a host page.
 
 Every state also asserts `results.incomplete` — axe's needs-review bucket —
 against a per-state allowlist of rule ids, compared by equality, so an
-undiagnosed new finding fails the same as a violation would. Three states
-carry a diagnosed entry, not an ignored one:
+undiagnosed new finding fails the same as a violation would. Two states carry a
+diagnosed entry, not an ignored one:
 
-- **`idle` and `error` — `color-contrast`.** `ActivationButton` and
-  `ErrorDisplay` are both real, full-viewport surfaces while shown
-  (`position: absolute; inset: 0`, not overridable through their `style` prop
-  — filed as #89), and each outranks the time row underneath it. Axe reports
-  the resulting stacking-order overlap as an unresolvable color-contrast case;
-  no CSS change in this example fixes it.
-- **`menu-open` — `aria-valid-attr-value`.** axe-core flags any
-  `aria-controls` paired with a non-false `aria-haspopup` as needs-review the
-  instant the attribute is present, without resolving the id first. Every
-  correctly-built `aria-haspopup` + `aria-controls` menu trips this — a
-  permanent axe-core limitation for the pattern, not something fixable here.
+- **`menu-open` and `captions-menu-open` — `aria-valid-attr-value`.** axe-core
+  flags any `aria-controls` paired with a non-false `aria-haspopup` as
+  needs-review the instant the attribute is present, without resolving the id
+  first. Every correctly-built `aria-haspopup` + `aria-controls` menu trips
+  this — a permanent axe-core limitation for the pattern, not something fixable
+  here.
+- **`captions-menu-open` — `color-contrast`.** Both radio items come back
+  needs-review because axe cannot resolve a background for them: the settings
+  menu gets `.playdeck-example-menu` from this example and `CaptionsMenu` takes
+  no `className`. Filed as #467, which decides whether the example should supply
+  one; the entry goes when it does.
 
-The other five states assert both buckets empty.
+`idle` and `error` used to carry a `color-contrast` entry each, because
+`ActivationButton` and `ErrorDisplay` are real full-viewport surfaces while
+shown and this example rendered the control row underneath them. Both entries
+are gone, and not by re-diagnosis: #89 ruled that a defect in the composition
+rather than in the primitives — content under a pointer-capturing overlay is
+unreachable but still tabbable — so the row is no longer rendered in those
+states. The focus-reachability tests are what pin that; the entries going away
+is the consequence.
+
+The other seven states assert both buckets empty.
 
 ### Reflow
 
