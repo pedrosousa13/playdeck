@@ -7,27 +7,27 @@ added.
 
 This is a position, not an omission. The packaging harness lints each tarball on
 an ESM-only profile precisely so that legacy-resolution complaints are muted
-rather than accumulating as noise — `scripts/verify-packaging.mjs` ignores the
-`node10` resolution and the CJS half of `node16` on purpose. A repo that had
-forgotten about CommonJS would not have written those ignores.
+rather than accumulating as noise: `scripts/verify-packaging.mjs` says it does
+this to stop the linter "flagging the legacy CJS/node10 resolution modes these
+packages intentionally do not support". A repo that had forgotten about
+CommonJS would not have written that.
 
 ## Why this is out of scope
 
 **Dual publishing is not a build flag, it is a second package.** Shipping CJS
 alongside ESM means two output graphs, two sets of resolution conditions, and
-the dual-package hazard: a dependency tree that loads both halves gets two
-copies of the module state. Playdeck's controller holds per-player state and
-hands subscriptions across package boundaries, so two copies is not a
-theoretical concern about identity checks — it is two controllers where a
-consumer believes there is one.
+the dual-package hazard: a dependency tree that loads both halves gets two copies of
+the module. That is not a theoretical concern about identity checks here.
+`PlayerController` holds its listener sets as private fields and hands
+subscriptions across the boundary into `@playdeck/react`, so which copy a
+consumer reached decides which listeners a state change reaches.
 
-**The measured cost is reach, and the measured reach is narrowing.** The
-comparison that raised this (2026-08-24, against packages installed from npm)
-found Media Chrome and Plyr shipping CommonJS and Playdeck not. That is a real
-gap. It is also a gap against a resolution mode that Node has supported ESM
-alongside for years, that every current bundler resolves, and that React itself
-now depends on — React 19 dropped the UMD builds React 18 shipped, so the
-ecosystem is moving the same direction rather than away from it.
+**The measured cost is reach.** The comparison that raised this (2026-08-24,
+against packages installed from npm) found Media Chrome and Plyr shipping
+CommonJS and Playdeck not. That is a real gap, and nothing here disputes it. It
+is weighed against a cost that lands on every future change rather than once,
+and it loses on that basis — not on a claim that CommonJS consumers do not
+exist.
 
 **The harm is not the absence — it is that the absence was silent.** A CommonJS
 consumer's type-checker reported success and only Node refused, at runtime. That
