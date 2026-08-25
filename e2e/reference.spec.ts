@@ -14,6 +14,10 @@ import {
   settingsTrigger,
   volumeSlider
 } from './locators';
+import {
+  dumpCurrentTimeTrap,
+  installCurrentTimeTrap
+} from './support/currenttime-trap';
 
 // #67's composed example, driven the way a consumer would. The MP4 and HLS legs
 // block; YouTube and Vimeo are @real and grep-inverted out of CI, because the
@@ -731,9 +735,21 @@ const settledAt = (
     )
     .toBe('held');
 
+// TEMPORARY, for #470 — reverted with the rig it dumps. The hook is declared
+// at file scope because Playwright has nowhere narrower to put one, but it is
+// scoped in effect to the two tests below: it reads `window.__pd470` and
+// returns immediately when the page has no rig, which is every other test in
+// this file. See `support/currenttime-trap.ts` for what it prints and why.
+test.afterEach(async ({ page }, testInfo) => {
+  await dumpCurrentTimeTrap(page, testInfo);
+});
+
 // #191: both controls remain operable by POINTER, and the resulting value
 // still reaches the media element.
 test('both range controls stay operable by pointer', async ({ page }) => {
+  // TEMPORARY, for #470. Before `goto`, so the trap is in place for the
+  // story's own writes as well as this test's.
+  await installCurrentTimeTrap(page);
   await page.goto(story);
   await activationButton(page).click();
   await played(page);
@@ -765,10 +781,38 @@ test('both range controls stay operable by pointer', async ({ page }) => {
   // WebKit is not a given — `seekableThrough` above is that precondition, and
   // carries why (#407).
   await seekableThrough(page, 1);
-  await media(page).evaluate((el: HTMLVideoElement) => {
+  // TEMPORARY, for #470: the single most decisive datum in the whole rig. The
+  // reading is taken INSIDE the same evaluate, one statement after the
+  // assignment, so nothing — no task, no microtask, no media event — can have
+  // run in between. `afterWrite !== 1` on a failing run says the engine
+  // refused or clamped the write on the spot; `afterWrite === 1` on a failing
+  // run says it took and something else put the playhead back. Logged on
+  // every run, passing or failing, because the passing runs are the control.
+  const immediate = await media(page).evaluate((el: HTMLVideoElement) => {
     el.pause();
+    const beforeWrite = el.currentTime;
     el.currentTime = 1;
+    return {
+      beforeWrite,
+      afterWrite: el.currentTime,
+      paused: el.paused,
+      ended: el.ended,
+      readyState: el.readyState,
+      duration: el.duration,
+      seekableEnd:
+        el.seekable.length === 0
+          ? null
+          : el.seekable.end(el.seekable.length - 1)
+    };
   });
+  // Field by field rather than `JSON.stringify`, which renders a NaN duration
+  // as `null` and would erase the parsed/unparsed distinction this turns on.
+  console.log(
+    `[#470] write of 1: before=${immediate.beforeWrite} after=${immediate.afterWrite}` +
+      ` paused=${immediate.paused} ended=${immediate.ended}` +
+      ` readyState=${immediate.readyState} duration=${immediate.duration}` +
+      ` seekableEnd=${immediate.seekableEnd}`
+  );
   await settledAt(page, 'seek-slider-input', 1, 'currentTime', {
     min: 1,
     max: Infinity
@@ -816,6 +860,11 @@ test('both range controls stay operable by pointer', async ({ page }) => {
 test('the seek slider stays operable by keyboard in both directions', async ({
   page
 }) => {
+  // TEMPORARY, for #470. This test's `Received: 0` after `End` has the same
+  // shape as the pointer test's dropped write, and whether it is the same
+  // defect is an open question the issue asks to answer either way — so it
+  // carries the same instrument.
+  await installCurrentTimeTrap(page);
   await page.goto(story);
   await activationButton(page).click();
   await played(page);

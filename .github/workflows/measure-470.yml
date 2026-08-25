@@ -1,0 +1,91 @@
+name: Measure 470
+
+# TEMPORARY, and deleted with the rig it runs. This is not a gate: it asserts
+# nothing beyond what the two tests already assert, no other workflow depends
+# on it, and a red run here is the POINT rather than a problem.
+#
+# #470 is a dropped `currentTime` write on WebKit that reproduces at roughly
+# half of CI runs and at none of ~70 targeted runs on the maintainer's machine.
+# CI is therefore the only instrument available, and a single run of it — green
+# or red — measures nothing. This job exists to take a sample large enough to
+# separate "always", "half the time" and "never", and to print the trap in
+# `e2e/support/currenttime-trap.ts` for every one of those runs.
+on:
+  push:
+    branches: ['pedrosousa13/issue-470-*']
+
+permissions:
+  contents: read
+
+# Its own group, so this never cancels or is cancelled by `ci.yml` — that
+# workflow keys on `${{ github.workflow }}-${{ github.ref }}` with
+# `cancel-in-progress: true`, which is also why the sample below is gathered
+# inside ONE job with `--repeat-each` rather than by pushing repeatedly.
+#
+# `cancel-in-progress: false` on purpose: a run that is 20 minutes into a
+# 50-run sample is data, and a second push should not throw it away.
+concurrency:
+  group: measure-470-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Setup mirrors the `e2e` job in `ci.yml` for the webkit leg of its matrix —
+  # same checkout, same corepack/node/pnpm, same playwright browser cache keyed
+  # on the pinned `@playwright/test` version, same composite install (webkit is
+  # the engine that cannot launch at all without its apt packages, so the
+  # `--with-deps` half of `.github/actions/playwright-install` matters here).
+  measure:
+    runs-on: ubuntu-latest
+    # 25 repeats of two tests is ~50 runs, and the pointer test alone was
+    # measured at 9.6s median and 22.2s worst case. Generous rather than
+    # tight: a bound that trips mid-sample would report a truncated rate,
+    # which is the one failure mode this job cannot tolerate.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: playwright-version
+        run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+      # Never gated on a cache hit, for the reason `ci.yml` states: a restored
+      # tree missing the browser binary would skip the install and fail every
+      # test with "Executable doesn't exist".
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-webkit-${{ steps.playwright-version.outputs.version }}
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: webkit
+      # `--retries=0` is the whole design of this job. `playwright.config.ts`
+      # sets `retries: 2` on CI, which turns a flake into a green job and
+      # reports the RATE as zero — exactly the reading #470 needs and cannot
+      # get from `ci.yml`. `--reporter=list` keeps each run's `console.log`
+      # dump attached to the test that produced it in a plain log.
+      #
+      # pnpm appends extra CLI args to the end of a compound script rather
+      # than inserting a `--` separator, so these land on `playwright test`.
+      - run: >-
+          pnpm test:e2e --project=webkit --repeat-each=25 --retries=0
+          --reporter=list
+          -g "both range controls stay operable by pointer|the seek slider stays operable by keyboard in both directions"
+      # `if: always()`, not `if: failure()`: the passing runs carry the control
+      # dump this measurement is read against, and on a sample where every run
+      # passes they are the only dumps there are. `test-results/` is where
+      # `testInfo.attach` writes the rig alongside any trace or screenshot.
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: measure-470-results
+          path: test-results/
+          retention-days: 14
+          # A sample where nothing failed leaves no traces and possibly no
+          # directory at all, and that is a healthy outcome rather than an
+          # upload error. The dumps are still in the job log either way.
+          if-no-files-found: ignore
