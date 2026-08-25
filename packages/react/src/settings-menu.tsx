@@ -55,11 +55,13 @@ const menuItems = (root: HTMLElement | null): HTMLElement[] =>
       ).filter((el) => getComputedStyle(el).display !== 'none')
     : [];
 
+export type SettingsMenuProps = ComponentPropsWithRef<'div'>;
+
 export const SettingsMenu = ({
   children,
   style,
   ...props
-}: ComponentPropsWithRef<'div'>) => {
+}: SettingsMenuProps) => {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -92,13 +94,15 @@ export const SettingsMenu = ({
   );
 };
 
+export type SettingsMenuTriggerProps = ComponentPropsWithRef<'button'>;
+
 export const SettingsMenuTrigger = ({
   children,
   onClick,
   onKeyDown,
   style,
   ...props
-}: ComponentPropsWithRef<'button'>) => {
+}: SettingsMenuTriggerProps) => {
   const { open, setOpen, triggerRef, triggerId, contentId } = useSettingsMenu();
   return (
     <button
@@ -132,13 +136,15 @@ export const SettingsMenuTrigger = ({
   );
 };
 
+export type SettingsMenuContentProps = ComponentPropsWithRef<'div'>;
+
 export const SettingsMenuContent = ({
   children,
   onKeyDown,
   style,
   tabIndex,
   ...props
-}: ComponentPropsWithRef<'div'>) => {
+}: SettingsMenuContentProps) => {
   const { open, close, setOpen, rootRef, triggerId, contentId } =
     useSettingsMenu();
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -240,13 +246,17 @@ export const SettingsMenuContent = ({
   );
 };
 
+export type MenuItemProps = ComponentPropsWithRef<'button'> & {
+  readonly onSelect?: () => void;
+};
+
 export const MenuItem = ({
   children,
   onClick,
   onSelect,
   style,
   ...props
-}: ComponentPropsWithRef<'button'> & { readonly onSelect?: () => void }) => {
+}: MenuItemProps) => {
   const { close } = useSettingsMenu();
   return (
     <button
@@ -283,15 +293,17 @@ const useMenuRadio = (): MenuRadioContextValue => {
   return ctx;
 };
 
+export type MenuRadioGroupProps = ComponentPropsWithRef<'div'> & {
+  readonly value: string;
+  readonly onValueChange: (value: string) => void;
+};
+
 export const MenuRadioGroup = ({
   value,
   onValueChange,
   children,
   ...props
-}: ComponentPropsWithRef<'div'> & {
-  readonly value: string;
-  readonly onValueChange: (value: string) => void;
-}) => (
+}: MenuRadioGroupProps) => (
   <MenuRadioContext.Provider value={{ value, onValueChange }}>
     <div {...props} data-playdeck-part="menu-radio-group" role="group">
       {children}
@@ -299,13 +311,17 @@ export const MenuRadioGroup = ({
   </MenuRadioContext.Provider>
 );
 
+export type MenuRadioItemProps = ComponentPropsWithRef<'button'> & {
+  readonly value: string;
+};
+
 export const MenuRadioItem = ({
   value,
   children,
   onClick,
   style,
   ...props
-}: ComponentPropsWithRef<'button'> & { readonly value: string }) => {
+}: MenuRadioItemProps) => {
   const { value: selected, onValueChange } = useMenuRadio();
   const { close } = useSettingsMenu();
   const checked = selected === value;

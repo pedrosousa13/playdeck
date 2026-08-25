@@ -367,9 +367,10 @@ export const Captions = () => <Player.CaptionsMenu />;
 it the same way.
 
 Every component has a matching props type (`RootProps`, `MediaProps`,
-`SeekSliderProps`, …), plus `PlayerHandle`, `PlayerActions`,
+`SeekSliderProps`, `MenuItemProps`, …), plus `PlayerHandle`, `PlayerActions`,
 `PlayerActivationProps`, `PosterInput`, `ResponsivePoster`, `NormalizedPoster`,
-`ErrorDisplayRenderProps`, `ShortcutAction`, `ShortcutBindings`.
+`ErrorDisplayRenderProps`, `ShortcutAction`, `ShortcutBindings`. The icons below
+are the exception, and need no import: each takes `SVGProps<SVGSVGElement>`.
 
 ### Icons
 
