@@ -3,6 +3,8 @@
 '@playdeck/provider-vimeo': minor
 '@playdeck/provider-wistia': minor
 '@playdeck/provider-youtube': minor
+'@playdeck/react': patch
+'@playdeck/provider-native': patch
 ---
 
 `startTime` is now a floor the YouTube, Vimeo and Wistia embeds are held to,
@@ -20,13 +22,13 @@ who wants the viewer to reach earlier material should not set a `startTime` for
 it.
 
 **What was broken.** The start was written as a load hint and then seeked to
-once, at adopt, and nothing re-applied it. Any later cause of a below-start
-position left the playhead outside the window with no report saying so — and the
-state actively disagreed with the player: measured with a start of 20 seconds
-and a crafted seek to 45, the embed's own playhead read 45 while
-`PlayerState.currentTime` still read 20. The window was broken and the control
-said otherwise. It is corrected now however the position arrived: an SDK-side
-seek, a repeat `ready`, or the viewer's own drag.
+once, at adopt, and nothing re-applied it. From that one seek onwards the window
+had no floor at all. Any later cause of a below-start position — an SDK-side
+seek, a repeat `ready`, or the viewer dragging the platform's own scrub bar —
+left the playhead outside the window, playing material the window was supposed
+to exclude, and no report said so. The clamp on `seekTo` and `seekBy` did not
+help: the positions that escaped were exactly the ones that arrived without a
+Playdeck command. It is corrected now however the position arrived.
 
 **The end of the window is corrected the same way, through the same predicate.**
 It was already enforced — a pause plus an `ended` — but only the published
@@ -66,7 +68,13 @@ something else, which is why it was not done.
 
 **The native and HLS providers are unchanged**, as they were for #214: native
 keeps its own boundary state machine, entangled with the element's `seekable`
-ranges, and nothing here reaches it.
+ranges, and nothing here reaches it. So `startTime` now means two things, and
+both ends say so rather than leaving it to be discovered: `RootProps.startTime`
+in `@playdeck/react` and `NativePlaybackOptions.startTime` in
+`@playdeck/provider-native` each state the divergence. Those two packages carry
+no code change at all — the corrected prose is their whole diff — but it is
+prose a consumer reads from the shipped `.d.ts`, so they take a `patch` for it,
+the way `@playdeck/react` took one for documentation alone in #457.
 
 **Why `minor` and not `patch`.** This is a defect fix, but not one behind an
 unchanged surface. `PlayerState.currentTime` publishes a value it did not
