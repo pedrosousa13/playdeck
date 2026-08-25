@@ -22,12 +22,6 @@ export const FullscreenButton = ({
   return (
     <button
       {...props}
-      // Read off props rather than left to the spread, as `VolumeSlider` and
-      // `ActivationButton` have always done it: a literal written after the
-      // spread wins by React's later-wins rule and discarded the consumer's
-      // value in silence (#446). The fallback stays inside the branch, so a
-      // consumer who names this control once keeps that name in both states
-      // rather than having the library's own reasserted over it in one.
       aria-label={
         ariaLabel ?? (fullscreen ? 'Exit fullscreen' : 'Enter fullscreen')
       }

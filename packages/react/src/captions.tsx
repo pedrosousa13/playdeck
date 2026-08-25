@@ -154,13 +154,9 @@ export const CaptionsButton = ({
     <>
       <button
         {...props}
-        // Read off props rather than left to the spread, as `VolumeSlider` and
-        // `ActivationButton` have always done it: a literal written after the
-        // spread wins by React's later-wins rule and discarded the consumer's
-        // value in silence (#446). The fallback stays inside the branch, so a
-        // consumer who names this control once keeps that name in both states.
-        // The live region below is untouched — it announces the transition, not
-        // the control, and is the library's own sentence either way.
+        // The live region below is untouched by the consumer's name: it
+        // announces the transition, not the control, and is the library's own
+        // sentence either way.
         aria-label={ariaLabel ?? (on ? 'Disable captions' : 'Enable captions')}
         aria-pressed={on}
         data-provider={provider ?? undefined}

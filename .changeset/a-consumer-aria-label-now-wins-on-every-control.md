@@ -52,11 +52,14 @@ with one exception, rather than a per-prop table.
 **No default wording changed.** With no consumer name supplied, all seven
 controls render byte-identical labels to the previous release, in every state.
 
-**Documentation.** `inputProps` appeared nowhere in any shipped README or doc —
-the reasoning for which attributes the library keeps existed only in the source,
-where a consumer cannot read it. `@playdeck/react`'s README now documents the
-escape hatch, the precedence order, and the rule that a consumer label wins on
-every control.
+**Documentation.** `inputProps` appeared in no shipped README — its one mention
+anywhere was a passing example in an architecture decision record, and the
+reasoning for which attributes the library keeps was in the source, where a
+consumer cannot read it. `@playdeck/react`'s README now documents the escape
+hatch, the precedence order, and the rule that a consumer label wins on every
+control — including the part a consumer has to do themselves, since a button's
+visible text falls back to its own English wording and naming one without also
+passing `children` leaves the two disagreeing.
 
 **Why `minor` and not `patch`.** No API broke and no type widened, but a
 released package renders something different for consumer code that already

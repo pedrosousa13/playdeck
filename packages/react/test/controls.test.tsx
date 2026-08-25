@@ -170,12 +170,12 @@ describe('PlayButton', () => {
     expect(screen.getByRole('button', { name: 'Play' }).textContent).toBe('Go');
   });
 
-  // Every control below carries this pair. The defect (#446) was a consumer
-  // spread written *above* a literal `aria-label`, which React's later-wins
-  // rule then discarded, and only the pair catches it coming back: the
-  // consumer-name half alone would pass against a control that had stopped
-  // labelling itself at all, and the default half alone is what the spread
-  // order already satisfied.
+  // Each of the six controls repaired by #446 is covered by a pair like this
+  // one. The defect was a consumer spread written *above* a literal
+  // `aria-label`, which React's later-wins rule then discarded, and only the
+  // pair catches it coming back: the consumer-name half alone would pass
+  // against a control that had stopped labelling itself at all, and the
+  // default half alone is what the spread order already satisfied.
   test('honours a consumer aria-label in both playback states', () => {
     const { emit } = renderWithPlayer(
       <Player.PlayButton aria-label="Reproducir" />,
@@ -627,9 +627,9 @@ describe('SeekSlider', () => {
   // The accessible name is the one prop this component takes at the wrapper
   // level and renders somewhere else. Its props are the wrapper's, so a plainly
   // written name used to type-check, land on a `<div>` with no role, and leave
-  // the input announcing 'Seek' with nothing to say so (#437). The four tests
-  // below pin the whole order — `inputProps`, then top-level, then the built-in
-  // — because the precedence is expressed by the position of a spread and a
+  // the input announcing 'Seek' with nothing to say so (#437). The tests below
+  // pin the whole order — `inputProps`, then top-level, then the built-in —
+  // because the precedence is expressed by the position of a spread, and a
   // reordering would otherwise reverse it in silence.
   test('forwards a top-level aria-label onto the range control', () => {
     const { container } = renderWithPlayer(

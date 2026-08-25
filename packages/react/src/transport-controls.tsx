@@ -93,6 +93,18 @@ const snapToStep = (
   return nearest <= max ? nearest : on(Math.floor((max - min) / size));
 };
 
+// THE ACCESSIBLE-NAME RULE, for every control in this package and stated only
+// here. A control destructures `aria-label` off its props and writes
+// `ariaLabel ?? <its own>`, rather than leaving the name to the props spread.
+// The shape is what `VolumeSlider` below and `ActivationButton` have always
+// used, and the reason the others need it is that a literal written after a
+// spread wins by React's later-wins rule: it discarded the consumer's name in
+// silence, with nothing from the compiler and nothing at runtime.
+//
+// The fallback belongs INSIDE the state branch, not around it. A control whose
+// wording changes with its state would otherwise reassert the library's word in
+// one state and keep the consumer's in the other, and a name is owned or it is
+// not — there is no coherent half of a name to own.
 export type PlayButtonProps = ComponentPropsWithRef<'button'>;
 
 export const PlayButton = ({
@@ -113,12 +125,6 @@ export const PlayButton = ({
   return (
     <button
       {...props}
-      // Read off props rather than left to the spread, as `VolumeSlider` and
-      // `ActivationButton` have always done it: a literal written after the
-      // spread wins by React's later-wins rule and discarded the consumer's
-      // value in silence (#446). The fallback stays inside the branch, so a
-      // consumer who names this control once keeps that name in both states
-      // rather than having 'Pause' reasserted over it in one of them.
       aria-label={ariaLabel ?? (isPlaying ? 'Pause' : 'Play')}
       aria-pressed={isPlaying}
       data-autoplay-state={autoplay}

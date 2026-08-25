@@ -200,12 +200,21 @@ export const poster = Player.normalizePoster('/poster.jpg');
 
 #### Accessible names
 
-Every control ships a built-in English `aria-label`, and **an `aria-label` you
-pass always wins over it**. The built-in is a fallback, never an override, so
-`<Player.PlayButton aria-label="Reproducir" />` and
+Every interactive control ships a built-in English `aria-label`, and **an
+`aria-label` you pass always wins over it**. The built-in is a fallback, never an
+override, so `<Player.PlayButton aria-label="Reproducir" />` and
 `<Player.SeekSlider aria-label="Buscar" />` do the same thing for the same
 reason. Playdeck carries no message catalogue and no locale handling; this prop
-is how you supply your own strings.
+is how you supply your own strings. (`Time` and `Controls` are not interactive
+and carry no name of their own.)
+
+**A button's visible text is separate, and you own that too.** The buttons fall
+back to rendering their own English wording as their children, so naming a
+button without also passing `children` leaves the two disagreeing — a
+`<Player.PlayButton aria-label="Reproducir" />` reads "Reproducir" to a screen
+reader and "Play" on screen. That is a WCAG 2.5.3 _Label in Name_ failure for
+anyone driving the control by voice. Pass both, or pass an icon as `children`
+and let the name stand alone.
 
 Where a control's own label changes with its state — play/pause, mute/unmute,
 captions on/off, and the fullscreen and picture-in-picture toggles — **one name
