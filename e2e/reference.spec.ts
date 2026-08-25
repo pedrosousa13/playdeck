@@ -14,10 +14,6 @@ import {
   settingsTrigger,
   volumeSlider
 } from './locators';
-import {
-  dumpCurrentTimeTrap,
-  installCurrentTimeTrap
-} from './support/currenttime-trap';
 
 // #67's composed example, driven the way a consumer would. The MP4 and HLS legs
 // block; YouTube and Vimeo are @real and grep-inverted out of CI, because the
@@ -735,21 +731,9 @@ const settledAt = (
     )
     .toBe('held');
 
-// TEMPORARY, for #470 — reverted with the rig it dumps. The hook is declared
-// at file scope because Playwright has nowhere narrower to put one, but it is
-// scoped in effect to the two tests below: it reads `window.__pd470` and
-// returns immediately when the page has no rig, which is every other test in
-// this file. See `support/currenttime-trap.ts` for what it prints and why.
-test.afterEach(async ({ page }, testInfo) => {
-  await dumpCurrentTimeTrap(page, testInfo);
-});
-
 // #191: both controls remain operable by POINTER, and the resulting value
 // still reaches the media element.
 test('both range controls stay operable by pointer', async ({ page }) => {
-  // TEMPORARY, for #470. Before `goto`, so the trap is in place for the
-  // story's own writes as well as this test's.
-  await installCurrentTimeTrap(page);
   await page.goto(story);
   await activationButton(page).click();
   await played(page);
@@ -761,61 +745,67 @@ test('both range controls stay operable by pointer', async ({ page }) => {
   // currentTime never falls by itself, so every `toBe(0)` below is a place
   // only a control can put it.
   //
-  // The seek starts at its far end, put there through the media element rather
-  // than through either control, so the pointer click has somewhere to travel
-  // that playback could not have reached on its own. Where a consumer supplies
-  // no step, `SeekSlider` derives its input's default from the window it
-  // renders — `min(1, span / 20)` (#383) — so on this ~1.000s fixture the grid
-  // is a fine one, its stops a twentieth of the clip apart, rather than the two
-  // values the older fixed `step={1}` left. ADR-0005 remains the account of
-  // that step: its `step={1}` bullet is why the attribute is still whatever
-  // pointer scrubbing wants even though the arrows stopped using it, and its
-  // footnote records the derivation replacing the fixed 1. The far end sits the
-  // full width of the window away from the minimum the click below asks for, so
-  // settling there first is what makes that click a real change rather than a
-  // no-op that fires no event: a range input handed the value it already holds
-  // fires neither `input` nor `change`, and the assertion after it would then
-  // be reading what this line put there.
+  // The seek starts one step short of its far end, put there through the media
+  // element rather than through either control, so the pointer click has
+  // somewhere to travel that playback could not have reached on its own. Where
+  // a consumer supplies no step, `SeekSlider` derives its input's default from
+  // the window it renders — `min(1, span / 20)` (#383) — so on this ~1.000s
+  // fixture the grid is a fine one, its stops a twentieth of the clip apart,
+  // rather than the two values the older fixed `step={1}` left. ADR-0005
+  // remains the account of that step: its `step={1}` bullet is why the
+  // attribute is still whatever pointer scrubbing wants even though the arrows
+  // stopped using it, and its footnote records the derivation replacing the
+  // fixed 1. 0.95 is a stop on that derived grid and sits 19 of its 20 steps
+  // away from the minimum the click below asks for, so settling there first is
+  // what makes that click a real change rather than a no-op that fires no
+  // event: a range input handed the value it already holds fires neither
+  // `input` nor `change`, and the assertion after it would then be reading what
+  // this line put there.
   //
-  // And the element has to be able to reach 1 before it is told to, which on
-  // WebKit is not a given — `seekableThrough` above is that precondition, and
-  // carries why (#407).
+  // 0.95 rather than the far end, which is where this line started and what it
+  // was written to use. The far end is exactly `duration`, and a seek to
+  // exactly `duration` is the one position this fixture cannot be relied on to
+  // reach in Playwright's Linux WebKit. Measured over 50 unretried runs
+  // (`--repeat-each=25 --retries=0`, #470): the write itself always took — 25
+  // of 25 read back exactly 1 in the statement after the assignment, on a
+  // source whose duration and seekable window had both reached 1.000000 — and
+  // then the seek the engine started for it landed at 0.000000 on 9 of those 25
+  // runs, `seeking` reporting 1.000000 and `seeked` 0.000000 a few
+  // milliseconds behind it. Nothing in the page put the playhead back: a
+  // `currentTime` accessor trap installed before the story's own script ran
+  // recorded exactly one write on the failing runs, the test's. So the target
+  // is the whole of the variable, and this test never needed the furthest one
+  // — only one far enough from the minimum to make the click below a real
+  // change. `.out-of-scope/webkit-end-of-media-seek.md` carries the rest, and
+  // the keyboard test below, which cannot move its target off `max`, carries
+  // the skip this retarget avoids needing.
+  //
+  // And the element has to be able to reach that position before it is told to,
+  // which on WebKit is not a given — `seekableThrough` above is that
+  // precondition, and carries why (#407). It still waits on 1 rather than on
+  // 0.95: waiting on the target alone would accept a window that stops just
+  // past it, and #407's subject is the partly-parsed element, not the distance.
   await seekableThrough(page, 1);
-  // TEMPORARY, for #470: the single most decisive datum in the whole rig. The
-  // reading is taken INSIDE the same evaluate, one statement after the
-  // assignment, so nothing — no task, no microtask, no media event — can have
-  // run in between. `afterWrite !== 1` on a failing run says the engine
-  // refused or clamped the write on the spot; `afterWrite === 1` on a failing
-  // run says it took and something else put the playhead back. Logged on
-  // every run, passing or failing, because the passing runs are the control.
-  const immediate = await media(page).evaluate((el: HTMLVideoElement) => {
+  await media(page).evaluate((el: HTMLVideoElement) => {
     el.pause();
-    const beforeWrite = el.currentTime;
-    el.currentTime = 1;
-    return {
-      beforeWrite,
-      afterWrite: el.currentTime,
-      paused: el.paused,
-      ended: el.ended,
-      readyState: el.readyState,
-      duration: el.duration,
-      seekableEnd:
-        el.seekable.length === 0
-          ? null
-          : el.seekable.end(el.seekable.length - 1)
-    };
+    el.currentTime = 0.95;
   });
-  // Field by field rather than `JSON.stringify`, which renders a NaN duration
-  // as `null` and would erase the parsed/unparsed distinction this turns on.
-  console.log(
-    `[#470] write of 1: before=${immediate.beforeWrite} after=${immediate.afterWrite}` +
-      ` paused=${immediate.paused} ended=${immediate.ended}` +
-      ` readyState=${immediate.readyState} duration=${immediate.duration}` +
-      ` seekableEnd=${immediate.seekableEnd}`
-  );
-  await settledAt(page, 'seek-slider-input', 1, 'currentTime', {
-    min: 1,
-    max: Infinity
+  // One derived step either side of the target, both ends measured rather than
+  // picked for comfort. Every engine parks the playhead at exactly 0.95 for
+  // this write — 6 of 6 on webkit, 4 of 4 on chromium and 4 of 4 on firefox,
+  // run locally on an idle machine, each reading 0.95 against a grid the input
+  // reported as min=0 step=0.05 max=1. The slack is a whole step and not the
+  // half `settledAt` allows the control, because a frame-boundary snap on a
+  // re-encoded fixture is bounded by a frame and a frame at any ordinary rate
+  // is longer than half a step's 25ms. What the lower bound must not do is
+  // admit 0, which is exactly where the defect above lands: 0.9 is eighteen
+  // steps clear of it. And the bound is closed at the top, where the far end
+  // needed `max: Infinity` — WebKit settles a fraction PAST 1 once the clip
+  // ends (observed 1.000122584-1.000185166), and a mid-clip seek has no such
+  // overshoot to allow for.
+  await settledAt(page, 'seek-slider-input', 0.95, 'currentTime', {
+    min: 0.9,
+    max: 1
   });
 
   // A single click, not a drag — a synthesized drag across a range input was
@@ -857,14 +847,35 @@ test('both range controls stay operable by pointer', async ({ page }) => {
 // there cover Space, k, the four arrows, j, l, PageUp, PageDown, m, f and c,
 // and nothing else), so they are the only keys left that exercise the input
 // itself. ADR-0005 names them as what keeps each slider operable.
+//
+// And End is what puts this test out of WebKit's reach, where the pointer test
+// above only had to move its target. `End` asks a range input for its `max`,
+// and `SeekSlider`'s `max` IS the duration, so this leg cannot ask for anything
+// but the position #470 measured as non-deterministic on this engine: 7 of 25
+// unretried runs read the playhead at 0 after a press whose seek the library
+// had already issued and the element had already accepted. There is no
+// narrower exclusion, and it was looked for. The control is not an independent
+// witness here: its `value` comes from `PlayerState.currentTime` with
+// `useSeekPreview` holding the requested value only until the published state
+// answers for it (`react/src/optimistic-request.ts`), so on a failing run the
+// seek succeeds, the element publishes 0, the preview is released and the
+// control follows the media back down — which is what the pointer test's own
+// failure string reported, `control 0 (target 1) / media 0`. An assertion on
+// the control alone would therefore fail on exactly the runs the media
+// assertion fails on, and the `Home` half degrades the other way: with the
+// playhead already at 0, `toBe(0)` after `Home` is a check that cannot fail.
+// The reasoning is the one `.out-of-scope/webkit-buffered-ranges.md` applies to
+// relaxed assertions — a guard that cannot refuse the defect it exists for is
+// worth nothing — so the whole test goes rather than half of it.
+const skipWithoutWebKitEndOfMediaSeek =
+  'End necessarily targets the seek slider max, which is the duration, and a seek to exactly the duration resolves at 0 on this engine for the WebM fixture this composition selects (measured: 7 of 25 unretried CI runs). See .out-of-scope/webkit-end-of-media-seek.md (#470).';
+
 test('the seek slider stays operable by keyboard in both directions', async ({
+  browserName,
   page
 }) => {
-  // TEMPORARY, for #470. This test's `Received: 0` after `End` has the same
-  // shape as the pointer test's dropped write, and whether it is the same
-  // defect is an open question the issue asks to answer either way — so it
-  // carries the same instrument.
-  await installCurrentTimeTrap(page);
+  test.skip(browserName === 'webkit', skipWithoutWebKitEndOfMediaSeek);
+
   await page.goto(story);
   await activationButton(page).click();
   await played(page);
@@ -892,10 +903,14 @@ test('the seek slider stays operable by keyboard in both directions', async ({
   // Home a real change: the position Home asks for is the one the press before
   // it moved away from, so a control still holding it would swallow the press.
   //
-  // The upper bound is left open because WebKit does not put the playhead at
-  // exactly 1 at the end of this fixture — it settles a fraction past it
-  // (observed 1.000122584-1.000185166; see the comment on the MP4 test above),
-  // while Chromium and Firefox report exactly 1.
+  // The upper bound is left open to match the poll above it, which asks for
+  // `>= 1` — the two are one assertion about the same press and would not be
+  // worth reading if they disagreed about what the end of the clip is. It was
+  // opened for WebKit, which settles a fraction past 1 at the end of this
+  // fixture (observed 1.000122584-1.000185166; see the comment on the MP4 test
+  // above) where Chromium and Firefox report exactly 1, and the skip above now
+  // keeps WebKit off this line — but "reached the end" is a floor on every
+  // engine, which is the reading the MP4 test takes as well.
   await settledAt(page, 'seek-slider-input', 1, 'currentTime', {
     min: 1,
     max: Infinity
@@ -939,10 +954,14 @@ declare global {
 // only the playhead assertion failed. Local WebKit passes both directions. The
 // pre-existing `operable by keyboard` test above carries the identical
 // `toBeGreaterThanOrEqual(1)` after its own End press and went flaky on that
-// same CI run, so the assertion is fragile on this engine independently of
-// #383. This engine takes the WebM fixture and behaves differently across loads
-// for it (#401, measured above); `el.seekable` populating and playback running
-// through to `ended` are recorded there, so the seek window is not the variable.
+// same CI run, so the assertion was fragile on this engine independently of
+// #383. #470 has since measured what that fragility is: a seek to exactly
+// `duration` resolves at 0.000000 on this engine for the WebM fixture this
+// composition selects, on 7 of 25 unretried runs, with the library's write and
+// the element's own `seeking` both reporting 1.000000 first. That is why the
+// test above now carries a WebKit skip and these two do not — the seek window
+// is not the variable, `el.seekable` having reached 1.000000 on every one of
+// those runs, and neither is anything the library does.
 //
 // The `seeking` counter is the stronger statement, not the weaker one: it says
 // the media element acted on a seek, which is the criterion's own wording —
