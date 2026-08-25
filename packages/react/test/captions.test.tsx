@@ -407,6 +407,30 @@ describe('Player.CaptionsButton', () => {
     expect(button?.getAttribute('aria-label')).toBe('Disable captions');
   });
 
+  // The consumer spread sat above the literal label, so React's later-wins rule
+  // discarded a consumer name (#446). Both directions are pinned, because the
+  // consumer-name half alone would still pass against a control that had
+  // stopped labelling itself at all.
+  test('honours a consumer aria-label in both caption states', () => {
+    const { container, emitState } = renderWithPlayer(
+      <Player.CaptionsButton aria-label="Subtítulos" />
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English')],
+      selectedTextTrackId: null
+    });
+    const button = container.querySelector(
+      '[data-playdeck-part="captions-button"]'
+    );
+    expect(button?.getAttribute('aria-label')).toBe('Subtítulos');
+
+    // One name, taken ownership of, held across the toggle rather than
+    // reasserted as 'Disable captions' in the other state.
+    emitState({ selectedTextTrackId: 'en' });
+    expect(button?.getAttribute('aria-label')).toBe('Subtítulos');
+  });
+
   test('clicking turns captions off when a track is selected', () => {
     const { container, emitState, selectTextTrack } = renderWithPlayer(
       <Player.CaptionsButton />

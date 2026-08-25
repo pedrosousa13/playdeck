@@ -5,6 +5,7 @@ import type { ComponentPropsWithRef } from 'react';
 export type FullscreenButtonProps = ComponentPropsWithRef<'button'>;
 
 export const FullscreenButton = ({
+  'aria-label': ariaLabel,
   children,
   onClick,
   style,
@@ -21,7 +22,15 @@ export const FullscreenButton = ({
   return (
     <button
       {...props}
-      aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      // Read off props rather than left to the spread, as `VolumeSlider` and
+      // `ActivationButton` have always done it: a literal written after the
+      // spread wins by React's later-wins rule and discarded the consumer's
+      // value in silence (#446). The fallback stays inside the branch, so a
+      // consumer who names this control once keeps that name in both states
+      // rather than having the library's own reasserted over it in one.
+      aria-label={
+        ariaLabel ?? (fullscreen ? 'Exit fullscreen' : 'Enter fullscreen')
+      }
       aria-pressed={fullscreen}
       data-provider={provider ?? undefined}
       data-playdeck-part="fullscreen-button"
@@ -44,6 +53,7 @@ export const FullscreenButton = ({
 export type PipButtonProps = ComponentPropsWithRef<'button'>;
 
 export const PipButton = ({
+  'aria-label': ariaLabel,
   children,
   onClick,
   style,
@@ -61,9 +71,10 @@ export const PipButton = ({
     <button
       {...props}
       aria-label={
-        pictureInPicture
+        ariaLabel ??
+        (pictureInPicture
           ? 'Exit picture-in-picture'
-          : 'Enter picture-in-picture'
+          : 'Enter picture-in-picture')
       }
       aria-pressed={pictureInPicture}
       data-provider={provider ?? undefined}
@@ -104,6 +115,7 @@ export type AirPlayButtonProps = ComponentPropsWithRef<'button'>;
  * wireless-route flag is ever surfaced, this control gains a state.
  */
 export const AirPlayButton = ({
+  'aria-label': ariaLabel,
   children,
   onClick,
   style,
@@ -119,7 +131,7 @@ export const AirPlayButton = ({
   return (
     <button
       {...props}
-      aria-label="AirPlay"
+      aria-label={ariaLabel ?? 'AirPlay'}
       data-provider={provider ?? undefined}
       data-playdeck-part="airplay-button"
       onClick={(event) => {
