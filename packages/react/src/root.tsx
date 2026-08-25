@@ -62,9 +62,10 @@ type SourceTransition = {
 // two declarations ever disagree.
 //
 // Their prose is split rather than copied, so that there is less left to drift
-// than the types the test pins: the JSDoc here is the consumer-facing summary
-// and states only what holds on all five providers, while the mechanism behind
-// each rule -- including why a zero `startTime` is not written -- is owned by
+// than the types the test pins: the JSDoc here is the consumer-facing summary,
+// stating what holds on every provider and naming the divergence where a rule
+// does not hold everywhere, while the mechanism behind each rule -- including
+// why a zero `startTime` is not written -- is owned by
 // `provider-native/src/playback.ts` and is not repeated here.
 export type RootProps = {
   readonly autoplay?: AutoplayMode;

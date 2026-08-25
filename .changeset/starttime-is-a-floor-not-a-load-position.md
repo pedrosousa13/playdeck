@@ -59,11 +59,22 @@ every answer is a fixed point: move the playhead to it and the report that move
 produces asks for no correction, so one out-of-window position costs at most one
 corrective seek however many reports of it arrive.
 
-**The loop wrap guard is untouched.** `atWrap` remains the loop concept it was
-documented as, still short-circuits on `loop`, and is still asked first by all
-three ports — so a looping embed is corrected by the loop rule exactly as it was
-and never reaches the floor below it. Widening it into "enforce a floor whenever
-not looping" would have changed all three embeds' loop behaviour to fix
+**The loop wrap guard is untouched.** `atWrap` is byte-identical — the loop
+concept it was documented as, still short-circuiting on `loop`, still the rule
+that restarts a looping embed and starts it playing again. What moved is the
+deference to it. Only the time-report paths ask it first: Vimeo's and Wistia's
+`onSeeked` call `correction` with no wrap test in front of them, because a
+paused embed reports no time update after a seek and the position has to be
+published from that handler. So the rule that a playhead behind the start of a
+looping player belongs to the loop now lives inside `correction`, which reads
+the loop from a parameter rather than from the call site and answers `undefined`
+for anything `atWrap` owns — sliding such a playhead onto the start instead
+would consume the wrap, leaving a position `atWrap` no longer recognises and
+quietly retiring the restart. A looping embed is therefore corrected by the loop
+rule exactly as it was and never reaches the floor below it, and that now holds
+wherever `correction` is asked from rather than depending on each call site
+remembering to ask in the right order. Widening `atWrap` into "enforce a floor
+whenever not looping" would have changed all three embeds' loop behaviour to fix
 something else, which is why it was not done.
 
 **The native and HLS providers are unchanged**, as they were for #214: native
