@@ -9,7 +9,7 @@ pnpm add @playdeck/provider-vimeo
 
 `@playdeck/react` loads this for you when the source resolves to `vimeo`. The SDK
 is bundled as a dependency and imported dynamically — nothing is fetched from a
-Vimeo CDN. [Provider setup](../../docs/provider-setup.md#vimeo) lists the URL
+Vimeo CDN. [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#vimeo) lists the URL
 forms that resolve to it, the ones that do not, and the options reachable
 through `Player.Root`.
 
@@ -59,7 +59,7 @@ export const playerReadyTimeout = PLAYER_READY_TIMEOUT_MS; // 15000
 
 The embed is chromeless by default (`controls: false`) so Playdeck's own controls
 are the only ones on screen, and `dnt` is on unless you turn it off. See
-[Third-party requests and CSP](../../docs/third-party-requests.md) for the full
+[Third-party requests and CSP](https://github.com/pedrosousa13/playdeck/blob/main/docs/third-party-requests.md) for the full
 origins list and what a page's CSP has to allow.
 
 ## Exports

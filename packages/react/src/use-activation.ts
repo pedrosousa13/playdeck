@@ -284,8 +284,13 @@ const echoSource = (input: unknown): string => {
 // object. So the two are for different audiences and both are correct for
 // theirs; this one is the React layer's, and core's stays what a direct caller
 // reads off the result.
+//
+// The document is named by url and not by repository path. A message is read
+// from wherever the built code ran -- a browser console, a paragraph over the
+// player -- and a reader there has no repository to resolve a path against
+// (#459).
 const SOURCE_GUIDANCE =
-  "See Playdeck's docs/provider-setup.md for the source forms each provider accepts.";
+  'See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for the source forms each provider accepts.';
 
 // One sentence per `detectSource` failure reason, because the three do not mean
 // the same thing and one sentence for all three is the dead end #305 reports.
@@ -357,7 +362,7 @@ const providerError = (cause: unknown, type: ResolvedPlayerSource['type']) => ({
   cause,
   fatal: false,
   recoverable: true,
-  message: `Unable to load the ${PROVIDER_LABELS[type]} provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See Playdeck's docs/provider-setup.md for what to check.`
+  message: `Unable to load the ${PROVIDER_LABELS[type]} provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.`
 });
 
 const destroyStale = (adapter: ProviderAdapter): void => {

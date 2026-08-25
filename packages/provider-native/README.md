@@ -9,7 +9,7 @@ pnpm add @playdeck/provider-native
 
 `@playdeck/react` loads this for you when the source resolves to `video` — an
 `.mp4` or `.webm` path, or an explicit `{ type: 'video' }` source; see
-[Provider setup](../../docs/provider-setup.md#the-other-three-providers). Install
+[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers). Install
 it directly only if you are driving a `PlayerController` yourself.
 
 <!-- example:provider-native -->

@@ -61,7 +61,7 @@ export const Clip = () => (
 
 `source` takes the same input as `detectSource` — a URL string, or an explicit
 `{ type: 'hls' | 'video' | 'youtube' | 'vimeo' | 'wistia', ... }` object. See
-[Provider setup](../../docs/provider-setup.md) for which URL forms each provider
+[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md) for which URL forms each provider
 accepts, which it refuses, and what each provider's `providerOptions` are.
 
 `textTracks` is a prop on `Player.Media`, not on `Player.Root`. It takes an
@@ -245,7 +245,7 @@ unmutes at the value the user chose.
 The region owns those keys wherever focus sits inside it, a focused
 `<input type="range">` included, so the arrows seek and adjust volume at the
 same distances on `SeekSlider` and `VolumeSlider` as off them — see
-[ADR-0005](../../docs/adr/0005-the-shortcut-layer-owns-its-keys-on-a-range-input.md).
+[ADR-0005](https://github.com/pedrosousa13/playdeck/blob/main/docs/adr/0005-the-shortcut-layer-owns-its-keys-on-a-range-input.md).
 Text entry (a text `<input>`, `<textarea>`, `<select>` or content-editable
 region) still swallows every key, and a focused button, link or checkbox keeps
 Space and `Enter` for itself.

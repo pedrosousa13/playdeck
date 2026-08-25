@@ -216,7 +216,7 @@ const REFUSED_SOURCE = 'javascript:alert(1)';
 const REFUSED_SOURCE_MESSAGE =
   'Playdeck will not play the player source "javascript:alert(1)". ' +
   'An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ' +
-  "See Playdeck's docs/provider-setup.md for the source forms each provider accepts.";
+  'See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for the source forms each provider accepts.';
 
 beforeEach(() => {
   ControlledIntersectionObserver.instances = [];
@@ -1344,7 +1344,7 @@ test.each([
     source: 'https://vimeo.com/channels/staffpicks/76979871',
     message:
       'Playdeck could not read a video from the player source "https://vimeo.com/channels/staffpicks/76979871" — it is either not a well-formed URL, or a provider URL in a form Playdeck does not read. ' +
-      "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
+      'See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for the source forms each provider accepts.'
   },
   {
     // A well-formed https URL that no provider host matches and no file
@@ -1354,7 +1354,7 @@ test.each([
     message:
       'Playdeck will not play the player source "https://example.com/watch". ' +
       'An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ' +
-      "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
+      'See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for the source forms each provider accepts.'
   },
   {
     // Not a string at all, so neither string sentence applies: the object is
@@ -1363,7 +1363,7 @@ test.each([
     source: { type: 'vimeo', videoId: 'not-digits' } as const,
     message:
       'The player source {"type":"vimeo","videoId":"not-digits"} is not a source object Playdeck accepts. ' +
-      "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
+      'See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for the source forms each provider accepts.'
   }
 ])(
   'eager loading names the failure for $label',
@@ -1405,7 +1405,7 @@ test('eager loading truncates a long source in the message', async () => {
         message:
           `Playdeck will not play the player source "https://example.com/${'a'.repeat(100)}…". ` +
           'An accepted source URL is http(s) or scheme-less, carries no control character at either end, and is either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8. ' +
-          "See Playdeck's docs/provider-setup.md for the source forms each provider accepts."
+          'See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for the source forms each provider accepts.'
       }
     })
   );
@@ -2399,7 +2399,7 @@ test('names the provider a failed load was for', async () => {
         category: 'provider',
         cause,
         message:
-          "Unable to load the Vimeo provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See Playdeck's docs/provider-setup.md for what to check.",
+          "Unable to load the Vimeo provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.",
         recoverable: true
       },
       lifecycle: 'error'
