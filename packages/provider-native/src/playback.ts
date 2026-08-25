@@ -1,4 +1,4 @@
-import type { CommandResult } from '@playdeck/core';
+import type { CommandResult, PlayerError } from '@playdeck/core';
 import {
   commandError,
   mediaError,
@@ -31,6 +31,17 @@ export type NativePlaybackOptions = {
    * back to the start of the DVR window, which is not what asking for the start
    * of the media meant.
    *
+   * A start the source cannot be positioned at is not dropped in silence. Since
+   * #418 the provider publishes a non-fatal `configuration` notice on
+   * `PlayerState.error` — presentational, so a protective notice from the same
+   * attach outranks it — and leaves the playhead wherever this load left it,
+   * which is the clamped position where one was written and the element's own
+   * starting position where none was. The commonest cause is a WebKit element
+   * that reports a zero
+   * duration and an empty seekable window until it has played: 51 of 60
+   * measured loads asking for 5s on a 10s clip stayed at 0. The notice reports
+   * that; it does not make the offset apply.
+   *
    * DECLARED DIVERGENCE FROM THE EMBEDS, since #381. There the start is a
    * *floor* on every reported position: a playhead that arrives below it
    * without a Playdeck command -- an SDK-side seek, the platform's own scrub
@@ -54,6 +65,33 @@ export type NativePlaybackOptions = {
    * finite, or not above the sanitised `startTime`, is no end at all.
    */
   readonly endTime?: number;
+};
+
+// What a `startTime` the source could not be positioned at publishes. The
+// offset is still not applied — that is #465 — but the drop is no longer
+// silent, which is what #418 reported: measured over 60 real WebKit loads with
+// `startTime: 5` on a 10s clip, 51 of them dropped the offset and the consumer
+// was told nothing. Non-fatal: the media plays, from wherever this load left
+// the playhead. Never `recoverable`: the remedy is a change the consumer
+// makes, so a retry re-runs the same configuration against the same source and
+// reaches the same answer (#198).
+//
+// Static, like every other notice here, and deliberately naming neither the
+// requested offset nor the position reached. Both are already on
+// `PlayerState.currentTime` and in the consumer's own props, and a message that
+// re-worded itself per load would be unreadable to a monitoring system — the
+// ground #330 stood on.
+//
+// `'presentational'`: a start offset that did not apply left nothing about the
+// viewer unprotected, so it must yield the notice slot to any protective notice
+// the same attach raises (#368).
+const startTimeConfigurationNotice: PlayerError = {
+  category: 'configuration',
+  fatal: false,
+  recoverable: false,
+  severity: 'presentational',
+  message:
+    'The configured startTime could not be applied to this source, so playback begins somewhere other than the position that was asked for.'
 };
 
 export type NativePlaybackDeps = {
@@ -377,6 +415,22 @@ export const createNativePlayback = (
         startTime,
         endTime
       );
+      // Anything other than the offset the caller asked for is a refusal, and
+      // since #418 it is reported rather than dropped in silence. Three shapes
+      // reach here: no seekable range intersects the configured window at all,
+      // so there is nowhere legal to land; the clamp landed on the empty
+      // `seekable` and zero `duration` a WebKit element reports before it has
+      // played, which answers 0; and the clamp landed inside a window still
+      // being parsed, a fraction of the clip. The consumer is told in all
+      // three, because from outside they are one thing: the offset they
+      // configured is not where the playhead is.
+      //
+      // Keyed on the position rather than on whether a write happened. A start
+      // the element already holds writes nothing and is not a refusal — the
+      // caller got the position they asked for — and the write/skip rules
+      // below are unchanged by the notice.
+      if (initialPosition !== startTime)
+        emit({ error: startTimeConfigurationNotice });
       if (initialPosition === undefined) return;
       // The same rule for a real start the element is already sitting on.
       if (initialPosition === media.currentTime) return;
