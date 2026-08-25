@@ -452,5 +452,24 @@ yours to read from CSS and tests, not to set.
 The reason is accessibility. The button primitives above set `type="button"`,
 an `aria-label`, and `aria-pressed` where there is a pressed state to report,
 on an element whose shape they know. None of that survives being moved onto an
-element the primitive has never seen, and WCAG 2.2 AA is a release gate here
-rather than an aspiration.
+element the primitive has never seen.
+
+WCAG 2.2 AA is the standard releases are gated on here rather than an
+aspiration, and it is worth being exact about which half of that gate has been
+cleared. **Automated: yes, and broadly.** Axe runs its default rule set — not a
+narrower WCAG-tag subset — over nine states of the composed example in Chromium,
+Firefox and WebKit, and over every primitive story in Chromium. Alongside it:
+three reflow cases, tab order and menu focus return, focus-not-obscured
+hit-tests, and a live-region policy asserting that state transitions announce
+and time updates never do. Axe's needs-review bucket is asserted by equality
+too, so a new undiagnosed finding fails the run rather than passing quietly.
+The [reference example](?path=/docs/reference-player--docs) sets all of that out
+in full.
+
+**Human: not yet.** Conformance to 2.2 AA as a whole is not something a scanner
+can settle — whether focus is genuinely visible against the backdrop, whether
+captions stay legible over a bright frame, whether a screen reader's account of
+the player makes sense. That review is owner work, it is still open, and until
+it closes nothing here should be read as saying a released version has passed a
+full 2.2 AA audit. What is published is the automated evidence above, which is
+specific and checkable, and an honest statement of where it stops.
