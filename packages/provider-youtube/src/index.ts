@@ -47,10 +47,14 @@ export type YouTubeProviderOptions = {
    */
   readonly loop?: boolean;
   /**
-   * Start playback at this offset in seconds. A non-finite or non-positive
-   * value is no start at all. `Root`'s `startTime` prop is folded into this
-   * bag by `packages/react/src/root.tsx`, so `PlayerProviderOptions` omits the
-   * key and this is not a second home for the setting (ADR-0004).
+   * Start playback at this offset in seconds, and the floor the playhead is
+   * held above: since #381 every polled position below it is pulled back to it,
+   * including the viewer's own drag of YouTube's scrub bar under
+   * `controls: true`, which reaches this adapter as nothing but a position. A
+   * non-finite or non-positive value is no start at all. `Root`'s `startTime`
+   * prop is folded into this bag by `packages/react/src/root.tsx`, so
+   * `PlayerProviderOptions` omits the key and this is not a second home for the
+   * setting (ADR-0004).
    */
   readonly startTime?: number;
   /**
@@ -63,7 +67,8 @@ export type YouTubeProviderOptions = {
    * YouTube has no end mechanism this adapter can trust, so the boundary is
    * enforced from the 250 ms position poll. It can therefore overshoot by up
    * to that much before the end is published; the published `currentTime` is
-   * the boundary itself.
+   * the boundary itself, and since #381 the playhead is seeked back onto it
+   * rather than left where the player stopped, so the two agree.
    */
   readonly endTime?: number;
   /**

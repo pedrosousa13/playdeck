@@ -30,6 +30,21 @@ export type NativePlaybackOptions = {
    * live source whose seekable window starts above zero that means pulling it
    * back to the start of the DVR window, which is not what asking for the start
    * of the media meant.
+   *
+   * DECLARED DIVERGENCE FROM THE EMBEDS, since #381. There the start is a
+   * *floor* on every reported position: a playhead that arrives below it
+   * without a Playdeck command -- an SDK-side seek, the platform's own scrub
+   * bar -- is seeked back into the window. Here it is applied once per load, by
+   * `applyInitialPosition` below, and nothing re-applies it, so a viewer who
+   * seeks below the start stays there. `seekTo` and `seekBy` are clamped into
+   * the window on every provider, so only the uncommanded positions differ.
+   * Native was out of scope for #381 for the reason it was for #214: its
+   * boundary state machine is entangled with `HTMLVideoElement.seekable` --
+   * `withinMediaBounds` reads the seekable ranges, and a live source's window
+   * slides -- so a floor here is a decision about DVR windows rather than the
+   * same one the embeds took. The end of the window does *not* diverge: this
+   * seam writes `media.currentTime = endTime` at the boundary and since #381
+   * every embed seeks back onto it too.
    */
   readonly startTime?: number;
   /**

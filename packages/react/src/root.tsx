@@ -62,9 +62,10 @@ type SourceTransition = {
 // two declarations ever disagree.
 //
 // Their prose is split rather than copied, so that there is less left to drift
-// than the types the test pins: the JSDoc here is the consumer-facing summary
-// and states only what holds on all five providers, while the mechanism behind
-// each rule -- including why a zero `startTime` is not written -- is owned by
+// than the types the test pins: the JSDoc here is the consumer-facing summary,
+// stating what holds on every provider and naming the divergence where a rule
+// does not hold everywhere, while the mechanism behind each rule -- including
+// why a zero `startTime` is not written -- is owned by
 // `provider-native/src/playback.ts` and is not repeated here.
 export type RootProps = {
   readonly autoplay?: AutoplayMode;
@@ -136,10 +137,18 @@ export type RootProps = {
   readonly ref?: Ref<PlayerHandle>;
   readonly source: PlayerSource;
   /**
-   * Start playback at this offset in seconds. Works the same on every provider.
-   * A value that is not finite, or not above zero, is no start at all — zero
-   * asks for the start the media would have had anyway, so the playhead is left
-   * wherever the provider put it rather than written to.
+   * Start playback at this offset in seconds. A value that is not finite, or
+   * not above zero, is no start at all — zero asks for the start the media
+   * would have had anyway, so the playhead is left wherever the provider put it
+   * rather than written to.
+   *
+   * The one rule that does not hold on every provider. On the three embed
+   * providers the start is a floor: a position that arrives below it without a
+   * Playdeck command — an SDK-side seek, the platform's own scrub bar — is
+   * seeked back to it. Native and HLS apply the start once per load and leave a
+   * viewer who seeks below it there; `NativePlaybackOptions` owns why. A
+   * `seekTo` or `seekBy` below the start is clamped on every provider, so only
+   * the uncommanded positions differ (#381).
    */
   readonly startTime?: number;
   readonly volume?: number;

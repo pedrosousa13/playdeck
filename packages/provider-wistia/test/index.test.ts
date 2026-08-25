@@ -1336,6 +1336,145 @@ test('resumes from the start boundary after the media ends naturally', async () 
   expect(player.handle.play).toHaveBeenCalled();
 });
 
+// --- the start boundary is a floor, not a load position (#381) ---
+// It used to be applied once, at adopt, and nothing re-applied it. Both ends of
+// the window are corrected through one predicate now, `@playdeck/core`'s
+// `correction`, which the Vimeo and YouTube ports consult identically.
+
+test('pulls a time report below the start boundary back into the window', async () => {
+  const result = await setup({
+    options: { startTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+
+  player.handle.currentTime = 5;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(player.handle.time).toHaveBeenLastCalledWith(20);
+  expect(result.patches).toContainEqual({ currentTime: 20 });
+  expect(result.patches).not.toContainEqual({ currentTime: 5 });
+});
+
+// The behaviour change #381 settled: the viewer's own seek is pulled back too,
+// because `startTime` is the window playback is confined to. A paused player
+// reports no `time-update` after a seek, so this cannot wait for one.
+test("pulls a viewer's own seek below the start boundary back into the window", async () => {
+  const result = await setup({
+    options: { startTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+
+  player.handle.currentTime = 5;
+  player.emit(WISTIA_EVENTS.seeked);
+
+  expect(player.handle.time).toHaveBeenLastCalledWith(20);
+  expect(result.patches).toContainEqual({ seeking: false, currentTime: 20 });
+});
+
+// A correction issues a seek, the seek reports back, and that report must not
+// correct again: `correction` answers undefined for its own target.
+test('does not correct the position its own correction produced', async () => {
+  const result = await setup({
+    options: { startTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+  player.handle.currentTime = 5;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  player.handle.currentTime = 20;
+  player.emit(WISTIA_EVENTS.seeked);
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  // The seek at adopt, then the one correction. Nothing the correction itself
+  // reported asked for another.
+  expect(seekTargets(player)).toEqual([20, 20]);
+  expect(result.patches).toContainEqual({ currentTime: 20 });
+});
+
+test('does not correct a seek command the clamp already pulled in', async () => {
+  const result = await setup({
+    options: { startTime: 20, endTime: 40 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+
+  await result.provider.seekTo(0);
+  player.handle.currentTime = 20;
+  player.emit(WISTIA_EVENTS.seeked);
+
+  expect(seekTargets(player)).toEqual([20, 20]);
+  expect(result.patches).toContainEqual({ seeking: false, currentTime: 20 });
+});
+
+// The end of the window, through the same predicate. Aurora reports on its own
+// cadence, so the pause lands after the player has already run past the
+// boundary; pinning the report alone left the viewer looking at a frame
+// outside the window while `currentTime` said the boundary.
+test('seeks the playhead back onto the end boundary it overshot', async () => {
+  const result = await setup({
+    options: { endTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+
+  player.handle.currentTime = 20.4;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(player.handle.pause).toHaveBeenCalledTimes(1);
+  expect(player.handle.time).toHaveBeenLastCalledWith(20);
+  expect(result.patches).toContainEqual({
+    playback: 'ended',
+    buffering: false,
+    currentTime: 20
+  });
+});
+
+test('issues no corrective seek for a report that lands on the end boundary', async () => {
+  const result = await setup({
+    options: { endTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+
+  player.handle.currentTime = 20;
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(player.handle.pause).toHaveBeenCalledTimes(1);
+  expect(seekTargets(player)).toEqual([]);
+});
+
+// The wrap guard's position, arriving by the one path that has no wrap test in
+// front of it. `reviewTime` asks `atWrap` before the floor; this handler asks
+// the floor alone, so the rule has to live inside `correction` rather than in
+// the call order. Correcting here would put the playhead *on* the start, which
+// `atWrap` no longer recognises, retiring the restart and the `buffering:
+// false` that goes with it.
+test('leaves a looping player below the start boundary to the wrap guard', async () => {
+  const result = await setup({
+    options: { loop: true, startTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+
+  player.handle.currentTime = 5;
+  player.emit(WISTIA_EVENTS.seeked);
+
+  // Only `adopt`'s own seek so far: no correction, and the reported position
+  // published as it arrived — what this adapter did before the floor existed.
+  expect(seekTargets(player)).toEqual([20]);
+  expect(result.patches).toContainEqual({ seeking: false, currentTime: 5 });
+
+  // And the report that follows still reaches the wrap guard, which restarts
+  // the player from the start boundary.
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(seekTargets(player)).toEqual([20, 20]);
+  expect(result.patches).toContainEqual({ currentTime: 20, buffering: false });
+});
+
 test('clamps a seek to the window rather than ending at it', async () => {
   const result = await setup({
     options: { startTime: 5, endTime: 20 },

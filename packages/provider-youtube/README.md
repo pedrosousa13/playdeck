@@ -126,8 +126,15 @@ origins list and what a page's CSP has to allow.
   pair is undocumented, and it is not known to publish the state change the
   adapter needs. The end boundary comes from the 250 ms position poll instead,
   so it can overshoot by up to that much before `ended` is published — the
-  published `currentTime` is pinned to the boundary, and the playhead is left
-  where the player stopped rather than seeking backwards onto it.
+  published `currentTime` is pinned to the boundary and the playhead is seeked
+  back onto it, so what is on screen and what is published agree (#381).
+- **`startTime` is a floor, not just where playback starts.** Every polled
+  position below it is pulled back to it, whatever moved the playhead —
+  including the viewer's own drag of YouTube's scrub bar under `controls: true`,
+  which reaches this adapter as nothing but a position. A `seekTo` or `seekBy`
+  below the start is clamped to the same value, so the two agree rather than
+  correcting one position twice, and a correction never triggers another: the
+  position it seeks to is one the window accepts (#381).
 - **A plain looping embed publishes `ended` on every iteration, where the
   native provider publishes none.** With `loop` and no `startTime`, YouTube's
   playlist loop restarts at zero, which is where the window already begins, so

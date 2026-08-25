@@ -155,6 +155,36 @@ export const createVimeoPlayback = (
     );
   };
 
+  // Pulls a position the adapter never commanded back into the window and
+  // answers where it was pulled to, or undefined when it was already inside.
+  // The start boundary is a floor rather than a position `adopt` applies once
+  // (#381), so a below-start position is corrected whatever put it there: an
+  // SDK-side seek, a repeat `ready`, or the viewer dragging Vimeo's own scrub
+  // bar. `seekTo` and `seekBy` are clamped into the same window, and the two
+  // agree by construction — a clamped command lands on a position `correction`
+  // leaves alone, so it is never corrected a second time.
+  //
+  // Nor can the correction chase itself: `correction` answers undefined for the
+  // position it just asked for, so the `seeked` and `timeupdate` this seek
+  // produces publish as ordinary reports rather than triggering another seek.
+  //
+  // It leaves the loop rule alone rather than being asked after it: a looping
+  // embed's below-start playhead belongs to `wrapped`, which restarts *and*
+  // resumes it, and `correction` declines that position wherever it is asked
+  // from. That matters here and not on the time report — this handler has no
+  // wrap test in front of it, and correcting onto the start would leave a
+  // position `wrapped` no longer recognises, retiring the restart.
+  const correctPosition = (time: number): number | undefined => {
+    const target = boundary.correction(duration, time);
+    if (target === undefined) return undefined;
+    const player = getPlayer();
+    if (player)
+      void Promise.resolve(player.setCurrentTime(target)).catch(
+        () => undefined
+      );
+    return target;
+  };
+
   return {
     play: () =>
       runVimeoCommand(getPlayer(), async (player) => {
@@ -313,16 +343,26 @@ export const createVimeoPlayback = (
             return;
           }
           // Every report past the boundary is out of the window, so nothing is
-          // published until playback is back inside it. The playhead is pinned
-          // to the boundary rather than seeked back: Vimeo reports time on its
-          // own cadence, and a corrective seek would be a visible jump.
+          // published until playback is back inside it. The overshoot itself is
+          // corrected rather than only pinned in the report (#381): Vimeo
+          // reports time on its own cadence, so the pause lands after the embed
+          // has already run past the boundary, and pinning alone left the
+          // viewer looking at a frame outside the window for as long as the
+          // player stayed there while `currentTime` said the boundary. The
+          // pause goes first so the seek is not overtaken by playback.
           if (boundary.hasEnded()) return;
           boundary.setEnded(true);
           const end = boundary.end(duration) ?? seconds;
+          const overshoot = boundary.correction(duration, seconds);
           currentTime = end;
           const player = getPlayer();
-          if (player)
+          if (player) {
             void Promise.resolve(player.pause()).catch(() => undefined);
+            if (overshoot !== undefined)
+              void Promise.resolve(player.setCurrentTime(overshoot)).catch(
+                () => undefined
+              );
+          }
           emit(
             { playback: 'ended', buffering: false, currentTime: end },
             providerEvent('ended', undefined, data)
@@ -334,10 +374,10 @@ export const createVimeoPlayback = (
           restartFromBoundary();
           return;
         }
-        currentTime = seconds;
+        currentTime = correctPosition(seconds) ?? seconds;
         boundary.setEnded(false);
         emit({
-          currentTime: seconds,
+          currentTime,
           ...(nextDuration === undefined ? {} : { duration: nextDuration })
         });
       },
@@ -365,13 +405,16 @@ export const createVimeoPlayback = (
       },
       onSeeked: (data) => {
         const seconds = numberField(data, 'seconds') ?? currentTime;
-        currentTime = seconds;
+        // The seek nobody here asked for lands in this handler, and a paused
+        // embed reports no `timeupdate` after one — so the window is applied
+        // here as well, before the position is published rather than after.
+        currentTime = correctPosition(seconds) ?? seconds;
         // A seek back inside the window retires the boundary end it landed
         // from, so the next pause is reported normally again.
-        if (!boundary.atEnd(duration, seconds)) boundary.setEnded(false);
+        if (!boundary.atEnd(duration, currentTime)) boundary.setEnded(false);
         emit(
-          { seeking: false, currentTime: seconds },
-          providerEvent('seeked', { currentTime: seconds }, data)
+          { seeking: false, currentTime },
+          providerEvent('seeked', { currentTime }, data)
         );
       },
       onVolumeChange: (player, data) => {

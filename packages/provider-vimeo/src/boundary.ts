@@ -36,6 +36,20 @@ export type VimeoBoundary = {
   // boundary. Gated on the attachment being positioned, so the time reports a
   // load emits before the initial seek do not read as a wrap.
   readonly wrapped: (duration: number | null, time: number) => boolean;
+  // Where a position the adapter did not ask for has to be moved to for the
+  // window to hold, or undefined when it needs no move — `@playdeck/core`'s
+  // shared `correction`, which the YouTube and Wistia ports consult too. It is
+  // what makes the start boundary a floor rather than something `adopt` applies
+  // once (#381), and it answers the end of the window as well: a report past
+  // the end says how far the embed ran on before the pause landed.
+  //
+  // It is handed the same state `wrapped` is, and answers nothing for anything
+  // that state owns: a player not yet positioned, and a looping playhead behind
+  // the start boundary, which is `wrapped`'s to restart.
+  readonly correction: (
+    duration: number | null,
+    time: number
+  ) => number | undefined;
   // Whether the player's own `ended` is one this seam has to correct rather
   // than publish. `@playdeck/core`'s shared gate, where the reasoning and the
   // declared divergence from native both live; the YouTube and Wistia ports
@@ -72,6 +86,8 @@ export const createVimeoBoundary = (
     atEnd: (duration, time) => bounds.atEnd(duration, time),
     wrapped: (duration, time) =>
       bounds.atWrap(duration, time, { loop, positioned }),
+    correction: (duration, time) =>
+      bounds.correction(duration, time, { loop, positioned }),
     restartsOnEnded: () => bounds.restartsAtStart(loop),
     hasEnded: () => boundaryEnded,
     setEnded: (ended) => {

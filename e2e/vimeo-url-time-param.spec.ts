@@ -188,11 +188,15 @@ test('the guard closes the repeat-ready path', async ({ page }) => {
 });
 
 // The same repeat `ready` on a page that opted out — the failure being closed,
-// spelled out. Nothing pulls the playhead back, and the divergence is the sharp
-// part: the embed sits at 45 while Playdeck goes on publishing 20, so the
-// window it was asked to confine playback to is broken with no report saying
-// so. That divergence is #381; the guard keeps it out of reach rather than
-// fixing it.
+// spelled out. Nothing pulls the playhead back: the embed sits at 45 while
+// Playdeck goes on publishing 20, and the guard is what keeps that out of
+// reach.
+//
+// This stays a #329 test now that #381 has landed. The floor #381 added answers
+// a position *below* `startTime`, and this path does not produce one: 45 is
+// inside the window the story configures (`startTime: 20`, no `endTime`), so
+// `correction` answers nothing for it. What diverges here is the published
+// mirror rather than the window, and that is #463.
 test('a page that opts out is left at the crafted position by a repeat ready', async ({
   page
 }) => {

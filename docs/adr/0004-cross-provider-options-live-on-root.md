@@ -97,6 +97,21 @@ provider's bag by `resolvedProviderOptions`, and omitted from all three bags in
   controller to retry from. The mode is therefore `'audible'` on a
   `<wistia-player>` — the prop compiles, the retry never runs. Closing it is a
   refusal check in the Wistia adapter's play command.
+- `startTime` is the third instance, and it arrives as a difference in meaning
+  rather than as a silence: every provider answers the prop, but not with the
+  same rule. #381 made it a _floor_ on the three embeds — a position that
+  arrives below it without a Playdeck command, an SDK-side seek or the
+  platform's own scrub bar, is seeked back into the window. Native and HLS apply
+  it once per load and leave a viewer who seeks below it there, because their
+  boundary is entangled with `HTMLVideoElement.seekable` and a live source's
+  window slides, so a floor there is a decision about DVR windows rather than
+  the one the embeds took. A commanded `seekTo` or `seekBy` is clamped on every
+  provider, so only the uncommanded positions differ. A silent no-op is the
+  failure this boundary exists to prevent; a prop that means two things is the
+  same failure wearing an answer, so the divergence is declared at both ends
+  (`provider-native/src/playback.ts`'s `startTime`, and `RootProps`) rather than
+  left to be discovered. Closing it is a decision about live windows, not a
+  fan-out.
 - The fan-out is not uniform, and a consumer can observe that. Folding `controls`
   into a bag makes a change to it look like a provider-option change, which
   re-attaches a Vimeo or YouTube embed — it must, the value being baked into the

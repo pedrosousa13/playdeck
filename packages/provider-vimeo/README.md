@@ -122,8 +122,8 @@ origins list and what a page's CSP has to allow.
   carries a start as a `#t=` fragment on the embed url, which only keeps the
   embed from loading at zero — the seek this adapter issues when the player is
   ready is what the start rests on. There is no end mechanism at all, so the
-  adapter watches `timeupdate`: crossing `endTime` pauses the embed and
-  publishes `ended` with the playhead pinned to the boundary, and the pause it
+  adapter watches `timeupdate`: crossing `endTime` pauses the embed, seeks the
+  playhead back onto the boundary and publishes `ended` there, and the pause it
   caused is not reported as one. `loop` composes with both — `loop=1` stays on
   the embed and wraps to zero, and the adapter puts the playhead back at
   `startTime` afterwards, which also covers the embeds where Vimeo never fires
@@ -131,6 +131,14 @@ origins list and what a page's CSP has to allow.
   Sanitisation matches every other provider: a non-finite or non-positive start
   is no start, an end that is not finite or not above the start is no end, and
   an end past the duration is clamped to it.
+- **`startTime` is a floor, not just where playback starts.** A reported
+  position below it is pulled back to it, whatever moved the playhead — the
+  SDK's own url-parameter seek, a repeat `ready`, or the viewer dragging Vimeo's
+  scrub bar. `seeked` is corrected as well as `timeupdate`, because a paused
+  embed reports no time update after a seek. A `seekTo` or `seekBy` below the
+  start is clamped to the same value, so the two agree rather than correcting
+  one position twice, and a correction never triggers another: the position it
+  seeks to is one the window accepts (#381).
 - **A plain looping embed publishes `ended` on every iteration, where the
   native provider publishes none.** With `loop` and no `startTime`, `loop=1`
   restarts the embed at zero, which is where the window already begins, so this
