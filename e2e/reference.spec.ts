@@ -572,7 +572,8 @@ test('both range controls carry the composition own presentation', async ({
 // sample. `settledAt` requires four things to hold TOGETHER for `HOLD_MS` of
 // wall clock, sampled inside the page:
 //
-//  - the control reads `value`;
+//  - the control sits on the grid its input renders, at the stop nearest
+//    `value`;
 //  - the media element's `property` is inside `bounds`, so the two agree;
 //  - the media element is not part-way through a seek (`el.seeking`), i.e. no
 //    seek is outstanding whose completion would publish another position;
@@ -581,6 +582,60 @@ test('both range controls carry the composition own presentation', async ({
 //    control. Every caller pauses first, which is what makes this reachable:
 //    a playing clip reports `timeupdate` several times a second and would
 //    never go quiet for a whole window.
+//
+// A stop, rather than the exact string the input has to report, because the
+// string a range input keeps is a function of a grid this test does not pin.
+// The seek input spans its seek window rather than the media duration: `min`
+// and `max` are that window's start and end, which is `0` to the duration for a
+// VOD source that has one — the case this fixture happens to be — and the
+// seekable extent for a live source that has none. Its `step` is the
+// consumer's wherever `inputProps` supplies one, and otherwise the derived
+// default, `min(1, span / 20)` (`transport-controls.tsx`, #383). `snapToStep`
+// there decides the value React assigns from whichever grid those produce, so
+// the string the input keeps is a stop on it. An engine that reports this
+// fixture's duration as `1.000333333` rather than `1` moves every stop off the
+// round number a literal would name, so a literal asserted the duration as
+// much as the control.
+//
+// Half a step is only half the check. The control must also sit ON the grid:
+// its distance to the nearest stop, counted in steps from the input's own
+// `min`, has to be within a small fraction of one. Neither condition is worth
+// much alone — proximity alone accepts a control that is merely close and on no
+// stop at all, which is a control that never went through the sanitisation this
+// is here to observe, and membership alone accepts any stop anywhere. Together
+// they pin the control to a stop, and to the stop nearest the target: a stop
+// further out fails the first, a near miss of one fails the second. That is the
+// strictness of the literal this replaced, minus its dependence on the
+// fixture's duration being a round number.
+//
+// Membership is a tolerance and not exact arithmetic because it cannot be. The
+// DOM value is a decimal string `snapToStep` produced through `.toFixed`, and a
+// stop rebuilt here in floating point from `min` and `step` does not reproduce
+// that string digit for digit, so a modulo test against it would fail on
+// grids that are perfectly sound. The tolerance is therefore a fraction of a
+// step rather than an absolute distance, and is orders of magnitude below any
+// drift that would mean the control had missed the grid.
+//
+// What the control side does NOT rest on is `bounds`. That constrains the media
+// element's own value independently of the control, so the two halves are
+// established separately rather than each from the other — but both seek call
+// sites pass `{ min: 1, max: Infinity }`, a floor and not a pin, so it is not
+// what makes the control side tight. The two conditions above are. And half a
+// step still rejects a control a whole step or more from the target, which is
+// every stale reading the helper exists to catch: the shape it was written for
+// is a control reading 1 while the media reads 0, a full window apart and
+// nowhere near any tolerance.
+//
+// The grid is read back off the input rather than recomputed here, and
+// deliberately not re-derived from the window: a check that reimplemented
+// `snapToStep` would agree with a broken `snapToStep` by construction, which is
+// the one thing this must not do. Membership is grid arithmetic and nothing
+// else for the same reason — it does not rebuild `snapToStep`'s clamp into
+// `[min, max]`, nor its fallback where the nearest stop overshoots `max`,
+// because rebuilding either is how a check starts agreeing with the code it is
+// checking. An input with no usable grid — `step="any"`, or an attribute that
+// parses to nothing — has no stop to sit on, so that case demands the target
+// exactly.
 //
 // The loop awaits a timer between samples, so a commit that is owed gets the
 // event loop and is observed rather than skipped over. `HOLD_MS` is fixed wall
@@ -592,7 +647,7 @@ const HOLD_MS = 150;
 const settledAt = (
   page: Page,
   part: 'seek-slider-input' | 'volume-slider',
-  value: string,
+  value: number,
   property: 'currentTime' | 'volume',
   bounds: { readonly min: number; readonly max: number }
 ) =>
@@ -608,6 +663,24 @@ const settledAt = (
               '[data-playdeck-part="media"]'
             );
             if (input === null || el === null) return 'nothing rendered';
+            const size = Number(input.step);
+            const origin = Number(input.min);
+            // Both conditions, on a control with a usable grid: within half a
+            // step of the target, and on the grid. The float boundary of the
+            // first needs a nudge, since a control exactly half a step out is
+            // on the tolerated side of it and `1e-9` is far below any grid
+            // these controls render. The second counts the distance to the
+            // nearest stop in steps rather than seconds, and tolerates a
+            // millionth of one: the value it reads is a decimal string written
+            // with `.toFixed`, so a stop rebuilt from `min` and `step` here in
+            // floating point cannot be expected to match it exactly.
+            const near = (reported: number): boolean => {
+              if (!Number.isFinite(size) || size <= 0)
+                return reported === value;
+              if (Math.abs(reported - value) > size / 2 + 1e-9) return false;
+              const stops = (reported - origin) / size;
+              return Math.abs(stops - Math.round(stops)) <= 1e-6;
+            };
             const names = [
               'durationchange',
               'seeked',
@@ -627,8 +700,12 @@ const settledAt = (
               const deadline = performance.now() + hold;
               for (;;) {
                 const reading = el[property];
-                if (input.value !== value || reading < min || reading > max) {
-                  return `control ${input.value} / media ${reading}`;
+                if (
+                  !near(Number(input.value)) ||
+                  reading < min ||
+                  reading > max
+                ) {
+                  return `control ${input.value} (target ${value}) / media ${reading} / grid min=${input.min} max=${input.max} step=${input.step} / duration ${el.duration} / seekableEnd ${el.seekable.length === 0 ? 'none' : el.seekable.end(el.seekable.length - 1)}`;
                 }
                 if (fired.length > 0) return `media fired ${fired.join(',')}`;
                 if (el.seeking) return 'media seeking';
@@ -670,11 +747,19 @@ test('both range controls stay operable by pointer', async ({ page }) => {
   //
   // The seek starts at its far end, put there through the media element rather
   // than through either control, so the pointer click has somewhere to travel
-  // that playback could not have reached on its own. `SeekSlider` keeps
-  // `step={1}` (ADR-0005 explains why) on a min 0 / max duration range, so on
-  // this 1.000s fixture the input has exactly two reachable values; settling
-  // at "1" says the click below is a real change rather than a no-op that
-  // fires no event.
+  // that playback could not have reached on its own. Where a consumer supplies
+  // no step, `SeekSlider` derives its input's default from the window it
+  // renders — `min(1, span / 20)` (#383) — so on this ~1.000s fixture the grid
+  // is a fine one, its stops a twentieth of the clip apart, rather than the two
+  // values the older fixed `step={1}` left. ADR-0005 remains the account of
+  // that step: its `step={1}` bullet is why the attribute is still whatever
+  // pointer scrubbing wants even though the arrows stopped using it, and its
+  // footnote records the derivation replacing the fixed 1. The far end sits the
+  // full width of the window away from the minimum the click below asks for, so
+  // settling there first is what makes that click a real change rather than a
+  // no-op that fires no event: a range input handed the value it already holds
+  // fires neither `input` nor `change`, and the assertion after it would then
+  // be reading what this line put there.
   //
   // And the element has to be able to reach 1 before it is told to, which on
   // WebKit is not a given — `seekableThrough` above is that precondition, and
@@ -684,7 +769,7 @@ test('both range controls stay operable by pointer', async ({ page }) => {
     el.pause();
     el.currentTime = 1;
   });
-  await settledAt(page, 'seek-slider-input', '1', 'currentTime', {
+  await settledAt(page, 'seek-slider-input', 1, 'currentTime', {
     min: 1,
     max: Infinity
   });
@@ -705,7 +790,7 @@ test('both range controls stay operable by pointer', async ({ page }) => {
   // as on the media element, the same precondition the seek click gets above:
   // a click that asks a range input for the value it already holds fires
   // nothing.
-  await settledAt(page, 'volume-slider', '1', 'volume', { min: 1, max: 1 });
+  await settledAt(page, 'volume-slider', 1, 'volume', { min: 1, max: 1 });
   const volumeBox = (await volumeSlider(page).boundingBox())!;
   await page.mouse.click(volumeBox.x + 1, volumeBox.y + volumeBox.height / 2);
   await expect
@@ -742,7 +827,7 @@ test('the seek slider stays operable by keyboard in both directions', async ({
     el.pause();
     el.currentTime = 0;
   });
-  await settledAt(page, 'seek-slider-input', '0', 'currentTime', {
+  await settledAt(page, 'seek-slider-input', 0, 'currentTime', {
     min: 0,
     max: 0
   });
@@ -762,7 +847,7 @@ test('the seek slider stays operable by keyboard in both directions', async ({
   // exactly 1 at the end of this fixture — it settles a fraction past it
   // (observed 1.000122584-1.000185166; see the comment on the MP4 test above),
   // while Chromium and Firefox report exactly 1.
-  await settledAt(page, 'seek-slider-input', '1', 'currentTime', {
+  await settledAt(page, 'seek-slider-input', 1, 'currentTime', {
     min: 1,
     max: Infinity
   });
@@ -918,7 +1003,7 @@ test('the volume slider stays operable by keyboard in both directions', async ({
     el.pause();
     el.volume = 0;
   });
-  await settledAt(page, 'volume-slider', '0', 'volume', { min: 0, max: 0 });
+  await settledAt(page, 'volume-slider', 0, 'volume', { min: 0, max: 0 });
 
   await volumeSlider(page).focus();
   await page.keyboard.press('End');
@@ -928,7 +1013,7 @@ test('the volume slider stays operable by keyboard in both directions', async ({
 
   // As on the seek slider: the control reaching 1 and holding it is what makes
   // the Home below a change rather than a no-op.
-  await settledAt(page, 'volume-slider', '1', 'volume', { min: 1, max: 1 });
+  await settledAt(page, 'volume-slider', 1, 'volume', { min: 1, max: 1 });
   await page.keyboard.press('Home');
   await expect
     .poll(() => media(page).evaluate((el: HTMLVideoElement) => el.volume))
