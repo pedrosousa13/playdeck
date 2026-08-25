@@ -337,8 +337,9 @@ the same rules refuse it again, so no control offers one. Fix the value.
 A player that fails _after_ the source resolved reports something else:
 
 > Unable to load the &lt;provider&gt; provider. Playdeck cannot say why: the
-> rejection it caught is on this error's cause. See Playdeck's
-> docs/provider-setup.md for what to check.
+> rejection it caught is on this error's cause. See
+> https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for
+> what to check.
 
 The provider is named because the resolved source knows it. The reason is not,
 and is not guessable: a dynamic import the network never delivered, a

@@ -8,7 +8,7 @@ pnpm add @playdeck/provider-youtube
 ```
 
 `@playdeck/react` loads this for you when the source resolves to `youtube`.
-[Provider setup](../../docs/provider-setup.md#youtube) lists the URL forms that
+[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#youtube) lists the URL forms that
 resolve to it, the ones that do not, and the options reachable through
 `Player.Root`.
 
@@ -68,7 +68,7 @@ the parsed origin. Any other value falls back to the default rather than
 throwing, so a misconfigured host still plays.
 The embedding origin is declared to the player so it can validate the
 `postMessage` traffic it exchanges with the iframe. See
-[Third-party requests and CSP](../../docs/third-party-requests.md) for the full
+[Third-party requests and CSP](https://github.com/pedrosousa13/playdeck/blob/main/docs/third-party-requests.md) for the full
 origins list and what a page's CSP has to allow.
 
 ## Exports
