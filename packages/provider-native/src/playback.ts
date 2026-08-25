@@ -37,7 +37,7 @@ export type NativePlaybackOptions = {
    * bar -- is seeked back into the window. Here it is applied once per load, by
    * `applyInitialPosition` below, and nothing re-applies it, so a viewer who
    * seeks below the start stays there. `seekTo` and `seekBy` are clamped into
-   * the window on all five providers, so only the uncommanded positions differ.
+   * the window on every provider, so only the uncommanded positions differ.
    * Native was out of scope for #381 for the reason it was for #214: its
    * boundary state machine is entangled with `HTMLVideoElement.seekable` --
    * `withinMediaBounds` reads the seekable ranges, and a live source's window
