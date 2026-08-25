@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+import type { ComponentPropsWithRef } from 'react';
 import { expectTypeOf, test } from 'vitest';
 import * as Player from '../src/index';
 import type {
@@ -16,11 +16,21 @@ import type {
 // no name, and these six had none (#438) -- they took their props inline, so
 // there was nothing to import.
 //
-// Each wrapper below compiles only while its type is exported from the package
-// entry, and each assertion holds only while that type still describes the
-// component it is named for -- re-inlining one, or letting the two drift, fails
-// here. These are type-level claims, so they fail `pnpm typecheck` rather than
-// the runtime run, the same way `root-props.test.ts` does.
+// Two claims, and they catch different regressions. The wrappers below compile
+// only while each type is exported from the package entry AND still covers
+// everything its part demands -- narrow one and the spread stops satisfying the
+// part. The assertions restate each shape independently, the way
+// `root-props.test.ts` restates `RootProps`'s key set, so widening one fails
+// too. Asserting a type against `ComponentProps<typeof Part>` would do neither:
+// the part is annotated with that same type, so it would only ever compare a
+// thing to itself.
+//
+// What nothing here catches is a swap between two parts that genuinely take the
+// same props -- `SettingsMenuProps` and `SettingsMenuContentProps` are both a
+// div's props, and no assertion can separate types that are equal.
+//
+// These are type-level claims, so they fail `pnpm typecheck` rather than the
+// runtime run, the same way `root-props.test.ts` does.
 const Menu = (props: SettingsMenuProps) => <Player.SettingsMenu {...props} />;
 
 const Trigger = (props: SettingsMenuTriggerProps) => (
@@ -42,22 +52,37 @@ const RadioItem = (props: MenuRadioItemProps) => (
 );
 
 test('every menu part has a named props type a consumer can wrap it in', () => {
-  expectTypeOf(Menu)
-    .parameter(0)
-    .toEqualTypeOf<ComponentProps<typeof Player.SettingsMenu>>();
-  expectTypeOf(Trigger)
-    .parameter(0)
-    .toEqualTypeOf<ComponentProps<typeof Player.SettingsMenuTrigger>>();
-  expectTypeOf(Content)
-    .parameter(0)
-    .toEqualTypeOf<ComponentProps<typeof Player.SettingsMenuContent>>();
-  expectTypeOf(Item)
-    .parameter(0)
-    .toEqualTypeOf<ComponentProps<typeof Player.MenuItem>>();
-  expectTypeOf(RadioGroup)
-    .parameter(0)
-    .toEqualTypeOf<ComponentProps<typeof Player.MenuRadioGroup>>();
-  expectTypeOf(RadioItem)
-    .parameter(0)
-    .toEqualTypeOf<ComponentProps<typeof Player.MenuRadioItem>>();
+  // Each wrapper is referenced as a value, which is what proves it compiled.
+  expectTypeOf(Menu).parameter(0).toEqualTypeOf<SettingsMenuProps>();
+  expectTypeOf(Trigger).parameter(0).toEqualTypeOf<SettingsMenuTriggerProps>();
+  expectTypeOf(Content).parameter(0).toEqualTypeOf<SettingsMenuContentProps>();
+  expectTypeOf(Item).parameter(0).toEqualTypeOf<MenuItemProps>();
+  expectTypeOf(RadioGroup).parameter(0).toEqualTypeOf<MenuRadioGroupProps>();
+  expectTypeOf(RadioItem).parameter(0).toEqualTypeOf<MenuRadioItemProps>();
+});
+
+test('each menu part accepts exactly the props it accepted before it was named', () => {
+  // Restated here rather than read off the parts, so that widening or narrowing
+  // one of the six aliases fails rather than moving both sides at once.
+  expectTypeOf<SettingsMenuProps>().toEqualTypeOf<
+    ComponentPropsWithRef<'div'>
+  >();
+  expectTypeOf<SettingsMenuTriggerProps>().toEqualTypeOf<
+    ComponentPropsWithRef<'button'>
+  >();
+  expectTypeOf<SettingsMenuContentProps>().toEqualTypeOf<
+    ComponentPropsWithRef<'div'>
+  >();
+  expectTypeOf<MenuItemProps>().toEqualTypeOf<
+    ComponentPropsWithRef<'button'> & { readonly onSelect?: () => void }
+  >();
+  expectTypeOf<MenuRadioGroupProps>().toEqualTypeOf<
+    ComponentPropsWithRef<'div'> & {
+      readonly value: string;
+      readonly onValueChange: (value: string) => void;
+    }
+  >();
+  expectTypeOf<MenuRadioItemProps>().toEqualTypeOf<
+    ComponentPropsWithRef<'button'> & { readonly value: string }
+  >();
 });
