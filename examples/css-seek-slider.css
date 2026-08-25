@@ -1,9 +1,10 @@
 /* Styling a part: a slider.
-   Four parts, no markup of your own: `seek-slider` is the positioned box,
-   `seek-buffered` the layer under the scrubber, `seek-buffered-range` one span
-   per buffered range, and `seek-slider-input` the native range input. Reach for
-   the part name rather than a tag selector — the part is the contract, the
-   element type is the primitive's business. */
+   Five parts, no markup of your own: `seek-slider` is the positioned box,
+   `seek-buffered` the layer under the input, `seek-buffered-range` one span
+   per buffered range, `seek-progress` the span before the current position, and
+   `seek-slider-input` the native range input. Reach for the part name rather
+   than a tag selector — the part is the contract, the element type is the
+   primitive's business. */
 
 [data-playdeck-part='seek-slider'] {
   display: flex;
@@ -33,6 +34,15 @@
   height: 100%;
   border-radius: inherit;
   background: #4b566b;
+}
+
+/* Placed by the primitive too, and rendered after the ranges, so it paints over
+   the loaded colour wherever the two overlap. */
+[data-playdeck-part='seek-progress'] {
+  top: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #7aa7ff;
 }
 
 /* No seek window yet — a live edge, or a duration nobody knows. Say so rather

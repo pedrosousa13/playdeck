@@ -10,7 +10,9 @@ engine and the fixture, and it was measured rather than assumed.
 
 Playwright's Linux WebKit has no H.264 decoder — `el.canPlayType('video/mp4')` is the
 empty string — so the reference composition falls past the MP4 to the WebM behind it and
-plays `tracer.webm`. For that clip WebKit populates `el.buffered` on roughly **half** of
+plays `tracer.webm` — the same fall-through
+[webkit-end-of-media-seek](./webkit-end-of-media-seek.md) turns on. For that clip
+WebKit populates `el.buffered` on roughly **half** of
 loads, and on the other half it never populates it at any observable instant.
 
 Not "at instants the adapter does not sample" — at any instant at all. A probe on the

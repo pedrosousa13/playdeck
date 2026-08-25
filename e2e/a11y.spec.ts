@@ -82,16 +82,20 @@ const story = (id: string) =>
 
 const composition = story('composition');
 
-// The seven states #32 lists, plus the global-shortcuts one #181 adds: eight
-// states over six stories. `composition` is genuinely both paused and
-// captions-on, and menu-open is that same story with the settings menu opened
-// by this spec rather than by a story play function — whether Storybook runs
-// play functions on a plain iframe render is not something this spec should
-// depend on.
+// The seven states #32 lists, plus the global-shortcuts one #181 adds and the
+// captions-menu-open one #419 adds: nine states over six stories.
+// `composition` is genuinely both paused and captions-on, and the two
+// menu-open states are that same story with one or the other menu opened by
+// this spec rather than by a story play function — whether Storybook runs play
+// functions on a plain iframe render is not something this spec should depend
+// on.
 const states: ReadonlyArray<{
   readonly name: string;
   readonly url: string;
-  readonly open?: boolean;
+  // Which menu this state opens, if any. Named rather than boolean because the
+  // composition has two, and a boolean could only ever have meant the settings
+  // one.
+  readonly open?: 'settings' | 'captions';
   // Whether this state's story puts the shortcut layer on `document`. Pinned
   // before the scan, because global mode is otherwise invisible in the DOM.
   readonly globalShortcuts?: boolean;
@@ -127,8 +131,32 @@ const states: ReadonlyArray<{
   {
     name: 'menu-open',
     url: composition,
-    open: true,
+    open: 'settings',
     knownIncomplete: ['aria-valid-attr-value']
+  },
+  // captions-menu-open: the same composition with the captions menu opened
+  // instead. `CaptionsMenu` is a preset over `SettingsMenu`, so it composes a
+  // different content tree — a radio group over the text tracks, plus an "Off"
+  // option — inside the same primitives, and that tree had no scan coverage:
+  // this spec only ever clicked the settings trigger (#419).
+  //
+  // Two diagnosed entries, per this list's own rule that a `knownIncomplete`
+  // id means an examined finding and never an unexamined one:
+  //
+  // - `aria-valid-attr-value`: the same axe-core limitation as the settings
+  //   state above, and for the same reason — axe flags the
+  //   aria-haspopup+aria-controls pattern itself, not anything specific here.
+  //
+  // - `color-contrast`: #467. Both radio items come back needs-review because
+  //   axe cannot resolve a background for them. The composition paints one on
+  //   the settings menu through `.playdeck-example-menu`; `CaptionsMenu`'s
+  //   default content takes no className, so the captions menu has none. This
+  //   entry goes when #467 decides whether the example should supply it.
+  {
+    name: 'captions-menu-open',
+    url: composition,
+    open: 'captions',
+    knownIncomplete: ['aria-valid-attr-value', 'color-contrast']
   },
   { name: 'blocked-autoplay', url: story('blocked-autoplay') },
   // global-shortcuts: the same composition with `Player.Controls global`, so
@@ -234,27 +262,49 @@ for (const state of states) {
     await expect(page.locator('[data-playdeck-part="viewport"]')).toBeVisible();
 
     if (state.open) {
-      await settingsTrigger(page).click();
+      await (state.open === 'captions' ? captionsTrigger : settingsTrigger)(
+        page
+      ).click();
       await expect(settingsMenu(page)).toHaveAttribute(
         'data-playdeck-menu',
         'open'
       );
+
+      // Both menus render the same `settings-menu` part, so the attribute above
+      // says a menu is open, not which one. Pin the identity on content: the
+      // captions menu always carries an "Off" radio item, and the settings
+      // menu's labels are rates, qualities and "Auto" — never "Off". Repoint
+      // either state at the other trigger and this flips.
+      await expect(
+        page.getByRole('menuitemradio', { name: 'Off', exact: true }),
+        `the ${state.open} menu must be the one that opened`
+      ).toHaveCount(state.open === 'captions' ? 1 : 0);
+
       // The zero-violations claim below is only worth anything for
       // `scrollable-region-focusable` if the region actually scrolls. The
       // example bounds the menu at `max-height: 12rem; overflow-y: auto`, and
       // a rate list plus a quality ladder overflows that — but a CSS edit
       // could quietly take the overflow away and turn this state into a scan
       // of a rule that no longer applies. Pin it.
-      const scroll = await settingsMenu(page).evaluate((el) => ({
-        scrollHeight: el.scrollHeight,
-        clientHeight: el.clientHeight,
-        overflowY: getComputedStyle(el).overflowY
-      }));
-      expect(
-        scroll.scrollHeight,
-        `the menu must genuinely scroll for this state to exercise ` +
-          `scrollable-region-focusable (overflow-y: ${scroll.overflowY})`
-      ).toBeGreaterThan(scroll.clientHeight);
+      //
+      // Settings only. `.playdeck-example-menu` is what bounds a menu at
+      // `max-height: 12rem; overflow-y: auto`, and the composition applies it
+      // to the settings menu alone — the captions menu takes no className, so
+      // it computes `overflow-y: visible` and cannot scroll at any item count.
+      // `reference-player.tsx` records the same asymmetry against its own
+      // height bound.
+      if (state.open === 'settings') {
+        const scroll = await settingsMenu(page).evaluate((el) => ({
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+          overflowY: getComputedStyle(el).overflowY
+        }));
+        expect(
+          scroll.scrollHeight,
+          `the menu must genuinely scroll for this state to exercise ` +
+            `scrollable-region-focusable (overflow-y: ${scroll.overflowY})`
+        ).toBeGreaterThan(scroll.clientHeight);
+      }
     }
 
     if (state.globalShortcuts) {

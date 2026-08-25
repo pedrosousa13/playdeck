@@ -9,6 +9,14 @@ not compose — and every control is gated on what the active provider can
 actually do, so a control whose command cannot be honoured is absent rather than
 present and disabled.
 
+Install `@playdeck/react`. It is the only package a consumer installs:
+
+```sh
+pnpm add @playdeck/react
+```
+
+`react` and `react-dom` are peer dependencies, at `>=19 <20`.
+
 <!-- example:quickstart -->
 
 ```tsx
@@ -32,6 +40,16 @@ export const Clip = () => (
 ```
 
 <!-- /example -->
+
+The primitives set the geometry they need inline, so the player works with no
+stylesheet at all — what it lacks is appearance. The default theme is one
+optional import:
+
+<!-- example:ignore one import line; the theme.css subpath export and its presence in the tarball are gated by packages/react/test/theme.test.ts -->
+
+```ts
+import '@playdeck/react/theme.css';
+```
 
 A YouTube or Vimeo source is the same prop and nothing else — no extra package,
 no registration: `source="https://www.youtube.com/watch?v=dQw4w9WgXcQ"`,
@@ -74,15 +92,23 @@ provider reaches and what a page's Content-Security-Policy has to allow for it.
 ## Docs
 
 The Storybook workbench is the documentation, with every primitive staged
-against a mock provider plus real-playback stories:
+against a mock provider plus real-playback stories. It is published from `main`
+at [pedrosousa13.github.io/playdeck](https://pedrosousa13.github.io/playdeck/), so
+reading it needs no clone. The
+same pages run against your own working tree with:
 
 ```sh
 pnpm --filter @playdeck/storybook dev
 ```
 
-**Overview/Introduction**, **Overview/Contract** (the data-attribute and `style`
-contract), **Overview/Capabilities matrix** (what each provider reports),
-**Overview/Captions** and **Overview/Theme**.
+[**Overview/Introduction**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-introduction--docs),
+[**Overview/Contract**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-contract--docs)
+(the data-attribute and `style` contract),
+[**Overview/Capabilities matrix**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-capabilities-matrix--docs)
+(what each provider reports),
+[**Overview/Captions**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-captions--docs)
+and
+[**Overview/Theme**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-theme--docs).
 
 [Provider setup](docs/provider-setup.md) lists the source values each provider
 accepts and the ones it refuses, plus each provider's own options.
@@ -190,11 +216,13 @@ bound only by that.
 where support arrived later — a media query that never matches simply does not
 apply, so they are progressive enhancement rather than requirements.
 
-React 19 is a separate peer requirement (`react` and `react-dom` `>=19 <20`).
+React is a separate peer requirement rather than a browser one; its range is
+given with the [install command](#playdeck) at the top of this file.
 
 The reference example in the workbench uses `@container`, which is newer than
-this floor. It is a Storybook composition, not published code — see **Reference
-example** in the workbench docs.
+this floor. It is a Storybook composition, not published code — see
+[**Overview/Reference example**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-reference-example--docs)
+in the workbench docs.
 
 ## License
 

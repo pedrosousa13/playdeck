@@ -6,7 +6,8 @@ React, no provider SDKs.
 
 Use it directly if you are wiring a player into something other than React, or
 writing a provider adapter. If you are building UI in React, use
-[`@playdeck/react`](../react), which owns a controller for you.
+[`@playdeck/react`](https://github.com/pedrosousa13/playdeck/blob/main/packages/react/README.md),
+which owns a controller for you.
 
 ```sh
 pnpm add @playdeck/core
@@ -125,7 +126,7 @@ provider to fail later. Wistia is the one exception, because it also serves
 plain media files on its own hosts: a Wistia URL that is not an embed shape is
 still read by file extension, so its HLS manifests and direct deliveries resolve
 as `hls` and `video`. Every accepted form, per provider, is listed in
-[Provider setup](../../docs/provider-setup.md).
+[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md).
 
 <!-- example:core-source-detection -->
 

@@ -55,12 +55,15 @@ const decimalPlaces = (value: number): number => {
 //
 // Neither slider below can assume it is handed a step-valid value, because both
 // render what the media publishes rather than what the user chose. Measured on
-// the ~1s reference clip, where the default 1s step leaves the seek input two
-// values it can keep: React assigns `0.505738182`, the input keeps `1`, the
-// tracker keeps `0.505738182`, and `End` from there moves nothing and seeks
-// nowhere on all three engines. A volume arrow chain drifts off its 0.05 grid in
-// floating point the same way. Snapping here is what keeps the string React
-// assigns and the string the input keeps the same string.
+// the ~1s reference clip, back when the seek step was a fixed second and that
+// window left the input two values it could keep: React assigned
+// `0.505738182`, the input kept `1`, the tracker kept `0.505738182`, and `End`
+// from there moved nothing and seeked nowhere on all three engines. The step is
+// derived from the window now (#383), so that window is no longer the one that
+// reaches this — a consumer step, a live window's own grid and the volume
+// arrow chain drifting off 0.05 in floating point all still are. Snapping here
+// is what keeps the string React assigns and the string the input keeps the
+// same string.
 //
 // It renders only. Nothing downstream reads it: a command carries the value read
 // back off the DOM, and the preview policy compares against what was requested.
@@ -288,26 +291,80 @@ const bufferedShare = (
   return Math.min(99, Math.max(1, Math.round((covered / span) * 100)));
 };
 
+// The step a window with nothing to divide falls back to, and the ceiling on
+// the derived one: the second the control always rendered.
+const DEFAULT_SEEK_STEP_SECONDS = 1;
+
+// The step the seek input renders where a consumer supplies none. Twenty
+// positions across the window, capped at the second it always was.
+//
+// The cap is what makes this free for ordinary content rather than a trade: on
+// any window of twenty seconds or more `span / 20` is already at least a second,
+// so every normal-length clip renders bit-for-bit the grid it rendered before,
+// and pointer scrubbing on it cannot have been coarsened. Only a window short
+// enough for a whole second to be coarse gets a finer one — the ~1s clip the
+// reference example uses had two positions and now has twenty, which is what
+// makes a `Home` or `End` press from mid-clip a position the input can move to
+// and so an event at all (#383).
+//
+// Twenty and not a hundred, because the divisor is also the ceiling on how tight
+// the echo tolerance below can get, and that is the side with something to lose.
+// A hundred would take every clip under 100s off the half-second bound the
+// tolerance has always had — a 20s clip down to 0.1s, the reference clip to
+// 0.005s — which is under the reporting precision the tolerance exists to
+// absorb, so a *correct* seek would routinely read as unanswered and hold the
+// preview for the whole `ECHO_DEADLINE_MS`. Twenty confines that to windows
+// under twenty seconds, where a whole-second step was the worse of the two
+// failures anyway, and leaves every ordinary clip on exactly the numbers it had.
+//
+// A span of zero or of `NaN` divides to nothing an input can hold and falls back
+// to the second. An infinite span — what a live HLS source publishes for its
+// duration — reaches the same second by the cap instead: `Infinity / 20` is
+// `Infinity`, and `Math.min` takes the second. Same answer, different route, and
+// the right one either way: an unbounded window has no extent to divide.
+const seekStep = (span: number): number => {
+  const derived = Math.min(DEFAULT_SEEK_STEP_SECONDS, span / 20);
+  return Number.isFinite(derived) && derived > 0
+    ? derived
+    : DEFAULT_SEEK_STEP_SECONDS;
+};
+
 // A seek can land on the nearest keyframe rather than the exact time asked
 // for, and the iframe providers report time back quantised over an
 // asynchronous bridge, so a reported time this close to the previewed one
-// counts as the provider having answered. It stays under the control's default
-// one-second step deliberately: a wider tolerance would read the time from
-// *before* a single arrow press as an answer to it and snap the thumb back
-// before the media had moved at all. A seek that lands further out than this
-// is released by the deadline below instead.
+// counts as the provider having answered. It stays under the step the control
+// is actually rendering deliberately: a wider tolerance would read the time
+// from *before* a single native step as an answer to it and snap the thumb back
+// before the media had moved at all. A seek that lands further out than this is
+// released by the deadline below instead.
 //
-// That bound is stated against the default step, and `inputProps.step` is a
-// documented escape hatch. A consumer step below this tolerance moves the
-// preview less than the tolerance on a single arrow press, so the time from
-// before the press reads as already-arrived and the thumb reverts as soon as
-// the command settles. Deriving the tolerance from the effective step would
-// cost more machinery than a fine-scrub step is worth.
+// Half the effective step, and not a constant. It was a fixed half-second while
+// the step was a fixed second, and this comment used to decline to derive it on
+// the grounds that doing so "would cost more machinery than a fine-scrub step
+// is worth" — the machinery being that the window has to be measured before the
+// preview hook is called rather than after. That trade is taken now the step is
+// derived too: a constant stated against a step that moves is a bound that
+// stops holding, and on the ~1s window it covered half of everything, so a seek
+// that landed visibly wrong read as an answer to one that asked for somewhere
+// else. It is unchanged wherever the step is: a clip of twenty seconds or more
+// still steps by one and still tolerates half of it, which is what the divisor
+// above was chosen to guarantee.
+//
+// The effective step is the consumer's where `inputProps.step` supplies one,
+// which is the case the old comment named as a known residual and this closes:
+// a consumer step finer than the tolerance no longer moves the preview less
+// than the tolerance. `step="any"` parses to `NaN` — no grid at all, so there
+// is no step to halve — and keeps the default's own half-second.
 //
 // It is passed to `requestAnswered` rather than living inside it: this bound is
 // a property of time and of how providers report it, and no other quantity a
 // control asks for shares it.
-const SEEK_ECHO_TOLERANCE_SECONDS = 0.5;
+const seekEchoTolerance = (step: number | string): number => {
+  const size = typeof step === 'number' ? step : Number(step);
+  return (
+    (Number.isFinite(size) && size > 0 ? size : DEFAULT_SEEK_STEP_SECONDS) / 2
+  );
+};
 
 type SeekRequest = {
   readonly value: number;
@@ -323,7 +380,8 @@ type SeekRequest = {
 const useSeekPreview = (
   hasWindow: boolean,
   currentTime: number,
-  provider: PlayerProvider | null
+  provider: PlayerProvider | null,
+  tolerance: number
 ): {
   readonly preview: number | null;
   readonly seek: (time: number) => void;
@@ -389,7 +447,7 @@ const useSeekPreview = (
         published: currentTime,
         requested: requested.value,
         settling,
-        tolerance: SEEK_ECHO_TOLERANCE_SECONDS
+        tolerance
       }));
   // Adjusted during render, the way React documents state that has to follow
   // its inputs: conditional and convergent, so the extra render is discarded
@@ -437,20 +495,23 @@ export const SeekSlider = ({
   const stalled = useLoadingPresentation() === 'buffering';
   const descriptionId = useId();
   const window = seekWindow(duration, seekable);
-  const { preview, seek } = useSeekPreview(
-    window !== null,
-    currentTime,
-    provider
-  );
-  if (status !== 'available') return null;
-  const hasDuration = typeof duration === 'number' && duration > 0;
   const min = window ? window.start : 0;
   const max = window ? window.end : 0;
   const span = max - min;
   // The step the input will actually be rendered with, since `inputProps`
-  // overrides the default below and the value has to be snapped to whichever
-  // grid wins.
-  const grid = inputProps?.step ?? 1;
+  // overrides the derived default and the value has to be snapped to whichever
+  // grid wins. Measured here, above the hook and above the capability gate,
+  // because the echo tolerance is derived from it and the hook has to be called
+  // unconditionally and in a stable order.
+  const grid = inputProps?.step ?? seekStep(span);
+  const { preview, seek } = useSeekPreview(
+    window !== null,
+    currentTime,
+    provider,
+    seekEchoTolerance(grid)
+  );
+  if (status !== 'available') return null;
+  const hasDuration = typeof duration === 'number' && duration > 0;
   // A held preview is clamped like media time is: the window it was asked
   // against can have moved on before the seek was answered.
   const value = window ? snapToStep(preview ?? currentTime, min, max, grid) : 0;
@@ -489,6 +550,25 @@ export const SeekSlider = ({
               />
             ))
           : null}
+        {/* The played span, after the loaded ranges so it paints over them. An
+            element rather than the input's own filled part, because the theme
+            has to turn the native range widget off to stop it painting over
+            this layer (#415), and turning it off takes `accent-color` with it
+            on Blink and WebKit, which offer no pseudo-element for a range's
+            filled part to draw it back. Sized like
+            the ranges beside it: positioned here, painted by CSS, `aria-hidden`
+            with the rest of the geometry — `seek-buffered-description` is what
+            reaches assistive technology. */}
+        {window ? (
+          <div
+            data-playdeck-part="seek-progress"
+            style={{
+              position: 'absolute',
+              left: 0,
+              width: `${((value - min) / span) * 100}%`
+            }}
+          />
+        ) : null}
       </div>
       <input
         aria-label="Seek"

@@ -2,7 +2,8 @@ import type {
   MediaDimensions,
   PlayerCapabilities,
   PlayerLiveState,
-  ProviderStatePatch
+  ProviderStatePatch,
+  TimeRange
 } from '@playdeck/core';
 import { deriveLiveState, liveStateEqual, notifySafely } from '@playdeck/core';
 import {
@@ -127,6 +128,40 @@ export const createNativeAttachment = (
   // statements dispatches a media event.
   let lastDuration: number | null | undefined;
 
+  // The buffered ranges last put on the wire — what `CONTEXT.md` calls the
+  // **Buffered window**. An element reporting no ranges is saying one of two
+  // things it gives no way to tell apart, "nothing is buffered" and "not
+  // telling you", so this adapter answers for it: within one attachment an
+  // empty reading is treated as unknown and its key is withheld from the patch,
+  // which `#applyPatch` resolves by retaining the ranges it already holds.
+  // Withheld rather than ignored outright, and scoped to one source with an
+  // explicit reset point below, because eviction is real — an empty reading
+  // genuinely can mean none.
+  //
+  // What made the ambiguity concrete: on some loads of the ~1s WebM tracer clip
+  // WebKit opened a buffered window while it parsed and closed it again when
+  // parsing finished, with the data still there and still playable, so a
+  // `progress` reading empty took an already-rendered indicator back off the
+  // DOM and walked `PlayerState.buffered` back below what the player had been
+  // told. Measured in situ 2026-08-21, on 2 of 13 sequential loads of the
+  // reference composition on the maintainer's machine; on 6 of the others the
+  // window never opened at any observable instant, which is #401's subject and
+  // is not what this rule addresses (#401, #405).
+  //
+  // Starts at `[]`, the value `createInitialPlayerState()` holds, so the record
+  // mirrors the controller from before the first patch.
+  let lastBuffered: ReadonlyArray<TimeRange> = [];
+
+  // The `buffered` key for an outgoing patch, or no key at all. Every publisher
+  // of `buffered` goes through this; nothing else may read `media.buffered`
+  // onto the wire.
+  const syncBuffered = (): { buffered?: ReadonlyArray<TimeRange> } => {
+    const buffered = toRanges(media.buffered);
+    if (buffered.length === 0 && lastBuffered.length > 0) return {};
+    lastBuffered = buffered;
+    return { buffered };
+  };
+
   const emitMediaState = (originalEvent?: Event): void => {
     lastDuration = publishedDuration();
     emit(
@@ -136,7 +171,7 @@ export const createNativeAttachment = (
           media.readyState >= HAVE_METADATA ? 'ready' : 'loading-provider',
         currentTime: media.currentTime,
         duration: lastDuration,
-        buffered: toRanges(media.buffered),
+        ...syncBuffered(),
         seekable: toRanges(media.seekable),
         muted: media.muted,
         volume: media.volume,
@@ -233,13 +268,37 @@ export const createNativeAttachment = (
     lastDuration = duration;
     emit(syncLive({ duration }));
   };
+  // `seekable` on every one of these, withheld or not: only `buffered` carries
+  // the ambiguity, and `progress` is the event that reports the window moving.
   const onProgress = (): void =>
     emit(
       syncLive({
-        buffered: toRanges(media.buffered),
+        ...syncBuffered(),
         seekable: toRanges(media.seekable)
       })
     );
+  // The one point inside an attachment where an empty buffer is news rather
+  // than silence. `emptied` fires from the media load algorithm, which empties
+  // the element's buffer as it runs, so here the ranges are gone rather than
+  // merely unreported and the retained value goes with them.
+  //
+  // A seek is deliberately not such a point. Engines carry their ranges across
+  // one — the old ranges stay, a disjoint range is added at the target, and a
+  // seek back into a retained range plays from it without refetching — so
+  // clearing on a seek would discard ranges that are still true. #405 records
+  // the measurement behind that.
+  //
+  // Silent when the record was already empty, the rule `onDurationChange` and
+  // `emitLiveUpdate` follow: `load()` calls `media.load()`, so every ordinary
+  // load fires this, and a patch restating a value that never moved is the
+  // empty patch the review of #361 refused. Through `syncLive` like every other
+  // emitter here, because the load algorithm empties the seekable window too
+  // and liveness is derived from it.
+  const onEmptied = (): void => {
+    if (lastBuffered.length === 0) return;
+    lastBuffered = [];
+    emit(syncLive({ buffered: [] }));
+  };
   const onVolumeChange = (originalEvent: Event): void =>
     emit(
       { muted: media.muted, volume: media.volume },
@@ -270,6 +329,7 @@ export const createNativeAttachment = (
     media.addEventListener('seeked', onSeeked);
     media.addEventListener('timeupdate', onTimeUpdate);
     media.addEventListener('progress', onProgress);
+    media.addEventListener('emptied', onEmptied);
     media.addEventListener('volumechange', onVolumeChange);
     media.addEventListener('ratechange', onRateChange);
     media.addEventListener('error', onError);
@@ -302,6 +362,7 @@ export const createNativeAttachment = (
     media.removeEventListener('seeked', onSeeked);
     media.removeEventListener('timeupdate', onTimeUpdate);
     media.removeEventListener('progress', onProgress);
+    media.removeEventListener('emptied', onEmptied);
     media.removeEventListener('volumechange', onVolumeChange);
     media.removeEventListener('ratechange', onRateChange);
     media.removeEventListener('error', onError);

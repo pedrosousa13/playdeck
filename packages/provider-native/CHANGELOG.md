@@ -1,5 +1,279 @@
 # @playdeck/provider-native
 
+## 0.2.0
+
+### Minor Changes
+
+- a7b73f7: The native provider no longer republishes an empty `buffered` over a non-empty one.
+  It published that field from four places — the media-state snapshot, reached by the
+  attach snapshot, `canplay` and `loadedmetadata`, and `progress` — each putting
+  whatever `media.buffered` read at that instant on the wire, unconditionally. An
+  empty `TimeRanges` therefore erased ranges the player had already been told about
+  (#405).
+
+  **An empty reading is ambiguous and the element gives no way to disambiguate it.** No
+  ranges means one of two things — "nothing is buffered" and "not telling you" — and
+  WebKit means the second often enough to matter. Measured in situ on 2026-08-21 under
+  [#401](https://github.com/pedrosousa13/playdeck/issues/401), over 13 sequential loads
+  of the reference composition on the maintainer's machine: on 2 of them WebKit opened a
+  buffered window for the ~1s WebM tracer clip while it parsed and closed it again when
+  parsing finished, with the data still there and still playable.
+
+  ```
+  run 6:  1942 progress   elBuf=[[0,0.357423974]] rs=2 ns=2 dom=1   <- window open, range rendered
+          2598 progress   elBuf=[]                rs=4 ns=1 dom=1   <- onProgress republishes []
+          2600 canplay    elBuf=[]                rs=4 ns=1 dom=0   <- range gone from the DOM
+  ```
+
+  A buffered indicator that had rendered correctly disappeared, and
+  `PlayerState.buffered` reported less than the player had already been told. On 6 of the
+  other 11 loads the window never opened at any observable instant — a different problem,
+  and one no adapter change reaches.
+
+  **What ships: within one source, an empty reading is _unknown_ rather than _none_.**
+  The adapter records the ranges it last put on the wire and withholds the `buffered`
+  key when the reading is empty and that record is not — the key is absent from the
+  patch rather than present and empty, which `#applyPatch` resolves by retaining what
+  it already holds. Withheld and not ignored outright, and scoped to one source with an
+  explicit reset point, because eviction is real: on another engine an empty reading
+  genuinely can mean none.
+
+  **`PlayerState.buffered`'s meaning moves with it,** and that is the substance of this
+  change rather than a side effect. It is no longer a faithful instantaneous mirror of
+  the media element — it is the last thing the provider was willing to vouch for. The
+  term is written down in `CONTEXT.md` as **Buffered window**.
+
+  **`emptied` is the one reset point inside an attachment.** It fires from the media
+  load algorithm, which empties the element's buffer as it runs, so there the ranges
+  are gone rather than merely unreported and the retained value goes with them. Silent
+  when the record was already empty: `load()` calls `media.load()`, so every ordinary
+  load fires this, and a patch restating a value that never moved is the empty patch
+  this adapter refuses everywhere else. A source change needs no code at all — it
+  builds a new provider over state rebuilt from `createInitialPlayerState()`, so the
+  record is fresh by construction.
+
+  **A seek is deliberately not a reset point.** Clearing on "a seek outside the known
+  buffered range" was the proposed third rule, and it was measured before being wired.
+  Measured 2026-08-24 on the maintainer's machine: chromium, firefox and webkit, three
+  runs each, a 600 s clip served through a range-honouring local server throttled to
+  250 KiB/s so only ~4% of it was ever buffered when the seek went out.
+
+  `buffered` never read empty after any seek on any engine. The old ranges were retained
+  verbatim — the leading range's `end` was bit-for-bit identical before and after — with
+  a new disjoint range added at the target, and seeking back into the retained range was
+  served with **zero HTTP traffic** on firefox and webkit and without a re-fetch on
+  chromium. The retained ranges were not merely reported, they were still true, so that
+  rule would have discarded real data. It is not implemented, and
+  [#405](https://github.com/pedrosousa13/playdeck/issues/405) carries the full traces
+  for anyone who wants to re-measure.
+
+  **What did not change.** `seekable` is published on every `progress` exactly as
+  before — only `buffered` carries the ambiguity. A non-empty reading is published
+  whenever it arrives, unchanged or not: the record suppresses the empty-over-non-empty
+  case and nothing else. A DVR window that slides, dropping ranges off its start, is
+  non-empty at every step and is published like any other reading.
+
+  **The buffered indicator's WebKit skip is untouched.**
+  [#401](https://github.com/pedrosousa13/playdeck/issues/401) closed by adding that skip,
+  and this change is not grounds for removing it: the loads it addresses are the ones
+  where WebKit reported a window and withdrew it, not the ones where it never reported
+  anything, and `e2e/reference.spec.ts`'s `skipWithoutWebKitBuffered` describes the
+  second. Removing the skip needs its own evidence, of the kind that put it there.
+
+  It lands as `minor` rather than `patch` for the reason `native-duration-no-longer-latches`
+  did: no API moved, but published state did, and a consumer asserting on the provider
+  stream sees a patch shape that was not there before — one from `emptied`, and one from
+  `progress` that carries `seekable` without `buffered`.
+
+- 3300d23: The native provider now publishes `duration` when the media element says it
+  changed. It listened for `durationchange` nowhere — the package's only such
+  listener fed chapters — and published a duration from one place, the media-state
+  snapshot, which runs on the attach snapshot, `canplay` and `loadedmetadata` and
+  on nothing else. `progress` republished `buffered` and `seekable`; `timeupdate`
+  republished `currentTime`; neither ever touched the duration (#400).
+
+  An element is entitled to revise its duration, and WebKit does: it publishes a
+  growing one while it is still parsing. `PlayerState.duration` therefore latched
+  whatever `media.duration` happened to read at the last of those three events and
+  never recovered, even after the element itself had converged.
+
+  **What a viewer got.** `SeekSlider` takes its `max` from
+  `seekWindow(duration, seekable)`, so a duration that never moves is a `max` that
+  never moves. On the ~1s reference clip the control froze at maxima between 0.05
+  and 0.56 while the element sat at 1.000333333, for the rest of the session. That
+  is not a mis-scaled control, it is an inoperable one: under the default
+  `step={1}` a `max` below 1 leaves `0` as the only value the input's grid can
+  express, so `End` snaps to the value the input already holds, no change event
+  fires, and no seek is ever issued — the mechanism
+  [#383](https://github.com/pedrosousa13/playdeck/issues/383) describes, reached
+  here through a bogus `max` rather than a genuinely short clip. That issue is
+  open and is not fixed here. Every other signal says the press was seen.
+
+  **A narrow `ProviderStatePatch`, not a second media-state snapshot.**
+  Republishing the whole snapshot was the obvious shape and is not what shipped.
+  The snapshot rebuilds `capabilities` and restates `lifecycle` and `activation`,
+  three fields this event has no news about, and `durationchange` also fires from
+  the media load algorithm with `readyState` back at 0 — so a `retry()` would have
+  walked a ready player back to `loading` on its way through. What ships instead
+  is the shape `progress`, `volumechange` and `ratechange` already use: a provider
+  patch carrying what its event reports and nothing else — one key here, where
+  `progress` carries two.
+
+  **Nothing is published for a duration that did not move.** A live stream fires
+  `durationchange` for an endless duration that normalizes to `null` every time,
+  and a reload fires one more for a `NaN`. The handler compares against the value
+  last put on the wire and stays silent when it held, so an endless duration
+  publishes exactly once and cannot flap, and no state change is fanned out for a
+  value nobody can observe changing. Liveness that such an event does move is
+  still published, because liveness is derived from the _raw_ duration, which is
+  what an endless stream's `Infinity` is.
+
+  **`seekable` is deliberately left where it was.** For a finite duration above
+  zero `seekWindow` reads the duration and ignores the window entirely — it guards
+  on `duration > 0`, so a finite `0` falls through to the seekable branch — and
+  for the live DVR case that does read it, `progress` is the event that reports
+  the window moving and already republishes it on every one. A duration changing
+  says nothing about the seekable window that a `progress` has not already said.
+
+  **What did not change.** `canplay` and `loadedmetadata` still publish the whole
+  media-state snapshot with the duration in it: this adds a publisher rather than
+  replacing one. Liveness, the at-edge flag and the endless-duration normalization
+  are untouched, and no field another seam owns is written from the new path.
+
+  It lands as `minor` rather than `patch` for the reason `7889ef8` did, when
+  `PlayerState.live` stopped being the HLS adapter's alone and every provider that
+  can tell began publishing it (#187): no API moved, but published state did, and
+  a consumer asserting on the provider stream sees a provider patch that was not
+  there before. What `patch` answers to is a defect fix behind an _unchanged_
+  surface, not the absence of a behaviour change — `07e47c3` released the
+  subscriber fan-out isolation, a behaviour change on every provider, at `patch`
+  (#233). This is a defect fix too, but `PlayerState.duration` is part of the
+  surface and what it carries moved.
+
+  **Superseded in this release by #431.** The paragraph above says the mechanism it
+  reaches belongs to an issue that "is open and is not fixed here". Both halves
+  stopped being true before this shipped: #431 landed in the same release and
+  closed #383. `SeekSlider` no longer renders a fixed one-second step — `seekStep`
+  derives `Math.min(1, span / 20)`, so a window narrower than twenty seconds gets
+  twenty positions instead of two, and a zero, `NaN` or infinite span falls back to
+  the second. What the paragraph describes still happened, and the latched `max` it
+  diagnoses is still the defect this changeset fixes; only the "under the default
+  `step={1}`" premise and the claim that #383 stands are out of date.
+
+### Patch Changes
+
+- ca47d59: The native provider no longer writes an initial position onto the media element
+  when there is no start position to apply. `applyInitialPosition` ran on every
+  `loadedmetadata`, the default `startTime` of 0 included, where the value it
+  asked for was the one the media load algorithm had already put there.
+
+  A same-value `currentTime` write is not a no-op. It starts a seek, and #407
+  measured what a seek into a partly-parsed WebKit element costs: the write is
+  clamped into `seekable`, the playhead lands on the leading edge, the duration
+  freezes there permanently and the network goes to `stalled`. #411 measured that
+  same hazard reaching every native and HLS consumer through this line, on every
+  ordinary load — a viewer on a slow connection clicked play, the clip loaded
+  completely, and the player sat at 0:00 with no error, while the library reported
+  `playback: 'ended'` for a clip that never showed a frame. Clicking play a second
+  time recovered it, which is the kind of thing a viewer works around silently and
+  never reports.
+
+  Two writes are skipped now, for two reasons:
+
+  - `startTime` 0, because there is no start position to apply. The element is
+    already at 0, and if metadata arrives after playback has begun, writing 0 is
+    not applying a start position — it is rewinding playback that already
+    happened.
+  - A `startTime` above 0 that the element is already sitting on, because asking
+    the element for the position it holds buys nothing and costs the same seek.
+
+  A real `startTime` still reaches the element on every load, and still after a
+  `retry()`. What changes for a consumer who never set one is that the element is
+  left alone: no seek, and no seek to freeze a partly-parsed source at 0:00.
+
+  **One behaviour beyond the defect changes with it.** On a live source the
+  skipped write was never a same-value write, so this is the one place a consumer
+  can see the difference. A DVR window that starts above 0 — `seekable` of
+  `[[100, 200]]`, an endless duration — has no point at 0 for the default
+  `startTime` of 0 to be clamped to, so `withinMediaBounds` returned the nearest
+  one it had, the back of the window, and every load rewound the viewer to the
+  oldest thing in the DVR buffer. Nothing asked for that; it fell out of clamping
+  a request that should not have been made. The position is now left where the
+  engine placed it, which for a live stream is the live edge, and a unit test
+  pins it.
+
+  **Why `patch` and not `minor`.** This is an intentional behaviour change, so
+  the level has to be argued rather than assumed. `PlayerState` gains no field
+  and loses none, no signature moves, and nothing a consumer calls answers
+  differently: what changes is a `currentTime` write onto an element the consumer
+  does not own, and the observable difference is the absence of a seek that
+  served no one. For a consumer without a `startTime` the element is left at the
+  position the media load algorithm already gave it — 0 — which is the position
+  the removed write asked for. For one with a `startTime` the position is
+  unchanged, and it still lands on every load and after a `retry()`. The live
+  case does move an observable position, and it moves it from a value nobody
+  requested to the engine's own, which is the fix rather than a second change to
+  absorb. `07e47c3` is the precedent this leans on: the subscriber fan-out
+  isolation changed behaviour on every provider and released at `patch`, because
+  `patch` answers to a defect fix behind an unchanged surface, not to the absence
+  of a behaviour change. `native-duration-no-longer-latches.md` went `minor` for
+  the opposite reason — `PlayerState.duration` is surface and what it carried
+  moved. Nothing here is surface.
+
+- cf13c02: `RootProps` is now a single declared object type rather than
+  `NativePlaybackOptions & PlayerActivationProps & { ... }`. `Root` accepts exactly
+  the same twenty-five props, none added and none removed, and nothing it renders
+  moves — this changes only what a consumer's compiler prints when a prop is
+  rejected.
+
+  Compiled against the built declarations, an invented prop used to read:
+
+  ```
+  error TS2322: Type '{ children: Element; ref: RefObject<PlayerHandle | null>; source: string; tracks: never[]; }' is not assignable to type 'IntrinsicAttributes & NativePlaybackOptions & PlayerActivationProps & { readonly autoplay?: AutoplayMode | undefined; ... 16 more ...; readonly volume?: number | undefined; }'.
+    Property 'tracks' does not exist on type 'IntrinsicAttributes & NativePlaybackOptions & PlayerActivationProps & { readonly autoplay?: AutoplayMode | undefined; ... 16 more ...; readonly volume?: number | undefined; }'.
+  ```
+
+  and now reads:
+
+  ```
+  error TS2322: Type '{ children: Element; ref: RefObject<PlayerHandle | null>; source: string; tracks: never[]; }' is not assignable to type 'IntrinsicAttributes & RootProps'.
+    Property 'tracks' does not exist on type 'IntrinsicAttributes & RootProps'.
+  ```
+
+  **TypeScript still does not list the props it would have accepted**, and no shape
+  this library can declare makes it. It elides the members of an object type it
+  prints, and `--noErrorTruncation` does not change the output above either,
+  because what gets printed now is the alias rather than its members. What changes
+  is that the rejected type has a name, and that name is exported from
+  `@playdeck/react`: the error points at a declaration a consumer can open, rather
+  than at a flattened intersection that had lost the alias and named
+  `NativePlaybackOptions`, a type from a package
+  [the README](https://github.com/pedrosousa13/playdeck#readme) says nobody needs
+  to install.
+
+  `PlayerActivationProps` keeps its shape and its export. It is now
+  `Pick<RootProps, 'loadMargin' | 'loadThreshold' | 'loading' | 'preload'>`, so
+  those four props have one declaration between them rather than two.
+
+  **The JSDoc on `loop`, `startTime` and `endTime` now describes the props rather
+  than the plumbing that carries them.** These are `Root` props on every provider
+  ([ADR-0004](https://github.com/pedrosousa13/playdeck/blob/main/docs/adr/0004-cross-provider-options-live-on-root.md)),
+  but their hover text lived in `@playdeck/provider-native` and opened by calling
+  itself the native and HLS route to the same prop, citing two bare issue numbers
+  — which is what a consumer on a YouTube source read when they hovered
+  `startTime`. Both the `Root` declaration and `NativePlaybackOptions` now say what
+  the prop does and which values it refuses. No behaviour and no type moved with
+  the text.
+
+- Updated dependencies [ecfef8b]
+- Updated dependencies [b5fa01a]
+- Updated dependencies [5ae1450]
+- Updated dependencies [727a376]
+- Updated dependencies [6910f1c]
+- Updated dependencies [ea664ad]
+- Updated dependencies [8624a2e]
+  - @playdeck/core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

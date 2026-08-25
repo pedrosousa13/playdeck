@@ -13,6 +13,16 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
  * children.
  */
 
+// The same resolver as `stories/asset-url.ts`, restated here because the lint
+// rule scoping this directory denies relative imports that leave it. The
+// fixtures below are served
+// from the workbench's own base path, which is `/` on the dev server and under
+// Vitest and `/playdeck/` on the hosted build — a root-absolute literal 404s
+// there (#435). `import.meta.env.BASE_URL` is Vite's name for that prefix and
+// always ends in a slash; it is not part of the primitives' API, and a consumer
+// copying this file writes their own URLs here.
+const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
+
 // Layout, plus the slider appearance the unmounted theme would otherwise have
 // supplied (#191). `@playdeck/react/theme.css` is deliberately not mounted: the
 // only per-story way to mount it reaches into `packages/`, which this directory
@@ -607,7 +617,7 @@ export const ReferencePlayer = ({
           <Player.Poster>
             <Player.PosterImage
               alt=""
-              src="/poster.svg"
+              src={assetUrl('poster.svg')}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           </Player.Poster>
@@ -704,7 +714,7 @@ const sources = [
   // Playwright Linux WebKit answers `''` for `avc1`, so it rejects an
   // `<source type="video/mp4">` during source selection and never issues a
   // request for it at all (`networkState` 3, `currentSrc` empty). A bare
-  // `'/tracer.mp4'` string source is stamped `video/mp4` from its extension
+  // `tracer.mp4` string source is stamped `video/mp4` from its extension
   // (`packages/core/src/source-detection.ts`), so it gave that engine exactly
   // one candidate and it was the one it would not take: the composition then
   // sat at `activation: 'loading-provider'` forever with its whole control row
@@ -717,15 +727,15 @@ const sources = [
     source: {
       type: 'video',
       sources: [
-        { src: '/tracer.mp4', mimeType: 'video/mp4' },
-        { src: '/tracer.webm', mimeType: 'video/webm' }
+        { src: assetUrl('tracer.mp4'), mimeType: 'video/mp4' },
+        { src: assetUrl('tracer.webm'), mimeType: 'video/webm' }
       ]
     }
   },
   {
     id: 'hls',
     label: 'HLS',
-    source: { type: 'hls', src: '/hls/master.m3u8' }
+    source: { type: 'hls', src: assetUrl('hls/master.m3u8') }
   },
   {
     id: 'youtube',
@@ -752,7 +762,7 @@ const sources = [
 // `e2e/captions.spec.ts`) — this file is scoped to the reference example only.
 const localTextTracks: Player.MediaProps['textTracks'] = [
   {
-    src: '/captions-reference.vtt',
+    src: assetUrl('captions-reference.vtt'),
     srcLang: 'en',
     label: 'English',
     kind: 'captions',

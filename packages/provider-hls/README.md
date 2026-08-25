@@ -11,7 +11,7 @@ pnpm add @playdeck/provider-hls
 
 `@playdeck/react` loads this for you when the source resolves to `hls` — an
 `.m3u8` path, or an explicit `{ type: 'hls' }` source; see
-[Provider setup](../../docs/provider-setup.md#the-other-three-providers). hls.js
+[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers). hls.js
 is a dependency but is imported dynamically, so it only reaches the network when
 the hls.js engine is actually selected.
 
@@ -130,7 +130,8 @@ exist.
   source — and it is not caption state, so the hls.js engine does not drop it.
 
 `deriveLiveState` is that derivation. It lives in
-[`@playdeck/core`](../core#live-state), where every adapter shares one copy, and is
+[`@playdeck/core`](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#live-state),
+where every adapter shares one copy, and is
 re-exported here so a custom HLS adapter can reuse it:
 
 <!-- example:provider-hls-live -->

@@ -8,7 +8,7 @@ pnpm add @playdeck/provider-wistia
 ```
 
 `@playdeck/react` loads this for you when the source resolves to `wistia`, for
-the URL forms [Provider setup](../../docs/provider-setup.md#the-other-three-providers)
+the URL forms [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers)
 lists. The
 player bundle is fetched from `https://fast.wistia.com/player.js` on the first
 attach — Aurora's own entry point, not the legacy `E-v1.js` shim, so there is
@@ -91,7 +91,7 @@ export const scriptLoadTimeout = SCRIPT_LOAD_TIMEOUT_MS; // 15000
 
 The embed is chromeless by default (`controls: false`) so Playdeck's own controls
 are the only ones on screen, and `dnt` is on unless you turn it off. See
-[Third-party requests and CSP](../../docs/third-party-requests.md) for the full
+[Third-party requests and CSP](https://github.com/pedrosousa13/playdeck/blob/main/docs/third-party-requests.md) for the full
 origins list and what a page's CSP has to allow.
 
 ## Exports
@@ -122,7 +122,7 @@ origins list and what a page's CSP has to allow.
   CDN. That is the trade to weigh before choosing this provider: nothing to
   bundle, and a third-party origin your `script-src` has to allow, which no
   `integrity` can pin — see
-  [Third-party requests and CSP](../../docs/third-party-requests.md).
+  [Third-party requests and CSP](https://github.com/pedrosousa13/playdeck/blob/main/docs/third-party-requests.md).
 - **`controls: false` switches off every control by name.**
   `controls-visible-on-load` alone only hides Wistia's chrome until the first
   hover or click, so `play-pause-control`, `play-bar-control`, `volume-control`,

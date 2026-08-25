@@ -1,12 +1,12 @@
 # Provider setup
 
 Which source values each provider accepts, what each provider's own options are,
-and a working player per provider. Read against
-`packages/core/src/source-detection.ts` — the detector itself, not a provider's
-own documentation — because a form a provider publishes is not a form this
-library reads. The refused forms are named alongside the accepted ones: a setup
-guide that lists a form the detector turns down is worse than one that lists
-fewer. Every claim here was checked by running the detector, not by reading it.
+and a working player per provider. These are `detectSource`'s rules, not a
+provider's own documentation, because a form a provider publishes is not a form
+this library reads. The refused forms are named alongside the accepted ones: a
+setup guide that lists a form the detector turns down is worse than one that
+lists fewer. Every claim here was checked by running the detector, not by
+reading it.
 
 Nothing here is an install step. `@playdeck/react` depends on all five provider
 packages and imports each one dynamically, so a YouTube or Vimeo source needs no
@@ -85,15 +85,24 @@ Non-obvious, and accepted: any other query parameter is ignored, so
 the playlist are dropped rather than refusing the URL. Use `Root`'s `startTime`
 prop for an offset.
 
-Non-obvious, and a trap: on a short host the **whole first path segment is taken
-as the id**, whatever it says. `https://youtu.be/watch?v=<id>` therefore
-resolves — to the video id `watch`, not to `<id>` — and fails at YouTube rather
-than here. On a short host, pass only `https://youtu.be/<id>`.
+Non-obvious, and accepted: on a short host the whole path segment is the id, so
+a segment that fits `[A-Za-z0-9_-]+` is read as one unless it is a full-host
+path keyword — those five are refused, and are the next entry below. Everything
+else resolves, so `watchAgain1`, `rewatching1` and `watch-later` are ordinary
+ids and resolve as themselves.
 
 Refused, because the shape is not one of the five above:
 
 - `https://www.youtube.com/<id>` — a bare id path is read on the short hosts
   only.
+- `https://youtu.be/watch?v=<id>` — a short host with a **full-host path
+  keyword** as its only segment: `watch`, `embed`, `live`, `shorts` or
+  `playlist`, in any case. This one combines the two forms and is the likeliest
+  to be written by hand. It used to resolve, to the video id `watch` rather than
+  to `<id>`, and then fail at YouTube rather than here; it is refused now, so
+  the refusal names the URL and the `v` parameter is never mistaken for
+  something this form reads. On a short host, pass only
+  `https://youtu.be/<id>`.
 - `https://youtu.be/embed/<id>`, `https://www.youtu.be/shorts/<id>`,
   `https://youtu.be/live/<id>` — `/embed/`, `/live/` and `/shorts/` are read on
   the full hosts only, and this holds for both short hosts.
@@ -328,8 +337,9 @@ the same rules refuse it again, so no control offers one. Fix the value.
 A player that fails _after_ the source resolved reports something else:
 
 > Unable to load the &lt;provider&gt; provider. Playdeck cannot say why: the
-> rejection it caught is on this error's cause. See Playdeck's
-> docs/provider-setup.md for what to check.
+> rejection it caught is on this error's cause. See
+> https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for
+> what to check.
 
 The provider is named because the resolved source knows it. The reason is not,
 and is not guessable: a dynamic import the network never delivered, a

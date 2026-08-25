@@ -63,12 +63,15 @@ whatever its specificity, so your own rules win by default — no `!important`, 
 ordering games, no `:not()` tricks.
 
 **Every selector is wrapped in `:where()`,** which contributes zero specificity.
-A single class of your own outranks any rule in the file. Four rules cannot reach
-zero: the slider thumb's ring needs pseudo-elements — one on Blink and WebKit,
-three on Gecko, which repaints the whole control the moment any part of it is
-styled — and Selectors 4 forbids a pseudo-element inside `:where()`, so those
-rules carry the pseudo-element's own (0,0,1). Your single class is (0,1,0), so it
-still outranks them — and the cascade layer above decides it either way.
+A single class of your own outranks any rule in the file. Six rules cannot reach
+zero: a range input's thumb, track and progress fill are reachable only through
+pseudo-elements, and the theme draws all three — the volume slider's thumb on
+Blink and WebKit and its whole control on Gecko, which repaints the moment any
+part of it is styled, plus the seek slider's control on all three engines, so
+that nothing paints over the thumb. Selectors 4 forbids a pseudo-element inside
+`:where()`, so those rules carry the pseudo-element's own (0,0,1). Your single
+class is (0,1,0), so it still outranks them — and the cascade layer above decides
+it either way.
 
 {/* example:ignore two lines demonstrating the cascade rule itself; there is no part and no stylesheet behind them */}
 
@@ -124,6 +127,15 @@ minimum is not a style choice. Larger values work normally.
 
 The two poster tokens are read by `Player.PosterImage` itself rather than by the
 stylesheet, so they apply with or without the theme.
+
+**`accent-color` reaches less of a slider than you might expect.** With this
+stylesheet mounted the seek slider is drawn by it on all three engines — that is
+what lets the loaded-range indicator paint behind the control instead of over it
+— and the Firefox volume slider is drawn by it too, because styling any part of a
+range input there turns the native widget off for the whole control. So an
+`accent-color` of your own reaches only the volume slider, and only on Chromium
+and Safari. `--playdeck-color-accent` reaches all of it, on every engine, which
+is what to set.
 
 ## Custom icons
 
@@ -231,6 +243,11 @@ conditions rather than asserting the CSS text:
   scrims and hover tints are dropped by the browser in this mode, so the theme
   switches controls to real borders and system colors — otherwise a hovered or
   focused control would be indistinguishable from an idle one. The two sliders
-  go the other way: the Gecko rules that hand-draw their track, fill and thumb
-  are held out of this mode, so the native range widget stays on and repaints
-  itself in the user's palette without the theme naming a single color for it.
+  go the other way: every rule that hand-draws one is held out of this mode —
+  the Gecko rules for their track, fill and thumb, and, on all three engines,
+  the `appearance: none`, the hand-drawn thumb and the played span the seek
+  slider is drawn with. So the native range widget stays on and repaints itself
+  in the user's palette without the theme naming a single color for it. Holding
+  those rules out is load-bearing rather than tidy: drawing a range control by
+  hand gives up the forced-colors rendering that came free with the widget, and
+  nothing the theme could name replaces it.

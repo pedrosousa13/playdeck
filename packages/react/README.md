@@ -13,6 +13,13 @@ React 19 is a peer dependency. Provider packages are pulled in as dependencies
 but loaded lazily — a consumer playing only MP4 ships no YouTube, Vimeo, Wistia
 or hls.js code in its initial graph, and makes no provider network requests.
 
+Every primitive below is staged, running, in the Storybook workbench at
+[pedrosousa13.github.io/playdeck](https://pedrosousa13.github.io/playdeck/). That is
+where the full styling
+contract ([**Overview/Contract**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-contract--docs))
+and the caption guidance ([**Overview/Captions**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-captions--docs))
+live.
+
 ## Usage
 
 <!-- example:react-composition -->
@@ -23,7 +30,11 @@ import * as Player from '@playdeck/react';
 export const Clip = () => (
   <Player.Root source="https://example.com/clip.mp4">
     <Player.Viewport>
-      <Player.Media />
+      <Player.Media
+        textTracks={[
+          { src: '/captions.en.vtt', srcLang: 'en', label: 'English' }
+        ]}
+      />
       <Player.Poster>
         <Player.PosterImage alt="" src="/poster.jpg" />
       </Player.Poster>
@@ -50,8 +61,36 @@ export const Clip = () => (
 
 `source` takes the same input as `detectSource` — a URL string, or an explicit
 `{ type: 'hls' | 'video' | 'youtube' | 'vimeo' | 'wistia', ... }` object. See
-[Provider setup](../../docs/provider-setup.md) for which URL forms each provider
+[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md) for which URL forms each provider
 accepts, which it refuses, and what each provider's `providerOptions` are.
+
+`textTracks` is a prop on `Player.Media`, not on `Player.Root`. It takes an
+array of `{ src, srcLang, label, kind?, default? }`, where `kind` is
+`'captions'` or `'subtitles'` and `default` selects that track on load. Tracks
+you supply this way reach native playback and the HLS provider's native engine;
+everywhere else only the captions a provider discovers for itself are
+available. Selection, discovery and what `Player.Captions` renders are covered
+in [**Overview/Captions**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-captions--docs).
+
+`Player.Captions` draws the active cues only where the provider hands caption
+rendering over, and renders nothing otherwise — where the provider paints its
+own captions there is nothing for it to add. `renderCue` replaces what it draws
+for each cue:
+
+<!-- example:ignore a signature and a type shape quoted from packages/react/src/captions.tsx and packages/core/src/types.ts, not runnable code; nothing gates this copy against them -->
+
+```ts
+renderCue?: (cue: TextCue) => ReactNode;
+// TextCue: { id: string | null; startTime: number; endTime: number; text: string }
+```
+
+A cue is stripped to those four fields before it reaches your function, so no
+provider-specific field leaks into consumer code. Supplying `renderCue` also
+drops the default styling from each cue's own box, leaving its appearance to
+you; the overlay that positions the cues keeps its own. Reach for it when the
+`--playdeck-caption-*` tokens do not go far enough, or to render a cue as
+something other than a run of text. The default splits `text` on newlines into
+one `caption-line` part per line.
 
 Optional stylesheet with the default look:
 
@@ -159,6 +198,25 @@ export const poster = Player.normalizePoster('/poster.jpg');
 `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time`,
 `FullscreenButton`, `PipButton`, `AirPlayButton`, `CaptionsButton`, `Controls`.
 
+`Time` takes a `type` of `current` (the default), `duration` or `remaining`.
+`remaining` counts down from the duration and carries a leading minus for as
+long as any remainder is left — `-1:23`, and still `-0:00` through the last
+second before the end. Only an exhausted remainder reads `0:00`. Each instance
+carries `data-time-type`, so the three are styleable apart.
+
+`data-state="untimed"` marks a `Time` on a source with no duration to measure
+against — a live stream, or one whose duration has not arrived yet. It marks all
+three types, `current` included, because it describes the source rather than the
+instance. What differs is the element. `duration` and `remaining` have no time
+to mark up there, so each becomes a `<span>` — keyed on the source being
+untimed, not on the text coming out empty, so one given `children` is still a
+`<span>` and still displays them. Given none it renders nothing: the library
+draws no placeholder of its own, because a `0:00` there would state a
+zero-length video rather than an unmeasured one. `current` still has an elapsed
+time to show, so it stays a `<time>`. Pair the state with
+`data-time-type` to hang a `LIVE` badge or an em dash off the right one — the
+state alone also matches the running `current` beside it.
+
 `Controls` is a focusable region that owns the media keyboard shortcuts: Space
 and `k` toggle playback, `ArrowLeft`/`ArrowRight` seek 5s back and forward,
 `j`/`PageDown` seek 10s back and `l`/`PageUp` 10s forward, `ArrowUp`/`ArrowDown`
@@ -187,7 +245,7 @@ unmutes at the value the user chose.
 The region owns those keys wherever focus sits inside it, a focused
 `<input type="range">` included, so the arrows seek and adjust volume at the
 same distances on `SeekSlider` and `VolumeSlider` as off them — see
-[ADR-0005](../../docs/adr/0005-the-shortcut-layer-owns-its-keys-on-a-range-input.md).
+[ADR-0005](https://github.com/pedrosousa13/playdeck/blob/main/docs/adr/0005-the-shortcut-layer-owns-its-keys-on-a-range-input.md).
 Text entry (a text `<input>`, `<textarea>`, `<select>` or content-editable
 region) still swallows every key, and a focused button, link or checkbox keeps
 Space and `Enter` for itself.
@@ -335,7 +393,7 @@ derived state) and, on provider-bound controls, `data-provider`. Style and query
 against those rather than internal class names. Geometry a primitive sets on
 itself is a default your `style` prop overrides; state-derived properties are
 the primitive's own. The full contract is in the workbench docs under
-**Overview/Contract**.
+[**Overview/Contract**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-contract--docs).
 
 ## Browser support
 

@@ -631,6 +631,42 @@ test('maps player ready onto confirmed state and honest capabilities', async () 
   expect(events).toContainEqual(expect.objectContaining({ type: 'ready' }));
 });
 
+// The one duration revision a load performs. Measured August 2026 over 7 loads
+// of 4 videos: `onReady` answers a whole-second metadata duration and the exact
+// media duration replaces it at the transition to PLAYING, every time. The pair
+// below is a real one. The re-read in the PLAYING branch of
+// `onPlayerStateChange` is the only thing that carries the correction into
+// state — drop it, or drop `duration` from that patch, and the rounded value
+// stands for the rest of the session (#403).
+test('republishes a duration the player revises between ready and playing', async () => {
+  vi.useFakeTimers();
+  const { fake, patches, provider } = createAdapter();
+  await provider.attach();
+  await provider.load();
+  const harness = fake.players[0]!;
+
+  harness.duration = 1344;
+  harness.fireReady();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({ lifecycle: 'ready', duration: 1344 })
+  );
+
+  harness.duration = 1343.661;
+  harness.fireStateChange(playerStates.PLAYING);
+  await vi.advanceTimersByTimeAsync(300);
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({ playback: 'playing', duration: 1343.661 })
+  );
+  // The revision is the last word on the duration, not merely present
+  // somewhere: a later patch restating 1344 would mis-scale the seek bar just
+  // as a missing republish would.
+  expect(
+    patches.filter((patch) => patch.duration !== undefined).at(-1)?.duration
+  ).toBe(1343.661);
+});
+
 test('distinguishes provider-not-ready from autoplay-blocked', async () => {
   vi.useFakeTimers();
   const { fake, provider } = createAdapter();
@@ -770,6 +806,36 @@ test('volume commands convert the 0-1 contract onto the YouTube 0-100 scale', as
     ok: false,
     reason: 'provider-error'
   });
+});
+
+test('reports a muted volume-arrow press as the one change it makes', async () => {
+  const { events, fake, provider } = createAdapter();
+  await provider.attach();
+  await provider.load();
+  const harness = fake.players[0]!;
+  // A muted player at half volume: the ready snapshot adopts both, so the
+  // mirrors start where the press finds them.
+  harness.muted = true;
+  harness.volume = 50;
+  harness.fireReady();
+  const before = events.filter(({ type }) => type === 'volumechange').length;
+
+  // The command pair a muted `ArrowUp` issues (#274): the unmute that restores
+  // the sound, and the volume request that records the level it is restoring
+  // to. The second asks for the volume the adapter already holds, so it is
+  // silent here and on every other adapter. The unmute is the one real change,
+  // and every other adapter reports it once too — through its event path
+  // rather than its command path: native's element fires `volumechange` for
+  // the `muted` assignment and HLS inherits that, Vimeo's `volumechange`
+  // subscription carries the muted half, and Wistia's is `mute-change`. One
+  // press, one real change, one event, on all five (#365).
+  await expect(provider.unmute?.()).resolves.toEqual({ ok: true });
+  await expect(provider.setVolume?.(0.5)).resolves.toEqual({ ok: true });
+
+  expect(harness.player.setVolume).toHaveBeenCalledWith(50);
+  expect(
+    events.filter(({ type }) => type === 'volumechange').length - before
+  ).toBe(1);
 });
 
 test('commands emit intended values instead of stale YouTube read-backs', async () => {

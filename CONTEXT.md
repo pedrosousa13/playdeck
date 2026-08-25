@@ -30,15 +30,31 @@ _Avoid_: element, node, slot
 The grip a user drags on either slider. The browser renders it inside the native
 range input, so it is not a part: it carries no `data-playdeck-part`, and the
 theme reaches it only through a pseudo-element — `::-webkit-slider-thumb` on
-Blink and WebKit, `::-moz-range-thumb` on Gecko. On Blink and WebKit its fill
-belongs to `accent-color` and cannot be addressed on its own, which is why the
-theme colours its ring (`--playdeck-color-thumb-ring`) rather than the thumb
-itself. On Gecko the ring costs more: styling any part of a range input turns the
-native widget off for the whole control, so there the theme draws the thumb
-whole — its fill as well as its ring — plus that engine's track and progress
-fill. It draws none of them in forced-colors mode, where the native widget is
-left on so the user's palette reaches the control.
+Blink and WebKit, `::-moz-range-thumb` on Gecko. How much of it the theme draws
+depends on how much of the control it has had to take over. On the volume
+slider, which nothing is painted over, Blink and WebKit keep their native thumb
+and the theme adds only its ring (`--playdeck-color-thumb-ring`), because the
+fill belongs to `accent-color` and cannot be addressed on its own; Gecko gets
+the thumb drawn whole — fill as well as ring — plus that engine's track and
+progress fill, because styling any part of a range input there turns the native
+widget off for the whole control. On the seek slider the theme draws the thumb
+whole on all three engines: the loaded-range indicator sits in the same 4px band
+and one of the two has to be behind the other, and an engine's own track is what
+hides the indicator once the input is on top. It draws none of it in
+forced-colors mode, where the native widget is left on so the user's palette
+reaches the control.
 _Avoid_: handle, knob, scrubber
+
+**Played span**:
+The stretch of the seek window between its start and the current position,
+rendered as the `seek-progress` part. An element the primitive places and CSS
+paints, rather than the input's own filled part: the theme turns the native
+range widget off so the loaded-range indicator can sit behind the input, and
+that takes `accent-color` with it on Blink and WebKit, neither of which offers a
+pseudo-element for a range's filled part (#415). Not the progress fill, which is
+`::-moz-range-progress` — the engine's own, and still what draws the volume
+slider's on Gecko.
+_Avoid_: played fill, progress fill, elapsed bar
 
 **Viewport**:
 The player's own bounding box, rendered by `Player.Viewport`, which every
@@ -117,6 +133,20 @@ that control's own domain sets, and so releases it. A request nothing echoes is
 released by its deadline instead.
 _Avoid_: confirmation, acknowledgement
 
+**Derived step**:
+The seek slider's default `step`, computed from the seek window rather than
+fixed: `min(1, span / 20)`, so a window of 20s or more keeps the one second it
+always rendered, and a shorter one gains positions instead of collapsing onto
+its two ends — where a `Home` or `End` press from mid-clip moved nothing and
+raised no event at all (#383). A default and not a rule: `inputProps.step` still
+wins, and whichever of the two is in force is the **effective step**, which the
+echo tolerance takes half of. A window with no extent to divide — one that has
+not arrived, a zero-length one, or the infinity a live source publishes for its
+duration — steps by that same second. Distinct from the shortcut layer's seek
+distance, which is a fixed five seconds through `seekBy` and is not derived from
+anything (ADR-0005).
+_Avoid_: granularity, resolution, increment, tick
+
 **Requested origin**:
 Where a command the library issued came from — a control a person operated, an
 untagged public command, an autoplay attempt. Held from the moment the command
@@ -152,6 +182,20 @@ any of the three and the commitment made under the old one is retired.
 The source whose media element may mount, because its activation identity
 matches the one activation committed to.
 _Avoid_: eligible media
+
+**Buffered window**:
+What `PlayerState.buffered` reports — the ranges a provider has said are
+loaded, and deliberately not an instantaneous mirror of what its media element
+reads. An element reporting no ranges is saying one of two things it gives no
+way to tell apart, "nothing is buffered" and "not telling you", so within one
+source an empty reading is treated as _unknown_ rather than _none_ and the last
+non-empty ranges stand (#405). Reset only where an empty buffer is news: the
+media load algorithm running, which fires `emptied`, and the source changing,
+which builds a new provider over state rebuilt from scratch. A seek is not such
+a point, because an engine carries its ranges across one and they stay true. A
+window that merely moves — a DVR window dropping ranges off its start — is
+non-empty at every step and is published like any other reading.
+_Avoid_: buffer, buffer level, download progress
 
 **Recovered autoplay**:
 Playback that started only because the audible attempt was refused by policy and
@@ -365,6 +409,35 @@ needs an explicit override to land, since it fails the gate until it is on
 which changes what the gate is shown; this changes what the gate is drawn
 around (#373).
 _Avoid_: unpublished, withdrawn, removed
+
+**Unreported**:
+A severity at which `pnpm audit`'s `metadata.vulnerabilities` counts more
+advisories than the same report's `advisories` list carries. pnpm does not
+decrement the counts when something drops an advisory from the list, so the
+report contradicts itself and the count is evidence of an advisory the gate was
+never shown. The audit gate compares the two halves per severity — every
+severity the report orders except `info`, which pnpm drops from the list on an
+ordinary tree — and fails naming each one and both counts as `UNREPORTED`.
+Distinct from **suppressed**, which names the workspace setting that hid the
+advisory; this needs no setting at all and catches a command-line
+`--audit-level` just the same (#374).
+_Avoid_: miscounted, undercounted, missing
+
+**Gate runtime**:
+The `node_modules` a pinned gate resolves its third-party imports from, placed
+next to `main`'s copy of the gate scripts rather than borrowed from the tree
+under test. Pinning a gate pins its source, and a bare specifier is not source:
+Node resolves one by walking `node_modules` upward, which lands in the pull
+request's own install, so a redirected name runs the pull request's code inside
+`main`'s gate. CI puts `yaml` there at the version `main` pins — by `npm pack`
+and a tarball extraction rather than an install, for reasons
+`.github/workflows/ci.yml` records — and names the directory in
+`PLAYDECK_GATE_MODULES`; `scripts/gate-parser.mjs` resolves the specifier
+without loading it and fails unless the answer sits inside that directory, so a
+gate that fell back to the tree's copy goes red rather than quiet (#372).
+`@playwright/test`, which the packaging harness drives a browser through, is not
+provided for the gate and is the open half.
+_Avoid_: vendored, bundled
 
 **Governed**:
 An install the root `pnpm-workspace.yaml` reaches — its advisory floors, its

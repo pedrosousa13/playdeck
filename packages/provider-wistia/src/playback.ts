@@ -401,6 +401,13 @@ export const createWistiaPlayback = (
           providerEvent('ratechange', { playbackRate }, detail)
         );
       },
+      // On the measured path this adds nothing: the duration is already final
+      // when the adapter first reads it at `api-ready`, and `adopt` has
+      // already derived `seekable` from it by the same formula used below, so
+      // the patch emitted here is identical to the one the ready emit carried.
+      // The ready-time read in `attachment.ts` holds the measurement behind
+      // that claim. This handler stays because it is the one publisher
+      // positioned to carry a revision if one ever arrived.
       onLoadedMetadata: (player) => {
         const next = player.duration();
         duration = Number.isFinite(next) && next > 0 ? next : null;

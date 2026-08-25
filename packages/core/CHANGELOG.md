@@ -1,5 +1,491 @@
 # @playdeck/core
 
+## 0.2.0
+
+### Minor Changes
+
+- ecfef8b: A refused play command now reaches player state. `PlayerState` gains
+  `refusedPlay`, which carries the last play command that was turned down against
+  the media attached now — an `origin` and a `CommandFailureReason` — and `null`
+  while none stands (#361).
+
+  Before this, a refusal existed only as the `CommandResult` returned to whoever
+  called `play()`. Under `autoplay={false}` a `NotAllowedError` left `playback` at
+  `'paused'`, `autoplay` at `'idle'` because that machine never engaged, and
+  `error` unset, so nothing subscribable moved. A consumer calling
+  `handle.current?.play()` could at least read the result. A consumer whose viewer
+  pressed `PlayButton` could not read anything at all: the button issues the
+  command on the viewer's behalf and discards the result, so the one party who has
+  to present the outcome never saw one. `refusedPlay` is what they subscribe to,
+  and no React change was needed to get it — the press already routes through the
+  same command funnel as every other play.
+
+  **Why this is a state field when #244's attempt record deliberately was not.**
+  That decision reasoned that a refusal is bookkeeping about a command, reported to
+  the caller that issued it and to nobody else. The first half still holds and the
+  second half is what #361 disproved: a `PlayButton` press has no caller in that
+  sense. Where the library issues a command on a viewer's behalf and throws the
+  answer away, "reported to the caller" reports it to nobody. So a **settled**
+  refusal is a fact about the player that outlives its command and belongs on
+  state, while an attempt **still in flight** is a property of the command alone
+  and stays where #244 put it. `hasUnconfirmedPlayAttempt()` is unchanged and is
+  still the poster writer's, for exactly the in-flight case this field cannot
+  answer.
+
+  **Beside the blocked-autoplay state, not folded into it.** `autoplay` keeps
+  `'blocked'` and `'failed'`: it reports the autoplay machine, whose
+  `'attempting'`, `'suppressed'`, `'started'` and recovered members are states no
+  record of a refusal could carry. What the new field subsumes is the _question_ —
+  "was a play refused, and who asked for it" — for every trigger at once. There
+  are not two independent ways to observe a refusal to choose between. An autoplay
+  refused by policy appears in both, and `refusedPlay.origin` is `'autoplay'`,
+  which is the whole story about which applies when: ask `refusedPlay` about the
+  refusal, ask `autoplay` about autoplay. A viewer's refused press is
+  `origin: 'user'`; an untagged `play()` is `origin: 'api'`.
+
+  **Lifecycle.** A refusal is a moment and a field is a condition, so what is
+  published is the condition: _the last play command was refused and nothing has
+  played since_. It is set when a play command settles unsuccessfully, replaced by
+  a later refusal, and cleared by exactly two transitions. The first is **a
+  provider patch that confirms playback** — not the play promise resolving, since
+  playback is what a provider reports, and not only the patch answering the retry,
+  because any play that starts clears it, autoplay's own muted recovery and the
+  viewer working the provider's native controls included. That is the same site
+  and the same moment at which #244's attempt record is dropped, which is
+  deliberate: the two describe the same window and must not disagree about when it
+  closed. The second is **the provider changing** — attach, swap and detach all
+  end it, so a new source never inherits the last one's refusal, and that is where
+  it parts company with a refused-URL notice, which survives an attach because a
+  notice describes a consumer prop no provider ever saw while this describes a
+  command one provider turned down. Nothing else clears it, and that is the point
+  of stating it as a condition: a pause, a seek, a stall or a later error leaves a
+  refused play exactly as refused as it was, and a consumer presenting it is not
+  made to guess when to stop.
+
+  **The condition holds under out-of-order settlement**, which is the part that
+  takes real work, because a play command can settle long after the player has
+  moved on. Each play command is recorded as its own attempt, and a refusal is
+  published only where that attempt is still the one standing: a later play
+  replaces it, and the patch that confirms playback clears it, so a command
+  refused after another play succeeded — or after the viewer started playback from
+  the provider's own controls — publishes nothing, and a pause arriving in between
+  does not hand the refusal back. A refusal against media that is playing right
+  now is dropped for the same reason: it would state that nothing has played since
+  while something demonstrably is, and the clearing rule would take it back on
+  whichever unrelated patch happened to arrive next. Publishing it anyway, on the
+  grounds that a command really was refused, was the alternative, and it was
+  rejected on those two grounds — a self-contradicting snapshot, and a lifetime
+  decided by a `timeupdate`. Nothing is withheld from the party with a stake in
+  it: the caller of every one of these commands receives the same `CommandResult`
+  as before, and the field exists for the consumer who is _not_ the caller, to
+  whom "your play was refused" over playing media is not a true thing to say.
+
+  **What a subscriber sees during an `'audible-then-muted'` recovery**, since it
+  follows from the above: the audible refusal is published as soon as it settles,
+  while `autoplay` still reads `'attempting'` and the muted retry is still in
+  flight, and it clears when that retry starts playback. Both states are true when
+  they are published — a play really was refused, and the machine really is still
+  attempting — so a consumer presenting `refusedPlay` on its own will show a
+  refusal that then goes away. `autoplay` is what says the machine has not settled
+  yet; gate on it where a refusal should only be presented once nothing more is
+  coming.
+
+  **What did not change.** The `CommandResult` handed back to a direct caller is
+  untouched, byte for byte, including the `PlayerError` a refusal carries.
+  `playback` still stays `'paused'` through a refused play, `autoplay` still stays
+  `'idle'` where the autoplay machine never ran, and the error slot is still not
+  filled — `keeps confirmed paused state when the media play command rejects`
+  passes unchanged. `@playdeck/react` is not listed here at all — it ships no
+  behaviour change, and takes only the dependency patch every dependent gets:
+  `PlayButton` still discards its command result, which after this costs a consumer
+  nothing, and no primitive, prop or part presents the refusal. That decision
+  stands and is recorded in
+  `.out-of-scope/default-presentation-on-blocked-autoplay.md`, which #361 updates:
+  this is the primitive that file's composed path assumes, supplied rather than
+  reopened.
+
+  The refusal deliberately does **not** carry the `PlayerError` from the command
+  result. The state has one error slot, `ErrorDisplay` renders whatever is in it,
+  and filling it on a refused play would ship exactly the default presentation
+  that file declines. Repeating the error inside `refusedPlay` instead would give
+  one `PlayerError` two homes with two clearing rules. `reason` is what a consumer
+  branches on, and the copy is theirs to write.
+
+  A provider cannot forge one: `ProviderStatePatch` is a `Partial<PlayerState>`,
+  so the key is in every patch's reach, and the field is filled from the
+  controller's own record and never from the patch — the same rule
+  `autoplayRecovered` already keeps.
+
+  `CONTEXT.md` gains a **Refused play** term and qualifies **Unconfirmed play
+  attempt**, whose "reported to the caller and to nobody else" no longer describes
+  what the library does.
+
+- b5fa01a: `detectSource` now refuses a **short-host YouTube URL whose only path segment is
+  a full-host path keyword** — `watch`, `embed`, `live`, `shorts` or `playlist`,
+  in any case — instead of reading that segment as the video id (#395).
+
+  `https://youtu.be/watch?v=dQw4w9WgXcQ` used to detect, and to detect as
+  `{ type: 'youtube', videoId: 'watch' }`. On a short host the whole first path
+  segment is the id, and `watch` is a valid id _shape_, so the `v` parameter
+  carrying the real id was never consulted. It is a plausible URL to write by
+  hand: a consumer who knows `youtube.com/watch?v=<id>` works, and knows
+  `youtu.be` is the short domain, may combine them.
+
+  **The failure it removes is a silent one.** Detection reported success, so the
+  player loaded the YouTube provider, asked for a video called `watch`, and failed
+  at YouTube with no Playdeck error at all. The refusal is the same
+  `malformed-string` every other unreadable provider URL gets — no new reason and
+  no new message — so the consumer meets the named, actionable error that quotes
+  the value it turned down, rather than a player that never plays.
+
+  **Refused, not interpreted.** Reading `v=` when the segment is `watch` would
+  have made the URL work, and would have taught a form YouTube does not serve and
+  committed this library to supporting it. A URL this library invents is a URL it
+  then owns.
+
+  **The keyword set is derived, not duplicated.** The five keywords are named once
+  each in `source-detection.ts`, and the list this rejection reads is assembled
+  from those names rather than written out a second time. A path added to the full
+  hosts is therefore excluded from the short hosts by the same edit that adds it —
+  without that, `/live/` (added earlier in this release, #379) would have been readable
+  as the id `live` on `youtu.be`, which is the same bug in a new spelling.
+  `playlist` is in the set for the short hosts' sake: a full host reads no video
+  out of `/playlist?list=<id>` and so refuses it already, and naming it as a
+  keyword closes the short-host hole without changing the full hosts at all.
+
+  **Case-insensitive on the short hosts, and only there.** The full-host `/watch`
+  comparison stays exact, because the two hosts fail differently: `/Watch` on a
+  full host is refused loudly, while on a short host it _succeeded_, with an id no
+  video answers to. Folding case cannot cost a legitimate id — the comparison is
+  still an exact one against the whole segment, the segment is `[A-Za-z0-9_-]+`
+  and so is ASCII, which lowercases without changing length, and the keywords are
+  four to eight characters against YouTube's eleven-character ids.
+
+  **What still detects.** `https://youtu.be/<id>` is untouched for every id that
+  is not one of the five keywords. The rejection keys on the keyword set alone and
+  never on length or plausibility, so `watchAgain1`, `rewatching1`, `watch-later`
+  and the single-character `w` all resolve to themselves — this library constrains
+  an id to `[A-Za-z0-9_-]+` and does not enforce YouTube's own length.
+
+  **Why `minor`.** This narrows what `detectSource` accepts, which is the opposite
+  direction to the widening earlier in this same release (#379), and a narrowing has to answer for
+  what it takes away. It takes away nothing that worked. Every form that changed
+  resolved to the keyword itself as the video id — `watch`, `playlist`, `ShOrTs`
+  and the like — and no YouTube video answers to any of them, so each one built a
+  player that could not play. A sweep of 347 URL forms through the built package,
+  before and after, moved 108 rows and no others: the five keywords in eighteen
+  case spellings, on both short hosts, with a `v` query, with a `list` query and
+  with none, every one of them accepted → refused. Every other form — the full
+  hosts' five accepted shapes, the three forms #379 added earlier in this release, Vimeo,
+  Wistia, and the file and manifest shapes — resolved exactly as before.
+
+  `major` would ask a consumer to do something before upgrading and would take
+  this package to `1.0.0`, neither of which is meant: at `0.x` the `minor` slot is
+  where an intentional behaviour change belongs. `patch` would hide a public
+  function answering differently for an input it already answered for. A consumer
+  who was passing one of these URLs will now see a refused-source error where they
+  previously saw a stuck player, and the fix is the one the error already points
+  at: pass `https://youtu.be/<id>`, or the full-host `watch?v=` form.
+
+  `@playdeck/react` is not bumped and takes only the dependency patch every
+  dependent gets. `Root`'s `source` prop hands the string straight to
+  `detectSource`, and neither the prop type, the detection call, nor the error
+  published for a refusal moves here.
+
+  `docs/provider-setup.md` documented this form as "a trap" a reader had to avoid
+  and now lists it among the refused shapes.
+
+- 5ae1450: Playdeck no longer starts playback on its own for a viewer who matches
+  `prefers-reduced-motion: reduce` (#311). Both `loading: 'eager'` and
+  `loading: 'viewport'` autoplay are declined — the rule is about motion the
+  viewer did not ask for, not about where on the page it happens. `PlayerState`
+  gains a sixth `autoplay` member, `'suppressed'`, and `Player.Root` gains an
+  `ignoreReducedMotion` prop that opts out.
+
+  **The autoplay you configured stays configured; only the attempt is declined.**
+  That distinction is the whole implementation. `Player.Root`'s poster gate reads
+  the `autoplay` prop and lets every autoplay state that is not `started` keep the
+  poster up, so a suppressed autoplay holds its poster over the frame through
+  `loadeddata` exactly as a refused one does. Passing `autoplay={false}` under
+  reduced motion instead would open that gate and uncover a paused first frame
+  with no cover over it and no gesture that put it there — the defect fixed in
+  #242, arriving by a different route. Nothing else changes: `playback` stays
+  where it was, `PlayButton` still starts playback from a click, and
+  `autoplayRecovered` is `false`, as it is for every autoplay that did not start.
+
+  `'suppressed'` is its own member rather than a reuse of `'idle'` because `'idle'`
+  already means "no autoplay configured". Without it a consumer cannot tell an
+  autoplay that was suppressed from one that never existed, which is what a
+  "video paused for reduced motion" affordance needs to know. What the viewer sees
+  is unchanged — the existing poster surface, with no presentation Playdeck
+  invented for the occasion.
+
+  `ignoreReducedMotion` defaults to `false`, and with it set autoplay behaves
+  exactly as it did before this change. Its JSDoc on `Player.Root` carries the
+  naming rationale.
+
+  The query is read fresh at the moment each player decides whether to attempt,
+  not subscribed to. A viewer who turns reduced motion on mid-session is honoured
+  by every player that has not yet decided; one who turns it off does not get
+  video retroactively starting at them. Where `matchMedia` is unavailable — server
+  rendering, a worker, an older engine — the query cannot match and autoplay
+  proceeds unchanged, so the browser-support floor is where it was.
+
+- 727a376: `Player.Poster` now stays over the frame when a play **command** is refused, not
+  only when an autoplay attempt is (#244). The `loadeddata` first-frame writer
+  added for #242 gates on the configured autoplay mode, so under `autoplay={false}`
+  it had no mode to read and the gate was inert: a `play()` the browser rejected
+  with `NotAllowedError` — from `handle.current?.play()`, from a `PlayButton`
+  press, or from any `usePlayerActions` consumer — left the media paused on the
+  frame it had just decoded, uncovered, with nothing on screen reporting the
+  refusal. That is the defect #242 fixed, arriving through a command instead of
+  through autoplay. Nothing about a refusal itself changed: it is still reported to
+  the caller that issued it and to nobody else, `playback` stays `paused`,
+  `autoplay` stays `idle`, and no error is set.
+
+  The race is covered with it. A `loadeddata` can land while the `play()` promise
+  is still in flight, and a promise in flight is a refusal not yet told — hide the
+  poster on the decode and the rejection that follows has no way to put the cover
+  back. An unsettled attempt therefore defers exactly as a settled refusal does.
+
+  `PlayerController` gains one method, `hasUnconfirmedPlayAttempt()`, and that is
+  the whole addition to `@playdeck/core`'s public API. It answers whether a play
+  command was issued against the media attached now and playback never reached
+  `playing` — refused, faulted, or still in flight — for whatever issued it: the
+  API, a user gesture, or autoplay's own attempt. The record is dropped the moment
+  a provider patch confirms playback, so a viewer who pauses does not re-arm it,
+  and it is scoped to the provider generation, so attaching a provider ends it and
+  the first frame of freshly attached media goes back to hiding the poster unaided.
+
+  It is a method on the controller rather than a field on `PlayerState` on purpose.
+  A refused command is a fact about the command, not about the player, and the one
+  thing that needs it is the React layer's first-frame poster writer; publishing an
+  attempt record to every consumer and every subscriber would be a permanent
+  addition to the state snapshot made to change what exactly one internal reader
+  does. `Player.Root` cannot count the calls itself either — `PlayButton` and every
+  `usePlayerActions` consumer reach `play` straight from the player context and
+  never through that component.
+
+  `@playdeck/core` takes `minor` for the new public member and `@playdeck/react`
+  takes `patch`: the React change is a defect fix behind an unchanged surface, the
+  same level #242's own fix took, and no React prop, part or published state moved.
+
+  **Superseded in this release by #361.** "Nothing about a refusal itself changed:
+  it is still reported to the caller that issued it and to nobody else" was true
+  when written and is not true of this release. #361 landed alongside it and gives
+  `PlayerState` a `refusedPlay` member carrying the last refused command's `origin`
+  and `CommandFailureReason`, `null` while none stands — so a refusal now reaches
+  player state and any subscriber, not only the caller that issued it. The rest of
+  the sentence holds: `playback` stays `paused`, `autoplay` stays `idle`, and no
+  error is set. `CONTEXT.md` was corrected in the same change.
+
+- 6910f1c: The five consumer-supplied URL props the shared allowlist refuses now publish a
+  **Notice** instead of dropping the value in silence: `PosterImage`'s `src` and
+  each `srcSet` candidate, `Media`'s `nativePoster` and each `textTracks[].src`,
+  and `bindMediaSession`'s artwork `src`. All five were routed through
+  `isPermittedSourceUrl` without one, three hours after the library's rule that a
+  refused consumer value must be observable was written and applied to `host`,
+  `playerColor` and the provider-side `poster`. A poisoned CMS field was blocked
+  correctly and left no trace anywhere — no error, no event, no console output —
+  so the only symptom was a missing thumbnail.
+
+  **Nothing about the refusal changed.** The value is still dropped exactly as an
+  absent prop would be: no attribute, no `<track>`, no throw, no lifecycle move,
+  and a poster given only refused values still settles in `data-state="idle"`.
+  This is the detection half only.
+
+  `PlayerController` gains one method, `reportRefusedUrl(surface)`. It takes a
+  closed union naming the prop — `'poster src'`, `'poster srcSet'`,
+  `'nativePoster'`, `'textTracks src'`, `'mediaSession artwork'` — and never the
+  URL. That union is `RefusedUrlSurface`, the one type this change adds to
+  `@playdeck/core`'s public API; the method above is the only other addition. The
+  message is built in core from that key alone, so a refused value cannot be
+  carried into an error that a monitoring system may log or `ErrorDisplay` may
+  render.
+
+  The method registers a standing refusal and returns a disposer. The notice is
+  published while any registration stands and is withdrawn only by the reporter
+  that made it, so fix the poisoned CMS field and the notice goes — a notice that
+  could never be cleared would be a permanent false positive, and an operator who
+  cannot clear a security notice learns to ignore all of them, which is the
+  monitoring failure this change exists to fix. Registration is per reporter and
+  not per prop because a prop name is not a component instance: two `PosterImage`s
+  under one `Player.Root` both hold a `src`, and the one holding a permitted value
+  must not be able to withdraw the other's notice. Each call site registers from an
+  effect and returns the disposer as that effect's cleanup, so a refusal is
+  withdrawn exactly when the value turns permitted or the component holding it goes
+  away, and nothing is left standing that no live reporter owns.
+
+  Several surfaces can stand refused at once and the state has one error slot, so
+  the published notice is the first refused surface in the rank core fixes —
+  `poster src`, `poster srcSet`, `nativePoster`, `textTracks src`,
+  `mediaSession artwork` — never the order the reports arrived in. Report order
+  depends on where a consumer placed `PosterImage` in the tree and on whether the
+  pass is a mount or an update; the same poisoned fields should always produce the
+  same message.
+
+  A refused consumer URL is scoped to the controller rather than to a provider,
+  unlike a provider's own notice. It has to be: a poster reports from its mount
+  effect, which in the ordinary flow runs before the provider module has finished
+  loading, so a provider-scoped report would be wiped by the very next attach. It
+  never displaces a standing error. Against a provider's own notice the single
+  error slot decides by arrival, not by rank: a provider notice resolved in the
+  same pass as a refused URL wins, but a refused URL already published keeps the
+  slot against a provider notice that arrives after it, until a later patch clears
+  the slot and the two are ranked together. That first-one-wins is the single-slot
+  behaviour #332 owns; this change makes it reachable from one more direction and
+  does not settle it.
+
+  `PosterImage` reads the player context optionally rather than through
+  `usePlayer()`, so a poster rendered outside `Player.Root` keeps working and
+  simply has nothing to report to.
+
+  **Superseded in this release by #368.** The single error slot no longer decides
+  by arrival, and the later patch anticipated above is in this same release: a
+  notice declares a `severity` and the highest one holds the slot. All five
+  refused-URL notices are `protective` — what each reports is the shared allowlist
+  blocking an untrusted URL — so a cosmetic provider notice never takes the slot
+  from one, whichever of the two arrived first. Where a provider's own notice ties,
+  a fixed precedence settles it rather than arrival: what already stands, then the
+  provider's notice, then the refused URL. The rank among the five surfaces
+  described above is untouched.
+
+- ea664ad: `PlayerState.error` now keeps the most important **Notice** of an attach rather
+  than the first one reported (#368).
+
+  A notice is a non-fatal `configuration` error reporting a value that was
+  rejected while the fall-back it degraded to stands unchanged. The state has one
+  error slot and no event carries the loser, so an adapter that rejects two
+  options in one attach has one of them silenced for good — and until now that was
+  whichever it happened to check first. A cosmetic refusal reported early
+  therefore hid a security- or privacy-relevant one reported after it: exactly
+  what #332 fixed for Wistia by reordering two checks, a fix that held the
+  instance and left the mechanism.
+
+  Notices are now ranked. `PlayerError` carries an optional
+  `severity: PlayerErrorSeverity` — `'protective'` where a control that protects
+  the viewer fired (an untrusted URL blocked, a privacy opt-out that did not
+  take), `'presentational'` where a cosmetic option was ignored — and the slot
+  keeps the highest severity whatever order the notices arrived in. Ties are
+  settled by a fixed precedence rather than by arrival — the notice already
+  standing in the slot, then the provider's own notice, then a refused consumer
+  URL, the order #330 recorded — so a single attach still cannot flap the slot.
+  The rule governs a provider's notice against a refused consumer URL as well,
+  which was the one masking path #332 never covered: a refused URL is protective,
+  so a cosmetic provider notice no longer takes the slot from one, and where the
+  two tie and are resolved in the same pass the provider's own notice wins.
+
+  The field is optional and an absent severity ranks as `'presentational'`, so a
+  provider adapter outside this repo emitting a notice without one keeps working
+  and displaces nothing. Every notice this repo emits declares one: the five
+  refused-URL surfaces, Wistia's `poster` and YouTube's `host` and Vimeo's
+  ineffective `suppressSeoMetadata` are protective; Wistia's `playerColor` and
+  Vimeo's incomplete chromeless probe are presentational.
+
+  **No message changed and no notice stopped being emitted.** What changed is
+  which of two an operator observes where an attach reports both. The
+  hand-placed orders that used to carry this — Wistia's poster-before-colour,
+  Vimeo's suppression-before-probe — are correct and stay as they are; they are
+  simply no longer what the outcome rests on.
+
+  `@playdeck/core` also exports `isNotice(error, lifecycle)`, the one rule that
+  tells a notice from a failure. The controller and `ErrorDisplay` both apply it,
+  and a consumer rendering `PlayerState.error` itself can now classify an error
+  exactly as the bundled surface does instead of restating the rule.
+
+  `@playdeck/core` and the three provider packages land as `minor` rather than
+  `patch` for the reason #319 and #332 did: no API was removed or narrowed, but
+  what a released package reports did — an attach that rejects two options now
+  surfaces the other one of them — and a behaviour change should not arrive as a
+  patch. Core carries public additions besides, which `minor` answers to on their
+  own: `PlayerErrorSeverity`, the optional `severity` field on `PlayerError`, and
+  the `isNotice` export.
+
+  `@playdeck/react` takes `patch` because nothing it renders moved.
+  `ErrorDisplay` gave up its own copy of the notice rule for core's `isNotice`,
+  which is the same three clauses in the same order, so every error classifies
+  exactly as it did and every overlay falls exactly where it fell; the
+  `use-activation.ts` change is comments only, and `setActivation` still ranks
+  nothing. What a React consumer observes differently is state core publishes, and
+  it arrives through the dependency rather than from this package.
+
+- 8624a2e: `detectSource` now reads three URL forms it used to turn down, each of them a
+  form a provider hands a consumer directly (#379):
+
+  - **`https://vimeo.com/<id>/<hash>`** — the share link Vimeo hands out for an
+    unlisted video, and the form copied out of Vimeo's own UI.
+  - **`https://youtube.com/live/<id>`** — the canonical URL for a live broadcast.
+  - **`https://youtube-nocookie.com/embed/<id>`**, and the `www.` spelling — the
+    privacy-preserving host.
+
+  None of the three was refused by the shared allowlist, so nothing unsafe was
+  being kept out and nothing unsafe is being let in. They were refused by shape,
+  and the refusals were safe and wrong: the same unlisted Vimeo video was already
+  accepted two other ways (`?h=<hash>`, and the `player.vimeo.com` path), so the
+  library supported the case and simply did not recognise the URL the provider
+  gives you.
+
+  **The Vimeo hash reaches the source, and that is the point.** A form that
+  detected but dropped it would build a player that cannot load the unlisted
+  video and would report no error at all — worse than the refusal it replaces.
+  The canonical host reads the hash from the same trailing segment the
+  `player.vimeo.com` path already read, so the three forms of one unlisted video
+  now resolve to one identical `VimeoSource`. Where a query hash and a path hash
+  both arrive, `?h=` still wins.
+
+  **The no-cookie host needs nothing downstream, and gets nothing.** A
+  `YouTubeSource` is a video id and carries no host, so a source URL cannot ask
+  for an embed origin — only `providerOptions.youtube.host` can. It does not need
+  to: `@playdeck/provider-youtube` already requests
+  `https://www.youtube-nocookie.com` whenever no `host` is given, so a consumer
+  who chose that host for privacy is served from the host they chose. Accepting
+  it in detection cannot hand them the cookie-bearing origin.
+
+  **Two consequences worth reading before upgrading**, both of them widenings and
+  neither of them a form that previously worked changing:
+
+  - The no-cookie host joined the **full hosts**, so it reads every full-host
+    shape — `/watch?v=`, `/embed/`, `/live/` and `/shorts/` — not `/embed/`
+    alone. Membership of that list is what a host has; a shape allowed on one
+    full host and refused on another would be a new rule, not a smaller change.
+    A URL in any of those shapes resolves to the same video id it would on
+    `youtube.com`, and loads from the same default origin.
+  - `https://vimeo.com/<id>/<trailing-segment>` is now read as an unlisted hash
+    whenever that segment is `[A-Za-z0-9]+`, because that **is** the accepted
+    form — a hash is not distinguishable from any other alphanumeric segment, on
+    this host or on `player.vimeo.com`, where it has always been read this way.
+    A URL of that shape that was not a share link resolves to a video id and a
+    hash Vimeo will not recognise, where before it was refused outright.
+
+  Each widening is bounded to one extra path segment. A trailing slash, an empty
+  hash, a doubled slash and a third segment stay refused on both Vimeo hosts;
+  `/live/` reads one id segment and reads it on the full hosts only, exactly as
+  `/embed/` and `/shorts/` do. One refusal changed its **reason** without changing
+  its answer: a bad path on the no-cookie host now reads as _not readable_ rather
+  than _will not play_, because the host is recognised now and the path is what
+  fails — the same way `https://www.youtube.com/<id>` already read.
+
+  **Why `minor`.** This is an intentional behaviour change, so the level has to be
+  argued rather than assumed. What moved is one direction only: the set of strings
+  `detectSource` accepts grew, and nothing left it. No type, signature or field
+  changes, no reason a consumer branches on is retired, and every URL that
+  resolved before this resolves to the same source after it — the sweep behind
+  this change checked that rather than assuming it. So no consumer upgrading can
+  find a URL that stopped working; they can only find one that started. `patch`
+  would understate a public function answering for inputs it did not answer for
+  before, which is the surface growing. `major` would claim there is something to
+  do before upgrading, and there is nothing: the one thing a consumer might be
+  surprised by is the second consequence above, and that is a refusal becoming an
+  acceptance, not an acceptance changing its answer.
+
+  `@playdeck/react` is not bumped, and takes only the dependency patch every
+  dependent gets. `Root`'s `source` prop is where most consumers will meet this
+  widening, but it hands the string straight to `detectSource` — neither the prop
+  type, the detection call, nor the notice published for a refusal moves here.
+
+  `docs/provider-setup.md` listed all three as refused and now lists them as
+  accepted, alongside the boundaries above.
+
 ## 0.1.0
 
 ### Minor Changes

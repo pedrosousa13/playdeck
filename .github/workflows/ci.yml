@@ -102,14 +102,14 @@ jobs:
   # `main` rather than from the pull request.
   #
   # What that is, exactly, because it is narrower than "the gate is pinned":
-  # pinned logic over unpinned inputs. `main` supplies the source. The pull
-  # request still supplies everything that source consumes — the tree being
-  # measured, the `node_modules` it imports from, and the pnpm that corepack
-  # resolves from its `packageManager`. So it defeats an edit to
-  # `scripts/audit.mjs`, and that is the whole of what it defeats. One residual
-  # is known and filed rather than papered over: `main`'s copy executes
-  # pull-request-authored dependency code, since `yaml` resolves into this tree
-  # (#372).
+  # pinned logic over inputs that are still mostly the pull request's. `main`
+  # supplies the source, and — since #372 — the one third-party package that
+  # source imports, unpacked beside the pinned copy below at the version `main`
+  # pins so that upward resolution never reaches this tree looking for it. What
+  # the pull request still supplies is the tree being measured, which is the
+  # point of the gate rather than a residual, and the pnpm that corepack
+  # resolves from its `packageManager`, which every job in this file already
+  # trusts and which #372 deliberately left alone.
   #
   # A second is closed rather than open, and it is an input rather than logic:
   # the publishable boundary the gate measures against is declared in
@@ -161,8 +161,8 @@ jobs:
       # `scripts/audit.mjs` resolves both the repository root and
       # `pnpm-workspace.yaml` relative to its own location, so a copy exactly
       # one level below the root measures *this* pull request's tree while
-      # executing *main*'s logic; `yaml` resolves upward into this tree's
-      # `node_modules`. `--strip-components=1` is what puts `scripts/*` at
+      # executing *main*'s logic. What it reads that tree *with* is the gate
+      # runtime further down. `--strip-components=1` is what puts `scripts/*` at
       # `.gate/*` rather than `.gate/scripts/*`. The whole directory is copied
       # rather than the two files it imports today, so `main`'s import closure
       # stays complete even if a pull request deletes a module it needs.
@@ -181,7 +181,10 @@ jobs:
       # and `.gate/node_modules/yaml/` is the one that bites, because Node
       # resolves a bare import from the nearest `node_modules` upward. A
       # committed one is found before this tree's, and `main`'s gate would
-      # then parse `pnpm-workspace.yaml` with pull-request code.
+      # then parse `pnpm-workspace.yaml` with pull-request code. That is now
+      # also the directory the gate runtime below is extracted into, which is
+      # why the clear has to keep happening and has to keep happening first:
+      # unpacking on top of a committed tree is not a replacement of it.
       #
       # `.gate-baseline/` answers the second residual named above (#373): the
       # publishable boundary both gates measure against is declared in
@@ -254,9 +257,142 @@ jobs:
       # — compares nothing and prints nothing new. A pull request can still
       # edit this file and drop the variable, the same residual the paragraphs
       # above accept for the pinned run itself.
+      #
+      # The gate runtime — everything from the `gate_yaml=` read down to the
+      # `node -e` that proves the extraction — is what #372 closed, and it sits
+      # after the `rm -rf` and the `git archive` for a reason rather than by
+      # arrangement: both of those have to have finished first, or it would be
+      # decorating a `.gate/node_modules/` the pull request committed rather
+      # than replacing it.
+      #
+      # What it fetches is `main`'s pinned version, read out of `main`'s own
+      # manifest through the `FETCH_HEAD` this step already has. A literal here
+      # would be a second place to bump and a second place to forget, and a
+      # version read from *this* tree's manifest would hand the choice straight
+      # back to the pull request. The read insists on an exact `x.y.z`, which is
+      # what `main` carries today: a range would fetch whatever satisfies it on
+      # the day, and a gate whose parser floats is not a pinned gate.
+      #
+      # `npm pack` and a `tar`, and not the `npm install` this began as. npm 11
+      # runs a supply-chain policy check before it installs and asks the
+      # operator about the result, and measured on npm 11.16.0 every way out of
+      # that prompt is worse than it reads. On a TTY it prints `Continue install
+      # ? (y/N)` and waits. With stdin redirected from `/dev/null` — the shape a
+      # CI step has — it prints the prompt anyway and the package is not
+      # installed. With `--yes` it exits 0 and the package is *still* not
+      # installed, which is the dangerous one: a green step over an empty
+      # `.gate/node_modules/` is this whole weakness back again, with the gate
+      # resolving `yaml` out of the tree it is judging and nothing red to say
+      # so. The runner's npm is 10.x today (`actions/setup-node` at
+      # `node-version: 22`) and has no such prompt, so an install would probably
+      # work here and now — but "probably, because the runner's npm is old
+      # enough" is not a foundation for a control whose entire subject is
+      # determinism. `npm pack` runs none of that check and is prompt-free on
+      # both.
+      #
+      # Extracting the tarball is a whole install rather than half of one, and
+      # that is a fact about `yaml` rather than about tarballs: it declares no
+      # dependencies at all, so once its own files are on disk there is no
+      # resolution left for an installer to do. npm tarballs carry everything
+      # under `package/`, hence a `--strip-components=1` exactly like the `git
+      # archive` above. Nothing executes during it either, which is what
+      # `--ignore-scripts` bought on the install — obtaining a parser whose
+      # whole purpose is not to run the pull request's code should not run
+      # anybody's install hooks on the way — except that a `tar -x` has no hooks
+      # to skip rather than hooks skipped by a flag.
+      #
+      # `--quiet` and not `--silent`: both drop the 233-line tarball listing npm
+      # prints at notice level, but measured, `--silent` also swallows the
+      # `ETARGET` on a version that does not exist and leaves a bare exit 1 with
+      # nothing in the log to read.
+      #
+      # `npm` rather than `pnpm`, unchanged by any of the above and for the
+      # unchanged reason. A pnpm install anywhere inside this checkout is
+      # governed by the root `pnpm-workspace.yaml` — that is exactly why the
+      # packaging fixture has to be copied out to a temp directory to escape it,
+      # and why #336 then had to carry the file along by hand — and that file is
+      # the one under test here, `overrides` block and all. So pnpm would let
+      # the pull request redirect the gate's own fetch, which is this weakness
+      # arriving through the package manager rather than through resolution. npm
+      # reads nothing out of that file. And the `npm` on PATH is Node's own:
+      # `corepack enable` above leaves npm out of the set it shims by default
+      # (corepack's own `SupportedPackageManagerSetWithoutNpm`), so this does
+      # not route the gate's fetch through the package manager the pull
+      # request's `packageManager` field selects either.
+      #
+      # npm has a redirect of its own, though, and it is a different file rather
+      # than the same one read twice — which is why the fetch runs from outside
+      # the checkout. npm ignores `pnpm-workspace.yaml`; it does not ignore a
+      # project `.npmrc`, and the project it takes one from is found by walking
+      # up from the working directory, which for a step whose commands all run
+      # in the checkout is the pull request's tree. So a pull request that
+      # commits a `registry=` line serves the gate its own `yaml`, and the
+      # `node -e` below passes on it: the name, the version and a callable
+      # `parse` are all whatever was published under that spec. Measured both
+      # ways with `registry=https://example.invalid/` committed at the root —
+      # run from the checkout, `npm pack` fails with `network request to
+      # https://example.invalid/yaml failed`; run with `env -C` naming the
+      # `mktemp -d`, the same command does not see the file at all and fetches
+      # the real tarball. Only the working directory moves: `--pack-destination`
+      # still names that same directory, so the tarball lands where the `tar`
+      # below looks for it. The two `npm_config_*` variables answer the same
+      # question for the user and global config, which this workflow does not
+      # control either, and they name two absent paths rather than `/dev/null`
+      # twice because npm refuses to load one file as both and exits before it
+      # resolves any config at all.
+      #
+      # Every stage of it reddens the step, which took arranging, because
+      # `set -e` is easier to slip past than it reads. A bare assignment's
+      # status *is* its command substitution's, so a failed `node` read and a
+      # failed `npm pack` each fail the line they went wrong on — unlike the
+      # substitution-as-an-argument this block already had to reason about above
+      # (#373). What that does not catch is a stage that succeeded and produced
+      # nothing, so both results are expanded with `:?`: an empty version would
+      # reach `npm pack` as `yaml@`, which packs the latest release rather than
+      # refusing the spec and is precisely the float being closed, and an empty
+      # tarball name would hand `tar` the pack directory itself.
+      #
+      # The tarball is written to a `mktemp -d` outside the workspace and
+      # deleted once extracted, so nothing that could be mistaken for repository
+      # content is left behind for a later step to read. The `rm -rf` is not
+      # reached when `npm pack` or `tar` fails, and that is left alone rather
+      # than wrapped in a `trap`: the directory is outside the checkout, so no
+      # later step reads it either way, and the runner is thrown away whole at
+      # the end of the job. Tidiness on a path where the step has already gone
+      # red buys nothing.
+      #
+      # Then the extraction is proved rather than assumed, in this step and not
+      # only inside the gate. `require.resolve` starting from `.gate/` and
+      # answering a path outside it means nothing landed and the walk upward
+      # reached this tree's copy; a version that is not the pinned one means
+      # something landed at the wrong depth or from the wrong spec; and the
+      # module is actually loaded, so a tarball that unpacked into a shape Node
+      # cannot read fails here rather than a line later. `gate-parser.mjs`
+      # asserts its own resolution too and that remains the backstop, but a
+      # runtime that never arrived should go red where it was supposed to
+      # arrive.
+      #
+      # `PLAYDECK_GATE_MODULES` is what makes the runtime provable to the gate
+      # instead of assumed, and it is asserted inside the gate rather than here.
+      # `scripts/gate-parser.mjs` — pinned along with the rest of `.gate/`, and
+      # the only place any gate script names a third-party package — resolves
+      # `yaml` without loading it, fails unless the answer sits inside the
+      # directory named here, and imports it only then. A bare specifier
+      # resolves from the importing file's own directory, so the module doing
+      # the importing is the only place *that* check can be made: the
+      # `require.resolve` above answers a neighbouring question — whether the
+      # extraction landed — in another process, and not the question of what
+      # `.gate/audit.mjs` will reach when it asks for `yaml`. Set means
+      # mandatory once more — a runtime that is not there, or a parser found
+      # anywhere else, is a red step rather than a quiet fall back to this
+      # tree's copy, and falling back silently is the defect rather than the
+      # fix. It is set on the pinned run alone: the pull request's own run below
+      # resolves its own `node_modules` by design, and asserting otherwise there
+      # would fail a step that is behaving.
       - name: Audit — main's copy of the gate
         env:
           PLAYDECK_PUBLISHABLE_BASELINE: ${{ github.workspace }}/.gate-baseline
+          PLAYDECK_GATE_MODULES: ${{ github.workspace }}/.gate/node_modules
         run: |
           set -o pipefail
           git fetch --depth=1 origin main
@@ -267,6 +403,37 @@ jobs:
             | grep -zE '(^|/)package\.json$' \
             | xargs -0 git archive FETCH_HEAD pnpm-workspace.yaml \
             | tar -x -i -C .gate-baseline
+          gate_yaml="$(git show FETCH_HEAD:package.json | node -e '
+            const manifest = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            const version = String(manifest.devDependencies?.yaml);
+            if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version))
+              throw new Error("main does not pin yaml to an exact version: " + version);
+            process.stdout.write(version);
+          ')"
+          gate_pack="$(mktemp -d)"
+          gate_tarball="$(env -C "$gate_pack" \
+            npm_config_userconfig="$gate_pack/absent-user-npmrc" \
+            npm_config_globalconfig="$gate_pack/absent-global-npmrc" \
+            npm pack --quiet --pack-destination "$gate_pack" \
+            "yaml@${gate_yaml:?the yaml version pinned on main could not be read}")"
+          mkdir -p .gate/node_modules/yaml
+          tar -x -f "$gate_pack/${gate_tarball:?npm pack named no tarball}" \
+            --strip-components=1 -C .gate/node_modules/yaml
+          rm -rf "$gate_pack"
+          node -e '
+            const { realpathSync } = require("node:fs");
+            const { sep } = require("node:path");
+            const expected = process.argv[1];
+            const gate = realpathSync(".gate") + sep;
+            const entry = require.resolve("yaml", { paths: [gate] });
+            if (!entry.startsWith(gate))
+              throw new Error("the gate runtime is not under " + gate + ": yaml resolved to " + entry);
+            const { version } = require(gate + "node_modules/yaml/package.json");
+            if (version !== expected)
+              throw new Error("the gate runtime holds yaml@" + version + ", not the pinned " + expected);
+            if (typeof require(entry).parse !== "function")
+              throw new Error("the yaml in the gate runtime, at " + entry + ", exports no parse()");
+          ' "$gate_yaml"
           node .gate/audit.mjs
       # Runs even when the pinned copy above failed, so one run never hides
       # the other's verdict: the two disagreeing is the interesting case.
@@ -438,13 +605,15 @@ jobs:
       # a pull request committed under `.gate/` that the extraction would not
       # overwrite, `.gate/node_modules/` above all: Node resolves a bare import
       # from the nearest `node_modules` upward, and `verify-packaging.mjs`
-      # imports `@playwright/test` that way. `--strip-components=1` is what
-      # puts `scripts/*` at `.gate/*` rather than `.gate/scripts/*`, which is
-      # what leaves the copy exactly one level below the repository root — the
-      # depth both scripts resolve their paths from, and the whole reason they
-      # transfer here unchanged. The directory is copied whole rather than
-      # file by file so `main`'s import closure stays complete even if a pull
-      # request deletes a module it needs.
+      # imports `@playwright/test` that way — and it is also where the gate
+      # runtime below is extracted, so the clear has to come first or that
+      # unpacking decorates a committed tree instead of replacing it.
+      # `--strip-components=1` is what puts `scripts/*` at `.gate/*` rather than
+      # `.gate/scripts/*`, which is what leaves the copy exactly one level below
+      # the repository root — the depth both scripts resolve their paths from,
+      # and the whole reason they transfer here unchanged. The directory is
+      # copied whole rather than file by file so `main`'s import closure stays
+      # complete even if a pull request deletes a module it needs.
       #
       # One extraction rather than one per pinned run: both runs read the same
       # directory, and re-fetching between them would buy a second network
@@ -452,13 +621,36 @@ jobs:
       # executes.
       #
       # What this is, in the same terms the `audit` job uses: pinned logic over
-      # unpinned inputs. `main` supplies the two scripts. The pull request still
-      # supplies the tree they measure, the `node_modules` they import from
-      # (#372 — and the packaging harness is the sharper case of that residual,
-      # since it drives a real browser through pull-request-installed
-      # Playwright), the fixture under `tests/packaging/`, and the pnpm that
-      # corepack resolves from `packageManager`. None of those are folded in
-      # here; #372 and #374 hold them.
+      # inputs that are still mostly the pull request's. `main` supplies the two
+      # scripts, and the parser one of them reads YAML with — the gate runtime
+      # fetched below is the `audit` job's, verbatim and for the reasons stated
+      # there at length — `npm pack` over `npm install`, and a working directory
+      # outside this checkout so the pull request's own `.npmrc` cannot redirect
+      # the fetch, among them (#372).
+      # `verify-packaging.mjs` needs it as much as the audit gate does, one
+      # level less obviously: it imports `./packaging-fixture.mjs`, and that
+      # file is what synthesises the fixture's `pnpm-workspace.yaml` from this
+      # repository's own, so a redirected parser rewrites the floors and the
+      # cooldown the fixture install runs under (#336) as well as hiding them.
+      # `check-bundle-budgets.mjs` imports nothing third-party at all —
+      # `node:zlib`, `node:fs/promises`, `node:url` — so nothing about it needs
+      # a runtime and its step names none.
+      #
+      # `@playwright/test` is the open half, stated rather than hidden. The
+      # packaging harness drives a real browser through it, resolved out of the
+      # pull request's own `node_modules` exactly as `yaml` used to be, and a
+      # pull request that redirects that name runs its own code inside `main`'s
+      # harness. #372 closed the parser and deliberately not this: a browser
+      # driver is a heavy thing to fetch per job, and one with a dependency tree
+      # that a tarball extraction would not resolve, so it is a decision of its
+      # own rather than another line beside this one. It is the sharpest
+      # residual this job carries and it is not filed yet.
+      #
+      # The pull request still supplies the tree the two scripts measure, which
+      # is the point of both gates rather than a residual, the fixture under
+      # `tests/packaging/`, and the pnpm that corepack resolves from
+      # `packageManager` — which every job in this file already trusts and
+      # which #372 left alone on purpose.
       #
       # One residual that would otherwise belong in that list is already closed,
       # elsewhere: the publishable boundary `verify-packaging.mjs` draws is
@@ -468,13 +660,44 @@ jobs:
       # boundary and the packaging harness and the audit gate both import it, so
       # the `audit` job materialising `main`'s boundary and failing on a
       # departure (#373) covers this job too. Hence no baseline here.
-      - name: Fetch main's copy of the gate scripts
+      - name: Fetch main's copy of the gate scripts and the parser they read with
         run: |
           set -o pipefail
           git fetch --depth=1 origin main
           rm -rf .gate
           mkdir -p .gate
           git archive FETCH_HEAD scripts | tar -x --strip-components=1 -C .gate
+          gate_yaml="$(git show FETCH_HEAD:package.json | node -e '
+            const manifest = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            const version = String(manifest.devDependencies?.yaml);
+            if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version))
+              throw new Error("main does not pin yaml to an exact version: " + version);
+            process.stdout.write(version);
+          ')"
+          gate_pack="$(mktemp -d)"
+          gate_tarball="$(env -C "$gate_pack" \
+            npm_config_userconfig="$gate_pack/absent-user-npmrc" \
+            npm_config_globalconfig="$gate_pack/absent-global-npmrc" \
+            npm pack --quiet --pack-destination "$gate_pack" \
+            "yaml@${gate_yaml:?the yaml version pinned on main could not be read}")"
+          mkdir -p .gate/node_modules/yaml
+          tar -x -f "$gate_pack/${gate_tarball:?npm pack named no tarball}" \
+            --strip-components=1 -C .gate/node_modules/yaml
+          rm -rf "$gate_pack"
+          node -e '
+            const { realpathSync } = require("node:fs");
+            const { sep } = require("node:path");
+            const expected = process.argv[1];
+            const gate = realpathSync(".gate") + sep;
+            const entry = require.resolve("yaml", { paths: [gate] });
+            if (!entry.startsWith(gate))
+              throw new Error("the gate runtime is not under " + gate + ": yaml resolved to " + entry);
+            const { version } = require(gate + "node_modules/yaml/package.json");
+            if (version !== expected)
+              throw new Error("the gate runtime holds yaml@" + version + ", not the pinned " + expected);
+            if (typeof require(entry).parse !== "function")
+              throw new Error("the yaml in the gate runtime, at " + entry + ", exports no parse()");
+          ' "$gate_yaml"
       # `verify-packaging.mjs` resolves the repository root from its own module
       # URL and builds every fixture at an absolute `tmpdir()` path, so a copy
       # in `.gate/` packs and installs *this* pull request's packages while
@@ -498,8 +721,18 @@ jobs:
       # `audit` job goes, whose first pinned run keeps the default `success()`,
       # and the difference is deliberate: this job runs four gate steps in
       # sequence rather than two, so a skip early in the chain hides more.
+      #
+      # `PLAYDECK_GATE_MODULES` names the directory the step above extracted
+      # into, and `main`'s `scripts/gate-parser.mjs` — reached from here through
+      # `./packaging-fixture.mjs` — fails this step unless that is where `yaml`
+      # resolved from (#372). Set on the pinned run alone, for the reason the
+      # `audit` job gives: the pull request's own run below resolves its own
+      # `node_modules` by design. The two budget steps name no runtime because
+      # `check-bundle-budgets.mjs` imports nothing to resolve.
       - name: Packaging — main's copy of the gate
         if: ${{ !cancelled() }}
+        env:
+          PLAYDECK_GATE_MODULES: ${{ github.workspace }}/.gate/node_modules
         run: node .gate/verify-packaging.mjs
       # Runs even when the pinned copy above failed, so one run never hides the
       # other's verdict: the two disagreeing is the interesting case. Both

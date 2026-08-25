@@ -2,10 +2,11 @@
 
 `Player.Controls` is a focusable region that binds ten media actions to keys,
 and two of the controls it holds are native range inputs: `SeekSlider`'s
-scrubber (`step={1}`) and `VolumeSlider` (`step={step ?? 0.05}`, so a consumer
-can set its own by passing `step` to the component, which is the input). A range
-input answers the arrow keys itself, so on those two controls every bound arrow
-has two plausible owners. Before #181 the region resolved that by standing
+scrubber (`step={1}` when this was decided; derived from the seek window since
+#383) and `VolumeSlider` (`step={step ?? 0.05}`, so a consumer can set its own
+by passing `step` to the component, which is the input). A range input answers
+the arrow keys itself, so on those two controls every bound arrow has two
+plausible owners. Before #181 the region resolved that by standing
 down — `controls.tsx`'s target test skipped any element whose tag was `INPUT`,
 and it ran before the key was looked at, so a focused slider handed the layer's
 arrows to the input and killed Space, `k`, `j`, `l`, `m`, `f` and `c` in the
@@ -108,7 +109,12 @@ key resolve identically on every render and in every consumer.
   unscrubbable by mouse; assistive technology announces `aria-valuetext` — the
   time readout, which stays accurate whatever moved the value — rather than the
   `step` attribute, so nothing reads the stale number out. Pointer dragging on
-  both sliders is untouched by this decision.
+  both sliders is untouched by this decision. _Since #383 the step is derived
+  from the seek window (`min(1, span / 20)`) rather than fixed at 1, which is
+  the same argument followed the other way: a clip of a few seconds gains
+  positions instead of losing them, and a window of 20s or more derives the 1
+  this bullet names. Arrow ownership and the five-second distance are unchanged
+  by that._
 - **Ownership is conditional on the layer having something to do.** Capability
   gating runs before `preventDefault()`, so where `seek` is unavailable the
   arrows still step whatever range input has focus, and where `setVolume` is

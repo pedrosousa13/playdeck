@@ -133,20 +133,29 @@ describe('theme contract', () => {
         previous = stripped;
         stripped = stripped.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '');
       } while (stripped !== previous);
-      // The documented exemption (#190): a native range input's thumb, track
-      // and progress fill are reachable only through pseudo-elements, and
-      // Selectors 4 forbids a pseudo-element inside `:where()`, so the rules
-      // that paint the thumb's ring cannot be specificity-zero. Each carries
-      // its pseudo-element's own (0,0,1), which any single consumer class
-      // outranks, and rule 1 -- the cascade layer -- still makes unlayered
-      // consumer CSS win outright.
+      // The documented exemption (#190, #415): a native range input's thumb,
+      // track and progress fill are reachable only through pseudo-elements, and
+      // Selectors 4 forbids a pseudo-element inside `:where()`, so no rule that
+      // paints one can be specificity-zero. Each carries its pseudo-element's
+      // own (0,0,1), which any single consumer class outranks, and rule 1 -- the
+      // cascade layer -- still makes unlayered consumer CSS win outright.
       //
-      // Widened from `::-webkit-slider-thumb` alone when Gecko's half of #190
-      // landed: Gecko honours neither `outline` nor `box-shadow` on its thumb,
-      // so the ring costs a redraw of all three of its parts. Still removed by
-      // exact name, one name at a time, so any OTHER pseudo-element -- and
-      // every class, id, attribute or type selector left outside a `:where()`
-      // -- still fails below.
+      // Six rules take it today, and the four names below are what they are
+      // built from. It was one rule and one name when #414 added a ring to the
+      // `::-webkit-slider-thumb` of both sliders. Gecko's half of #190 made it
+      // four rules and four names: Gecko honours neither `outline` nor
+      // `box-shadow` on its thumb, and the first paint property to land on any
+      // part of a range input switches its native widget off for the whole
+      // control, so the ring there costs a redraw of the track and the progress
+      // fill as well. #415 made it six rules without adding a name, because the
+      // seek slider is now drawn rather than decorated on all three engines: it
+      // takes a `::-webkit-slider-thumb` rule of its own, and one more rule
+      // silencing `::-moz-range-track` and `::-moz-range-progress` for that one
+      // input so the theme's bar is its track and `seek-progress` its fill.
+      //
+      // Still removed by exact name, one name at a time, so any OTHER
+      // pseudo-element -- and every class, id, attribute or type selector left
+      // outside a `:where()` -- still fails below.
       for (const exempt of [
         '::-webkit-slider-thumb',
         '::-moz-range-track',
@@ -207,15 +216,20 @@ describe('theme contract', () => {
     expect(withoutComments).toMatch(/@media\s*\(\s*forced-colors\s*:\s*active/);
   });
 
-  // #190's Gecko half works by switching that engine's native range widget off,
-  // and forced colors is the mode where the widget was the only thing painting
-  // the control in the user's own palette. Unguarded, the Gecko volume slider
-  // flattened to `Canvas` -- the progress fill and the unfilled track alike at
-  // `rgb(255 255 255)`, 1.00:1, so the slider stated no value at all.
+  // Both hand-drawn sliders work by switching an engine's native range widget
+  // off, and forced colors is the mode where that widget was the only thing
+  // painting the control in the user's own palette. Unguarded, #190's Gecko
+  // volume slider flattened to `Canvas` -- the progress fill and the unfilled
+  // track alike at `rgb(255 255 255)`, 1.00:1, so the slider stated no value at
+  // all. #415's seek slider is held out of the mode for the same reason and at a
+  // measured price: `theme.css` records that positioning the input there takes
+  // the loaded range from 21.00:1 against the unfilled one to 1.00:1 on
+  // Chromium, and that drawing the control there flattens Gecko's thumb to
+  // between 2.05:1 and 2.85:1 against the canvas.
   // `e2e/thumb-contrast.spec.ts` measures that from rendered pixels; this
   // asserts the structural reason for it, which costs no browser and fails in
   // the same edit.
-  test('leaves the Gecko slider parts native in forced-colors mode', () => {
+  test('leaves every hand-drawn slider rule out of forced-colors mode', () => {
     const query = /@media\s*\(\s*forced-colors\s*:\s*none\s*\)/.exec(
       withoutComments
     );
@@ -231,10 +245,27 @@ describe('theme contract', () => {
       else if (withoutComments[end] === '}' && --depth === 0) break;
     }
 
+    // One needle per rule the query holds, each chosen to occur in the file
+    // exactly where that rule is and nowhere else. The three `::-moz-*` names
+    // are #190's; the rest are #415's, and they are listed by selector text
+    // rather than by pseudo-element name because `::-webkit-slider-thumb` also
+    // names the shared ring rule, which lives OUTSIDE this query and has to.
     const names = [
       '::-moz-range-track',
       '::-moz-range-progress',
-      '::-moz-range-thumb'
+      '::-moz-range-thumb',
+      // `appearance: none` on the seek input, which is what turns Blink's and
+      // WebKit's native widget off. Both occurrences -- this one and the thumb
+      // rule's own -- are inside.
+      'appearance: none',
+      // The rule the line above sits in, so moving `position: relative` out
+      // alone still fails: on its own that hands the bar's rows to the engine's
+      // track, which is the trade this query exists to refuse.
+      ":where([data-playdeck-part='seek-slider-input']) {",
+      // The fill `accent-color` stopped painting once the widget went off.
+      ":where([data-playdeck-part='seek-progress']) {",
+      // And the thumb, redrawn whole because nothing paints it any more.
+      ":where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb"
     ];
     const guarded = withoutComments.slice(start, end + 1);
     expect(names.filter((name) => guarded.includes(name))).toEqual(names);
@@ -319,9 +350,16 @@ describe('slider non-text contrast', () => {
     parseColor(tokenDefault('--playdeck-color-track')),
     backdrop
   );
+  // Over the track, not over the backdrop. `seek-buffered-range` nests inside
+  // `seek-buffered`, which paints `--playdeck-color-track` first, so a loaded
+  // range reaches the screen composited over the track and never over the
+  // ground behind it. Compositing it over the backdrop was conservative rather
+  // than wrong -- it put the loaded range at 178.5 where it renders at 206 --
+  // but every ratio derived from it moved, and the figures below now agree with
+  // what `e2e/thumb-contrast.spec.ts` samples off the screen (#415).
   const buffered = over(
     parseColor(tokenDefault('--playdeck-color-buffered')),
-    backdrop
+    track
   );
   const accent = over(
     parseColor(tokenDefault('--playdeck-color-accent')),
@@ -361,11 +399,21 @@ describe('slider non-text contrast', () => {
   // the component, which a boundary supplies as well as a fill does.
   //
   // The two accent-vs-surface ratios stay measured and stated below at their
-  // real, failing values, because the fill really does sit at 2.59:1 and 1.23:1
+  // real, failing values, because the fill really does sit at 2.59:1 and 1.65:1
   // and hiding that would misrepresent what ships. They are not asserted
   // because they are unreachable, not because they are unimportant -- what is
   // asserted instead is that the ring clears both surfaces and that the fill
   // stays legible inside its own ring.
+  //
+  // Since #415 those two are also the boundaries of a part in their own right.
+  // The seek slider's played span is no longer `accent-color` on an engine's
+  // native widget but `seek-progress`, an element the primitive positions and
+  // this file paints `--playdeck-color-accent`, so `accent vs track` and
+  // `accent vs buffered` describe its two edges exactly. Neither figure moved
+  // with the part: `e2e/thumb-contrast.spec.ts` samples them off the screen at
+  // 2.28:1 and 1.69:1 -- the same pair over the story's lighter ground -- and
+  // pins them there, on all three engines, so a change that moves either has to
+  // restate it in both files.
   //
   // What the three ring ratios do not add. `--playdeck-color-thumb-ring`
   // defaults to `#000`, which is also the `--playdeck-color-backdrop` default,
@@ -383,14 +431,38 @@ describe('slider non-text contrast', () => {
   // so on Blink and WebKit what sits beside its thumb is the engine's own
   // unfilled track and no token describes it.
   //
-  // What none of it measures is a rendered pixel. Every ratio here composites
-  // token defaults; the engines composite something else. Each paints its own
-  // native track under this file's `seek-buffered` bar, and that bar is
-  // absolutely positioned while the input is not, so on Blink and Gecko the
-  // bar paints OVER the control and lifts the whole thumb -- ring included --
-  // towards white. That overlay defect is owned by #415.
-  // `e2e/thumb-contrast.spec.ts` measures what is actually on screen and records
-  // how far apart the two answers are.
+  // What none of it measures is a rendered pixel, and until #415 the two
+  // answers disagreed: every engine painted its own native track under this
+  // file's `seek-buffered` bar, and the bar was absolutely positioned while the
+  // input was not, so the bar composited OVER the control and lifted the whole
+  // thumb -- ring included -- towards white. `ring vs buffered` said 9.96:1 and
+  // the screen said 1.03:1.
+  //
+  // The theme now draws the whole seek control, so the pixels beside its thumb
+  // are the ones composited here rather than an engine's. The two answers still
+  // differ, and by design: these ratios composite onto `--playdeck-color-backdrop`
+  // alone, while the story they are measured on has a ground of `rgb(11 14 19)`.
+  // Rendered against arithmetic: 3.55:1 against 3.13:1 for the ring on the
+  // track, 13.73:1 against 13.35:1 for the ring on the loaded range, 3.86:1
+  // against 4.26:1 for the loaded range on the track. Not all one direction, and
+  // that is what a lighter ground does rather than a discrepancy: it lifts a
+  // translucent white further where less of that white is opaque, so the track
+  // gains more than the range above it and the boundary between the two closes
+  // while both boundaries against the ring open.
+  // `e2e/thumb-contrast.spec.ts` is what measures the screen.
+  //
+  // Which makes `ring vs track` the row to read carefully, because the pixel
+  // gate never sees its worst case. `--playdeck-color-track` is a translucent
+  // white, so how far the ring clears it is a property of whatever is behind
+  // the slider. On this file's own `--playdeck-color-backdrop` default of `#000`
+  // -- the darkest ground there is, and the one a consumer who sets no token
+  // gets -- it is the 3.13:1 stated below, a margin of 0.13 over the floor
+  // (3.14:1 from the rendered `rgb(92 92 92)` that ground paints, the same
+  // margin either way). The story the pixel gate runs on has a lighter ground of
+  // `rgb(11 14 19)`, where the same boundary measures 3.55:1. So this
+  // arithmetic, not the screenshot, is what holds the worst case, and moving
+  // either `--playdeck-color-track`'s alpha or `--playdeck-color-thumb-ring`
+  // spends a margin thinner than the pixels ever show.
   const asserted = [
     'track vs backdrop',
     'buffered vs track',
@@ -421,13 +493,13 @@ describe('slider non-text contrast', () => {
     );
     expect(stated).toEqual({
       'track vs backdrop': '3.13:1',
-      'buffered vs track': '3.18:1',
-      'buffered vs backdrop': '9.96:1',
+      'buffered vs track': '4.26:1',
+      'buffered vs backdrop': '13.35:1',
       'accent vs backdrop': '8.10:1',
       'accent vs track': '2.59:1',
-      'accent vs buffered': '1.23:1',
+      'accent vs buffered': '1.65:1',
       'ring vs track': '3.13:1',
-      'ring vs buffered': '9.96:1',
+      'ring vs buffered': '13.35:1',
       'accent vs ring': '8.10:1'
     });
   });

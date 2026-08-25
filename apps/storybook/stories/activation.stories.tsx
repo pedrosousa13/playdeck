@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import type { MockPlayerParameters } from '../.storybook/mock-player';
 import { withCss } from '../.storybook/theme';
+import { assetUrl } from './asset-url';
 // The stylesheet the Styled story mounts, read as text so the same string is
 // both what renders and what the docs block below prints. `?raw` and not
 // `?inline` for the reason spelled out in play-button.stories.tsx: a production
@@ -103,7 +104,7 @@ export const ErrorState: Story = {
       fatal: false,
       recoverable: true,
       message:
-        "Unable to load the Vimeo provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See Playdeck's docs/provider-setup.md for what to check."
+        "Unable to load the Vimeo provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check."
     }
   }),
   play: async ({ canvas }) => {
@@ -224,7 +225,7 @@ export const OverlayOnPoster: Story = {
   render: () => (
     <Player.Viewport style={{ width: 480, height: 270, background: '#0b0e13' }}>
       <Player.Poster>
-        <Player.PosterImage src="/poster.svg" />
+        <Player.PosterImage src={assetUrl('poster.svg')} />
       </Player.Poster>
       <Player.ActivationButton>
         <Player.PlayIcon style={{ color: '#fff', fontSize: '3rem' }} />

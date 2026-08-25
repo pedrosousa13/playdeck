@@ -156,6 +156,54 @@ const isWistiaHost = (hostname: string): boolean =>
   hostname.endsWith('.wistia.com') ||
   hostname.endsWith('.wistia.net');
 
+// `live` sits in this list rather than in a pattern of its own: it is the
+// canonical URL for a live broadcast and reads `/<path>/<id>` exactly as the
+// other two do, so it is one more spelling of a shape already here (#379).
+const embeddedVideoPaths = ['embed', 'live', 'shorts'] as const;
+
+// The `/watch` path is the full-host keyword that carries its id in the query
+// rather than the path, which is why it is named here and matched on its own
+// below rather than joining the alternation.
+const watchPath = 'watch';
+
+// `/playlist?list=<id>` is a real full-host path, and the only recognised one
+// this detector reads no video out of: a playlist is not a video id, so a full
+// host already refuses it and naming it here changes nothing there. It is named
+// for the short hosts' sake. Without it `https://youtu.be/playlist?list=<id>`
+// detects as the video id `playlist` -- the same silent failure `watch` had,
+// and the reason the keyword set is membership of the full hosts' paths rather
+// than of the subset that happens to have a reading shape (#395).
+const playlistPath = 'playlist';
+
+// Every path keyword the full hosts recognise, spelled once each. The pieces
+// above are each read where they are matched -- `embeddedVideoPaths` by the
+// `embeddedVideoPattern` alternation, `watchPath` by the `/watch` comparison --
+// and this list joins them, `playlistPath` included, for its single reader: the
+// short-host rejection below, which refuses all five. A path added to the full
+// hosts is therefore excluded from the short hosts by the same edit that adds
+// it. Two hand-kept lists would let a new path be read as an id on `youtu.be`,
+// which is exactly the bug this closes (#395).
+const fullHostPaths: readonly string[] = [
+  watchPath,
+  playlistPath,
+  ...embeddedVideoPaths
+];
+
+// Built from the list above so the alternation cannot drift from it. What it
+// produces today is written out here so the pattern can be read at a glance,
+// but the construction is the authority and this line is illustrative:
+//
+//   /^\/(?:embed|live|shorts)\/([A-Za-z0-9_-]+)$/
+//
+// One segment after the keyword and nothing more; the full-host bound is the
+// `isShortUrl` ternary below, which never reads this match on a short host. The
+// interpolated values are `as const` string literals with no regex
+// metacharacter among them, so the construction cannot change the pattern's
+// meaning, and no flag is set, so there is no `lastIndex` carried between calls.
+const embeddedVideoPattern = new RegExp(
+  `^/(?:${embeddedVideoPaths.join('|')})/([A-Za-z0-9_-]+)$`
+);
+
 const sourceFromYouTubeUrl = (url: URL): YouTubeSource | undefined => {
   if (!isYouTubeHost(url.hostname)) return undefined;
 
@@ -163,18 +211,35 @@ const sourceFromYouTubeUrl = (url: URL): YouTubeSource | undefined => {
     url.hostname === 'youtu.be' || url.hostname === 'www.youtu.be';
   const watchVideoIds = url.searchParams.getAll('v');
   const shortUrlMatch = /^\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
-  // `live` sits in this alternation rather than in a pattern of its own: it is
-  // the canonical URL for a live broadcast and reads `/<path>/<id>` exactly as
-  // the other two do, so it is one more spelling of a shape already here
-  // (#379). The alternation is what holds it to one segment; the full-host
-  // bound is the `isShortUrl` ternary below, which never reads this match on a
-  // short host.
-  const embeddedVideoMatch = /^\/(?:embed|live|shorts)\/([A-Za-z0-9_-]+)$/.exec(
-    url.pathname
-  );
+  const embeddedVideoMatch = embeddedVideoPattern.exec(url.pathname);
+  // A short-host path is one segment and that segment is the id, so a full-host
+  // path keyword arriving there is a URL that combined the two forms rather
+  // than an id at all. `https://youtu.be/watch?v=<id>` used to detect, with the
+  // video id `watch`: the segment is a valid id *shape*, so the `v` parameter
+  // carrying the real id was never consulted and the consumer got a player that
+  // failed at YouTube with no Playdeck error at all -- worse than a refusal,
+  // which at least names the value it turned down (#395). Refused rather than
+  // interpreted: reading `v=` here would teach a URL form YouTube does not
+  // serve and commit this library to supporting it.
+  //
+  // Case-insensitive, unlike the `/watch` comparison below, because the two
+  // fail differently rather than because the rule differs: `/Watch` on a full
+  // host refuses loudly already, while on a short host it *succeeds*, with an
+  // id no video answers to, which is the silent failure this rejection exists
+  // to remove. It stays an exact comparison of the whole segment, so it cannot
+  // reach an id: the segment matched `[A-Za-z0-9_-]+`, which is ASCII, so
+  // lowercasing preserves its length, and no segment of a length other than a
+  // keyword's four to eight characters can equal one however it is cased.
+  // `watchAgain1`, `rewatching1` and `watch-later` are ordinary ids and read.
+  const shortUrlSegment = shortUrlMatch?.[1];
+  const shortUrlVideoId =
+    shortUrlSegment !== undefined &&
+    fullHostPaths.includes(shortUrlSegment.toLowerCase())
+      ? undefined
+      : shortUrlSegment;
   const videoId = isShortUrl
-    ? shortUrlMatch?.[1]
-    : url.pathname === '/watch'
+    ? shortUrlVideoId
+    : url.pathname === `/${watchPath}`
       ? watchVideoIds.length === 1
         ? watchVideoIds[0]
         : undefined

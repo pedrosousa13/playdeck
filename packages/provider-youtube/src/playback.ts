@@ -115,7 +115,15 @@ export const createYouTubePlayback = ({
   let pendingPlays: PendingPlay[] = [];
   // The iframe API proxies commands over postMessage, so getters read stale
   // values right after a command. These mirrors track the last confirmed or
-  // intended values instead; commands emit intent, events and polling confirm.
+  // intended values instead; commands emit intent, and `adoptVolume` confirms
+  // by reading `isMuted()` and `getVolume()` back off the player. That
+  // read-back happens at ready and nowhere else: the IFrame Player API
+  // publishes no volume event — `onReady`, `onStateChange`,
+  // `onPlaybackQualityChange`, `onPlaybackRateChange`, `onError` and
+  // `onApiChange` are the set, and `attachment.ts` subscribes to five of them
+  // — and nothing polls volume the way the position mirror is polled. So a
+  // change a viewer makes in YouTube's own chrome is not observed here until
+  // the next ready adopt (#365).
   let knownMuted = false;
   let knownVolume = 1;
 
@@ -132,9 +140,32 @@ export const createYouTubePlayback = ({
     command: (current: YouTubeCommandPlayer) => void
   ): Promise<CommandResult> => runYouTubeCommand(getReadyPlayer(), command);
 
-  const emitVolumeIntent = (): void => {
-    const muted = knownMuted;
-    const volume = knownVolume;
+  // Moves the mirrors onto the values a command intends and publishes them,
+  // but only where at least one of the two actually moved: an accepted command
+  // asking for what the adapter already holds changed nothing, and reporting
+  // it would count a change the media never made. The controller fans every
+  // provider event straight out rather than deduping, so an unconditional emit
+  // here is one a consumer counting `volumechange` would see (#365). Every
+  // other adapter is already silent on such a command: native assigns the
+  // element's `volume`/`muted` and lets the element fire only on a real
+  // change, HLS delegates to native, and Vimeo and Wistia publish nothing at
+  // all for an accepted command — their only emit off a volume command is a
+  // capability downgrade on a `setVolume` refused as `unsupported`, which
+  // reports what the player cannot do rather than a volume.
+  //
+  // The comparison takes the next values as arguments and does the assignment
+  // itself, because it is the only way it can see both sides: each caller used
+  // to overwrite the mirror before asking for the emit, leaving nothing to
+  // compare against.
+  //
+  // `volume` is the unrounded clamped value the mirror keeps, never the 0-100
+  // integer the player is sent: 0.501 and 0.502 are two distinct requests that
+  // round onto the same player step, and comparing the rounded value would
+  // silence the second and invent a precision boundary the adapter never had.
+  const emitVolumeIntent = (muted: boolean, volume: number): void => {
+    if (muted === knownMuted && volume === knownVolume) return;
+    knownMuted = muted;
+    knownVolume = volume;
     emit({ muted, volume }, providerEvent('volumechange', { muted, volume }));
   };
 
@@ -217,17 +248,23 @@ export const createYouTubePlayback = ({
       // earlier seek command would still return the pre-seek position.
       return seekToTime(timeUpdates.getCurrentTime() + offset);
     },
+    // The commands themselves still reach the player whether or not the
+    // mirrors move, and that call is load-bearing rather than defensive: with
+    // no volume event and no volume poll, `adoptVolume` at ready is the only
+    // thing that ever re-reads the player, so re-asserting a mirror the
+    // command did not move is the only mechanism that re-converges a player
+    // whose volume has drifted from it — nothing else would notice until the
+    // next `onReady`. The command result is the same accepted result it
+    // always was.
     mute: () =>
       runCommand((current) => {
         current.mute();
-        knownMuted = true;
-        emitVolumeIntent();
+        emitVolumeIntent(true, knownVolume);
       }),
     unmute: () =>
       runCommand((current) => {
         current.unMute();
-        knownMuted = false;
-        emitVolumeIntent();
+        emitVolumeIntent(false, knownVolume);
       }),
     setVolume: (volume) => {
       if (!Number.isFinite(volume)) {
@@ -235,8 +272,7 @@ export const createYouTubePlayback = ({
       }
       return runCommand((current) => {
         current.setVolume(Math.round(clamp01(volume) * 100));
-        knownVolume = clamp01(volume);
-        emitVolumeIntent();
+        emitVolumeIntent(knownMuted, clamp01(volume));
       });
     },
     setPlaybackRate: (rate) => {
@@ -262,6 +298,34 @@ export const createYouTubePlayback = ({
           // (`provider-native`, `:129-131`; Vimeo `onPlay`; Wistia `onPlay`).
           boundary.clearEnded();
           settlePendingPlays({ ok: true });
+          // Re-reading the duration here is load-bearing rather than
+          // defensive, and it is the whole of the correction this adapter
+          // needs. Measured August 2026 over 7 loads of 4 videos — a 22-minute
+          // VOD, a 1h56m VOD, a 5h03m VOD and a 24/7 DVR live stream —
+          // instrumented at the IFrame API seam, subscribed to all six player
+          // callbacks with `getDuration()` polled alongside them. Every load
+          // revised its duration exactly once, and always here: `onReady`
+          // answers a whole-second metadata duration and the exact media
+          // duration replaces it at the transition to PLAYING, which on the
+          // short video fell between the 903ms and 935ms marks of the load. So
+          // the revision is under a second in magnitude, arrives before the
+          // first frame is far along, and this branch already publishes it —
+          // no listener beyond it was called for. Nothing revised
+          // after the first PLAYING in any load, including a 120s VOD soak
+          // spanning a seek, a buffering cycle and `ended`, and a 150s live
+          // soak. Seven loads bound what was seen rather than what the API can
+          // do, and the measurement itself is recorded on #403.
+          //
+          // The live stream is the informative negative. #400's severe native
+          // defect needed a duration that GROWS while the media is read; this
+          // DVR stream answered a fixed 446416.9 for 150s while the playhead
+          // advanced 150 seconds, so YouTube's live duration behaves as a
+          // snapshot rather than a value tracking the edge, and the shape that
+          // left `SeekSlider` inoperable there does not arise. The residual is
+          // a player cued and never played: it holds `onReady`'s rounded
+          // integer (1344 against a true 1343.661, unchanged over 60s) because
+          // the correction rides PLAYING. Off by up to a second on a `max` in
+          // the thousands, which is cosmetic.
           const duration = current.getDuration();
           emit(
             {

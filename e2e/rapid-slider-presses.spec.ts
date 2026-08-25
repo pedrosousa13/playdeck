@@ -512,10 +512,11 @@ test('the seek control keeps End, Home and End pressed inside one round trip', a
 
   // Park the media at the start and hold it there. Not a wait for the player to
   // go quiet — the gesture below is made under congestion with nothing settled
-  // between its presses — but the seek window is only ~1s wide and the control
-  // steps by 1, so a clip left running would put the thumb at a different end
-  // of that window depending on how far it had got, and the gesture would be
-  // asserting something different on every run.
+  // between its presses — but the seek window is only ~1s wide, so a clip left
+  // running would put the thumb somewhere else in it depending on how far it
+  // had got, and the first entry of `shown` would be asserting something
+  // different on every run. `Home` and `End` themselves are the two ends of the
+  // window whatever the step is (#383), so the rest of the gesture is not.
   await media(page).evaluate((el: HTMLVideoElement) => {
     el.pause();
     el.currentTime = 0;
