@@ -120,15 +120,15 @@ export const createYouTubeBoundary = (
 
   // Where a position the adapter never asked for has to be moved to for the
   // window to hold, or undefined when it needs no move — `@playdeck/core`'s
-  // shared `correction`, which the Vimeo and Wistia ports consult and gate the
-  // same way. Gated on the attachment being positioned, for the reason the wrap
-  // guard is: a player that has not been positioned yet is still loading, and
-  // correcting it would fight the initial seek.
+  // shared `correction`, which the Vimeo and Wistia ports consult too. It is
+  // handed the same state the wrap guard is, and answers nothing for anything
+  // that guard owns: a player not yet positioned, and a looping playhead behind
+  // the start boundary, which is a wrap to restart from.
   const correctionFor = (
     duration: number | undefined,
     time: number
   ): number | undefined =>
-    positioned ? bounds.correction(duration, time) : undefined;
+    bounds.correction(duration, time, { loop, positioned });
 
   // Seeks and reports the intended position: a read-back would still return
   // the pre-seek time, and the poll does not run while the player is paused.
@@ -224,9 +224,11 @@ export const createYouTubeBoundary = (
         return false;
       }
       // The wrap guard, shared with the Vimeo and Wistia ports so the three
-      // cannot drift apart on which start they compare against. It answers
-      // first, so a looping player is corrected by the loop concept exactly as
-      // it was and the floor below never sees the wrap.
+      // cannot drift apart on which start they compare against. It is asked
+      // first for legibility rather than for correctness: the floor below
+      // declines every position this claims, so a looping player is corrected
+      // by the loop concept exactly as it was whichever order they are asked
+      // in.
       if (current && bounds.atWrap(duration, time, { loop, positioned })) {
         restartFromBoundary(current);
         return false;

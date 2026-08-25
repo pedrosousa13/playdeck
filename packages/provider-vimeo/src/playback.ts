@@ -167,6 +167,13 @@ export const createVimeoPlayback = (
   // Nor can the correction chase itself: `correction` answers undefined for the
   // position it just asked for, so the `seeked` and `timeupdate` this seek
   // produces publish as ordinary reports rather than triggering another seek.
+  //
+  // It leaves the loop rule alone rather than being asked after it: a looping
+  // embed's below-start playhead belongs to `wrapped`, which restarts *and*
+  // resumes it, and `correction` declines that position wherever it is asked
+  // from. That matters here and not on the time report — this handler has no
+  // wrap test in front of it, and correcting onto the start would leave a
+  // position `wrapped` no longer recognises, retiring the restart.
   const correctPosition = (time: number): number | undefined => {
     const target = boundary.correction(duration, time);
     if (target === undefined) return undefined;

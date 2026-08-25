@@ -361,6 +361,12 @@ export const createWistiaPlayback = (
         // the state never carries a position outside the window. The seek this
         // issues reports back to this same handler, where `correction` answers
         // undefined for its own target and the echo publishes plainly.
+        //
+        // A looping player's below-start position is not this seam's to move.
+        // It is a wrap, `reviewTime` restarts and resumes it, and `correction`
+        // declines it here — there is no wrap test in front of this handler,
+        // and correcting onto the start would leave a position the wrap guard
+        // no longer recognises, retiring the restart.
         const corrected = boundary.correction(duration, reported);
         if (corrected !== undefined) player.time(corrected);
         currentTime = corrected ?? reported;

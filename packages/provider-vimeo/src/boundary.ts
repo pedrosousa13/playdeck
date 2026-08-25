@@ -43,9 +43,9 @@ export type VimeoBoundary = {
   // once (#381), and it answers the end of the window as well: a report past
   // the end says how far the embed ran on before the pause landed.
   //
-  // Gated on the attachment being positioned, for the reason the wrap guard is:
-  // the reports a load emits before the initial seek are a player still
-  // loading, and correcting them would fight `adopt`'s own seek.
+  // It is handed the same state `wrapped` is, and answers nothing for anything
+  // that state owns: a player not yet positioned, and a looping playhead behind
+  // the start boundary, which is `wrapped`'s to restart.
   readonly correction: (
     duration: number | null,
     time: number
@@ -87,7 +87,7 @@ export const createVimeoBoundary = (
     wrapped: (duration, time) =>
       bounds.atWrap(duration, time, { loop, positioned }),
     correction: (duration, time) =>
-      positioned ? bounds.correction(duration, time) : undefined,
+      bounds.correction(duration, time, { loop, positioned }),
     restartsOnEnded: () => bounds.restartsAtStart(loop),
     hasEnded: () => boundaryEnded,
     setEnded: (ended) => {

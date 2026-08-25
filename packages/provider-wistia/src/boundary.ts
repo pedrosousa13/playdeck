@@ -80,9 +80,9 @@ export type WistiaBoundary = {
   // time reports go through `reviewTime`, which asks this; `seeked` asks it
   // directly, because a paused player reports no time update after a seek.
   //
-  // Gated on the attachment being positioned, for the reason the wrap guard
-  // is: a player that has not been positioned yet is loading, and correcting
-  // it would fight the initial seek.
+  // It is handed the same state the wrap guard is, and answers nothing for
+  // anything that guard owns: a player not yet positioned, and a looping
+  // playhead behind the start boundary, which is a wrap to restart from.
   readonly correction: (
     duration: number | null,
     time: number
@@ -117,7 +117,7 @@ export const createWistiaBoundary = (
     duration: number | null,
     time: number
   ): number | undefined =>
-    positioned ? bounds.correction(duration, time) : undefined;
+    bounds.correction(duration, time, { loop, positioned });
 
   return {
     startAt,
@@ -148,9 +148,11 @@ export const createWistiaBoundary = (
         };
       }
       // The wrap guard, shared with the YouTube and Vimeo ports so the three
-      // cannot drift apart on which start they compare against. It answers
-      // first, so a looping player is corrected by the loop concept exactly as
-      // it was and the floor below never sees the wrap.
+      // cannot drift apart on which start they compare against. It is asked
+      // first for legibility rather than for correctness: the floor below
+      // declines every position this claims, so a looping player is corrected
+      // by the loop concept exactly as it was whichever order they are asked
+      // in.
       if (bounds.atWrap(duration, time, { loop, positioned })) {
         return { kind: 'restart', time: startAt(duration) };
       }

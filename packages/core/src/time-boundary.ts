@@ -108,18 +108,20 @@ export type TimeBoundary = {
   // ordinary report. One out-of-window position therefore costs at most one
   // corrective seek, however many reports of it arrive.
   //
-  // That holds because every answer is a *finite* position, and one reported
-  // time has to be excluded by hand for it to: a reported `NaN` compares false
-  // against everything including itself, so the clamp would answer `NaN` — a
-  // seek to `NaN`, reported back as `NaN`, corrected again, without end. So a
-  // `NaN` report answers undefined and nothing moves. It is not a theoretical
-  // input: YouTube's `getCurrentTime()` answers `NaN` before its player is
-  // ready and the poll passes it straight here. The infinities need no such
-  // exception — they are ordered, so a reported `Infinity` answers the
-  // effective end or nothing and a reported `-Infinity` answers the start.
+  // It takes the same `state` `atWrap` does, and for the same reason it is not
+  // a caller's business: the two answer overlapping positions, and the wrap
+  // guard owns the overlap. A playhead behind the start of a looping player is
+  // a wrap — the loop rule restarts it and starts playback again — so this
+  // answers undefined there and leaves it to `atWrap`, whether the port asked
+  // `atWrap` first or not. Reading the loop from a parameter rather than from
+  // the call site is what makes that true on the seek paths as well as the
+  // time-report ones. `positioned` is likewise the guard's: the reports a load
+  // emits before the initial seek are a player still loading, and correcting
+  // them would fight the port's own positioning seek.
   readonly correction: (
     duration: number | null | undefined,
-    time: number
+    time: number,
+    state: { readonly loop: boolean; readonly positioned: boolean }
   ) => number | undefined;
 };
 
@@ -168,17 +170,23 @@ export const createTimeBoundary = (options: {
     return effectiveEnd !== undefined && time >= effectiveEnd;
   };
 
+  const atWrap = (
+    duration: number | null | undefined,
+    time: number,
+    state: { readonly loop: boolean; readonly positioned: boolean }
+  ): boolean => {
+    if (!state.loop || !state.positioned) return false;
+    const effectiveStart = start(duration);
+    return effectiveStart > 0 && time < effectiveStart;
+  };
+
   return {
     startTime,
     endTime,
     end,
     start,
     atEnd,
-    atWrap: (duration, time, state) => {
-      if (!state.loop || !state.positioned) return false;
-      const effectiveStart = start(duration);
-      return effectiveStart > 0 && time < effectiveStart;
-    },
+    atWrap,
     restartsAtStart: (loop) => loop && startTime > 0,
     clamp: (duration, time) => {
       const effectiveEnd = end(duration);
@@ -187,7 +195,21 @@ export const createTimeBoundary = (options: {
         effectiveEnd === undefined ? time : Math.min(time, effectiveEnd)
       );
     },
-    correction: (duration, time) => {
+    correction: (duration, time, state) => {
+      // Nothing to hold a player to before the port has positioned it: the
+      // reports a load emits before the initial seek are a player still
+      // loading, and correcting them would fight that seek. All three ports
+      // gated their own call on this before it moved in here, where a new call
+      // site cannot forget it.
+      if (!state.positioned) return undefined;
+      // The wrap guard owns a playhead behind the start of a looping player,
+      // and owns it on every path rather than on the paths that happen to ask
+      // it first. `atWrap` restarts and resumes such a position; this would
+      // only slide it onto the floor, and a playhead sitting *on* the start is
+      // one `atWrap` no longer recognises — so correcting here would consume
+      // the wrap and silently retire the restart. Deferring is what keeps a
+      // looping embed behaving exactly as it did before this predicate existed.
+      if (atWrap(duration, time, state)) return undefined;
       // The one reported position with no answer. `NaN` is unordered, so every
       // comparison below is false for it: `atEnd` reads it as inside the
       // window, `Math.max` propagates it, and `target === time` is false even

@@ -3140,6 +3140,39 @@ test('corrects nothing past the duration when no end boundary is set', async () 
   expect(patches.at(-1)).toEqual({ currentTime: 60, duration: 60 });
 });
 
+// The wrap guard's position, arriving by the one path that has no wrap test in
+// front of it. `onTimeUpdate` asks `wrapped` before the floor; this handler
+// asks the floor alone, so the rule has to live inside `correction` rather than
+// in the call order. Correcting here would put the playhead *on* the start,
+// which `atWrap` no longer recognises — retiring the restart along with its
+// `play()`, its `buffering: false` and its restart token.
+test('leaves a looping embed below the start boundary to the wrap guard', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { loop: true, startTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('seeked', { duration: 60, percent: 0.08, seconds: 5 });
+  await flushMicrotasks();
+
+  // No corrective seek, and the reported position published as it arrived —
+  // what this adapter did before the floor existed.
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+  expect(player.play).not.toHaveBeenCalled();
+  expect(patches.at(-1)).toMatchObject({ seeking: false, currentTime: 5 });
+
+  // And the report that follows still reaches the wrap guard, which restarts
+  // the embed and starts playback again.
+  player.emit('timeupdate', { duration: 60, percent: 0.08, seconds: 5 });
+  await flushMicrotasks();
+
+  expect(player.setCurrentTime).toHaveBeenLastCalledWith(20);
+  expect(patches.at(-1)).toMatchObject({ currentTime: 20, buffering: false });
+  expect(player.play).toHaveBeenCalled();
+});
+
 test('clamps a seek to the window instead of crossing the end boundary', async () => {
   const { patches, provider, sdk } = await setup({
     fake: { duration: 60 },

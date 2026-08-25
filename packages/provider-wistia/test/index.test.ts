@@ -1446,6 +1446,35 @@ test('issues no corrective seek for a report that lands on the end boundary', as
   expect(seekTargets(player)).toEqual([]);
 });
 
+// The wrap guard's position, arriving by the one path that has no wrap test in
+// front of it. `reviewTime` asks `atWrap` before the floor; this handler asks
+// the floor alone, so the rule has to live inside `correction` rather than in
+// the call order. Correcting here would put the playhead *on* the start, which
+// `atWrap` no longer recognises, retiring the restart and the `buffering:
+// false` that goes with it.
+test('leaves a looping player below the start boundary to the wrap guard', async () => {
+  const result = await setup({
+    options: { loop: true, startTime: 20 },
+    fake: { duration: 60 }
+  });
+  const player = element(result);
+
+  player.handle.currentTime = 5;
+  player.emit(WISTIA_EVENTS.seeked);
+
+  // Only `adopt`'s own seek so far: no correction, and the reported position
+  // published as it arrived — what this adapter did before the floor existed.
+  expect(seekTargets(player)).toEqual([20]);
+  expect(result.patches).toContainEqual({ seeking: false, currentTime: 5 });
+
+  // And the report that follows still reaches the wrap guard, which restarts
+  // the player from the start boundary.
+  player.emit(WISTIA_EVENTS.timeUpdate);
+
+  expect(seekTargets(player)).toEqual([20, 20]);
+  expect(result.patches).toContainEqual({ currentTime: 20, buffering: false });
+});
+
 test('clamps a seek to the window rather than ending at it', async () => {
   const result = await setup({
     options: { startTime: 5, endTime: 20 },
