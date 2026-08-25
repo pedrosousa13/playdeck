@@ -93,9 +93,22 @@ const snapToStep = (
   return nearest <= max ? nearest : on(Math.floor((max - min) / size));
 };
 
+// THE ACCESSIBLE-NAME RULE, for every control in this package and stated only
+// here. A control destructures `aria-label` off its props and writes
+// `ariaLabel ?? <its own>`, rather than leaving the name to the props spread.
+// The shape is what `VolumeSlider` below and `ActivationButton` have always
+// used, and the reason the others need it is that a literal written after a
+// spread wins by React's later-wins rule: it discarded the consumer's name in
+// silence, with nothing from the compiler and nothing at runtime.
+//
+// The fallback belongs INSIDE the state branch, not around it. A control whose
+// wording changes with its state would otherwise reassert the library's word in
+// one state and keep the consumer's in the other, and a name is owned or it is
+// not — there is no coherent half of a name to own.
 export type PlayButtonProps = ComponentPropsWithRef<'button'>;
 
 export const PlayButton = ({
+  'aria-label': ariaLabel,
   children,
   onClick,
   style,
@@ -112,7 +125,7 @@ export const PlayButton = ({
   return (
     <button
       {...props}
-      aria-label={isPlaying ? 'Pause' : 'Play'}
+      aria-label={ariaLabel ?? (isPlaying ? 'Pause' : 'Play')}
       aria-pressed={isPlaying}
       data-autoplay-state={autoplay}
       data-provider={provider ?? undefined}
@@ -135,6 +148,7 @@ export const PlayButton = ({
 export type MuteButtonProps = ComponentPropsWithRef<'button'>;
 
 export const MuteButton = ({
+  'aria-label': ariaLabel,
   children,
   onClick,
   style,
@@ -151,7 +165,7 @@ export const MuteButton = ({
   return (
     <button
       {...props}
-      aria-label={muted ? 'Unmute' : 'Mute'}
+      aria-label={ariaLabel ?? (muted ? 'Unmute' : 'Mute')}
       aria-pressed={muted}
       data-provider={provider ?? undefined}
       data-playdeck-part="mute-button"
@@ -477,7 +491,21 @@ const useSeekPreview = (
   return { preview, seek };
 };
 
+// `aria-label` is the one prop this component accepts at the wrapper level and
+// renders somewhere else, and that asymmetry is deliberate. Everything else a
+// consumer writes at the top level describes the box — layout, classes, data
+// hooks — and belongs on it. A name does not: the wrapper carries no role, so a
+// name there reaches nothing, while the inner input is what assistive
+// technology focuses and announces. Writing the obvious thing therefore used to
+// type-check, do nothing observable, and leave the control still announcing the
+// built-in English (#437). It is relocated and not copied, because the same
+// name on both elements is one of them saying it twice.
+//
+// The name and nothing else. `inputProps` remains the route for every other
+// input-level prop; generalising the relocation would turn "which element does
+// this prop land on" into a per-prop rule a consumer has to memorise.
 export const SeekSlider = ({
+  'aria-label': ariaLabel,
   children,
   inputProps,
   style,
@@ -571,7 +599,11 @@ export const SeekSlider = ({
         ) : null}
       </div>
       <input
-        aria-label="Seek"
+        // Above the spread, so `inputProps['aria-label']` still outranks both:
+        // it names the element it is written for, which is more specific than a
+        // name written at the wrapper. Precedence is inputProps, then the
+        // top-level prop, then the built-in.
+        aria-label={ariaLabel ?? 'Seek'}
         {...inputProps}
         step={grid}
         aria-describedby={describedBy}

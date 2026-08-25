@@ -118,6 +118,7 @@ export const resolveCaptionToggle = (
 export type CaptionsButtonProps = ComponentPropsWithRef<'button'>;
 
 export const CaptionsButton = ({
+  'aria-label': ariaLabel,
   children,
   onClick,
   style,
@@ -153,7 +154,10 @@ export const CaptionsButton = ({
     <>
       <button
         {...props}
-        aria-label={on ? 'Disable captions' : 'Enable captions'}
+        // The live region below is untouched by the consumer's name: it
+        // announces the transition, not the control, and is the library's own
+        // sentence either way.
+        aria-label={ariaLabel ?? (on ? 'Disable captions' : 'Enable captions')}
         aria-pressed={on}
         data-provider={provider ?? undefined}
         data-playdeck-part="captions-button"

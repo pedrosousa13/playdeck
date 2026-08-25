@@ -169,6 +169,33 @@ describe('PlayButton', () => {
     });
     expect(screen.getByRole('button', { name: 'Play' }).textContent).toBe('Go');
   });
+
+  // Each of the six controls repaired by #446 is covered by a pair like this
+  // one. The defect was a consumer spread written *above* a literal
+  // `aria-label`, which React's later-wins rule then discarded, and only the
+  // pair catches it coming back: the consumer-name half alone would pass
+  // against a control that had stopped labelling itself at all, and the
+  // default half alone is what the spread order already satisfied.
+  test('honours a consumer aria-label in both playback states', () => {
+    const { emit } = renderWithPlayer(
+      <Player.PlayButton aria-label="Reproducir" />,
+      { playback: 'paused' }
+    );
+    const button = screen.getByRole('button', { name: 'Reproducir' });
+    emit({ playback: 'playing' });
+    // A consumer who supplies one name owns it in every state. Reasserting
+    // 'Pause' here would rename a control the consumer had already named.
+    expect(attr(button, 'aria-label')).toBe('Reproducir');
+  });
+
+  test('names itself Play and Pause when no consumer label is given', () => {
+    const { emit } = renderWithPlayer(<Player.PlayButton />, {
+      playback: 'paused'
+    });
+    const button = screen.getByRole('button', { name: 'Play' });
+    emit({ playback: 'playing' });
+    expect(attr(button, 'aria-label')).toBe('Pause');
+  });
 });
 
 describe('MuteButton', () => {
@@ -203,6 +230,26 @@ describe('MuteButton', () => {
     const button = screen.getByRole('button', { name: 'Unmute' });
     expect(attr(button, 'aria-pressed')).toBe('true');
     expect(attr(button, 'data-state')).toBe('muted');
+  });
+
+  test('honours a consumer aria-label in both muted states', () => {
+    const { emit } = renderWithPlayer(
+      <Player.MuteButton aria-label="Silenciar" />,
+      { ...withVolume(available), muted: false }
+    );
+    const button = screen.getByRole('button', { name: 'Silenciar' });
+    emit({ muted: true });
+    expect(attr(button, 'aria-label')).toBe('Silenciar');
+  });
+
+  test('names itself Mute and Unmute when no consumer label is given', () => {
+    const { emit } = renderWithPlayer(<Player.MuteButton />, {
+      ...withVolume(available),
+      muted: false
+    });
+    const button = screen.getByRole('button', { name: 'Mute' });
+    emit({ muted: true });
+    expect(attr(button, 'aria-label')).toBe('Unmute');
   });
 });
 
@@ -575,6 +622,72 @@ describe('SeekSlider', () => {
     fireEvent.change(slider, { target: { value: '75' } });
     expect(spies.seekTo).toHaveBeenCalledWith(75);
     expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  // The accessible name is the one prop this component takes at the wrapper
+  // level and renders somewhere else. Its props are the wrapper's, so a plainly
+  // written name used to type-check, land on a `<div>` with no role, and leave
+  // the input announcing 'Seek' with nothing to say so (#437). The tests below
+  // pin the whole order — `inputProps`, then top-level, then the built-in —
+  // because the precedence is expressed by the position of a spread, and a
+  // reordering would otherwise reverse it in silence.
+  test('forwards a top-level aria-label onto the range control', () => {
+    const { container } = renderWithPlayer(
+      <Player.SeekSlider aria-label="Buscar" />,
+      seekReady()
+    );
+    expect(screen.getByRole('slider', { name: 'Buscar' })).toBeDefined();
+    // Relocated, not copied: a name on the role-less wrapper conveys nothing
+    // and would leave the same string announced twice by anything walking it.
+    expect(
+      attr(
+        container.querySelector('[data-playdeck-part="seek-slider"]'),
+        'aria-label'
+      )
+    ).toBeNull();
+  });
+
+  test('names the input Seek when neither level supplies a label', () => {
+    const { container } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    expect(screen.getByRole('slider', { name: 'Seek' })).toBeDefined();
+    expect(
+      attr(
+        container.querySelector('[data-playdeck-part="seek-slider"]'),
+        'aria-label'
+      )
+    ).toBeNull();
+  });
+
+  test('names the input from inputProps alone', () => {
+    renderWithPlayer(
+      <Player.SeekSlider inputProps={{ 'aria-label': 'Scrub' }} />,
+      seekReady()
+    );
+    expect(screen.getByRole('slider', { name: 'Scrub' })).toBeDefined();
+  });
+
+  test('lets an inputProps aria-label outrank a top-level one', () => {
+    renderWithPlayer(
+      <Player.SeekSlider
+        aria-label="Buscar"
+        inputProps={{ 'aria-label': 'Scrub' }}
+      />,
+      seekReady()
+    );
+    expect(screen.getByRole('slider', { name: 'Scrub' })).toBeDefined();
+  });
+
+  test('leaves every wrapper prop that is not the name on the wrapper', () => {
+    const { container } = renderWithPlayer(
+      <Player.SeekSlider aria-label="Buscar" className="c" data-scope="bar" />,
+      seekReady()
+    );
+    const wrapper = container.querySelector(
+      '[data-playdeck-part="seek-slider"]'
+    );
+    expect(wrapper?.classList.contains('c')).toBe(true);
+    expect(attr(wrapper, 'data-scope')).toBe('bar');
+    expect(attr(screen.getByRole('slider'), 'class')).toBeNull();
   });
 
   const liveWindow = (patch: ProviderStatePatch = {}): ProviderStatePatch => ({
@@ -1970,6 +2083,26 @@ describe('FullscreenButton', () => {
     fireEvent.click(active);
     expect(spies.exitFullscreen).toHaveBeenCalledTimes(1);
   });
+
+  test('honours a consumer aria-label in both fullscreen states', () => {
+    const { emit } = renderWithPlayer(
+      <Player.FullscreenButton aria-label="Pantalla completa" />,
+      capabilities({ fullscreen: available })
+    );
+    const button = screen.getByRole('button', { name: 'Pantalla completa' });
+    emit({ ...capabilities({ fullscreen: available }), fullscreen: true });
+    expect(attr(button, 'aria-label')).toBe('Pantalla completa');
+  });
+
+  test('names both states itself when no consumer label is given', () => {
+    const { emit } = renderWithPlayer(
+      <Player.FullscreenButton />,
+      capabilities({ fullscreen: available })
+    );
+    const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+    emit({ ...capabilities({ fullscreen: available }), fullscreen: true });
+    expect(attr(button, 'aria-label')).toBe('Exit fullscreen');
+  });
 });
 
 describe('PipButton', () => {
@@ -2000,6 +2133,34 @@ describe('PipButton', () => {
       screen.getByRole('button', { name: 'Exit picture-in-picture' })
     );
     expect(spies.exitPictureInPicture).toHaveBeenCalledTimes(1);
+  });
+
+  test('honours a consumer aria-label in both picture-in-picture states', () => {
+    const { emit } = renderWithPlayer(
+      <Player.PipButton aria-label="Imagen en imagen" />,
+      capabilities({ pictureInPicture: available })
+    );
+    const button = screen.getByRole('button', { name: 'Imagen en imagen' });
+    emit({
+      ...capabilities({ pictureInPicture: available }),
+      pictureInPicture: true
+    });
+    expect(attr(button, 'aria-label')).toBe('Imagen en imagen');
+  });
+
+  test('names both states itself when no consumer label is given', () => {
+    const { emit } = renderWithPlayer(
+      <Player.PipButton />,
+      capabilities({ pictureInPicture: available })
+    );
+    const button = screen.getByRole('button', {
+      name: 'Enter picture-in-picture'
+    });
+    emit({
+      ...capabilities({ pictureInPicture: available }),
+      pictureInPicture: true
+    });
+    expect(attr(button, 'aria-label')).toBe('Exit picture-in-picture');
   });
 });
 
@@ -2083,6 +2244,27 @@ describe('AirPlayButton', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'AirPlay' }));
     expect(spies.showAirPlayPicker).not.toHaveBeenCalled();
+  });
+
+  // The one control here with a single state, so the pair is a pair of renders
+  // rather than a pair of states. It is pinned all the same: the spread order
+  // that discarded a consumer name was identical to the five toggles'.
+  test('honours a consumer aria-label', () => {
+    renderWithPlayer(
+      <Player.AirPlayButton aria-label="Transmitir" />,
+      capabilities({ airPlay: available })
+    );
+    expect(screen.getByRole('button', { name: 'Transmitir' })).toBeDefined();
+  });
+
+  test('names itself AirPlay when no consumer label is given', () => {
+    renderWithPlayer(
+      <Player.AirPlayButton />,
+      capabilities({ airPlay: available })
+    );
+    expect(
+      attr(screen.getByRole('button', { name: 'AirPlay' }), 'aria-label')
+    ).toBe('AirPlay');
   });
 });
 

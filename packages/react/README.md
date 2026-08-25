@@ -198,6 +198,48 @@ export const poster = Player.normalizePoster('/poster.jpg');
 `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time`,
 `FullscreenButton`, `PipButton`, `AirPlayButton`, `CaptionsButton`, `Controls`.
 
+#### Accessible names
+
+Every interactive control ships a built-in English `aria-label`, and **an
+`aria-label` you pass always wins over it**. The built-in is a fallback, never an
+override, so `<Player.PlayButton aria-label="Reproducir" />` and
+`<Player.SeekSlider aria-label="Buscar" />` do the same thing for the same
+reason. Playdeck carries no message catalogue and no locale handling; this prop
+is how you supply your own strings. (`Time` and `Controls` are not interactive
+and carry no name of their own.)
+
+**A button's visible text is separate, and you own that too.** The buttons fall
+back to rendering their own English wording as their children, so naming a
+button without also passing `children` leaves the two disagreeing — a
+`<Player.PlayButton aria-label="Reproducir" />` reads "Reproducir" to a screen
+reader and "Play" on screen. That is a WCAG 2.5.3 _Label in Name_ failure for
+anyone driving the control by voice. Pass both, or pass an icon as `children`
+and let the name stand alone.
+
+Where a control's own label changes with its state — play/pause, mute/unmute,
+captions on/off, and the fullscreen and picture-in-picture toggles — **one name
+you supply holds in every state.** The library does not reassert its own wording
+in one state and keep yours in the other: naming the control is yours from the
+first prop onwards, so pick a name that reads correctly in both, or drive it
+yourself from `usePlayerState`.
+
+`SeekSlider` is the one control whose props are the wrapper `<div>`'s rather
+than the interactive element's, because it renders buffered geometry around the
+input. `aria-label` is the single exception, and is forwarded onto the inner
+`<input type="range">` — the element that carries the slider role and the one a
+screen reader announces. Everything else you pass stays on the wrapper, where
+`className`, `style` and `data-*` belong.
+
+`inputProps` is the escape hatch onto that inner input, for the props that have
+nowhere else to go: `step`, `disabled`, `id`/`name`, `onChange`, its own
+`style`, `data-*`. It is the more specific of the two, so
+`inputProps['aria-label']` outranks a top-level `aria-label`, which outranks the
+built-in `"Seek"`. Playdeck keeps ownership of the controlled attributes —
+`value`, `min`, `max`, `type`, `aria-valuetext`, `aria-disabled` — so those
+cannot be overridden. An `onChange` you pass is chained after the seek rather
+than replacing it, and an `aria-describedby` you pass is composed with the
+buffered-progress description rather than replacing it.
+
 `Time` takes a `type` of `current` (the default), `duration` or `remaining`.
 `remaining` counts down from the duration and carries a leading minus for as
 long as any remainder is left — `-1:23`, and still `-0:00` through the last

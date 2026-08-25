@@ -5,6 +5,7 @@ import type { ComponentPropsWithRef } from 'react';
 export type FullscreenButtonProps = ComponentPropsWithRef<'button'>;
 
 export const FullscreenButton = ({
+  'aria-label': ariaLabel,
   children,
   onClick,
   style,
@@ -21,7 +22,9 @@ export const FullscreenButton = ({
   return (
     <button
       {...props}
-      aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      aria-label={
+        ariaLabel ?? (fullscreen ? 'Exit fullscreen' : 'Enter fullscreen')
+      }
       aria-pressed={fullscreen}
       data-provider={provider ?? undefined}
       data-playdeck-part="fullscreen-button"
@@ -44,6 +47,7 @@ export const FullscreenButton = ({
 export type PipButtonProps = ComponentPropsWithRef<'button'>;
 
 export const PipButton = ({
+  'aria-label': ariaLabel,
   children,
   onClick,
   style,
@@ -61,9 +65,10 @@ export const PipButton = ({
     <button
       {...props}
       aria-label={
-        pictureInPicture
+        ariaLabel ??
+        (pictureInPicture
           ? 'Exit picture-in-picture'
-          : 'Enter picture-in-picture'
+          : 'Enter picture-in-picture')
       }
       aria-pressed={pictureInPicture}
       data-provider={provider ?? undefined}
@@ -104,6 +109,7 @@ export type AirPlayButtonProps = ComponentPropsWithRef<'button'>;
  * wireless-route flag is ever surfaced, this control gains a state.
  */
 export const AirPlayButton = ({
+  'aria-label': ariaLabel,
   children,
   onClick,
   style,
@@ -119,7 +125,7 @@ export const AirPlayButton = ({
   return (
     <button
       {...props}
-      aria-label="AirPlay"
+      aria-label={ariaLabel ?? 'AirPlay'}
       data-provider={provider ?? undefined}
       data-playdeck-part="airplay-button"
       onClick={(event) => {
