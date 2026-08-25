@@ -192,25 +192,11 @@ test('the guard closes the repeat-ready path', async ({ page }) => {
 // Playdeck goes on publishing 20, and the guard is what keeps that out of
 // reach.
 //
-// #381 HAS LANDED AND DOES NOT CLOSE THIS, which is recorded here rather than
-// left to be rediscovered. `startTime` is now a floor on reported positions,
-// but 45 is *inside* the window this story configures (`startTime: 20`, no
-// `endTime`), so `correction` answers undefined for it — there is nothing
-// outside the window to pull back to. The issue framed the 45-against-20
-// reading as the window being broken; what is broken is the mirror, and its
-// cause sits one seam below the boundary. The SDK forwards the url parameter as
-// the raw *string* it matched (`@vimeo/player@2.30.4/dist/player.js:1052`,
-// `player.setCurrentTime(sec)`), this stub echoes that string back on `seeked`
-// and `timeupdate`, and the port's `numberField` drops a non-numeric `seconds`
-// — so the adapter never learns the playhead moved and keeps publishing its own
-// last position. Measured 2026-08-23, chromium: coerce the stub's
-// `state.currentTime` to a number and the published position follows to 45 with
-// no corrective seek issued at all, which is #381 agreeing that 45 is in the
-// window rather than failing to fire.
-//
-// So this stays a #329 test, and the assertions below stay as they were. The
-// floor #381 added answers a different position — one *below* 20 — which this
-// path does not produce.
+// This stays a #329 test now that #381 has landed. The floor #381 added answers
+// a position *below* `startTime`, and this path does not produce one: 45 is
+// inside the window the story configures (`startTime: 20`, no `endTime`), so
+// `correction` answers nothing for it. What diverges here is the published
+// mirror rather than the window, and that is #463.
 test('a page that opts out is left at the crafted position by a repeat ready', async ({
   page
 }) => {
