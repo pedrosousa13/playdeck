@@ -136,10 +136,18 @@ export type RootProps = {
   readonly ref?: Ref<PlayerHandle>;
   readonly source: PlayerSource;
   /**
-   * Start playback at this offset in seconds. Works the same on every provider.
-   * A value that is not finite, or not above zero, is no start at all — zero
-   * asks for the start the media would have had anyway, so the playhead is left
-   * wherever the provider put it rather than written to.
+   * Start playback at this offset in seconds. A value that is not finite, or
+   * not above zero, is no start at all — zero asks for the start the media
+   * would have had anyway, so the playhead is left wherever the provider put it
+   * rather than written to.
+   *
+   * The one rule that does not hold on all five. On the three embed providers
+   * the start is a floor: a position that arrives below it without a Playdeck
+   * command — an SDK-side seek, the platform's own scrub bar — is seeked back
+   * to it. Native and HLS apply the start once per load and leave a viewer who
+   * seeks below it there; `NativePlaybackOptions` owns why. A `seekTo` or
+   * `seekBy` below the start is clamped on all five, so only the uncommanded
+   * positions differ (#381).
    */
   readonly startTime?: number;
   readonly volume?: number;
