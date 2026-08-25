@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { expect, test, vi } from 'vitest';
 import type {
   MediaDimensions,
+  PlayerError,
   ProviderAdapter,
   ProviderStateListener
 } from '@playdeck/core';
@@ -319,6 +320,182 @@ test('writes no initial position into a live seekable window', async () => {
 
   expect(writes).toEqual([]);
   expect(media.currentTime).toBe(200);
+});
+
+// Collects the errors a provider publishes. The refusal below is emitted as a
+// bare `{ error }` patch — no `lifecycle`, which is what keeps it a notice —
+// so a test can assert on the errors alone without matching the rest of the
+// patch stream (#418).
+const trackErrors = (provider: ProviderAdapter): PlayerError[] => {
+  const errors: PlayerError[] = [];
+  provider.subscribe((patch) => {
+    if (patch.error) errors.push(patch.error);
+  });
+  return errors;
+};
+
+// #418: the shape 51 of 60 real WebKit loads reported at `loadedmetadata` with
+// `startTime: 5` on a 10s clip — a `<video>` that has not started playing
+// reports `duration === 0` and an empty `seekable`, so the clamp answers 0,
+// which is where the playhead already is. The write is correctly skipped and
+// the offset is correctly not applied; what was wrong is that the consumer was
+// told nothing about either.
+test('reports a start position the empty WebKit seekable window refused', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 0 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([
+    expect.objectContaining({
+      category: 'configuration',
+      fatal: false,
+      recoverable: false,
+      severity: 'presentational'
+    })
+  ]);
+});
+
+// The same refusal where the clamp does land somewhere: a source still being
+// parsed reports a duration and a seekable window that reach a fraction of the
+// clip, so the requested 5s becomes 0.0278s. The write still happens — that
+// part is unchanged — but it is not the position the consumer asked for.
+test('reports a start position clamped into a partly-parsed window', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: 0.0278
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 0.0278]])
+  });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([0.0278]);
+  expect(errors).toHaveLength(1);
+});
+
+// The third refusal shape, and the one where nothing is written because no
+// seekable range intersects the configured window at all: a declared duration
+// of 10 with the window only parsed to 8.734 leaves `withinMediaBounds`
+// answering `undefined` for a start above the edge. The offset is still
+// dropped here — what is asserted is that the drop is now reported.
+test('reports a start position no seekable range could satisfy', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 10 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 8.734]])
+  });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 9 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([
+    expect.objectContaining({ category: 'configuration', fatal: false })
+  ]);
+});
+
+// A start the source can satisfy is not a refusal, so it publishes nothing.
+test('publishes no notice for a start position applied as asked', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 20]])
+  });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 4 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([4]);
+  expect(errors).toEqual([]);
+});
+
+// The element already sitting on the start writes nothing, and that is not a
+// refusal either: the consumer got the position they asked for, so the notice
+// is keyed on the position rather than on whether a write happened.
+test('publishes no notice for a start position the element already holds', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  const { writes } = trackPosition(media, 4);
+  const provider = createNativeProvider(media, { startTime: 4 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// An ordinary zero-offset load asked for nothing, so it refuses nothing. This
+// is #411's landed behaviour and the notice must not regress it.
+test('publishes no notice for the default zero start', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 0 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media);
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// The refusal is decided once per load, by the same `positioned` latch the
+// write is: a repeat `loadedmetadata` republishes nothing, and a `retry` that
+// resets the latch gets a fresh decision on the reloaded source.
+test('reports the refusal once per load rather than on every metadata event', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 0 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  vi.spyOn(media, 'load').mockImplementation(() => undefined);
+  const { rewind } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+  media.dispatchEvent(new Event('loadedmetadata'));
+  expect(errors).toHaveLength(1);
+
+  await provider.retry?.();
+  rewind();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(errors).toHaveLength(2);
 });
 
 test('ends playback at the configured end boundary without looping', async () => {
