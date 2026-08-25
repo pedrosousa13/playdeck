@@ -322,7 +322,9 @@ describe('correction', () => {
   // event, and Infinity is above every window.
   test('corrects nothing for a reported Infinity with no endTime', () => {
     const boundary = createTimeBoundary({ startTime: 5 });
-    expect(boundary.correction(30, Number.POSITIVE_INFINITY, arrived)).toBeUndefined();
+    expect(
+      boundary.correction(30, Number.POSITIVE_INFINITY, arrived)
+    ).toBeUndefined();
   });
 
   // The two must agree rather than double-correct: a command the clamp already
@@ -452,8 +454,8 @@ describe('correction', () => {
   // so the ceiling applies to it exactly as it does to a non-looping one.
   test('still corrects past the end while looping', () => {
     const boundary = createTimeBoundary({ startTime: 5, endTime: 20 });
-    expect(
-      boundary.correction(30, 25, { loop: true, positioned: true })
-    ).toBe(20);
+    expect(boundary.correction(30, 25, { loop: true, positioned: true })).toBe(
+      20
+    );
   });
 });
