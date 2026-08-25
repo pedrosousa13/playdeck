@@ -69,6 +69,15 @@ export {
   SettingsMenuTrigger
 } from './settings-menu.js';
 
+export type {
+  MenuItemProps,
+  MenuRadioGroupProps,
+  MenuRadioItemProps,
+  SettingsMenuContentProps,
+  SettingsMenuProps,
+  SettingsMenuTriggerProps
+} from './settings-menu.js';
+
 export {
   MuteButton,
   PlayButton,
