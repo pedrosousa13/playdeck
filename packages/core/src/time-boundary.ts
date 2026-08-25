@@ -80,9 +80,9 @@ export type TimeBoundary = {
   // before they reach here, and having no `undefined` in its answer this could
   // only substitute some in-window position for the nonsense one — turning a
   // command that should be refused into a seek that quietly moves the playhead
-  // somewhere nobody named. `NaN` in, `NaN` out keeps it refusable. Nor can it
-  // feed the loop `correction` guards against: what this answers is a seek, and
-  // the report that seek produces is `correction`'s question, not this one's.
+  // somewhere nobody named. `NaN` in, `NaN` out keeps it refusable. Why
+  // `correction` answers the same input the other way is argued where it is
+  // implemented.
   readonly clamp: (duration: number | null | undefined, time: number) => number;
   // Where a *reported* position has to be moved to for the window to hold, or
   // undefined when it needs no move. `clamp` answers for a position Playdeck
@@ -102,11 +102,10 @@ export type TimeBoundary = {
   // `endTime`, the natural end of the media stays the platform's own event and
   // is nothing for the window to seek back from.
   //
-  // WHAT BREAKS THE FEEDBACK LOOP: every answer is a fixed point. Move the
-  // playhead to it and the report that move produces is inside the window and
-  // equal to the target, so this answers undefined and the port publishes an
-  // ordinary report. One out-of-window position therefore costs at most one
-  // corrective seek, however many reports of it arrive.
+  // Every answer is a fixed point, so one out-of-window position costs at most
+  // one corrective seek however many reports of it arrive. Why that holds — and
+  // which single input it does not hold for — is argued where this is
+  // implemented, beside the arithmetic it is a property of.
   //
   // It takes the same `state` `atWrap` does, and for the same reason it is not
   // a caller's business: the two answer overlapping positions, and the wrap
@@ -222,8 +221,11 @@ export const createTimeBoundary = (options: {
       if (Number.isNaN(time)) return undefined;
       // `atEnd` is only ever true with an effective end, so the fallback does
       // not run; it is what keeps the target a plain number. Below the window
-      // the target is the start, and a time already inside it is its own
-      // target — which is how a position needing nothing answers undefined.
+      // the target is the start, above it the end, and a time already inside
+      // the window is its own target — which is how a position needing nothing
+      // answers undefined, and why every answer is a fixed point: each one is
+      // itself a position inside the window, so the report the corrective seek
+      // produces asks for no correction of its own.
       const target = atEnd(duration, time)
         ? (end(duration) ?? time)
         : Math.max(start(duration), time);
