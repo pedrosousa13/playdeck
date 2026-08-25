@@ -460,11 +460,16 @@ cleared. **Automated: yes, and broadly.** Axe runs its default rule set — not 
 narrower WCAG-tag subset — over nine states of the composed example in Chromium,
 Firefox and WebKit, and over every primitive story in Chromium. Alongside it:
 three reflow cases, tab order and menu focus return, focus-not-obscured
-hit-tests, and a live-region policy asserting that state transitions announce
-and time updates never do. Axe's needs-review bucket is asserted by equality
-too, so a new undiagnosed finding fails the run rather than passing quietly.
-The [reference example](?path=/docs/reference-player--docs) sets all of that out
-in full.
+hit-tests, shortcut keys checked against the real media element rather than the
+DOM, and a live-region policy asserting that state transitions announce and time
+updates never do. Axe's needs-review bucket is asserted by equality too, so a
+new undiagnosed finding fails the run rather than passing quietly — two states
+carry a diagnosed entry, and the rest assert it empty. Where you use the
+optional stylesheet, its forced-colors handling has its own tests, including
+ones that measure rendered pixels rather than computed CSS; the headless
+primitives ship no forced-colors handling to test. The
+[reference example](?path=/docs/reference-player--docs) sets all of that out in
+full.
 
 **Human: not yet.** Conformance to 2.2 AA as a whole is not something a scanner
 can settle — whether focus is genuinely visible against the backdrop, whether
