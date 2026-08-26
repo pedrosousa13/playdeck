@@ -701,8 +701,9 @@ jobs:
       # `verify-packaging.mjs` resolves the repository root from its own module
       # URL and builds every fixture at an absolute `tmpdir()` path, so a copy
       # in `.gate/` packs and installs *this* pull request's packages while
-      # executing *main*'s logic. Its local imports — `./workspace-packages.mjs`
-      # and `./packaging-fixture.mjs` — ride along in the whole-directory copy.
+      # executing *main*'s logic. Its local imports — `./workspace-packages.mjs`,
+      # `./packaging-fixture.mjs` and `./shipped-changelog.mjs` — ride along in
+      # the whole-directory copy.
       #
       # `node .gate/verify-packaging.mjs` and not `pnpm test:packages`, here and
       # for the budget check below. That is the point rather than a shortcut:
