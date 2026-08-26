@@ -129,7 +129,12 @@ pnpm build
 
 Packaging is verified against real tarballs (`pnpm test:packages`), bundle
 budgets are enforced (`pnpm test:budgets`), and a Next.js integration is built
-and driven in a browser (`pnpm test:integrations`).
+and driven in a browser (`pnpm test:integrations`). Two limits on what that
+integration proves: it depends on `@playdeck/react` through the workspace
+protocol, so what it drives is this repository's source rather than an installed
+artifact, and it imports the package only from a `'use client'` component, so
+nothing there imports it from a React Server Component. What a consumer's
+install resolves to is `pnpm test:packages`'s subject; RSC is covered nowhere.
 
 `pnpm test:packages` installs those tarballs into a fixture it copies to a temp
 directory, and replays `tests/packaging/fixture/pnpm-lock.yaml` there so that
@@ -143,6 +148,14 @@ node scripts/verify-packaging.mjs --update-fixture-lockfile
 ```
 
 Then commit the lockfile.
+
+That fixture is a consumer's project rather than a smoke script: it is
+type-checked against the installed tarballs under every resolution setting
+these packages claim to support, and under the ones they do not claim — which
+have to keep failing, since a setting that ignores export maps cannot reach the
+declarations. `scripts/resolution-modes.mjs` holds that set. The fixture also
+imports the theme by the subpath the documentation gives consumers, so the
+build has to resolve it and the browser check reads it back off the page.
 
 The `@real` e2e tests talk to live YouTube, Vimeo and Wistia. They never run in
 CI, and there is no scheduled run either (#118): YouTube will not serve video to

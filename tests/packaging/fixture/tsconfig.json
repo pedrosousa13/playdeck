@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+    // No `module` or `moduleResolution`: those are the one group that varies
+    // per run, and `scripts/resolution-modes.mjs` is where they are written
+    // down. The harness generates a config per entry in that table extending
+    // this one, and type-checks the sources below through it, so a pair set
+    // here would be overridden by every run that reads it.
+  },
+  "include": ["src"]
+}
