@@ -5,31 +5,23 @@ import {
   PlayerController,
   type PlayerCommand,
   type ProviderAdapter,
-  type ProviderStateListener,
   type RefusedCommand
 } from '../src/index';
 
-const createProvider = () => {
-  let emit: ProviderStateListener | undefined;
-  const provider: ProviderAdapter = {
-    provider: 'native',
-    attach: () => undefined,
-    load: () => undefined,
-    destroy: () => undefined,
-    subscribe: (listener) => {
-      emit = listener;
-      return () => undefined;
-    },
-    play: async () => ({ ok: true }),
-    pause: async () => ({ ok: true }),
-    mute: async () => ({ ok: true })
-  };
-
-  return {
-    provider,
-    emit: (...args: Parameters<ProviderStateListener>) => emit?.(...args)
-  };
-};
+// Nothing here drives provider events, so unlike the fake in
+// `refused-play.test.ts` this one keeps no `emit` handle: every test below
+// refuses its command before a provider is ever in hand, and the attach cases
+// only need something to attach.
+const createProvider = (): ProviderAdapter => ({
+  provider: 'native',
+  attach: () => undefined,
+  load: () => undefined,
+  destroy: () => undefined,
+  subscribe: () => () => undefined,
+  play: async () => ({ ok: true }),
+  pause: async () => ({ ok: true }),
+  mute: async () => ({ ok: true })
+});
 
 const notReady = { ok: false, reason: 'not-ready' } as const;
 
@@ -87,24 +79,25 @@ test('publishes a pre-attach seek refusal from either seek entry point', async (
   });
 });
 
-test('publishes an untagged refusal for every command that carries no origin', async () => {
-  const issue: ReadonlyArray<
-    readonly [PlayerCommand, (c: PlayerController) => Promise<unknown>]
-  > = [
-    ['mute', (c) => c.mute()],
-    ['unmute', (c) => c.unmute()],
-    ['setVolume', (c) => c.setVolume(0.5)],
-    ['setPlaybackRate', (c) => c.setPlaybackRate(2)],
-    ['selectQuality', (c) => c.selectQuality(null)],
-    ['selectTextTrack', (c) => c.selectTextTrack(null)],
-    ['requestFullscreen', (c) => c.requestFullscreen()],
-    ['exitFullscreen', (c) => c.exitFullscreen()],
-    ['requestPictureInPicture', (c) => c.requestPictureInPicture()],
-    ['exitPictureInPicture', (c) => c.exitPictureInPicture()],
-    ['showAirPlayPicker', (c) => c.showAirPlayPicker()]
-  ];
+const untagged: ReadonlyArray<
+  readonly [PlayerCommand, (c: PlayerController) => Promise<unknown>]
+> = [
+  ['mute', (c) => c.mute()],
+  ['unmute', (c) => c.unmute()],
+  ['setVolume', (c) => c.setVolume(0.5)],
+  ['setPlaybackRate', (c) => c.setPlaybackRate(2)],
+  ['selectQuality', (c) => c.selectQuality(null)],
+  ['selectTextTrack', (c) => c.selectTextTrack(null)],
+  ['requestFullscreen', (c) => c.requestFullscreen()],
+  ['exitFullscreen', (c) => c.exitFullscreen()],
+  ['requestPictureInPicture', (c) => c.requestPictureInPicture()],
+  ['exitPictureInPicture', (c) => c.exitPictureInPicture()],
+  ['showAirPlayPicker', (c) => c.showAirPlayPicker()]
+];
 
-  for (const [command, run] of issue) {
+test.each(untagged)(
+  'publishes an untagged refusal for %s, which carries no origin',
+  async (command, run) => {
     const controller = new PlayerController();
 
     expect(await run(controller)).toEqual(notReady);
@@ -114,7 +107,7 @@ test('publishes an untagged refusal for every command that carries no origin', a
       reason: 'not-ready'
     });
   }
-});
+);
 
 test('records no refused command for a retry, which is not one of them', async () => {
   const controller = new PlayerController();
@@ -157,7 +150,7 @@ test('holds a pre-attach refusal until a provider attaches, and withdraws it the
     seen.push({ activation: state.activation, refused: state.refusedCommand })
   );
   seen.length = 0;
-  controller.setProvider(fake.provider);
+  controller.setProvider(fake);
 
   // Withdrawn in the same update that hands the consumer a provider, so no
   // snapshot ever says "loading a provider" beside "there was none".
@@ -166,6 +159,31 @@ test('holds a pre-attach refusal until a provider attaches, and withdraws it the
     activation: 'loading-provider',
     refusedCommand: null,
     refusedPlay: null
+  });
+});
+
+// The clearing rule is `setProvider`, not "a provider arrived" — so a detach
+// ends the refusal even though no provider ever attached and "no provider was
+// attached" is still true of the world. `setProvider(undefined)` reaches the
+// clear rather than its early-return guard whenever something occupies the
+// error slot, and a standing refused-URL notice does exactly that, which is the
+// ordinary case here because the poster reports before a provider loads.
+// Keeping the record instead would leave it standing while the published field
+// went back to null, and the next patch would resurrect it into reset state.
+test('ends a pre-attach refusal on a detach, with no provider ever attached', async () => {
+  const controller = new PlayerController();
+
+  controller.reportRefusedUrl('poster src');
+  await controller.playWithOrigin('user');
+  expect(controller.getState().refusedCommand).toMatchObject({
+    command: 'play'
+  });
+
+  controller.setProvider(undefined);
+
+  expect(controller.getState()).toMatchObject({
+    provider: null,
+    refusedCommand: null
   });
 });
 
@@ -206,7 +224,7 @@ test('publishes a pre-attach refusal to subscribers rather than only recording i
 test('refuses a command again once the provider detaches', async () => {
   const controller = new PlayerController();
   const fake = createProvider();
-  controller.setProvider(fake.provider);
+  controller.setProvider(fake);
 
   expect(controller.getState().refusedCommand).toBeNull();
 

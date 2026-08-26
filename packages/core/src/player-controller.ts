@@ -449,14 +449,15 @@ export class PlayerController {
     // is what keeps the two in step: without it the next patch would republish
     // a refusal by media that is no longer attached.
     this.#refusedPlay = undefined;
-    // Attach is what withdraws a pre-attach refusal, and this is the line that
-    // does it — for the same reason as above, since the state below is rebuilt
-    // from `createInitialPlayerState()` and the record has to keep step with
-    // it. Unlike `#refusedPlay` there is no second clearing rule to state:
-    // nothing but a provider arriving can make "no provider was attached" stop
-    // being true, and a swap or a detach is a provider arriving for these
-    // purposes — each one re-opens the window rather than leaving the old
-    // refusal describing it.
+    // The pre-attach refusal is withdrawn here, for the same reason as above:
+    // the state below is rebuilt from `createInitialPlayerState()`, so the
+    // record has to keep step with it. That makes this line the whole of its
+    // clearing rule. An attach ends the refusal because a provider arrived; a
+    // swap and a detach end it because the state it was published into is being
+    // rebuilt regardless. So a detach clears it without a provider ever having
+    // attached — keeping it instead would leave the record standing while the
+    // published field went back to null, and the next patch would resurrect it
+    // into freshly reset state.
     this.#refusedCommand = undefined;
     // Only an attempt that actually existed can be abandoned. Waiters
     // registered before the first attach are waiting *for* this provider, not
@@ -900,8 +901,8 @@ export class PlayerController {
       // its refusal sites stay silent rather than one of them.
       if (name === 'retry') return { ok: false, reason: 'not-ready' };
       return this.#refuseCommand(
-        // Neither seek method reaches here today, because both public seeks
-        // carry an origin and take `#seekWithOrigin`'s own path. Named anyway,
+        // Both public seeks carry an origin and take `#seekWithOrigin`'s own
+        // path, so neither name reaches this branch from them. Mapped anyway,
         // so a command that is one command to a consumer cannot arrive under
         // two names depending on which path refused it.
         name === 'seekTo' || name === 'seekBy' ? 'seek' : name,
@@ -929,7 +930,7 @@ export class PlayerController {
     this.#refusedCommand = Object.freeze({
       command,
       origin,
-      reason: 'not-ready' as const
+      reason: 'not-ready'
     });
     this.#applyPatch({});
     return { ok: false, reason: 'not-ready' };

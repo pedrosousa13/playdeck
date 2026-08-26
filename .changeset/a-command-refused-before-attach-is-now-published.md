@@ -11,13 +11,18 @@ A command issued before a provider attaches is now published on
 is attached, and `#seekWithOrigin` and the shared command path do the same. The
 publication that fills `refusedPlay` lives inside the private method the play
 early return never reaches, so a pre-attach refusal was produced correctly,
-returned to the caller correctly, and published nowhere. Every control this
-package's React bindings ship is rendered, enabled and `aria-pressed` from first
-paint, and each discards the `CommandResult` it gets — so a viewer who pressed
-play on a cold page got a control that looked actionable, did nothing, and left
-no record anywhere that they had asked. A consumer who was already reading
-`refusedPlay` could not see it either, because the field they would read was
-never written.
+returned to the caller correctly, and published nowhere. Several of the controls
+this package's React bindings ship — the play and mute buttons among them —
+render enabled and `aria-pressed` from first paint, and every control discards
+the `CommandResult` it gets, so a viewer who pressed play on a cold page got a
+control that looked actionable, did nothing, and left no record anywhere that
+they had asked. A consumer who was already reading `refusedPlay` could not see
+it either, because the field they would read was never written.
+
+Not every control is in that state — the seek slider carries `aria-disabled`
+while it has no window, and the activation button disables itself and swallows
+its own click while a provider loads — so the gap this closes is a gap in what
+is _recorded_, for the controls that do stay operable.
 
 **What is published.** One new field beside `refusedPlay`, not replacing it:
 
@@ -43,7 +48,7 @@ readonly refusedCommand: RefusedCommand | null; // on PlayerState
 
 **One field rather than fourteen.** Eleven of the fourteen commands funnel
 through a single refusal site, and a consumer asking "was anything I asked for
-refused" would otherwise OR eleven slots together — the assembly `refusedPlay`
+refused" would otherwise OR fourteen slots together — the assembly `refusedPlay`
 was introduced to prevent (#361). A field rather than an event for the same
 reason that one settled: a refusal is a moment, but what a consumer presents is
 a condition, and an event would re-open that.
@@ -66,13 +71,15 @@ programmatic call.
 is made until a provider attaches, and attach is what withdraws it — in the same
 synchronous update that publishes `activation: 'loading-provider'`, so no
 snapshot reports a provider in hand beside a refusal saying there was none. A
-swap and a detach clear it too, because each re-opens the window rather than
-leaving the old refusal describing it. Nothing else clears it, because nothing
-else can make "no provider was attached" stop being true.
+swap and a detach clear it in that same place, because the state it was
+published into is rebuilt either way — so a detach ends the refusal with nothing
+having attached. `setProvider` is the whole of the rule; nothing outside it
+clears the field.
 
 **A pre-attach play fills both fields, deliberately.** They do not end together:
 `refusedPlay` carries any failure reason and is cleared by confirmed playback,
-`refusedCommand` carries one reason and is cleared by attach. One field with two
+`refusedCommand` carries one reason and is cleared in `setProvider`. One field
+with two
 clearing rules would be worse than two fields, and dropping `'play'` from
 `PlayerCommand` would force a consumer to check two fields and OR them. This is
 the overlap `refusedPlay` and `autoplay` already have, documented the same way.
@@ -80,8 +87,10 @@ the overlap `refusedPlay` and `autoplay` already have, documented the same way.
 **`retry` is not a `PlayerCommand`.** The `not-ready` it can raise comes from a
 guard that runs with a provider attached and the generation moved under it, so
 the attach that moved it would withdraw the refusal it caused. That is a moment,
-not a condition. Leaving it out of the vocabulary keeps both of its refusal
-sites silent rather than one of them.
+not a condition. It publishes from neither of its two refusal sites, by two
+different mechanisms: leaving it out of the vocabulary silences the shared
+command path, and the generation-moved guard returns without consulting the
+vocabulary at all.
 
 **`refusedPlay`'s published behaviour is unchanged.** Its shape, its clearing
 rules and the three guards that drop a refusal a later state contradicted are

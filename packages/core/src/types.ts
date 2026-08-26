@@ -208,8 +208,10 @@ export type RefusedPlay = {
 // generation-moved guard, reached with a provider already attached, so the very
 // attach that moved the generation would withdraw the refusal it caused. That
 // is a moment, and this vocabulary exists for a condition — see
-// `RefusedCommand`. Keeping it out of the type is what keeps it out of both of
-// its refusal sites, rather than published from one and not the other.
+// `RefusedCommand`. It publishes from neither of its two refusal sites, by two
+// different mechanisms: leaving it out of this type is what silences the shared
+// command path, and the generation-moved guard returns without consulting the
+// vocabulary at all.
 export type PlayerCommand =
   | 'play'
   | 'pause'
@@ -231,16 +233,17 @@ export type PlayerCommand =
 // `RefusedPlay`: that one answers "was a play refused, and who asked" for every
 // way a play can be refused, and this one answers "was anything I asked for
 // refused before there was anything to ask it of", for every command there is.
-// One field rather than one slot per command, so a consumer never ORs eleven of
-// them together — the assembly `RefusedPlay` exists to prevent.
+// One field rather than one slot per command, so a consumer never ORs fourteen
+// of them together — the assembly `RefusedPlay` exists to prevent.
 //
-// **Its lifetime is the pre-attach window.** The refusal stands from the moment
-// it is made until a provider attaches, and attach is what withdraws it, in the
-// same synchronous update that publishes `activation: 'loading-provider'`. So
-// no snapshot ever reports a provider in hand beside a refusal that says there
-// was none. Nothing else clears it, because nothing else can make "no provider
-// was attached" stop being true; a later refusal replaces it, and a refusal
-// nothing followed simply stands.
+// Its lifetime is the pre-attach window, and `setProvider` is the whole of its
+// clearing rule. On an attach the refusal is withdrawn in the same synchronous
+// update that publishes `activation: 'loading-provider'`, so no snapshot ever
+// reports a provider in hand beside a refusal saying there was none. A swap and
+// a detach clear it in that same place, which means a detach ends the refusal
+// without a provider having arrived — the state it was published into is being
+// rebuilt either way. Nothing outside `setProvider` clears it: a later refusal
+// replaces it, and a refusal nothing followed simply stands.
 //
 // `reason` is the literal `'not-ready'` and never another
 // `CommandFailureReason`. No other one has a clearing rule that would keep this
@@ -335,14 +338,17 @@ export type PlayerState = {
   // `autoplay` about autoplay.
   readonly refusedPlay: RefusedPlay | null;
   // The last command turned down for want of a provider, and `null` while none
-  // stands. Every control this library ships is rendered, enabled and operable
-  // before a provider attaches, so a command issued in that window is refused
-  // with `not-ready` and the caller may be the only party that hears of it.
-  // This is where the refusal is stated for the consumer who is not the caller
-  // — no control presents it, and none gains a `disabled` attribute on the
-  // strength of it. Cleared by attach and by nothing else: see
-  // `RefusedCommand`, which also says why a pre-attach play fills both this and
-  // `refusedPlay`.
+  // stands. Several of the controls this library ships — the play and mute
+  // buttons among them — render enabled and operable before a provider
+  // attaches, so a command issued in that window is refused with `not-ready`
+  // and the caller may be the only party that hears of it. Others already gate
+  // themselves: the seek slider carries `aria-disabled` while it has no
+  // window, and the activation button both disables itself and swallows its
+  // own click while a provider is loading. This is where the refusal is stated
+  // for the consumer who is not the caller — no control presents it, and none
+  // gains a `disabled` attribute on the strength of it. Cleared in
+  // `setProvider` and nowhere else: see `RefusedCommand`, which also says why a
+  // pre-attach play fills both this and `refusedPlay`.
   readonly refusedCommand: RefusedCommand | null;
   readonly provider: PlayerProvider | null;
   readonly hlsEngine: HlsEngine | null;
