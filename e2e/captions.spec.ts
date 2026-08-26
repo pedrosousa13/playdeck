@@ -1,46 +1,54 @@
 import { expect, test, type Page } from '@playwright/test';
-import { media, playButton } from './locators';
+import { playButton } from './locators';
 
-// Click play until playback has started. A click on the play button is
-// sometimes swallowed — the button is present and `play()` is not blocked, but
-// the player never acts on the click — so this WORKS AROUND a dropped click
-// rather than showing that clicking play is reliable. It is not: the dropped
-// click is a product defect, tracked in #484 — tolerated HERE only because
-// starting playback is a precondition of these tests rather than the thing
-// under test. What they assert is that cue text reaches the overlay, and a
-// swallowed click leaves that overlay present and EMPTY rather than absent,
-// because a browser updates `activeCues` only as time marches on, which never
-// runs while media is paused.
+// Wait for a provider to attach, then click play ONCE. Starting playback is a
+// precondition of these tests rather than the thing under test: what they
+// assert is that cue text reaches the overlay, and a browser updates
+// `activeCues` only as time marches on, which never runs while media is
+// paused. So a click that does not start playback leaves the overlay present
+// and EMPTY rather than absent, which is exactly the failure #480 recorded.
 //
-// The wait is on the precondition itself because nothing observable stands in
-// for it: an activation reaching `ready` is not published to the DOM, and the
-// play button's `data-state` is set before a click on it does anything.
-// `currentTime > 0` is the signal for the reason `played()` in
-// `e2e/a11y-media.spec.ts` gives — a ~1s fixture leaves `playing` on its own,
-// while `currentTime` stays true once ended. That file's fixtures are the
-// reference stories rather than this one, but `tracer.mp4` behind
-// `captions-custom` is 1.000s too, so the reasoning carries.
+// A click landing before a provider attaches is refused with a typed
+// `not-ready` and then discarded by the button, so nothing starts and nothing
+// says so. That is a product defect, tracked in #484, and this helper does not
+// paper over it: it waits for the precondition instead of retrying past it.
+// Clicking more than once would be the papering-over, and would be
+// indistinguishable from a grown timeout.
 //
-// The click is guarded by that same check rather than repeated blindly: a
-// `toPass` body that clicks every iteration toggles a playing video back to
-// paused. 15s is a bound on this wait alone and tightens rather than loosens
-// anything — `toPass` otherwise runs to the 30s test timeout, and every
-// assertion in this file keeps the 5s default.
+// `data-provider` is the gate because it is the DOM-observable, documented
+// shadow of that precondition. `PlayButton` renders
+// `data-provider={provider ?? undefined}`
+// (`packages/react/src/transport-controls.tsx:131`), so the attribute is
+// absent for exactly the pre-attach window and present from the moment a
+// provider is in hand. The contract is stated to consumers, not inferred here:
+// the play-button story says `data-provider` is set once a provider attaches,
+// and `packages/react/README.md` names it as part of the styling and querying
+// surface. Its presence, not its value, is what is asserted — the fixtures
+// here are native, but which provider attached is irrelevant to the wait.
+//
+// The wait carries the 5s default, like every other assertion in this file. No
+// timeout anywhere in it is raised.
 //
 // Measured 2026-08-26 on the maintainer's machine under `@playwright/test`
-// 1.61.1, `--repeat-each=15 --retries=0 --workers=6`, 60 chromium runs and 45
-// firefox: an ungated click failed 32 on chromium and 10 on firefox, against 0
-// here. Contention is what surfaces it — ungated at the default worker count
-// the same spec failed 8 in 60 and 2 in 60 — so an idle run is a poor test of
-// this. WEBKIT IS UNMEASURED: it has no H.264 locally and cannot play
-// `tracer.mp4` at all, so every webkit run fails for an unrelated reason.
+// 1.61.1, `--repeat-each=15 --retries=0 --workers=6` — 60 chromium runs and 45
+// firefox per arm, both arms on the same machine on the same day:
+//
+//   arm      chromium   firefox
+//   ungated  25 failed  16 failed
+//   gated     0 failed   0 failed
+//
+// CONTENTION IS WHAT SURFACES IT, so an idle run is a poor test of this: at
+// the default worker count the same ungated spec failed 8 in 60 on chromium
+// and 2 in 60 on firefox. #484 measured the gate itself in isolation over 60
+// attempts per engine — 6/60 ungated on chromium against 0/60 gated — and
+// every one of those 6 had no provider attached at the instant of the click.
+//
+// WEBKIT IS UNMEASURED: it has no H.264 locally and cannot play `tracer.mp4`
+// at all, so every webkit run fails for an unrelated reason and no rate can be
+// taken here. The CI rate is unmeasured on all three engines.
 const play = async (page: Page) => {
-  const started = () =>
-    media(page).evaluate((el: HTMLVideoElement) => el.currentTime > 0);
-  await expect(async () => {
-    if (!(await started())) await playButton(page).click();
-    expect(await started()).toBe(true);
-  }).toPass({ timeout: 15_000 });
+  await expect(playButton(page)).toHaveAttribute('data-provider', /.+/);
+  await playButton(page).click();
 };
 
 test('custom captions render the discovered track once playing', async ({
