@@ -96,7 +96,8 @@ State and contract: `PlayerState`, `PlayerCapabilities`, `Availability`,
 `PlayerQuality`, `TimeRange`, `TextTrack`, `TextTrackKind`,
 `TextTrackReadiness`, `TextCue`, `CaptionRendering`, `Chapter`, `ChapterInput`,
 `PlayerLiveState`, `PlayerError`, `PlayerErrorCategory`, `PlayerErrorSeverity`,
-`RefusedPlay`, `RefusedUrlSurface`, `PreProviderActivation`.
+`RefusedPlay`, `PlayerCommand`, `RefusedCommand`, `RefusedUrlSurface`,
+`PreProviderActivation`.
 
 Events: `PlayerEvent`, `PlayerEventType`, `PlayerEventDetailMap`,
 `PlayerEventFor`, `PlayerEventOrigin`.

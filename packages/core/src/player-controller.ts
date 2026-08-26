@@ -6,6 +6,7 @@ import type {
   MediaDimensions,
   PlaybackState,
   PlayerCapabilities,
+  PlayerCommand,
   PlayerError,
   PlayerEvent,
   PlayerEventFor,
@@ -16,6 +17,7 @@ import type {
   ProviderAdapter,
   ProviderEvent,
   ProviderStatePatch,
+  RefusedCommand,
   RefusedPlay,
   RefusedUrlSurface,
   TextCue
@@ -164,6 +166,7 @@ export const createInitialPlayerState = (): PlayerState =>
     autoplay: 'idle',
     autoplayRecovered: false,
     refusedPlay: null,
+    refusedCommand: null,
     provider: null,
     hlsEngine: null,
     quality: null,
@@ -229,6 +232,17 @@ export class PlayerController {
   // every snapshot, so it has to be cleared rather than merely ignored.
   // `setProvider` is where that happens.
   #refusedPlay: RefusedPlay | undefined;
+  // The refusal `PlayerState.refusedCommand` publishes, held here rather than
+  // read back off the published state for the reason `#refusedPlay` above is:
+  // `ProviderStatePatch` is a `Partial<PlayerState>`, so an adapter could
+  // otherwise manufacture the refusal of a command it was never told about, or
+  // erase one that happened.
+  //
+  // Not scoped to the generation, and it does not need to be. It is written
+  // only where no provider is attached, and cleared where one attaches,
+  // detaches or is swapped — `setProvider`, in the same place `#refusedPlay` is
+  // cleared.
+  #refusedCommand: RefusedCommand | undefined;
   // Set once the muted retry of `'audible-then-muted'` is issued, and read at
   // the moment the attempt turns into `'started'`. The state flag cannot be
   // written from here directly: playback is confirmed by a provider patch, not
@@ -435,6 +449,16 @@ export class PlayerController {
     // is what keeps the two in step: without it the next patch would republish
     // a refusal by media that is no longer attached.
     this.#refusedPlay = undefined;
+    // The pre-attach refusal is withdrawn here, for the same reason as above:
+    // the state below is rebuilt from `createInitialPlayerState()`, so the
+    // record has to keep step with it. That makes this line the whole of its
+    // clearing rule. An attach ends the refusal because a provider arrived; a
+    // swap and a detach end it because the state it was published into is being
+    // rebuilt regardless. So a detach clears it without a provider ever having
+    // attached — keeping it instead would leave the record standing while the
+    // published field went back to null, and the next patch would resurrect it
+    // into freshly reset state.
+    this.#refusedCommand = undefined;
     // Only an attempt that actually existed can be abandoned. Waiters
     // registered before the first attach are waiting *for* this provider, not
     // for the one being replaced, so they must survive it.
@@ -740,14 +764,28 @@ export class PlayerController {
   play = (): Promise<CommandResult> => this.playWithOrigin('api');
   playWithOrigin = (origin: PlayerEventOrigin): Promise<CommandResult> => {
     const provider = this.#provider;
-    if (!provider) return Promise.resolve({ ok: false, reason: 'not-ready' });
+    if (!provider) {
+      // The refusal `#playWithOrigin` publishes for every play that reaches a
+      // provider, made here because this return never reaches that method. It
+      // is a refused play by every part of the definition — a play command was
+      // issued and turned down — and the only reason it went unpublished is
+      // where the guard sits.
+      //
+      // The three conditions that guard the publication there hold on this
+      // branch without being tested, which is why they are not repeated. This
+      // is synchronous, so no later play can have replaced it and the
+      // generation cannot have moved; and `playback` cannot be `'playing'`
+      // when there is no provider attached to be playing anything (#361).
+      this.#refusedPlay = Object.freeze({ origin, reason: 'not-ready' });
+      return Promise.resolve(this.#refuseCommand('play', origin));
+    }
     return this.#playWithOrigin(provider, this.#generation, origin);
   };
   pause = (): Promise<CommandResult> => this.pauseWithOrigin('api');
   pauseWithOrigin = (origin: PlayerEventOrigin): Promise<CommandResult> => {
     this.#pendingOrigins.delete('playback');
     const provider = this.#provider;
-    if (!provider) return Promise.resolve({ ok: false, reason: 'not-ready' });
+    if (!provider) return Promise.resolve(this.#refuseCommand('pause', origin));
     return this.#pauseWithOrigin(provider, this.#generation, origin);
   };
   togglePlayback = (): Promise<CommandResult> =>
@@ -857,8 +895,45 @@ export class PlayerController {
     value?: number | string | null
   ): Promise<CommandResult> => {
     const provider = this.#provider;
-    if (!provider) return { ok: false, reason: 'not-ready' };
+    if (!provider) {
+      // The one command refused here without being published — see
+      // `PlayerCommand`, which leaves it out of the vocabulary so that both of
+      // its refusal sites stay silent rather than one of them.
+      if (name === 'retry') return { ok: false, reason: 'not-ready' };
+      return this.#refuseCommand(
+        // Both public seeks carry an origin and take `#seekWithOrigin`'s own
+        // path, so neither name reaches this branch from them. Mapped anyway,
+        // so a command that is one command to a consumer cannot arrive under
+        // two names depending on which path refused it.
+        name === 'seekTo' || name === 'seekBy' ? 'seek' : name,
+        null
+      );
+    }
     return this.#providerCommand(provider, name, value);
+  };
+
+  // Records a command refused for want of a provider, and publishes it through
+  // an empty patch — which rebuilds the snapshot from the controller's own
+  // records and fans it out. Nothing about the player itself moved, so there is
+  // no provider patch to carry this, and `refusedCommand` is filled from the
+  // record rather than from a key, so there is no key to state. Pre-attach that
+  // rebuild is deliberately not a no-op: it re-ranks the error slot, and a
+  // standing refused-URL notice is the ordinary case there rather than an edge
+  // one, because the poster reports before the provider loads (#330).
+  //
+  // `origin` is taken rather than derived: only the three commands with
+  // `*WithOrigin` entry points have one to pass, and the rest pass `null`.
+  #refuseCommand = (
+    command: PlayerCommand,
+    origin: PlayerEventOrigin | null
+  ): CommandResult => {
+    this.#refusedCommand = Object.freeze({
+      command,
+      origin,
+      reason: 'not-ready'
+    });
+    this.#applyPatch({});
+    return { ok: false, reason: 'not-ready' };
   };
 
   #providerCommand = async (
@@ -1054,6 +1129,10 @@ export class PlayerController {
       // changed, so the one clearing rule above governs the published field as
       // well as the record.
       refusedPlay: this.#refusedPlay ?? null,
+      // Filled from the record for the reason above, and written on every pass
+      // for the same reason: the one clearing rule in `setProvider` governs the
+      // published field as well as the record it is copied from.
+      refusedCommand: this.#refusedCommand ?? null,
       error: explicitProviderError
         ? freezeError(patch.error)
         : this.#hasAutoplayConfigurationError
@@ -1416,7 +1495,10 @@ export class PlayerController {
   ): Promise<CommandResult> => {
     this.#pendingOrigins.delete('seek');
     const provider = this.#provider;
-    if (!provider) return Promise.resolve({ ok: false, reason: 'not-ready' });
+    // One command to a consumer, whichever entry point they reached it by: a
+    // viewer scrubbed, and the difference between an absolute and a relative
+    // target is not part of the refusal.
+    if (!provider) return Promise.resolve(this.#refuseCommand('seek', origin));
     return this.#commandWithOrigin(
       provider,
       { kind: 'seek', generation: this.#generation, origin },
