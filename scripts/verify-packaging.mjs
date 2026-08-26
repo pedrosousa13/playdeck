@@ -34,6 +34,7 @@ import {
   fixtureWorkspaceYaml,
   reresolvedPackages
 } from './packaging-fixture.mjs';
+import { changelogProblems, shippedChangelog } from './shipped-changelog.mjs';
 import { publishablePackages } from './workspace-packages.mjs';
 
 const console = globalThis.console;
@@ -195,11 +196,16 @@ const unreachableLinks = (entry, source, entries) => {
 
 // What ships is what the `files` field lets through, and that is a coarser
 // filter than it looks: `dist` sweeps up whatever else the build left in the
-// directory. These are the things a consumer should never receive. The markdown
-// link check is the one that looks at files `files` never mentions at all --
-// npm ships the README and the LICENSE whatever that field says.
-/** @param {string} tarball */
-const tarballProblems = (tarball) => {
+// directory. Most of these are things a consumer should never receive. The
+// markdown link check is the one that looks at files `files` never mentions at
+// all -- npm ships the README and the LICENSE whatever that field says -- and
+// the changelog check is the one rule here that runs in the other direction,
+// naming something the tarball has to carry rather than something it must not.
+/**
+ * @param {string} tarball
+ * @param {string} version
+ */
+const tarballProblems = (tarball, version) => {
   const entries = tarballEntries(tarball);
   /** @type {string[]} */
   const problems = [];
@@ -250,6 +256,13 @@ const tarballProblems = (tarball) => {
     );
   }
 
+  // The changelog, and that it describes the version being packed. See
+  // scripts/shipped-changelog.mjs for the rule and for why a heading rather
+  // than a mention. The version comes from the caller's manifest entry rather
+  // than from the tarball's own package.json, because the version this run is
+  // packing is what the rest of the harness is checking against.
+  problems.push(...changelogProblems(shippedChangelog(tarball), version));
+
   return problems;
 };
 
@@ -288,7 +301,7 @@ async function main() {
       const tarball = join(tarballDir, tarballFileName(pkg.name, pkg.version));
 
       console.log(`\n--- tarball contents: ${pkg.name} ---`);
-      const contentProblems = tarballProblems(tarball);
+      const contentProblems = tarballProblems(tarball, pkg.version);
       for (const problem of contentProblems) {
         console.error(`${pkg.name} ${problem}`);
         failures.push(`${pkg.name} ${problem}`);

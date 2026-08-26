@@ -122,7 +122,8 @@
   gives an ordered list to check, forwarding to the CSP origins list rather than
   duplicating it.
 
-  Every message points at **[Provider setup](../docs/provider-setup.md)**, new in
+  Every message points at
+  **[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md)**, new in
   this release, which lists the source values each provider accepts and refuses —
   derived from `detectSource` and checked by running it, not by reading a
   provider's documentation — along with each provider's `providerOptions` and a

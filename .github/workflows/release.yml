@@ -11,6 +11,12 @@ name: Release
 # off only when the run is meant to claim the versions for real: npm has no
 # unpublish for a version more than 72 hours old, and none of the seven names
 # exists on the registry yet.
+#
+# The release tags are not this workflow's, and should not become its. They are
+# pushed from `main` by `pnpm tag:packages` before this is dispatched, so a
+# release that fails halfway still leaves something to diff against -- #460's
+# criterion, and the reason a tag must not be a product of a successful publish.
+# `scripts/release-tags.mjs` carries the rest of that reasoning.
 on:
   workflow_dispatch:
     inputs:
@@ -19,8 +25,11 @@ on:
         type: boolean
         default: true
 
-# Read-only, as in `ci.yml`. The release job below widens its own copy; nothing
-# here is a reason to widen that one.
+# Read-only, as in `ci.yml`. The release job below widens its own copy to
+# `id-token: write` and nothing else; nothing here is a reason to widen that
+# one. Pushing the release tags from this workflow would mean `contents: write`
+# on the job holding the publish credential, which is why they are pushed from
+# `main` instead.
 permissions:
   contents: read
 

@@ -182,6 +182,24 @@ A release is cut by hand, from `main`, with `release.yml`. There is no push
 trigger: the version bump lands as an ordinary pull request first, and
 dispatching the workflow is the separate, deliberate act that publishes it.
 
+The bump is `pnpm version:packages`, which applies the pending changesets, moves
+the versions, writes each package's `CHANGELOG.md`, and ends by naming the tags
+the release will need. Once that pull request has landed, tag `main` before
+dispatching anything:
+
+```sh
+pnpm tag:packages
+```
+
+One tag per package, named the way changesets names one — `@playdeck/core@0.2.0`
+— because these packages version independently, so one repo-wide tag would name
+a version most of them are not at. It runs before the publish rather than after
+it, so a release that
+fails halfway still leaves a tag to diff against, and a second run pushes
+nothing. `scripts/release-tags.mjs` carries the rest of the reasoning, including
+why the tag is not created by `changeset version` itself and not pushed from the
+workflow.
+
 ```sh
 gh workflow run release.yml --ref main -f dry_run=true   # resolve and pack only
 gh workflow run release.yml --ref main -f dry_run=false  # publish
@@ -192,6 +210,11 @@ the job runs `typecheck`, `test`, `test:audit`, `build`, `test:packages`,
 `test:budgets`, `test:bundle` and `test:integrations` before it goes near the
 registry, so the provenance attestation covers artifacts that run actually
 checked.
+
+Every package ships its own `CHANGELOG.md`, so an installed copy carries the
+history of the version installed rather than sending its reader back to GitHub.
+`test:packages` fails a tarball that carries no changelog, or one whose
+changelog does not name the version being packed.
 
 The publish is `pnpm publish -r`, never `npm publish`: the packages depend on
 each other through pnpm's `workspace:^` protocol, and only pnpm rewrites that to
