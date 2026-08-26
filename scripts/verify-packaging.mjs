@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 // Packaging correctness harness: builds and packs every publishable workspace
-// package, lints each tarball with publint + attw, then installs the packed
-// tarballs (not workspace links) into a clean React 19/Vite fixture, builds
-// it, and smoke-tests the result in a real browser.
+// package, checks each tarball -- with publint, with attw, and against the
+// rules `tarballProblems` below reads out of the tarball itself -- then
+// installs the packed tarballs (not workspace links) into a clean React
+// 19/Vite fixture, builds it, and smoke-tests the result in a real browser.
+//
+// Each of those rules is stated where it is implemented rather than listed
+// here, so adding one cannot leave this paragraph describing a gate that has
+// moved on.
 //
 // New workspace packages are covered automatically: package discovery comes
 // from scripts/workspace-packages.mjs, the single definition of "publishable"
@@ -30,6 +35,7 @@ import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { extname, join, posix } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
+import { guardProblems } from './esm-only-guard.mjs';
 import {
   fixtureWorkspaceYaml,
   reresolvedPackages
@@ -198,9 +204,9 @@ const unreachableLinks = (entry, source, entries) => {
 // filter than it looks: `dist` sweeps up whatever else the build left in the
 // directory. Most of these are things a consumer should never receive. The
 // markdown link check is the one that looks at files `files` never mentions at
-// all -- npm ships the README and the LICENSE whatever that field says -- and
-// the changelog check is the one rule here that runs in the other direction,
-// naming something the tarball has to carry rather than something it must not.
+// all -- npm ships the README and the LICENSE whatever that field says --
+// while the rules at the end run in the other direction, naming something the
+// tarball has to carry rather than something it must not.
 /**
  * @param {string} tarball
  * @param {string} version
@@ -255,6 +261,19 @@ const tarballProblems = (tarball, version) => {
       ...unreachableLinks(entry, readTarballFile(tarball, entry), entries)
     );
   }
+
+  // The ESM-only guard, read out of the tarball rather than out of the working
+  // tree. `files` decides what a consumer receives and it is a coarse filter,
+  // so a guard that is present in the repository and absent from the install is
+  // exactly the case worth catching -- the export map would then point a
+  // CommonJS consumer at a file that is not there.
+  problems.push(
+    ...guardProblems(
+      JSON.parse(readTarballFile(tarball, 'package.json')),
+      (entry) =>
+        entries.includes(entry) ? readTarballFile(tarball, entry) : undefined
+    )
+  );
 
   // The changelog, and that it describes the version being packed. See
   // scripts/shipped-changelog.mjs for the rule and for why a heading rather
@@ -330,10 +349,27 @@ async function main() {
         .filter((subpath) => /\.(?:css|svg|png|woff2?)$/.test(subpath))
         .map((subpath) => subpath.replace(/^\.\//, ''));
 
-      // All workspace packages currently ship ESM only (`"type": "module"`,
-      // a single `import` export condition, no `require` entry point). The
-      // esm-only profile stops attw from flagging the legacy CJS/node10
-      // resolution modes these packages intentionally do not support.
+      // These packages ship ESM only, and the esm-only profile stops attw from
+      // reporting the legacy resolution modes they intentionally do not
+      // support: `node10`, which ignores export maps entirely so nothing
+      // written into one can reach it, and `node16-cjs`.
+      //
+      // What the `node16-cjs` mute covers changed when the `require` condition
+      // landed, and the change is worth stating rather than inheriting. attw
+      // resolves that condition, reaches the guard, and calls the resolution a
+      // success: `node16 (from CJS) 🟢 (CJS)` for @playdeck/core under attw
+      // 0.18.5, where the same package with an ESM-only map and no `require`
+      // condition gave `⚠️ ESM (dynamic import only)`. So the profile is no
+      // longer hiding a real problem on that row. It is hiding a green attw
+      // has no way to see through, because resolving is all attw checks and
+      // the file it resolved to throws on load.
+      //
+      // Nothing here leans on attw to keep that condition pointed at the
+      // guard, which is why the green costs nothing. `tarballProblems` above
+      // deep-equals the `require` condition against scripts/esm-only-guard.mjs
+      // out of the packed tarball, and scripts/esm-only-guard.test.mjs
+      // resolves and `require()`s every package on the running Node -- a map
+      // that sent a CommonJS consumer to `dist` fails both of those.
       if (
         !tryRun('pnpm', [
           'exec',
