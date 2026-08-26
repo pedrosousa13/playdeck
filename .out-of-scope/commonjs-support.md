@@ -1,16 +1,17 @@
 # CommonJS support
 
 Every Playdeck package publishes ESM and nothing else. `@playdeck/react`'s
-export map carries a `types` condition and an `import` condition, so
-`require('@playdeck/react')` cannot resolve, and no `require` condition will be
-added.
+export map answers `import` with the real entry and `require` with a guard that
+refuses — a `.d.cts` that is not a module, so a CommonJS consumer's own build
+fails, and a `.cjs` that throws by name if one gets that far. No `require`
+condition pointing at an implementation will be added.
 
 This is a position, not an omission. The packaging harness lints each tarball on
 an ESM-only profile precisely so that legacy-resolution complaints are muted
-rather than accumulating as noise: `scripts/verify-packaging.mjs` says it does
-this to stop the linter "flagging the legacy CJS/node10 resolution modes these
-packages intentionally do not support". A repo that had forgotten about
-CommonJS would not have written that.
+rather than accumulating as noise, and `scripts/verify-packaging.mjs` sets out
+at length which resolution modes that profile mutes, and what each of them
+reports once the guard is in place. A repo that had forgotten about CommonJS
+would not have written that.
 
 ## Why this is out of scope
 
@@ -31,11 +32,11 @@ exist.
 
 **The harm is not the absence — it is that the absence was silent.** A CommonJS
 consumer's type-checker reported success and only Node refused, at runtime. That
-is indefensible whatever the packaging position is, and it is a separate defect:
-being ESM-only is a stance, failing quietly is not. #458 covers making that
-failure loud at build time, so a consumer who cannot use the package learns it
-from their toolchain rather than from production. Read together, the decision is
-"ESM only, and say so early" rather than "ESM only, and let them find out".
+is indefensible whatever the packaging position is, and it was a separate defect:
+being ESM-only is a stance, failing quietly is not. #458 made that failure loud
+at build time, so a consumer who cannot use the package learns it from their
+toolchain rather than from production. Read together, the decision is "ESM only,
+and say so early" rather than "ESM only, and let them find out".
 
 ```js
 // Not supported, and refused loudly rather than silently:
@@ -56,8 +57,10 @@ What would have to be answered first is the dual-package hazard: how a tree that
 loads both halves is prevented from holding two controllers, or what breaks when
 it does. That question is the work, not the build config.
 
-If it is reconsidered, delete this file, and close #458 rather than implementing
-it — a loud failure for a case that now succeeds is worse than no check at all.
+If it is reconsidered, delete this file, and delete the guard with it —
+`scripts/esm-only-guard.mjs` and the two files it defines in each package. A
+loud refusal for a case that has started succeeding is worse than no check at
+all.
 
 ## Prior requests
 

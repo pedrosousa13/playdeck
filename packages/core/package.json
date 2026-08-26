@@ -20,7 +20,9 @@
     "url": "https://github.com/pedrosousa13/playdeck/issues"
   },
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./esm-only.cjs"
+  ],
   "browserslist": [
     "chrome >= 99",
     "edge >= 99",
@@ -30,15 +32,23 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./esm-only.d.cts",
+        "default": "./esm-only.cjs"
+      }
     }
   },
   "files": [
     "CHANGELOG.md",
     "dist",
     "!dist/**/*.d.ts.map",
-    "!dist/.tsbuildinfo*"
+    "!dist/.tsbuildinfo*",
+    "esm-only.cjs",
+    "esm-only.d.cts"
   ],
   "publishConfig": {
     "access": "public",
