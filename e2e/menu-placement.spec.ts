@@ -125,19 +125,83 @@ const placementOf = (page: Page, trigger: string): Promise<Placement> =>
     { triggerSelector: trigger, menuSelector: settingsMenuSelector }
   );
 
-/** The focused element's box, plus enough identity to name it in a failure. */
+/**
+ * The focused element's box, plus enough identity to name it in a failure —
+ * polled across `requestAnimationFrame` boundaries until the box is inside the
+ * document, or until a 1s wall-clock deadline passes.
+ *
+ * `placementOf` scrolls every item into view to hit-test it, which leaves the
+ * settings menu's own scroller at the bottom: measured, `scrollTop: 244` of a
+ * `scrollHeight: 448` in a `clientHeight: 200`. Focus is still on item 1, so the
+ * first ArrowDown moves it to an item scrolled out of the top of that scroller,
+ * and `settings-menu.tsx` only calls `.focus()` — the scroll that brings the
+ * item back is the browser's own. Chromium and Firefox apply it during the key
+ * event's dispatch; WebKit defers it, so a read taken right after the press
+ * catches the item still scrolled out and reports it above the document. One
+ * evaluate caught the whole shape at once: the item's top at -179, the menu box
+ * at 16 and 218 against a 640px document, and the scroller still at 244. Those
+ * three together say the item is clipped inside a scroller that is itself
+ * wholly inside the document — nothing is painted above the viewport, and once
+ * the deferred scroll lands the scroller returns to 0 and the item reads 65.
+ *
+ * Everything below was measured on 2026-08-26 on the maintainer's machine,
+ * under `@playwright/test` 1.61.1 driving WebKit 26.5 (Playwright build v2311).
+ * The rate is load-dependent, so a bare count would mislead — the pre-fix rate
+ * against this file was 2 in 84 with
+ * `playwright test e2e/menu-placement.spec.ts --project=webkit
+ * --repeat-each=12 --retries=0`, and 1 in 35 at `--repeat-each=5`, both at the
+ * default worker count. A harness driving this composition directly, 80
+ * attempts per cell, isolated the trap: with all three engine projects running
+ * at once webkit failed 16/80 at the 460px shape and 7/80 at the 640px one,
+ * chromium and firefox went 0/80 in every cell, and webkit alone on an
+ * otherwise idle machine went 0/60. Removing the `scrollIntoView` pass took
+ * webkit to 0/80 at both shapes, which is what names the pass as the thing that
+ * sets the trap rather than the engine alone. Contention is therefore part of
+ * the measurement, not incidental to it.
+ *
+ * The condition polled on is containment, NOT stability: the stale box is stable
+ * too. While the deferred scroll is pending, two reads a frame apart are both
+ * the pre-scroll value and agree on the first comparison, so a settle that waits
+ * for agreement returns the stale box with confidence — that approach was tried,
+ * and under the same command and machine above it still reported this same -179
+ * twice in 84 webkit runs.
+ *
+ * The bound is what keeps this a wait rather than a mask: a genuinely
+ * mispositioned menu never comes into view, so the poll runs out, returns its
+ * last measurement, and the assertion fails with the real number. Only the
+ * keyboard-walk half is polled — the #413 placement guarantee this spec exists
+ * for is asserted from `placementOf`'s un-polled read of the menu box taken
+ * right after open, which this does not touch.
+ */
 const focused = (page: Page) =>
-  page.evaluate(() => {
-    const el = document.activeElement;
-    if (el === null) throw new Error('nothing focused');
-    const rect = el.getBoundingClientRect();
-    return {
-      label: el.textContent ?? '',
-      part: el.getAttribute('data-playdeck-part'),
-      top: rect.top,
-      bottom: rect.bottom,
-      documentHeight: document.documentElement.clientHeight
+  page.evaluate(async () => {
+    const measure = () => {
+      const el = document.activeElement;
+      if (el === null) throw new Error('nothing focused');
+      const rect = el.getBoundingClientRect();
+      return {
+        label: el.textContent ?? '',
+        part: el.getAttribute('data-playdeck-part'),
+        top: rect.top,
+        bottom: rect.bottom,
+        documentHeight: document.documentElement.clientHeight
+      };
     };
+    const nextFrame = () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+
+    const deadline = performance.now() + 1000;
+    let box = measure();
+    while (
+      (box.top < 0 || box.bottom > box.documentHeight) &&
+      performance.now() < deadline
+    ) {
+      await nextFrame();
+      box = measure();
+    }
+    return box;
   });
 
 /**
@@ -147,7 +211,9 @@ const focused = (page: Page) =>
  * autofocuses the first item on open and ArrowDown moves through the rest, so
  * an off-document box puts focus on something the user cannot see. The walk
  * stops one short of wrapping — the primitive wraps from the last item back to
- * the first, which would re-measure the item already checked.
+ * the first, which would re-measure the item already checked. Each step measures
+ * through `focused`, which polls the box into the document first because moving
+ * focus is what scrolls the item back into the menu's own scroller.
  */
 const assertPlacement = async (
   page: Page,
