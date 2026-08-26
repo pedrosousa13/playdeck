@@ -1,5 +1,41 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { playButton } from './locators';
+
+// Wait for a provider to attach, then click play ONCE. Starting playback is a
+// precondition of these tests rather than the thing under test: what they
+// assert is that cue text reaches the overlay, and a browser updates
+// `activeCues` only as time marches on, which never runs while media is
+// paused. So a click that does not start playback leaves the overlay present
+// and EMPTY rather than absent — a caption failure to read, and not one.
+//
+// The wait is the point. A click landing before a provider attaches is refused
+// and starts nothing, so clicking again until something happens would retry
+// past the precondition rather than establish it, and a retry is
+// indistinguishable from a grown timeout. Waiting for it instead leaves every
+// assertion below on its 5s default.
+//
+// `data-provider` is the signal because it is the DOM-observable, documented
+// shadow of that precondition: `PlayButton` renders it only once a provider is
+// in hand (`packages/react/src/transport-controls.tsx`), the play-button story
+// states the contract — "`data-provider` is set once a provider attaches" —
+// and `packages/react/README.md` names it on provider-bound controls. Presence
+// is what is asserted, not a value: the gate is that some provider attached,
+// not which one, so it holds if these fixtures ever move off native.
+//
+// Measured 2026-08-26 under `@playwright/test` 1.61.1, `--repeat-each=15
+// --retries=0 --workers=6` on a 4-core machine, both arms the same day:
+//
+//   arm      chromium      firefox
+//   ungated  25 of 60      16 of 45
+//   gated     0 of 60       0 of 45
+//
+// Firefox is 45 rather than 60 because the safe-area test below is
+// chromium-only. `--workers=6` oversubscribes deliberately: contention is what
+// surfaces this, so an idle run is a poor test of it.
+const play = async (page: Page) => {
+  await expect(playButton(page)).toHaveAttribute('data-provider');
+  await playButton(page).click();
+};
 
 test('custom captions render the discovered track once playing', async ({
   page
@@ -8,7 +44,7 @@ test('custom captions render the discovered track once playing', async ({
     '/iframe.html?id=fixtures-playerfixture--captions-custom&viewMode=story'
   );
 
-  await playButton(page).click();
+  await play(page);
 
   const captionsButton = page.locator('[data-playdeck-part="captions-button"]');
   await expect(captionsButton).toHaveAttribute('data-state', 'on');
@@ -24,7 +60,7 @@ test('the captions button toggles the overlay off and back on', async ({
     '/iframe.html?id=fixtures-playerfixture--captions-custom&viewMode=story'
   );
 
-  await playButton(page).click();
+  await play(page);
 
   const captionsButton = page.locator('[data-playdeck-part="captions-button"]');
   const captions = page.locator('[data-playdeck-part="captions"]');
@@ -48,7 +84,7 @@ test('native caption rendering leaves the custom overlay empty', async ({
     '/iframe.html?id=fixtures-playerfixture--captions-native&viewMode=story'
   );
 
-  await playButton(page).click();
+  await play(page);
 
   const captionsButton = page.locator('[data-playdeck-part="captions-button"]');
   await expect(captionsButton).toHaveAttribute('data-state', 'on');
@@ -72,7 +108,7 @@ test('a device safe-area inset lifts the cue box clear of the chrome', async ({
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--captions-custom&viewMode=story'
   );
-  await playButton(page).click();
+  await play(page);
   const captions = page.locator('[data-playdeck-part="captions"]');
   const cue = page.locator('[data-playdeck-part="caption-cue"]').first();
   await expect(cue).toHaveText(/Playdeck caption one/);
