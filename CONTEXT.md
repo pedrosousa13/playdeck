@@ -169,6 +169,21 @@ The player's lifecycle before a provider attaches — whether loading has been
 permitted, started, or failed. Reaches `ready` when a provider takes over.
 _Avoid_: startup, boot, init
 
+**Refused command**:
+A command turned down because no provider was attached, published on player
+state as the command it was, the Requested origin it carried where it had one,
+and the single `not-ready` reason every such refusal shares. It ends when a
+provider attaches, and only then — an attach is what stops "no provider was
+attached" being true, and nothing else can. One field answers "was anything I
+asked for refused" for every command there is, rather than a consumer reading
+one slot per command and OR-ing them. Every control ships enabled and operable
+throughout this window, so the refusal is the only record that a viewer asked
+for something and got nothing; no control presents it. A play refused this way
+is also a **Refused play**, deliberately, because the two end at different
+moments. `retry` raises the same reason from a guard that has a provider in
+hand, so it is not one of these.
+_Avoid_: dropped command, swallowed click, queued command
+
 **Lifecycle**:
 Whether media is loaded and playable. Derived from activation until a provider
 attaches, and the provider's own from then on.

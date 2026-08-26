@@ -200,6 +200,73 @@ export type RefusedPlay = {
   readonly reason: CommandFailureReason;
 };
 
+// The commands a `RefusedCommand` can name — every command a consumer may issue
+// through `PlayerController`, with the two seek entry points collapsed into the
+// one command a viewer performed.
+//
+// `retry` is deliberately not a member. The `not-ready` it raises is its
+// generation-moved guard, reached with a provider already attached, so the very
+// attach that moved the generation would withdraw the refusal it caused. That
+// is a moment, and this vocabulary exists for a condition — see
+// `RefusedCommand`. Keeping it out of the type is what keeps it out of both of
+// its refusal sites, rather than published from one and not the other.
+export type PlayerCommand =
+  | 'play'
+  | 'pause'
+  | 'seek'
+  | 'mute'
+  | 'unmute'
+  | 'setVolume'
+  | 'setPlaybackRate'
+  | 'selectQuality'
+  | 'selectTextTrack'
+  | 'requestFullscreen'
+  | 'exitFullscreen'
+  | 'requestPictureInPicture'
+  | 'exitPictureInPicture'
+  | 'showAirPlayPicker';
+
+// A command turned down because no provider was attached, as
+// `PlayerState.refusedCommand` publishes it. It is the general half of
+// `RefusedPlay`: that one answers "was a play refused, and who asked" for every
+// way a play can be refused, and this one answers "was anything I asked for
+// refused before there was anything to ask it of", for every command there is.
+// One field rather than one slot per command, so a consumer never ORs eleven of
+// them together — the assembly `RefusedPlay` exists to prevent.
+//
+// **Its lifetime is the pre-attach window.** The refusal stands from the moment
+// it is made until a provider attaches, and attach is what withdraws it, in the
+// same synchronous update that publishes `activation: 'loading-provider'`. So
+// no snapshot ever reports a provider in hand beside a refusal that says there
+// was none. Nothing else clears it, because nothing else can make "no provider
+// was attached" stop being true; a later refusal replaces it, and a refusal
+// nothing followed simply stands.
+//
+// `reason` is the literal `'not-ready'` and never another
+// `CommandFailureReason`. No other one has a clearing rule that would keep this
+// a condition rather than a log: `unsupported` is already published per command
+// as `PlayerCapabilities`, and a `blocked` or a `provider-error` on a
+// `setVolume` is a moment with no natural end. Admitting them would make this a
+// record of things that happened, which is the shape #361 rejected.
+//
+// `origin` is the Requested origin the command carried, and `null` where it
+// carried none: only play, pause and seek have `*WithOrigin` entry points, and
+// the rest share one command path with nothing to tag them with. Note this is
+// not the `null` of `PlayerState.seekOrigin`, which means no seek is in flight.
+// Here it means the origin was never recorded — not that nobody asked.
+//
+// A pre-attach play fills this AND `refusedPlay`, deliberately, the way an
+// autoplay refused by policy already fills both `refusedPlay` and `autoplay`.
+// The two are not one field because they do not end together: `refusedPlay`
+// carries any reason and is cleared by confirmed playback, this carries one
+// reason and is cleared by attach. Ask this field which command, and
+// `refusedPlay` about the play.
+export type RefusedCommand = {
+  readonly command: PlayerCommand;
+  readonly origin: PlayerEventOrigin | null;
+  readonly reason: 'not-ready';
+};
+
 export type PlayerState = {
   readonly lifecycle: 'idle' | 'loading' | 'ready' | 'error';
   readonly activation:
@@ -267,6 +334,16 @@ export type PlayerState = {
   // story about which applies when: ask this field about the refusal, and
   // `autoplay` about autoplay.
   readonly refusedPlay: RefusedPlay | null;
+  // The last command turned down for want of a provider, and `null` while none
+  // stands. Every control this library ships is rendered, enabled and operable
+  // before a provider attaches, so a command issued in that window is refused
+  // with `not-ready` and the caller may be the only party that hears of it.
+  // This is where the refusal is stated for the consumer who is not the caller
+  // — no control presents it, and none gains a `disabled` attribute on the
+  // strength of it. Cleared by attach and by nothing else: see
+  // `RefusedCommand`, which also says why a pre-attach play fills both this and
+  // `refusedPlay`.
+  readonly refusedCommand: RefusedCommand | null;
   readonly provider: PlayerProvider | null;
   readonly hlsEngine: HlsEngine | null;
   readonly quality: PlayerQuality | null;
