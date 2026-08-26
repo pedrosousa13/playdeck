@@ -6,7 +6,14 @@
     <title>Playdeck packaging fixture</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      A theme token, set above the player the way the theme's own contract says
+      a consumer may set one, for the smoke test in scripts/verify-packaging.mjs
+      to read back off a rendered element. That check is what this is for, and
+      it is where the reasoning -- including what would make it stop proving
+      anything -- is written down.
+    -->
+    <div id="root" style="--playdeck-color-on-surface: rgb(1, 2, 3)"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

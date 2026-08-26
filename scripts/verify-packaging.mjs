@@ -3,7 +3,9 @@
 // package, checks each tarball -- with publint, with attw, and against the
 // rules `tarballProblems` below reads out of the tarball itself -- then
 // installs the packed tarballs (not workspace links) into a clean React
-// 19/Vite fixture, builds it, and smoke-tests the result in a real browser.
+// 19/Vite fixture, type-checks the fixture's sources against them under every
+// resolution mode scripts/resolution-modes.mjs carries, builds it, and
+// smoke-tests the result in a real browser.
 //
 // Each of those rules is stated where it is implemented rather than listed
 // here, so adding one cannot leave this paragraph describing a gate that has
@@ -40,6 +42,7 @@ import {
   fixtureWorkspaceYaml,
   reresolvedPackages
 } from './packaging-fixture.mjs';
+import { resolutionModes, resolutionProblems } from './resolution-modes.mjs';
 import { changelogProblems, shippedChangelog } from './shipped-changelog.mjs';
 import { publishablePackages } from './workspace-packages.mjs';
 
@@ -445,6 +448,85 @@ function updateFixtureLockfile() {
   }
 }
 
+// The question `vite build` below never asks. A bundler resolves and
+// transpiles; it never asks the compiler whether the shipped declarations
+// satisfy a consumer, and the answer to that is decided by a setting the
+// consumer owns rather than by anything in the tarball. scripts/resolution-
+// modes.mjs holds the settings and what each one owes, and it is also what
+// scripts/esm-only-guard.test.mjs runs -- so the set is one edit, and the two
+// gates cannot come to disagree about which modes are claimed.
+//
+// The compiler is invoked from this repository's own node_modules, so the
+// TypeScript version this gate reports on is the one the repo pins and the
+// fixture's dependencies decide nothing about it. What it reads is the
+// fixture's own sources against the fixture's own node_modules, and that is the
+// packed tarballs. The modes that turn on the consumer manifest's `type` need
+// it to be `module`, which the fixture manifest already declares; a fixture that
+// stopped declaring it fails those modes rather than skipping them, because an
+// ESM-only package resolved from a CommonJS consumer lands on the guard.
+/**
+ * @param {string} fixtureDir
+ * @param {readonly string[]} packageNames
+ */
+const typecheckProblems = (fixtureDir, packageNames) => {
+  // Every publishable package imported by name, written here rather than
+  // committed to the fixture, so a package that starts shipping tomorrow is
+  // covered without this file learning its name. `src/main.tsx` beside it is
+  // the shaped half: it drives the API a consumer drives, through the JSX and
+  // the stylesheet subpath the README hands them.
+  writeFileSync(
+    join(fixtureDir, 'src/publishable-packages.ts'),
+    packageNames
+      .map((name, index) => `import * as playdeck${index} from '${name}';\n`)
+      .join('')
+  );
+
+  /** @type {Record<string, import('./resolution-modes.mjs').TypecheckResult>} */
+  const results = {};
+  for (const [mode, { compilerOptions, unsupported }] of Object.entries(
+    resolutionModes
+  )) {
+    // A consumer changes their resolution setting and keeps the rest of their
+    // configuration, so each mode is the fixture's own tsconfig with that one
+    // group supplied rather than a configuration of this harness's design. The
+    // fixture leaves that group unset for exactly this reason; a value there
+    // would be overridden here and stand as a second, dead copy of the table.
+    const config = join(fixtureDir, `tsconfig.${mode}.json`);
+    writeFileSync(
+      config,
+      JSON.stringify({ extends: './tsconfig.json', compilerOptions }, null, 2)
+    );
+
+    // Labelled with what the mode owes, so the diagnostics an unsupported mode
+    // is supposed to produce do not read as a failing run.
+    console.log(`\n--- tsc: ${mode}${unsupported ? ' (must fail) ' : ' '}---`);
+    results[mode] = tsc(config);
+    console.log(results[mode].output || 'ok');
+  }
+
+  return resolutionProblems(packageNames, results);
+};
+
+/**
+ * @param {string} config
+ * @returns {import('./resolution-modes.mjs').TypecheckResult}
+ */
+const tsc = (config) => {
+  try {
+    execFileSync(join(repoRoot, 'node_modules/.bin/tsc'), ['-p', config], {
+      encoding: 'utf8'
+    });
+    return { status: 0, output: '' };
+  } catch (error) {
+    // tsc reports diagnostics on stdout and exits non-zero, so the output is
+    // the finding rather than the exit code.
+    const failed = /** @type {{ status: number; stdout: string }} */ (
+      /** @type {unknown} */ (error)
+    );
+    return { status: failed.status, output: failed.stdout };
+  }
+};
+
 /**
  * @param {readonly PublishablePackage[]} packages
  * @param {string} tarballDir
@@ -490,6 +572,18 @@ async function runFixture(packages, tarballDir) {
           'Either the fixture manifest changed without the lockfile being ' +
           'regenerated (node scripts/verify-packaging.mjs ' +
           '--update-fixture-lockfile), or pnpm stopped replaying it.'
+      );
+    }
+
+    console.log('\n--- Type-checking the fixture against the tarballs ---');
+    const resolutionFailures = typecheckProblems(
+      fixtureDir,
+      packages.map((pkg) => pkg.name)
+    );
+    if (resolutionFailures.length > 0) {
+      throw new Error(
+        'The packed artifacts did not resolve the way a consumer resolves ' +
+          `them:\n${resolutionFailures.map((problem) => `  ${problem}`).join('\n')}`
       );
     }
 
@@ -556,6 +650,37 @@ async function smokeTest(distDir) {
         `Expected the smoke player to request /fixture.mp4, got: ${source}`
       );
     }
+
+    // The stylesheet subpath, end to end. The fixture imports it by the
+    // specifier the README hands consumers, so the bundler had to reach it
+    // through the installed package's export map -- a subpath `files` and
+    // `exports` disagreed about fails the build before this runs. What is left
+    // to establish is that what arrived is the theme, and the fixture's markup
+    // sets `--playdeck-color-on-surface` above the player so this can read it
+    // back. Reading a token the fixture set, rather than a shipped default,
+    // keeps an empty or truncated stylesheet failing here while a change to the
+    // theme's own palette does not.
+    //
+    // What this depends on, and the way it can go inert: nothing but theme.css
+    // may declare a property that consults that token on the viewport. A
+    // primitive that starts reading it inline -- which ADR-0001 blesses, and
+    // `PosterImage` already does for `--playdeck-poster-fit` -- would colour
+    // the element with no stylesheet present, and this check would pass on a
+    // run where nothing arrived. Whoever tokenises that property has to move
+    // this check to one theme.css alone still owns.
+    const themedColor = await page
+      .locator('[data-playdeck-part="viewport"]')
+      .evaluate(
+        (/** @type {Element} */ element) =>
+          globalThis.getComputedStyle(element).color
+      );
+    if (themedColor !== 'rgb(1, 2, 3)') {
+      throw new Error(
+        '@playdeck/react/theme.css did not reach the page: the viewport ' +
+          `should read its colour from the token the fixture sets, got ${themedColor}.`
+      );
+    }
+
     if (pageErrors.length > 0) {
       throw new Error(
         `The smoke player threw uncaught errors: ${pageErrors

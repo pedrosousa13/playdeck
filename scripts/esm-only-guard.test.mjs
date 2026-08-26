@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath, URL } from 'node:url';
 import { guardProblems, guardRuntime, guardTypes } from './esm-only-guard.mjs';
+import { supportedResolutionModes } from './resolution-modes.mjs';
 import { publishablePackages } from './workspace-packages.mjs';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -147,22 +148,16 @@ test('a CommonJS consumer is told at build time', (t) => {
 
 // The modes that already worked, each of which the guard has to leave alone. A
 // guard that made any of them worse would be a bad trade: it would have moved
-// the failure rather than surfaced it. `node10` is not among them and is not
-// checked here -- that mode ignores export maps entirely, so nothing written
-// into one can reach it.
-for (const [mode, setup] of Object.entries({
-  'esm-nodenext': {
-    type: /** @type {'module'} */ ('module'),
-    compilerOptions: { module: 'nodenext', moduleResolution: 'nodenext' }
-  },
-  'esm-node16': {
-    type: /** @type {'module'} */ ('module'),
-    compilerOptions: { module: 'node16', moduleResolution: 'node16' }
-  },
-  bundler: {
-    compilerOptions: { module: 'esnext', moduleResolution: 'bundler' }
-  }
-})) {
+// the failure rather than surfaced it. The set comes from
+// scripts/resolution-modes.mjs, which is also what the packaging harness
+// type-checks the packed artifacts under -- the two gates ask different
+// questions (which file the export map reaches, versus whether the shipped
+// declarations satisfy a consumer) and a mode that only one of them knows about
+// would answer half of it. Entries marked unsupported there are skipped here,
+// however many there are: a mode is marked because it cannot reach the
+// declarations through the export map at all, and this file asks only which
+// file the export map sends a mode to.
+for (const [mode, setup] of Object.entries(supportedResolutionModes)) {
   test(`${mode} resolves the real entry`, (t) => {
     const root = installedTree(t);
     const { status, output } = typecheck(root, mode, setup);
