@@ -1,11 +1,11 @@
 ---
-'@playdeck/core': patch
-'@playdeck/provider-hls': patch
-'@playdeck/provider-native': patch
-'@playdeck/provider-vimeo': patch
-'@playdeck/provider-wistia': patch
-'@playdeck/provider-youtube': patch
-'@playdeck/react': patch
+'@playdeck/core': minor
+'@playdeck/provider-hls': minor
+'@playdeck/provider-native': minor
+'@playdeck/provider-vimeo': minor
+'@playdeck/provider-wistia': minor
+'@playdeck/provider-youtube': minor
+'@playdeck/react': minor
 ---
 
 A CommonJS consumer is now refused by their own type-checker instead of by Node
@@ -73,12 +73,17 @@ matches a CommonJS consumer before `require` ever does — which is the silent
 pass, restored. The nesting is what lets the two consumers be told different
 things.
 
-**Why `patch`, and what it can still break.** No API, no type and no rendered
-output changed, and `dist` is byte-identical — this is the export map and two
-files that are never imported. It is a patch because nothing that ran stops
-running: the builds this turns red were already producing code that Node
-refused. A consumer who was type-checking such code, and shipping it unrun, will
-see their build fail on the upgrade.
+**Why `minor`, and what it breaks.** No API, no type and no rendered output
+changed, and `dist` is byte-identical — this is the export map and two files
+that are never imported. Nothing that ran stops running, because the builds this
+turns red were already producing code that Node refused.
+
+It is a `minor` rather than a `patch` because a build going red on upgrade is a
+break a consumer should be able to see in the version, whatever the state of the
+code underneath it. A CommonJS consumer type-checking code they never executed
+gets `tsc` exit 0 before the upgrade and a hard failure after it; calling that a
+patch asks them to discover the boundary from their own CI. While the major is
+`0`, `minor` is the slot a break belongs in.
 
 **What is unaffected, verified rather than assumed.** The three resolution modes
 that worked still do — `bundler`, `node16` and `nodenext` on a `"type":"module"`
