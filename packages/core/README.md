@@ -131,15 +131,6 @@ Providers: `ProviderAdapter`, `ProviderStatePatch`, `ProviderStateListener`,
 `ProviderEvent`, `ProviderEventFor`, `MediaDimensions`, `TimeBoundary`,
 `LiveDerivationInput`.
 
-`MediaDimensions` is the media's own pixel size, not the box it is drawn into,
-and it belongs to the adapter contract: an adapter that can report a size
-implements `subscribeDimensions`, and the controller re-publishes what it sends
-through its own `subscribeDimensions`. Both are side channels rather than part
-of `PlayerState`, so a size change does not re-render every state consumer, and
-`undefined` is how "not known" is said — including withdrawing a size that was
-reported earlier. An adapter with no size to report leaves the method off
-altogether, which is why it is optional on `ProviderAdapter`.
-
 Autoplay: `AutoplayMode`, `AutoplayConfigurationOptions`.
 
 Media Session: `MediaSessionLike`, `MediaSessionCoordinator`,
@@ -700,6 +691,23 @@ this with everything else.
 Which track is selected and who draws its cues are separate questions:
 `captionRendering` answers the second, and where a provider paints its own
 captions there is nothing for a consumer to draw.
+
+## Media dimensions
+
+`MediaDimensions` is the media's own pixel size, not the box it is drawn into.
+An adapter that can report one implements `subscribeDimensions`, and the
+controller re-publishes what it sends through a `subscribeDimensions` of its
+own.
+
+Neither is part of `PlayerState`, so a size arriving does not re-render every
+state consumer — a video that reports its intrinsic size on load would
+otherwise wake code that cares only about playback. `undefined` is how "not
+known" is said, and it is also how a size reported earlier is withdrawn.
+
+An adapter with no size to report leaves the method off altogether, which is
+why it is optional on `ProviderAdapter`: an embed that never exposes the media
+element has nothing to measure, and saying nothing is more honest than
+publishing the iframe's box as though it were the media's.
 
 ## Notifying subscribers
 

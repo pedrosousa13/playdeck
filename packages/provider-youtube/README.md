@@ -88,12 +88,12 @@ origins list and what a page's CSP has to allow.
 | `YouTubePlayer`                    | A constructed player, as the API members this adapter uses.                                                                                                                                                          |
 
 The `YouTube*` names above describe Google's IFrame Player API rather than
-Playdeck. There is no package to import them from — the API arrives as a script
-that installs a global — so they are declared here, in `src/loader.ts`, as the
-members this adapter uses, which is why the API offers more than they name.
-Their contents belong to Google: what a member does, what it reports, whether it
-exists at all is settled by whatever the script serves, and nothing this project
-can do makes those shapes stable for you. They are exported so that a caller
+Playdeck. The API arrives as a script that installs a global rather than as a
+module this package imports, so they are declared here, in `src/loader.ts`, as
+the members this adapter calls, and they name only those. Their contents belong
+to Google: what a member does, what it reports, whether it exists at all is
+settled by whatever the script serves, and nothing this project can do makes
+those shapes stable for you. They are exported so that a caller
 holding what `loadYouTubeIframeApi` returns — or supplying its own API through
 `loadIframeApi` — has names for it; read them as a description of the API the
 page loaded, not as a contract Playdeck controls.

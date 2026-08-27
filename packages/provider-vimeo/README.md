@@ -75,17 +75,17 @@ origins list and what a page's CSP has to allow.
 | `VimeoSdkPlayer`        | An instance of that class, as the SDK members this adapter uses.                                                                                                                                             |
 | `VimeoSdkEventListener` | The listener `VimeoSdkPlayer`'s `on` and `off` take. Its payload is `unknown` — the SDK decides the shape per event.                                                                                         |
 | `VimeoSdkModule`        | The imported SDK module, whose `default` is the constructor. What an importer handed to `loadVimeoSdk` has to resolve.                                                                                       |
-| `VimeoSdkQuality`       | A rung as `getQualities()` reports it — `id`, `label` and which one is `active`. Distinct from core's published `PlayerQuality`.                                                                             |
+| `VimeoSdkQuality`       | An entry as `getQualities()` reports it, `auto` among them, with `active` marking the one the player is honouring rather than the rung being rendered. Distinct from core's published `PlayerQuality`.       |
 | `VimeoSdkChapter`       | A chapter as `getChapters()` reports it — a start, a title and a 1-based `index`, with no end. Distinct from core's published `Chapter`.                                                                     |
 | `VimeoSdkTextTrack`     | A track as `getTextTracks()` reports it, including the SDK's own `mode`. Distinct from core's published `TextTrack`.                                                                                         |
 
 The `VimeoSdk*` names above describe `@vimeo/player` rather than Playdeck. They
 are declared here, in `src/loader.ts`, as the SDK members this adapter uses, so
-the loader and the adapter can be typed without taking the SDK's own typings as
-a dependency — which is why the SDK offers more than they name. Their contents
-belong to Vimeo: what a member does, what it reports, whether it exists at all
-is settled in an SDK release rather than here, and nothing this project can do
-makes those shapes stable for you. They are exported so that a caller holding
+the loader and the adapter can be typed without binding to the SDK's own
+typings — these name only what the adapter calls. Their contents belong to
+Vimeo: what a member does, what it reports, whether it exists at all is settled
+in an SDK release rather than here, and nothing this project can do makes those
+shapes stable for you. They are exported so that a caller holding
 what `loadVimeoSdk` returns has names for it; read them as a description of the
 SDK you have installed, not as a contract Playdeck controls.
 
