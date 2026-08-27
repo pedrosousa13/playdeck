@@ -1,3 +1,17 @@
+// Every value this entry exports is built on hooks, context and refs, so the
+// client boundary is the package's to declare rather than the caller's to
+// place: a bundler resolving this module into a server graph has nothing else
+// to read it from, and what it reports without the directive names a React API
+// such as `createContext` or `useSyncExternalStore` inside a file the caller
+// cannot edit. It sits on the entry alone because the entry is the only module
+// `exports` exposes, and the bundle it produces carries the directive to the
+// top of the chunk. That last part is a property of the build rather than of
+// this file, so the directive is read back out of the packed tarball by
+// scripts/verify-packaging.mjs, against the rule scripts/client-boundary.mjs
+// holds: a build that stopped hoisting it fails there rather than in a
+// consumer's app.
+'use client';
+
 export { Media, Viewport } from './viewport-media.js';
 
 export type { MediaProps, ViewportProps } from './viewport-media.js';

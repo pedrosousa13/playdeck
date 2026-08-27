@@ -129,12 +129,15 @@ pnpm build
 
 Packaging is verified against real tarballs (`pnpm test:packages`), bundle
 budgets are enforced (`pnpm test:budgets`), and a Next.js integration is built
-and driven in a browser (`pnpm test:integrations`). Two limits on what that
-integration proves: it depends on `@playdeck/react` through the workspace
-protocol, so what it drives is this repository's source rather than an installed
-artifact, and it imports the package only from a `'use client'` component, so
-nothing there imports it from a React Server Component. What a consumer's
-install resolves to is `pnpm test:packages`'s subject; RSC is covered nowhere.
+and driven in a browser (`pnpm test:integrations`). That integration serves two
+routes: one imports `@playdeck/react` from a `'use client'` component, and one
+is a React Server Component that imports it directly and passes no directive of
+its own, so the build fails there unless the package carries `'use client'` on
+its entry. Its limit is that it depends on `@playdeck/react` through the
+workspace protocol, so what it drives is this repository's source rather than an
+installed artifact. What a consumer's install resolves to is
+`pnpm test:packages`'s subject, and that run reads the directive back out of the
+packed tarball rather than out of the working tree.
 
 `pnpm test:packages` installs those tarballs into a fixture it copies to a temp
 directory, and replays `tests/packaging/fixture/pnpm-lock.yaml` there so that
