@@ -54,20 +54,25 @@ export const stop = (): void => {
 **A capability is not a boolean.** Every entry in `PlayerState.capabilities` is
 an `Availability`: `available` on its own, or `unknown` or `unavailable` with a
 `reason` for it. The two negative-looking statuses are not degrees of one
-answer. `unknown` is "not yet" — nothing has decided, so a control reading it
-renders nothing rather than something disabled. `unavailable` is "no", decided.
-Each status has its own reason vocabulary, and the two do not overlap:
+answer. `unknown` is undecided, so a control reading it renders nothing rather
+than something disabled. `unavailable` is "no". Each status has its own reason
+vocabulary, and the two do not overlap.
 
-| Status        | `reason`         | What it says                                                                                                        |
-| ------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `available`   | none             | The command can be issued. This status carries no `reason` at all.                                                  |
-| `unknown`     | `not-ready`      | Nothing has answered yet: no provider is attached, or the attached one has not got as far as this question.         |
-| `unknown`     | `provider-check` | A provider is attached and is resolving this one; the verdict replaces it.                                          |
-| `unavailable` | `browser`        | This engine exposes no such API, or the device refuses it — iOS pins media volume to its hardware switch.           |
-| `unavailable` | `policy`         | The document, the permissions policy or an attribute on the media element forbids it.                               |
-| `unavailable` | `provider`       | The active provider has nothing to give here — an SDK that wires no such command, or one with nothing to offer yet. |
-| `unavailable` | `provider-plan`  | The provider offers it, but not on the account behind this video. Vimeo's plan-gated features answer this way.      |
-| `unavailable` | `source`         | The media itself has none: no rendition ladder, no chapters, nothing seekable to seek through.                      |
+Undecided is not the same as pending: nothing promises that an `unknown`
+resolves. A provider may leave a capability there on purpose rather than pay
+what answering would cost, so a consumer should treat `unknown` as a state to
+render for, not a state to wait on.
+
+| Status        | `reason`         | What it says                                                                                                                                                                                                    |
+| ------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `available`   | none             | The command can be issued. This status carries no `reason` at all.                                                                                                                                              |
+| `unknown`     | `not-ready`      | Nothing has answered yet: no provider is attached, or the attached one has not got as far as this question.                                                                                                     |
+| `unknown`     | `provider-check` | A provider is attached and has not answered this one, and may never — resolving it can cost a request it declines to make unasked.                                                                              |
+| `unavailable` | `browser`        | This engine exposes no such API, or the device refuses it — iOS pins media volume to its hardware switch.                                                                                                       |
+| `unavailable` | `policy`         | The document, the permissions policy or an attribute on the media element forbids it.                                                                                                                           |
+| `unavailable` | `provider`       | The active provider has nothing to give here — an SDK that wires no such command, or a condition that is false right now, such as AirPlay before any receiver has announced itself. It flips when that changes. |
+| `unavailable` | `provider-plan`  | The provider offers it, but not on the account behind this video. Vimeo's plan-gated features answer this way.                                                                                                  |
+| `unavailable` | `source`         | The media itself has none: no rendition ladder, no chapters, nothing seekable to seek through.                                                                                                                  |
 
 So a control never has to guess what a provider can do, and never has to read a
 question nobody has answered as a "no".
@@ -304,10 +309,9 @@ that has been asked to begin, and `'loading-provider'` is one whose provider is
 on the way. `{ activation: 'error', error }` is the attempt that never reached a
 provider at all, carrying the `PlayerError` that says why — a source that was
 refused, or a configuration under which the player will never load. The
-controller derives
-`lifecycle` from whichever is set and puts the error into the state's one error
-slot, clearing that slot on every activation that is not `'error'`, so a
-consumer moves one field rather than keeping two in agreement.
+controller derives `lifecycle` from whichever is set and puts the error into
+the state's one error slot, clearing that slot on every activation that is not
+`'error'`, so a consumer moves one field rather than keeping two in agreement.
 
 The call is ignored once a provider is attached, because the question it answers
 has been overtaken: a provider in hand _is_ the answer, and `setProvider`

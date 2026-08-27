@@ -175,16 +175,14 @@ It starts a player that `loading="interaction"` has left dormant — nothing
 fetched, no provider network request made — and `PlayerController` has no
 concept of that dormancy: only the activation `Player.Root` runs has one.
 Joining it to the handle is what lets an external control surface drive
-activation
-through the ref it already holds, without the controller growing an activation
-concern of its own. It returns `void` rather than a `CommandResult`, because it
-starts a player rather than issuing a command; what became of the activation is
-read from `state.activation` and `state.error`.
+activation through the ref it already holds, without the controller growing an
+activation concern of its own. It returns `void` rather than a `CommandResult`,
+because it starts a player rather than issuing a command; what became of the
+activation is read from `state.activation` and `state.error`.
 
 Calling it on a dormant root arms the player and queues one play, so the
 provider loads and playback begins from that single call —
-`Player.ActivationButton` is the bundled way to make that call, not the only
-one.
+`Player.ActivationButton` is the bundled way to make that call, not the only one.
 Where the activation is in its `error` state it is a retry instead: the provider
 is discarded and the load re-armed. It refuses an error the state reports as
 `recoverable: false`, exactly as `ActivationButton` does, so a direct call and a
@@ -195,11 +193,11 @@ that calls it unconditionally before `play()` needs: a root that is not
 `loading="interaction"`, a `source` that was refused, the
 `loading="interaction"` with autoplay pairing the library treats as a
 configuration conflict, and a player that has already activated all leave it
-doing nothing rather than restarting or throwing. A `play()` issued straight
-after it against a still-dormant player resolves
-`{ ok: false, reason: 'not-ready' }` and is dropped rather than queued — nothing
-is replayed here either — so that pair costs exactly one play once the provider
-attaches.
+doing nothing rather than restarting or throwing. Calling it moves the root to
+`eligible` at once, but a provider is not attached yet, so a `play()` issued
+straight after resolves `{ ok: false, reason: 'not-ready' }` and is dropped
+rather than queued — nothing is replayed here either — so that pair costs
+exactly one play once the provider attaches.
 
 ## Exports
 
