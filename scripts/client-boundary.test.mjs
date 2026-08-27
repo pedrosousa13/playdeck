@@ -152,6 +152,11 @@ test('reports an exports map with no import entry at all', () => {
 // scoping catches something, not only that nothing it caught is wrong. The
 // ESM-only guard's own suite holds its rule against the real manifests for the
 // same reason.
+// Manifests only, deliberately. Holding the rule against the built entry
+// belongs to scripts/verify-packaging.mjs, which reads it out of the packed
+// tarball after a build; this suite runs in a job that does not build, so a
+// test here that opened dist/ would fail for the absence of a file rather than
+// for anything about the boundary.
 test('the rule covers a package this repository actually publishes', () => {
   const covered = publishablePackages(repoRoot).filter(
     (pkg) =>
@@ -159,23 +164,4 @@ test('the rule covers a package this repository actually publishes', () => {
         .peerDependencies?.react !== undefined
   );
   assert.notDeepEqual(covered, []);
-});
-
-test('every publishable package satisfies the rule', () => {
-  for (const pkg of publishablePackages(repoRoot)) {
-    const manifest = JSON.parse(
-      readFileSync(join(pkg.path, 'package.json'), 'utf8')
-    );
-    assert.deepEqual(
-      clientBoundaryProblems(manifest, (entry) => {
-        try {
-          return readFileSync(join(pkg.path, entry), 'utf8');
-        } catch {
-          return undefined;
-        }
-      }),
-      [],
-      pkg.name
-    );
-  }
 });
