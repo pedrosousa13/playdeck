@@ -1,43 +1,44 @@
 import { expect, test, type Page } from '@playwright/test';
 import { playButton } from './locators';
 
-// Wait for the play button to exist before asserting anything about it. A test
-// that opens on an assertion rather than on an action pays for getting the
-// story on screen out of that assertion's budget, and each one below does.
+// Wait for the play button to attach before asserting anything about it. A test
+// that opens on an assertion charges getting the story on screen to that
+// assertion's budget, and the two below open on one.
 //
-// The e2e server is `storybook dev`, which compiles a story on first request,
-// so `page.goto` resolves on a document whose story module has not run — the
-// button appears some way after it. `playwright.config.ts` provisions for that
-// with a 30s test timeout, and a locator method inherits it: `actionTimeout` is
-// unset, so `waitFor` runs with no timeout of its own and is bounded by the
-// test. An `expect` matcher does not inherit it; it runs on the 5s `expect`
-// default whatever the test timeout is. A spec that opens on an assertion
-// therefore charges the compile and mount to that assertion's 5s, and what is
-// left over is what the player gets to reach the state being asserted.
+// The budgets differ, which is the whole of it. A locator method is bounded by
+// the test timeout, which `playwright.config.ts` sets wide and says why. An
+// `expect` matcher is not: it runs on its own 5s default however wide the test
+// timeout is. So the wait can absorb a cost the assertion cannot, and what the
+// assertion is left with is what the player gets to reach the state asserted.
 //
-// So this draws a boundary rather than lengthening a wait for the thing under
-// test. Nothing about the player is awaited here — the button renders before a
-// provider is bound — so binding a provider, attaching, loading and the
-// autoplay attempt itself all still have to land inside the untouched 5s
-// budget of the assertion that follows.
+// `attached` and not the default `visible`, because it releases at the earliest
+// moment the button can be observed. That matters: the button renders before a
+// provider is bound, so the earlier this releases, the more of the player's own
+// work stays inside the assertion that follows rather than being absorbed here.
+// It does not stay wholly outside. Probed over 20 chromium and firefox runs,
+// this released before a provider was bound in 13 of them, and in the rest the
+// compile was fast enough that binding had already happened — an `attached`
+// gate narrows that overlap rather than removing it.
 //
-// Measured on this machine, 2026-08-27, under `@playwright/test` 1.61.1 with
-// `--repeat-each=30 --retries=0 --workers=6` on a 4-core machine, 30 runs of
-// each test per arm:
+// Measured under `@playwright/test` 1.61.1, `--retries=0 --workers=6` on a
+// 4-core machine, 30 firefox runs per arm against an already-compiled story:
 //
-//   arm      firefox muted   firefox blocked   chromium muted   chromium blocked
-//   ungated  11 failed       6 failed          0 failed         0 failed
-//   gated    0 failed        0 failed          0 failed         0 failed
+//   arm      firefox muted
+//   ungated  2 of 30 failed
+//   gated    0 of 30 failed
 //
-// Only two engines are listed because only those two were run; `--workers=6`
-// oversubscribes deliberately, since contention is what makes the compile slow
-// and so an idle run is a poor test of this. Instrumented over those firefox
-// runs, the button appeared 0.7s to 4.9s after `page.goto` resolved and
-// sometimes not inside the budget at all, while the span from the button
-// appearing to `data-autoplay-state="started"` stayed between 0.3s and 1.6s.
+// Both arms ran warm deliberately, so the figure is a floor: a cold compile is
+// what makes this fail, and warming the story removes most of the cost being
+// measured. `--workers=6` oversubscribes for the same reason — contention is
+// what surfaces it, so an idle run understates it.
+//
+// Firefox is the only engine listed because it is the only one that reproduced
+// it here; chromium did not fail either arm. Webkit, which is where CI reported
+// it, does not launch on this machine and is unmeasured — the mechanism above
+// is read across to it rather than observed there.
 const mountedPlayButton = async (page: Page) => {
   const play = playButton(page);
-  await play.waitFor();
+  await play.waitFor({ state: 'attached' });
   return play;
 };
 
