@@ -81,6 +81,22 @@ origins list and what a page's CSP has to allow.
 | `PLAYBACK_CONFIRMATION_TIMEOUT_MS` | How long a `play()` waits for the player to confirm it (3 seconds).                                                                                                                                                  |
 | `resetYouTubeIframeApiLoader`      | Drops the memo of the API load — for tests that need a clean load.                                                                                                                                                   |
 | `API_READY_TIMEOUT_MS`             | How long the API script is given to hand over the API before the load is reported as failed (15 seconds).                                                                                                            |
+| `YouTubeIframeApi`                 | What `loadYouTubeIframeApi` resolves to: the API object the script installs, whose `Player` is the constructor.                                                                                                      |
+| `YouTubePlayerConstructor`         | That `Player`, constructed over an iframe and a `YouTubePlayerOptions`.                                                                                                                                              |
+| `YouTubePlayerOptions`             | The constructor's second argument. This adapter hands the constructor an iframe that already carries the embed, so `events` is what it passes through here.                                                          |
+| `YouTubePlayerEventHandlers`       | That `events` bag — the `onReady`, `onStateChange` and sibling callbacks the player invokes.                                                                                                                         |
+| `YouTubePlayer`                    | A constructed player, as the API members this adapter uses.                                                                                                                                                          |
+
+The `YouTube*` names above describe Google's IFrame Player API rather than
+Playdeck. There is no package to import them from — the API arrives as a script
+that installs a global — so they are declared here, in `src/loader.ts`, as the
+members this adapter uses, which is why the API offers more than they name.
+Their contents belong to Google: what a member does, what it reports, whether it
+exists at all is settled by whatever the script serves, and nothing this project
+can do makes those shapes stable for you. They are exported so that a caller
+holding what `loadYouTubeIframeApi` returns — or supplying its own API through
+`loadIframeApi` — has names for it; read them as a description of the API the
+page loaded, not as a contract Playdeck controls.
 
 ## What it reports honestly
 

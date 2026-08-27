@@ -128,7 +128,17 @@ Sources: `PlayerSource`, `ResolvedPlayerSource`, `VideoFileSource`, `HlsSource`,
 `SourceDetectionFailureReason`.
 
 Providers: `ProviderAdapter`, `ProviderStatePatch`, `ProviderStateListener`,
-`ProviderEvent`, `ProviderEventFor`, `TimeBoundary`, `LiveDerivationInput`.
+`ProviderEvent`, `ProviderEventFor`, `MediaDimensions`, `TimeBoundary`,
+`LiveDerivationInput`.
+
+`MediaDimensions` is the media's own pixel size, not the box it is drawn into,
+and it belongs to the adapter contract: an adapter that can report a size
+implements `subscribeDimensions`, and the controller re-publishes what it sends
+through its own `subscribeDimensions`. Both are side channels rather than part
+of `PlayerState`, so a size change does not re-render every state consumer, and
+`undefined` is how "not known" is said — including withdrawing a size that was
+reported earlier. An adapter with no size to report leaves the method off
+altogether, which is why it is optional on `ProviderAdapter`.
 
 Autoplay: `AutoplayMode`, `AutoplayConfigurationOptions`.
 
