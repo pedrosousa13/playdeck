@@ -100,16 +100,20 @@ to hand them to differs. The answer is `state.captionRendering`, and that is
 what `Player.Captions` follows: it draws while that reads `custom` and renders
 nothing otherwise, whatever the prop says.
 
-Media the browser is playing itself — a native source, or HLS on the browser's
-own engine — puts the selected track back into the browser's hands, so the
-browser draws the captions and the state reads `native` for as long as a track
-is selected. Vimeo hands rendering to its own player and the state reads
-`provider`. Where a provider has no second surface to hand the cues to, the
-request lands without changing anything and the state keeps reporting whatever
-is really drawing: an hls.js engine parses the cues itself and stays `custom`,
-and a provider that paints captions inside its own frame is already `provider`
-however the prop is set. `unavailable` is a source with no caption track to
-draw at all.
+What the request can reach differs by what is playing. Where the browser holds
+the media itself, asking for `'native'` puts the selected track back into its
+hands and the state reads `native` while a track is selected. Where an embed
+paints cues inside its own frame, the state reads `provider` and the prop
+changes nothing — there is no second surface to hand them to. Where a provider
+parses cues itself without a native seam, the request lands and the state
+honestly stays `custom`. In every case the state reports what is really
+drawing, not what was asked for.
+
+`unavailable` is the answer before anything has reported otherwise. A source
+whose provider found no caption tracks reads that way, and so does one whose
+provider has no caption seam at all — it is the value the state starts at, so
+nothing having patched it and nothing being there are indistinguishable from
+outside.
 
 Optional stylesheet with the default look:
 
@@ -161,13 +165,17 @@ export const CueText = () => {
 changes. `Player.Root` also accepts a `ref`, which receives a `PlayerHandle`
 carrying the same commands plus `getState`, `subscribe` and `on`.
 
-Every command on either surface resolves a `CommandResult` — `{ ok: true }`, or
-`{ ok: false, reason }` with an optional `PlayerError` behind it. That result is
-the only place the answer lives, because nothing is queued and replayed once the
-player catches up: a `reason` of `not-ready` means the call did nothing and the
-caller has to ask again, which is what `whenReady` is for. The `reason`
-vocabulary and the capability contract are shared with the controller and are
-documented in
+The commands that ask a provider to do something resolve a `CommandResult` —
+`{ ok: true }`, or `{ ok: false, reason }` with an optional `PlayerError` behind
+it. Not every member is one: `whenReady` answers a `boolean`,
+`setCaptionRenderer` records a preference and returns nothing, and
+`activateFromInteraction` starts a player rather than issuing a command.
+
+That result is the only place the answer lives, because nothing is queued and
+replayed once the player catches up: a `reason` of `not-ready` means the call
+did nothing and the caller has to ask again, which is what `whenReady` is for.
+The `reason` vocabulary and the capability contract are shared with the
+controller and are documented in
 [@playdeck/core](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md).
 
 `seekBy` moves the playhead by an offset in seconds — negative back, positive
@@ -220,7 +228,7 @@ exactly one play once the provider attaches.
 
 ## Volume, muting and playback rate
 
-Each of the three playback preferences is either yours to hold or the player's.
+Each playback preference is either yours to hold or the player's.
 `muted`, `volume` and `playbackRate` are the controlled props: pass one and the
 player is pinned to that value, and moving it is yours to do. `defaultMuted`,
 `defaultVolume` and `defaultPlaybackRate` are the uncontrolled form — a
@@ -245,25 +253,32 @@ there the value the provider last confirmed is what carries forward, through a
 source change and through a provider re-attach, rather than the default being
 applied a second time. Handing a controlled prop back likewise leaves the
 player on the value it currently holds rather than returning it to the default.
-A volume is clamped into `0`–`1`, and a volume that is not finite, or a
-playback rate that is not finite and above zero, is not applied at all.
+A starting volume is clamped into `0`–`1`. A volume that is not finite is not
+applied at all, and neither is a playback rate unless it is finite and greater
+than zero.
 
 `onMutedChange`, `onVolumeChange` and `onPlaybackRateChange` report the value
 the provider confirmed rather than the one that was asked for, which is why
 they are worth reading even where you issued the change yourself. They fire
 whatever moved the player — a bundled control, a `usePlayerActions` or
 `PlayerHandle` command, the provider's own chrome under `controls`, the
-platform moving the media by itself. The one change they do not report is the
-one `Player.Root` issued to satisfy a controlled prop, so a controlled player
-is never called back with the value it was just handed; the starting value is
-not announced either, and the first report is the first departure from it.
+platform moving the media by itself.
+
+What they suppress is the echo: a change `Player.Root` issued to satisfy a
+controlled prop is not reported back, so a controlled player is not called with
+the value it was just handed. A starting value the provider agrees with is not
+announced either. Neither rule is a guarantee that no callback ever arrives
+unbidden, because both compare against what was asked for — a provider that
+confirms something else answers with a genuine change. A controlled `volume`
+outside `0`–`1` is the reachable case: it travels to the provider as given, and
+the value that comes back is the clamped one.
 
 That makes them the other half of a controlled player. A change arriving from
 anywhere but the prop is reported and then reconciled back to the prop's value,
 so a controlled player whose callback updates no state snaps its viewer back
 every time they touch the control. Under the uncontrolled form the callback
-observes only — the player keeps the new value with or without it. All three
-are read through a ref as `Player.Root` renders, so an inline arrow function
+observes only — the player keeps the new value with or without it. Each is read
+through a ref as `Player.Root` renders, so an inline arrow function
 re-subscribes nothing.
 
 ## Media Session
@@ -279,13 +294,18 @@ player replaces what that player publishes. Where the browser exposes no
 `navigator.mediaSession` there is nothing to bind and the prop does nothing.
 
 That surface is shared by every player on the page, and the arbitration over
-it — which root owns it, when ownership moves, which of the platform's actions
-are routed back into playback, and what becomes of an artwork `src` the URL
-allowlist refuses — belongs to `bindMediaSession` and is documented under
+it — which root owns it, when ownership moves, and which of the platform's
+actions are routed back into playback — belongs to `bindMediaSession` and is
+documented under
 [Media Session](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#media-session)
 in `@playdeck/core`. `Player.Root` makes that call for you, and `mediaMetadata`
 is both its seed and its setter; what the platform shows is still whatever the
 root owning the surface published last.
+
+An artwork `src` is a consumer-supplied URL, so the allowlist can refuse one.
+What that publishes is
+[A URL prop the allowlist refused](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#a-url-prop-the-allowlist-refused),
+also in `@playdeck/core`.
 
 ## Exports
 
