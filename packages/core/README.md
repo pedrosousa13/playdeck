@@ -51,11 +51,26 @@ export const stop = (): void => {
 
 ## The two ideas worth knowing before the API list
 
-**Capabilities are three-valued.** Every entry in `PlayerState.capabilities` is
-`available`, `unknown`, or `unavailable` with a reason (`browser`, `policy`,
-`provider`, `source`, `not-ready`). A control reading them renders nothing while
-the answer is `unknown` rather than showing something disabled, and never has to
-guess what a provider can do.
+**A capability is not a boolean.** Every entry in `PlayerState.capabilities` is
+an `Availability`: `available` on its own, or `unknown` or `unavailable` with a
+`reason` for it. The two negative-looking statuses are not degrees of one
+answer. `unknown` is "not yet" — nothing has decided, so a control reading it
+renders nothing rather than something disabled. `unavailable` is "no", decided.
+Each status has its own reason vocabulary, and the two do not overlap:
+
+| Status        | `reason`         | What it says                                                                                                        |
+| ------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `available`   | none             | The command can be issued. This status carries no `reason` at all.                                                  |
+| `unknown`     | `not-ready`      | Nothing has answered yet: no provider is attached, or the attached one has not got as far as this question.         |
+| `unknown`     | `provider-check` | A provider is attached and is resolving this one; the verdict replaces it.                                          |
+| `unavailable` | `browser`        | This engine exposes no such API, or the device refuses it — iOS pins media volume to its hardware switch.           |
+| `unavailable` | `policy`         | The document, the permissions policy or an attribute on the media element forbids it.                               |
+| `unavailable` | `provider`       | The active provider has nothing to give here — an SDK that wires no such command, or one with nothing to offer yet. |
+| `unavailable` | `provider-plan`  | The provider offers it, but not on the account behind this video. Vimeo's plan-gated features answer this way.      |
+| `unavailable` | `source`         | The media itself has none: no rendition ladder, no chapters, nothing seekable to seek through.                      |
+
+So a control never has to guess what a provider can do, and never has to read a
+question nobody has answered as a "no".
 
 **Commands are answered, never queued.** Every command resolves a
 `CommandResult` — `{ ok: true }` or `{ ok: false, reason }`. Before a provider
@@ -269,6 +284,35 @@ export const named = textTrackLabel('Commentary', 'en'); // 'Commentary'
 
 <!-- /example -->
 
+## Activation, before there is a provider
+
+`PlayerState.activation` is how far the player has got towards having a
+provider at all, which `lifecycle` cannot say on its own: a player nobody has
+asked to load anything yet and a player whose provider module is still being
+fetched are both outside the media's own lifecycle, and `lifecycle` calls them
+`'idle'` and `'loading'` without distinguishing either from what a loaded
+provider does. `PreProviderActivation` is the part of that field a caller may
+set through `PlayerController.setActivation`, which is to say the states that
+can be true while no provider exists. `'ready'` is not one of them: it is a
+report the attached provider publishes about itself, and in the window this
+type describes there is nothing to make it.
+
+That makes `setActivation` the entry point for a host that defers loading —
+until a viewport intersection, or until someone interacts.
+`{ activation: 'dormant' }` is a player that has not begun, `'eligible'` is one
+that has been asked to begin, and `'loading-provider'` is one whose provider is
+on the way. `{ activation: 'error', error }` is the attempt that never reached a
+provider at all, carrying the `PlayerError` that says why — a source that was
+refused, or a configuration under which the player will never load. The
+controller derives
+`lifecycle` from whichever is set and puts the error into the state's one error
+slot, clearing that slot on every activation that is not `'error'`, so a
+consumer moves one field rather than keeping two in agreement.
+
+The call is ignored once a provider is attached, because the question it answers
+has been overtaken: a provider in hand _is_ the answer, and `setProvider`
+publishes `'loading-provider'` itself as part of the attach.
+
 ## Origins and refusals
 
 Every command carries an origin. The ones a viewer performs directly — starting,
@@ -372,6 +416,49 @@ A play refused before a provider attaches fills this field _and_
 carries any reason and is cleared by confirmed playback, this one carries a
 single reason and is cleared by `setProvider`. Ask this field which command,
 and `refusedPlay` about the play (#484).
+
+### A URL prop the allowlist refused
+
+`RefusedUrlSurface` names one consumer-supplied URL prop that the shared
+allowlist can refuse outside a provider — a poster, a text-track source, a
+Media Session artwork entry. The refusal itself is the quiet part: the value is
+dropped exactly as an absent prop would be, with no throw, no lifecycle change
+and nothing different on screen. `PlayerController.reportRefusedUrl` is what
+makes it audible, publishing a notice for as long as the refusal stands. Under
+`@playdeck/react` the primitives report their own surfaces, so a consumer
+composing them gets this without calling anything.
+
+The union carries prop names and never the value that was refused, and the
+notice's message is built in core from the name alone. That is a deliberate
+narrowing rather than a shorthand: a refusal is reported from code holding a URL
+that an attacker may have chosen, a free-form parameter would invite passing it
+along "for context", and the destination is an error a monitoring system may log
+and `ErrorDisplay` may render. Naming the prop is also the more useful half —
+the prop is what an operator has to go and fix. A refused `source` does quote
+its value, and the difference is structural: a source is one prop holding one
+value, while a surface can be refused by several component instances at once, so
+no one value describes it.
+
+`reportRefusedUrl` is a registration and not a setter. It returns a disposer,
+and the notice stands while any registration for any surface stands — which is
+what stops a sibling holding a permitted value for the same prop from
+withdrawing a refusal it never made, an ordinary situation the moment a
+responsive poster puts two images under one root. It is withdrawable at all
+because the notice states that a refusal stands right now rather than that one
+once happened: a consumer who replaced a poisoned CMS value with a good one must
+not keep the error forever, and an operator who cannot clear a security notice
+learns to ignore all of them.
+
+What it publishes is a notice in `isNotice`'s sense — non-fatal, `configuration`
+— and its severity is `'protective'` whatever the surface decorates, because
+what fired is a security control and not a presentation option being ignored. So
+it never drives the lifecycle, it must not be rendered as a failure, and a
+provider reporting a cosmetic rejection cannot push it out of the state's one
+error slot. Where several surfaces stand at once, that slot takes the first of
+them in a fixed order held in core, never the order the reports arrived in:
+report order follows where a consumer placed its components and whether the pass
+was a mount or an update, and a notice whose wording changed for that reason
+would be unreadable to a monitoring system.
 
 ## Autoplay
 
