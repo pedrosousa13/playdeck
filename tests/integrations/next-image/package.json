@@ -7,6 +7,7 @@
     "test:integration": "node --test harness.test.mjs && node test.mjs"
   },
   "dependencies": {
+    "@playdeck/core": "workspace:*",
     "@playdeck/react": "workspace:*",
     "next": "16.2.11",
     "react": "19.2.8",

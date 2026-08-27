@@ -13,6 +13,17 @@ React 19 is a peer dependency. Provider packages are pulled in as dependencies
 but loaded lazily — a consumer playing only MP4 ships no YouTube, Vimeo, Wistia
 or hls.js code in its initial graph, and makes no provider network requests.
 
+This package's entry carries a `'use client'` directive, so a React Server
+Component can import these primitives and render them directly, with no wrapper
+of your own to hold the boundary. It is still a boundary: the props a server
+component hands across it are serialised, so a function prop — a `renderCue`, an
+`onVolumeChange` — belongs on a component of yours that carries the directive
+itself.
+
+`@playdeck/core` and the provider packages import no React API and carry no
+directive; server code can call `detectSource` and the rest of that surface
+without a boundary at all.
+
 Every primitive below is staged, running, in the Storybook workbench at
 [pedrosousa13.github.io/playdeck](https://pedrosousa13.github.io/playdeck/). That is
 where the full styling

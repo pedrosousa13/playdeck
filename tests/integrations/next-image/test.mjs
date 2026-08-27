@@ -144,6 +144,63 @@ await runWithCleanup({
     } finally {
       releaseHeldScripts();
     }
+
+    // The RSC route. `app/rsc/page.tsx` is a server component that imports the
+    // primitives with no `'use client'` of its own, so the build that produced
+    // this page is already most of the evidence: without the directive
+    // @playdeck/react ships on its entry, `next build` fails on that file and
+    // there is nothing here to drive. What is left to observe is that the
+    // boundary works in both directions -- the server pass renders the
+    // primitives into the streamed HTML, and the client pass hydrates them into
+    // something that answers a click.
+    const rscPage = await browser.newPage();
+    /** @type {string[]} */
+    const rscFailures = [];
+    await rscPage.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.origin !== origin && url.protocol !== 'data:') {
+        rscFailures.push(`External request: ${url.href}`);
+        await route.abort();
+        return;
+      }
+      await route.continue();
+    });
+    rscPage.on('console', (message) => {
+      if (message.type() === 'error')
+        rscFailures.push(`Console error: ${message.text()}`);
+    });
+    rscPage.on('pageerror', (error) =>
+      rscFailures.push(`Page error: ${error.message}`)
+    );
+
+    const served = await rscPage.goto(`${origin}/rsc`, { waitUntil: 'commit' });
+    // Read off the response body rather than the DOM, so this is the markup the
+    // server produced and not a post-hydration reading of it. The attribute
+    // carries a value `@playdeck/core`'s `detectSource` computed in the server
+    // graph, where that package has no client boundary and needs none.
+    assert.match(
+      (await served?.text()) ?? '',
+      /data-source-status="success"/,
+      'Expected @playdeck/core to have run in the server graph.'
+    );
+
+    const activation = rscPage.locator('[data-playdeck-part="activation"]');
+    await activation.waitFor({ state: 'attached', timeout: 10_000 });
+    assert.equal(await activation.getAttribute('data-state'), 'dormant');
+    // A click the DOM answers is what separates hydrated primitives from
+    // server-rendered markup that only looks like them: `data-state` is written
+    // from `usePlayerState`, and nothing moves it off `dormant` until React has
+    // attached this button's handler on the client.
+    await activation.click();
+    await rscPage.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-playdeck-part="activation"]')
+          ?.getAttribute('data-state') !== 'dormant',
+      undefined,
+      { timeout: 10_000 }
+    );
+    assert.deepEqual(rscFailures, []);
   },
   closeBrowser: async () => browser?.close(),
   terminateServer: () => terminate(server)

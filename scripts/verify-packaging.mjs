@@ -37,6 +37,7 @@ import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { extname, join, posix } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
+import { clientBoundaryProblems } from './client-boundary.mjs';
 import { guardProblems } from './esm-only-guard.mjs';
 import {
   fixtureWorkspaceYaml,
@@ -216,6 +217,7 @@ const unreachableLinks = (entry, source, entries) => {
  */
 const tarballProblems = (tarball, version) => {
   const entries = tarballEntries(tarball);
+  const manifest = JSON.parse(readTarballFile(tarball, 'package.json'));
   /** @type {string[]} */
   const problems = [];
 
@@ -271,10 +273,25 @@ const tarballProblems = (tarball, version) => {
   // exactly the case worth catching -- the export map would then point a
   // CommonJS consumer at a file that is not there.
   problems.push(
-    ...guardProblems(
-      JSON.parse(readTarballFile(tarball, 'package.json')),
-      (entry) =>
-        entries.includes(entry) ? readTarballFile(tarball, entry) : undefined
+    ...guardProblems(manifest, (entry) =>
+      entries.includes(entry) ? readTarballFile(tarball, entry) : undefined
+    )
+  );
+
+  // The React client boundary, read out of the tarball for the same reason the
+  // guard above is: what a consumer receives is decided by `files` and
+  // `exports`, not by what the working tree holds. See
+  // scripts/client-boundary.mjs for the rule and for which packages it reaches.
+  //
+  // The directive is authored on the entry's source and carried to the top of
+  // the chunk by the bundler, so this checks the build's behaviour rather than
+  // restating the source. A bundler that stopped hoisting it is caught by the
+  // Next integration too, which resolves the same built file; what only this
+  // sees is `files` or `exports` moving out from under it, where the built
+  // entry is intact and the installed one is a different file or no file.
+  problems.push(
+    ...clientBoundaryProblems(manifest, (entry) =>
+      entries.includes(entry) ? readTarballFile(tarball, entry) : undefined
     )
   );
 
