@@ -64,13 +64,30 @@ origins list and what a page's CSP has to allow.
 
 ## Exports
 
-| Export                 | What it is                                                                                                                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `createVimeoProvider`  | Builds the adapter over a mount element and a `VimeoSource`.                                                                                                                                                 |
-| `VimeoProviderOptions` | `controls`, `dnt`, `loop`, `startTime`, `endTime`, `customControls`, `suppressSeoMetadata`. Through `Player.Root`, `controls`, `loop`, `startTime` and `endTime` are its own props (ADR-0004), not bag keys. |
-| `VimeoSdkLoadOptions`  | What `loadVimeoSdk` takes beyond its importer: `suppressSeoMetadata`, honoured only by the call that actually imports the SDK.                                                                               |
-| `VimeoMountElement`    | What the adapter can mount into.                                                                                                                                                                             |
-| `VimeoProviderAdapter` | The adapter's own type.                                                                                                                                                                                      |
+| Export                  | What it is                                                                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createVimeoProvider`   | Builds the adapter over a mount element and a `VimeoSource`.                                                                                                                                                 |
+| `VimeoProviderOptions`  | `controls`, `dnt`, `loop`, `startTime`, `endTime`, `customControls`, `suppressSeoMetadata`. Through `Player.Root`, `controls`, `loop`, `startTime` and `endTime` are its own props (ADR-0004), not bag keys. |
+| `VimeoSdkLoadOptions`   | What `loadVimeoSdk` takes beyond its importer: `suppressSeoMetadata`, honoured only by the call that actually imports the SDK.                                                                               |
+| `VimeoMountElement`     | What the adapter can mount into.                                                                                                                                                                             |
+| `VimeoProviderAdapter`  | The adapter's own type.                                                                                                                                                                                      |
+| `VimeoSdkConstructor`   | What `loadVimeoSdk` resolves to: the `@vimeo/player` class, constructed over an iframe.                                                                                                                      |
+| `VimeoSdkPlayer`        | An instance of that class, as the SDK members this adapter uses.                                                                                                                                             |
+| `VimeoSdkEventListener` | The listener `VimeoSdkPlayer`'s `on` and `off` take. Its payload is `unknown` — the SDK decides the shape per event.                                                                                         |
+| `VimeoSdkModule`        | The imported SDK module, whose `default` is the constructor. What an importer handed to `loadVimeoSdk` has to resolve.                                                                                       |
+| `VimeoSdkQuality`       | An entry as `getQualities()` reports it, `auto` among them, with `active` marking the one the player is honouring rather than the rung being rendered. Distinct from core's published `PlayerQuality`.       |
+| `VimeoSdkChapter`       | A chapter as `getChapters()` reports it — a start, a title and a 1-based `index`, with no end. Distinct from core's published `Chapter`.                                                                     |
+| `VimeoSdkTextTrack`     | A track as `getTextTracks()` reports it, including the SDK's own `mode`. Distinct from core's published `TextTrack`.                                                                                         |
+
+The `VimeoSdk*` names above describe `@vimeo/player` rather than Playdeck. They
+are declared here, in `src/loader.ts`, as the SDK members this adapter uses, so
+the loader and the adapter can be typed without binding to the SDK's own
+typings — these name only what the adapter calls. Their contents belong to
+Vimeo: what a member does, what it reports, whether it exists at all is settled
+in an SDK release rather than here, and nothing this project can do makes those
+shapes stable for you. They are exported so that a caller holding
+what `loadVimeoSdk` returns has names for it; read them as a description of the
+SDK you have installed, not as a contract Playdeck controls.
 
 ## What it reports honestly
 
