@@ -92,6 +92,25 @@ you; the overlay that positions the cues keeps its own. Reach for it when the
 something other than a run of text. The default splits `text` on newlines into
 one `caption-line` part per line.
 
+`captionRenderer` on `Player.Root` chooses which side draws the cues, and
+defaults to `'custom'`: the provider hands its cues to Playdeck and
+`Player.Captions` paints them. `'native'` asks the provider to draw its own
+captions instead — a request rather than a setting, because what a provider has
+to hand them to differs. The answer is `state.captionRendering`, and that is
+what `Player.Captions` follows: it draws while that reads `custom` and renders
+nothing otherwise, whatever the prop says.
+
+Media the browser is playing itself — a native source, or HLS on the browser's
+own engine — puts the selected track back into the browser's hands, so the
+browser draws the captions and the state reads `native` for as long as a track
+is selected. Vimeo hands rendering to its own player and the state reads
+`provider`. Where a provider has no second surface to hand the cues to, the
+request lands without changing anything and the state keeps reporting whatever
+is really drawing: an hls.js engine parses the cues itself and stays `custom`,
+and a provider that paints captions inside its own frame is already `provider`
+however the prop is set. `unavailable` is a source with no caption track to
+draw at all.
+
 Optional stylesheet with the default look:
 
 <!-- example:ignore one import line; the theme.css subpath export and its presence in the tarball are gated by test/theme.test.ts -->
@@ -198,6 +217,75 @@ doing nothing rather than restarting or throwing. Calling it moves the root to
 straight after resolves `{ ok: false, reason: 'not-ready' }` and is dropped
 rather than queued — nothing is replayed here either — so that pair costs
 exactly one play once the provider attaches.
+
+## Volume, muting and playback rate
+
+Each of the three playback preferences is either yours to hold or the player's.
+`muted`, `volume` and `playbackRate` are the controlled props: pass one and the
+player is pinned to that value, and moving it is yours to do. `defaultMuted`,
+`defaultVolume` and `defaultPlaybackRate` are the uncontrolled form — a
+starting value the player then owns, which is what opening muted, or opening
+quiet, costs when you have no reason to hold the state yourself.
+
+| uncontrolled          | controlled     | starting value |
+| --------------------- | -------------- | -------------- |
+| `defaultMuted`        | `muted`        | `false`        |
+| `defaultVolume`       | `volume`       | `1`            |
+| `defaultPlaybackRate` | `playbackRate` | `1`            |
+
+Each row is decided on its own, so a player can be controlled on one preference
+and uncontrolled on another. Within a row the controlled prop wins outright
+wherever it holds a value: the `default*` beside it is never consulted, and it
+is not a fallback for a controlled prop that is momentarily `undefined`, since
+an `undefined` there is the whole row going uncontrolled.
+
+A `default*` is read on the first render and never again, the same as React's
+own uncontrolled inputs. What it seeds is the first media that attaches; from
+there the value the provider last confirmed is what carries forward, through a
+source change and through a provider re-attach, rather than the default being
+applied a second time. Handing a controlled prop back likewise leaves the
+player on the value it currently holds rather than returning it to the default.
+A volume is clamped into `0`–`1`, and a volume that is not finite, or a
+playback rate that is not finite and above zero, is not applied at all.
+
+`onMutedChange`, `onVolumeChange` and `onPlaybackRateChange` report the value
+the provider confirmed rather than the one that was asked for, which is why
+they are worth reading even where you issued the change yourself. They fire
+whatever moved the player — a bundled control, a `usePlayerActions` or
+`PlayerHandle` command, the provider's own chrome under `controls`, the
+platform moving the media by itself. The one change they do not report is the
+one `Player.Root` issued to satisfy a controlled prop, so a controlled player
+is never called back with the value it was just handed; the starting value is
+not announced either, and the first report is the first departure from it.
+
+That makes them the other half of a controlled player. A change arriving from
+anywhere but the prop is reported and then reconciled back to the prop's value,
+so a controlled player whose callback updates no state snaps its viewer back
+every time they touch the control. Under the uncontrolled form the callback
+observes only — the player keeps the new value with or without it. All three
+are read through a ref as `Player.Root` renders, so an inline arrow function
+re-subscribes nothing.
+
+## Media Session
+
+`Player.Root` binds itself to the browser's Media Session, so a player composed
+from these primitives reaches the platform's own media surface — lock screen,
+notification shade, hardware keys — without a consumer calling anything.
+`mediaMetadata` is what it publishes there: an optional
+`{ title, artist, album, artwork }`, where `artwork` is a list of
+`{ src, sizes?, type? }`. Nothing is read off the source to fill it, so passing
+none publishes none rather than a guess, and changing the prop on a mounted
+player replaces what that player publishes. Where the browser exposes no
+`navigator.mediaSession` there is nothing to bind and the prop does nothing.
+
+That surface is shared by every player on the page, and the arbitration over
+it — which root owns it, when ownership moves, which of the platform's actions
+are routed back into playback, and what becomes of an artwork `src` the URL
+allowlist refuses — belongs to `bindMediaSession` and is documented under
+[Media Session](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#media-session)
+in `@playdeck/core`. `Player.Root` makes that call for you, and `mediaMetadata`
+is both its seed and its setter; what the platform shows is still whatever the
+root owning the surface published last.
 
 ## Exports
 
