@@ -247,8 +247,10 @@ carries no state of its own.
 Calling one past its gate is answered rather than thrown, and the
 `CommandResult` says which gate it met. `not-ready` is a command that arrived
 before a provider was attached and ready to take it. `unsupported` is the active
-provider having no such command to give — picture-in-picture on the YouTube and
-Wistia embeds, an AirPlay picker on any engine but WebKit. `blocked` is a
+provider having no such command to give: an embed exposes only what its own SDK
+offers, so some wire no picture-in-picture at all, and the AirPlay picker is
+wired only by the adapters that drive a media element directly, and then only
+where that element exposes the picker. `blocked` is a
 permissions policy or a media-element attribute refusing it, and carries the
 `PlayerError` that names which. So the capability answers whether to offer a
 control, and the result answers what became of a command once it was issued.

@@ -271,11 +271,10 @@ export const named = textTrackLabel('Commentary', 'en'); // 'Commentary'
 
 ## Origins and refusals
 
-Every command carries an origin. The ones a viewer performs directly — play,
-pause and seek — take one explicitly through `playWithOrigin`,
-`pauseWithOrigin`, `seekToWithOrigin` and `seekByWithOrigin`, while the
-untagged `play()`, `pause()`, `seekTo()` and `seekBy()` pass `'api'` on the
-caller's behalf. The controls Playdeck ships tag what a person did as `'user'`,
+Every command carries an origin. The ones a viewer performs directly — starting,
+stopping and moving through playback — take one explicitly through the
+`*WithOrigin` entry points, while their untagged counterparts pass `'api'` on
+the caller's behalf. The controls Playdeck ships tag what a person did as `'user'`,
 and autoplay's own attempt is tagged `'autoplay'`. An origin is not
 bookkeeping: it is what separates the case these fields exist for — the viewer
 asked for something and nothing happened — from a programmatic call nobody was
@@ -323,8 +322,8 @@ you. `reason` is the part to branch on, and the copy is yours to write.
 
 `refusedPlay` sits beside `autoplay` rather than folded into it, and it
 replaces neither `'blocked'` nor `'failed'`: `autoplay` reports the autoplay
-machine, whose `'attempting'`, `'suppressed'` and `'started'` members are
-states no record of a refusal could carry, while this reports the command. An
+machine, and most of what it reports is progress through an attempt rather
+than any refusal at all, while this reports the command. An
 autoplay refused by policy therefore appears in both, and `origin: 'autoplay'`
 is what says which one it was. Ask this field about the refusal, and `autoplay`
 about autoplay.
@@ -334,7 +333,7 @@ about autoplay.
 `PlayerState.refusedCommand` is the general half of the same idea: the
 `PlayerCommand` that was turned down, the origin it carried, and a `reason`
 that is the literal `'not-ready'`. It answers "was anything I asked for refused
-before there was anything to ask it of" for every command a consumer can issue,
+before there was anything to ask it of" for every command in `PlayerCommand`,
 in one field rather than a slot per command, so nobody has to OR them together
 — the assembly `refusedPlay` exists to prevent. The window it describes is real
 for a consumer rather than a formality: a control that renders operable before
@@ -355,10 +354,17 @@ clearing rule that would keep this a condition. `unsupported` is already
 published per command as `PlayerCapabilities`, and a `blocked` or a
 `provider-error` on a `setVolume` is a moment with no natural end.
 
-`origin` is nullable here, and its `null` is not `seekOrigin`'s. Only play,
-pause and seek have `*WithOrigin` entry points; every other command shares one
-path with nothing to tag it with and carries `null`. Here that means the origin
-was never recorded — not that nobody asked.
+`origin` is nullable here, and its `null` is not `seekOrigin`'s. Only the
+commands with a `*WithOrigin` entry point can carry one; every other command
+shares one path with nothing to tag it with and carries `null`. Here that means
+the origin was never recorded — not that nobody asked.
+
+`retry` is the one command a consumer can issue that this field never reports,
+and it is left out of `PlayerCommand` to keep it that way. It can be refused
+before a provider attaches and again when the provider changes underneath an
+attempt already in flight; publishing the first while the second stayed silent
+would make the field's absence mean two different things. Neither site
+publishes, so a refused `retry` is always read from its own `CommandResult`.
 
 A play refused before a provider attaches fills this field _and_
 `refusedPlay`, deliberately, the way an autoplay refused by policy fills both
@@ -575,9 +581,9 @@ export const closed = !chaptersEqual(
 `PlayerState.textTracks` is what the provider found; `selectedTextTrackId` is
 which of them is on. A captions menu needs both, the way a quality menu needs
 `qualities` and `selectedQualityId`: the collection fills the rows and the
-selection checks one of them. `capabilities.selectTextTrack` is the third
-answer, and it is the one to read first — while it is `unknown` a menu renders
-nothing rather than something disabled.
+selection checks one of them. `capabilities.selectTextTrack` answers whether a
+selection can be made at all, and it is the one to read first — while it is
+`unknown` a menu renders nothing rather than something disabled.
 
 `null` there is a selection and not the absence of one: it is captions off,
 which is what `selectTextTrack(null)` asks for, and it is the value a snapshot
