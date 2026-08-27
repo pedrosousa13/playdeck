@@ -142,6 +142,33 @@ export const CueText = () => {
 changes. `Player.Root` also accepts a `ref`, which receives a `PlayerHandle`
 carrying the same commands plus `getState`, `subscribe` and `on`.
 
+Every command on either surface resolves a `CommandResult` — `{ ok: true }`, or
+`{ ok: false, reason }` with an optional `PlayerError` behind it. That result is
+the only place the answer lives, because nothing is queued and replayed once the
+player catches up: a `reason` of `not-ready` means the call did nothing and the
+caller has to ask again, which is what `whenReady` is for. The `reason`
+vocabulary and the capability contract are shared with the controller and are
+documented in
+[@playdeck/core](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md).
+
+`seekBy` moves the playhead by an offset in seconds — negative back, positive
+forward. It is not sugar for `seekTo(currentTime + offset)`: the offset is added
+to the position the provider itself holds when the command reaches it, so it
+does not inherit the lag between a provider's real position and the
+`currentTime` a render last read. Every provider clamps the target into the same
+window `seekTo` lands in, so overshooting either end of the media is not itself
+a failure — the seek lands on the boundary. An offset that is not finite is a
+failure, answered `provider-error` without the playhead moving. This is the
+command behind `Controls`' arrow, `j`/`l` and `PageUp`/`PageDown` bindings, and
+behind `Gestures`' `seekOffset`.
+
+`toggleMuted` reads the muted state the player is in and issues `mute` or
+`unmute` accordingly, resolving whatever that one command resolved — so a `false`
+result is the mute or the unmute failing, not the toggle. It writes no volume of
+its own, which is why unmuting a player whose published volume is `0` leaves it
+silent; the arrow-key handling described under `Controls` is a deliberate
+exception layered on top, not what the command does.
+
 ## Exports
 
 ### Structure
@@ -197,6 +224,36 @@ export const poster = Player.normalizePoster('/poster.jpg');
 
 `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time`,
 `FullscreenButton`, `PipButton`, `AirPlayButton`, `CaptionsButton`, `Controls`.
+
+#### Presentation and casting
+
+`FullscreenButton`, `PipButton` and `AirPlayButton` each read one entry of
+`state.capabilities` — `fullscreen`, `pictureInPicture` and `airPlay` — and
+render only while that entry says `available`. An `unknown` entry renders
+nothing either: a capability still being decided is not a reason to put a
+control on screen and then withdraw it.
+
+Driving those presentations without the buttons means doing that gate yourself.
+The commands are on `PlayerHandle` and on `usePlayerActions`, as the request and
+exit pairs `requestFullscreen`/`exitFullscreen` and
+`requestPictureInPicture`/`exitPictureInPicture`. The built-in buttons choose
+which half of a pair to send from `state.fullscreen` and
+`state.pictureInPicture`, and that choice is exactly what you take over.
+`showAirPlayPicker` has no exit twin and is not a toggle: it opens the
+platform's own route picker, and which device the viewer picked — or whether
+they picked one at all — is never reported back, which is why `AirPlayButton`
+carries no state of its own.
+
+Calling one past its gate is answered rather than thrown, and the
+`CommandResult` says which gate it met. `not-ready` is a command that arrived
+before a provider was attached and ready to take it. `unsupported` is the active
+provider having no such command to give: an embed exposes only what its own SDK
+offers, so some wire no picture-in-picture at all, and the AirPlay picker is
+wired only by the adapters that drive a media element directly, and then only
+where that element exposes the picker. `blocked` is a
+permissions policy or a media-element attribute refusing it, and carries the
+`PlayerError` that names which. So the capability answers whether to offer a
+control, and the result answers what became of a command once it was issued.
 
 #### Accessible names
 
@@ -371,6 +428,12 @@ Every component has a matching props type (`RootProps`, `MediaProps`,
 `PlayerActivationProps`, `PosterInput`, `ResponsivePoster`, `NormalizedPoster`,
 `ErrorDisplayRenderProps`, `ShortcutAction`, `ShortcutBindings`. The icons below
 are the exception, and need no import: each takes `SVGProps<SVGSVGElement>`.
+
+`PlayerHandle` is what a `ref` on `Player.Root` receives, and `PlayerActions` is
+that same type with the read side (`getState`, `subscribe`, `on`) removed — it
+is what `usePlayerActions` returns. Both are derived from the one action list
+rather than written out twice, so a command reachable through the hook is
+reachable through the ref and answers the same way.
 
 ### Icons
 

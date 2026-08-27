@@ -209,6 +209,19 @@ and for every `src` inside an explicit source object alike. So a result's
 `source` may be a normalised copy of the object passed in; its `input` is
 always the caller's own object.
 
+An `HlsSource`'s `engine` is a request rather than a report. `'auto'`, which is
+also what an omitted `engine` means, asks for whichever engine the browser can
+serve; `'native'` and `'hls.js'` force one and fail the attach where the
+browser cannot provide it. `PlayerState.hlsEngine` is the answer: the HLS provider
+publishes it as it attaches, `'native'` where the browser plays the manifest
+itself and `'hls.js'` where Media Source Extensions carry it. It is `null`
+before that attach, `null` where engine selection failed and the state went to
+`error` instead, and `null` under every other provider — no other adapter
+publishes it — so a control reading it is asking which engine is playing this
+manifest, never whether the source is HLS. Attaching, swapping or detaching a
+provider rebuilds the snapshot from `createInitialPlayerState()`, which puts it
+back to `null` with everything else.
+
 ## Starting state
 
 `createInitialPlayerState()` is the state a controller starts from — what to
@@ -255,6 +268,152 @@ export const named = textTrackLabel('Commentary', 'en'); // 'Commentary'
 ```
 
 <!-- /example -->
+
+## Origins and refusals
+
+Every command carries an origin. The ones a viewer performs directly — starting,
+stopping and moving through playback — take one explicitly through the
+`*WithOrigin` entry points, while their untagged counterparts pass `'api'` on
+the caller's behalf. The controls Playdeck ships tag what a person did as `'user'`,
+and autoplay's own attempt is tagged `'autoplay'`. An origin is not
+bookkeeping: it is what separates the case these fields exist for — the viewer
+asked for something and nothing happened — from a programmatic call nobody was
+watching.
+
+### Where a seek came from
+
+`PlayerState.seekOrigin` is where the seek in flight came from, and `null`
+whenever `seeking` is false: a seek that is not happening has no provenance.
+`seeking` keeps its plain boolean meaning, and this is the additive field
+beside it. A seek Playdeck was asked for is labelled with the origin its
+command carried, and a seek nobody asked for keeps the `'provider'` the adapter
+stamps it with. A seek already under way keeps the origin it started with, so a
+patch that merely re-reports `seeking` never relabels it (#186).
+
+### A play that was refused
+
+A refused play must not be silent. The caller receives a `CommandResult` and
+can act on it, but the party that presents a refusal is rarely the party that
+issued the command: a button hands the result nowhere, and the surface that
+would say something about it never sees one. A refusal that lived only in a
+returned promise would therefore leave a control that looked actionable, did
+nothing, and left no record anywhere that the viewer had asked.
+`PlayerState.refusedPlay` is that record: the `PlayerEventOrigin` the command
+carried, and the `CommandFailureReason` off the result unchanged, so a policy
+refusal is not read as a provider fault.
+
+It states a condition rather than logging a moment. What it says is that the
+last play command issued against the media attached now was refused and nothing
+has played since, so it is cleared by the patch that confirms playback and by
+the provider changing, and by nothing else — a pause, a seek, a stall or an
+error does not make the refusal untrue. Commands settle out of order, and the
+condition holds through that: a refusal reported by a play that a later play
+replaced, or that playback was confirmed after, is never published at all, nor
+is one refused while playback is already `'playing'`, which would say nothing
+is playing while something is. The caller still receives its `CommandResult`
+unchanged in every one of those cases; it is this field that declines to state
+a thing that has stopped being true (#361).
+
+The `PlayerError` such a result may also carry is deliberately absent here. The
+state has one error slot, and a refused play must not take it: `isNotice` and
+the bundled error surface present whatever is in that slot, and whether a
+refusal is worth covering the player with is a decision this library leaves to
+you. `reason` is the part to branch on, and the copy is yours to write.
+
+`refusedPlay` sits beside `autoplay` rather than folded into it, and it
+replaces neither `'blocked'` nor `'failed'`: `autoplay` reports the autoplay
+machine, and most of what it reports is progress through an attempt rather
+than any refusal at all, while this reports the command. An
+autoplay refused by policy therefore appears in both, and `origin: 'autoplay'`
+is what says which one it was. Ask this field about the refusal, and `autoplay`
+about autoplay.
+
+### A command refused before a provider attached
+
+`PlayerState.refusedCommand` is the general half of the same idea: the
+`PlayerCommand` that was turned down, the origin it carried, and a `reason`
+that is the literal `'not-ready'`. It answers "was anything I asked for refused
+before there was anything to ask it of" for every command in `PlayerCommand`,
+in one field rather than a slot per command, so nobody has to OR them together
+— the assembly `refusedPlay` exists to prevent. The window it describes is real
+for a consumer rather than a formality: a control that renders operable before
+a provider is attached will have its command refused, and without this field
+the caller is the only party that hears of it.
+
+Its lifetime is the pre-attach window, and `setProvider` is the whole of its
+clearing rule. An attach withdraws the refusal in the same synchronous update
+that publishes `activation: 'loading-provider'`, so no snapshot ever reports a
+provider in hand beside a refusal saying there was none; a swap and a detach
+clear it in the same place, because the state it was published into is being
+rebuilt either way — which means a detach ends the refusal without a provider
+having arrived. Nothing outside `setProvider` clears it: a later refusal
+replaces it, and a refusal nothing followed simply stands.
+
+`reason` admits no other `CommandFailureReason`, because no other one has a
+clearing rule that would keep this a condition. `unsupported` is already
+published per command as `PlayerCapabilities`, and a `blocked` or a
+`provider-error` on a `setVolume` is a moment with no natural end.
+
+`origin` is nullable here, and its `null` is not `seekOrigin`'s. Only the
+commands with a `*WithOrigin` entry point can carry one; every other command
+shares one path with nothing to tag it with and carries `null`. Here that means
+the origin was never recorded — not that nobody asked.
+
+`retry` is the one command a consumer can issue that this field never reports,
+and it is left out of `PlayerCommand` to keep it that way. It can be refused
+before a provider attaches and again when the provider changes underneath an
+attempt already in flight; publishing the first while the second stayed silent
+would make the field's absence mean two different things. Neither site
+publishes, so a refused `retry` is always read from its own `CommandResult`.
+
+A play refused before a provider attaches fills this field _and_
+`refusedPlay`, deliberately, the way an autoplay refused by policy fills both
+`refusedPlay` and `autoplay`. The two do not end together: `refusedPlay`
+carries any reason and is cleared by confirmed playback, this one carries a
+single reason and is cleared by `setProvider`. Ask this field which command,
+and `refusedPlay` about the play (#484).
+
+## Autoplay
+
+`configureAutoplay(mode, options)` takes an `AutoplayMode`, and the mode is a
+policy for one question: what should happen when the browser refuses an audible
+attempt?
+
+| `AutoplayMode`         | What it attempts                                                                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `false`                | Nothing, and `PlayerState.autoplay` stays `'idle'`.                                                                                           |
+| `'muted'`              | A muted attempt. Muting is part of the mode, so `controlledMuted: false` beside it is a configuration conflict rather than a case to resolve. |
+| `'audible'`            | An audible attempt. A refusal is reported as it is, unretried.                                                                                |
+| `'audible-then-muted'` | An audible attempt, and a muted retry of it where — and only where — the browser refused by policy (`reason: 'blocked'`).                     |
+
+`'muted'` and `'audible'` keep their strict meanings: neither ever changes what
+the other does. The retry belongs to `'audible-then-muted'` alone, it is issued
+at most once, and it is issued only from a policy refusal — retrying a decode
+error or a provider fault muted would change nothing about why it failed
+(#306). Where the consumer controls `muted` and has set it to `false`, the
+recovery is suppressed rather than performed: an audible attempt under a
+controlled unmuted state is legitimate, and muting to recover would override a
+value the consumer owns, which this library never does. The attempt ends
+`'blocked'` there, exactly as `'audible'` would. Any mode may also go
+unattempted altogether, reporting `autoplay: 'suppressed'`, where the viewer
+matches `prefers-reduced-motion: reduce` and
+`AutoplayConfigurationOptions.ignoreReducedMotion` was not set.
+
+`PlayerState.autoplayRecovered` is how a consumer detects that the recovery is
+what played. It is true only where `autoplay` is `'started'` because an audible
+attempt was refused by policy and the muted retry is what started playback, and
+false everywhere else — the in-flight retry included, since the recovery is
+recorded once playback has started and not when it is attempted. That is what
+tells a player muted because a consumer asked for a muted autoplay apart from
+one muted because the browser would have it no other way, and it is the state
+to offer an unmute affordance on: the viewer never chose this.
+
+The controller derives `autoplayRecovered` and never takes it from a provider
+patch, for the reason `refusedPlay` is filled from the controller's own record:
+`ProviderStatePatch` is a `Partial<PlayerState>`, so the key is within every
+patch's reach, and a provider has no way to know an attempt before this one was
+refused. Deriving it here is what stops an adapter manufacturing a recovery
+that never happened, or erasing one that did.
 
 ## Time boundary
 
@@ -416,6 +575,30 @@ export const closed = !chaptersEqual(
 ```
 
 <!-- /example -->
+
+## Text track selection
+
+`PlayerState.textTracks` is what the provider found; `selectedTextTrackId` is
+which of them is on. A captions menu needs both, the way a quality menu needs
+`qualities` and `selectedQualityId`: the collection fills the rows and the
+selection checks one of them. `capabilities.selectTextTrack` answers whether a
+selection can be made at all, and it is the one to read first — while it is
+`unknown` a menu renders nothing rather than something disabled.
+
+`null` there is a selection and not the absence of one: it is captions off,
+which is what `selectTextTrack(null)` asks for, and it is the value a snapshot
+starts from. Core publishes what the provider reports and derives nothing of
+its own, so the field moves when a selection is made, when a provider's own
+caption UI moves it, and when the track it named stops existing — the native
+and hls.js caption subsystems hold a chosen selection while its track survives
+a re-discovery and drop it to `null` when it does not, so a rediscovered track
+list cannot put a default track back over a viewer who turned captions off.
+Attaching, swapping or detaching a provider rebuilds the snapshot and resets
+this with everything else.
+
+Which track is selected and who draws its cues are separate questions:
+`captionRendering` answers the second, and where a provider paints its own
+captions there is nothing for a consumer to draw.
 
 ## Notifying subscribers
 
