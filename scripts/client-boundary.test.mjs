@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath, URL } from 'node:url';
 import { clientBoundaryProblems } from './client-boundary.mjs';
+import { publishablePackages } from './workspace-packages.mjs';
+
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 // The manifests are the shapes these packages actually publish, trimmed to the
 // fields the rule reads: a React package with the ESM-only guard's two nested
@@ -138,4 +144,38 @@ test('reports an exports map with no import entry at all', () => {
       'names react as a peer dependency, and its exports "." has no import entry for the directive to sit on'
     ]
   );
+});
+
+// The rule scopes itself, which is what makes it silently disableable: drop
+// `peerDependencies.react` from a manifest and every case above still passes
+// while the real package stops being checked at all. So this asserts the
+// scoping catches something, not only that nothing it caught is wrong. The
+// ESM-only guard's own suite holds its rule against the real manifests for the
+// same reason.
+test('the rule covers a package this repository actually publishes', () => {
+  const covered = publishablePackages(repoRoot).filter(
+    (pkg) =>
+      JSON.parse(readFileSync(join(pkg.path, 'package.json'), 'utf8'))
+        .peerDependencies?.react !== undefined
+  );
+  assert.notDeepEqual(covered, []);
+});
+
+test('every publishable package satisfies the rule', () => {
+  for (const pkg of publishablePackages(repoRoot)) {
+    const manifest = JSON.parse(
+      readFileSync(join(pkg.path, 'package.json'), 'utf8')
+    );
+    assert.deepEqual(
+      clientBoundaryProblems(manifest, (entry) => {
+        try {
+          return readFileSync(join(pkg.path, entry), 'utf8');
+        } catch {
+          return undefined;
+        }
+      }),
+      [],
+      pkg.name
+    );
+  }
 });

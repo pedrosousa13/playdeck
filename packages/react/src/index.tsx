@@ -1,10 +1,21 @@
-// Every value this entry exports is built on hooks, context and refs, so the
-// client boundary is the package's to declare rather than the caller's to
+// The primitives this entry exports are built on hooks, context and refs, so
+// the client boundary is the package's to declare rather than the caller's to
 // place: a bundler resolving this module into a server graph has nothing else
 // to read it from, and what it reports without the directive names a React API
 // such as `createContext` or `useSyncExternalStore` inside a file the caller
-// cannot edit. It sits on the entry alone because the entry is the only module
-// `exports` exposes, and the bundle it produces carries the directive to the
+// cannot edit.
+//
+// The directive is the whole entry's, so it also crosses the icons and the
+// handful of plain helpers beside them, which take no hook and would render on
+// a server perfectly well. That is a cost accepted rather than one overlooked:
+// splitting them off would mean a second entry point and a second thing for a
+// consumer to know, to save shipping a few stateless SVG components to a client
+// that is already loading the player they decorate. Core carries no directive
+// for the opposite reason -- nothing there touches React at all, so a boundary
+// would buy nothing and would stop server code calling in.
+//
+// It sits on the entry rather than on each module because that is what the
+// build reads, and the bundle it produces carries the directive to the
 // top of the chunk. That last part is a property of the build rather than of
 // this file, so the directive is read back out of the packed tarball by
 // scripts/verify-packaging.mjs, against the rule scripts/client-boundary.mjs

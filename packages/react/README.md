@@ -17,7 +17,7 @@ This package's entry carries a `'use client'` directive, so a React Server
 Component can import these primitives and render them directly, with no wrapper
 of your own to hold the boundary. It is still a boundary: the props a server
 component hands across it are serialised, so a function prop — a `renderCue`, an
-`onPlay` handler — belongs on a component of yours that carries the directive
+`onVolumeChange` — belongs on a component of yours that carries the directive
 itself.
 
 `@playdeck/core` and the provider packages import no React API and carry no

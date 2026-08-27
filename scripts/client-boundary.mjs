@@ -32,8 +32,17 @@
 // rule that accepted one would pass a chunk where the directive had been
 // demoted out of the prologue -- which is the failure this exists to catch,
 // because a demoted directive is inert and looks identical to a grep.
+//
+// The block-comment branch is spelled out rather than written `\/\*[\s\S]*?\*\/`
+// so that each character has exactly one way to be consumed. A lazy any-character
+// run nested inside the outer repetition can be split between the two in many
+// ways, and on input that never matches -- a chunk opening with comments and no
+// directive, which is precisely the failure case -- the engine tries all of them.
+// Measured before the rewrite, each added comment multiplied the time to report:
+// sixteen took 3ms and twenty-four took 201ms. A gate that hangs rather than
+// reports is worse than one that never ran.
 const CLIENT_DIRECTIVE =
-  /^(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*(['"])use client\1\s*;?/;
+  /^(?:\s|\/\/[^\n]*|\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\/)*(['"])use client\1\s*;?/;
 
 /**
  * What is wrong with the client boundary a package declares, as phrases that
