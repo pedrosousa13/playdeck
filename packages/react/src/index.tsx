@@ -143,10 +143,30 @@ export { Gestures } from './gestures.js';
 
 export type { GesturesProps } from './gestures.js';
 
-export * from './icons.js';
+// Named rather than re-exported wholesale. `export * from './icons.js'`
+// delegated this package's public surface to whatever that module happened to
+// export, so a helper added there for one icon's use would have become public
+// API without anyone choosing it -- and once the API is frozen, an export
+// published by accident is withdrawn only by the next major (#512). Naming them
+// makes each one a decision. The price is that adding an icon touches this file
+// too, which is the same decision seen from the other side.
+export {
+  AirPlayIcon,
+  CaptionsIcon,
+  CheckIcon,
+  FullscreenEnterIcon,
+  FullscreenExitIcon,
+  MutedIcon,
+  PauseIcon,
+  PipEnterIcon,
+  PipExitIcon,
+  PlayIcon,
+  ReplayIcon,
+  SeekBackwardIcon,
+  SeekForwardIcon,
+  SettingsIcon,
+  VolumeHighIcon,
+  VolumeLowIcon
+} from './icons.js';
 
-// Named here as well as reached by the wildcard above, so that the entry's type
-// surface reads the same way for the icons as for every other group in this
-// file: a consumer scanning for what they can import finds it without opening
-// the icons module.
 export type { IconProps } from './icons.js';
