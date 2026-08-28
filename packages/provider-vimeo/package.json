@@ -1,6 +1,6 @@
 {
   "name": "@playdeck/provider-vimeo",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Vimeo player SDK provider for Playdeck.",
   "keywords": [
     "media",

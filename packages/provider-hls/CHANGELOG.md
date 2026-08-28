@@ -1,5 +1,211 @@
 # @playdeck/provider-hls
 
+## 1.0.0
+
+### Major Changes
+
+- Playdeck is 1.0.0, and the public API is frozen: anything reachable from a
+  package entry is a contract, and changing it costs a major.
+
+  **What the major is for.** Not a finished feature list. It is that the gaps
+  between what this library reported and what was true have been closed rather
+  than documented around:
+
+  - A capability answers `available`, `unknown` or `unavailable` with a reason
+    rather than guessing, and a control whose capability has not resolved is
+    absent rather than disabled-but-visible.
+  - A consumer value a security control refuses is published as a notice rather
+    than dropped in silence.
+  - An embedded provider that cannot attach reaches `error` within a stated
+    deadline rather than waiting forever. The native and hls.js engines carry no
+    such deadline and do not need one: they answer to the media element's own
+    error event and to hls.js's, which report a failure to load without being
+    asked.
+  - A `ref` on `Player.Root` hands back the members its type declares. One hatch
+    reaches past it, keyed by a well-known symbol and used by this package's own
+    tests; it is in no export map and is not part of the frozen surface, but a
+    consumer who goes looking can reach it.
+
+  **Upgrading from 0.2.0 removes nothing.** Measured rather than assumed: every
+  name each package exported at its published version — values and types together,
+  read off the shipped declarations — is still exported here, and names were only
+  added. That is a statement about names and not about every type's shape, so read
+  the entries below for what individual releases changed; several of them alter
+  what an existing call reports.
+
+  `@playdeck/provider-hls` moves from `0.1.1` to join the others. The publishable
+  packages now version as one, so a single number describes the whole API a
+  consumer installs together.
+
+  **Two unions widened, which is breaking for an exhaustive switch.**
+  `SourceDetectionFailureReason` gains `unsupported-format`, and `Availability`
+  gains `provider-build`. A `switch` with no branch for the new member falls
+  through where it used to match.
+
+  **What the freeze is over.** React 19 only, pure ESM, named exports, the stated
+  browser floor, headless primitives that import no CSS, and providers whose code
+  loads only when the active source needs it.
+
+### Minor Changes
+
+- 083df66: A CommonJS consumer is now refused by their own type-checker instead of by Node
+  at runtime (#458). Being ESM-only is unchanged and stays unchanged; what changes
+  is when a consumer who cannot use these packages finds out.
+
+  **What was wrong.** The export map answered `types` and `import` and nothing
+  else. A consumer whose project is CommonJS, on `moduleResolution: nodenext`,
+  resolved the `types` condition, got `tsc` exit 0 with zero diagnostics, and then
+  got this from Node:
+
+  ```
+  Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: No "exports" main defined in
+    .../node_modules/@playdeck/react/package.json
+  ```
+
+  TypeScript used to report that disagreement and stopped, because Node learned to
+  `require` an ES module — but `require(esm)` still needs the `require` condition
+  to resolve to something, and an ESM-only map had nothing to answer it with. So
+  the diagnostic went away while the failure did not. An intentional constraint a
+  consumer meets at build time is a supported boundary; one that passes typecheck
+  and fails at `node` is a trap.
+
+  **What each package now carries.** Two files, and a `require` condition that
+  points at them:
+
+  ```json
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./esm-only.d.cts", "default": "./esm-only.cjs" }
+    }
+  }
+  ```
+
+  `esm-only.d.cts` is deliberately not a module — it declares nothing and exports
+  nothing — so the consumer's own import statement fails to compile:
+
+  ```
+  app.tsx(1,25): error TS2306: File '.../node_modules/@playdeck/react/esm-only.d.cts'
+    is not a module.
+  ```
+
+  `esm-only.cjs` throws on load, so a consumer who gets past their build is
+  refused by name rather than by a report of a missing file:
+
+  ```
+  @playdeck/react is ESM only and cannot be loaded with require(). Import it from
+  an ES module, or reach it with a dynamic import().
+  ```
+
+  **Nothing gained a second implementation.** The guard refuses; it never
+  implements. That is the point of it being a throw and an empty declaration
+  rather than a shim: no bundler configuration can select it in place of the real
+  ESM entry and get something that runs, so the ESM-only guarantee is not weakened
+  by having answered `require` at all. Each package's `sideEffects` now names
+  `./esm-only.cjs` for the same reason — a blanket `"sideEffects": false` would
+  let a bundler that took the `require` condition drop a module it saw no
+  bindings taken from, and hand the consumer an empty namespace instead of the
+  refusal. `dist` is unaffected and still tree-shakes.
+
+  **The types sit inside each condition rather than above both.** Conditions match
+  in the order the map writes them, and a `types` key at the top of the `.` entry
+  matches a CommonJS consumer before `require` ever does — which is the silent
+  pass, restored. The nesting is what lets the two consumers be told different
+  things.
+
+  **Why `minor`, and what it breaks.** No API, no type and no rendered output
+  changed, and `dist` is byte-identical — this is the export map and two files
+  that are never imported. Nothing that ran stops running, because the builds this
+  turns red were already producing code that Node refused.
+
+  It is a `minor` rather than a `patch` because a build going red on upgrade is a
+  break a consumer should be able to see in the version, whatever the state of the
+  code underneath it. A CommonJS consumer type-checking code they never executed
+  gets `tsc` exit 0 before the upgrade and a hard failure after it; calling that a
+  patch asks them to discover the boundary from their own CI. While the major is
+  `0`, `minor` is the slot a break belongs in.
+
+  **What is unaffected, verified rather than assumed.** The three resolution modes
+  that worked still do — `bundler`, `node16` and `nodenext` on a `"type":"module"`
+  consumer, each type-checked against an installed package. `node10` still fails
+  as it always did, naming the settings that would work; export maps are invisible
+  to it, so nothing here could have reached it.
+
+- 3896f17: A light hls.js build reports the captions it cannot show, and a subtitle-less stream stops claiming to be checking
+
+  Two capability bugs on the hls.js engine, both of them `selectTextTrack`
+  reporting `unknown` / `provider-check` for the whole session — the value that
+  means "still checking" — long after the answer was known.
+
+  **A stream with no subtitles.** The capability was only ever written by the
+  `SUBTITLE_TRACKS_UPDATED` handler, and real hls.js does not fire that event when
+  a manifest declares no subtitle renditions at all. So an ordinary subtitle-less
+  HLS stream never settled. The unit test that covered the `unavailable` / `source`
+  branch fired the event with an empty array by hand, which hls.js never does, so
+  the gap did not show. It is now settled from `MANIFEST_PARSED`, which fires for
+  every manifest.
+
+  **A light hls.js build.** `hls.js/light`, reachable through `loadHls`, saves
+  about 53 KB gzip by compiling out the subtitle controllers along with alternate
+  audio, CMCD and EME. It still parses subtitle renditions and reports them once,
+  then never emits `SUBTITLE_TRACKS_UPDATED`, so the tracks could be counted and
+  never selected. That combination now publishes:
+
+  ```ts
+  capabilities.selectTextTrack; // { status: 'unavailable', reason: 'provider-build' }
+  ```
+
+  `Availability` gains the `provider-build` reason for it. Neither neighbour was
+  true: the provider is able, so `provider` would be wrong, and the media does
+  carry subtitles, so `source` would be wrong. Widening the union is breaking for
+  a consumer switching exhaustively on the reason -- a build this applies to used
+  to report a reason from the old set, and now reports one a switch may have no
+  branch for.
+
+  The build is told apart by reading `Hls.DefaultConfig` for the controllers the
+  light build omits — synchronous, settled before anything loads, and no deadline.
+  A module exposing no `DefaultConfig` is read as the full build, so an
+  unrecognised one behaves exactly as it did before.
+
+### Patch Changes
+
+- a978938: Every package now ships its own `CHANGELOG.md` (#460). The file existed in the
+  repository all along, but `files` named `dist` and nothing else, and a changelog
+  is not one of the names npm includes regardless — unlike the README, the LICENSE
+  and the manifest. So an installed `node_modules/@playdeck/react` carried no
+  account of what had changed, and a consumer upgrading between two published
+  versions had nowhere local to read one.
+
+  This is packaging only. No code, no types and no rendered output changed, and
+  `dist` is byte-identical.
+
+  **It is not free, and the number belongs here rather than in a commit message.**
+  Measured on the 0.2.0 tarballs, packed: `@playdeck/react` 123,391 → 170,286
+  bytes (+38%), `@playdeck/core` 69,941 → 95,793 (+37%), and the seven together
+  408,465 → 549,301 (+34%). None of it is code — a changelog is never imported, so
+  it reaches no bundle and no bundle budget moved — but it is bytes in every
+  install, and it grows with every release. If that becomes the wrong trade the
+  next step is a truncated or per-major changelog, not a return to shipping none.
+
+  Alongside it, and outside the packages: a published version now has a git tag on
+  the remote. One per package, named `@playdeck/core@0.2.0`, so that the tag
+  answering "what shipped as that" carries the name a consumer resolves from the
+  registry, and so that packages publishing nothing are not implied by it. The tags are
+  pushed before the publish rather than after it, so a release that fails halfway
+  still leaves something to diff against. Versions published before this change
+  are deliberately not backfilled.
+
+- Updated dependencies [85e38d1]
+- Updated dependencies [083df66]
+- Updated dependencies [3896f17]
+- Updated dependencies [3896f17]
+- Updated dependencies [ef04afe]
+- Updated dependencies [a978938]
+- Updated dependencies
+- Updated dependencies [636ead7]
+  - @playdeck/core@1.0.0
+  - @playdeck/provider-native@1.0.0
+
 ## 0.1.1
 
 ### Patch Changes

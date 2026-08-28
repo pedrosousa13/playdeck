@@ -1,5 +1,427 @@
 # @playdeck/core
 
+## 1.0.0
+
+### Major Changes
+
+- Playdeck is 1.0.0, and the public API is frozen: anything reachable from a
+  package entry is a contract, and changing it costs a major.
+
+  **What the major is for.** Not a finished feature list. It is that the gaps
+  between what this library reported and what was true have been closed rather
+  than documented around:
+
+  - A capability answers `available`, `unknown` or `unavailable` with a reason
+    rather than guessing, and a control whose capability has not resolved is
+    absent rather than disabled-but-visible.
+  - A consumer value a security control refuses is published as a notice rather
+    than dropped in silence.
+  - An embedded provider that cannot attach reaches `error` within a stated
+    deadline rather than waiting forever. The native and hls.js engines carry no
+    such deadline and do not need one: they answer to the media element's own
+    error event and to hls.js's, which report a failure to load without being
+    asked.
+  - A `ref` on `Player.Root` hands back the members its type declares. One hatch
+    reaches past it, keyed by a well-known symbol and used by this package's own
+    tests; it is in no export map and is not part of the frozen surface, but a
+    consumer who goes looking can reach it.
+
+  **Upgrading from 0.2.0 removes nothing.** Measured rather than assumed: every
+  name each package exported at its published version — values and types together,
+  read off the shipped declarations — is still exported here, and names were only
+  added. That is a statement about names and not about every type's shape, so read
+  the entries below for what individual releases changed; several of them alter
+  what an existing call reports.
+
+  `@playdeck/provider-hls` moves from `0.1.1` to join the others. The publishable
+  packages now version as one, so a single number describes the whole API a
+  consumer installs together.
+
+  **Two unions widened, which is breaking for an exhaustive switch.**
+  `SourceDetectionFailureReason` gains `unsupported-format`, and `Availability`
+  gains `provider-build`. A `switch` with no branch for the new member falls
+  through where it used to match.
+
+  **What the freeze is over.** React 19 only, pure ESM, named exports, the stated
+  browser floor, headless primitives that import no CSS, and providers whose code
+  loads only when the active source needs it.
+
+### Minor Changes
+
+- 85e38d1: A command issued before a provider attaches is now published on
+  `PlayerState.refusedCommand`, and a play refused that way now fills
+  `PlayerState.refusedPlay` as well (#484).
+
+  **What was wrong.** `playWithOrigin` and `pauseWithOrigin` return
+  `{ ok: false, reason: 'not-ready' }` from an early return taken when no provider
+  is attached, and `#seekWithOrigin` and the shared command path do the same. The
+  publication that fills `refusedPlay` lives inside the private method the play
+  early return never reaches, so a pre-attach refusal was produced correctly,
+  returned to the caller correctly, and published nowhere. Several of the controls
+  this package's React bindings ship — the play and mute buttons among them —
+  render enabled and `aria-pressed` from first paint, and every control discards
+  the `CommandResult` it gets, so a viewer who pressed play on a cold page got a
+  control that looked actionable, did nothing, and left no record anywhere that
+  they had asked. A consumer who was already reading `refusedPlay` could not see
+  it either, because the field they would read was never written.
+
+  Not every control is in that state — the seek slider carries `aria-disabled`
+  while it has no window, and the activation button disables itself and swallows
+  its own click while a provider loads — so the gap this closes is a gap in what
+  is _recorded_, for the controls that do stay operable.
+
+  **What is published.** One new field beside `refusedPlay`, not replacing it:
+
+  ```ts
+  export type PlayerCommand =
+    | 'play' | 'pause' | 'seek'
+    | 'mute' | 'unmute' | 'setVolume' | 'setPlaybackRate'
+    | 'selectQuality' | 'selectTextTrack'
+    | 'requestFullscreen' | 'exitFullscreen'
+    | 'requestPictureInPicture' | 'exitPictureInPicture'
+    | 'showAirPlayPicker';
+
+  export type RefusedCommand = {
+    readonly command: PlayerCommand;
+    readonly origin: PlayerEventOrigin | null;
+    readonly reason: 'not-ready';
+  };
+
+  readonly refusedCommand: RefusedCommand | null; // on PlayerState
+  ```
+
+  `PlayerCommand` and `RefusedCommand` are exported from the package entry.
+
+  **One field rather than fourteen.** Eleven of the fourteen commands funnel
+  through a single refusal site, and a consumer asking "was anything I asked for
+  refused" would otherwise OR fourteen slots together — the assembly `refusedPlay`
+  was introduced to prevent (#361). A field rather than an event for the same
+  reason that one settled: a refusal is a moment, but what a consumer presents is
+  a condition, and an event would re-open that.
+
+  **`reason` is the literal `'not-ready'` and nothing else.** No other
+  `CommandFailureReason` has a clearing rule that would keep this a condition
+  rather than a log. `unsupported` is already published per command as
+  `PlayerCapabilities`; a `blocked` or a `provider-error` on a `setVolume` is a
+  moment with no natural end.
+
+  **`origin` is nullable, and its `null` is not `seekOrigin`'s.** Only `play`,
+  `pause` and `seek` have `*WithOrigin` entry points, so the other eleven carry
+  `null`. Here that means the origin was never recorded — not, as on
+  `PlayerState.seekOrigin`, that nothing is in flight. The three that do carry one
+  keep it, because the shipped controls tag their seeks and pauses as `'user'`,
+  and "the viewer scrubbed and nothing happened" is worth telling apart from a
+  programmatic call.
+
+  **Its lifetime is the pre-attach window.** The refusal stands from the moment it
+  is made until a provider attaches, and attach is what withdraws it — in the same
+  synchronous update that publishes `activation: 'loading-provider'`, so no
+  snapshot reports a provider in hand beside a refusal saying there was none. A
+  swap and a detach clear it in that same place, because the state it was
+  published into is rebuilt either way — so a detach ends the refusal with nothing
+  having attached. `setProvider` is the whole of the rule; nothing outside it
+  clears the field.
+
+  **A pre-attach play fills both fields, deliberately.** They do not end together:
+  `refusedPlay` carries any failure reason and is cleared by confirmed playback,
+  `refusedCommand` carries one reason and is cleared in `setProvider`. One field
+  with two
+  clearing rules would be worse than two fields, and dropping `'play'` from
+  `PlayerCommand` would force a consumer to check two fields and OR them. This is
+  the overlap `refusedPlay` and `autoplay` already have, documented the same way.
+
+  **`retry` is not a `PlayerCommand`.** The `not-ready` it can raise comes from a
+  guard that runs with a provider attached and the generation moved under it, so
+  the attach that moved it would withdraw the refusal it caused. That is a moment,
+  not a condition. It publishes from neither of its two refusal sites, by two
+  different mechanisms: leaving it out of the vocabulary silences the shared
+  command path, and the generation-moved guard returns without consulting the
+  vocabulary at all.
+
+  **`refusedPlay`'s published behaviour is unchanged.** Its shape, its clearing
+  rules and the three guards that drop a refusal a later state contradicted are
+  all as they were, and the tests that settled them pass unmodified. The one
+  change to it is that the play early return now records a refusal — the hole this
+  release closes. The three guards hold on that branch without being tested: it is
+  synchronous, so no later play can have replaced it and the generation cannot
+  have moved, and `playback` cannot be `'playing'` with no provider attached to be
+  playing anything.
+
+  **Nothing renders differently.** No control gained a `disabled` attribute, none
+  inspects a command result it did not inspect before, and no shipped UI presents
+  a refusal. This publishes the fact and leaves the copy, and the decision to show
+  it at all, to the consumer.
+
+  **Why `minor`.** No API broke, but the published state gained a field and two
+  types, and a consumer comparing snapshots or asserting on `refusedPlay` sees
+  something they did not see before.
+
+- 083df66: A CommonJS consumer is now refused by their own type-checker instead of by Node
+  at runtime (#458). Being ESM-only is unchanged and stays unchanged; what changes
+  is when a consumer who cannot use these packages finds out.
+
+  **What was wrong.** The export map answered `types` and `import` and nothing
+  else. A consumer whose project is CommonJS, on `moduleResolution: nodenext`,
+  resolved the `types` condition, got `tsc` exit 0 with zero diagnostics, and then
+  got this from Node:
+
+  ```
+  Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: No "exports" main defined in
+    .../node_modules/@playdeck/react/package.json
+  ```
+
+  TypeScript used to report that disagreement and stopped, because Node learned to
+  `require` an ES module — but `require(esm)` still needs the `require` condition
+  to resolve to something, and an ESM-only map had nothing to answer it with. So
+  the diagnostic went away while the failure did not. An intentional constraint a
+  consumer meets at build time is a supported boundary; one that passes typecheck
+  and fails at `node` is a trap.
+
+  **What each package now carries.** Two files, and a `require` condition that
+  points at them:
+
+  ```json
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./esm-only.d.cts", "default": "./esm-only.cjs" }
+    }
+  }
+  ```
+
+  `esm-only.d.cts` is deliberately not a module — it declares nothing and exports
+  nothing — so the consumer's own import statement fails to compile:
+
+  ```
+  app.tsx(1,25): error TS2306: File '.../node_modules/@playdeck/react/esm-only.d.cts'
+    is not a module.
+  ```
+
+  `esm-only.cjs` throws on load, so a consumer who gets past their build is
+  refused by name rather than by a report of a missing file:
+
+  ```
+  @playdeck/react is ESM only and cannot be loaded with require(). Import it from
+  an ES module, or reach it with a dynamic import().
+  ```
+
+  **Nothing gained a second implementation.** The guard refuses; it never
+  implements. That is the point of it being a throw and an empty declaration
+  rather than a shim: no bundler configuration can select it in place of the real
+  ESM entry and get something that runs, so the ESM-only guarantee is not weakened
+  by having answered `require` at all. Each package's `sideEffects` now names
+  `./esm-only.cjs` for the same reason — a blanket `"sideEffects": false` would
+  let a bundler that took the `require` condition drop a module it saw no
+  bindings taken from, and hand the consumer an empty namespace instead of the
+  refusal. `dist` is unaffected and still tree-shakes.
+
+  **The types sit inside each condition rather than above both.** Conditions match
+  in the order the map writes them, and a `types` key at the top of the `.` entry
+  matches a CommonJS consumer before `require` ever does — which is the silent
+  pass, restored. The nesting is what lets the two consumers be told different
+  things.
+
+  **Why `minor`, and what it breaks.** No API, no type and no rendered output
+  changed, and `dist` is byte-identical — this is the export map and two files
+  that are never imported. Nothing that ran stops running, because the builds this
+  turns red were already producing code that Node refused.
+
+  It is a `minor` rather than a `patch` because a build going red on upgrade is a
+  break a consumer should be able to see in the version, whatever the state of the
+  code underneath it. A CommonJS consumer type-checking code they never executed
+  gets `tsc` exit 0 before the upgrade and a hard failure after it; calling that a
+  patch asks them to discover the boundary from their own CI. While the major is
+  `0`, `minor` is the slot a break belongs in.
+
+  **What is unaffected, verified rather than assumed.** The three resolution modes
+  that worked still do — `bundler`, `node16` and `nodenext` on a `"type":"module"`
+  consumer, each type-checked against an installed package. `node10` still fails
+  as it always did, naming the settings that would work; export maps are invisible
+  to it, so nothing here could have reached it.
+
+- 3896f17: A DASH source is refused by name instead of by shape
+
+  A `.mpd` URL used to fall through source detection to `unsupported-string`, the
+  reason that cannot name a cause, and the message it produced restated the list
+  of accepted forms. A consumer reading it learned that their URL was not on the
+  list, not that DASH is out of scope, so the natural next move was to file an
+  issue and wait.
+
+  `detectSource` now raises the new `unsupported-format` reason for a URL whose
+  path ends in a streaming manifest extension this library recognises and does not
+  play, and `Player.Root` renders a message that names the format:
+
+  > Playdeck does not play DASH. The player source "https://cdn.example.com/stream.mpd"
+  > is a DASH manifest, and Playdeck plays HLS (.m3u8), MP4 and WebM.
+
+  The list behind it is exported as `unsupportedSourceFormat` and has both readers
+  — detection and the message — so a format added to it cannot be refused under a
+  sentence that fails to name it. It holds `.mpd` and DASH alone today.
+
+  `SourceDetectionFailureReason` gains a member, which is breaking for a consumer
+  switching on it exhaustively: a `.mpd` that used to arrive as
+  `unsupported-string` now arrives as `unsupported-format`, so a switch with no
+  branch for it falls through. Widening the union is the point rather than a side
+  effect -- the old reason could not name a cause, which is what left a consumer
+  filing an issue instead of changing their pipeline.
+
+- 3896f17: A light hls.js build reports the captions it cannot show, and a subtitle-less stream stops claiming to be checking
+
+  Two capability bugs on the hls.js engine, both of them `selectTextTrack`
+  reporting `unknown` / `provider-check` for the whole session — the value that
+  means "still checking" — long after the answer was known.
+
+  **A stream with no subtitles.** The capability was only ever written by the
+  `SUBTITLE_TRACKS_UPDATED` handler, and real hls.js does not fire that event when
+  a manifest declares no subtitle renditions at all. So an ordinary subtitle-less
+  HLS stream never settled. The unit test that covered the `unavailable` / `source`
+  branch fired the event with an empty array by hand, which hls.js never does, so
+  the gap did not show. It is now settled from `MANIFEST_PARSED`, which fires for
+  every manifest.
+
+  **A light hls.js build.** `hls.js/light`, reachable through `loadHls`, saves
+  about 53 KB gzip by compiling out the subtitle controllers along with alternate
+  audio, CMCD and EME. It still parses subtitle renditions and reports them once,
+  then never emits `SUBTITLE_TRACKS_UPDATED`, so the tracks could be counted and
+  never selected. That combination now publishes:
+
+  ```ts
+  capabilities.selectTextTrack; // { status: 'unavailable', reason: 'provider-build' }
+  ```
+
+  `Availability` gains the `provider-build` reason for it. Neither neighbour was
+  true: the provider is able, so `provider` would be wrong, and the media does
+  carry subtitles, so `source` would be wrong. Widening the union is breaking for
+  a consumer switching exhaustively on the reason -- a build this applies to used
+  to report a reason from the old set, and now reports one a switch may have no
+  branch for.
+
+  The build is told apart by reading `Hls.DefaultConfig` for the controllers the
+  light build omits — synchronous, settled before anything loads, and no deadline.
+  A module exposing no `DefaultConfig` is read as the full build, so an
+  unrecognised one behaves exactly as it did before.
+
+- 636ead7: `startTime` is now a floor the YouTube, Vimeo and Wistia embeds are held to,
+  rather than a position applied once when the provider adopts the player (#381).
+  A reported position below it is pulled back into the window and the published
+  `currentTime` reports the corrected position.
+
+  **This is a behaviour change for shipped consumers, and it is deliberate.**
+  Until now a viewer could drag the platform's own scrub bar below `startTime` and
+  stay there. From this release they are returned to `startTime`. That follows from
+  what `startTime` already claimed to be — the window playback is confined to —
+  and from `seekTo` and `seekBy` having been clamped into that window since #214;
+  a floor that only a Playdeck command respected was the inconsistency. A consumer
+  who wants the viewer to reach earlier material should not set a `startTime` for
+  it.
+
+  **What was broken.** The start was written as a load hint and then seeked to
+  once, at adopt, and nothing re-applied it. From that one seek onwards the window
+  had no floor at all. Any later cause of a below-start position — an SDK-side
+  seek, a repeat `ready`, or the viewer dragging the platform's own scrub bar —
+  left the playhead outside the window, playing material the window was supposed
+  to exclude, and no report said so. The clamp on `seekTo` and `seekBy` did not
+  help: the positions that escaped were exactly the ones that arrived without a
+  Playdeck command. It is corrected now however the position arrived.
+
+  **The end of the window is corrected the same way, through the same predicate.**
+  It was already enforced — a pause plus an `ended` — but only the published
+  `currentTime` was pinned to the boundary; the playhead itself was left wherever
+  the player had run on to before the pause landed. A viewer was therefore left
+  looking at a frame outside the window, for as long as the player stayed there,
+  while `currentTime` reported the boundary. The playhead is now seeked back onto
+  the boundary, so what is on screen and what is published agree. Stated without
+  inflation: the frames between the boundary and the report that notices it are
+  still shown, briefly. These platforms report time on their own cadence — a poll
+  every 250 ms on YouTube, the platform's own `timeupdate` on Vimeo and Wistia —
+  so nothing driven by a report can stop before the boundary. What ends is the
+  lasting disagreement, not the overshoot.
+
+  **One rule, in one place.** `@playdeck/core`'s `createTimeBoundary` gains
+  `correction(duration, time)`: where a position that simply _arrived_ has to move
+  for the window to hold, or `undefined` when it needs no move. The three embed
+  ports consult it, so one prop cannot mean three things — the reason the window
+  was centralised in #214. `TimeBoundary` gains a member and loses none, and the
+  existing questions (`start`, `end`, `atEnd`, `atWrap`, `restartsAtStart`,
+  `clamp`) are unchanged in meaning and in what they answer.
+
+  **It does not fight the seek clamp, and it cannot chase itself.** Every answer
+  `correction` gives is the `clamp` of the same time, so a command the clamp
+  already pulled into the window reports a position `correction` leaves alone —
+  the two agree by construction rather than correcting one position twice. And
+  every answer is a fixed point: move the playhead to it and the report that move
+  produces asks for no correction, so one out-of-window position costs at most one
+  corrective seek however many reports of it arrive.
+
+  **The loop wrap guard is untouched.** `atWrap` is byte-identical — the loop
+  concept it was documented as, still short-circuiting on `loop`, still the rule
+  that restarts a looping embed and starts it playing again. What moved is the
+  deference to it. Only the time-report paths ask it first: Vimeo's and Wistia's
+  `onSeeked` call `correction` with no wrap test in front of them, because a
+  paused embed reports no time update after a seek and the position has to be
+  published from that handler. So the rule that a playhead behind the start of a
+  looping player belongs to the loop now lives inside `correction`, which reads
+  the loop from a parameter rather than from the call site and answers `undefined`
+  for anything `atWrap` owns — sliding such a playhead onto the start instead
+  would consume the wrap, leaving a position `atWrap` no longer recognises and
+  quietly retiring the restart. A looping embed is therefore corrected by the loop
+  rule exactly as it was and never reaches the floor below it, and that now holds
+  wherever `correction` is asked from rather than depending on each call site
+  remembering to ask in the right order. Widening `atWrap` into "enforce a floor
+  whenever not looping" would have changed all three embeds' loop behaviour to fix
+  something else, which is why it was not done.
+
+  **The native and HLS providers are unchanged**, as they were for #214: native
+  keeps its own boundary state machine, entangled with the element's `seekable`
+  ranges, and nothing here reaches it. So `startTime` now means two things, and
+  both ends say so rather than leaving it to be discovered: `RootProps.startTime`
+  in `@playdeck/react` and `NativePlaybackOptions.startTime` in
+  `@playdeck/provider-native` each state the divergence. Those two packages carry
+  no code change at all — the corrected prose is their whole diff — but it is
+  prose a consumer reads from the shipped `.d.ts`, so they take a `patch` for it,
+  the way `@playdeck/react` took one for documentation alone in #457.
+
+  **Why `minor` and not `patch`.** This is a defect fix, but not one behind an
+  unchanged surface. `PlayerState.currentTime` publishes a value it did not
+  publish before for the same viewer action, the library now moves a playhead it
+  previously left alone, and `@playdeck/core` gained an export member. `patch`
+  answers to a fix a consumer cannot observe except as the absence of a bug —
+  `07e47c3` released the subscriber fan-out isolation that way — and this is
+  observable on purpose: a consumer asserting on the provider stream sees patches
+  that were not there before, and a viewer sees a seek they did not ask for. The
+  precedent is `vimeo-no-longer-obeys-a-url-time-parameter.md` and
+  `native-duration-no-longer-latches.md`: no API broke in either, but what a
+  released package does changed, and a behaviour change should not arrive as a
+  patch.
+
+### Patch Changes
+
+- a978938: Every package now ships its own `CHANGELOG.md` (#460). The file existed in the
+  repository all along, but `files` named `dist` and nothing else, and a changelog
+  is not one of the names npm includes regardless — unlike the README, the LICENSE
+  and the manifest. So an installed `node_modules/@playdeck/react` carried no
+  account of what had changed, and a consumer upgrading between two published
+  versions had nowhere local to read one.
+
+  This is packaging only. No code, no types and no rendered output changed, and
+  `dist` is byte-identical.
+
+  **It is not free, and the number belongs here rather than in a commit message.**
+  Measured on the 0.2.0 tarballs, packed: `@playdeck/react` 123,391 → 170,286
+  bytes (+38%), `@playdeck/core` 69,941 → 95,793 (+37%), and the seven together
+  408,465 → 549,301 (+34%). None of it is code — a changelog is never imported, so
+  it reaches no bundle and no bundle budget moved — but it is bytes in every
+  install, and it grows with every release. If that becomes the wrong trade the
+  next step is a truncated or per-major changelog, not a return to shipping none.
+
+  Alongside it, and outside the packages: a published version now has a git tag on
+  the remote. One per package, named `@playdeck/core@0.2.0`, so that the tag
+  answering "what shipped as that" carries the name a consumer resolves from the
+  registry, and so that packages publishing nothing are not implied by it. The tags are
+  pushed before the publish rather than after it, so a release that fails halfway
+  still leaves something to diff against. Versions published before this change
+  are deliberately not backfilled.
+
 ## 0.2.0
 
 ### Minor Changes
