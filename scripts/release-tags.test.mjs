@@ -5,11 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
+  missingReleaseTags,
   releaseTag,
   remoteTagNames,
   tagPlan,
   tagRelease,
-  uncommittedPaths
+  uncommittedPaths,
+  verifyReleaseTags
 } from './release-tags.mjs';
 
 test('names a tag the way changesets names one', () => {
@@ -95,6 +97,33 @@ test('reports a required tag that exists in neither place', () => {
       remoteTags: new Set()
     }),
     { toPush: [], unaccounted: ['@playdeck/core@0.2.0'] }
+  );
+});
+
+// Why this is not `tagPlan` is `missingReleaseTags`' own doc comment in
+// scripts/release-tags.mjs, for the same reason the `tagPlan` case above sends
+// its reader there: stated once, so a change that falsifies it has one comment
+// to correct rather than two that drift apart.
+test('names the required tags the remote does not carry', () => {
+  assert.deepEqual(
+    missingReleaseTags({
+      required: ['@playdeck/core@0.2.0', '@playdeck/react@0.2.0'],
+      remoteTags: new Set(['@playdeck/core@0.2.0'])
+    }),
+    ['@playdeck/react@0.2.0']
+  );
+});
+
+// A remote carrying tags this release does not need -- every previous release's
+// -- must not be read as covering one it does. The set is asked about the exact
+// names, never counted.
+test('names nothing when the remote carries every required tag', () => {
+  assert.deepEqual(
+    missingReleaseTags({
+      required: ['@playdeck/core@0.2.0'],
+      remoteTags: new Set(['@playdeck/core@0.2.0', '@playdeck/core@0.1.0'])
+    }),
+    []
   );
 });
 
@@ -241,4 +270,24 @@ test('refuses to tag a commit the remote does not carry', (t) => {
 
   assert.throws(() => tagRelease({ repoRoot: repo }), /origin\/main/);
   assert.deepEqual(originTags(), []);
+});
+
+// The precondition end to end, against a real remote: it must refuse before the
+// tags exist and pass once they do. Only a live run answers this -- the pure
+// function above is given a tag set, and the thing that can actually go wrong
+// in the workflow is reading one off `origin` at all.
+test('refuses a release whose versions the remote has no tags for', (t) => {
+  const { repo } = fixtureWorkspace(t);
+
+  assert.throws(
+    () => verifyReleaseTags({ repoRoot: repo }),
+    /@tag-fixture\/alpha@1\.0\.0/
+  );
+
+  tagRelease({ repoRoot: repo });
+
+  assert.deepEqual(verifyReleaseTags({ repoRoot: repo }).sort(), [
+    '@tag-fixture/alpha@1.0.0',
+    '@tag-fixture/beta@2.3.4'
+  ]);
 });

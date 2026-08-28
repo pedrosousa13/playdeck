@@ -87,12 +87,44 @@ jobs:
     permissions:
       contents: read
     steps:
+      # `fetch-depth: 0` is not needed and not set: `ls-remote` asks the remote
+      # rather than reading local history, so a shallow clone answers the tag
+      # question exactly as a full one does.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - run: corepack enable
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: pnpm
+
+      # Every publishable version must already be tagged on the remote before a
+      # release proceeds. `pnpm tag:packages` creates those tags, run locally
+      # from `main` once the bump has landed there -- deliberately, because a
+      # tag has to exist for a release that failed to publish, which it cannot
+      # if the publish pipeline is what creates it (#460). This is the check
+      # that the step was taken, never a second way to take it: it reads, and
+      # the job's `contents: read` is all `git ls-remote` needs.
+      #
+      # It runs on a dry run too. A dry run exists to rehearse the real one, and
+      # a rehearsal that skips a gate the real run has answers a question nobody
+      # asked -- a maintainer rehearsing before tagging gets told what is
+      # missing rather than a green they cannot rely on.
+      #
+      # Here rather than lower down because a release whose versions are
+      # untagged cannot proceed, and nothing is learned by building it first:
+      # `package-verify` is the earliest job and `release` `needs:` it, so a
+      # failure here ends the run before anything is installed, built or packed.
+      #
+      # Not first, though, and the reason is `pnpm list -r --depth -1 --json`,
+      # which `scripts/workspace-packages.mjs` reaches to discover the
+      # publishable packages: it needs pnpm on PATH, hence after
+      # `corepack enable`. `--depth -1` is what keeps it from needing anything
+      # else -- no lockfile, no `node_modules`, no install -- so it can still
+      # run above `pnpm install`. It also needs the `origin` the checkout above
+      # configures, for `git ls-remote` to have something to ask.
+      - run: node scripts/release-tags.mjs --verify
+
       - run: pnpm install --frozen-lockfile
       # `verify-packaging.mjs` drives a real browser for its smoke test.
       - run: pnpm exec playwright install --with-deps chromium

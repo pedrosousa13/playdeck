@@ -270,10 +270,13 @@ gh workflow run release.yml --ref main -f dry_run=false  # publish
 ```
 
 `dry_run` defaults to true, so an accidental dispatch cannot publish. Either way
-the job runs `typecheck`, `test`, `test:audit`, `build`, `test:packages`,
-`test:budgets`, `test:bundle` and `test:integrations` before it goes near the
-registry, so the provenance attestation covers artifacts that run actually
-checked.
+the run begins by refusing outright if the remote carries no tag for a version
+about to be published — `pnpm tag:packages` above is what creates them, and this
+is the check that it was run, so a dry run dispatched before tagging fails here
+and names what is missing. Past that, the job runs `typecheck`, `test`,
+`test:audit`, `build`, `test:packages`, `test:budgets`, `test:bundle` and
+`test:integrations` before it goes near the registry, so the provenance
+attestation covers artifacts that run actually checked.
 
 Every package ships its own `CHANGELOG.md`, so an installed copy carries the
 history of the version installed rather than sending its reader back to GitHub.
