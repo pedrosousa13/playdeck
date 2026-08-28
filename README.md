@@ -82,15 +82,15 @@ number a reader cares about is the one for the source they are playing, and for
 one of these sources it is large. Gzip, excluding React itself and the optional
 `theme.css` (5.8 KB):
 
-| Playing                                           | Downloads                                                      | Total        |
-| ------------------------------------------------- | -------------------------------------------------------------- | ------------ |
-| MP4 or WebM                                       | core 7.8 + primitives 16.9 + native 5.7                        | **30.4 KB**  |
-| HLS on Safari and iOS                             | the above + HLS adapter 4.8                                    | **35.2 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 159.5**                                   | **194.7 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | the above + hls.js light 106.0                                 | **141.2 KB** |
-| YouTube                                           | core 7.8 + primitives 16.9 + adapter 6.1                       | **30.8 KB**  |
-| Vimeo                                             | core 7.8 + primitives 16.9 + adapter 7.7 + `@vimeo/player` 8.2 | **40.6 KB**  |
-| Wistia                                            | core 7.8 + primitives 16.9 + adapter 5.4                       | **30.1 KB**  |
+| Playing                                           | Downloads                                                          | Total        |
+| ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
+| MP4 or WebM                                       | core 7.8 + primitives 16.9 + native 5.7                            | **30.4 KB**  |
+| HLS on Safari and iOS                             | the above + HLS adapter 4.8                                        | **35.2 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 159.5**                                       | **194.7 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 35.2 + hls.js light 106.0 | **141.2 KB** |
+| YouTube                                           | core 7.8 + primitives 16.9 + adapter 6.1                           | **30.8 KB**  |
+| Vimeo                                             | core 7.8 + primitives 16.9 + adapter 7.7 + `@vimeo/player` 8.2     | **40.6 KB**  |
+| Wistia                                            | core 7.8 + primitives 16.9 + adapter 5.4                           | **30.1 KB**  |
 
 **hls.js is the whole story here, and it is not ours.** Adaptive streaming needs
 manifest parsing, MSE buffer management, ABR heuristics, MPEG-TS to fMP4

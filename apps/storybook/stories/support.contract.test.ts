@@ -2,6 +2,29 @@ import { createInitialPlayerState, type Availability } from '@playdeck/core';
 import { describe, expect, it } from 'vitest';
 import { available, notReady, ready, unavailable } from './support';
 
+const unavailableReasons = [
+  'browser',
+  'policy',
+  'provider',
+  'provider-build',
+  'provider-plan',
+  'source'
+] as const;
+
+// A reason added to core's union without being added here fails to compile,
+// which is the point: this list is hand-written and the last one went stale
+// unnoticed.
+type UnavailableReason = Extract<
+  Availability,
+  { status: 'unavailable' }
+>['reason'];
+type ListedReason = (typeof unavailableReasons)[number];
+const everyReasonListed: ListedReason extends UnavailableReason
+  ? UnavailableReason extends ListedReason
+    ? true
+    : never
+  : never = true;
+
 const isValidAvailability = (a: Availability): boolean => {
   switch (a.status) {
     case 'available':
@@ -9,13 +32,7 @@ const isValidAvailability = (a: Availability): boolean => {
     case 'unknown':
       return a.reason === 'not-ready' || a.reason === 'provider-check';
     case 'unavailable':
-      return [
-        'browser',
-        'provider',
-        'provider-plan',
-        'source',
-        'policy'
-      ].includes(a.reason);
+      return (unavailableReasons as readonly string[]).includes(a.reason);
     default:
       return false;
   }
@@ -37,6 +54,10 @@ describe('story support derives from the real core contract', () => {
   it('capability overrides win over the derived base', () => {
     const staged = ready({ seek: available }).player.state?.capabilities;
     expect(staged?.seek).toEqual(available);
+  });
+
+  it('lists every unavailable reason core declares', () => {
+    expect(everyReasonListed).toBe(true);
   });
 
   it('exported Availability samples are all valid core values', () => {
