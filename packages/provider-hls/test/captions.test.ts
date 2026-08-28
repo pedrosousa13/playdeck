@@ -364,6 +364,76 @@ test('reports the selectTextTrack capability as unavailable with zero tracks and
   });
 });
 
+// The manifest is the only reading both hls.js builds agree on, and these four
+// are the whole of what it settles. The `SUBTITLE_TRACKS_UPDATED` test above
+// drives an event real hls.js does not fire for a manifest with no subtitle
+// renditions, so before these the common case -- an ordinary stream with no
+// subtitles -- never reached the seam at all.
+const parseManifest = (
+  hls: FakeHls,
+  subtitleTracks: readonly unknown[] | undefined
+): void => {
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, {
+    levels: hls.levels,
+    ...(subtitleTracks === undefined ? {} : { subtitleTracks })
+  });
+};
+
+test('a manifest declaring no subtitle renditions settles the capability instead of leaving it checking forever', async () => {
+  const { patches, hls } = await mountHlsEngineHls();
+
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'unknown', reason: 'provider-check' }
+  });
+
+  parseManifest(hls, []);
+
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'unavailable', reason: 'source' }
+  });
+});
+
+test('a build with no subtitle controller reports provider-build for a manifest that does declare subtitles', async () => {
+  FakeHls.DefaultConfig = {};
+  const { patches, hls } = await mountHlsEngineHls();
+
+  parseManifest(hls, [{ id: 0, name: 'English', lang: 'en' }]);
+
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'unavailable', reason: 'provider-build' }
+  });
+});
+
+test('a build that does carry the controller waits for the tracks rather than answering from the manifest', async () => {
+  FakeHls.DefaultConfig = { subtitleTrackController: class {} };
+  const { patches, hls } = await mountHlsEngineHls();
+
+  parseManifest(hls, [{ id: 0, name: 'English', lang: 'en' }]);
+
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'unknown', reason: 'provider-check' }
+  });
+
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: false, type: 'SUBTITLES' }
+  ]);
+
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'available' }
+  });
+});
+
+test('a manifest payload carrying no subtitleTracks at all teaches the capability nothing', async () => {
+  FakeHls.DefaultConfig = {};
+  const { patches, hls } = await mountHlsEngineHls();
+
+  parseManifest(hls, undefined);
+
+  expect(latest(patches).capabilities).toMatchObject({
+    selectTextTrack: { status: 'unknown', reason: 'provider-check' }
+  });
+});
+
 test('retry() clears the selectTextTrack capability instead of leaving it stale until tracks are rediscovered', async () => {
   const { provider, patches, hls } = await mountHlsEngineHls();
   discoverHlsSubtitles(hls, [

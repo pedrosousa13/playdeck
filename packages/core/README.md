@@ -63,16 +63,17 @@ resolves. A provider may leave a capability there on purpose rather than pay
 what answering would cost, so a consumer should treat `unknown` as a state to
 render for, not a state to wait on.
 
-| Status        | `reason`         | What it says                                                                                                                                                                                                    |
-| ------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `available`   | none             | The command can be issued. This status carries no `reason` at all.                                                                                                                                              |
-| `unknown`     | `not-ready`      | Nothing has answered yet: no provider is attached, or the attached one has not got as far as this question.                                                                                                     |
-| `unknown`     | `provider-check` | A provider is attached and has not answered this one, and may never — resolving it can cost a request it declines to make unasked.                                                                              |
-| `unavailable` | `browser`        | This engine exposes no such API, or the device refuses it — iOS pins media volume to its hardware switch.                                                                                                       |
-| `unavailable` | `policy`         | The document, the permissions policy or an attribute on the media element forbids it.                                                                                                                           |
-| `unavailable` | `provider`       | The active provider has nothing to give here — an SDK that wires no such command, or a condition that is false right now, such as AirPlay before any receiver has announced itself. It flips when that changes. |
-| `unavailable` | `provider-plan`  | The provider offers it, but not on the account behind this video. Vimeo's plan-gated features answer this way.                                                                                                  |
-| `unavailable` | `source`         | The media itself has none: no rendition ladder, no chapters, nothing seekable to seek through.                                                                                                                  |
+| Status        | `reason`         | What it says                                                                                                                                                                                                                                       |
+| ------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `available`   | none             | The command can be issued. This status carries no `reason` at all.                                                                                                                                                                                 |
+| `unknown`     | `not-ready`      | Nothing has answered yet: no provider is attached, or the attached one has not got as far as this question.                                                                                                                                        |
+| `unknown`     | `provider-check` | A provider is attached and has not answered this one, and may never — resolving it can cost a request it declines to make unasked.                                                                                                                 |
+| `unavailable` | `browser`        | This engine exposes no such API, or the device refuses it — iOS pins media volume to its hardware switch.                                                                                                                                          |
+| `unavailable` | `policy`         | The document, the permissions policy or an attribute on the media element forbids it.                                                                                                                                                              |
+| `unavailable` | `provider`       | The active provider has nothing to give here — an SDK that wires no such command, or a condition that is false right now, such as AirPlay before any receiver has announced itself. It flips when that changes.                                    |
+| `unavailable` | `provider-build` | The provider is able and the media does carry it, but the build of the third-party engine in use had that machinery compiled out. `hls.js/light` ships no subtitle controllers, so a manifest's subtitle tracks can be counted and never selected. |
+| `unavailable` | `provider-plan`  | The provider offers it, but not on the account behind this video. Vimeo's plan-gated features answer this way.                                                                                                                                     |
+| `unavailable` | `source`         | The media itself has none: no rendition ladder, no chapters, nothing seekable to seek through.                                                                                                                                                     |
 
 So a control never has to guess what a provider can do, and never has to read a
 question nobody has answered as a "no".
@@ -160,7 +161,8 @@ import {
   isVimeoVideoId,
   isWistiaMediaId,
   isYouTubeVideoId,
-  resolveNetworkPath
+  resolveNetworkPath,
+  unsupportedSourceFormat
 } from '@playdeck/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
@@ -203,6 +205,20 @@ console.log(isYouTubeVideoId('dQw4w9WgXcQ')); // true
 console.log(isVimeoVideoId('76979871')); // true
 console.log(isVimeoHash('8272103f6e')); // true
 console.log(isWistiaMediaId('abc123')); // true
+
+// A format this library recognises and does not play fails with its own reason,
+// so the message a consumer reads can name what arrived rather than restate the
+// list of accepted forms.
+const dash = detectSource('https://cdn.example.com/stream.mpd');
+if (dash.status === 'failure') {
+  console.log(dash.reason); // 'unsupported-format'
+}
+
+// The same list, should you want to turn a URL down before setting it as a
+// source. It names the format, and answers `undefined` for everything it does
+// not refuse — including the formats this library plays.
+console.log(unsupportedSourceFormat('https://cdn.example.com/stream.mpd')); // 'DASH'
+console.log(unsupportedSourceFormat('https://cdn.example.com/master.m3u8')); // undefined
 
 // The substitution `isPermittedSourceUrl` itself never performs, for a caller
 // that validates a URL and then needs to write the same normalisation back.

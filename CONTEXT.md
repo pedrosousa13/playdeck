@@ -92,7 +92,7 @@ _Avoid_: field, key, call site
 **Refused source**:
 The `source` prop turned down before any provider is constructed — by the shared
 allowlist, or by source detection failing to read a video out of it. Published
-as an `unsupported` error whose message names which of the three detection
+as an `unsupported` error whose message names which of the four detection
 failures occurred **and quotes the offending value**, truncated, escaped by the
 text child that renders it. Never recoverable: the same prop re-read is refused
 by the same rules, so no control offers a retry.
@@ -104,6 +104,24 @@ fix. A surface can be refused by several component instances at once, so no one
 value describes the refusal and the prop name is the only honest thing to
 report. Neither is a Notice: a refused source is a failure with no fall-back.
 _Avoid_: bad source, invalid URL, unsupported source
+
+**Refused format**:
+The one of those four detection failures that names a cause rather than a shape:
+a well-formed URL whose path ends in a streaming manifest extension this library
+recognises and deliberately does not play. `unsupportedSourceFormat`
+(`@playdeck/core`) holds the one list of which formats those are, and has two
+readers — detection, which raises `unsupported-format`, and the React
+layer, which names the format in the message. One list rather than two, so a
+format cannot be refused under a sentence that fails to name it
+(`.out-of-scope/dash.md`).
+
+Distinct from the `unsupported-string` beside it, and the distinction is what
+the member buys. That one covers a scheme the allowlist refused, a control
+character at an edge, and a URL that simply matched nothing, so it can only
+restate the requirement. This one knows what arrived, so it says the answer is
+no and will stay no: a reader has a decision to make about their media pipeline
+rather than a typo to fix.
+_Avoid_: unknown format, bad extension
 
 **Shortcut layer**:
 The media keys `Player.Controls` owns. One binding maps keys to one action —
@@ -335,6 +353,28 @@ distinction is load-bearing: Wistia's legacy player (the `E-v1.js` script tag
 and `window._wq`) has a different API and a different embed, and the provider
 deliberately drives neither.
 _Avoid_: the Wistia SDK, the Wistia embed
+
+**Light build**:
+`hls.js/light`, the smaller of the two hls.js builds a consumer can hand the HLS
+provider through `loadHls`. It saves about 53 KB gzip by compiling out alternate
+audio, subtitles, CMCD, EME and Variable Substitution. Subtitles are the half
+this library notices: the light build still parses a manifest's subtitle
+renditions and reports them on `MANIFEST_PARSED`, and never emits
+`SUBTITLE_TRACKS_UPDATED`, so the tracks can be counted and never selected.
+
+Told apart from the full build by reading `Hls.DefaultConfig` for the
+controllers the light one omits, which is synchronous and settled before
+anything loads — deliberately not a deadline, and deliberately not the `Events`
+enum, which carries every name in both builds. A module exposing no
+`DefaultConfig` is read as the full build, so an unrecognised one reports what
+it always did.
+
+What it produces is the `provider-build` availability reason: the provider is
+able and the media does have subtitles, so neither `provider` nor `source` is
+true, and a plan is a billing fact where this is a build one. The one reason in
+the vocabulary that describes the third-party runtime a consumer supplied rather
+than the provider, the browser, the media or a policy.
+_Avoid_: hls light, the small build, the slim build
 
 ### Styling
 

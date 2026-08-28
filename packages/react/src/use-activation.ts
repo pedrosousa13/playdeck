@@ -6,6 +6,7 @@ import type {
   SourceDetectionFailure,
   SourceDetectionResult
 } from '@playdeck/core';
+import { unsupportedSourceFormat } from '@playdeck/core';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
 import {
   useCallback,
@@ -292,8 +293,8 @@ const echoSource = (input: unknown): string => {
 const SOURCE_GUIDANCE =
   'See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for the source forms each provider accepts.';
 
-// One sentence per `detectSource` failure reason, because the three do not mean
-// the same thing and one sentence for all three is the dead end #305 reports.
+// One sentence per `detectSource` failure reason, because the four do not mean
+// the same thing and one sentence for all of them is the dead end #305 reports.
 // Each quotes what was rejected, so the message says which value to go and fix
 // rather than only that one exists.
 //
@@ -309,6 +310,20 @@ const SOURCE_GUIDANCE =
 // -- so it states the requirement instead of guessing which half of it failed.
 const refusedSourceMessage = (source: SourceDetectionFailure): string => {
   const echoed = echoSource(source.input);
+  // The format is read back out of core's one list rather than spelled here,
+  // so this sentence cannot name DASH for a source refused as something else
+  // once a second format joins that list. `input` is a string wherever this
+  // reason is raised -- it comes from the extension of a url -- and the guard
+  // is what proves it to the type rather than a claim that it could be absent.
+  if (source.reason === 'unsupported-format') {
+    const format =
+      typeof source.input === 'string'
+        ? unsupportedSourceFormat(source.input)
+        : undefined;
+    if (format) {
+      return `Playdeck does not play ${format}. The player source "${echoed}" is a ${format} manifest, and Playdeck plays HLS (.m3u8), MP4 and WebM. ${SOURCE_GUIDANCE}`;
+    }
+  }
   if (source.reason === 'malformed-string') {
     return `Playdeck could not read a video from the player source "${echoed}" — it is either not a well-formed URL, or a provider URL in a form Playdeck does not read. ${SOURCE_GUIDANCE}`;
   }

@@ -201,3 +201,14 @@ measurement is on [#82](https://github.com/pedrosousa13/playdeck/issues/82).
 setter and `quality-min` / `quality-max` attributes, but nothing that enumerates
 the rungs actually available for a media, so the adapter does not wire quality
 selection at all and `qualities` stays empty.
+
+## DASH is declined, not missing
+
+The one adaptive format Playdeck plays is HLS. DASH is out of scope by decision
+rather than by omission: an `.mpd` source is recognised and refused by name, with
+a message saying Playdeck does not play DASH, so a consumer is told to change
+their pipeline rather than left checking their URL. No release turns it on, and
+no capability reports on it — a declined format is not a capability. The
+reasoning is recorded in
+[`.out-of-scope/dash.md`](https://github.com/pedrosousa13/playdeck/blob/main/.out-of-scope/dash.md)
+([#447](https://github.com/pedrosousa13/playdeck/issues/447)).

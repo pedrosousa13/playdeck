@@ -69,6 +69,13 @@ export type HlsTextTracks = {
   readonly reset: () => void;
   readonly destroy: () => void;
   readonly handlers: {
+    // Settles the capability from the manifest, which is the only reading both
+    // hls.js builds agree on. `buildSupportsSubtitles` comes from
+    // `hlsBuildSupportsSubtitles`.
+    readonly onManifestParsed: (
+      data: unknown,
+      buildSupportsSubtitles: boolean
+    ) => void;
     readonly onSubtitleTracksUpdated: (
       instance: Pick<HlsInstanceLike, 'subtitleTracks'>,
       data: unknown
@@ -204,6 +211,43 @@ export const createHlsTextTracks = (
       hlsCueListeners.clear();
     },
     handlers: {
+      // `MANIFEST_PARSED` is where the capability stops being a guess, and it
+      // is the one report both hls.js builds make: its payload carries the
+      // subtitle renditions the manifest declared, parsed by machinery the
+      // light build keeps.
+      //
+      // Before this, the capability was only ever written by
+      // `onSubtitleTracksUpdated` below, and real hls.js does not fire that
+      // event when a manifest declares no subtitle renditions at all -- so an
+      // ordinary subtitle-less stream left `selectTextTrack` reading
+      // `unknown` / `provider-check` for the whole session, still claiming to
+      // be checking something it had already finished.
+      //
+      // Nothing is settled here when the manifest has subtitles and the build
+      // can show them: `SUBTITLE_TRACKS_UPDATED` follows a few milliseconds
+      // later with the tracks themselves, and it owns the `available` answer.
+      // Staying `unknown` across that gap is honest, because the tracks really
+      // have not been read yet.
+      onManifestParsed: (data, buildSupportsSubtitles) => {
+        const declared = (data as { subtitleTracks?: ReadonlyArray<unknown> })
+          .subtitleTracks;
+        // A payload carrying no `subtitleTracks` at all has taught us nothing,
+        // which is not the same as one carrying an empty array -- that is the
+        // manifest saying there are no subtitle renditions, and it is a fact.
+        // The same distinction the Buffered window draws between "none" and
+        // "not telling you", and the capability stays `unknown` for the second
+        // rather than reporting a refusal it cannot support. Both builds of
+        // hls.js 1.6.16, the version this package pins, send the array, so
+        // this guard is for a shape that is not hls.js rather than for a case
+        // in the field.
+        if (!Array.isArray(declared)) return;
+        const hasSubtitleRenditions = declared.length > 0;
+        if (hasSubtitleRenditions && buildSupportsSubtitles) return;
+        selectTextTrackAvailability = hasSubtitleRenditions
+          ? { status: 'unavailable', reason: 'provider-build' }
+          : { status: 'unavailable', reason: 'source' };
+        emit({ ...capabilitiesPatch() });
+      },
       onSubtitleTracksUpdated: (instance, data) => {
         const rawTracks =
           (data as { subtitleTracks?: ReadonlyArray<HlsSubtitleTrackLike> })

@@ -112,10 +112,39 @@ const failure = (
   guidance: explicitObjectGuidance
 });
 
+// The streaming formats this library recognises by extension and refuses, with
+// the name to report for each. The twin of `sourceFromFileExtension` below and
+// deliberately disjoint from it: that maps an extension to a source, this maps
+// one to a refusal, and an extension in both would detect and refuse at once.
+//
+// A table rather than a comparison, because the entry a second format adds has
+// to land in one place that both readers already consult, and because the
+// format name is the whole payload -- the message a consumer reads names DASH,
+// which is the difference between "you made a mistake" and "this is out of
+// scope, stop waiting for it" (`.out-of-scope/dash.md`).
+const unsupportedFormats: readonly {
+  readonly pattern: RegExp;
+  readonly format: string;
+}[] = [{ pattern: /\.mpd$/i, format: 'DASH' }];
+
+const pathOf = (input: string): string => input.split(/[?#]/, 1)[0] ?? '';
+
+/**
+ * The name of the streaming format a source URL asks for, when it is one this
+ * library recognises and does not play, and `undefined` otherwise.
+ *
+ * The one rule for that question, read by `detectSource` to raise
+ * `unsupported-format` and by the React layer to name the format in the message
+ * it renders. Two readers and one list, so a format added here cannot be
+ * refused under a message that fails to name it.
+ */
+export const unsupportedSourceFormat = (input: string): string | undefined =>
+  unsupportedFormats.find(({ pattern }) => pattern.test(pathOf(input)))?.format;
+
 const sourceFromFileExtension = (
   input: string
 ): VideoFileSource | HlsSource | undefined => {
-  const path = input.split(/[?#]/, 1)[0] ?? '';
+  const path = pathOf(input);
   if (/\.mp4$/i.test(path)) {
     return { type: 'video', sources: [{ src: input, mimeType: 'video/mp4' }] };
   }
@@ -428,15 +457,27 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
         // -- `.m3u8` manifests under `/embed/medias/` and `.mp4` under
         // `/deliveries/` are its documented way to play without its player. So
         // a Wistia URL that is not an embed shape falls through to the file
-        // extension before the recognised-host rule fails it outright.
+        // extension, and then to the refused formats below, before the
+        // recognised-host rule fails it outright: a host serving media files
+        // can serve one this library declines by name just as any other host
+        // can, and the reason a reader is owed is the same one.
         const fileSource = sourceFromFileExtension(normalizedInput);
         if (fileSource) return { status: 'success', input, source: fileSource };
+        if (unsupportedSourceFormat(normalizedInput)) {
+          return failure(input, 'unsupported-format');
+        }
         return failure(input, 'malformed-string');
       }
     }
 
     const fileSource = sourceFromFileExtension(normalizedInput);
     if (fileSource) return { status: 'success', input, source: fileSource };
+
+    // After the extension patterns rather than before them, so a format can
+    // only be refused here once nothing has read a source out of it.
+    if (unsupportedSourceFormat(normalizedInput)) {
+      return failure(input, 'unsupported-format');
+    }
 
     return failure(input, 'unsupported-string');
   }
