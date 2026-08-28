@@ -1,5 +1,6 @@
 import type { CommandResult, HlsSource, PlayerError } from '@playdeck/core';
 import type { NativeProviderAdapter } from '@playdeck/provider-native';
+import { hlsBuildSupportsSubtitles } from './adapter-values.js';
 import type {
   EmitProviderState,
   HlsConstructorLike,
@@ -156,8 +157,13 @@ export const createHlsAttachment = (
       if (destroyed || hls !== instance) return;
       qualityLevels.onLevelSwitched(instance, data);
     });
-    instance.on(HlsRuntime.Events.MANIFEST_PARSED, () => {
+    const buildSupportsSubtitles = hlsBuildSupportsSubtitles(HlsRuntime);
+    instance.on(HlsRuntime.Events.MANIFEST_PARSED, (_event, data) => {
       if (destroyed || hls !== instance) return;
+      // Text tracks before the ladder: the manifest's answer about subtitles is
+      // final at this point, while the ladder is still being refreshed, so the
+      // settled fact is published before the moving one.
+      textTracks.handlers.onManifestParsed(data, buildSupportsSubtitles);
       qualityLevels.refresh(instance);
     });
     instance.on(HlsRuntime.Events.LEVELS_UPDATED, () => {

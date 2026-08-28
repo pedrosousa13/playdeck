@@ -113,6 +113,61 @@ levels during its own error recovery, and the published quality ladder has to
 follow it; a build without that event would leave rungs in a menu that no longer
 exist.
 
+### The light build
+
+`hls.js/light` is a supported thing to return. It is about 53 KB gzip smaller
+than the full build, and what it drops is alternate audio, subtitles, CMCD, EME
+and Variable Substitution:
+
+<!-- example:ignore the same call the provider-hls-loader fixture above compiles, differing only in the module specifier; a second fixture would type-check the same three lines twice -->
+
+```ts
+createHlsProvider(videoElement, source, {
+  loadHls: () => import('hls.js/light')
+});
+```
+
+Subtitles are the half that reaches this adapter. The light build still parses a
+manifest's subtitle renditions and reports them once, and then never emits
+`SUBTITLE_TRACKS_UPDATED`, because the controller that would has been compiled
+out. So the tracks can be counted and never selected.
+
+That is reported rather than hidden. On a manifest that declares subtitles, a
+build with no subtitle controller publishes:
+
+<!-- example:ignore one published value rather than code to run; the reason it names is asserted by packages/provider-hls/test/captions.test.ts -->
+
+```ts
+capabilities.selectTextTrack; // { status: 'unavailable', reason: 'provider-build' }
+```
+
+`provider-build` is its own reason because neither neighbour is true: the
+provider is perfectly able (`provider` would be wrong) and the media does have
+subtitles (`source` would be wrong).
+
+What this changes is the honesty of the state, not what a viewer sees.
+`Player.CaptionsButton` renders only on `available`, so it was already absent
+here — but the capability read `unknown` / `provider-check`, meaning "still
+checking", and it read that for the whole session because the check it was
+waiting on was never going to report. An operator reading state, or a test
+asserting on it, could not tell a build that cannot show captions from one that
+had not finished looking. Now it can.
+
+The detection is a synchronous read of `Hls.DefaultConfig`, where the full build
+registers `subtitleTrackController` and the light build does not. A module
+exposing no `DefaultConfig` at all is treated as capable, so an unrecognised
+build behaves exactly as it did before this existed.
+
+One wart, and it is hls.js's rather than this package's: the `./light` subpath
+carries no `types` condition in hls.js's export map, so `import('hls.js/light')`
+resolves to `any`. It costs you nothing here, because `loadHls` is typed and the
+`any` lands on a typed parameter, but your editor will not describe the module.
+
+Take the light build when you know your manifests carry no subtitles, or when
+you render captions yourself from a sidecar `<track>`, which
+`Player.Media`'s `textTracks` prop still serves on the hls.js engine. Keep the
+full build otherwise: 53 KB is not worth a caption track your viewers needed.
+
 ## What it reports honestly
 
 - **`selectQuality`** is `available` on the hls.js engine, with the ladder from

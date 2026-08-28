@@ -27,9 +27,17 @@ export class FakeHls implements HlsInstanceLike {
     MEDIA_ERROR: 'mediaError'
   };
   static isSupported = (): boolean => FakeHls.supported;
+  // Mirrors the two hls.js builds this adapter can be handed. The full build
+  // registers its controllers on `Hls.DefaultConfig`; `hls.js/light` exposes
+  // the same field with those keys absent, which is how
+  // `hlsBuildSupportsSubtitles` tells them apart. Undefined by default, and
+  // read as capable, so a test that says nothing about the build gets the
+  // behaviour the full build has always had.
+  static DefaultConfig: { subtitleTrackController?: unknown } | undefined;
   static reset = (): void => {
     FakeHls.instances = [];
     FakeHls.supported = true;
+    FakeHls.DefaultConfig = undefined;
   };
 
   levels: HlsLevelLike[] = [];

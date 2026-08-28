@@ -131,7 +131,26 @@ export type Availability =
   | {
       readonly status: 'unavailable';
       readonly reason:
-        'browser' | 'provider' | 'provider-plan' | 'source' | 'policy';
+        | 'browser'
+        | 'provider'
+        | 'provider-plan'
+        // The provider is present and able, and the third-party runtime the
+        // consumer handed it does not carry this feature. Today that is the
+        // `hls.js/light` build reached through `loadHls`, which ships no
+        // subtitle controllers and so can never select a text track however
+        // many the manifest declares.
+        //
+        // Its own member rather than `provider`, which says the provider
+        // cannot do this at all and would be false here, and rather than
+        // `source`, which says the media does not offer it and would be false
+        // in the case that matters -- a manifest with subtitles played by a
+        // build that cannot show them. `provider-plan` is the nearest
+        // neighbour and the shape is the same, the provider being fine while
+        // how it was provisioned is not, but a plan is a billing fact and this
+        // is a build one.
+        | 'provider-build'
+        | 'source'
+        | 'policy';
     };
 
 export type TimeRange = { readonly start: number; readonly end: number };

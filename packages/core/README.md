@@ -160,7 +160,8 @@ import {
   isVimeoVideoId,
   isWistiaMediaId,
   isYouTubeVideoId,
-  resolveNetworkPath
+  resolveNetworkPath,
+  unsupportedSourceFormat
 } from '@playdeck/core';
 
 // A URL only resolves if the host, path shape and id are all recognised.
@@ -203,6 +204,20 @@ console.log(isYouTubeVideoId('dQw4w9WgXcQ')); // true
 console.log(isVimeoVideoId('76979871')); // true
 console.log(isVimeoHash('8272103f6e')); // true
 console.log(isWistiaMediaId('abc123')); // true
+
+// A format this library recognises and does not play fails with its own reason,
+// so the message a consumer reads can name what arrived rather than restate the
+// list of accepted forms.
+const dash = detectSource('https://cdn.example.com/stream.mpd');
+if (dash.status === 'failure') {
+  console.log(dash.reason); // 'unsupported-format'
+}
+
+// The same list, should you want to turn a URL down before setting it as a
+// source. It names the format, and answers `undefined` for everything it does
+// not refuse — including the formats this library plays.
+console.log(unsupportedSourceFormat('https://cdn.example.com/stream.mpd')); // 'DASH'
+console.log(unsupportedSourceFormat('https://cdn.example.com/master.m3u8')); // undefined
 
 // The substitution `isPermittedSourceUrl` itself never performs, for a caller
 // that validates a URL and then needs to write the same normalisation back.

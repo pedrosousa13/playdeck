@@ -353,6 +353,28 @@ and `window._wq`) has a different API and a different embed, and the provider
 deliberately drives neither.
 _Avoid_: the Wistia SDK, the Wistia embed
 
+**Light build**:
+`hls.js/light`, the smaller of the two hls.js builds a consumer can hand the HLS
+provider through `loadHls`. It saves about 53 KB gzip by compiling out alternate
+audio, subtitles, CMCD, EME and Variable Substitution. Subtitles are the half
+this library notices: the light build still parses a manifest's subtitle
+renditions and reports them on `MANIFEST_PARSED`, and never emits
+`SUBTITLE_TRACKS_UPDATED`, so the tracks can be counted and never selected.
+
+Told apart from the full build by reading `Hls.DefaultConfig` for the
+controllers the light one omits, which is synchronous and settled before
+anything loads — deliberately not a deadline, and deliberately not the `Events`
+enum, which carries every name in both builds. A module exposing no
+`DefaultConfig` is read as the full build, so an unrecognised one reports what
+it always did.
+
+What it produces is the `provider-build` availability reason: the provider is
+able and the media does have subtitles, so neither `provider` nor `source` is
+true, and a plan is a billing fact where this is a build one. The one reason in
+the vocabulary that describes the third-party runtime a consumer supplied rather
+than the provider, the browser, the media or a policy.
+_Avoid_: hls light, the small build, the slim build
+
 ### Styling
 
 See [ADR-0001](docs/adr/0001-structural-css-ships-inline.md) for why structural

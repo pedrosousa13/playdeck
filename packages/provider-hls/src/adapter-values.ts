@@ -94,11 +94,41 @@ export type HlsConstructorLike = {
     readonly NETWORK_ERROR: string;
     readonly MEDIA_ERROR: string;
   };
+  // Read by `hlsBuildSupportsSubtitles` alone, and optional because a build
+  // that does not expose it is treated as capable rather than as incapable.
+  readonly DefaultConfig?: {
+    readonly subtitleTrackController?: unknown;
+  };
 };
 
 export type HlsModuleLoader = () => Promise<{
   readonly default: HlsConstructorLike;
 }>;
+
+/**
+ * Whether the hls.js build in hand carries the machinery that surfaces subtitle
+ * tracks, read off the constructor's own default config.
+ *
+ * `hls.js/light` ships no `SubtitleTrackController` and no
+ * `SubtitleStreamController`, so it parses a manifest's subtitle renditions,
+ * reports them once on `MANIFEST_PARSED`, and then never emits
+ * `SUBTITLE_TRACKS_UPDATED` for them. A consumer reaches that build through
+ * `loadHls`, which exists so a build can be pinned or swapped, and the 53 KB
+ * gzip it saves over the full build is largely this machinery.
+ *
+ * Read from `DefaultConfig` rather than waited for: the controllers are absent
+ * from the constructor before anything has loaded, so the answer is synchronous
+ * and needs no deadline. The event *names* are no use for the same question --
+ * `Events` is one shared enum and carries `SUBTITLE_TRACKS_UPDATED` in both
+ * builds. What the light build lacks is the controller that emits it.
+ *
+ * A build exposing no `DefaultConfig` at all reads as capable, so an
+ * unrecognised one reports what it always did rather than being called
+ * incapable on the strength of a field this package went looking for.
+ */
+export const hlsBuildSupportsSubtitles = (Hls: HlsConstructorLike): boolean =>
+  Hls.DefaultConfig === undefined ||
+  typeof Hls.DefaultConfig.subtitleTrackController === 'function';
 
 export const readMediaRanges = (
   ranges: globalThis.TimeRanges
