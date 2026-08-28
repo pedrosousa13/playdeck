@@ -221,9 +221,7 @@ export const createHlsTextTracks = (
       // event when a manifest declares no subtitle renditions at all -- so an
       // ordinary subtitle-less stream left `selectTextTrack` reading
       // `unknown` / `provider-check` for the whole session, still claiming to
-      // be checking something it had already finished. The unit test covering
-      // that branch fired `SUBTITLE_TRACKS_UPDATED` with an empty array by
-      // hand, which is a thing the real library never does.
+      // be checking something it had already finished.
       //
       // Nothing is settled here when the manifest has subtitles and the build
       // can show them: `SUBTITLE_TRACKS_UPDATED` follows a few milliseconds
@@ -238,9 +236,10 @@ export const createHlsTextTracks = (
         // manifest saying there are no subtitle renditions, and it is a fact.
         // The same distinction the Buffered window draws between "none" and
         // "not telling you", and the capability stays `unknown` for the second
-        // rather than reporting a refusal it cannot support. Real hls.js always
-        // sends the array, in both builds, so this guard is for a shape that
-        // is not hls.js rather than for a case in the field.
+        // rather than reporting a refusal it cannot support. Both builds of
+        // hls.js 1.6.16, the version this package pins, send the array, so
+        // this guard is for a shape that is not hls.js rather than for a case
+        // in the field.
         if (!Array.isArray(declared)) return;
         const hasSubtitleRenditions = declared.length > 0;
         if (hasSubtitleRenditions && buildSupportsSubtitles) return;

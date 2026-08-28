@@ -201,6 +201,18 @@ test.each([
   }
 );
 
+// The same fall-through carries the format refusal: a recognised host serving
+// media files can serve one this library declines by name, and the reader is
+// owed the same reason there as anywhere else.
+test('refuses a Wistia-hosted DASH manifest by format', () => {
+  const input = 'https://embed-ssl.wistia.com/deliveries/oifkgmxnkb.mpd';
+  expect(detectSource(input)).toMatchObject({
+    status: 'failure',
+    input,
+    reason: 'unsupported-format'
+  });
+});
+
 test('accepts and preserves every explicit source object', () => {
   const video: VideoFileSource = {
     type: 'video',

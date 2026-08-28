@@ -117,11 +117,11 @@ const failure = (
 // deliberately disjoint from it: that maps an extension to a source, this maps
 // one to a refusal, and an extension in both would detect and refuse at once.
 //
-// One entry today. It is a table rather than a comparison because the entry a
-// second format adds has to land in one place that both readers already
-// consult, and because the format name is the whole payload -- the message a
-// consumer reads names DASH, which is the difference between "you made a
-// mistake" and "this is out of scope, stop waiting for it" (#447).
+// A table rather than a comparison, because the entry a second format adds has
+// to land in one place that both readers already consult, and because the
+// format name is the whole payload -- the message a consumer reads names DASH,
+// which is the difference between "you made a mistake" and "this is out of
+// scope, stop waiting for it" (`.out-of-scope/dash.md`).
 const unsupportedFormats: readonly {
   readonly pattern: RegExp;
   readonly format: string;
@@ -457,9 +457,15 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
         // -- `.m3u8` manifests under `/embed/medias/` and `.mp4` under
         // `/deliveries/` are its documented way to play without its player. So
         // a Wistia URL that is not an embed shape falls through to the file
-        // extension before the recognised-host rule fails it outright.
+        // extension, and then to the refused formats below, before the
+        // recognised-host rule fails it outright: a host serving media files
+        // can serve one this library declines by name just as any other host
+        // can, and the reason a reader is owed is the same one.
         const fileSource = sourceFromFileExtension(normalizedInput);
         if (fileSource) return { status: 'success', input, source: fileSource };
+        if (unsupportedSourceFormat(normalizedInput)) {
+          return failure(input, 'unsupported-format');
+        }
         return failure(input, 'malformed-string');
       }
     }

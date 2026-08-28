@@ -95,7 +95,7 @@ one of these sources it is large. Gzip, excluding React itself and the optional
 **hls.js is the whole story here, and it is not ours.** Adaptive streaming needs
 manifest parsing, MSE buffer management, ABR heuristics, MPEG-TS to fMP4
 transmuxing and CEA-608/708 extraction; hls.js's own smallest build is 106 KB,
-and Playdeck's HLS adapter over it is 4.7. What lazy loading buys is not a
+and Playdeck's HLS adapter over it is 4.8. What lazy loading buys is not a
 smaller hls.js. It is that the other four rows never download one, and that
 Safari and iOS do not either, because they play HLS natively and hls.js is never
 fetched there.
@@ -120,9 +120,8 @@ this table against it, so it is a snapshot and the budgets are the gate.
 
 The third-party bytes are the exception, and deliberately so: hls.js and
 `@vimeo/player` are external to those bundles, so that script never sees them.
-The two figures here were read off the installed packages when this table was
-written — hls.js 1.6.16 and `@vimeo/player` 2.30.4 — and they move when you
-upgrade.
+The two figures here were read off the installed packages on 2026-08-28 —
+hls.js 1.6.16 and `@vimeo/player` 2.30.4 — and they move when you upgrade.
 
 ## Honesty about providers
 

@@ -487,8 +487,10 @@ export type ResolvedPlayerSource = Exclude<PlayerSource, string>;
 
 // `unsupported-format` is the one of these four that names a cause rather than
 // describing a shape. It is a well-formed URL whose path ends in a streaming
-// manifest extension this library recognises and deliberately does not play,
-// which today is `.mpd` and DASH alone (#447). It is split out from
+// manifest extension this library recognises and deliberately does not play
+// (`.out-of-scope/dash.md`); `unsupportedSourceFormat` in
+// `packages/core/src/source-detection.ts` owns which formats those are. It is
+// split out from
 // `unsupported-string` because the two owe the reader different things: that
 // one covers a scheme the allowlist refused, a control character at an edge and
 // a url that simply matched nothing, so it can only restate the requirement,

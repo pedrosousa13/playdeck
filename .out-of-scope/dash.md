@@ -20,12 +20,15 @@ all. Everywhere else hls.js is fetched lazily, and at 159.5 KB it is by a wide
 margin the largest package Playdeck ships. So HLS costs an adapter on the
 platforms that already speak it, and an engine only where they do not.
 
-DASH has no equivalent row and could never have one. No shipping browser plays a
-manifest natively, so every consumer of a DASH provider downloads an ABR engine,
-on every platform, with no path that avoids it. The cheapest possible DASH is
-more expensive than the most expensive HLS this library ships, and the argument
-that makes hls.js tolerable — that four of the five providers never fetch it,
-and Safari never fetches it either — has no counterpart.
+DASH has no equivalent row. No browser ships native DASH playback — as of
+2026-08-28 none has, and none has announced it — so every consumer of a DASH
+provider downloads an ABR engine, on every platform, with no path that avoids
+it. This says nothing about how large that engine would be, and the point does
+not need a number: what HLS has here is a configuration that costs an adapter
+and nothing more, and DASH has no such configuration available to it at any
+size. The argument that makes hls.js tolerable — that four of the five
+providers never fetch it, and that Safari and iOS never fetch it either — has
+no counterpart.
 
 **A second ABR engine is a second capability-reporting story, not a second
 import.** The honesty guarantee is that every capability answers with a reason,
