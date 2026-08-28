@@ -1,5 +1,22 @@
 # @playdeck/storybook
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [083df66]
+- Updated dependencies [8ba0938]
+- Updated dependencies [3896f17]
+- Updated dependencies [ceaff4a]
+- Updated dependencies [a978938]
+- Updated dependencies
+- Updated dependencies [636ead7]
+- Updated dependencies [0fb3371]
+- Updated dependencies [c6ca82b]
+- Updated dependencies [982872d]
+- Updated dependencies [a686982]
+  - @playdeck/react@1.0.0
+
 ## 0.0.2
 
 ### Patch Changes

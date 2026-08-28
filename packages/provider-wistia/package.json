@@ -1,6 +1,6 @@
 {
   "name": "@playdeck/provider-wistia",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Wistia player SDK provider for Playdeck.",
   "keywords": [
     "media",

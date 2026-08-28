@@ -1,5 +1,517 @@
 # @playdeck/react
 
+## 1.0.0
+
+### Major Changes
+
+- Playdeck is 1.0.0, and the public API is frozen: anything reachable from a
+  package entry is a contract, and changing it costs a major.
+
+  **What the major is for.** Not a finished feature list. It is that the gaps
+  between what this library reported and what was true have been closed rather
+  than documented around:
+
+  - A capability answers `available`, `unknown` or `unavailable` with a reason
+    rather than guessing, and a control whose capability has not resolved is
+    absent rather than disabled-but-visible.
+  - A consumer value a security control refuses is published as a notice rather
+    than dropped in silence.
+  - An embedded provider that cannot attach reaches `error` within a stated
+    deadline rather than waiting forever. The native and hls.js engines carry no
+    such deadline and do not need one: they answer to the media element's own
+    error event and to hls.js's, which report a failure to load without being
+    asked.
+  - A `ref` on `Player.Root` hands back the members its type declares. One hatch
+    reaches past it, keyed by a well-known symbol and used by this package's own
+    tests; it is in no export map and is not part of the frozen surface, but a
+    consumer who goes looking can reach it.
+
+  **Upgrading from 0.2.0 removes nothing.** Measured rather than assumed: every
+  name each package exported at its published version — values and types together,
+  read off the shipped declarations — is still exported here, and names were only
+  added. That is a statement about names and not about every type's shape, so read
+  the entries below for what individual releases changed; several of them alter
+  what an existing call reports.
+
+  `@playdeck/provider-hls` moves from `0.1.1` to join the others. The publishable
+  packages now version as one, so a single number describes the whole API a
+  consumer installs together.
+
+  **Two unions widened, which is breaking for an exhaustive switch.**
+  `SourceDetectionFailureReason` gains `unsupported-format`, and `Availability`
+  gains `provider-build`. A `switch` with no branch for the new member falls
+  through where it used to match.
+
+  **What the freeze is over.** React 19 only, pure ESM, named exports, the stated
+  browser floor, headless primitives that import no CSS, and providers whose code
+  loads only when the active source needs it.
+
+### Minor Changes
+
+- 083df66: A CommonJS consumer is now refused by their own type-checker instead of by Node
+  at runtime (#458). Being ESM-only is unchanged and stays unchanged; what changes
+  is when a consumer who cannot use these packages finds out.
+
+  **What was wrong.** The export map answered `types` and `import` and nothing
+  else. A consumer whose project is CommonJS, on `moduleResolution: nodenext`,
+  resolved the `types` condition, got `tsc` exit 0 with zero diagnostics, and then
+  got this from Node:
+
+  ```
+  Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: No "exports" main defined in
+    .../node_modules/@playdeck/react/package.json
+  ```
+
+  TypeScript used to report that disagreement and stopped, because Node learned to
+  `require` an ES module — but `require(esm)` still needs the `require` condition
+  to resolve to something, and an ESM-only map had nothing to answer it with. So
+  the diagnostic went away while the failure did not. An intentional constraint a
+  consumer meets at build time is a supported boundary; one that passes typecheck
+  and fails at `node` is a trap.
+
+  **What each package now carries.** Two files, and a `require` condition that
+  points at them:
+
+  ```json
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./esm-only.d.cts", "default": "./esm-only.cjs" }
+    }
+  }
+  ```
+
+  `esm-only.d.cts` is deliberately not a module — it declares nothing and exports
+  nothing — so the consumer's own import statement fails to compile:
+
+  ```
+  app.tsx(1,25): error TS2306: File '.../node_modules/@playdeck/react/esm-only.d.cts'
+    is not a module.
+  ```
+
+  `esm-only.cjs` throws on load, so a consumer who gets past their build is
+  refused by name rather than by a report of a missing file:
+
+  ```
+  @playdeck/react is ESM only and cannot be loaded with require(). Import it from
+  an ES module, or reach it with a dynamic import().
+  ```
+
+  **Nothing gained a second implementation.** The guard refuses; it never
+  implements. That is the point of it being a throw and an empty declaration
+  rather than a shim: no bundler configuration can select it in place of the real
+  ESM entry and get something that runs, so the ESM-only guarantee is not weakened
+  by having answered `require` at all. Each package's `sideEffects` now names
+  `./esm-only.cjs` for the same reason — a blanket `"sideEffects": false` would
+  let a bundler that took the `require` condition drop a module it saw no
+  bindings taken from, and hand the consumer an empty namespace instead of the
+  refusal. `dist` is unaffected and still tree-shakes.
+
+  **The types sit inside each condition rather than above both.** Conditions match
+  in the order the map writes them, and a `types` key at the top of the `.` entry
+  matches a CommonJS consumer before `require` ever does — which is the silent
+  pass, restored. The nesting is what lets the two consumers be told different
+  things.
+
+  **Why `minor`, and what it breaks.** No API, no type and no rendered output
+  changed, and `dist` is byte-identical — this is the export map and two files
+  that are never imported. Nothing that ran stops running, because the builds this
+  turns red were already producing code that Node refused.
+
+  It is a `minor` rather than a `patch` because a build going red on upgrade is a
+  break a consumer should be able to see in the version, whatever the state of the
+  code underneath it. A CommonJS consumer type-checking code they never executed
+  gets `tsc` exit 0 before the upgrade and a hard failure after it; calling that a
+  patch asks them to discover the boundary from their own CI. While the major is
+  `0`, `minor` is the slot a break belongs in.
+
+  **What is unaffected, verified rather than assumed.** The three resolution modes
+  that worked still do — `bundler`, `node16` and `nodenext` on a `"type":"module"`
+  consumer, each type-checked against an installed package. `node10` still fails
+  as it always did, naming the settings that would work; export maps are invisible
+  to it, so nothing here could have reached it.
+
+- 8ba0938: An `aria-label` a consumer passes now wins on every control, and `SeekSlider`
+  forwards one onto the element that carries the slider role (#446, #437).
+
+  **This is not internationalisation.** Playdeck still ships one hardcoded English
+  label per control, still carries no message catalogue, and still has no locale
+  mechanism. What changes is that the label is now a fallback rather than an
+  override, so a consumer can finally supply their own string — which is the
+  prerequisite for any i18n approach, not an instance of one.
+
+  **What was broken.** Six controls — `PlayButton`, `MuteButton`,
+  `CaptionsButton`, `FullscreenButton`, `PipButton` and `AirPlayButton` — spread
+  the consumer's props _above_ their own literal `aria-label`. React's later-wins
+  rule then dropped the consumer's value with no error and no warning, and the
+  control kept announcing the built-in English. The literal was written last
+  because five of the six swap their wording by state, and writing it last is
+  exactly what discarded the consumer's name. Each now reads the label off props
+  and falls back inside the branch, which is the shape `VolumeSlider` and
+  `ActivationButton` already had; those two are untouched.
+
+  **One name holds in every state.** Where a control's default wording changes
+  with state, a consumer who supplies a single name keeps it on both sides of the
+  toggle. The library does not reassert `'Pause'` over a name the consumer chose
+  for the paused state. That follows from the fallback being evaluated per state
+  and short-circuited by the consumer's value in all of them: naming a control is
+  taken as ownership of the name, not as a per-state override.
+
+  **`SeekSlider`'s name is relocated, not duplicated.** Its props are the wrapper
+  `<div>`'s, since it renders buffered geometry around the input, so
+  `<Player.SeekSlider aria-label="Buscar" />` type-checked cleanly, landed the name
+  on an element with no role, and left the input announcing `"Seek"` — nothing from
+  the compiler, nothing at runtime, and nothing in the shipped docs said so. A
+  top-level `aria-label` is now written onto the inner `<input type="range">`, and
+  the wrapper no longer receives it: the same string on both elements is one of
+  them saying it twice. `VolumeSlider` and `SeekSlider` therefore answer the same
+  consumer code the same way, which is the rule the README now states.
+
+  **Precedence, pinned by test.** `inputProps['aria-label']` outranks a top-level
+  `aria-label`, which outranks the built-in `"Seek"`. The nested object is the more
+  specific of the two — it names the element it is written for — and it keeps
+  working exactly as it did.
+
+  **Scoped to the name.** No general mechanism for relocating wrapper props to the
+  input was added, and none is wanted: `className`, `style`, `data-*` and every
+  other top-level prop still land on the wrapper, and `inputProps` remains the
+  route for everything input-level. Which element a prop lands on stays one rule
+  with one exception, rather than a per-prop table.
+
+  **No default wording changed.** With no consumer name supplied, all seven
+  controls render byte-identical labels to the previous release, in every state.
+
+  **Documentation.** `inputProps` appeared in no shipped README — its one mention
+  anywhere was a passing example in an architecture decision record, and the
+  reasoning for which attributes the library keeps was in the source, where a
+  consumer cannot read it. `@playdeck/react`'s README now documents the escape
+  hatch, the precedence order, and the rule that a consumer label wins on every
+  control — including the part a consumer has to do themselves, since a button's
+  visible text falls back to its own English wording and naming one without also
+  passing `children` leaves the two disagreeing.
+
+  **Why `minor` and not `patch`.** No API broke and no type widened, but a
+  released package renders something different for consumer code that already
+  compiled: an `aria-label` that was previously discarded now takes effect, and
+  `SeekSlider`'s wrapper no longer carries an attribute it used to render. A test
+  or selector asserting on either sees the change. That is observable on purpose.
+
+- 3896f17: A DASH source is refused by name instead of by shape
+
+  A `.mpd` URL used to fall through source detection to `unsupported-string`, the
+  reason that cannot name a cause, and the message it produced restated the list
+  of accepted forms. A consumer reading it learned that their URL was not on the
+  list, not that DASH is out of scope, so the natural next move was to file an
+  issue and wait.
+
+  `detectSource` now raises the new `unsupported-format` reason for a URL whose
+  path ends in a streaming manifest extension this library recognises and does not
+  play, and `Player.Root` renders a message that names the format:
+
+  > Playdeck does not play DASH. The player source "https://cdn.example.com/stream.mpd"
+  > is a DASH manifest, and Playdeck plays HLS (.m3u8), MP4 and WebM.
+
+  The list behind it is exported as `unsupportedSourceFormat` and has both readers
+  — detection and the message — so a format added to it cannot be refused under a
+  sentence that fails to name it. It holds `.mpd` and DASH alone today.
+
+  `SourceDetectionFailureReason` gains a member, which is breaking for a consumer
+  switching on it exhaustively: a `.mpd` that used to arrive as
+  `unsupported-string` now arrives as `unsupported-format`, so a switch with no
+  branch for it falls through. Widening the union is the point rather than a side
+  effect -- the old reason could not name a cause, which is what left a consumer
+  filing an issue instead of changing their pipeline.
+
+- ceaff4a: `@playdeck/react`'s entry now ships a `'use client'` directive, so a React
+  Server Component can import the primitives and render them without a wrapper of
+  the consumer's own to hold the boundary (#500).
+
+  **What a consumer got before.** Measured, not predicted: an App Router page
+  (Next.js 16.2.11, Turbopack) that imports `Player.Root` from a server component
+  fails to build, seven times over — once per React API the built entry reaches
+  for:
+
+  ```
+  Error: Turbopack build failed with 7 errors:
+  ./packages/react/dist/index.js:2:10
+  You're importing a module that depends on `createContext` into a React Server
+  Component module. This API is only available in Client Components. To fix, mark
+  the file (or its parent) with the `"use client"` directive.
+  ```
+
+  The remaining six name `useEffect`, `useImperativeHandle`, `useLayoutEffect`,
+  `useRef`, `useState` and `useSyncExternalStore`. The report is accurate and its
+  instruction is unreachable: the file it asks to be marked is the package's own
+  built entry, which for an installed consumer sits under `node_modules`. Their
+  actual fix is a component of their own that carries the directive and
+  re-exports what they needed — a supported constraint met at the worst moment,
+  which is the shape #458 was filed and fixed for on the CommonJS side.
+
+  **What changes.** One directive, on `packages/react/src/index.tsx`. Every value
+  that entry exports is built on hooks, context and refs, so there is no part of
+  the published surface the boundary would be wrong for. The same page now
+  builds, and the primitives render into the server pass and hydrate on the
+  client: the streamed HTML carries the viewport and the activation button, and a
+  click moves `data-state` off `dormant`.
+
+  **Nothing else gained one, and `@playdeck/core` deliberately did not.** No
+  package outside `@playdeck/react` imports a React API — core and the five
+  provider packages are framework-neutral — so a directive on any of them would
+  push framework-neutral code across a boundary it has no reason to cross, and
+  would stop a server component calling `detectSource` on the server. The RSC
+  route added to the Next integration imports `@playdeck/core` alongside the
+  primitives and uses it server-side, so that half is a measurement rather than
+  an assumption.
+
+  **Where it is enforced.** The directive is authored on the source entry and
+  carried to the top of the bundled chunk by the build, which is a property of
+  the build rather than of the file — so `pnpm test:packages` reads it back out
+  of the packed tarball, off the file the `exports` map's `import` condition
+  points at, for any package that names `react` in `peerDependencies`. A bundler
+  that stopped hoisting it, a `files` field that stopped shipping the entry, and
+  an `exports` map pointed somewhere else all fail there. The Next integration
+  covers the other end: its RSC route has no directive of its own, so the build
+  fails on that route if this one goes missing.
+
+  **Why `minor`, and what it can disturb.** No API, no type, no rendered output
+  and no runtime behaviour changed — the module's bindings are what they were.
+  What changed is the first line of the file a consumer's bundler reads, and a
+  bundler that does not implement directives may report it before ignoring it, so
+  an upgrade can add a warning to a build that had none. That is worth being able
+  to see in the version rather than discovering it in a build log.
+
+  **The ESM-only guarantee is untouched.** The export map, the `require`
+  condition and the two guard files are unchanged, and the directive lands on the
+  `import` entry only.
+
+- c6ca82b: The icons now have a props type a consumer can import, `IconProps` (#478).
+
+  **What a consumer got before.** The icons are public components — they reach the
+  entry through a re-export of the icons module — but their props alias was
+  declared without the `export` keyword. So a wrapper around one had to restate
+  `SVGProps<SVGSVGElement>` from memory, while elsewhere in the package an
+  exported component shipped a type to import. The README's own list of props
+  types carved the icons out as the exception that needed none.
+
+  **One shared type, not one per icon.** The icons accept the same props, and a
+  name each is a difference a reader has to check for and never finds. This is
+  the package's one departure from a props type per component, and it is the
+  honest description of what is there.
+
+  The type is additive: nothing an icon accepts changes, and no export is
+  removed.
+
+- 982872d: `SettingsMenuProps`, `SettingsMenuTriggerProps`, `SettingsMenuContentProps`,
+  `MenuItemProps`, `MenuRadioGroupProps` and `MenuRadioItemProps` are now declared
+  and exported from the package entry (#438). Every other composed primitive in
+  the package already shipped one; these six did not, and not because the export
+  was forgotten — they took their props inline and anonymously, so there was no
+  name to export. A consumer importing `MenuItemProps` got `TS2305`, and the
+  README's own claim that every part has a matching props type was false for these
+  six — and for the icons, whose shared props type is likewise declared without
+  being exported.
+
+  It was false where it costs the most. The package ships no playback-rate or
+  quality menu, and the README sends a consumer to these parts to compose one, so
+  a wrapper around them is expected consumer code — and a wrapper needs a name for
+  what it accepts. `ComponentProps<typeof Player.MenuItem>` worked and still does,
+  but it is a workaround for a missing export rather than the surface the rest of
+  the package presents.
+
+  **Naming and exporting only.** Each type is the annotation the part already
+  carried, moved above it and given a name: `SettingsMenu`, `SettingsMenuTrigger`
+  and `SettingsMenuContent` are their element's `ComponentPropsWithRef`
+  unchanged, and `MenuItem`, `MenuRadioGroup` and `MenuRadioItem` keep the same
+  intersections — `onSelect`, `value` with `onValueChange`, and `value` — with the
+  same optionality. Not one of the six gained a prop, lost one, or changed what it
+  does with any of them, and the rendered output is byte-identical.
+
+  `minor` rather than `patch` because the published API gained six members. The
+  README's claim was made true rather than corrected downwards, which is what the
+  issue asked for: the parts are presented as composition primitives, and a
+  composition primitive whose props cannot be named is hard to build on. The same
+  sentence now also says what the icons take, since those are SVG components with
+  no props type of their own to import.
+
+### Patch Changes
+
+- a978938: Every package now ships its own `CHANGELOG.md` (#460). The file existed in the
+  repository all along, but `files` named `dist` and nothing else, and a changelog
+  is not one of the names npm includes regardless — unlike the README, the LICENSE
+  and the manifest. So an installed `node_modules/@playdeck/react` carried no
+  account of what had changed, and a consumer upgrading between two published
+  versions had nowhere local to read one.
+
+  This is packaging only. No code, no types and no rendered output changed, and
+  `dist` is byte-identical.
+
+  **It is not free, and the number belongs here rather than in a commit message.**
+  Measured on the 0.2.0 tarballs, packed: `@playdeck/react` 123,391 → 170,286
+  bytes (+38%), `@playdeck/core` 69,941 → 95,793 (+37%), and the seven together
+  408,465 → 549,301 (+34%). None of it is code — a changelog is never imported, so
+  it reaches no bundle and no bundle budget moved — but it is bytes in every
+  install, and it grows with every release. If that becomes the wrong trade the
+  next step is a truncated or per-major changelog, not a return to shipping none.
+
+  Alongside it, and outside the packages: a published version now has a git tag on
+  the remote. One per package, named `@playdeck/core@0.2.0`, so that the tag
+  answering "what shipped as that" carries the name a consumer resolves from the
+  registry, and so that packages publishing nothing are not implied by it. The tags are
+  pushed before the publish rather than after it, so a release that fails halfway
+  still leaves something to diff against. Versions published before this change
+  are deliberately not backfilled.
+
+- 636ead7: `startTime` is now a floor the YouTube, Vimeo and Wistia embeds are held to,
+  rather than a position applied once when the provider adopts the player (#381).
+  A reported position below it is pulled back into the window and the published
+  `currentTime` reports the corrected position.
+
+  **This is a behaviour change for shipped consumers, and it is deliberate.**
+  Until now a viewer could drag the platform's own scrub bar below `startTime` and
+  stay there. From this release they are returned to `startTime`. That follows from
+  what `startTime` already claimed to be — the window playback is confined to —
+  and from `seekTo` and `seekBy` having been clamped into that window since #214;
+  a floor that only a Playdeck command respected was the inconsistency. A consumer
+  who wants the viewer to reach earlier material should not set a `startTime` for
+  it.
+
+  **What was broken.** The start was written as a load hint and then seeked to
+  once, at adopt, and nothing re-applied it. From that one seek onwards the window
+  had no floor at all. Any later cause of a below-start position — an SDK-side
+  seek, a repeat `ready`, or the viewer dragging the platform's own scrub bar —
+  left the playhead outside the window, playing material the window was supposed
+  to exclude, and no report said so. The clamp on `seekTo` and `seekBy` did not
+  help: the positions that escaped were exactly the ones that arrived without a
+  Playdeck command. It is corrected now however the position arrived.
+
+  **The end of the window is corrected the same way, through the same predicate.**
+  It was already enforced — a pause plus an `ended` — but only the published
+  `currentTime` was pinned to the boundary; the playhead itself was left wherever
+  the player had run on to before the pause landed. A viewer was therefore left
+  looking at a frame outside the window, for as long as the player stayed there,
+  while `currentTime` reported the boundary. The playhead is now seeked back onto
+  the boundary, so what is on screen and what is published agree. Stated without
+  inflation: the frames between the boundary and the report that notices it are
+  still shown, briefly. These platforms report time on their own cadence — a poll
+  every 250 ms on YouTube, the platform's own `timeupdate` on Vimeo and Wistia —
+  so nothing driven by a report can stop before the boundary. What ends is the
+  lasting disagreement, not the overshoot.
+
+  **One rule, in one place.** `@playdeck/core`'s `createTimeBoundary` gains
+  `correction(duration, time)`: where a position that simply _arrived_ has to move
+  for the window to hold, or `undefined` when it needs no move. The three embed
+  ports consult it, so one prop cannot mean three things — the reason the window
+  was centralised in #214. `TimeBoundary` gains a member and loses none, and the
+  existing questions (`start`, `end`, `atEnd`, `atWrap`, `restartsAtStart`,
+  `clamp`) are unchanged in meaning and in what they answer.
+
+  **It does not fight the seek clamp, and it cannot chase itself.** Every answer
+  `correction` gives is the `clamp` of the same time, so a command the clamp
+  already pulled into the window reports a position `correction` leaves alone —
+  the two agree by construction rather than correcting one position twice. And
+  every answer is a fixed point: move the playhead to it and the report that move
+  produces asks for no correction, so one out-of-window position costs at most one
+  corrective seek however many reports of it arrive.
+
+  **The loop wrap guard is untouched.** `atWrap` is byte-identical — the loop
+  concept it was documented as, still short-circuiting on `loop`, still the rule
+  that restarts a looping embed and starts it playing again. What moved is the
+  deference to it. Only the time-report paths ask it first: Vimeo's and Wistia's
+  `onSeeked` call `correction` with no wrap test in front of them, because a
+  paused embed reports no time update after a seek and the position has to be
+  published from that handler. So the rule that a playhead behind the start of a
+  looping player belongs to the loop now lives inside `correction`, which reads
+  the loop from a parameter rather than from the call site and answers `undefined`
+  for anything `atWrap` owns — sliding such a playhead onto the start instead
+  would consume the wrap, leaving a position `atWrap` no longer recognises and
+  quietly retiring the restart. A looping embed is therefore corrected by the loop
+  rule exactly as it was and never reaches the floor below it, and that now holds
+  wherever `correction` is asked from rather than depending on each call site
+  remembering to ask in the right order. Widening `atWrap` into "enforce a floor
+  whenever not looping" would have changed all three embeds' loop behaviour to fix
+  something else, which is why it was not done.
+
+  **The native and HLS providers are unchanged**, as they were for #214: native
+  keeps its own boundary state machine, entangled with the element's `seekable`
+  ranges, and nothing here reaches it. So `startTime` now means two things, and
+  both ends say so rather than leaving it to be discovered: `RootProps.startTime`
+  in `@playdeck/react` and `NativePlaybackOptions.startTime` in
+  `@playdeck/provider-native` each state the divergence. Those two packages carry
+  no code change at all — the corrected prose is their whole diff — but it is
+  prose a consumer reads from the shipped `.d.ts`, so they take a `patch` for it,
+  the way `@playdeck/react` took one for documentation alone in #457.
+
+  **Why `minor` and not `patch`.** This is a defect fix, but not one behind an
+  unchanged surface. `PlayerState.currentTime` publishes a value it did not
+  publish before for the same viewer action, the library now moves a playhead it
+  previously left alone, and `@playdeck/core` gained an export member. `patch`
+  answers to a fix a consumer cannot observe except as the absence of a bug —
+  `07e47c3` released the subscriber fan-out isolation that way — and this is
+  observable on purpose: a consumer asserting on the provider stream sees patches
+  that were not there before, and a viewer sees a seek they did not ask for. The
+  precedent is `vimeo-no-longer-obeys-a-url-time-parameter.md` and
+  `native-duration-no-longer-latches.md`: no API broke in either, but what a
+  released package does changed, and a behaviour change should not arrive as a
+  patch.
+
+- 0fb3371: The package entry names the icon components it exports instead of re-exporting
+  the icons module wholesale (#512).
+
+  **Nothing a consumer can import changes.** Verified rather than asserted: the
+  entry's full export surface — values and types together, read off the built
+  declarations with the TypeScript checker — is identical before and after, at 90
+  names.
+
+  **What changes is who decides.** `export * from './icons.js'` delegated the
+  public surface to whatever that module happened to export, so a helper added
+  there for one icon's use would have become public API without anyone choosing
+  it. Naming them makes each one a decision, and it is taken now because an export
+  published by accident is withdrawn only by a major once the API is frozen.
+
+- a686982: `Time`'s `remaining` variant and `Captions`' `renderCue` are documented in the
+  package README (#442). Both ship in the type declarations, and both were covered
+  only by the Storybook workbench — `Overview/Contract` and `Overview/Captions` —
+  which is published but is not what arrives in the tarball. A consumer reading
+  the README a package manager put in front of them found neither prop, and the
+  next place to look was a `.d.ts`.
+
+  `remaining` is a standard player affordance, and a consumer who concludes it is
+  absent reimplements it as `duration - currentTime` — which gets the untimed case
+  this component already handles wrong. The README now states all three `type`
+  values, that `remaining` carries a leading minus for as long as any remainder is
+  left, and what happens where there is no duration to measure against:
+  `data-state="untimed"` marks all three types, `current` included, because it
+  describes the source rather than the instance, while the element differs —
+  `duration` and `remaining` become a `<span>` holding only the children given to
+  them, and `current` stays a `<time>` because it still has an elapsed time to
+  show. Pairing that state with `data-time-type` is called out as the way to place
+  a live badge, since the state alone also matches the running `current`.
+
+  `renderCue` was named in `Overview/Captions` and nowhere else. Its signature,
+  the four-field `TextCue` a cue is stripped to before it reaches consumer code,
+  and the fact that supplying it drops the default styling from each cue's own box
+  — while the overlay positioning them keeps its own — are now in the README
+  beside the caption prose. That `Player.Captions` renders nothing
+  unless the provider hands caption rendering over is stated with it — a consumer
+  passing `renderCue` and seeing no cues is otherwise left guessing.
+
+  Documentation only. No behaviour changed, and no declaration moved.
+
+- Updated dependencies [85e38d1]
+- Updated dependencies [083df66]
+- Updated dependencies [3896f17]
+- Updated dependencies [3896f17]
+- Updated dependencies [ef04afe]
+- Updated dependencies [a978938]
+- Updated dependencies
+- Updated dependencies [636ead7]
+  - @playdeck/core@1.0.0
+  - @playdeck/provider-hls@1.0.0
+  - @playdeck/provider-native@1.0.0
+  - @playdeck/provider-vimeo@1.0.0
+  - @playdeck/provider-wistia@1.0.0
+  - @playdeck/provider-youtube@1.0.0
+
 ## 0.2.0
 
 ### Minor Changes

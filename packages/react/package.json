@@ -1,6 +1,6 @@
 {
   "name": "@playdeck/react",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Headless, composable React 19 media player primitives with capability-aware providers.",
   "keywords": [
     "media",
