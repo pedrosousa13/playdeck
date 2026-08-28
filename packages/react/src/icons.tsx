@@ -1,6 +1,10 @@
 import type { ReactElement, SVGProps } from 'react';
 
-type IconProps = SVGProps<SVGSVGElement>;
+// One type for every icon rather than one alias each. Elsewhere in the package
+// a component owns its own props type; this is the one departure, because the
+// icons accept the same props and a name per icon would be a difference a
+// reader has to check for and never finds (#478).
+export type IconProps = SVGProps<SVGSVGElement>;
 
 const Icon = ({
   children,

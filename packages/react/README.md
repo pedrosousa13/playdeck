@@ -576,7 +576,7 @@ Every component has a matching props type (`RootProps`, `MediaProps`,
 `SeekSliderProps`, `MenuItemProps`, …), plus `PlayerHandle`, `PlayerActions`,
 `PlayerActivationProps`, `PosterInput`, `ResponsivePoster`, `NormalizedPoster`,
 `ErrorDisplayRenderProps`, `ShortcutAction`, `ShortcutBindings`. The icons below
-are the exception, and need no import: each takes `SVGProps<SVGSVGElement>`.
+share one type, `IconProps`, rather than carrying an identical alias each.
 
 `PlayerHandle` is what a `ref` on `Player.Root` receives, and `PlayerActions` is
 that same type with the read side (`getState`, `subscribe`, `on`) removed — it
