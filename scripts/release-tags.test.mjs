@@ -52,9 +52,14 @@ test('collapses the peeled ref an annotated tag adds', () => {
   );
 });
 
-// The acceptance criterion #460 states as "packages that move to different
-// versions in one release are each identifiable". A single repo-wide tag names
-// one version, so it cannot name a tree whose packages sit at two.
+// Why the tags are per package rather than one for the repository is the header
+// of scripts/release-tags.mjs, stated there once for the reason the `tagPlan`
+// case below gives: one comment to correct rather than two that drift apart.
+//
+// The two versions here differ only to make the example legible. What the
+// assertion pins is the naming -- a tag per package, carrying that package's own
+// version -- which a repository-wide scheme fails whether the versions are equal
+// or not.
 test('names every package at its own version', () => {
   const { toPush } = tagPlan({
     packages: [

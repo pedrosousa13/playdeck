@@ -5,11 +5,17 @@
 // upgrading between two of them had no commit range to read, and a release that
 // failed halfway had nothing to diff against.
 //
-// **One tag per package, never one for the repository.** These packages version
-// independently -- `.changeset/config.json` declares no `fixed` and no `linked`
-// group -- so one release can move them to different versions, and a single
-// repository-wide `v0.2.0` would name a tree in which some of them are not at
-// 0.2.0 at all.
+// **One tag per package, never one for the repository.** A tag has to name what
+// a consumer installs: someone resolves `@playdeck/core@0.2.0` from the
+// registry, and the tag answering "what shipped as that" carries the same name,
+// where a repository-wide `v0.2.0` would need a reader to already know the two
+// name the same thing. The workspace also holds packages that publish nothing,
+// which a repository-wide version tag would claim to name as well.
+//
+// Neither reason depends on a release moving the packages to different
+// versions, which is the property worth having: whether it does is a changesets
+// configuration choice, and a tagging scheme that only worked under one setting
+// of it would break quietly the day that setting changed.
 //
 // The names are not invented here. `changeset tag` creates them, so the
 // vocabulary is changesets' own and follows changesets rather than this file if
