@@ -144,3 +144,9 @@ export { Gestures } from './gestures.js';
 export type { GesturesProps } from './gestures.js';
 
 export * from './icons.js';
+
+// Named here as well as reached by the wildcard above, so that the entry's type
+// surface reads the same way for the icons as for every other group in this
+// file: a consumer scanning for what they can import finds it without opening
+// the icons module.
+export type { IconProps } from './icons.js';
