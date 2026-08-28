@@ -75,6 +75,55 @@ provider lazily, once source detection says the active source needs it. A
 consumer playing MP4 ships no YouTube, Vimeo, Wistia or hls.js code in its
 initial graph.
 
+## What a page actually downloads
+
+Lazy loading is worth stating in bytes rather than in adjectives, because the
+number a reader cares about is the one for the source they are playing, and for
+one of these sources it is large. Gzip, excluding React itself and the optional
+`theme.css` (5.8 KB):
+
+| Playing                                           | Downloads                                                      | Total        |
+| ------------------------------------------------- | -------------------------------------------------------------- | ------------ |
+| MP4 or WebM                                       | core 7.8 + primitives 16.9 + native 5.7                        | **30.4 KB**  |
+| HLS on Safari and iOS                             | the above + HLS adapter 4.8                                    | **35.2 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 159.5**                                   | **194.7 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | the above + hls.js light 106.0                                 | **141.2 KB** |
+| YouTube                                           | core 7.8 + primitives 16.9 + adapter 6.1                       | **30.8 KB**  |
+| Vimeo                                             | core 7.8 + primitives 16.9 + adapter 7.7 + `@vimeo/player` 8.2 | **40.6 KB**  |
+| Wistia                                            | core 7.8 + primitives 16.9 + adapter 5.4                       | **30.1 KB**  |
+
+**hls.js is the whole story here, and it is not ours.** Adaptive streaming needs
+manifest parsing, MSE buffer management, ABR heuristics, MPEG-TS to fMP4
+transmuxing and CEA-608/708 extraction; hls.js's own smallest build is 106 KB,
+and Playdeck's HLS adapter over it is 4.7. What lazy loading buys is not a
+smaller hls.js. It is that the other four rows never download one, and that
+Safari and iOS do not either, because they play HLS natively and hls.js is never
+fetched there.
+
+Two of those numbers are within your control. `hls.js/light` saves 53.5 KB and
+gives up subtitles, alternate audio and DRM — the HLS package's README covers
+what that costs and how the player reports it, and it is reached through
+`loadHls` without forking anything. The `@vimeo/player` and hls.js versions are
+ordinary dependencies you can pin or swap.
+
+YouTube and Wistia load their own player from their own origin at runtime, so
+their SDK is a network request rather than a package in your bundle, and it is
+not counted above. [Third-party requests and CSP](docs/third-party-requests.md)
+names every origin involved.
+
+Every Playdeck package in this table is measured by `pnpm test:budgets` on each
+CI run, and three of them fail the build if they grow past a budget: core at
+10 KB, the primitives at 18 KB and `theme.css` at 6 KB. The provider adapters are
+measured and reported without a budget, because a lazy chunk does not compete
+for the initial graph. Run that command for the current figures — nothing checks
+this table against it, so it is a snapshot and the budgets are the gate.
+
+The third-party bytes are the exception, and deliberately so: hls.js and
+`@vimeo/player` are external to those bundles, so that script never sees them.
+The two figures here were read off the installed packages when this table was
+written — hls.js 1.6.16 and `@vimeo/player` 2.30.4 — and they move when you
+upgrade.
+
 ## Honesty about providers
 
 The reason for the capability contract is that these five providers do not have
