@@ -34,7 +34,10 @@
 // and the whole point of #460's criterion is that the tag must exist for a
 // release that failed to publish. Run from `main` by whoever cut the bump, the
 // tag is on the remote before the workflow is dispatched at all, and no
-// permission near the publish credential moves.
+// permission near the publish credential moves. What the workflow does carry is
+// `--verify` below: a read that refuses a release whose versions this has not
+// tagged yet. Checking is not creating, and it needs no permission the workflow
+// did not already have.
 //
 // Idempotent in both halves, because a retried release is exactly when this
 // gets run twice: `changeset tag` skips a tag that already exists locally or on
@@ -139,6 +142,56 @@ export const requiredTags = (tree) =>
   publishablePackages(tree).map((pkg) => releaseTag(pkg));
 
 /**
+ * Which required tags the remote does not carry.
+ *
+ * Deliberately not `tagPlan`, which answers a different question: that one
+ * decides what *this checkout* can push, so it needs a local tag list. A
+ * release runner has a fresh clone and no local tags, and no business creating
+ * any -- the whole reason tagging stays out of the workflow is that a tag must
+ * not be a product of the publish pipeline. All it can ask is whether the work
+ * was already done somewhere else.
+ * @param {{ required: readonly string[]; remoteTags: ReadonlySet<string> }} state
+ * @returns {string[]}
+ */
+export const missingReleaseTags = ({ required, remoteTags }) =>
+  required.filter((tag) => !remoteTags.has(tag));
+
+/**
+ * Throws unless the remote carries a tag for every publishable version in a
+ * tree. Answers with the tags it checked, so a caller can report what it
+ * covered rather than restating the list.
+ *
+ * Read-only, and that is a requirement rather than a property that happens to
+ * hold: this runs inside .github/workflows/release.yml, whose jobs have
+ * `contents: read`. `git ls-remote` needs nothing more.
+ * @param {{ repoRoot: string }} options
+ * @returns {string[]}
+ */
+export const verifyReleaseTags = ({ repoRoot: tree }) => {
+  const required = requiredTags(tree);
+  const missing = missingReleaseTags({
+    required,
+    remoteTags: remoteTagNames(
+      execFileSync('git', ['ls-remote', '--tags', 'origin'], {
+        cwd: tree,
+        encoding: 'utf8'
+      })
+    )
+  });
+
+  if (missing.length > 0) {
+    throw new Error(
+      `The remote carries no tag for these versions, so publishing now would ship a version with no commit range to read:\n${missing
+        .map((tag) => `  ${tag}`)
+        .join('\n')}\n` +
+        'Run `pnpm tag:packages` from a checkout of `main` that carries the ' +
+        'version bump, then dispatch this workflow again.'
+    );
+  }
+  return required;
+};
+
+/**
  * Tags every publishable version in a repository and pushes what the remote is
  * missing. Answers with the tags it pushed, which is empty on a repeat run.
  *
@@ -238,7 +291,14 @@ export const tagRelease = ({ repoRoot: tree }) => {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv.includes('--list')) {
+    if (process.argv.includes('--verify')) {
+      const verified = verifyReleaseTags({ repoRoot });
+      console.log(
+        `Every publishable version is tagged on the remote:\n${verified
+          .map((tag) => `  ${tag}`)
+          .join('\n')}`
+      );
+    } else if (process.argv.includes('--list')) {
       for (const tag of requiredTags(repoRoot)) console.log(tag);
       console.log(
         '\nThe tag every publishable version needs. `pnpm tag:packages`, run ' +
