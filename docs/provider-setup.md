@@ -307,7 +307,7 @@ neither a string nor an object — is refused as `invalid-source`.
 ## What a refusal reads like
 
 A refused source is published on `PlayerState.error` and rendered by
-`Player.ErrorDisplay`. The message names which of the three failures occurred
+`Player.ErrorDisplay`. The message names which of the four failures occurred
 and quotes the value that was rejected, truncated to 120 characters:
 
 **Not readable** — a string that broke one of the shared rules, or a recognised
@@ -324,12 +324,23 @@ character at either end, and a URL that simply matched nothing:
 > http(s) or scheme-less, carries no control character at either end, and is
 > either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8.
 
+**Does not play that format** — a well-formed URL for a streaming format
+Playdeck recognises and does not support. Today that is DASH, and only DASH:
+
+> Playdeck does not play DASH. The player source "…" is a DASH manifest, and
+> Playdeck plays HLS (.m3u8), MP4 and WebM.
+
+This one is a scope decision rather than a mistake in the value. Playdeck plays
+HLS and progressive files, and DASH is out of scope: a `.mpd` URL is refused
+deliberately, so changing the URL will not help and no future patch release
+turns it on. Convert the media to HLS, or use a player that carries dash.js.
+
 **Not a source object** — a value that is not a string and does not validate as
 one of the objects above:
 
 > The player source … is not a source object Playdeck accepts.
 
-None of the three is recoverable: a retry re-reads the same `source` prop and
+None of the four is recoverable: a retry re-reads the same `source` prop and
 the same rules refuse it again, so no control offers one. Fix the value.
 
 ### When the provider fails to load

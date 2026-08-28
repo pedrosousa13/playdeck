@@ -10,6 +10,7 @@ import {
   isVimeoVideoId,
   isWistiaMediaId,
   isYouTubeVideoId,
+  unsupportedSourceFormat,
   type HlsSource,
   type ProviderStateListener,
   type VideoFileSource,
@@ -249,6 +250,61 @@ test.each([
   if (result.status === 'failure') {
     expect(result.guidance).toMatch(/explicit source object/i);
   }
+});
+
+test.each([
+  'https://cdn.example.com/stream.mpd',
+  'https://cdn.example.com/stream.MPD',
+  'https://cdn.example.com/stream.mpd?token=abc',
+  'https://cdn.example.com/stream.mpd#t=10',
+  '//cdn.example.com/stream.mpd',
+  '/stream.mpd',
+  'stream.mpd'
+])('refuses a recognised format this library does not play: %s', (input) => {
+  expect(detectSource(input)).toMatchObject({
+    status: 'failure',
+    input,
+    reason: 'unsupported-format'
+  });
+});
+
+// The separation that earns `unsupported-format` its own member: both are
+// refused, and only one of them can say what arrived.
+test('a DASH manifest is refused by format and an unreadable url by shape', () => {
+  expect(detectSource('https://cdn.example.com/stream.mpd')).toMatchObject({
+    reason: 'unsupported-format'
+  });
+  expect(detectSource('https://cdn.example.com/clip.avi')).toMatchObject({
+    reason: 'unsupported-string'
+  });
+});
+
+test('unsupportedSourceFormat names the format, and only for one it refuses', () => {
+  expect(unsupportedSourceFormat('https://cdn.example.com/stream.mpd')).toBe(
+    'DASH'
+  );
+  expect(unsupportedSourceFormat('https://cdn.example.com/stream.MPD')).toBe(
+    'DASH'
+  );
+  expect(
+    unsupportedSourceFormat('https://cdn.example.com/master.m3u8')
+  ).toBeUndefined();
+  expect(
+    unsupportedSourceFormat('https://cdn.example.com/clip.mp4')
+  ).toBeUndefined();
+  // The extension is read off the path, so a query that merely mentions one
+  // does not make the source that format.
+  expect(
+    unsupportedSourceFormat('https://cdn.example.com/clip.mp4?next=x.mpd')
+  ).toBeUndefined();
+});
+
+// The two lists behind `unsupportedSourceFormat` and `sourceFromFileExtension`
+// have to stay disjoint, so the formats this library plays keep detecting.
+test('a played extension is unaffected by the refused-format list', () => {
+  expect(detectSource('https://cdn.example.com/master.m3u8')).toMatchObject({
+    status: 'success'
+  });
 });
 
 test.each([

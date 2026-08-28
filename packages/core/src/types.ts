@@ -466,8 +466,21 @@ export type PlayerSource =
 
 export type ResolvedPlayerSource = Exclude<PlayerSource, string>;
 
+// `unsupported-format` is the one of these four that names a cause rather than
+// describing a shape. It is a well-formed URL whose path ends in a streaming
+// manifest extension this library recognises and deliberately does not play,
+// which today is `.mpd` and DASH alone (#447). It is split out from
+// `unsupported-string` because the two owe the reader different things: that
+// one covers a scheme the allowlist refused, a control character at an edge and
+// a url that simply matched nothing, so it can only restate the requirement,
+// while this one knows exactly what arrived and can say that the answer is no
+// and will stay no. A consumer who reads it has a decision to make about their
+// media pipeline rather than a typo to fix.
 export type SourceDetectionFailureReason =
-  'malformed-string' | 'unsupported-string' | 'invalid-source';
+  | 'malformed-string'
+  | 'unsupported-string'
+  | 'unsupported-format'
+  | 'invalid-source';
 
 export type SourceDetectionSuccess = {
   status: 'success';

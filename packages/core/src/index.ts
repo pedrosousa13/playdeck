@@ -76,7 +76,8 @@ export {
   isVimeoVideoId,
   isWistiaMediaId,
   isYouTubeVideoId,
-  resolveNetworkPath
+  resolveNetworkPath,
+  unsupportedSourceFormat
 } from './source-detection.js';
 
 export { textTrackLabel } from './text-tracks.js';

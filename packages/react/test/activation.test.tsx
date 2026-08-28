@@ -1357,6 +1357,17 @@ test.each([
       'See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for the source forms each provider accepts.'
   },
   {
+    // A recognised streaming manifest this library refuses on purpose. It gets
+    // its own sentence because the `unsupported-string` one above can only
+    // restate the requirement, while this one names what arrived and says the
+    // answer will not change (#447).
+    label: 'a DASH manifest',
+    source: 'https://cdn.example.com/stream.mpd',
+    message:
+      'Playdeck does not play DASH. The player source "https://cdn.example.com/stream.mpd" is a DASH manifest, and Playdeck plays HLS (.m3u8), MP4 and WebM. ' +
+      'See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for the source forms each provider accepts.'
+  },
+  {
     // Not a string at all, so neither string sentence applies: the object is
     // quoted as it was passed (`source-detection.ts:369`).
     label: 'an explicit source object that does not validate',

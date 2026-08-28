@@ -92,10 +92,27 @@ _Avoid_: field, key, call site
 **Refused source**:
 The `source` prop turned down before any provider is constructed — by the shared
 allowlist, or by source detection failing to read a video out of it. Published
-as an `unsupported` error whose message names which of the three detection
+as an `unsupported` error whose message names which of the four detection
 failures occurred **and quotes the offending value**, truncated, escaped by the
 text child that renders it. Never recoverable: the same prop re-read is refused
 by the same rules, so no control offers a retry.
+
+**Refused format**:
+The one of those four detection failures that names a cause rather than a shape:
+a well-formed URL whose path ends in a streaming manifest extension this library
+recognises and deliberately does not play. `unsupportedSourceFormat`
+(`@playdeck/core`) holds the one list, which is `.mpd` and DASH alone today, and
+has two readers — detection, which raises `unsupported-format`, and the React
+layer, which names the format in the message. One list rather than two, so a
+format cannot be refused under a sentence that fails to name it (#447).
+
+Distinct from the `unsupported-string` beside it, and the distinction is what
+the member buys. That one covers a scheme the allowlist refused, a control
+character at an edge, and a URL that simply matched nothing, so it can only
+restate the requirement. This one knows what arrived, so it says the answer is
+no and will stay no: a reader has a decision to make about their media pipeline
+rather than a typo to fix.
+_Avoid_: unknown format, bad extension
 
 Quoting the value is what separates this from a **Refused surface**, and the
 reason is structural rather than a difference of opinion about disclosure. A
