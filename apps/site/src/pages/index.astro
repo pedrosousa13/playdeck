@@ -89,31 +89,6 @@ const statuses = [
   }
 ] as const;
 
-// The ledger's rows. Every one is a status this repository documents, quoted
-// from the package README that documents it, and the caption under the panel
-// says so — this panel reads nothing from a running player, and a hero that
-// implied it did would be the one dishonest thing on a page about honesty.
-const ledger = [
-  {
-    provider: 'vimeo',
-    capability: 'selectQuality',
-    status: 'available',
-    reason: undefined
-  },
-  {
-    provider: 'vimeo',
-    capability: 'customControls',
-    status: 'unknown',
-    reason: 'provider-check'
-  },
-  {
-    provider: 'native',
-    capability: 'selectQuality',
-    status: 'unavailable',
-    reason: 'source'
-  }
-] as const;
-
 // The five, and what each one drives. Taken from the package table in the root
 // README rather than described again here.
 const providers = [

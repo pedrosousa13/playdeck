@@ -29,14 +29,41 @@ export default defineConfig({
   // while pixelmatch's own antialiasing detection still absorbs edge noise.
   expect: { toHaveScreenshot: { threshold: 0.1 } },
   use: { baseURL: 'http://127.0.0.1:4173' },
-  webServer: {
-    command:
-      'pnpm --filter @playdeck/storybook exec storybook dev --ci --no-open -p 4173 --host 127.0.0.1',
-    url: 'http://127.0.0.1:4173/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story',
-    gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000
-  },
+  // Two servers, and `baseURL` above names the first: the workbench is what
+  // almost every spec here drives, so a relative `page.goto` stays a story.
+  // `site-ledger.spec.ts` writes its address out in full for that reason.
+  webServer: [
+    {
+      command:
+        'pnpm --filter @playdeck/storybook exec storybook dev --ci --no-open -p 4173 --host 127.0.0.1',
+      url: 'http://127.0.0.1:4173/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story',
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000
+    },
+    // The site, for the landing page's capability ledger.
+    //
+    // Built here rather than assumed built. The site cannot be served at all
+    // until the packages are: it imports `@playdeck/react` through its
+    // published entry, and the landing page reads the built bundles for the
+    // figures it prints. No e2e job builds anything today, so the server
+    // command has to — and `turbo run build` makes an already-built tree a
+    // cache hit of a few seconds rather than a rebuild.
+    //
+    // Served by `scripts/serve-site.mjs` and not by `astro preview`, which
+    // starts a background daemon and exits; that file carries the rest.
+    //
+    // Port 4322, one past the Astro default, so a `pnpm --filter @playdeck/site
+    // dev` on 4321 is neither reused nor trampled.
+    {
+      command:
+        'pnpm exec turbo run build --filter=@playdeck/site... && node scripts/serve-site.mjs 4322',
+      url: 'http://127.0.0.1:4322/',
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000
+    }
+  ],
   projects: [
     // `visual` runs chromium only, so a visual test is +1 to the suite, not
     // +3. The three engine projects ignore it explicitly rather than relying
