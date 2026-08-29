@@ -15,10 +15,12 @@
 // recorded for the whole visit. Every failure is reported, not the first, so
 // one run tells the reader everything that is wrong.
 //
-// Deliberately not wired into any pull-request gate: that is #528. It builds
-// both surfaces by default, because a run against whatever happens to be on
-// disk proves nothing about the tree under test; `--no-build` is for a local
-// re-run against an artifact this script already assembled.
+// Run on demand as `pnpm test:pages` rather than from a pull-request gate: it
+// builds both surfaces from scratch and drives a browser through them, which is
+// several times the work `ci.yml` does per pull request. Extending the gate to
+// cover it is #528. It builds by default, because a run against whatever
+// happens to be on disk proves nothing about the tree under test; `--no-build`
+// is for a local re-run against an artifact this script already assembled.
 
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
@@ -122,16 +124,30 @@ const serveArtifact = async (directory) => {
   };
 };
 
-// Two things the workbench does to itself, tolerated because both were observed
-// on a build served from the domain root — the arrangement where no base path
-// exists to get wrong — and so say nothing about the prefix under test.
+// Noise the workbench makes about itself, tolerated because neither event can
+// carry the evidence this check is looking for. Storybook navigates its preview
+// iframe while the previous navigation of that iframe is still in flight, and
+// the browser reports the request it drops as aborted rather than with a
+// status. And the manager logs the diagnostic below when a channel event
+// arrives from a window it cannot match: it names an internal event and no URL
+// at all. Anything else is a failure.
 //
-// Storybook navigates the preview iframe while its previous navigation is still
-// in flight, which the browser reports as an aborted request rather than as a
-// status. And its manager logs this diagnostic when a channel event arrives
-// from a window it cannot match; it names an internal event and no URL at all.
-// Anything else, from either half, is a failure.
+// The aborted request is tolerated by the URL it happens to and not by the
+// surface it happens on, because the surfaces do not separate it: the site
+// visit follows its link into the workbench and sees the same abort. A
+// tolerance for every aborted request would drop, rather than report, a
+// wrong-prefix asset abandoned by a navigation — which is the failure this
+// whole script is for. Only the preview iframe's own URL, under the prefix
+// being proven, is allowed to abort; the same document requested from a wrong
+// prefix is not that URL and is still reported.
+//
+// To satisfy yourself that either tolerance is really the workbench and not the
+// prefix under test: build the workbench with `PLAYDECK_BASE_PATH` unset, serve
+// `apps/storybook/storybook-static` from a domain root — the arrangement where
+// no base path exists to get wrong — and visit it with the same listeners
+// attached.
 const abortedRequest = 'net::ERR_ABORTED';
+const previewIframePath = `${basePath}storybook/iframe.html`;
 const managerChannelDiagnostic =
   /^%c manager %c received .* but was unable to determine the source of the event/;
 
@@ -153,7 +169,8 @@ const recordFailures = (page, failures, surface) => {
   });
   page.on('requestfailed', (request) => {
     const reason = request.failure()?.errorText ?? 'no reason given';
-    if (reason === abortedRequest) return;
+    const { pathname } = new URL(request.url());
+    if (reason === abortedRequest && pathname === previewIframePath) return;
     failures.push(
       `${surface}: request failed for ${request.url()} (${reason})`
     );
@@ -181,14 +198,25 @@ const checkSite = async (browser, origin, failures) => {
   await page.getByRole('heading', { name: 'Playdeck', exact: true }).waitFor();
 
   // Every internal link, rather than the one the placeholder page happens to
-  // carry today: a link added by #520 or #521 is exactly the kind that gets
-  // written root-absolute, and this check should already cover it.
+  // carry today: whatever links the site grows, an internal one is exactly the
+  // kind that gets written root-absolute, and this check should already cover
+  // it without being extended.
+  //
+  // Selected by the prefix they are served from, and not merely by being an
+  // absolute URL: `HTMLAnchorElement.href` resolves every link against the
+  // document, so an external link the site gains later would look identical.
+  // Following one would put a network request in the middle of a check that
+  // must pass with no egress, and its 404 or its console errors would be
+  // reported as this artifact's.
+  const served = `${origin}${basePath}`;
   const links = await page
     .locator('a[href]')
-    .evaluateAll((anchors) =>
-      anchors
-        .map((anchor) => /** @type {HTMLAnchorElement} */ (anchor).href)
-        .filter((href) => href.startsWith('http'))
+    .evaluateAll(
+      (anchors, prefix) =>
+        anchors
+          .map((anchor) => /** @type {HTMLAnchorElement} */ (anchor).href)
+          .filter((href) => href.startsWith(prefix)),
+      served
     );
   if (links.length === 0) {
     failures.push('site: the page carries no internal link to follow.');

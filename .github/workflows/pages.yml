@@ -15,10 +15,10 @@ name: Pages
 # `main` only. Deploying a branch would overwrite the published documentation
 # with unreviewed content; `ci.yml`'s `storybook` job already proves on every
 # pull request that the workbench build still succeeds, which is the part a
-# pull request needs. The site build has no such pull-request gate yet — that
-# is its own ticket (#528) — so until it lands a site build that only breaks
-# under a base path breaks here first. `workflow_dispatch` is here to
-# re-publish without an empty commit.
+# pull request needs. It does not build the site, so a site build that only
+# breaks under a base path breaks here rather than on the pull request that
+# introduced it; carrying the site into that gate is #528. `workflow_dispatch`
+# is here to re-publish without an empty commit.
 on:
   push:
     branches: [main]

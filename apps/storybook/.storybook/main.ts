@@ -26,19 +26,26 @@ const pendingAssetPlugin = (): PluginOption => {
 };
 
 /**
- * The path the workbench is served from, which is `/` everywhere except the
- * hosted build: GitHub Pages serves a project site under `/<repo>/` and never
- * from the domain root. Vite turns this into `import.meta.env.BASE_URL`, which
- * is what `stories/asset-url.ts` resolves the `staticDirs` fixtures against —
- * a root-absolute `/tracer.mp4` reaches `pedrosousa13.github.io/tracer.mp4`,
+ * The path the workbench is served from, which is `/` everywhere except a
+ * build staged for GitHub Pages: a project site is served under `/<repo>/` and
+ * never from the domain root, and the workbench sits one segment further in,
+ * under `/<repo>/storybook/`, because `apps/site` holds the artifact root
+ * (#519). Vite turns this into `import.meta.env.BASE_URL`, which is what
+ * `stories/asset-url.ts` resolves the `staticDirs` fixtures against — a
+ * root-absolute `/tracer.mp4` reaches `pedrosousa13.github.io/tracer.mp4`,
  * which is a different site's root and 404s (#435).
  *
  * Read from the environment rather than hard-coded, for two reasons.
- * `.github/workflows/pages.yml` takes the value from
- * `actions/configure-pages`, so the repository name is stated nowhere in this
- * tree. And leaving the default at `/` keeps `storybook dev`, the Vitest
- * browser run and `ci.yml`'s `storybook` job byte-identical to what they build
- * today — the deploy is the only caller that sets it.
+ * `.github/workflows/pages.yml` takes the value from `actions/configure-pages`
+ * and appends the segment itself, so the repository name is stated nowhere in
+ * this tree and where the workbench lands inside the artifact stays that
+ * file's decision rather than this one's. And the default of `/` is what keeps
+ * `storybook dev`, the Vitest browser run and `ci.yml`'s `storybook` job
+ * building exactly what they build today: each is served from a root, so none
+ * of them passes a value. The callers that do pass one are the callers that
+ * stage the artifact — the deploy, and `scripts/check-pages-artifact.mjs`,
+ * which builds under the same prefix in order to prove the result loads under
+ * it.
  */
 const basePath = process.env.PLAYDECK_BASE_PATH ?? '/';
 

@@ -25,10 +25,10 @@ directive; server code can call `detectSource` and the rest of that surface
 without a boundary at all.
 
 Every primitive below is staged, running, in the Storybook workbench at
-[pedrosousa13.github.io/playdeck](https://pedrosousa13.github.io/playdeck/). That is
-where the full styling
-contract ([**Overview/Contract**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-contract--docs))
-and the caption guidance ([**Overview/Captions**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-captions--docs))
+[pedrosousa13.github.io/playdeck/storybook](https://pedrosousa13.github.io/playdeck/storybook/).
+That is where the full styling
+contract ([**Overview/Contract**](https://pedrosousa13.github.io/playdeck/storybook/?path=/docs/overview-contract--docs))
+and the caption guidance ([**Overview/Captions**](https://pedrosousa13.github.io/playdeck/storybook/?path=/docs/overview-captions--docs))
 live.
 
 ## Usage
@@ -81,7 +81,7 @@ array of `{ src, srcLang, label, kind?, default? }`, where `kind` is
 you supply this way reach native playback and the HLS provider's native engine;
 everywhere else only the captions a provider discovers for itself are
 available. Selection, discovery and what `Player.Captions` renders are covered
-in [**Overview/Captions**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-captions--docs).
+in [**Overview/Captions**](https://pedrosousa13.github.io/playdeck/storybook/?path=/docs/overview-captions--docs).
 
 `Player.Captions` draws the active cues only where the provider hands caption
 rendering over, and renders nothing otherwise — where the provider paints its
@@ -648,7 +648,7 @@ derived state) and, on provider-bound controls, `data-provider`. Style and query
 against those rather than internal class names. Geometry a primitive sets on
 itself is a default your `style` prop overrides; state-derived properties are
 the primitive's own. The full contract is in the workbench docs under
-[**Overview/Contract**](https://pedrosousa13.github.io/playdeck/?path=/docs/overview-contract--docs).
+[**Overview/Contract**](https://pedrosousa13.github.io/playdeck/storybook/?path=/docs/overview-contract--docs).
 
 ## Browser support
 
