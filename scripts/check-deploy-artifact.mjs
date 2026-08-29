@@ -224,16 +224,51 @@ const checkSite = async (browser, origin, failures) => {
   if (links.length === 0) {
     failures.push('site: the page carries no internal link to follow.');
   }
+  await page.close();
+
+  // Each link in a page of its own, and the page holding the links is closed
+  // above before the first one opens.
+  //
+  // This used to be one `page.goto` after another in the context that found
+  // them, and that made the *order* of the links on the landing page
+  // load-bearing (#528). The workbench goes on fetching its own scripts well
+  // after its document has arrived, so navigating away from it abandoned those
+  // requests, and the browser reports an abandoned request as
+  // `net::ERR_ABORTED` — which `recordFailures` reports, because the tolerance
+  // for that error is deliberately narrow and stays narrow: widening it to
+  // every aborted request would drop a wrong-prefix asset abandoned by a
+  // navigation, which is the failure this whole script exists to catch.
+  //
+  // A fresh context has nothing to abandon. Nothing is in flight in it when the
+  // navigation starts, and closing it is not a navigation, so no surface's
+  // requests can be dropped by another surface's visit and the landing page is
+  // free to list its links in whatever order reads best.
   for (const link of links) {
-    // A response event already reports the status, so what is left to
-    // establish is that a document arrived rather than an error page.
-    await page.goto(link);
-    const title = await page.title();
-    if (title === '') {
-      failures.push(`site: ${link} rendered no document title.`);
+    const visit = await browser.newPage();
+    recordFailures(visit, failures, 'site');
+    try {
+      // A response event already reports the status, so what is left to
+      // establish is that a document arrived rather than an error page.
+      await visit.goto(link);
+      // `load` fires when the document and its subresources are in, and the
+      // workbench is still fetching after it — so closing the page there would
+      // abandon those requests exactly as navigating away used to, and put the
+      // same `net::ERR_ABORTED` into the report. Waiting for the network to go
+      // quiet is what makes the close above a close of an idle page.
+      //
+      // A surface that never goes quiet would time out here, and that is the
+      // right verdict rather than a limitation: neither surface in this
+      // artifact polls or holds a socket open, so a page still talking half a
+      // minute after `load` is a finding.
+      await visit.waitForLoadState('networkidle');
+      const title = await visit.title();
+      if (title === '') {
+        failures.push(`site: ${link} rendered no document title.`);
+      }
+    } finally {
+      await visit.close();
     }
   }
-  await page.close();
 };
 
 /**

@@ -21,8 +21,7 @@ const archetypesUrl = `${import.meta.env.BASE_URL}archetypes/`;
 // The workbench, which `scripts/assemble-deploy.mjs` places under `storybook/`
 // beside this page. It is also what `scripts/check-deploy-artifact.mjs` follows
 // from here in a browser, which is how the two surfaces are proven reachable
-// from each other rather than merely present in the same directory — and it has
-// to be the LAST internal link in this document. See the note above it below.
+// from each other rather than merely present in the same directory.
 const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
 
 // The composition example, read as bytes from the file the `examples`
@@ -110,9 +109,8 @@ const providers = [
 <Base title="Playdeck — a headless React video player">
   {
     /* No crumbs, which is what tells the header it is on `/`: the wordmark
-     * stops being a link there, so the header adds no internal link above the
-     * three in the Start section and the order the deploy check depends on is
-     * untouched. */
+     * stops being a link on the page it points at, so the header renders no
+     * link of its own here. */
   }
   <SiteHeader />
 
@@ -375,14 +373,16 @@ const providers = [
           this site is allowed to use.
         </li>
         {
-          /* The workbench comes last, and the order is load-bearing:
-           * `scripts/check-deploy-artifact.mjs` follows every internal link on
-           * this page in document order, and the workbench goes on fetching its
-           * own scripts well after its document has arrived. Following another
-           * link after it abandons those requests, and an abandoned request is
-           * exactly what that check reports — it cannot tell a navigation that
-           * dropped one from a wrong prefix that never had it. Every link this
-           * page gains goes above this one. */
+          /* The workbench comes last because it is the least likely of the
+           * three to be what a reader came for, and for no other reason. The
+           * order used to be load-bearing: `scripts/check-deploy-artifact.mjs`
+           * followed every internal link on this page in one page context, and
+           * the workbench goes on fetching its own scripts well after its
+           * document has arrived, so navigating away from it abandoned those
+           * requests and the check reported the abandonment it cannot tell from
+           * a wrong-prefix asset. That check now visits each link in a page of
+           * its own (#528), where no navigation can abandon another surface's
+           * requests, so a link added below this one breaks nothing. */
         }
         <li>
           <a href={storybookUrl}>Storybook workbench</a> stages every primitive
