@@ -1,0 +1,387 @@
+---
+import { render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import Sweep from '../../components/Sweep.astro';
+import ThemeToggle from '../../components/ThemeToggle.astro';
+import { referencePackages } from '../../reference-packages.mjs';
+
+// One page per package, each rendering that package's whole README. Splitting a
+// README across a page per `##` was considered and rejected: the fences in these
+// documents are generated from real files by `scripts/docs-examples.mjs` and the
+// prose around them refers backwards and forwards freely, so cutting between two
+// headings cuts sentences that were written to sit together. The sticky table of
+// contents below is what a reader gets instead of a page break.
+//
+// The route parameter is `pkg` and not `package`, which is a reserved word: a
+// destructured `package` is a syntax error in a module, and the name would only
+// have appeared in this file anyway.
+export const getStaticPaths = async () => {
+  const packages = await referencePackages();
+  return packages.map((current) => ({
+    params: { pkg: current.dir },
+    props: { current, packages }
+  }));
+};
+
+const { current, packages } = Astro.props;
+
+// Every link on this page goes through `import.meta.env.BASE_URL`, which is what
+// Astro fills the configured `base` into, rather than being written as a
+// literal. That prefix is the root today and the literals would be identical,
+// which is precisely why the habit is worth keeping: the day the site moves
+// under a prefix, a hand-written `/reference/` is the bug a base path exists to
+// prevent (#435) and nothing would flag it (#523).
+const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
+const packageUrl = (dir) => `${referenceUrl}${dir}/`;
+
+const { Content, headings } = await render(current.entry);
+
+// The table of contents, derived from the same parse that produced the
+// document. Nothing here is a list of section names: a parallel list is exactly
+// the drift this ticket exists to remove, and it would go stale the first time
+// somebody renamed a heading in a README with no idea this page existed.
+//
+// Depth 1 is the README's own title, which is the page's `h1` and is already at
+// the top of what the link would scroll to. Depth 4 is dropped as well:
+// `packages/react` is the only README that goes that deep, and including it
+// would put four levels in a rail whose job is to let a reader jump to a section
+// rather than to restate the document's outline.
+const contents = headings.filter(
+  (heading) => heading.depth === 2 || heading.depth === 3
+);
+---
+
+<Base title={`${current.name} — Playdeck reference`}>
+  <header class="bar">
+    <a href={referenceUrl}>Reference</a>
+    <ThemeToggle />
+  </header>
+
+  <div class="shell">
+    {
+      /* One `nav` holding both lists rather than two landmarks, because they
+       * answer the same question at two scales: which document, and where in
+       * it. The headings inside it are the labels a screen reader lists them
+       * by. */
+    }
+    <nav class="rail" aria-label="Reference navigation">
+      <div class="rail__inner">
+        <section class="rail__group">
+          <h2 class="rail__label">Packages</h2>
+          <ul class="rail__list">
+            {
+              packages.map((entry) => (
+                <li>
+                  <a
+                    href={packageUrl(entry.dir)}
+                    aria-current={entry.dir === current.dir ? 'page' : undefined}
+                  >
+                    {entry.name}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+        </section>
+
+        <section class="rail__group">
+          <h2 class="rail__label">On this page</h2>
+          <ul class="rail__list rail__list--toc">
+            {
+              contents.map((heading) => (
+                <li data-depth={heading.depth}>
+                  <a href={`#${heading.slug}`}>{heading.text}</a>
+                </li>
+              ))
+            }
+          </ul>
+        </section>
+
+        {
+          /* The version, at the foot of the rail rather than above the
+           * document's own title. A line of small type sitting on top of an
+           * `h1` is the eyebrow `DESIGN.md` names as a generated-interface
+           * tell, and this one would have restated the heading underneath it. */
+        }
+        <p class="rail__version">
+          <span class="rail__version-label">version</span>{' '}
+          <code>{current.version}</code>
+        </p>
+      </div>
+    </nav>
+
+    {
+      /* `Content` is the README, compiled. Everything the reader sees below is
+       * that file: this page contributes a measure, a heading rhythm and the
+       * code-block styling in `base.css`, and not one word. */
+    }
+    <main class="doc">
+      <Content />
+    </main>
+  </div>
+
+  <footer class="foot">
+    <div class="foot__rule"><Sweep form="hairline" /></div>
+    <p>
+      <a href={referenceUrl}>All packages</a>
+    </p>
+  </footer>
+</Base>
+
+<style>
+  .bar {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-5);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  /* Rail and document, side by side on a wide screen and stacked below it. The
+   * rail comes first in the source in both, so a reader arriving on a phone or
+   * with a screen reader meets the contents before several hundred lines of
+   * prose rather than after them. */
+  .shell {
+    display: grid;
+    /* `minmax(0, 1fr)` and never a bare `auto`. An `auto` track is floored at
+     * its content's max-content size, and the widest thing in a reference page
+     * is a code fence whose line length is decided by `examples/` — so the
+     * column grows to the longest line and the whole document scrolls sideways
+     * on a phone. Flooring the track at zero hands the overflow back to the
+     * `<pre>`, which has a scroller of its own. */
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+    max-inline-size: 74rem;
+    margin-inline: auto;
+    padding: var(--space-6) var(--space-5);
+  }
+
+  @media (min-width: 60rem) {
+    .shell {
+      grid-template-columns: 16rem minmax(0, 1fr);
+      align-items: start;
+      gap: var(--space-8);
+    }
+  }
+
+  .rail {
+    font-size: var(--text-sm);
+  }
+
+  /* Sticky, and bounded by the viewport with its own scroller, because
+   * `packages/core` has more sections than fit on a laptop screen: a rail that
+   * is taller than the window scrolls its own tail out of reach and never
+   * brings it back. */
+  @media (min-width: 60rem) {
+    .rail__inner {
+      position: sticky;
+      inset-block-start: var(--space-5);
+      max-block-size: calc(100vh - var(--space-7));
+      overflow-y: auto;
+      /* Room for the scrollbar the line above can produce, so a link's focus
+       * ring is never clipped by the scroller's own edge. */
+      padding-inline-end: var(--space-2);
+    }
+  }
+
+  .rail__group + .rail__group {
+    margin-block-start: var(--space-5);
+  }
+
+  /* An `h2` by role, so the rail's two lists are labelled in the document
+   * outline, and at the caption rung rather than the section rung, because the
+   * heading it labels is not competing with the README's own. Capitals are left
+   * alone: a tracked uppercase label is the eyebrow tell in another position. */
+  .rail__label {
+    margin-block-end: var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--color-ink-subtle);
+    letter-spacing: normal;
+  }
+
+  .rail__list {
+    display: grid;
+    gap: var(--space-1);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .rail__list a {
+    display: block;
+    padding-block: var(--space-1);
+    color: var(--color-ink-muted);
+    text-decoration: none;
+  }
+
+  .rail__list a:hover {
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
+
+  /* The current package, marked by the same attribute that tells a screen
+   * reader which one it is rather than by a class that only says it visually.
+   * Weight and colour together, because colour alone is not a state. */
+  .rail__list a[aria-current='page'] {
+    font-weight: var(--weight-semibold);
+    color: var(--color-accent);
+  }
+
+  .rail__list--toc a {
+    font-size: var(--text-xs);
+  }
+
+  /* Indent by the heading's own depth, so the rail carries the document's
+   * hierarchy rather than flattening it. */
+  .rail__list--toc li[data-depth='3'] a {
+    padding-inline-start: var(--space-4);
+  }
+
+  .rail__version {
+    margin-block-start: var(--space-5);
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
+  .rail__version-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .rail__version code {
+    font-size: var(--text-xs);
+    color: var(--color-ink-muted);
+  }
+
+  /* The measure. These are pages of prose rather than a landing page, and a
+   * paragraph the full width of a desktop window is the thing that makes a long
+   * document unreadable — the eye loses the start of the next line. The code
+   * blocks inside are allowed the full column, because a fence that wraps or
+   * scrolls is worse than a wide one and `docs:check` decides how long its lines
+   * are, not this file. */
+  .doc {
+    min-inline-size: 0;
+    /* Inherited by everything in the document, and needed because these are
+     * someone else's words: a package name is one unbroken token and
+     * `@playdeck/provider-youtube` set at the `h1` rung is wider than a phone.
+     * Without this the title alone gives the page a horizontal scrollbar, which
+     * then moves the whole document rather than the one thing that did not fit.
+     * It has no effect inside a fence, where nothing wraps in the first place. */
+    overflow-wrap: break-word;
+  }
+
+  .doc :global(p),
+  .doc :global(ul),
+  .doc :global(ol),
+  .doc :global(blockquote) {
+    max-inline-size: 40rem;
+  }
+
+  /* Rendered Markdown carries none of the attributes Astro scopes this
+   * stylesheet by — the scoping is stamped on this page's own elements, and
+   * `Content` is compiled from a file in `packages/` — so every rule below the
+   * container has to be `:global`. */
+  .doc :global(h1) {
+    margin-block-end: var(--space-4);
+  }
+
+  .doc :global(h2) {
+    margin-block: var(--space-7) var(--space-3);
+  }
+
+  .doc :global(h3) {
+    margin-block: var(--space-6) var(--space-2);
+  }
+
+  /* `packages/react` is the only README that reaches this depth, and `base.css`
+   * stops at `h3`, so without this rule its fourth level arrives at the
+   * browser's own default and reads as body text in bold. It sits at the body
+   * rung and is separated by weight, which is what a fourth level has left. */
+  .doc :global(h4) {
+    margin-block: var(--space-5) var(--space-2);
+    font-size: var(--text-md);
+    font-weight: var(--weight-semibold);
+    line-height: var(--leading-snug);
+  }
+
+  /* `base.css` sets `p { margin: 0 }` for the site's laid-out pages, where the
+   * gap belongs to the grid. A document is the case that rule does not cover:
+   * its paragraphs are a stream and the space between them is the paragraph
+   * break. */
+  .doc :global(p),
+  .doc :global(ul),
+  .doc :global(ol),
+  .doc :global(pre),
+  .doc :global(blockquote),
+  .doc :global(table) {
+    margin-block: var(--space-4);
+  }
+
+  .doc :global(li) {
+    margin-block: var(--space-2);
+  }
+
+  .doc :global(blockquote) {
+    padding-inline-start: var(--space-4);
+    border-inline-start: var(--line-width) solid var(--color-line-strong);
+    color: var(--color-ink-muted);
+  }
+
+  /* Inline code, set apart from the prose by a well rather than by colour: the
+   * accent is the link colour on this site and an identifier is not a link. */
+  .doc :global(:not(pre) > code) {
+    padding: 0.1em 0.3em;
+    background-color: var(--color-sunken);
+    border-radius: var(--radius-sm);
+  }
+
+  /* The READMEs carry wide tables of props and events. The scroller is on the
+   * table rather than on the page, so a narrow window scrolls the table and
+   * never the document. */
+  .doc :global(table) {
+    display: block;
+    max-inline-size: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+  }
+
+  .doc :global(th),
+  .doc :global(td) {
+    padding: var(--space-2) var(--space-3);
+    border-block-end: var(--line-width) solid var(--color-line);
+    text-align: start;
+    vertical-align: top;
+  }
+
+  .doc :global(th) {
+    font-weight: var(--weight-semibold);
+    white-space: nowrap;
+  }
+
+  /* A `hr` in a README is a section break in someone else's document, so it is
+   * a hairline and not the chroma sweep: the sweep has exactly two forms and a
+   * horizontal rule inside rendered prose is neither of them. */
+  .doc :global(hr) {
+    block-size: 0;
+    margin-block: var(--space-6);
+    border: 0;
+    border-block-start: var(--line-width) solid var(--color-line);
+  }
+
+  .foot {
+    max-inline-size: 74rem;
+    margin-inline: auto;
+    padding: 0 var(--space-5) var(--space-8);
+    font-size: var(--text-sm);
+  }
+
+  /* The separator's spacing is this page's business; its thickness and its paint
+   * are `Sweep.astro`'s. */
+  .foot__rule {
+    margin-block-end: var(--space-4);
+  }
+</style>

@@ -19,13 +19,20 @@
   // `tsc` cannot parse `.astro` files, so this covers the TypeScript the site
   // actually has and never `**/*.astro`: the templates are checked by Astro's
   // own tooling, and naming them here would fail `pnpm typecheck` on syntax it
-  // has no parser for. `src/**/*.ts` matches nothing yet and is here so the
-  // first module the site grows is checked without anyone remembering to come
-  // back (#519).
+  // has no parser for. `src/**/*.ts` is here so a module the site grows is
+  // checked without anyone remembering to come back (#519).
   //
   // `.astro/` — the directory `astro sync` writes its generated ambient types
   // into — is left out for the same reason it is gitignored: it is build output,
   // it does not exist on a clean checkout, and a project reference that only
   // typechecks after a build has run is a broken reference.
-  "include": ["astro.config.ts", "src/**/*.ts"]
+  "include": ["astro.config.ts", "src/**/*.ts"],
+  // The one file that cannot be covered by the line above, and it is the
+  // exclusion above that puts it here rather than anything about the file. It
+  // imports `astro:content`, a virtual module whose declarations exist only in
+  // the generated `.astro/` directory this project deliberately does not read,
+  // so `tsc` resolves the import to nothing and fails on a file that is
+  // perfectly well-formed. Astro's own tooling checks it, in the same pass that
+  // checks the `.astro` templates for the same reason.
+  "exclude": ["src/content.config.ts"]
 }

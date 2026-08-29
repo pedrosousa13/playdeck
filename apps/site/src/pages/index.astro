@@ -19,6 +19,9 @@ const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
 // design reference rather than a destination for a reader of the site, which is
 // why it is one line at the bottom of a placeholder and not navigation.
 const designUrl = `${import.meta.env.BASE_URL}design/`;
+
+// The package reference, addressed the same way and for the same reason (#523).
+const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
 ---
 
 {
@@ -30,6 +33,12 @@ const designUrl = `${import.meta.env.BASE_URL}design/`;
 <Base title="Playdeck">
   <h1>Playdeck</h1>
   <p><a href={designUrl}>Visual system reference</a></p>
+  {
+    /* Before the workbench link, and that is the whole reason it is here rather
+     * than under it: the note below explains why nothing may follow the
+     * workbench, so anything the site gains goes above it. */
+  }
+  <p><a href={referenceUrl}>Package reference</a></p>
   {
     /* The workbench comes last, and the order is load-bearing:
      * `scripts/check-deploy-artifact.mjs` follows every internal link on this
