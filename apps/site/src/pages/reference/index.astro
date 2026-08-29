@@ -1,0 +1,131 @@
+---
+import Base from '../../layouts/Base.astro';
+import Sweep from '../../components/Sweep.astro';
+import ThemeToggle from '../../components/ThemeToggle.astro';
+import { referencePackages } from '../../reference-packages.mjs';
+
+const packages = await referencePackages();
+
+// Through `import.meta.env.BASE_URL` rather than as literals, for the reason
+// `src/pages/index.astro` gives at length: the prefix is the root today, so a
+// hand-written path would be identical and would stop being identical silently
+// (#435).
+const homeUrl = import.meta.env.BASE_URL;
+const packageUrl = (dir) => `${import.meta.env.BASE_URL}reference/${dir}/`;
+---
+
+{
+  /* Deliberately not "Playdeck". `scripts/check-deploy-artifact.mjs` identifies
+   * the site's root document in a browser by a heading named exactly that, which
+   * is how the deployed artifact is proven to serve the site rather than
+   * something else at the origin root, and a second document answering to the
+   * name would make that identification ambiguous. `src/pages/design.astro`
+   * carries the same constraint. */
+}
+<Base title="Reference — Playdeck">
+  <header class="bar">
+    <a href={homeUrl}>Playdeck</a>
+    <ThemeToggle />
+  </header>
+
+  <main class="page">
+    <h1>Reference</h1>
+    <p class="lead">
+      Every published package, rendered from the README that ships inside its own
+      npm tarball. There is no second copy: the page and the file a reader gets
+      from npm are the same text.
+    </p>
+    <Sweep form="accent" />
+
+    <ul class="packages">
+      {
+        packages.map((entry) => (
+          <li class="package">
+            <h2 class="package__name">
+              <a href={packageUrl(entry.dir)}>{entry.name}</a>
+            </h2>
+            <p class="package__description">{entry.description}</p>
+            <p class="package__version">
+              <span class="package__version-label">version</span>{' '}
+              <code>{entry.version}</code>
+            </p>
+          </li>
+        ))
+      }
+    </ul>
+  </main>
+</Base>
+
+<style>
+  .bar {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-5);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  .page {
+    display: grid;
+    gap: var(--space-4);
+    max-inline-size: 46rem;
+    margin-inline: auto;
+    padding: var(--space-7) var(--space-5) var(--space-8);
+  }
+
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-ink-muted);
+  }
+
+  .packages {
+    display: grid;
+    gap: var(--space-3);
+    padding: 0;
+    margin-block-start: var(--space-5);
+    list-style: none;
+  }
+
+  /* Depth is a surface colour and a hairline. There is no shadow token on this
+   * site to reach for, which is the point: a one-pixel border under a wide blur
+   * is the pairing the design audit named. */
+  .package {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    background-color: var(--color-surface);
+    border: var(--line-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+  }
+
+  /* The package name is an identifier, so it is set in the mono face like every
+   * other identifier on this site, and at the subsection rung rather than the
+   * section rung — seven cards of `h2` at 24px would out-shout the page's own
+   * title. */
+  .package__name {
+    font-family: var(--font-mono);
+    font-size: var(--text-lg);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .package__description {
+    color: var(--color-ink-muted);
+  }
+
+  .package__version {
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
+  .package__version-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .package__version code {
+    font-size: var(--text-xs);
+    color: var(--color-ink-muted);
+  }
+</style>

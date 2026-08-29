@@ -78,6 +78,59 @@ pre {
   letter-spacing: var(--tracking-fn);
 }
 
+/*
+ * Highlighted code blocks. These live here rather than in a page's scoped
+ * `<style>` because the markup is Shiki's: a page's styles are scoped by an
+ * attribute Astro stamps on that page's own elements, and rendered Markdown
+ * carries none of them, so a scoped rule cannot reach a `<pre>` the highlighter
+ * produced.
+ *
+ * The well is the site's own `--color-sunken` and not the Shiki theme's
+ * background, which is why `--shiki-light-bg` and `--shiki-dark-bg` are
+ * emitted here and never read. A code block is one of the two things
+ * `DESIGN.md` names a recessed well for, and taking the theme's background
+ * would drop a foreign white or near-black panel into a page whose every other
+ * surface is a role token.
+ *
+ * The token colours are the one place on this site where a colour arrives from
+ * outside `tokens.css`. It is a named Shiki theme rather than anything written
+ * by hand, it is regenerated from the source text on every build, and there is
+ * no palette of ours it could be expressed in: a scale of four accents cannot
+ * distinguish a keyword from a string from a comment. `DESIGN.md` records the
+ * exception and the two themes it names.
+ */
+.astro-code {
+  padding: var(--space-4);
+  background-color: var(--color-sunken);
+  border-radius: var(--radius-md);
+  line-height: var(--leading-snug);
+}
+
+/*
+ * Which of the two theme colours each token spends, in the same three states
+ * and the same order as the role tokens in `tokens.css` — and for the same
+ * reason. `astro.config.ts` sets `defaultColor: false` so that both colours
+ * arrive as custom properties and neither is baked into a `color:` declaration,
+ * which is what leaves this an ordinary cascade decision rather than something
+ * a stylesheet has to override. A reader who chose light on a dark-mode machine
+ * is the case a lone `prefers-color-scheme` block gets wrong, and a page whose
+ * prose went light while its code stayed dark is exactly how that shows up.
+ */
+.astro-code,
+.astro-code span {
+  color: var(--shiki-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) :is(.astro-code, .astro-code span) {
+    color: var(--shiki-dark);
+  }
+}
+
+:root[data-theme='dark'] :is(.astro-code, .astro-code span) {
+  color: var(--shiki-dark);
+}
+
 a {
   color: var(--color-accent);
   /* Underlined, not coloured-only: colour alone does not mark a link for a

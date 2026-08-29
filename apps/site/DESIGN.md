@@ -17,7 +17,9 @@ its opposite is what a generated interface looks like.
 1. **A hex literal appears once**, in the raw scale in `tokens.css`. Role tokens
    point at the scale, components point at the roles. No component writes a
    colour, a font stack, a font size or a duration literal. A missing value is a
-   missing token, not a local exception.
+   missing token, not a local exception. Syntax highlighting is the one thing
+   outside this rule, and it is named as an exception rather than left to be
+   discovered — see below.
 2. **There is exactly one gradient.** See below.
 3. **Functional text never goes below 11px.**
 4. **Depth is a surface colour and a hairline. There is no shadow.**
@@ -166,6 +168,43 @@ applied wherever Plex Mono is — `base.css` sets it on `code`, `kbd`, `samp` an
 than closing it, because mono is already set tight relative to its own width and
 functional text at 11px loses more to that than it gains.
 
+## Code, and the one exception to rule 1
+
+The reference pages at `/reference/<package>/` are the package READMEs rendered,
+and those documents are mostly code. Colouring it is the one place a colour on
+this site comes from somewhere other than `tokens.css`.
+
+The highlighter is **Shiki**, which Astro already ships — no new dependency —
+configured in `astro.config.ts` with the `github-light` and `github-dark`
+themes. The two names are the exception in full: no hex is written by hand
+anywhere, the palette is regenerated from the source text on every build, and
+there is no way to express it in this system's own colours, because a scale of
+four accents cannot tell a keyword from a string from a comment.
+
+**What the exception does not cover is the block itself.** The well is
+`--color-sunken`, which is one of the two things that token exists for. Shiki
+emits its theme's background as `--shiki-light-bg` and `--shiki-dark-bg`, and
+`base.css` never reads either: a foreign white or near-black panel in a page
+whose every other surface is a role token is exactly the seam this system is
+built to avoid.
+
+**Which of the two theme colours is spent is an ordinary cascade decision**, in
+the same three states and the same order as the role tokens. `defaultColor:
+false` is what makes that possible: it stops Shiki writing one theme into a
+`color:` declaration on every span — which a stylesheet could then only reach
+past with `!important` — and leaves both as custom properties. So the rule in
+_Themes_ below holds for code as well as for prose, including the case a lone
+`prefers-color-scheme` block gets wrong. A reader who forces light on a
+dark-mode machine and gets a dark code block in a light page is what the scoped
+selector prevents.
+
+Highlighting colours the fences and changes nothing else about them. That is a
+requirement rather than an observation: `scripts/docs-examples.mjs` generates
+every marked fence in those READMEs from a real file in `examples/`, and
+`pnpm docs:check` compares them byte for byte. A highlighter that re-indented,
+re-wrapped or reformatted would put the site and that gate into disagreement
+about what the example is.
+
 ## The one gradient
 
 `src/components/Sweep.astro` draws the only gradient in the system. It sweeps
@@ -276,7 +315,56 @@ the element's own shape and survives forced-colors mode.
 | `src/components/ThemeToggle.astro` | The control that stores a theme choice       |
 | `src/components/Sweep.astro`       | The one gradient, and its two forms          |
 | `src/pages/design.astro`           | The specimen sheet, served at `/design`      |
-| `src/pages/index.astro`            | The placeholder at `/`, and its two links    |
+| `src/pages/index.astro`            | The placeholder at `/`, and its links        |
+| `src/pages/reference/index.astro`  | The package index, served at `/reference`    |
+| `src/pages/reference/[pkg].astro`  | One reference page per publishable package   |
+| `src/content.config.ts`            | The READMEs, loaded from `packages/`         |
+| `src/reference-packages.mjs`       | Which packages get a page, and from where    |
+
+The reference pages are the site's long-form reading, and the only pages here
+whose words are not written in this app: each renders one package's whole
+README from `packages/`, word for word. What follows about them is design
+decision rather than incident.
+
+**The rail** is the narrow sticky column beside a reference document, the
+`nav.rail` in `src/pages/reference/[pkg].astro`. It holds two lists — which
+package, and where in this one — and it is the word this document and that file
+both use for it, in preference to "sidebar", which says where a thing sits
+rather than what it does.
+
+**The measure is on the prose and not on the column.** Paragraphs, lists and
+quotes are held to `40rem`; code blocks and tables get the full column. A fence
+is generated from a real file and this site does not get to decide how long its
+lines are, so narrowing it would only add scrolling.
+
+**The table of contents is derived from the rendered headings**, never written
+down. A parallel list of section names would go stale the first time somebody
+renamed a heading in a README with no idea this page existed, which is the whole
+failure the pages exist to avoid. It carries depth 2 and 3: depth 1 is the
+document's own title, and depth 4 would make a rail that restates an outline
+rather than one a reader jumps with. A README that goes deeper is still rendered
+in full, and its fourth level is still styled — a heading a reader scrolls past
+has to look like one whether or not the rail indexes it.
+
+**The version sits at the foot of the rail, not above the title.** A line of
+small type on top of an `h1` is the eyebrow this document names as a tell, and
+that one would have restated the heading underneath it.
+
+**Two classes of link are re-addressed on the way in, and only two.** A README is
+one document read in two places, and a link that is right in the npm tarball can
+be wrong here. A target relative to the package directory sits beside the README
+on npm and on GitHub and nowhere under `/reference/<package>/`, so it is pointed
+at the file's real home on
+GitHub. A link to another package's README, written as a GitHub blob URL because
+that is the only address that works from inside a tarball, would send a reader
+out to raw Markdown, so it becomes that package's own reference page with its
+fragment kept — and only where that package has a page. Everything else is left
+as written, including in-page fragments and links to files that are not another
+package's README. The rewriting happens in `src/content.config.ts`'s loader,
+before the Markdown is parsed, and it steps over fenced blocks: those fences are
+generated from `examples/` and compared byte for byte by `pnpm docs:check`, so
+nothing inside one may be touched. It is a transform of the source rather than a
+copy of it, so editing a README still changes the page.
 
 The specimen sheet at `/design` renders every token in both themes — the type
 scale, the surface and ink swatches, the capability colours and both forms of the
