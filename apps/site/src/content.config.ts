@@ -50,6 +50,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { referencePackageDirs } from './reference-packages.mjs';
+import { PROVIDER_SETUP_DOC, providerDocuments } from './provider-pages.mjs';
 
 const repoRoot = import.meta.env.PLAYDECK_REPO_ROOT;
 const packagesDir = join(repoRoot, 'packages');
@@ -300,4 +301,99 @@ const reference = defineCollection({
   }
 });
 
-export const collections = { reference };
+/*
+ * The provider setup pages, cut out of `docs/provider-setup.md`.
+ *
+ * A second collection rather than a second entry in the one above, because the
+ * two are loaded from different places under different rules and share only the
+ * principle: the site renders a document this repository already keeps true and
+ * writes none of its own. Which sections reach which page, why the pages are
+ * selections rather than summaries, and what the one dropped sentence is are
+ * all in `src/provider-pages.mjs`, beside the code that decides them.
+ *
+ * The link rewriting happens there too, before `renderMarkdown` sees the text,
+ * for the reason this file's own rewriting does: the content layer's `glob()`
+ * hands a file straight to the Markdown entry type and offers no point in
+ * between at which the text can be transformed.
+ *
+ * `data` carries what the route needs and the body does not say: the page's
+ * title, which is the provider's name lifted out of the heading or the bold
+ * lead that was dropped, the packages the adapter ships in, and the position
+ * the document introduces it at. Still no schema, for the reason the collection
+ * above has none — nothing here is frontmatter, and a schema would validate a
+ * shape this file has just built rather than one it read.
+ */
+const providers = defineCollection({
+  loader: {
+    name: 'provider-setup',
+    load: async ({
+      store,
+      config,
+      renderMarkdown,
+      generateDigest,
+      logger,
+      watcher
+    }) => {
+      const file = join(repoRoot, PROVIDER_SETUP_DOC);
+      // Relative to the Astro project rather than to the repository, which is
+      // what `filePath` means and what the collection above stores; the four
+      // entries share it, because they are four selections of one file.
+      const filePath = relative(fileURLToPath(config.root), file);
+
+      const sync = async () => {
+        const source = await readFile(file, 'utf8');
+        const documents = providerDocuments(source, repoRoot);
+        store.clear();
+        await Promise.all(
+          documents.map(async (document, order) => {
+            store.set({
+              id: document.slug,
+              data: {
+                title: document.title,
+                packages: document.packages,
+                order
+              },
+              // The composed document rather than the file, because that is
+              // what this entry is: `entry.body` on a page holding a selection
+              // of a document should be the selection. The file itself is one
+              // `git show` away and is what `docs/provider-setup.md` renders as
+              // on GitHub.
+              body: document.markdown,
+              filePath,
+              digest: generateDigest(document.markdown),
+              rendered: await renderMarkdown(document.markdown, {
+                fileURL: pathToFileURL(file)
+              })
+            });
+          })
+        );
+      };
+
+      await sync();
+
+      // Dev only: `watcher` is absent in a build. `docs/` is outside everything
+      // the dev server watches, so without this an edit to the document would
+      // leave every open provider page showing the previous text until the
+      // server was restarted — the same stale-copy failure these pages exist to
+      // prevent, arriving by another route.
+      if (watcher === undefined) {
+        return;
+      }
+      watcher.add(file);
+      const reload = async (changed: string) => {
+        if (
+          relative(repoRoot, changed).split(sep).join('/') !==
+          PROVIDER_SETUP_DOC
+        ) {
+          return;
+        }
+        await sync();
+        logger.info(`Reloaded ${PROVIDER_SETUP_DOC}`);
+      };
+      watcher.on('add', reload);
+      watcher.on('change', reload);
+    }
+  }
+});
+
+export const collections = { providers, reference };

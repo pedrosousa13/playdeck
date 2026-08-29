@@ -217,9 +217,12 @@ functional text at 11px loses more to that than it gains.
 ## Code, and the one exception to rule 1
 
 The reference pages at `/reference/<package>/` are the package READMEs rendered,
-and those documents are mostly code. The landing page carries one block of it
-too, the composition example. Colouring it is the one place a colour on this site
-comes from somewhere other than `tokens.css`.
+and those documents are mostly code; two of the provider setup pages at
+`/providers/<provider>/` carry a working player, from the same `examples/`
+machinery, because `docs/provider-setup.md` writes one for YouTube and one for
+Vimeo. The landing page carries one block of it too, the composition
+example. Colouring it is the one place a colour on this site comes from
+somewhere other than `tokens.css`.
 
 The highlighter is **Shiki**, which Astro already ships — no new dependency —
 set to the `github-light` and `github-dark` themes. The two names live in
@@ -482,24 +485,29 @@ system not owned by one component, and a new one has to earn that:
 
 ## Where things live
 
-| File                                  | What it is                                    |
-| ------------------------------------- | --------------------------------------------- |
-| `src/styles/tokens.css`               | Every value. The only file with hex literals  |
-| `src/styles/base.css`                 | Element defaults, spoken in tokens            |
-| `src/layouts/Base.astro`              | The document, and the pre-paint theme script  |
-| `src/components/SiteHeader.astro`     | The shell above every page                    |
-| `src/components/ThemeToggle.astro`    | The control that stores a theme choice        |
-| `src/components/Sweep.astro`          | The one gradient, and its two forms           |
-| `src/components/HeroPlayer.astro`     | The hero's player panel, and the player theme |
-| `src/components/HeroPlayerIsland.tsx` | The hero player's composition. The one island |
-| `src/pages/archetypes.astro`          | Two composed players, and the files they are  |
-| `src/pages/design.astro`              | The specimen sheet, served at `/design`       |
-| `src/pages/index.astro`               | The landing page at `/`, and its links        |
-| `src/pages/reference/index.astro`     | The package index, served at `/reference`     |
-| `src/pages/reference/[pkg].astro`     | One reference page per publishable package    |
-| `src/content.config.ts`               | The READMEs, loaded from `packages/`          |
-| `src/reference-packages.mjs`          | Which packages get a page, and from where     |
-| `src/shiki.ts`                        | The two theme names, for both readers of them |
+| File                                   | What it is                                      |
+| -------------------------------------- | ----------------------------------------------- |
+| `src/styles/tokens.css`                | Every value. The only file with hex literals    |
+| `src/styles/base.css`                  | Element defaults, spoken in tokens              |
+| `src/styles/doc.css`                   | The shell and the prose of a rendered document  |
+| `src/layouts/Base.astro`               | The document, and the pre-paint theme script    |
+| `src/components/SiteHeader.astro`      | The shell above every page                      |
+| `src/components/ThemeToggle.astro`     | The control that stores a theme choice          |
+| `src/components/Sweep.astro`           | The one gradient, and its two forms             |
+| `src/components/DocRail.astro`         | The rail beside a document, both sets of them   |
+| `src/components/HeroPlayer.astro`      | The hero's two panels, and the player theme     |
+| `src/components/HeroPlayerIsland.tsx`  | The hero's composition. The one island          |
+| `src/pages/index.astro`                | The landing page at `/`, and its links          |
+| `src/pages/design.astro`               | The specimen sheet, served at `/design`         |
+| `src/pages/archetypes.astro`           | Two composed players, and the files they are    |
+| `src/pages/reference/index.astro`      | The package index, served at `/reference`       |
+| `src/pages/reference/[pkg].astro`      | One reference page per publishable package      |
+| `src/pages/providers/index.astro`      | The provider index, served at `/providers`      |
+| `src/pages/providers/[provider].astro` | One setup page per provider                     |
+| `src/content.config.ts`                | The two document collections, and their loaders |
+| `src/reference-packages.mjs`           | Which packages get a page, and from where       |
+| `src/provider-pages.mjs`               | Which providers get a page, and which sections  |
+| `src/shiki.ts`                         | The two theme names, for both readers of them   |
 
 **The header** is the same three things on every page: the wordmark returning
 home, the path from the root to where the reader currently is, and the theme
@@ -532,16 +540,20 @@ same check follows every internal link on `/` in document order and needs the
 workbench to be the last, which is a second reason a header there does not add
 one.
 
-The reference pages are the site's long-form reading, and the only pages here
-whose words are not written in this app: each renders one package's whole
-README from `packages/`, word for word. What follows about them is design
-decision rather than incident.
+The reference pages and the provider setup pages are the site's long-form
+reading, and the only pages here whose words are not written in this app. A
+reference page renders one package's whole README from `packages/`, word for
+word. A provider setup page is a selection of `docs/provider-setup.md` — the
+introduction, that provider's own material and every section that applies to all
+of them — with nothing paraphrased and nothing added. What follows about them is
+design decision rather than incident, and it holds for both: they are the same
+page shape, which is why `src/components/DocRail.astro` and `src/styles/doc.css`
+are shared rather than written twice.
 
-**The rail** is the narrow sticky column beside a reference document, the
-`nav.rail` in `src/pages/reference/[pkg].astro`. It holds two lists — which
-package, and where in this one — and it is the word this document and that file
-both use for it, in preference to "sidebar", which says where a thing sits
-rather than what it does.
+**The rail** is the narrow sticky column beside one of those documents,
+`DocRail.astro`. It holds two lists — which document, and where in this one —
+and it is the word this document and that file both use for it, in preference to
+"sidebar", which says where a thing sits rather than what it does.
 
 **On a narrow screen the rail is a disclosure, closed.** Stacked above the
 document it ran to several phone screens — a link per package, an entry per
@@ -586,12 +598,17 @@ back. Only the `::details-content` rule itself sits behind the guard, because
 where that anonymous box exists the height has to pass through it and where it
 does not there is no box between the two.
 
-**The rail states `@playdeck/` once and lists what differs.** Repeated down a
-16rem column, the scope spent the width that tells `provider-vimeo` from
-`provider-wistia` on characters identical in every row. The prefix sits in the
-group's own label; each link keeps the whole name in its accessible name through
-`.u-visually-hidden`, because `core` on its own is not what a reader would say
-out loud.
+**On a reference page the rail states `@playdeck/` once and lists what
+differs.** Repeated down a 16rem column, the scope spent the width that tells
+`provider-vimeo` from `provider-wistia` on characters identical in every row.
+The prefix sits in the group's own label; each link keeps the whole name in its
+accessible name through `.u-visually-hidden`, because `core` on its own is not
+what a reader would say out loud. It is a prop rather than something the rail
+assumes, and so is the mono face those names are set in: a provider setup page
+lists `YouTube` and `Vimeo`, which are proper nouns and share no prefix. The
+foot of the rail is a slot for the same reason — the version on a reference
+page, the adapter's package on a provider page, and neither route describing the
+other by naming what it carries.
 
 **The measure is on the prose and not on the column.** Paragraphs, lists and
 quotes are held to `--measure`; code blocks and tables get the full column. A
@@ -608,6 +625,14 @@ collects the set of versions, prints one line when there is one member, and
 falls back to a figure per row when there is more than one. A number repeated
 down a column is a number nobody reads.
 
+**The provider index is that same list, and its second column is the adapter's
+own sentence.** The rows are the four setup pages, and beside each is the
+package that ships the adapter with the `description` npm shows for it — which
+is the only description of a provider on this site that this app did not have to
+write. One row carries two, because native files and HLS are one passage of
+`docs/provider-setup.md` and two packages. The names are set in the mono face
+and the provider is not, which is what says one of them is a thing you type.
+
 **The table of contents is derived from the rendered headings**, never written
 down. A parallel list of section names would go stale the first time somebody
 renamed a heading in a README with no idea this page existed, which is the whole
@@ -620,6 +645,18 @@ has to look like one whether or not the rail indexes it.
 **The version sits at the foot of the rail, not above the title.** A line of
 small type on top of an `h1` is the eyebrow this document names as a tell, and
 that one would have restated the heading underneath it.
+
+**A provider setup page is a selection of one document, and the selection is
+made in code.** `src/provider-pages.mjs` slices `docs/provider-setup.md` at its
+own headings and composes a page out of the pieces; no sentence of it is written
+in this app. Two things are done to the text and both are transforms rather than
+edits — the heading or the bold lead naming the provider is dropped, because the
+page's `h1` is that name, and the provider's own material is moved above the
+shared sections, because a reader on `/providers/vimeo/` came for Vimeo. A
+section of that document that the module can place in neither category fails the
+build rather than appearing on all four pages or on none, which is what keeps a
+sixth provider from being documented and never published. One sentence of the
+source reaches no page, and the module names it.
 
 **Two classes of link are re-addressed on the way in, and only two.** A README is
 one document read in two places, and a link that is right in the npm tarball can
@@ -636,6 +673,14 @@ before the Markdown is parsed, and it steps over fenced blocks: those fences are
 generated from `examples/` and compared byte for byte by `pnpm docs:check`, so
 nothing inside one may be touched. It is a transform of the source rather than a
 copy of it, so editing a README still changes the page.
+
+`docs/provider-setup.md` gets the same treatment under its own rules, in
+`src/provider-pages.mjs` rather than in the loader: its relative targets are
+resolved against `docs/` and sent to GitHub, except a link to a package the site
+publishes, which becomes that package's reference page. A fragment is left as
+written, and that is load-bearing rather than lazy — the two the document links
+to name shared sections, and every provider page carries every shared section,
+so the fragment resolves wherever the link was read.
 
 The specimen sheet at `/design` renders every token in both themes — the type
 scale, the surface and ink swatches, the capability colours and both forms of the

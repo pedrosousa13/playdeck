@@ -1,0 +1,202 @@
+---
+import { render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import Sweep from '../../components/Sweep.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import DocRail from '../../components/DocRail.astro';
+import { providerPages } from '../../provider-pages.mjs';
+import { referencePackages } from '../../reference-packages.mjs';
+import '../../styles/doc.css';
+
+/*
+ * One page per provider, each built out of `docs/provider-setup.md` and nothing
+ * else. Which parts of that document reach which page, and why the pages are
+ * selections of it rather than retellings, is in `src/provider-pages.mjs`.
+ *
+ * ---- about the refusal messages on these pages -----------------------------
+ *
+ * *What a refusal reads like* is one of the sections every page carries, and it
+ * quotes what the library says when it turns a source down. Those quotations
+ * were checked against the code that emits them rather than taken on trust,
+ * because a documented message that has drifted from the real one is worse than
+ * no documentation at all: a reader searches for what the player told them and
+ * finds nothing. Where each one comes from, by symbol rather than by line so
+ * the citation survives an edit above it:
+ *
+ * - *Not readable*, *Will not play* and *Not a source object* are the three
+ *   branches of `refusedSourceMessage` in `packages/react/src/use-activation.ts`,
+ *   keyed on `malformed-string`, `unsupported-string` and everything else.
+ * - *Does not play that format* is the fourth branch of the same function, for
+ *   `unsupported-format`. The format name is not written into that sentence: it
+ *   comes back from `unsupportedSourceFormat` in
+ *   `packages/core/src/source-detection.ts`, whose list holds `.mpd` → `DASH`
+ *   and nothing else — which is what makes the document's "Today that is DASH,
+ *   and only DASH" a statement about that list rather than a claim about the
+ *   future.
+ * - The provider-load failure is `providerError` in the same React module, and
+ *   the provider name in it is `PROVIDER_LABELS` there — which is why the page
+ *   shows it with a placeholder rather than a name.
+ * - "truncated to 120 characters" is `MAX_SOURCE_ECHO` in that module, applied
+ *   by `echoSource`, which slices by code point.
+ *
+ * The library appends one further sentence to all four — `SOURCE_GUIDANCE`,
+ * naming this document by URL — that the document's quotations stop short of.
+ * The quoted text is therefore the opening of each real message and never a
+ * paraphrase of it, so a reader who pastes what they saw into a search still
+ * lands here.
+ *
+ * None of these messages is emitted by a provider package. All four refusals
+ * are raised in `@playdeck/react` before any provider is loaded, which is the
+ * document's own point: a source that fails never reaches a provider.
+ */
+export const getStaticPaths = async () => {
+  const providers = await providerPages();
+  const packages = await referencePackages();
+  const byDir = new Map(packages.map((entry) => [entry.dir, entry]));
+
+  return providers.map((current) => ({
+    params: { provider: current.slug },
+    props: {
+      current,
+      providers,
+      // Resolved here rather than in the rail's markup so the failure is one
+      // error naming the provider, not an undefined sliding into a link. A
+      // package named by `src/provider-pages.mjs` that has no reference page is
+      // either a renamed directory or a package that stopped being publishable,
+      // and both need a person.
+      packages: current.packages.map((dir) => {
+        const entry = byDir.get(dir);
+        if (entry === undefined) {
+          throw new Error(
+            `The ${current.title} setup page names packages/${dir}, which has no reference page. Update PROVIDERS in src/provider-pages.mjs, or check that the package is still publishable.`
+          );
+        }
+        return entry;
+      })
+    }
+  }));
+};
+
+const { current, providers, packages } = Astro.props;
+
+// Through `import.meta.env.BASE_URL`, which is what Astro fills the configured
+// `base` into, and never as a literal `/providers/`. The prefix is the root
+// today and the literal would be identical, which is exactly why the habit is
+// kept: a hand-written path is the bug a base path exists to prevent (#435).
+const providersUrl = `${import.meta.env.BASE_URL}providers/`;
+const providerUrl = (slug) => `${providersUrl}${slug}/`;
+const packageUrl = (dir) => `${import.meta.env.BASE_URL}reference/${dir}/`;
+
+const { Content, headings } = await render(current.entry);
+
+// Derived from the same parse that produced the document, never written down —
+// the reason `src/pages/reference/[pkg].astro` gives at length. Depth 1 does not
+// occur here: the composed document has no title of its own, because the
+// heading a provider's material sat under is what this page's `h1` replaced.
+const contents = headings.filter(
+  (heading) => heading.depth === 2 || heading.depth === 3
+);
+---
+
+<Base title={`${current.title} — Playdeck provider setup`}>
+  <SiteHeader
+    crumbs={[
+      { label: 'Provider setup', href: providersUrl },
+      { label: current.title }
+    ]}
+  />
+
+  <div class="shell">
+    <DocRail
+      label="Provider setup navigation"
+      group={{
+        label: 'Providers',
+        items: providers.map((entry) => ({
+          href: providerUrl(entry.slug),
+          label: entry.title,
+          current: entry.slug === current.slug
+        }))
+      }}
+      contents={contents}
+    >
+      {
+        /* The adapter this page is about, at the foot of the rail. It is the
+         * one question the document does not answer on every page — it names
+         * the package for YouTube and Vimeo and for nobody else — and the
+         * answer is a link rather than a sentence, because what that adapter
+         * reports is written in its README and this site already renders it.
+         *
+         * Slotted for the same reason the version is on a reference page: it
+         * belongs to this route, and a prop for it on the shared rail would
+         * describe both routes by naming what one of them carries. */
+      }
+      <p class="rail__packages" slot="foot">
+        <span class="rail__packages-label">
+          {packages.length === 1 ? 'package' : 'packages'}
+        </span>
+        {
+          packages.map((entry) => (
+            <a href={packageUrl(entry.dir)}>{entry.name}</a>
+          ))
+        }
+      </p>
+    </DocRail>
+
+    {
+      /* The `h1` is the provider's name and the rest is the document. This page
+       * writes one word of its own — that name — and it is the name the source
+       * gave the section or the bold lead that was dropped in its favour, so
+       * even that is read rather than chosen. */
+    }
+    <main class="doc">
+      <h1>{current.title}</h1>
+      <Content />
+    </main>
+  </div>
+
+  <footer class="foot">
+    <div class="foot__rule"><Sweep form="hairline" /></div>
+    <p>
+      <a href={providersUrl}>All providers</a>
+    </p>
+  </footer>
+</Base>
+
+<style>
+  /* What the rail and the document look like is in
+   * `src/components/DocRail.astro` and `src/styles/doc.css`, both shared with
+   * the reference pages. What is left here is the one element this route puts
+   * in the rail. */
+  .rail__packages {
+    display: grid;
+    gap: var(--space-1);
+    margin-block-start: var(--space-5);
+    font-size: var(--text-xs);
+  }
+
+  .rail__packages-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  /* A package name is an identifier and is set in the mono face wherever it
+   * appears on this site. */
+  .rail__packages a {
+    font-family: var(--font-mono);
+    color: var(--color-ink-muted);
+    letter-spacing: var(--tracking-fn);
+    text-decoration: none;
+  }
+
+  .rail__packages a:hover {
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
+
+  /* Pressed, restating `base.css`'s rule because the hover above outranks it. */
+  .rail__packages a:active {
+    color: var(--color-ink-subtle);
+  }
+</style>
