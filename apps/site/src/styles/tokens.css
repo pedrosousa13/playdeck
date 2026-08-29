@@ -174,12 +174,12 @@
    * would resize the title of every reference document at once.
    *
    * It is deliberately NOT the next term of the ratio the rungs below it run
-   * at. That would put it at 60px, which is what it was, and 60px on a
-   * 1440-wide canvas is a heading rather than a thesis — measured against the
-   * page it sits on, it lost to the picture beside it. A display size is a
-   * different job from a text size and answers to the width of the page rather
-   * than to the rung under it, so this one is 2x the `h1` default and the
-   * spacing of the scale stops at `--text-3xl`. */
+   * at. That would put it at 60px, which is close enough to the 44px rung
+   * under it that the step reads as an accident rather than as a change of
+   * register — a large heading, not a thesis. A display size is a different job
+   * from a text size and answers to the width of the page rather than to the
+   * rung under it, so this one is 2x the `h1` default and the spacing of the
+   * scale stops at `--text-3xl`. */
   --text-4xl: 5.5rem; /* 88px */
 
   --leading-tight: 1.15;

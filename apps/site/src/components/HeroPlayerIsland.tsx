@@ -18,11 +18,20 @@
  * page serves the clip from is resolved against `import.meta.env.BASE_URL` in
  * the Astro component, the way every other address on this site is.
  */
+import { useEffect, useRef, type RefObject } from 'react';
 import * as Player from '@playdeck/react';
 
 interface Props {
   /** The clip's URL, already resolved against the site's base path. */
   readonly source: string;
+}
+
+interface ControlBarProps {
+  /**
+   * Whether the activation press that is about to produce a player came from
+   * the keyboard. Read once, when the bar appears, and cleared there.
+   */
+  readonly fromKeyboardRef: RefObject<boolean>;
 }
 
 /**
@@ -42,13 +51,44 @@ interface Props {
  * update, which is what a naive read of a whole snapshot would cost on a bar
  * that contains a clock.
  */
-const ControlBar = () => {
+const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
   const state = Player.usePlayerState((snapshot) => ({
     activation: snapshot.activation,
     playing: snapshot.playback === 'playing',
     muted: snapshot.muted,
     fullscreen: snapshot.fullscreen
   }));
+  /*
+   * Where the keyboard goes when the affordance it was standing on disappears.
+   *
+   * `Player.ActivationButton` unmounts at the moment the player is ready, and a
+   * browser drops focus to `<body>` when the focused element leaves the
+   * document. The library restores focus for its own capability-gated controls
+   * — `Player.Controls` refocuses its region when a control unmounts from
+   * inside it — but the activation button is outside that region, so nothing
+   * catches this one. Left alone, a reader who pressed Enter is standing on
+   * nothing: no ring, and no media shortcut, because `shortcuts` is not
+   * `global` and Space belongs to `Player.Controls` only while focus is inside
+   * it. So they would have to Tab back into the page to work the thing they
+   * just started.
+   *
+   * The play button is where they land, because it is the same command they
+   * just gave. It is a real control, it is visible, and it is the first stop in
+   * the bar, so Tab from there walks the rest.
+   *
+   * Only for a keyboard press. `fromKeyboardRef` is written by the activation
+   * button from the browser's own answer to "was the ring showing" — a pointer
+   * press leaves no `:focus-visible` — because moving focus after a click would
+   * put a ring on screen that the reader did not ask for, and that is its own
+   * defect rather than a fix for this one.
+   */
+  const playButton = useRef<HTMLButtonElement>(null);
+  const ready = state.activation === 'ready';
+  useEffect(() => {
+    if (!ready || !fromKeyboardRef.current) return;
+    fromKeyboardRef.current = false;
+    playButton.current?.focus();
+  }, [fromKeyboardRef, ready]);
   return (
     /*
      * A focusable region that owns the media keyboard map — Space, the arrows,
@@ -72,8 +112,8 @@ const ControlBar = () => {
      * once, and does it without unmounting a subtree that is about to come
      * back.
      */
-    <Player.Controls hidden={state.activation !== 'ready'}>
-      <Player.PlayButton>
+    <Player.Controls hidden={!ready}>
+      <Player.PlayButton ref={playButton}>
         {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
       </Player.PlayButton>
       <Player.MuteButton>
@@ -114,11 +154,12 @@ const ControlBar = () => {
  * removes itself at exactly the moment this appears.
  *
  * `tabIndex={-1}` because this is a pointer target and not a second control.
- * The keyboard already has two routes to the same command — the bar's own
- * `Player.PlayButton`, and Space or `k` anywhere inside `Player.Controls` — so
- * a tab stop here would put a second thing named "Pause" in front of the bar
- * without offering anything the bar does not. The affordance that must stay
- * reachable by Tab is the activation button, and it does.
+ * A tab stop here would put a second thing named "Pause" in front of the bar
+ * without offering anything the bar's own `Player.PlayButton` does not. What
+ * makes that safe is not that the keyboard has other routes to the command
+ * already — at the moment of activation it has none, which is why `ControlBar`
+ * moves focus into the bar — but that once focus is in the bar there are two:
+ * the bar's play button, and Space or `k` anywhere inside `Player.Controls`.
  *
  * The empty fragment is how a `Player` button is given no visible content: the
  * library falls back to printing its own English wording for `children` that
@@ -136,62 +177,83 @@ const SurfaceToggle = () => {
   );
 };
 
-const HeroPlayerIsland = ({ source }: Props) => (
+const HeroPlayerIsland = ({ source }: Props) => {
   /*
-   * `loading="interaction"` is the prop the Providers section below the hero
-   * argues from, used here for real: the root stays dormant until the
-   * activation affordance is pressed, so the clip is not fetched and no
-   * provider is attached before that press. A hero that preloaded its media
-   * while the page said nothing loads before a click would be the one thing on
-   * this page contradicting the page.
+   * How the activation was given, carried from the press to the render that
+   * replaces the button — a ref rather than state, because nothing renders
+   * from it and a re-render here would be a re-render of the whole player.
    *
-   * It also settles `prefers-reduced-motion` without a branch of its own.
-   * Nothing moves until a reader asks it to, so there is no motion to suppress
-   * for a reader who asked to see none — and the optional theme collapses the
-   * opacity transitions its own controls carry under that query already.
-   *
-   * `defaultMuted` is the uncontrolled form: the player opens silent and then
-   * owns the value, so `Player.MuteButton` can hand it back. The clip carries
-   * no audio track at all, which makes the muting belt-and-braces rather than
-   * load-bearing — but a hero that could make noise on a click is worth
-   * closing off at the prop rather than at the media.
+   * `:focus-visible` is the test rather than a modality guess of this file's
+   * own. It is the browser's own record of whether this element was showing a
+   * focus ring at the moment it was pressed, which is exactly the question:
+   * a ring that was already on screen may move, and one that was not must not
+   * appear. Enter and Space on a focused button match it; a mouse click and a
+   * touch tap do not.
    */
-  <Player.Root loading="interaction" source={source} defaultMuted>
-    <Player.Viewport>
-      <Player.Media />
-      {/*
-       * Before the control bar and after the picture, which is the order the
-       * stacking in `HeroPlayer.astro` reads: at equal `z-index` the later
-       * sibling paints in front, so the bar's own buttons stay on top of this
-       * and keep their clicks.
-       */}
-      <SurfaceToggle />
-      {/*
-       * The affordance that starts everything. It is a real `<button>` from
-       * the library, so it is reachable by Tab and answers Enter, and it takes
-       * the site's own focus ring: `base.css` styles `:focus-visible` by
-       * element rather than by class, and nothing here opts out of it.
-       *
-       * Named rather than left to the built-in "Play", because this button
-       * both loads and plays and the name has to say the first part. Its
-       * children are the icon, so the name stands alone rather than
-       * disagreeing with a word printed beside it.
-       *
-       * It is also the whole picture and not the badge drawn on it, and that
-       * is the library's own default rather than something added here: the
-       * button ships `position: absolute; inset: 0` with auto margins, so it
-       * is full-bleed until a stylesheet gives it a size. The bundled theme
-       * gives it 4rem, and `HeroPlayer.astro` takes that back and redraws the
-       * badge as a background, so a click anywhere on the stage loads and
-       * plays — one control, one accessible name, no second click target.
-       */}
-      <Player.ActivationButton aria-label="Load and play the sample clip">
-        <Player.PlayIcon />
-      </Player.ActivationButton>
-      <ControlBar />
-    </Player.Viewport>
-  </Player.Root>
-);
+  const fromKeyboardRef = useRef(false);
+  return (
+    /*
+     * `loading="interaction"` is the prop the Providers section below the hero
+     * argues from, used here for real: the root stays dormant until the
+     * activation affordance is pressed, so the clip is not fetched and no
+     * provider is attached before that press. A hero that preloaded its media
+     * while the page said nothing loads before a click would be the one thing on
+     * this page contradicting the page.
+     *
+     * It also settles `prefers-reduced-motion` without a branch of its own.
+     * Nothing moves until a reader asks it to, so there is no motion to suppress
+     * for a reader who asked to see none — and the optional theme collapses the
+     * opacity transitions its own controls carry under that query already.
+     *
+     * `defaultMuted` is the uncontrolled form: the player opens silent and then
+     * owns the value, so `Player.MuteButton` can hand it back. The clip carries
+     * no audio track at all, which makes the muting belt-and-braces rather than
+     * load-bearing — but a hero that could make noise on a click is worth
+     * closing off at the prop rather than at the media.
+     */
+    <Player.Root loading="interaction" source={source} defaultMuted>
+      <Player.Viewport>
+        <Player.Media />
+        {/*
+         * Before the control bar and after the picture, which is the order the
+         * stacking in `HeroPlayer.astro` reads: at equal `z-index` the later
+         * sibling paints in front, so the bar's own buttons stay on top of this
+         * and keep their clicks.
+         */}
+        <SurfaceToggle />
+        {/*
+         * The affordance that starts everything. It is a real `<button>` from
+         * the library, so it is reachable by Tab and answers Enter, and it takes
+         * the site's own focus ring: `base.css` styles `:focus-visible` by
+         * element rather than by class, and nothing here opts out of it.
+         *
+         * Named rather than left to the built-in "Play", because this button
+         * both loads and plays and the name has to say the first part. Its
+         * children are the icon, so the name stands alone rather than
+         * disagreeing with a word printed beside it.
+         *
+         * It is also the whole picture and not the badge drawn on it, and that
+         * is the library's own default rather than something added here: the
+         * button ships `position: absolute; inset: 0` with auto margins, so it
+         * is full-bleed until a stylesheet gives it a size. The bundled theme
+         * gives it 4rem, and `HeroPlayer.astro` takes that back and redraws the
+         * badge as a background, so a click anywhere on the stage loads and
+         * plays — one control, one accessible name, no second click target.
+         */}
+        <Player.ActivationButton
+          aria-label="Load and play the sample clip"
+          onClick={(event) => {
+            fromKeyboardRef.current =
+              event.currentTarget.matches(':focus-visible');
+          }}
+        >
+          <Player.PlayIcon />
+        </Player.ActivationButton>
+        <ControlBar fromKeyboardRef={fromKeyboardRef} />
+      </Player.Viewport>
+    </Player.Root>
+  );
+};
 
 /*
  * The default export is what the island loader resolves: Astro looks the

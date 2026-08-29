@@ -401,9 +401,10 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * baseline. The theme then centres the track on the CONTAINER
    * (`inset-block-start: 50%` on `seek-buffered`) while the input keeps the top
    * of the line box, so the thumb and the bar it runs along do not share a
-   * centre. How far apart depends on the consumer's font: measured at 1440px
-   * and 3x, the library's own workbench is 2px out and this panel, whose
-   * `--playdeck-font-size` is the site's mono at `--text-sm`, was 3.8px out.
+   * centre. How far apart is a function of the consumer's font, so every
+   * consumer of the bundled theme has some version of the offset and this
+   * panel — whose `--playdeck-font-size` is the site's mono at `--text-sm` —
+   * had its own.
    *
    * `display: block` removes the line box, so the container is the input's own
    * 44px and the 50% the theme centres on is the input's centre. It is the

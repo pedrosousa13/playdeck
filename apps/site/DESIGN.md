@@ -152,7 +152,7 @@ a page that wants another rung has to ask for it in a class.
 
 | Token        | Size             | Applied to                                    |
 | ------------ | ---------------- | --------------------------------------------- |
-| `--text-4xl` | 3.75rem (60px)   | No element. Opt-in only — see below           |
+| `--text-4xl` | 5.5rem (88px)    | No element. Opt-in only — see below           |
 | `--text-3xl` | 2.75rem (44px)   | `h1`                                          |
 | `--text-2xl` | 2rem (32px)      | No element. Opt-in only — see below           |
 | `--text-xl`  | 1.5rem (24px)    | `h2`                                          |
@@ -172,12 +172,14 @@ was reviewed as rendered, so changing what `h1` or `h2` resolves to is a change
 to every page at once — including the reference documents, whose titles are
 package names and want no display treatment at all.
 
-`/` is the only page that spends either. Its `h1` steps up to `--text-4xl` at
-the width where the hero becomes two columns and keeps `h1`'s own rung below
-that, where the title shares its line with nothing and 60px would cost the lead
-its first screen. A step between two rungs of this scale rather than a
-`clamp()`, because a clamp is a font size written into a component and no
-component here writes one.
+`/` is the only page that spends either on a heading of its own. Its `h1` steps
+up to `--text-4xl` at `48rem` and keeps `h1`'s own rung below that, where 88px
+would take three quarters of a phone's width and cost the lead its first
+screen. A step between two rungs of this scale rather than a `clamp()`, because
+a clamp is a font size written into a component and no component here writes
+one. `/design` renders a specimen at every rung, these two included, which is
+the same exemption a specimen sheet already has for both forms of the sweep: it
+is showing the scale, not spending it.
 
 Sizes are in `rem` against the browser's own root size, which is left alone: a
 reader who raised their default has said something, and a fixed pixel root
@@ -383,6 +385,20 @@ hairline; it does not accompany it. That single sentence is what keeps the
 banned pairing unassemblable, and it is the reason this rule could be relaxed at
 all.
 
+**This rule is unenforced, and the old one was not.** "There is no shadow" was
+kept by the absence of a shadow token: there was nothing to write, so writing
+one meant writing a colour, and rule 1 fails that in review at the first hex.
+The amended rule has two tokens and a prohibition made of prose, and nothing in
+the repository fails when a third `box-shadow` appears or when an elevated
+element also takes a border. That was accepted rather than overlooked. The
+guards this site does carry — the background-image scan, the packaging and
+budget gates — each answer a question with one right answer that a scan can
+read. "Is this element the one panel this page is built around" is not that
+question, and a scan that only counted `box-shadow` declarations would pass the
+pairing this rule exists to ban while failing nothing that matters. So the
+allowlist above is the enforcement, and it works only if a new elevated element
+is an edit to it.
+
 Also still banned: coloured glows, zero-offset halos, and stacked shadows
 imitating one large soft one. A shadow is cast by a surface above a surface. It
 is not a way to tint an edge.
@@ -390,7 +406,9 @@ is not a way to tint an edge.
 **What may spend an elevation, by name.** `--elevation-instrument` belongs to
 the capability ledger on `/` and to nothing else — it is the panel that page is
 built around, and a second instrument on one page means neither is the
-instrument. `--elevation-panel` belongs to the hero's player stage. Everything
+instrument. `--elevation-panel` belongs to the bezel around the hero's player —
+`.demo__bezel` in `HeroPlayer.astro`, and not the stage inside it, which is a
+recessed colour and a hairline. Everything
 else on this site is a surface colour and a hairline, as before. A new elevated
 element is an edit to this list, not a local decision.
 
@@ -724,19 +742,33 @@ over. Once the clip is running the target is a second `Player.PlayButton`, laid
 into the same cell with its control-bar chrome removed, so the click toggles
 playback the way every desktop player's does. The two never coexist: the
 activation button removes itself at the moment the surface toggle is rendered.
-The surface toggle is out of the tab order, because the keyboard already reaches
-the same command twice — the bar's own play button, and Space or `k` anywhere
-inside `Player.Controls` — and a third stop named "Pause" in front of the bar
-would be an obstacle rather than an affordance. The bar keeps its own clicks by
-painting in front: both layers take `z-index: 1` and the bar comes later.
+The surface toggle is out of the tab order: once focus is in the bar the
+keyboard reaches the same command twice already — the bar's own play button, and
+Space or `k` anywhere inside `Player.Controls` — and a third stop named "Pause"
+in front of the bar would be an obstacle rather than an affordance. The bar
+keeps its own clicks by painting in front: both layers take `z-index: 1` and the
+bar comes later.
+
+**The keyboard is put into the bar when the player appears, and only the
+keyboard.** The activation button unmounts while it holds focus, and a browser
+drops focus to `<body>` when the focused element leaves the document — so a
+reader who pressed Enter would be left with nothing focused and no media
+shortcut, `shortcuts` being scoped to `Player.Controls` rather than global. The
+library restores focus for controls that unmount from inside that region, and
+this button is outside it. `HeroPlayerIsland.tsx` moves focus to the bar's play
+button, which is the command that was just given. It does so only when the
+activation button matched `:focus-visible` at the moment it was pressed — the
+browser's own record of whether a ring was on screen — because a ring appearing
+after a mouse click or a touch tap is its own defect.
 
 **The seek input is `display: block`, and that is a library defect worked around
 rather than a choice.** A range input is inline-level, so the theme's
 `seek-slider` box grows past it by the descender space under the baseline, while
 the theme centres the track on that box — leaving the thumb and the bar it runs
-along without a shared centre. Measured at 1440px and 3x: the library's own
-workbench is 2px out, and this panel, whose `--playdeck-font-size` is the site's
-mono, was 3.8px out. Removing the line box makes the container the input's own
+along without a shared centre. How far apart is a function of the consumer's
+font, so every consumer of the bundled theme has some version of it and this
+panel, whose `--playdeck-font-size` is the site's mono, had its own. Removing
+the line box makes the container the input's own
 44px and the two centres one. The 44px target is untouched. The defect is
 `theme.css`'s and reaches every consumer of the bundled theme; it is reported
 separately rather than fixed here.

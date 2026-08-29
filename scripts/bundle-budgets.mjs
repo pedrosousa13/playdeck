@@ -37,7 +37,7 @@ const KB = 1024;
 // which the caller supplies, rather than resolved against this module's own
 // URL: one of the two callers is an Astro page, and a bundler rewrites
 // `import.meta.url` to the chunk it emitted, which is not where this file
-// lives. `scripts/workspace-packages.mjs` takes a root for the same reason.
+// lives.
 /** @type {readonly { name: string; path: string; budget: number | null }[]} */
 const targets = [
   {

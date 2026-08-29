@@ -526,8 +526,11 @@ const providers = [
    * down to that default on a phone, where the word would otherwise take three
    * quarters of the width and leave the lead below the fold. A step between two
    * existing rungs rather than a `clamp()`, because a clamp is a font size
-   * written into a component and this system has no literal sizes outside
-   * `tokens.css`. */
+   * written into a component and no component here writes one — every
+   * `font-size` on this site names a rung. The layout literals further down
+   * this file are a different thing: a column width or a label track is this
+   * page's own decision, which `DESIGN.md` says stays a literal where it is
+   * made, and none of them is a type size. */
   .hero__title {
     font-size: var(--text-3xl);
   }
@@ -757,6 +760,12 @@ const providers = [
     }
   }
 
+  /* The one shape on this page, shared by the ledger's rows and the comparison's
+   * columns so the two readouts mark a state the same way. `--radius-pill` is
+   * the token that means "fully round" here; `50%` would be a second spelling of
+   * it. The 8px is a one-off — it is a shape's own size and not a step of the
+   * spacing scale, so it is written here rather than promoted to a token
+   * nothing else would read. */
   .row__dot,
   .status__dot {
     align-self: center;
@@ -764,7 +773,7 @@ const providers = [
     inline-size: 0.5rem;
     block-size: 0.5rem;
     background-color: var(--status-color);
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
   }
 
   /* The capability is the subject of its row and takes the body rung in the
@@ -823,6 +832,10 @@ const providers = [
    * plain `--color-line`, not the sweep: this is a line where a line is
    * genuinely wanted, and the sweep is spent in the hero.
    */
+  /* `15rem` is the width below which a column's summary stops being a
+   * paragraph, so it is where the three fold into one. A one-off, like every
+   * other layout literal on this page: it is a fact about this comparison's
+   * own text and not a step anything else would read. */
   .statuses {
     gap: var(--space-5);
     grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
@@ -931,6 +944,9 @@ const providers = [
     border-block-end: var(--line-width) solid var(--color-line);
   }
 
+  /* `8rem` holds the longest provider name on one line so the details beside
+   * them start in the same place down the list. Another one-off measured from
+   * this list's own contents. */
   .provider__name {
     flex: none;
     min-inline-size: 8rem;
@@ -1039,6 +1055,8 @@ const providers = [
     margin-block-start: var(--space-2);
   }
 
+  /* `7rem` is the width of this list's own longest label, and one more layout
+   * one-off: a term column is measured from the terms in it. */
   @media (min-width: 40rem) {
     .facts {
       grid-template-columns: 7rem minmax(0, 1fr);
