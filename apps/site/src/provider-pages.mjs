@@ -30,9 +30,10 @@
  *   once, front to back; a reader on `/providers/vimeo/` came for Vimeo. The
  *   cross-references survive the move because they were never forward
  *   references out of a provider's section: `see below` in the grouped section
- *   points at *Explicit source objects*, which still follows it, and *Shared
- *   rules* refers to `a path shape not listed above`, which is now genuinely
- *   above it rather than several sections down.
+ *   points at *Explicit source objects*, which still follows it, and the `a
+ *   path shape not listed above` in *What a refusal reads like* still has the
+ *   provider's own material above it — the move puts it further above, not
+ *   below.
  *
  * One sentence does not survive, and it is named here rather than left to be
  * discovered: `Covered here as well, because the detector treats all five the
@@ -43,8 +44,10 @@
  * This is `.mjs` rather than `.ts` for the reason `src/reference-packages.mjs`
  * is: it reaches `astro:content`, whose declarations are generated into the
  * `.astro/` directory the site's `tsconfig.json` deliberately does not read,
- * and a module belonging to the `scripts` project. Astro's own tooling checks
- * it, in the same pass that checks the `.astro` templates.
+ * and a module belonging to the `scripts` project. Nothing type-checks it as a
+ * result — there is no `astro check` in this repository — so what stands behind
+ * it is `astro build`, which runs this module for real on every build; see the
+ * note in `apps/site/tsconfig.json`.
  */
 
 import { getCollection } from 'astro:content';

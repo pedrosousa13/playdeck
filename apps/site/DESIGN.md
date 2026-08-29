@@ -26,6 +26,11 @@ its opposite is what a generated interface looks like.
    elevated surface never also carries a border.** See below.
 5. **Only `transform` and `opacity` are animated.**
 
+Rules 1 and 5 govern what this app writes. The two archetype stylesheets
+mounted on `/archetypes` are outside both, and that is named here rather than
+left to be found — see _The archetypes, and why they are outside rules 1 and 5_
+below.
+
 ## Palette
 
 Roles, and what each theme assigns them. `--color-*` is what a component reads;
@@ -201,10 +206,16 @@ prose — the reference documents' paragraphs, lists and quotes, and the lead on
 the package index. It was chosen to put a line at the body rung inside the 65–75
 character band, so a page that sets prose at another rung is choosing a
 different character count and says so where it does it. A page's own maximum
-width is a separate decision and stays a literal in that page: `46rem` at `/`,
-`52rem` on the package index, `74rem` for a reference page's rail-and-document
-shell. One column width is not evidence about another, and a shared token would
-claim it was.
+width is a separate decision and stays a literal where that decision is made:
+`72rem` at `/`, `64rem` on `/archetypes`, `46rem` on `/design`, `52rem` on each
+of the two indexes — written twice, once in `src/pages/reference/index.astro`
+and once in `src/pages/providers/index.astro`, because two pages agreeing on a
+number is not the same fact as one number. The `74rem` rail-and-document shell
+is the exception and lives in `src/styles/doc.css`: the reference pages and the
+provider pages are one page shape rendered from two sources, so their width is
+one decision and the stylesheet they already share is where it belongs. One
+column width is not evidence about another, and a shared token would claim it
+was.
 
 **`--text-fn` is the floor and the scale has no rung beneath it.** The comps put
 reason lines such as `└ browser` at 10.88px, and that is the text carrying the
@@ -258,6 +269,30 @@ every marked fence in those READMEs from a real file in `examples/`, and
 `pnpm docs:check` compares them byte for byte. A highlighter that re-indented,
 re-wrapped or reformatted would put the site and that gate into disagreement
 about what the example is.
+
+## The archetypes, and why they are outside rules 1 and 5
+
+`/archetypes` mounts `examples/archetype-streaming-service.tsx` and
+`examples/archetype-course-platform.tsx`. Each carries its own stylesheet as a
+`<style>` element inside the component, and each writes hex literals by the
+dozen and animates `background-color`. Read against rules 1 and 5 those are
+violations; they are allowed, and the reason is what the page is for.
+
+Those two files are not this app's. They live in `examples/`, they are the
+files a consumer copies, and `apps/storybook` mounts the same two. A stylesheet
+spoken in `tokens.css`'s role tokens would render as unstyled text everywhere
+outside this one site, and an archetype that borrowed its look from the page
+around it would be proving something about this page rather than about the
+library. The point of mounting them here is that the site and the workbench show
+the same player; that is only true if the appearance travels with the
+composition.
+
+So the boundary is ownership rather than taste: a file under `apps/site/src`
+writes no colour and animates nothing but `transform` and `opacity`. A file
+under `examples/` is a consumer's code that this site happens to render, and it
+answers to `examples/`'s own constraints — one paste, no imports, no design
+system. `/archetypes` itself, everything around the two players, is inside the
+rules like every other page.
 
 ## The one gradient
 

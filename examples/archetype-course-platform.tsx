@@ -304,9 +304,11 @@ const Progress = (): ReactElement => {
  * zero, and it stops being one the moment the box becomes a flex item, whose
  * auto margins absorb the free space in its line.
  *
- * The picture's own start affordance a few lines down does NOT take this. It is
- * left exactly as the library ships it, because there the full-bleed overlay is
- * the design.
+ * The picture's own start affordance a few lines down does NOT take this: its
+ * POSITIONING is left exactly as the library ships it, because there the
+ * full-bleed overlay is the design. `.study-start` in the stylesheet gives it a
+ * look — a centring grid, no border, no radius, no background — and touches
+ * none of the four properties above.
  */
 const inFlow: CSSProperties = {
   position: 'static',
@@ -454,8 +456,10 @@ export const CoursePlatformSurface = ({
             {/* The library ships this part full-bleed with auto margins, so
                 left at its own size it is the whole picture — one control, one
                 accessible name, and a press anywhere on the frame starts the
-                lesson. The badge is drawn as a ring on the button rather than
-                as a second element over the picture. */}
+                lesson. The badge inside it is one `aria-hidden` span rather
+                than an image or a second control: it is the button's mark, not
+                a target of its own, so it adds nothing to the tab order and
+                nothing to the accessible name above. */}
             <Player.ActivationButton
               aria-label="Start the lesson"
               className="study-start"
@@ -632,8 +636,9 @@ const courseCss = `
   background-color: transparent;
   cursor: pointer;
 }
-/* The badge is a ring with a triangle inside it, built from borders so the
-   button needs no second element and no image. */
+/* The badge is a ring with a triangle inside it, both drawn from borders — the
+   ring from the span's own, the triangle from a pseudo-element's — so it costs
+   no image and no request. */
 .study-start__badge {
   width: 4rem;
   height: 4rem;

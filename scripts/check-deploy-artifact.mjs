@@ -224,6 +224,12 @@ const checkSite = async (browser, origin, failures) => {
   if (links.length === 0) {
     failures.push('site: the page carries no internal link to follow.');
   }
+  // The same wait every visit below takes, and for the same reason: closing a
+  // page with requests still in flight abandons them, and the browser reports
+  // an abandoned request as `net::ERR_ABORTED`, which `recordFailures` above is
+  // listening for. The landing page is not exempt from that just because it is
+  // the one that found the links.
+  await page.waitForLoadState('networkidle');
   await page.close();
 
   // Each link in a page of its own, and the page holding the links is closed

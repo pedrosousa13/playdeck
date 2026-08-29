@@ -2,9 +2,12 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  // The e2e server is `storybook dev`, which compiles each story on first
-  // request. On slower CI runners (notably Linux WebKit) that cold compile can
-  // push the first interaction past a tight budget, so allow generous headroom.
+  // Two e2e servers, and the budget is set by the first: `storybook dev`
+  // compiles each story on first request, and on slower CI runners (notably
+  // Linux WebKit) that cold compile can push the first interaction past a tight
+  // budget, so allow generous headroom. The second server is a built site and
+  // serves static files, so it costs a test nothing once it is up — its own
+  // cost is the build, which `webServer` waits out before any test starts.
   timeout: 30_000,
   // Retry on CI: a first attempt warms Storybook's on-demand story compile, so
   // the retry hits a compiled story and runs fast. Also absorbs known
@@ -46,6 +49,16 @@ export default defineConfig({
      * rather than a second Playwright project: it serves a different artifact,
      * not a different engine, and the specs that use it want the same three
      * engines as everything else.
+     *
+     * It is unconditional, and that is a limitation rather than a choice.
+     * `webServer` is a property of the config and not of a project — there is
+     * no per-project form of it in Playwright's types — so a run of one
+     * workbench spec still waits for both site builds, and a site build that
+     * breaks fails every project. Scoping it on `process.argv` would make the
+     * suite's servers depend on how it was invoked, which is worse than the
+     * wait. What keeps the wait small is Turbo: the first entry's build is
+     * cached, so the cost is paid once per change to the site's inputs rather
+     * than once per run.
      *
      * It is built rather than served by `astro dev` because the search index is
      * a build artifact — `apps/site/package.json` runs Pagefind over `dist/`

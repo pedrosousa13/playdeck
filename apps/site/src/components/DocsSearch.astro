@@ -212,10 +212,18 @@
   }
 
   /*
-   * The Pagefind bundle is generated at build time and has no types to import.
-   * Only the three members this file calls are described, so a change in the
-   * shape of a result is a type error here rather than an empty list at
-   * runtime.
+   * The Pagefind bundle is generated at build time and has no types to import,
+   * so this describes only the three members this file calls.
+   *
+   * It buys documentation and not safety, and the difference matters enough to
+   * state: nothing typechecks this inline script — `apps/site/tsconfig.json`
+   * covers `.ts` and `.tsx` and cannot parse `.astro` — and the shape below
+   * reaches the runtime value through an `as` cast on the dynamic import, which
+   * asserts rather than verifies. A Pagefind release that renamed `sub_results`
+   * would go on compiling and would show an empty list at runtime. What this
+   * block is for is telling the next reader what was assumed, and the exact
+   * version pin in `apps/site/package.json` is what keeps the assumption from
+   * changing under them.
    */
   interface PagefindResultData {
     url: string;

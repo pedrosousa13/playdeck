@@ -456,8 +456,11 @@ export const StreamingServiceSurface = ({
             )}
           </Player.ErrorDisplay>
 
-          {/* Before `Player.Controls`: `Player.Gestures` is full-bleed and takes
-              no `z-index`, so a later sibling without one would sit under it. */}
+          {/* Before `Player.Controls`, and that order is the whole of it:
+              `Player.Gestures` is full-bleed and takes no `z-index`, so among
+              positioned siblings at the same level the LATER one paints on top.
+              Put after the bar it would cover the bar and swallow its clicks;
+              put here, every interactive layer below stays above it. */}
           <Player.Gestures />
 
           {/* The title block, and the two ways in. It is one absolutely
@@ -828,9 +831,9 @@ const streamingCss = `
   inline-size: 5rem;
 }
 /* The effective caption mode, printed beside the toggle that turns captions on.
-   Colour is an accelerator and never the only carrier: the word itself is
-   always there, and the dot is what a reader who has learnt the palette reads
-   first. */
+   The renderer is spelled out as a word, so the readout carries itself; the one
+   colour below is an accelerator on top of that word and never the only carrier
+   of it. */
 .stream-mode {
   display: inline-flex;
   gap: 0.35rem;
@@ -933,9 +936,14 @@ const streamingCss = `
   font-size: 0.75rem;
   line-height: 1.5;
 }
-/* Below this the bar alone needs the width. The volume slider goes and the mute
-   button stays, so no command is lost — which is the test for hiding a control
-   rather than folding it into a menu. */
+/* Below this the bar alone needs the width, and two things go rather than wrap.
+   The chapter name is a readout and costs nothing; the volume slider is a
+   control, and setting a level IS lost here — the mute button that stays
+   answers a different command. It goes anyway because at this width the slider
+   is a 5rem target on a surface that almost certainly has hardware volume of
+   its own, and because the alternative — folding it into the settings menu —
+   would put a continuous control two presses deep. Named as a cost rather than
+   claimed to be free. */
 @container (max-width: 30rem) {
   .stream-volume,
   .stream-chapter {

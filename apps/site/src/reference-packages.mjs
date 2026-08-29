@@ -20,8 +20,10 @@
  * from this project rather than a preference. It reaches two things the site's
  * `tsconfig.json` deliberately cannot see: a `.mjs` module belonging to the
  * `scripts` project, and `astro:content`, whose declarations are generated into
- * the `.astro/` directory that project leaves out. Astro's own tooling checks
- * it, in the same pass that checks the `.astro` templates.
+ * the `.astro/` directory that project leaves out. Nothing type-checks it as a
+ * result — there is no `astro check` in this repository — so what stands behind
+ * it is `astro build`, which runs this module for real on every build; see the
+ * note in `apps/site/tsconfig.json`.
  */
 
 import { getCollection } from 'astro:content';

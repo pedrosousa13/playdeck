@@ -4,6 +4,27 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".tsbuildinfo", ".next/**", "storybook-static/**"]
+    },
+    // The site is the one package that builds files from outside its own
+    // directory: `src/pages/archetypes.astro` imports the two compositions in
+    // `examples/`, and `src/content.config.ts` loads the package READMEs and
+    // `docs/provider-setup.md`. Turbo's default input set is the package's own
+    // tracked files, so an edit to any of those left the cached build valid and
+    // a `turbo run build` replayed a site that did not contain it. Playwright's
+    // `webServer` builds through Turbo and without `--force`, so the archetype
+    // e2e specs could pass against a stale site.
+    //
+    // `$TURBO_DEFAULT$` keeps the package's own files in the set and adds these
+    // three beside them, rather than replacing them.
+    "@playdeck/site#build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "../../examples/**",
+        "../../docs/provider-setup.md",
+        "../../packages/*/README.md"
+      ],
+      "outputs": ["dist/**"]
     }
   }
 }

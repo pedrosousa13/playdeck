@@ -33,8 +33,11 @@
  * `contents` is the document's own headings, passed in from the same parse that
  * produced the document rather than written down anywhere. Depth 1 is the
  * page's own title and depth 4 restates an outline instead of being something a
- * reader jumps with, so a caller filters to 2 and 3; this component indents by
- * whatever depth it is handed.
+ * reader jumps with, so a caller filters to 2 and 3. The depth reaches the
+ * markup as `data-depth` on every item, but only one rule below reads it —
+ * depth 3 is indented and everything else sits flush — so this component draws
+ * two levels rather than any number of them. A caller passing depth 4 would get
+ * it rendered at the depth-2 indent, which is a reason the callers filter.
  */
 
 interface RailItem {
@@ -393,8 +396,9 @@ const { label, group, contents } = Astro.props;
     font-size: var(--text-xs);
   }
 
-  /* Indent by the heading's own depth, so the rail carries the document's
-   * hierarchy rather than flattening it. */
+  /* The one indent, and the only rule that reads `data-depth`: depth 3 steps in
+   * and everything else sits flush, which is the whole of the hierarchy the
+   * two-level filter the callers apply can produce. */
   .rail__list--toc li[data-depth='3'] a {
     padding-inline-start: var(--space-4);
   }
