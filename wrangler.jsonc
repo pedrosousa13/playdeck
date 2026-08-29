@@ -4,7 +4,7 @@
 // Wrangler (#519).
 //
 // At the repository root rather than in `apps/site`, because the directory it
-// publishes is not either app's. `scripts/assemble-site.mjs` composes it out of
+// publishes is not either app's. `scripts/assemble-deploy.mjs` composes it out of
 // both builds — the site at the root, the workbench under `storybook/` — and a
 // configuration file living inside one of the two surfaces would claim the
 // other one's output as its own.
@@ -18,7 +18,7 @@
   // is absent for the same reason — a binding exists so a Worker script can
   // fetch an asset, and adding one would declare a handler that does not exist.
   "assets": {
-    "directory": "./site-dist/",
+    "directory": "./deploy-dist/",
 
     // `"none"` — Cloudflare's default, restated because the alternatives are
     // both wrong here rather than merely unchosen. The site renders a

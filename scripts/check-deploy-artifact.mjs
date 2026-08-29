@@ -18,7 +18,7 @@
 // failure is reported, not the first, so one run tells the reader everything
 // that is wrong.
 //
-// Run on demand as `pnpm test:site` rather than from a pull-request gate: it
+// Run on demand as `pnpm test:deploy` rather than from a pull-request gate: it
 // builds both surfaces from scratch and drives a browser through them, which is
 // several times the work `ci.yml` does per pull request. Extending the gate to
 // cover it is #528. It builds by default, because a run against whatever
@@ -31,7 +31,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
-import { assembleSite } from './assemble-site.mjs';
+import { assembleDeploy } from './assemble-deploy.mjs';
 
 // As in scripts/verify-packaging.mjs: the lint config gives this directory node
 // globals, but `console` and `process` still have to be reached through
@@ -48,7 +48,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 // under test is the artifact that ships.
 const sitePath = '/';
 const storybookPath = '/storybook/';
-const artifactDir = join(repoRoot, 'site-dist');
+const artifactDir = join(repoRoot, 'deploy-dist');
 
 // The story the Storybook visit navigates to. It renders against the mock
 // player, so nothing here depends on media loading — what is being proven is
@@ -291,7 +291,7 @@ if (shouldBuild) {
   // The deploy's own layout, imported rather than restated: two copies would
   // drift, and a harness that went green against a shape the deploy no longer
   // produces is worse than no harness.
-  await assembleSite(artifactDir);
+  await assembleDeploy(artifactDir);
   console.log(`--- Assembled the artifact at ${artifactDir} ---`);
 } else {
   console.log(`--- Reusing the artifact at ${artifactDir} (--no-build) ---`);

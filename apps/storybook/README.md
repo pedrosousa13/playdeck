@@ -26,7 +26,7 @@ passes:
 PLAYDECK_BASE_PATH=/storybook/ pnpm build
 ```
 
-`scripts/check-site-artifact.mjs` builds both surfaces this way, assembles the
+`scripts/check-deploy-artifact.mjs` builds both surfaces this way, assembles the
 artifact and drives a browser through it, which is what proves the prefix is
 honoured rather than merely configured.
 

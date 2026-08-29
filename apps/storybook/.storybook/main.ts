@@ -36,14 +36,14 @@ const pendingAssetPlugin = (): PluginOption => {
  *
  * Read from the environment rather than hard-coded, for two reasons. Where the
  * workbench lands inside the artifact belongs to whoever assembles the
- * artifact, so `scripts/assemble-site.mjs` places the directory and the callers
+ * artifact, so `scripts/assemble-deploy.mjs` places the directory and the callers
  * that build for it pass the matching prefix; a literal here would be this
  * file's private copy of that decision and would go stale the first time the
  * layout moved. And the default of `/` is what keeps `storybook dev`, the
  * Vitest browser run and `ci.yml`'s `storybook` job building exactly what they
  * build today: each is served from a root, so none of them passes a value. The
  * callers that do pass one are the callers that stage the artifact —
- * `.github/workflows/deploy-site.yml`, and `scripts/check-site-artifact.mjs`,
+ * `.github/workflows/deploy-site.yml`, and `scripts/check-deploy-artifact.mjs`,
  * which builds under the same prefix in order to prove the result loads under
  * it.
  */

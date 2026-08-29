@@ -90,7 +90,7 @@ jobs:
       # not this file's — the verification harness assembles the same layout,
       # and one definition is what keeps the two from drifting. The directory
       # named here is the one `wrangler.jsonc` publishes as its assets.
-      - run: node scripts/assemble-site.mjs site-dist
+      - run: node scripts/assemble-deploy.mjs deploy-dist
 
       # Cloudflare's documented choice for the token is the "Edit Cloudflare
       # Workers" API token template. A narrower set — Workers Scripts: Edit,

@@ -28,7 +28,7 @@ const layout = [
 /**
  * @param {string} destination Where to assemble the artifact.
  */
-export const assembleSite = async (destination) => {
+export const assembleDeploy = async (destination) => {
   for (const { from } of layout) {
     // Loudly, and before anything is copied: a missing source means a build
     // did not run, and half an artifact deployed is worse than a red run.
@@ -48,11 +48,11 @@ export const assembleSite = async (destination) => {
   }
 };
 
-// Only when run as a command. `scripts/check-site-artifact.mjs` imports the
+// Only when run as a command. `scripts/check-deploy-artifact.mjs` imports the
 // function above so the harness and the deploy cannot disagree about the
 // layout, and an import must not assemble anything as a side effect (#519).
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const destination = resolve(process.argv[2] ?? join(repoRoot, 'site-dist'));
-  await assembleSite(destination);
+  const destination = resolve(process.argv[2] ?? join(repoRoot, 'deploy-dist'));
+  await assembleDeploy(destination);
   console.log(`Assembled the deployed artifact at ${destination}`);
 }

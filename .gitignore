@@ -7,8 +7,8 @@ storybook-static/
 # is also outside what `tsc -b` reads.
 .astro/
 # The assembled deployment, composed from the two build outputs above by
-# scripts/assemble-site.mjs and published as the Worker's assets (#519).
-site-dist/
+# scripts/assemble-deploy.mjs and published as the Worker's assets (#519).
+deploy-dist/
 *storybook.log
 playwright-report/
 test-results/

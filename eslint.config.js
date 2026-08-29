@@ -14,10 +14,10 @@ export default tseslint.config(
       // ambient types `astro build` writes are linted as project source and
       // fail the gate on code nobody in this repo wrote (#519).
       '**/.astro/**',
-      // The assembled deployment (scripts/assemble-site.mjs) is a copy of the
+      // The assembled deployment (scripts/assemble-deploy.mjs) is a copy of the
       // two build outputs above, so linting it lints minified bundles that were
       // already excluded under the names they were built as (#519).
-      'site-dist/**',
+      'deploy-dist/**',
       'playwright-report/**',
       'test-results/**',
       // Gitignored, unlike the two entries below — and not redundant for it.

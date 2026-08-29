@@ -12,7 +12,7 @@
     // `dist/`. Here `dist/` is Astro's *output* directory: `astro build` clears
     // it, so a buildinfo kept there is destroyed by every build, and one written
     // after a build is copied into the published artifact by
-    // `scripts/assemble-site.mjs`. `scripts/tsconfig.json` already keeps its
+    // `scripts/assemble-deploy.mjs`. `scripts/tsconfig.json` already keeps its
     // buildinfo here for the analogous reason.
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/site.tsbuildinfo"
   },
