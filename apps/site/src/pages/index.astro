@@ -1,0 +1,28 @@
+---
+// The link is not decoration. It is the one link the site needs anyway — the
+// workbench, which `scripts/assemble-deploy.mjs` places under `storybook/` beside
+// this page — and it is also what `scripts/check-deploy-artifact.mjs` follows
+// from here in a browser, which is how the two surfaces are proven to be
+// reachable from each other rather than merely present in the same directory.
+//
+// Written through `import.meta.env.BASE_URL`, which is what Astro fills the
+// configured `base` into, rather than as a literal. That prefix is the root
+// today and the literal would be identical, which is precisely why the habit is
+// worth keeping here: the day the site moves under a prefix, a hand-written
+// `/storybook/` is the bug a base path exists to prevent (#435) and nothing
+// would flag it.
+const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Playdeck</title>
+  </head>
+  <body>
+    <h1>Playdeck</h1>
+    <p><a href={storybookUrl}>Storybook workbench</a></p>
+  </body>
+</html>

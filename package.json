@@ -16,6 +16,7 @@
     "test:storybook": "pnpm --filter @playdeck/storybook test",
     "test:integrations": "turbo run build --filter=@playdeck/integration-next-image && pnpm --filter @playdeck/integration-next-image test:integration",
     "test:packages": "node scripts/verify-packaging.mjs",
+    "test:deploy": "node scripts/check-deploy-artifact.mjs",
     "test:budgets": "node scripts/check-bundle-budgets.mjs",
     "test:bundle": "turbo run build --filter=@playdeck/bundle-native-only && pnpm --filter @playdeck/bundle-native-only test",
     "test:docs": "node --test scripts/docs-examples.test.mjs",
