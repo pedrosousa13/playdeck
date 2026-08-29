@@ -1,7 +1,8 @@
 # Provider setup
 
 Which source values each provider accepts, what each provider's own options are,
-and a working player per provider. These are `detectSource`'s rules, not a
+and a worked example wherever the source forms need one. These are
+`detectSource`'s rules, not a
 provider's own documentation, because a form a provider publishes is not a form
 this library reads. The refused forms are named alongside the accepted ones: a
 setup guide that lists a form the detector turns down is worse than one that

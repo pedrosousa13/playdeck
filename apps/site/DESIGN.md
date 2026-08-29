@@ -218,11 +218,12 @@ functional text at 11px loses more to that than it gains.
 
 The reference pages at `/reference/<package>/` are the package READMEs rendered,
 and those documents are mostly code; two of the provider setup pages at
-`/providers/<provider>/` carry a working player, from the same `examples/`
-machinery, because `docs/provider-setup.md` writes one for YouTube and one for
-Vimeo. The landing page carries one block of it too, the composition
-example. Colouring it is the one place a colour on this site comes from
-somewhere other than `tokens.css`.
+`/providers/<provider>/` carry a highlighted code example, because
+`docs/provider-setup.md` writes one for YouTube and one for Vimeo and none for
+the other three. No provider page mounts a player — the hero island is still
+the site's only one. The landing page carries one block of code too, the
+composition example. Colouring it is the one place a colour on this site comes
+from somewhere other than `tokens.css`.
 
 The highlighter is **Shiki**, which Astro already ships — no new dependency —
 set to the `github-light` and `github-dark` themes. The two names live in
@@ -791,12 +792,17 @@ hairline at all. `--color-surface` on `--color-field` is built to raise a panel
 with no border; the player's stage beside it is `--color-sunken`, which sits
 close to the field, and that is what a hairline is for.
 
-Two constraints on that page are `scripts/check-deploy-artifact.mjs`'s rather
-than this system's, and both are load-bearing. Its `h1` is exactly `Playdeck`,
-which is how that check identifies the site's root document in a browser. And the
-workbench link is the last internal link in the document, because the check
-follows every internal link in document order and navigating away from the
-workbench abandons requests it is still making.
+One constraint on that page is `scripts/check-deploy-artifact.mjs`'s rather
+than this system's, and it is load-bearing: its `h1` is exactly `Playdeck`,
+which is how that check identifies the site's root document in a browser.
+
+There used to be a second — the workbench link had to be the last internal link
+in the document, because the check followed every internal link in one page
+context and navigating away from the workbench abandoned requests it was still
+making. That check now visits each link in a page of its own (#528), so a link
+may be added anywhere in the list. The constraint is written down here as gone
+rather than deleted silently, because it governed the order of that list for
+long enough to look deliberate.
 
 `data-theme` has two writers and they are not interchangeable: the pre-paint
 script in `Base.astro` applies a stored choice before the browser paints, and

@@ -172,6 +172,12 @@
   /** How many results the list shows. */
   const LIMIT = 8;
 
+  /**
+   * How many headings one document may contribute to that list. Four documents
+   * minimum at the `LIMIT` above, which is the point — see `flatten`.
+   */
+  const PER_PAGE = 2;
+
   /*
    * Pagefind's own debounce. It resolves to `null` for a search that a later
    * keystroke has superseded, which is what keeps a slow query from painting
@@ -327,9 +333,19 @@
      * them in it. A result with no sub-results at all falls back to the page:
      * one entry that goes somewhere is worth more than a document that
      * disappears from a list it matched.
+     *
+     * At most `PER_PAGE` of them, which is what stops one document answering
+     * the whole query. The list is capped at `LIMIT` entries after flattening,
+     * so without a per-document cap a long README that matches in eight places
+     * fills every slot and every other page that matched is never shown —
+     * measured on `provider`, which returned six headings from `provider-hls`
+     * and two from `provider-wistia` and nothing at all from the other five
+     * documents that match it. A reader searching one word across a package
+     * set is asking which packages, so breadth across documents beats depth
+     * within one.
      */
     const flatten = (data: PagefindResultData): Entry[] => {
-      const subs = data.sub_results ?? [];
+      const subs = (data.sub_results ?? []).slice(0, PER_PAGE);
       if (subs.length === 0) {
         return [
           {

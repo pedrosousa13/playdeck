@@ -56,10 +56,13 @@
  * the title rung — `scripts/check-deploy-artifact.mjs` identifies the site's
  * root document by a heading named exactly `Playdeck`, so that `h1` cannot move
  * — and a strip repeating it directly above would be the same word twice in
- * eighty pixels. It also keeps that check's other constraint intact: it follows
- * every internal link on `/` in document order and the workbench must be the
- * last one, so a header that quietly added a link there would change what the
- * check means as well as what the page looks like.
+ * eighty pixels.
+ *
+ * That check used to carry a second constraint this decision protected: it
+ * followed every internal link on `/` in one page context, so the workbench had
+ * to be the last one and a header that quietly added a link would have changed
+ * what the check meant. It visits each link in a page of its own now (#528), so
+ * only the reason above is still doing any work here.
  */
 import DocsSearch from './DocsSearch.astro';
 import ThemeToggle from './ThemeToggle.astro';

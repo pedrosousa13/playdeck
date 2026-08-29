@@ -194,10 +194,20 @@ const RateControl = (): ReactElement | null => {
  * The outline, and the study layout's way of getting around.
  *
  * Every entry is a real button that seeks, gated as a set on
- * `capabilities.seek`: where seeking is refused the same list is rendered as
- * plain text, so the structure is still readable and nothing offers an action
- * that cannot be taken. That is the library's rule applied to a control the
- * library does not ship.
+ * `capabilities.seek`: anywhere seeking is not `available` the same list is
+ * rendered as plain text, so the structure is still readable and nothing
+ * offers an action that cannot be taken. That is the library's rule applied to
+ * a control the library does not ship.
+ *
+ * All three states, and not two. `unavailable` is a refusal and says so;
+ * `unknown` is undecided — which is what every capability reads before a
+ * provider has attached, and this player is `loading="interaction"`, so it is
+ * the state a visitor meets first. Printing the refusal there would state
+ * something false about the source on the page whose argument is that this
+ * distinction is the product. So the hint is bound to `unavailable` alone, and
+ * `unknown` renders the list without a claim about why — the library's own
+ * "a control reading `unknown` renders nothing" applied to the sentence rather
+ * than to the control.
  *
  * The section being played is marked with `aria-current`, which is the
  * attribute for "the one of these you are on" and is what a screen reader
@@ -258,12 +268,12 @@ const Outline = (): ReactElement => {
           );
         })}
       </ol>
-      {navigable ? null : (
+      {seekStatus === 'unavailable' ? (
         <p className="study-hint">
           This source cannot be seeked, so the outline reads rather than
           navigates.
         </p>
-      )}
+      ) : null}
     </nav>
   );
 };
