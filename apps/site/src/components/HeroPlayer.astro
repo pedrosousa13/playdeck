@@ -1,0 +1,440 @@
+---
+/**
+ * The hero's player panel: the box, the caption, the no-JavaScript fallback,
+ * and the `--playdeck-*` values the library's optional theme reads.
+ *
+ * The split with `HeroPlayerIsland.tsx` is deliberate and is the same split the
+ * library itself draws. That file composes primitives and points them at a
+ * source; this one decides what the result looks like. Nothing about the
+ * composition is expressible here and nothing about the appearance is
+ * expressible there, so neither file can quietly grow the other's job.
+ *
+ * ---- why `client:only` and not a hydrating directive ------------------------
+ *
+ * `client:visible` and its siblings render the component on the server and then
+ * hydrate it. Both halves of that are wrong here. The server-rendered half
+ * would put a real `<button>` into the document that does nothing until a
+ * script arrives, which is the "present and disabled" shape this whole site
+ * argues against — and for a reader with JavaScript off it would never stop
+ * being that. The hydrating half then has to reproduce, in a browser holding a
+ * media element, markup that was produced where there was none to measure; any
+ * disagreement between the two is a console error on the site's root document,
+ * and console errors on that document are one of the things
+ * `scripts/check-deploy-artifact.mjs` fails the deployed artifact on. That is a
+ * risk this page has no reason to take, not a defect anyone has reproduced.
+ *
+ * `client:only` renders nothing on the server, so neither problem exists. What
+ * it costs is a box that is empty until the island mounts, and the stage below
+ * reserves that box's height so the hero does not move when it does.
+ *
+ * ---- the two theme systems, and why they do not meet ------------------------
+ *
+ * `@playdeck/react/theme.css` is imported below. It is the player's theme, not
+ * this site's, and `DESIGN.md` puts it out of this system's scope — so the
+ * import needs its reason stated rather than assumed.
+ *
+ * The reason is that the Headless section of this page tells a reader the
+ * primitives import no CSS and that the default look is one optional import.
+ * The hero is where that sentence is either demonstrated or merely asserted,
+ * and demonstrating it costs one import rather than a second stylesheet of this
+ * site's own restating a control bar the library already ships and tests.
+ *
+ * They cannot bleed into each other, and that is a property of the file rather
+ * than of this page's care. Every selector in it is inside `@layer playdeck`
+ * and wrapped in `:where()`, so it matches only elements carrying a
+ * `data-playdeck-part` attribute — which nothing on this site has except inside
+ * the island — and loses to any unlayered rule here regardless of specificity.
+ * In the other direction it declares no token of its own: every value is read
+ * as `var(--playdeck-…, fallback)`, so the block below is the whole of what
+ * this site says to it. That is why the mapping is a list of custom properties
+ * on one element and not a set of overriding rules.
+ *
+ * The mapping spends this site's role tokens and writes no colour, so rule 1 of
+ * `DESIGN.md` holds across the seam: the player re-tunes with the theme switch
+ * because it is reading the same roles every other panel on the page reads.
+ */
+import '@playdeck/react/theme.css';
+import HeroPlayerIsland from './HeroPlayerIsland';
+
+// Resolved against the configured base the way every other address on this site
+// is, rather than written as a root-absolute literal. The file is this app's
+// own — `public/tracer.mp4`, copied into this build rather than referenced
+// across an app boundary, because an Astro build serves only its own `public/`.
+const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
+---
+
+<figure class="demo">
+  {
+    /* The bezel, and the reason the dormant panel is worth looking at.
+     *
+     * Nothing is loaded until the affordance is pressed, so there is no frame
+     * to show and this component may not invent one — no poster, no still, no
+     * gradient standing in for a picture. What it can do instead is make the
+     * emptiness read as a switched-off instrument rather than as a missing
+     * image: a raised surface holding a recessed screen, which is the same
+     * construction the ledger beside it uses and is a claim about this page's
+     * furniture rather than about any media.
+     *
+     * The bezel is elevated and therefore draws no border, which is the whole
+     * of `DESIGN.md` rule 4 as amended. The screen inside it keeps a hairline,
+     * because `--color-sunken` on `--color-surface` is a small step and the
+     * hairline is what says where the screen ends — two different elements,
+     * two different depth vocabularies, neither doubling the other. */
+  }
+  <div class="demo__bezel">
+    <div class="demo__stage">
+    <HeroPlayerIsland client:only="react" source={clipUrl} />
+    {
+      /* With JavaScript the island owns this box and the markup below is inert
+       * text the parser never fetches from. Without it, this is the whole
+       * player: the browser's own controls over the same file, and
+       * `preload="none"` so the page keeps the property it argues from —
+       * nothing is fetched until the reader asks for it. `muted` for the reason
+       * the island passes `defaultMuted`.
+       *
+       * A real `<video>` rather than a paragraph explaining what is missing,
+       * because the clip is a static file on this origin and the platform
+       * already ships a player for it. */
+    }
+    <noscript>
+      <video
+        class="demo__fallback"
+        controls
+        muted
+        playsinline
+        preload="none"
+        src={clipUrl}></video>
+    </noscript>
+    </div>
+  </div>
+  <figcaption class="demo__caption">
+    A real player, composed from the published primitives. The clip is a
+    one-second test pattern served from this origin, and
+    {' '}
+    <code>loading="interaction"</code> holds the player dormant until the button
+    is pressed — so nothing is fetched, and no provider is attached, before that
+    press.
+  </figcaption>
+</figure>
+
+<style>
+  .demo {
+    display: grid;
+    gap: var(--space-2);
+    margin: 0;
+  }
+
+  /* The raised body of the instrument. It carries `--elevation-panel` and no
+   * border at all: `DESIGN.md` rule 4 as amended allows an elevated element
+   * exactly one of the two, and border-under-blur is the pairing that stays
+   * banned. `--space-3` all round is what makes it read as a body holding a
+   * screen rather than as a card with a picture in it. */
+  .demo__bezel {
+    display: grid;
+    padding: var(--space-3);
+    background-color: var(--color-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--elevation-panel);
+  }
+
+  /* The screen, and the box that exists before the player does.
+   *
+   * `client:only` means nothing is here until the island mounts, so without a
+   * reserved height the hero would lay out once without a player and again with
+   * one. The ratio is the library's own documented fallback and is also the
+   * ratio of `public/tracer.mp4`, so the reservation and what fills it are the
+   * same shape and the box does not resize on mount. The background is stated
+   * here as well as passed to the player as `--playdeck-color-backdrop`, so the
+   * reserved box is already the screen at first paint rather than a hole
+   * showing the page through it.
+   *
+   * A recessed colour and a hairline, which is the depth treatment for a box
+   * whose fill sits a step or two from its ground. Nothing here is elevated —
+   * the bezel around it is. */
+  .demo__stage {
+    display: grid;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background-color: var(--color-sunken);
+    border: var(--line-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+
+    /* ---- the player's tokens, spoken in this site's roles ----------------
+     *
+     * Set here rather than on the viewport because the theme reads each one
+     * with `var(--name, default)` and never declares it, so a value on any
+     * ancestor reaches every part. One element to read, and adding a control
+     * later needs nothing added here.
+     */
+
+    /* The well behind the media, which is what shows before a frame is
+     * decoded. `--color-sunken` is the recessed-surface role — the same one
+     * the code block on this page sits in. */
+    --playdeck-color-backdrop: var(--color-sunken);
+    /* The control bar and the activation button share this pair. A raised
+     * panel in the page's own surface colour rather than the theme's
+     * translucent black: a bar that is part of this page reads as part of it,
+     * and `--color-ink` on `--color-surface` is a contrast pair `DESIGN.md`
+     * already records for both themes. */
+    --playdeck-color-surface: var(--color-surface);
+    --playdeck-color-on-surface: var(--color-ink);
+    /* `--playdeck-overlay-scrim` is the control bar's background, and its
+     * default is a gradient. This system has exactly one gradient and
+     * `Sweep.astro` draws it, so the bar takes the flat surface the rest of
+     * the panel is built from. */
+    --playdeck-overlay-scrim: var(--color-surface);
+    --playdeck-control-hover: var(--color-sunken);
+    --playdeck-color-accent: var(--color-accent);
+    /* One focus treatment for the whole site, and this is the belt to
+     * `base.css`'s braces. That file rings every `:focus-visible` element in
+     * the accent, unlayered, so it is what actually draws the ring on a control
+     * in here. The theme carries a rule of its own that would draw a white one
+     * if it ever did the drawing, and its default is the only `--playdeck-*`
+     * value that could put a colour on this page from outside the system. */
+    --playdeck-color-focus: var(--color-accent);
+    /* The seek slider's three grounds, and the one place on this panel where
+     * the choice is arithmetic rather than taste.
+     *
+     * The track is `--color-sunken`, which is the recessed-well role and names
+     * a switch track outright. The loaded range then has to be visible on it
+     * and the thumb's ring has to be visible on both, which is what picks the
+     * other two: on `--color-line`, the quieter separator role, the loaded
+     * range measures below the 3:1 that non-text UI owes, and on the sunken
+     * well it clears it. The ratios are in `DESIGN.md`.
+     *
+     * The thumb takes a ring because its fill cannot carry the boundary on its
+     * own — the accent does not clear 3:1 against both the track and the loaded
+     * range, which is the library's own finding and the reason its theme draws
+     * a ring at all. `--color-ink` is what clears both. */
+    --playdeck-color-track: var(--color-sunken);
+    --playdeck-color-buffered: var(--color-line-strong);
+    --playdeck-color-thumb-ring: var(--color-ink);
+    /* The time readout is machine output, so it is mono like every other
+     * value on this site, at the caption rung — above the 11px floor. */
+    --playdeck-font-family: var(--font-mono);
+    --playdeck-font-size: var(--text-sm);
+    --playdeck-font-size-small: var(--text-xs);
+    --playdeck-space-1: var(--space-1);
+    --playdeck-space-2: var(--space-2);
+    --playdeck-space-3: var(--space-3);
+    --playdeck-radius: var(--radius-sm);
+    --playdeck-radius-large: var(--radius-md);
+    --playdeck-control-size: var(--hit-target);
+    --playdeck-transition-duration: var(--duration-fast);
+    --playdeck-transition-easing: var(--ease);
+  }
+
+  /* One cell, and every layer in it.
+   *
+   * Where the layers sit is the page's to decide and not the theme's: the
+   * library's stylesheet states appearance and leaves geometry out, so that a
+   * player works with no stylesheet at all and so that a consumer can put the
+   * controls somewhere other than over the picture. The media states one thing
+   * about its own size — that it fills the box it is laid into — and everything
+   * else about this arrangement is the three rules below.
+   *
+   * A single named area rather than absolute positioning, because that is what
+   * makes the picture the thing that sizes the cell: the overlays are laid into
+   * the same cell without taking it out of flow, so nothing here has to restate
+   * a height the media already determines.
+   *
+   * The ratio is read from the property the library writes onto this element
+   * once a provider has measured its media, with the same fallback as the stage
+   * above. So the box is right before anything has loaded and stays right if
+   * the media turns out not to be the shape the fallback assumed. */
+  .demo__stage :global([data-playdeck-part='viewport']) {
+    display: grid;
+    grid-template-areas: 'stack';
+    aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9);
+    inline-size: 100%;
+  }
+
+  .demo__stage :global([data-playdeck-part='media']) {
+    grid-area: stack;
+    /* A grid item's automatic minimum is its content, and a video's content is
+     * its intrinsic width. Without this the picture would refuse to shrink
+     * below that and push the panel wider than its column. */
+    min-inline-size: 0;
+  }
+
+  /* The activation affordance places itself: it comes out of the library
+   * already taken out of flow and centred in whatever box it is given, so this
+   * only has to say which box that is.
+   *
+   * Deliberately not restated here as a `place-self`. The library sets that
+   * geometry inline, inline styles beat any stylesheet, and a rule that cannot
+   * take effect is worse than no rule — it reads as the thing holding the
+   * button in the middle of the picture.
+   *
+   * ---- why the button is the whole screen -----------------------------------
+   *
+   * A click anywhere on the picture has to start the clip, and the way to get
+   * that is to stop shrinking the control rather than to add a second one. The
+   * library ships this part `position: absolute; inset: 0` with auto margins,
+   * which is full-bleed on its own and centres itself only once a stylesheet
+   * gives it a fixed size — the bundled theme's 4rem is what was doing that.
+   * Undoing the size here is therefore a return to the library's default, and
+   * it costs no handler, no wrapper and no second tab stop: the one `<button>`
+   * that was already the affordance is now the size of the thing people aim at.
+   *
+   * The badge is what the button used to be, redrawn as a background so the
+   * picture is not painted over. `--space-8` is 4rem, so the face is the size
+   * the theme drew it and the only thing that moved is the target.
+   *
+   * `border-radius` has to come back with the size, and it is the half of this
+   * that a rect measurement cannot see. The theme rounds this part to 50%,
+   * which on a 4rem square is the badge's circle and on a full-bleed box is an
+   * ellipse inscribed in the stage — and a rounded corner clips hit testing,
+   * not just paint. So the element's box was the whole picture while the
+   * region that answered a click was the ellipse inside it: the four corners
+   * and the whole top and bottom band were dead, and `getBoundingClientRect`
+   * reported full-bleed throughout. Measured by probing `elementFromPoint` on
+   * a grid rather than by clicking the middle, which is the one point that
+   * could never have caught it. Squared off here, and the badge below carries
+   * its own roundness, so the two are no longer one declaration.
+   *
+   * The ring goes inside the box, not outside it. `base.css` sets
+   * `outline-offset: 2px` for the whole site, which is right for a control with
+   * room around it and wrong for one flush with the edge of a stage that clips
+   * its overflow — at +2px the ring is drawn where nothing is painted. Negated
+   * rather than zeroed, so there is still a hairline of screen between the
+   * stage's border and the ring.
+   *
+   * `place-content` is the half of the centring the theme does not do. Its
+   * `place-items: center` centres the badge inside its grid area, and the area
+   * is one auto-sized row that a full-height button leaves standing at the top
+   * — `start` being what `align-content` defaults to. Both are needed. */
+  .demo__stage :global([data-playdeck-part='activation']) {
+    grid-area: stack;
+    grid-template-areas: 'face';
+    place-content: center;
+    inline-size: 100%;
+    block-size: 100%;
+    background-color: transparent;
+    border-radius: 0;
+    outline-offset: calc(-1 * var(--space-1));
+  }
+
+  .demo__stage :global([data-playdeck-part='activation'])::before {
+    content: '';
+    grid-area: face;
+    inline-size: var(--space-8);
+    block-size: var(--space-8);
+    background-color: var(--color-surface);
+    border-radius: var(--radius-pill);
+  }
+
+  /* The icon shares the badge's cell rather than following it in a second row,
+   * and paints over it because it comes later. The theme's `place-items:
+   * center` is what centres each of the two inside that one cell.
+   *
+   * The child combinator is inside `:global()` and not outside it, which is the
+   * difference between this rule working and this rule doing nothing. Astro
+   * scopes every compound it is not told to leave alone, so `:global(a) > svg`
+   * asks for an `svg` carrying this component's scope attribute — and the icon
+   * comes out of the island, where no scope attribute reaches. Written that way
+   * first, and caught by the badge and the glyph rendering as two stacked rows.
+   */
+  .demo__stage :global([data-playdeck-part='activation'] > svg) {
+    grid-area: face;
+  }
+
+  /* Once the clip is running the same gesture toggles it, and the element that
+   * answers is `Player.PlayButton` with its box opened out — see the rationale
+   * in `HeroPlayerIsland.tsx`. Everything below undoes the theme's control-bar
+   * treatment of that part for this one instance: the bar's buttons are 44px
+   * chips with a hover tint, and a hover tint at this size would wash the
+   * picture.
+   *
+   * `position` and `z-index` for the reason the control bar carries them — the
+   * media declares a layer of its own and an unpositioned box in the same cell
+   * paints underneath it. The bar takes the same `z-index` and comes later in
+   * the markup, so it wins the overlap and its own buttons keep their clicks.
+   *
+   * No focus rule: it is not in the tab order, and a pointer press on a
+   * `:focus-visible` site leaves no ring. */
+  .demo__stage :global([data-surface-toggle]) {
+    grid-area: stack;
+    position: relative;
+    z-index: 1;
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: 0;
+  }
+
+  .demo__stage :global([data-surface-toggle]:hover) {
+    background-color: transparent;
+  }
+
+  /* Pinned to the foot of the picture, and separated from it by the same
+   * hairline that frames the panel — the bar is opaque, so without one its edge
+   * would be the only boundary on this page drawn by a colour change alone.
+   *
+   * `position` and `z-index` are what put it in front of the picture rather
+   * than behind it. The media declares a layer of its own, so a box left
+   * unpositioned in the same cell paints underneath it however late it comes in
+   * the markup — measured, by watching the bar disappear when the first frame
+   * arrived. Stacking here is asked for, not inherited from source order. */
+  .demo__stage :global([data-playdeck-part='controls']) {
+    grid-area: stack;
+    position: relative;
+    z-index: 1;
+    place-self: end stretch;
+    border-block-start: var(--line-width) solid var(--color-line);
+  }
+
+  /* The `[hidden]` reset, needed here rather than assumed: the attribute is
+   * honoured by a rule in the user-agent stylesheet, and the theme gives this
+   * part a `display` of its own, which any author rule beats. So the bar the
+   * island marks hidden before a player exists stays on screen unless this says
+   * otherwise. Unlayered and unqualified, which is enough — the theme's own
+   * declaration sits inside a cascade layer and loses to this one whatever the
+   * two specificities are. */
+  .demo__stage :global([data-playdeck-part='controls'][hidden]) {
+    display: none;
+  }
+
+  /* The seek input, taken out of the text line it was sitting in.
+   *
+   * A range input is inline-level, so in `seek-slider` it is laid into a line
+   * box and the container grows past it by the descender space under the
+   * baseline. The theme then centres the track on the CONTAINER
+   * (`inset-block-start: 50%` on `seek-buffered`) while the input keeps the top
+   * of the line box, so the thumb and the bar it runs along do not share a
+   * centre. How far apart is a function of the consumer's font, so every
+   * consumer of the bundled theme has some version of the offset and this
+   * panel — whose `--playdeck-font-size` is the site's mono at `--text-sm` —
+   * had its own.
+   *
+   * `display: block` removes the line box, so the container is the input's own
+   * 44px and the 50% the theme centres on is the input's centre. It is the
+   * whole fix, and it is a fix in the right place only for this panel — the
+   * defect is `theme.css`'s and reaches every consumer of the bundled theme,
+   * where it is reported rather than patched here (#520 puts `packages/` out of
+   * this work's scope, and `e2e/thumb-contrast.spec.ts` pins that geometry).
+   *
+   * The 44px target is untouched: this changes the input's outer display type
+   * and none of its box. */
+  .demo__stage :global([data-playdeck-part='seek-slider-input']) {
+    display: block;
+  }
+
+  /* Plex Mono is set tight relative to its own width, and this is the site's
+   * rule for opening it wherever it appears. The theme sets the family from the
+   * token above but has no tracking of its own to set. */
+  .demo__stage :global([data-playdeck-part='time']) {
+    letter-spacing: var(--tracking-fn);
+  }
+
+  /* The fallback fills the reserved box rather than sizing itself from the
+   * clip, so the two states occupy the same space. */
+  .demo__fallback {
+    inline-size: 100%;
+    block-size: 100%;
+  }
+
+  .demo__caption {
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+</style>

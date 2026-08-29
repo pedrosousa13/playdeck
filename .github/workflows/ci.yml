@@ -729,7 +729,8 @@ jobs:
       # resolved from (#372). Set on the pinned run alone, for the reason the
       # `audit` job gives: the pull request's own run below resolves its own
       # `node_modules` by design. The two budget steps name no runtime because
-      # `check-bundle-budgets.mjs` imports nothing to resolve.
+      # `check-bundle-budgets.mjs` imports nothing from `node_modules`: its only
+      # import is the sibling `./bundle-budgets.mjs`, which is a relative path.
       - name: Packaging — main's copy of the gate
         if: ${{ !cancelled() }}
         env:
@@ -744,17 +745,20 @@ jobs:
       - name: Packaging — this pull request's copy of the gate
         if: ${{ !cancelled() }}
         run: pnpm test:packages
-      # `check-bundle-budgets.mjs` reaches every one of its targets through
-      # `new URL(path, import.meta.url)`, and `.gate/` sits at the same depth as
-      # `scripts/`, so each of those relative paths resolves from `.gate/` to
-      # exactly the file it resolves to from `scripts/`. Seven of the eight are
+      # `check-bundle-budgets.mjs` resolves the repository root as
+      # `new URL('../', import.meta.url)` and `scripts/bundle-budgets.mjs` joins
+      # each target path onto it. `.gate/` sits at the same depth as `scripts/`,
+      # so that root resolves from `.gate/` to exactly the directory it resolves
+      # to from `scripts/`, and every target with it. Seven of the eight are
       # build outputs at `../packages/*/dist/index.js`, the ones `pnpm build`
       # above produced; the eighth is `../packages/react/theme.css`, which is
       # neither under `dist/` nor built at all — it is plain CSS the package
       # ships as-is, so the pinned run measures the file this pull request
       # committed. Both shapes resolve identically from either directory, which
       # is the only property this step needs. Nothing else in the script is
-      # location-sensitive.
+      # location-sensitive, and its one import — the sibling
+      # `./bundle-budgets.mjs`, which the whole-directory copy above brings with
+      # it — is a relative path rather than anything a runtime has to resolve.
       #
       # The same `!cancelled()`, and here is the concrete instance of why every
       # gate step in this job carries it: under the default `success()` a red

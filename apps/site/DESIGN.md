@@ -22,7 +22,8 @@ its opposite is what a generated interface looks like.
    discovered — see below.
 2. **There is exactly one gradient.** See below.
 3. **Functional text never goes below 11px.**
-4. **Depth is a surface colour and a hairline. There is no shadow.**
+4. **Depth is a surface colour, a hairline, or one of two elevations — and an
+   elevated surface never also carries a border.** See below.
 5. **Only `transform` and `opacity` are animated.**
 
 ## Palette
@@ -151,6 +152,7 @@ a page that wants another rung has to ask for it in a class.
 
 | Token        | Size             | Applied to                                    |
 | ------------ | ---------------- | --------------------------------------------- |
+| `--text-4xl` | 5.5rem (88px)    | No element. Opt-in only — see below           |
 | `--text-3xl` | 2.75rem (44px)   | `h1`                                          |
 | `--text-2xl` | 2rem (32px)      | No element. Opt-in only — see below           |
 | `--text-xl`  | 1.5rem (24px)    | `h2`                                          |
@@ -160,11 +162,24 @@ a page that wants another rung has to ask for it in a class.
 | `--text-xs`  | 0.75rem (12px)   | Captions and table labels, by class           |
 | `--text-fn`  | 0.6875rem (11px) | The floor, by class. Functional text only     |
 
-**Nothing defaults to `--text-2xl`.** It is the rung between the page title and
-`h2`, and it exists for a page that needs a section title heavier than `h2`'s
-default — set it in a class on that page rather than by moving `h2`. The heading
-elements keep whatever `base.css` gives them above, which was reviewed as
-rendered, so changing what `h2` resolves to is a change to every page at once.
+**Nothing defaults to `--text-2xl` or to `--text-4xl`**, and both are opt-in for
+the same reason. `--text-2xl` is the rung between the page title and `h2`, for a
+page that needs a section title heavier than `h2`'s default. `--text-4xl` is the
+display rung above `h1`, for a page whose title is a thesis rather than a
+document's name. Set either in a class on that page rather than by moving the
+element: the heading elements keep whatever `base.css` gives them above, which
+was reviewed as rendered, so changing what `h1` or `h2` resolves to is a change
+to every page at once — including the reference documents, whose titles are
+package names and want no display treatment at all.
+
+`/` is the only page that spends either on a heading of its own. Its `h1` steps
+up to `--text-4xl` at `48rem` and keeps `h1`'s own rung below that, where 88px
+would take three quarters of a phone's width and cost the lead its first
+screen. A step between two rungs of this scale rather than a `clamp()`, because
+a clamp is a font size written into a component and no component here writes
+one. `/design` renders a specimen at every rung, these two included, which is
+the same exemption a specimen sheet already has for both forms of the sweep: it
+is showing the scale, not spending it.
 
 Sizes are in `rem` against the browser's own root size, which is left alone: a
 reader who raised their default has said something, and a fixed pixel root
@@ -202,12 +217,16 @@ functional text at 11px loses more to that than it gains.
 ## Code, and the one exception to rule 1
 
 The reference pages at `/reference/<package>/` are the package READMEs rendered,
-and those documents are mostly code. Colouring it is the one place a colour on
-this site comes from somewhere other than `tokens.css`.
+and those documents are mostly code. The landing page carries one block of it
+too, the composition example. Colouring it is the one place a colour on this site
+comes from somewhere other than `tokens.css`.
 
 The highlighter is **Shiki**, which Astro already ships — no new dependency —
-configured in `astro.config.ts` with the `github-light` and `github-dark`
-themes. The two names are the exception in full: no hex is written by hand
+set to the `github-light` and `github-dark` themes. The two names live in
+`src/shiki.ts` and are read twice: `astro.config.ts` hands them to
+`markdown.shikiConfig` for the READMEs' fences, and the landing page hands them to
+Astro's `<Code>` component, which reads nothing from that configuration. The two
+names are the exception in full: no hex is written by hand
 anywhere, the palette is regenerated from the source text on every build, and
 there is no way to express it in this system's own colours, because a scale of
 four accents cannot tell a keyword from a string from a comment.
@@ -255,6 +274,16 @@ and never a second gradient with different stops. Gradients creeping outward
 until the page looks like every other generated landing page is the specific
 failure this rule exists to prevent. If a design seems to want another one, the
 answer is the flat surface tokens.
+
+**"Exactly one" is a count of renders and not only a count of stops.** The rule
+was read for a while as a licence to place the hairline after every section,
+and `/` shipped five of them plus the hero band. Six sweeps down one page is the
+creep this rule exists to stop, drawn from the one component that was supposed
+to make it impossible. So the landing page now renders the sweep once — the
+hero band — and separates its sections with `--space-9` and nothing else. Where
+a page genuinely needs a line, `--color-line` is the line; the sweep is not a
+general-purpose separator that happens to be pretty. `/design` is the exception
+that proves nothing, because a specimen sheet's job is to show both forms.
 
 Its stops are unevenly spaced because the perceptual distance from blue to green
 is much larger than from amber to red, and even stops make the warm end read as
@@ -318,19 +347,89 @@ are acceptance criteria for anything added to this site, not style advice.
 - **No tracked-caps eyebrow chip above an `h1`.** A named tell, and it was on
   every comp.
 - **No 1px border under a wide shadow blur** (24px, 60px). That pairing was the
-  comps' entire depth system, and it is a named tell too. Depth here is a
-  surface colour and a hairline; the system has no shadow token to reach for,
-  which is the point.
+  comps' entire depth system, and it is a named tell too. It is still banned,
+  and the rule below is written so that it cannot be assembled by accident.
 - **Functional text at 11px or above.** See `--text-fn`.
 - **Animate `transform` and `opacity` only.** Never `max-height` or `width`:
   those lay the page out again on every frame, and every effect that seems to
   need them has a composited equivalent — a translate or a scale under
   `overflow: hidden`.
 
+### Elevation, and what rule 4 used to say
+
+Rule 4 read **"Depth is a surface colour and a hairline. There is no shadow."**
+It was written that way because a 1px border under a 24px or 60px blur was the
+comps' whole depth system and is a named generated-interface tell, and the
+cheapest way to kill one combination is to ban the category it belongs to.
+
+That was too wide. The tell is the _pairing_, not the shadow: a border and a
+wide soft blur together, imitating depth that neither states on its own. An
+elevation with a real offset and a tight blur, standing alone, is not that
+thing — and without it every panel on the site had to be either flat or
+outlined, which is why the landing page read as a stack of boxes.
+
+So the rule is now two tokens and one prohibition.
+
+| Token                    | Value                    | For                                  |
+| ------------------------ | ------------------------ | ------------------------------------ |
+| `--elevation-panel`      | `0 2px 4px` shadow       | A surface at rest on the field       |
+| `--elevation-instrument` | `0 8px 16px` deep shadow | The one panel a page is built around |
+
+The geometry is theme-independent and only the ink changes, so the two themes
+cannot drift into casting differently-shaped shadows. The names say what a thing
+_is_, not how big its shadow is, which is what stops the scale growing a third
+step the first time something wants to sit between them.
+
+**An elevated surface never also carries a border.** Elevation replaces the
+hairline; it does not accompany it. That single sentence is what keeps the
+banned pairing unassemblable, and it is the reason this rule could be relaxed at
+all.
+
+**This rule is unenforced, and the old one was not.** "There is no shadow" was
+kept by the absence of a shadow token: there was nothing to write, so writing
+one meant writing a colour, and rule 1 fails that in review at the first hex.
+The amended rule has two tokens and a prohibition made of prose, and nothing in
+the repository fails when a third `box-shadow` appears or when an elevated
+element also takes a border. That was accepted rather than overlooked. The
+guards this site does carry — the background-image scan, the packaging and
+budget gates — each answer a question with one right answer that a scan can
+read. "Is this element the one panel this page is built around" is not that
+question, and a scan that only counted `box-shadow` declarations would pass the
+pairing this rule exists to ban while failing nothing that matters. So the
+allowlist above is the enforcement, and it works only if a new elevated element
+is an edit to it.
+
+Also still banned: coloured glows, zero-offset halos, and stacked shadows
+imitating one large soft one. A shadow is cast by a surface above a surface. It
+is not a way to tint an edge.
+
+**What may spend an elevation, by name.** `--elevation-instrument` belongs to
+the capability ledger on `/` and to nothing else — it is the panel that page is
+built around, and a second instrument on one page means neither is the
+instrument. `--elevation-panel` belongs to the bezel around the hero's player —
+`.demo__bezel` in `HeroPlayer.astro`, and not the stage inside it, which is a
+recessed colour and a hairline. Everything
+else on this site is a surface colour and a hairline, as before. A new elevated
+element is an edit to this list, not a local decision.
+
+**There is one animation on the site, and it is on `/`.** The hero's sweep band
+travels in from the left once on arrival — a `translateX(-100%)` to
+`translateX(0)` on an inner box inside an `overflow: hidden` window, at
+`--duration-slow`. A translate under a clip rather than a scale, because scaling
+the band would compress the gradient instead of revealing it and the warm end
+would arrive first; a translate moves the paint across a fixed window at its
+final width. Everything below the hero is still. Scattered reveals down a page
+are the generated-landing-page tell in motion form, and one authored moment is
+worth more than six of them.
+
 `prefers-reduced-motion: reduce` collapses durations, which lands each transition
 on its settled state immediately. That only works because every transition moves
 between two settled states. An effect that leaves an element mid-travel or
-invisible when its motion is removed is a bug in the effect.
+invisible when its motion is removed is a bug in the effect. The hero's
+animation meets the same condition and meets it the same way: its second
+keyframe is the band in place, and `animation-fill-mode: both` is what holds it
+there, so a collapsed duration produces a drawn band rather than one parked off
+to the left.
 
 Focus is one treatment for the whole site: a 2px `--color-accent` outline on
 `:focus-visible`, offset by 2px. An outline rather than a shadow, so it follows
@@ -383,20 +482,23 @@ system not owned by one component, and a new one has to earn that:
 
 ## Where things live
 
-| File                               | What it is                                   |
-| ---------------------------------- | -------------------------------------------- |
-| `src/styles/tokens.css`            | Every value. The only file with hex literals |
-| `src/styles/base.css`              | Element defaults, spoken in tokens           |
-| `src/layouts/Base.astro`           | The document, and the pre-paint theme script |
-| `src/components/SiteHeader.astro`  | The shell above every page                   |
-| `src/components/ThemeToggle.astro` | The control that stores a theme choice       |
-| `src/components/Sweep.astro`       | The one gradient, and its two forms          |
-| `src/pages/design.astro`           | The specimen sheet, served at `/design`      |
-| `src/pages/index.astro`            | The placeholder at `/`, and its links        |
-| `src/pages/reference/index.astro`  | The package index, served at `/reference`    |
-| `src/pages/reference/[pkg].astro`  | One reference page per publishable package   |
-| `src/content.config.ts`            | The READMEs, loaded from `packages/`         |
-| `src/reference-packages.mjs`       | Which packages get a page, and from where    |
+| File                                  | What it is                                    |
+| ------------------------------------- | --------------------------------------------- |
+| `src/styles/tokens.css`               | Every value. The only file with hex literals  |
+| `src/styles/base.css`                 | Element defaults, spoken in tokens            |
+| `src/layouts/Base.astro`              | The document, and the pre-paint theme script  |
+| `src/components/SiteHeader.astro`     | The shell above every page                    |
+| `src/components/ThemeToggle.astro`    | The control that stores a theme choice        |
+| `src/components/Sweep.astro`          | The one gradient, and its two forms           |
+| `src/components/HeroPlayer.astro`     | The hero's player panel, and the player theme |
+| `src/components/HeroPlayerIsland.tsx` | The hero player's composition. The one island |
+| `src/pages/design.astro`              | The specimen sheet, served at `/design`       |
+| `src/pages/index.astro`               | The landing page at `/`, and its links        |
+| `src/pages/reference/index.astro`     | The package index, served at `/reference`     |
+| `src/pages/reference/[pkg].astro`     | One reference page per publishable package    |
+| `src/content.config.ts`               | The READMEs, loaded from `packages/`          |
+| `src/reference-packages.mjs`          | Which packages get a page, and from where     |
+| `src/shiki.ts`                        | The two theme names, for both readers of them |
 
 **The header** is the same three things on every page: the wordmark returning
 home, the path from the root to where the reader currently is, and the theme
@@ -541,8 +643,46 @@ a role that changed shows the change. It is the living reference a later ticket
 checks its work against, and the place to add a specimen when a token is added.
 
 It is not part of the site's own navigation, and `/` links to it only so it is
-reachable. The placeholder at `/` is a placeholder: #521 replaces it with the
-real landing page, and `/design` stays where it is.
+reachable.
+
+The landing page at `/` is the site's front door, and two of the things it prints
+are measured at build time rather than written down. The bundle figures come from
+`scripts/bundle-budgets.mjs`, the module `pnpm test:budgets` gates with, so the
+page and the gate cannot state different numbers. The composition example is
+`examples/react-composition.tsx`, read as bytes and highlighted with the same two
+Shiki themes the reference pages use — which is why those two names now live in
+`src/shiki.ts`: Astro's `<Code>` component reads nothing from
+`markdown.shikiConfig`, so a page that typed them out again would eventually
+colour one block differently from every fence beside it.
+
+**Its sections are shaped by what they hold, and deliberately not alike.** A
+page whose every section is a small heading, a paragraph and a block gives the
+thesis and the budget table the same weight, which is a way of saying nothing
+about either. So the three capability states are one comparison in three
+columns on a `subgrid`, aligned row for row so a reader travels across rather
+than round three boxes; the composition example is prose beside code; the
+providers and the budgets are a list and a table, at the page's full width
+rather than at the measure. Prose inside any of them is still held to
+`--measure` — the width buys columns, not longer lines — and the page's own
+maximum is `72rem`, which is the literal that section names as a page's own
+decision.
+
+**Cards of identical size are the container this page does not reach for.** It
+is the same finding the package index records: three or five boxes the same size
+are what a layout defaults to when nothing has been decided about the contents,
+and they cost a reader the alignment that makes a set comparable. The capability
+ledger takes the opposite treatment for the opposite reason — it is genuinely
+one panel of machine output, so it is one raised surface, and it carries no
+hairline at all. `--color-surface` on `--color-field` is built to raise a panel
+with no border; the player's stage beside it is `--color-sunken`, which sits
+close to the field, and that is what a hairline is for.
+
+Two constraints on that page are `scripts/check-deploy-artifact.mjs`'s rather
+than this system's, and both are load-bearing. Its `h1` is exactly `Playdeck`,
+which is how that check identifies the site's root document in a browser. And the
+workbench link is the last internal link in the document, because the check
+follows every internal link in document order and navigating away from the
+workbench abandons requests it is still making.
 
 `data-theme` has two writers and they are not interchangeable: the pre-paint
 script in `Base.astro` applies a stored choice before the browser paints, and
@@ -550,8 +690,115 @@ script in `Base.astro` applies a stored choice before the browser paints, and
 storage key is a literal in both, because an `is:inline` script cannot import
 the module that would otherwise hold it.
 
+## The hero player, and the site's one island
+
+The hero mounts a real player. It is the only interactive thing on the site, the
+only place any JavaScript of this site's hydrates, and the only route that ships
+a renderer at all — every other page is still HTML, CSS and the two inline theme
+scripts. A prose section that shipped a framework would be the defect; a landing
+page for a video-player library that showed no player would be a different one.
+
+**The clip is `public/tracer.mp4`, this app's own copy.** An Astro build serves
+only its own `public/`, so the file is copied in rather than reached for across
+an app boundary. It is a one-second colour-bar test pattern with no audio track,
+and the caption under the panel says what it is — the picture is a fixture, not
+footage, and a hero that implied otherwise would be the page's only dishonest
+frame.
+
+**Nothing about the player contacts a third party, and that is the point.** The
+source is a file on this origin, driven through the native provider, and
+`loading="interaction"` holds the root dormant until the play affordance is
+pressed: no fetch, no provider attached. The page argues that in prose two
+sections further down, and the hero is where it is either demonstrated or merely
+asserted.
+
+**With no JavaScript the panel is a plain `<video controls preload="none">`** on
+the same file, inside `<noscript>`. The island is `client:only`, so it renders
+nothing on the server and there is never a button in the document that a script
+has to arrive to make work.
+
+**The player's theme is imported, and it is a second system meeting this one.**
+`@playdeck/react/theme.css` is layered and matches only elements carrying a
+`data-playdeck-part` attribute, so it cannot reach anything else on the site and
+loses to every unlayered rule here. It declares no token of its own — every value
+is read as `var(--playdeck-…, fallback)` — so `HeroPlayer.astro` maps the whole
+of it onto this system's roles in one block, and the player re-tunes with the
+theme switch because it is reading the roles every other panel reads. Two of
+those choices are not free:
+
+- **The control bar is `--color-surface`, not the theme's scrim.** That default
+  is a gradient, and this system has exactly one gradient. A flat surface and a
+  hairline is the depth treatment the rest of the page uses.
+- **Layer geometry is the page's.** The library's stylesheet states appearance
+  and leaves position out, so the picture, the activation affordance and the
+  control bar are stacked in one grid cell by rules in `HeroPlayer.astro`.
+
+**A click anywhere on the picture works the player, and neither half of that is
+a handler.** Before the clip is loaded the target is the activation button
+itself, restored to the full-bleed box the library ships it with — the bundled
+theme's 4rem is what had been shrinking it, and `HeroPlayer.astro` takes that
+size back and redraws the badge as a background so the picture is not painted
+over. Once the clip is running the target is a second `Player.PlayButton`, laid
+into the same cell with its control-bar chrome removed, so the click toggles
+playback the way every desktop player's does. The two never coexist: the
+activation button removes itself at the moment the surface toggle is rendered.
+The surface toggle is out of the tab order: once focus is in the bar the
+keyboard reaches the same command twice already — the bar's own play button, and
+Space or `k` anywhere inside `Player.Controls` — and a third stop named "Pause"
+in front of the bar would be an obstacle rather than an affordance. The bar
+keeps its own clicks by painting in front: both layers take `z-index: 1` and the
+bar comes later.
+
+**The keyboard is put into the bar when the player appears, and only the
+keyboard.** The activation button unmounts while it holds focus, and a browser
+drops focus to `<body>` when the focused element leaves the document — so a
+reader who pressed Enter would be left with nothing focused and no media
+shortcut, `shortcuts` being scoped to `Player.Controls` rather than global. The
+library restores focus for controls that unmount from inside that region, and
+this button is outside it. `HeroPlayerIsland.tsx` moves focus to the bar's play
+button, which is the command that was just given. It does so only when the
+activation button matched `:focus-visible` at the moment it was pressed — the
+browser's own record of whether a ring was on screen — because a ring appearing
+after a mouse click or a touch tap is its own defect.
+
+**The seek input is `display: block`, and that is a library defect worked around
+rather than a choice.** A range input is inline-level, so the theme's
+`seek-slider` box grows past it by the descender space under the baseline, while
+the theme centres the track on that box — leaving the thumb and the bar it runs
+along without a shared centre. How far apart is a function of the consumer's
+font, so every consumer of the bundled theme has some version of it and this
+panel, whose `--playdeck-font-size` is the site's mono, had its own. Removing
+the line box makes the container the input's own
+44px and the two centres one. The 44px target is untouched. The defect is
+`theme.css`'s and reaches every consumer of the bundled theme; it is reported
+separately rather than fixed here.
+
+Measured with `packages/react/test/contrast.ts`, in the same arithmetic as the
+table above. Text on the bar is the `--color-ink` on `--color-surface` row that
+table already carries; these are the pairs the player adds:
+
+| Pair                           | Light | Dark  | Needs |
+| ------------------------------ | ----- | ----- | ----- |
+| Loaded range on the track      | 3.24  | 3.62  | 3     |
+| Thumb ring on the track        | 16.38 | 16.92 | 3     |
+| Thumb ring on the loaded range | 5.06  | 4.68  | 3     |
+| Progress fill on the track     | 5.88  | 8.66  | 3     |
+| Focus ring on the bar          | 6.65  | 8.33  | 3     |
+
+**The thumb carries a ring because its fill cannot carry the boundary.** The
+accent measures 1.82 light and 2.39 dark against the loaded range, and no accent
+value clears 3:1 against both that and the track — which is the library's own
+finding, and why its theme draws a ring at all. The ring is what the table above
+holds to 3:1, and the fill is decoration on top of it.
+
+**The track is `--color-sunken`.** That is the recessed-well role, which names a
+switch track outright, and it is also what the first row of the table needs: on
+`--color-line` the loaded range measures 2.85 light and 2.82 dark, below what
+non-text UI owes.
+
 This system is separate from `@playdeck/react/theme.css`, which is the player's
 theme and ships to consumers. That file is layered and zero-specificity because a
 stranger's stylesheet has to be able to win against it; nothing here ships
 anywhere, so nothing here needs that. The two share no tokens and are not meant
-to match.
+to match — the hero maps one onto the other at a single seam, and that mapping is
+the whole of the contact between them.

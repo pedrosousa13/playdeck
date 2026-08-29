@@ -52,13 +52,14 @@ jobs:
     # of being a fork.
     if: github.repository == 'pedrosousa13/playdeck'
     runs-on: ubuntu-latest
-    # Install plus two static builds, an assembly and an asset upload — no
-    # browsers, no packaging harness. `ci.yml` records its `storybook` job at 37s
-    # whole-job, install included (2026-08-20, run 32337178101); the Astro build
-    # of a placeholder page and a directory copy are small beside it, and the
-    # upload is bounded by the same artifact. 15 minutes is still several times
-    # the work, in the same spirit as the bounds there. Revisit it if the site
-    # grows a build that is not.
+    # Install, the library builds the site measures, two static builds, an
+    # assembly and an asset upload — no browsers, no packaging harness.
+    # `ci.yml` records its `storybook` job at 37s whole-job, install included
+    # (2026-08-20, run 32337178101); the seven library builds this one adds are
+    # `vite build && tsc -b` apiece, the Astro build and a directory copy are
+    # small beside them, and the upload is bounded by the same artifact. 15
+    # minutes is still several times the work, in the same spirit as the bounds
+    # there. Revisit it if the site grows a build that is not.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -68,6 +69,17 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+
+      # The packages, before the site, because the landing page measures them.
+      # It renders the gzipped size of every bundle `pnpm test:budgets` gates,
+      # read at build time from the module that gate measures with rather than
+      # from figures typed into the page, and that module reads build output. A
+      # site built against an unbuilt tree fails here by name instead of
+      # publishing a table of stale numbers.
+      #
+      # Topological, which is `pnpm run -r`'s own order, so a package is built
+      # after the packages it depends on.
+      - run: pnpm --filter './packages/*' build
 
       # The site is handed no base path, and that is not an omission. It is
       # served from the apex, so its prefix is the root its build already

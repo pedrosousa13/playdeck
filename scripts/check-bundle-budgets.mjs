@@ -1,6 +1,5 @@
-import { gzipSync } from 'node:zlib';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
+import { measureBundles } from './bundle-budgets.mjs';
 
 // Matches scripts/verify-packaging.mjs: the lint config gives this directory
 // node globals, but `console` still has to be reached through globalThis.
@@ -9,92 +8,18 @@ const console = globalThis.console;
 // Enforces the initial-gzip bundle budgets from the MVP contract (issue #1).
 // Without this, the budgets were prose: nothing failed when a package grew.
 //
-// What is measured, and why it is not exactly what the contract says:
-//
-// The contract budgets "selected React primitives" — a consumer's chosen
-// subset, not the whole package. Measuring a real consumer's closure needs a
-// fixture per selection, and tests/bundle/native-only cannot serve as one
-// because it must run in a browser, so React is bundled into its single chunk
-// and cannot be subtracted.
-//
-// Instead this measures the ENTIRE built package with React, JSX runtime, core
-// and every provider external. That is a strictly stronger guarantee than the
-// contract asks for: if the whole primitives surface fits the budget, any
-// selected subset does too. It is also stable — no bundler heuristics, no
-// fixture to keep in sync.
-//
-// Provider adapters are reported, never gated: the contract says provider
-// chunks are accounted for separately, and they are lazily loaded, so they do
-// not compete for the initial-graph budget.
+// What is measured and why is `bundle-budgets.mjs`'s to say. This file is the
+// gate: it prints what that module measured and fails the build on a package
+// that has outgrown its ceiling. The split exists because the landing page
+// renders the same figures, and a page arguing that a number is enforced has to
+// be reading the enforced number rather than a second copy of it.
 
-const KB = 1024;
+// Resolved from this file's own URL rather than from `process.cwd()`, which is
+// whatever directory the command was typed in. This script is never bundled, so
+// its `import.meta.url` is where it actually lives.
+const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 
-/** @param {string} path */
-const gzipKilobytes = async (path) => {
-  const source = await readFile(new URL(path, import.meta.url));
-  return gzipSync(source).length / KB;
-};
-
-// `budget: null` means report-only.
-/** @type {readonly { name: string; path: string; budget: number | null }[]} */
-const targets = [
-  {
-    name: '@playdeck/core',
-    path: '../packages/core/dist/index.js',
-    budget: 10
-  },
-  {
-    name: '@playdeck/react (primitives, excl. React)',
-    path: '../packages/react/dist/index.js',
-    budget: 18
-  },
-  {
-    // Shipped as-is rather than built: it is plain CSS, and the primitives
-    // never import it, which is what keeps the headless chain CSS-free.
-    name: '@playdeck/react/theme.css',
-    path: '../packages/react/theme.css',
-    budget: 6
-  },
-  {
-    name: '@playdeck/provider-native',
-    path: '../packages/provider-native/dist/index.js',
-    budget: null
-  },
-  {
-    name: '@playdeck/provider-hls',
-    path: '../packages/provider-hls/dist/index.js',
-    budget: null
-  },
-  {
-    name: '@playdeck/provider-youtube',
-    path: '../packages/provider-youtube/dist/index.js',
-    budget: null
-  },
-  {
-    name: '@playdeck/provider-vimeo',
-    path: '../packages/provider-vimeo/dist/index.js',
-    budget: null
-  },
-  {
-    name: '@playdeck/provider-wistia',
-    path: '../packages/provider-wistia/dist/index.js',
-    budget: null
-  }
-];
-
-const measured = [];
-for (const target of targets) {
-  try {
-    measured.push({ ...target, size: await gzipKilobytes(target.path) });
-  } catch (cause) {
-    throw new Error(
-      `Cannot measure ${target.name}: ${fileURLToPath(
-        new URL(target.path, import.meta.url)
-      )} is missing. Run \`pnpm build\` first.`,
-      { cause }
-    );
-  }
-}
+const measured = await measureBundles(repoRoot);
 
 const column = Math.max(...measured.map(({ name }) => name.length));
 for (const { name, size, budget } of measured) {

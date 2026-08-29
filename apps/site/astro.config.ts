@@ -1,5 +1,7 @@
 import { defineConfig } from 'astro/config';
+import react from '@astrojs/react';
 import { fileURLToPath } from 'node:url';
+import { shikiConfig } from './src/shiki';
 
 /*
  * Where the repository starts, resolved from this file rather than from the
@@ -26,6 +28,20 @@ export default defineConfig({
    * lands where it already defaults to.
    */
   base: '/',
+  /**
+   * React, for one island: the hero's player. Playdeck is a React library and
+   * a landing page for it that showed no player would be arguing from
+   * description alone, so the renderer is here to make one claim on this page
+   * demonstrable rather than to open the site to components in general.
+   *
+   * Registering it costs nothing by itself. Astro ships a renderer only to a
+   * page that mounts an island, so every other route in this build stays what
+   * it was: HTML, CSS and the two inline theme scripts. `src/pages/index.astro`
+   * carries the only `client:` directive in the site, and it is `client:only`
+   * there — see `src/components/HeroPlayer.astro` for why that one rather than
+   * a hydrating variant.
+   */
+  integrations: [react()],
   // Sitemap and canonical URLs, and deliberately not routing: `base` above is
   // what a link or an asset resolves against, and this changes neither.
   site: 'https://playdeck.video',
@@ -70,10 +86,12 @@ export default defineConfig({
      * site. That is what lets a reader's explicit choice beat the operating
      * system in both directions, which the media query Astro's documented dual
      * theme CSS reaches for cannot do on its own.
+     *
+     * The values themselves live in `src/shiki.ts` because Astro's `<Code>`
+     * component reads nothing from here, and the landing page uses it to render
+     * a real file from `examples/`. That file explains why the two readers
+     * cannot be allowed to drift.
      */
-    shikiConfig: {
-      themes: { light: 'github-light', dark: 'github-dark' },
-      defaultColor: false
-    }
+    shikiConfig
   }
 });
