@@ -1,7 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
 import Sweep from '../../components/Sweep.astro';
-import ThemeToggle from '../../components/ThemeToggle.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
 import { referencePackages } from '../../reference-packages.mjs';
 
 const packages = await referencePackages();
@@ -10,8 +10,22 @@ const packages = await referencePackages();
 // `src/pages/index.astro` gives at length: the prefix is the root today, so a
 // hand-written path would be identical and would stop being identical silently
 // (#435).
-const homeUrl = import.meta.env.BASE_URL;
 const packageUrl = (dir) => `${import.meta.env.BASE_URL}reference/${dir}/`;
+
+// The scope every package on this index shares, taken from the names rather
+// than written down, so a package published under a different scope one day
+// stops being described by a line that says they all share this one.
+const scope = '@playdeck/';
+const scoped = packages.every((entry) => entry.name.startsWith(scope));
+
+// The version, stated once when there is one version to state. These packages
+// are released together, so the seven rows carried `version 1.0.0` seven times
+// and the repetition was the reason none of them was read. Derived rather than
+// assumed: the day a package is released on its own, `common` is undefined and
+// every row carries its own figure again — which is the only arrangement in
+// which the figure is worth reading.
+const versions = new Set(packages.map((entry) => entry.version));
+const common = versions.size === 1 ? packages[0].version : undefined;
 ---
 
 {
@@ -23,10 +37,7 @@ const packageUrl = (dir) => `${import.meta.env.BASE_URL}reference/${dir}/`;
    * carries the same constraint. */
 }
 <Base title="Reference — Playdeck">
-  <header class="bar">
-    <a href={homeUrl}>Playdeck</a>
-    <ThemeToggle />
-  </header>
+  <SiteHeader crumbs={[{ label: 'Reference' }]} />
 
   <main class="page">
     <h1>Reference</h1>
@@ -37,18 +48,58 @@ const packageUrl = (dir) => `${import.meta.env.BASE_URL}reference/${dir}/`;
     </p>
     <Sweep form="accent" />
 
+    {
+      /* The two facts that were repeated down the column, said once each above
+       * it. A reader who wants to know what to type into `pnpm add` reads this
+       * line and the row's own name; a reader scanning for the right package
+       * reads only the part of each name that differs. */
+    }
+    <p class="summary">
+      {scoped && (
+        <>
+          Published under <code>{scope}</code>
+        </>
+      )}
+      {scoped && common !== undefined && ', '}
+      {
+        common !== undefined && (
+          <>
+            all at version <code class="u-tabular">{common}</code>
+          </>
+        )
+      }.
+    </p>
+
+    {
+      /* A list and not a grid of cards. Seven cards of identical size are the
+       * shape a container reaches for when nothing has been decided about the
+       * contents, and they cost a reader the one thing an index is for: seven
+       * names close enough together to compare in one glance. Rows separated by
+       * a hairline, name aligned in its own column, no chrome. */
+    }
     <ul class="packages">
       {
         packages.map((entry) => (
           <li class="package">
             <h2 class="package__name">
-              <a href={packageUrl(entry.dir)}>{entry.name}</a>
+              <a href={packageUrl(entry.dir)}>
+                {scoped ? (
+                  <>
+                    <span class="u-visually-hidden">{scope}</span>
+                    {entry.name.slice(scope.length)}
+                  </>
+                ) : (
+                  entry.name
+                )}
+              </a>
             </h2>
             <p class="package__description">{entry.description}</p>
-            <p class="package__version">
-              <span class="package__version-label">version</span>{' '}
-              <code>{entry.version}</code>
-            </p>
+            {common === undefined && (
+              <p class="package__version">
+                <span class="package__version-label">version</span>{' '}
+                <code class="u-tabular">{entry.version}</code>
+              </p>
+            )}
           </li>
         ))
       }
@@ -57,19 +108,13 @@ const packageUrl = (dir) => `${import.meta.env.BASE_URL}reference/${dir}/`;
 </Base>
 
 <style>
-  .bar {
-    display: flex;
-    gap: var(--space-4);
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-3) var(--space-5);
-    border-block-end: var(--line-width) solid var(--color-line);
-  }
-
+  /* Wider than the prose pages, because this one is a table of names rather
+   * than a document: the measure that keeps a paragraph readable is the same
+   * measure that would force a one-line description to wrap. */
   .page {
     display: grid;
     gap: var(--space-4);
-    max-inline-size: 46rem;
+    max-inline-size: 52rem;
     margin-inline: auto;
     padding: var(--space-7) var(--space-5) var(--space-8);
   }
@@ -77,42 +122,79 @@ const packageUrl = (dir) => `${import.meta.env.BASE_URL}reference/${dir}/`;
   .lead {
     font-size: var(--text-lg);
     color: var(--color-ink-muted);
+    max-inline-size: 40rem;
+  }
+
+  /* The two facts that used to be repeated down the column, said once each. At
+   * the caption rung, because neither is what a reader came for — they are what
+   * a reader would otherwise have had to infer from seven identical lines. */
+  .summary {
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
+  .summary code {
+    font-size: var(--text-xs);
+    color: var(--color-ink-muted);
   }
 
   .packages {
-    display: grid;
-    gap: var(--space-3);
     padding: 0;
-    margin-block-start: var(--space-5);
+    margin: 0;
     list-style: none;
+    border-block-start: var(--line-width) solid var(--color-line);
   }
 
-  /* Depth is a surface colour and a hairline. There is no shadow token on this
-   * site to reach for, which is the point: a one-pixel border under a wide blur
-   * is the pairing the design audit named. */
+  /* Stacked below the breakpoint and two columns above it. The name column is
+   * sized to the longest name the scope leaves behind — `provider-youtube` at
+   * the mono body rung — so the descriptions all start on the same axis and the
+   * eye reads down one edge. */
   .package {
     display: grid;
-    gap: var(--space-2);
-    padding: var(--space-4);
-    background-color: var(--color-surface);
-    border: var(--line-width) solid var(--color-line);
-    border-radius: var(--radius-md);
+    gap: var(--space-1);
+    padding-block: var(--space-3);
+    border-block-end: var(--line-width) solid var(--color-line);
   }
 
-  /* The package name is an identifier, so it is set in the mono face like every
-   * other identifier on this site, and at the subsection rung rather than the
-   * section rung — seven cards of `h2` at 24px would out-shout the page's own
-   * title. */
+  @media (min-width: 40rem) {
+    .package {
+      grid-template-columns: 12rem minmax(0, 1fr);
+      gap: var(--space-2) var(--space-5);
+      align-items: baseline;
+    }
+
+    /* Under the description rather than under the name, so the second column
+     * stays one block. Only ever rendered when the versions differ. */
+    .package__version {
+      grid-column: 2;
+    }
+  }
+
+  /* An identifier, so it is set in the mono face like every other identifier on
+   * this site, and at the body rung rather than the section rung: seven names
+   * at `h2`'s own 24px would out-shout the page's title, and the row's job is to
+   * be compared with the six rows around it rather than to be a heading first. */
   .package__name {
     font-family: var(--font-mono);
-    font-size: var(--text-lg);
+    font-size: var(--text-md);
     letter-spacing: var(--tracking-fn);
+  }
+
+  .package__name a {
+    text-decoration: none;
+  }
+
+  .package__name a:hover {
+    text-decoration: underline;
   }
 
   .package__description {
     color: var(--color-ink-muted);
+    font-size: var(--text-sm);
   }
 
+  /* Only rendered when the versions differ, which is when the figure carries
+   * information. See the frontmatter. */
   .package__version {
     font-size: var(--text-xs);
     color: var(--color-ink-subtle);

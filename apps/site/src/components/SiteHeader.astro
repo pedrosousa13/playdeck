@@ -1,0 +1,188 @@
+---
+/**
+ * The shell every page of this site is served under: the wordmark, where the
+ * reader currently is, and the theme switch.
+ *
+ * It replaces a lone underlined link sitting in the site-navigation slot, which
+ * read as a stray link rather than as a header and said different things on
+ * different pages. Three jobs and no fourth: this is a documentation shell, not
+ * a marketing bar, so there is no call to action, no product navigation and no
+ * search — a docs reader arrived to read one document, and everything in the
+ * strip above it is a tax on that.
+ *
+ * Deliberately not sticky. These pages are long — `@playdeck/core` renders to
+ * around eighteen thousand pixels — and a bar that followed the reader down
+ * would be defensible, but it would also have to fight the rail's own sticky
+ * offset for the top of the viewport, and the rail is the thing a reader
+ * actually navigates a long document with. One sticky element per page.
+ *
+ * ---- the wordmark and the crumb --------------------------------------------
+ *
+ * `crumbs` is the path from the site root to this page, not including the root
+ * itself, and its last entry is always the page the reader is on. An entry with
+ * an `href` is a link; the last one has none, and carries `aria-current="page"`.
+ *
+ * On `/` the list is empty and the wordmark is not rendered at all. There is
+ * nowhere for it to return to, the page's own `h1` is already the wordmark at
+ * the title rung — `scripts/check-deploy-artifact.mjs` identifies the site's
+ * root document by a heading named exactly `Playdeck`, so that `h1` cannot move
+ * — and a strip repeating it directly above would be the same word twice in
+ * eighty pixels. It also keeps that check's other constraint intact: it follows
+ * every internal link on `/` in document order and the workbench must be the
+ * last one, so a header that quietly added a link there would change what the
+ * check means as well as what the page looks like.
+ */
+import ThemeToggle from './ThemeToggle.astro';
+
+interface Crumb {
+  label: string;
+  href?: string;
+}
+
+interface Props {
+  crumbs?: Crumb[];
+}
+
+const { crumbs = [] } = Astro.props;
+
+// Through `import.meta.env.BASE_URL` rather than as a literal, for the reason
+// `src/pages/index.astro` gives at length: the prefix is the root today, so a
+// hand-written path would be identical and would stop being identical silently
+// (#435).
+const homeUrl = import.meta.env.BASE_URL;
+const atHome = crumbs.length === 0;
+---
+
+<header class="bar">
+  <div class="bar__place">
+    {
+      !atHome && (
+        <>
+          <a class="bar__mark" href={homeUrl}>
+            Playdeck
+          </a>
+
+          <nav class="bar__crumbs" aria-label="Breadcrumb">
+            <ol class="bar__trail">
+              {crumbs.map(({ label, href }) => (
+                <li class="bar__crumb">
+                  {href === undefined ? (
+                    <span aria-current="page">{label}</span>
+                  ) : (
+                    <a href={href}>{label}</a>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </nav>
+        </>
+      )
+    }
+  </div>
+
+  <ThemeToggle />
+</header>
+
+<style>
+  .bar {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-5);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  /* The wordmark and the trail are one shrinkable group and the switch is not:
+   * at 320px the trail is what gives way, and a switch that had wrapped its
+   * label under its track would be the more obvious break. */
+  .bar__place {
+    display: flex;
+    min-inline-size: 0;
+    gap: var(--space-3);
+    align-items: baseline;
+  }
+
+  /* The wordmark is not a heading. `scripts/check-deploy-artifact.mjs`
+   * identifies the site's root document in a browser by a heading named exactly
+   * `Playdeck`, so a second element answering to that role and name on every
+   * page of the site would make the identification ambiguous. It is set in the
+   * body rung rather than larger: the loudest thing on a documentation page is
+   * the document's own title. */
+  .bar__mark {
+    flex: none;
+    font-weight: var(--weight-semibold);
+    color: var(--color-ink);
+    text-decoration: none;
+    letter-spacing: -0.015em;
+  }
+
+  a.bar__mark:hover {
+    color: var(--color-accent);
+  }
+
+  /* The trail truncates rather than wraps or pushes. A package name is one
+   * unbroken token — `@playdeck/provider-youtube` is wider than the room a
+   * 320px header has left after the wordmark and the switch — and the reader
+   * has the whole name in the `h1` immediately underneath, so an ellipsis here
+   * costs nothing. */
+  .bar__crumbs {
+    min-inline-size: 0;
+    font-size: var(--text-sm);
+  }
+
+  .bar__trail {
+    display: flex;
+    min-inline-size: 0;
+    gap: var(--space-2);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  /* Every crumb but the last keeps its full width, and the last one is the only
+   * one allowed to shrink. The ancestors are short words chosen by this site;
+   * the leaf is a package name chosen by npm, so it is both the longest and the
+   * one the reader can read in full from the `h1` a line below. Letting them all
+   * shrink in proportion truncated `Reference` to `Refer…` at 390px to save room
+   * a crumb that was already legible did not need. */
+  .bar__crumb {
+    flex: none;
+    min-inline-size: 0;
+    overflow: hidden;
+    color: var(--color-ink-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bar__crumb:last-child {
+    flex: 0 1 auto;
+  }
+
+  /* The separator is generated rather than written, so the trail carries no
+   * character a screen reader would read out between two names. On every crumb
+   * and not only between them: the wordmark is the root of the same path, and
+   * without one `Playdeck Reference` reads as a single phrase. */
+  .bar__crumb::before {
+    margin-inline-end: var(--space-2);
+    content: '/';
+    color: var(--color-ink-subtle);
+  }
+
+  .bar__crumb a {
+    color: var(--color-ink-muted);
+    text-decoration: none;
+  }
+
+  .bar__crumb a:hover {
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
+
+  /* The page the reader is on, marked by weight and ink rather than by colour
+   * alone — and by `aria-current`, which is what says it to everyone else. */
+  .bar__crumb [aria-current='page'] {
+    font-weight: var(--weight-semibold);
+    color: var(--color-ink);
+  }
+</style>

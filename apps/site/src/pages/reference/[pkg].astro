@@ -2,7 +2,7 @@
 import { render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import Sweep from '../../components/Sweep.astro';
-import ThemeToggle from '../../components/ThemeToggle.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
 import { referencePackages } from '../../reference-packages.mjs';
 
 // One page per package, each rendering that package's whole README. Splitting a
@@ -49,13 +49,23 @@ const { Content, headings } = await render(current.entry);
 const contents = headings.filter(
   (heading) => heading.depth === 2 || heading.depth === 3
 );
+
+// The scope every package here shares, taken from the names rather than written
+// down. The rail shows what differs and states the prefix once above the list;
+// each link keeps the whole name in its accessible name, because `core` on its
+// own is not what the reader would say out loud.
+const scope = '@playdeck/';
+const scoped = packages.every((entry) => entry.name.startsWith(scope));
+const railName = (name) => (scoped ? name.slice(scope.length) : name);
 ---
 
 <Base title={`${current.name} — Playdeck reference`}>
-  <header class="bar">
-    <a href={referenceUrl}>Reference</a>
-    <ThemeToggle />
-  </header>
+  <SiteHeader
+    crumbs={[
+      { label: 'Reference', href: referenceUrl },
+      { label: current.name }
+    ]}
+  />
 
   <div class="shell">
     {
@@ -65,49 +75,93 @@ const contents = headings.filter(
        * by. */
     }
     <nav class="rail" aria-label="Reference navigation">
-      <div class="rail__inner">
-        <section class="rail__group">
-          <h2 class="rail__label">Packages</h2>
-          <ul class="rail__list">
+      {
+        /* A disclosure, closed, and open again by CSS as soon as there is a
+         * column to put it in.
+         *
+         * Stacked above the document on a phone, these two lists ran to about
+         * 1,100px — seven package links, twenty contents entries and the
+         * version — so a reader who followed a link to `/reference/core/` on a
+         * 390px screen scrolled past the whole of the site's navigation before
+         * reaching the first word of the document they asked for. Moving the
+         * rail below the document was the other option and it is worse: the
+         * source order is what a screen reader and a keyboard follow, and it
+         * would have put the navigation somewhere neither of them meets it
+         * until after several hundred lines of prose.
+         *
+         * `<details>` rather than a button and a script, because it is the
+         * element the platform already made for this: the affordance, the
+         * keyboard behaviour, the announced expanded state and the focus ring
+         * all arrive without JavaScript, and the page still works with none.
+         *
+         * At `60rem` and up the summary is taken out of the flow and the
+         * content is forced open. `::details-content` is what makes the second
+         * half possible — the content of a closed `<details>` is hidden by the
+         * user agent and no author rule could reach past it before that pseudo
+         * element existed — so the rule is behind `@supports`. An engine
+         * without it leaves the rail as a closed disclosure at every width:
+         * both lists are still there, still labelled and still keyboard
+         * operable, which is the right thing to degrade to. */
+      }
+      <details class="rail__disclosure">
+        <summary class="rail__summary">Contents</summary>
+        <div class="rail__inner">
+          <section class="rail__group">
             {
-              packages.map((entry) => (
-                <li>
-                  <a
-                    href={packageUrl(entry.dir)}
-                    aria-current={entry.dir === current.dir ? 'page' : undefined}
-                  >
-                    {entry.name}
-                  </a>
-                </li>
-              ))
+              /* The label states the shared prefix once, and the list below it
+               * carries only what differs. `@playdeck/` seven times down a
+               * 16rem column spent the width that tells `provider-vimeo` from
+               * `provider-wistia` on seven identical characters. */
             }
-          </ul>
-        </section>
+            <h2 class="rail__label">
+              <span>Packages</span>
+              {scoped && <code class="rail__scope">{scope}</code>}
+            </h2>
+            <ul class="rail__list">
+              {
+                packages.map((entry) => (
+                  <li>
+                    <a
+                      href={packageUrl(entry.dir)}
+                      aria-current={
+                        entry.dir === current.dir ? 'page' : undefined
+                      }
+                    >
+                      {scoped && <span class="u-visually-hidden">{scope}</span>}
+                      {railName(entry.name)}
+                    </a>
+                  </li>
+                ))
+              }
+            </ul>
+          </section>
 
-        <section class="rail__group">
-          <h2 class="rail__label">On this page</h2>
-          <ul class="rail__list rail__list--toc">
-            {
-              contents.map((heading) => (
-                <li data-depth={heading.depth}>
-                  <a href={`#${heading.slug}`}>{heading.text}</a>
-                </li>
-              ))
-            }
-          </ul>
-        </section>
+          <section class="rail__group">
+            <h2 class="rail__label"><span>On this page</span></h2>
+            <ul class="rail__list rail__list--toc">
+              {
+                contents.map((heading) => (
+                  <li data-depth={heading.depth}>
+                    <a href={`#${heading.slug}`}>{heading.text}</a>
+                  </li>
+                ))
+              }
+            </ul>
+          </section>
 
-        {
-          /* The version, at the foot of the rail rather than above the
-           * document's own title. A line of small type sitting on top of an
-           * `h1` is the eyebrow `DESIGN.md` names as a generated-interface
-           * tell, and this one would have restated the heading underneath it. */
-        }
-        <p class="rail__version">
-          <span class="rail__version-label">version</span>{' '}
-          <code>{current.version}</code>
-        </p>
-      </div>
+          {
+            /* The version, at the foot of the rail rather than above the
+             * document's own title. A line of small type sitting on top of an
+             * `h1` is the eyebrow `DESIGN.md` names as a generated-interface
+             * tell, and this one would have restated the heading underneath
+             * it. */
+          }
+          <p class="rail__version">
+            <span class="rail__version-label">version</span>{' '}
+            <code class="u-tabular">{current.version}</code>
+          </p>
+        </div>
+      </details>
     </nav>
 
     {
@@ -129,15 +183,6 @@ const contents = headings.filter(
 </Base>
 
 <style>
-  .bar {
-    display: flex;
-    gap: var(--space-4);
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-3) var(--space-5);
-    border-block-end: var(--line-width) solid var(--color-line);
-  }
-
   /* Rail and document, side by side on a wide screen and stacked below it. The
    * rail comes first in the source in both, so a reader arriving on a phone or
    * with a screen reader meets the contents before several hundred lines of
@@ -160,13 +205,58 @@ const contents = headings.filter(
   @media (min-width: 60rem) {
     .shell {
       grid-template-columns: 16rem minmax(0, 1fr);
-      align-items: start;
       gap: var(--space-8);
     }
   }
 
   .rail {
     font-size: var(--text-sm);
+  }
+
+  /* The disclosure's own affordance: a row with a marker, a pointer target tall
+   * enough to hit, and the site's focus ring from `base.css`. The default
+   * triangle is replaced by one drawn from the same character in both states,
+   * rotated — a `transform`, which is one of the two properties this site
+   * animates, so it settles correctly with reduced motion. */
+  .rail__summary {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    min-block-size: 2.75rem;
+    padding-inline: var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    color: var(--color-ink);
+    cursor: pointer;
+    background-color: var(--color-surface);
+    border: var(--line-width) solid var(--color-line-strong);
+    border-radius: var(--radius-md);
+    list-style: none;
+  }
+
+  /* Safari still draws the marker through this pseudo element, which
+   * `list-style: none` above does not reach. */
+  .rail__summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .rail__summary::before {
+    font-size: var(--text-xs);
+    content: '▸';
+    color: var(--color-ink-subtle);
+    transition: transform var(--duration-fast) var(--ease);
+  }
+
+  .rail__disclosure[open] > .rail__summary::before {
+    transform: rotate(90deg);
+  }
+
+  .rail__summary:hover {
+    color: var(--color-accent);
+  }
+
+  .rail__disclosure[open] > .rail__summary {
+    margin-block-end: var(--space-4);
   }
 
   /* Sticky, and bounded by the viewport with its own scroller. A sticky element
@@ -176,11 +266,43 @@ const contents = headings.filter(
    * scroller of its own means every entry stays reachable however many sections
    * the README it indexes turns out to have. */
   @media (min-width: 60rem) {
+    /* Wide enough for a column, so the disclosure stops being one. See the
+     * comment on the element for why the second rule needs `@supports` and what
+     * an engine without `::details-content` gets instead. */
+    @supports selector(::details-content) {
+      .rail__summary {
+        display: none;
+      }
+
+      /* The chain a sticky element needs, and the reason the grid no longer
+       * aligns its items to `start`. `position: sticky` travels inside its own
+       * containing block, so an element exactly as tall as its parent has
+       * nowhere to travel and simply scrolls away — which is what the rail did:
+       * measured against the page before this change, the rail's inner box sat
+       * at -3,899px after a 4,000px scroll, so it had never stuck at all. Each
+       * box between the grid row and the sticky one is given the row's height
+       * instead — the rail by stretching, the disclosure and its content box by
+       * asking for it — and all three sit here rather than outside because they
+       * only matter in the engines where the rail is expanded. */
+      .rail,
+      .rail__disclosure {
+        block-size: 100%;
+      }
+
+      .rail__disclosure::details-content {
+        content-visibility: visible;
+        block-size: 100%;
+      }
+    }
+
     .rail__inner {
       position: sticky;
       inset-block-start: var(--space-5);
       max-block-size: calc(100vh - var(--space-7));
       overflow-y: auto;
+      /* Thin, because the rail is 16rem wide and a platform-width bar down its
+       * edge would read as a second column boundary. The colour is the root's. */
+      scrollbar-width: thin;
       /* Room for the scrollbar the line above can produce, so a link's focus
        * ring is never clipped by the scroller's own edge. */
       padding-inline-end: var(--space-2);
@@ -196,11 +318,25 @@ const contents = headings.filter(
    * heading it labels is not competing with the README's own. Capitals are left
    * alone: a tracked uppercase label is the eyebrow tell in another position. */
   .rail__label {
+    display: flex;
+    gap: var(--space-3);
+    align-items: baseline;
+    justify-content: space-between;
     margin-block-end: var(--space-2);
     font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
     color: var(--color-ink-subtle);
     letter-spacing: normal;
+  }
+
+  /* The shared prefix, stated once at the head of the column it was repeated
+   * down. Regular weight, so it reads as the thing the names below complete
+   * rather than as a second label. */
+  .rail__scope {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    font-weight: var(--weight-regular);
+    letter-spacing: var(--tracking-fn);
   }
 
   .rail__list {
@@ -221,6 +357,14 @@ const contents = headings.filter(
   .rail__list a:hover {
     color: var(--color-accent);
     text-decoration: underline;
+  }
+
+  /* Package names are identifiers and are set in the mono face wherever they
+   * appear on this site. Here that also does the work of joining each one to
+   * the `@playdeck/` above the column. */
+  .rail__group:first-child .rail__list a {
+    font-family: var(--font-mono);
+    letter-spacing: var(--tracking-fn);
   }
 
   /* The current package, marked by the same attribute that tells a screen
@@ -275,11 +419,17 @@ const contents = headings.filter(
     overflow-wrap: break-word;
   }
 
+  /* 42rem, measured rather than chosen: at the body rung in Plex Sans that
+   * comes out at 67 characters, inside the 65–75 band a line of prose is
+   * comfortable to read across. The 40rem it replaces measured 64, which is
+   * under it — close enough to look right and far enough to be worth the two
+   * rem. Measured with the harness in `.scratch/inspect-535.mjs`, which divides
+   * the rendered paragraph width by the rendered width of a digit. */
   .doc :global(p),
   .doc :global(ul),
   .doc :global(ol),
   .doc :global(blockquote) {
-    max-inline-size: 40rem;
+    max-inline-size: 42rem;
   }
 
   /* Rendered Markdown carries none of the attributes Astro scopes this
@@ -383,8 +533,11 @@ const contents = headings.filter(
   }
 
   /* The separator's spacing is this page's business; its thickness and its paint
-   * are `Sweep.astro`'s. */
+   * are `Sweep.astro`'s. More above than below: the document that ends over it
+   * runs to eighteen thousand pixels, and `.shell`'s bottom padding is the same
+   * figure as its top, which is the gap the rail wanted rather than the gap a
+   * document's end does. */
   .foot__rule {
-    margin-block-end: var(--space-4);
+    margin-block: var(--space-7) var(--space-4);
   }
 </style>
