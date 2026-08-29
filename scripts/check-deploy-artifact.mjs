@@ -20,10 +20,10 @@
 //
 // Run on demand as `pnpm test:deploy` rather than from a pull-request gate: it
 // builds both surfaces from scratch and drives a browser through them, which is
-// several times the work `ci.yml` does per pull request. Extending the gate to
-// cover it is #528. It builds by default, because a run against whatever
-// happens to be on disk proves nothing about the tree under test; `--no-build`
-// is for a local re-run against an artifact this script already assembled.
+// several times the work `ci.yml` does per pull request. It builds by default,
+// because a run against whatever happens to be on disk proves nothing about the
+// tree under test; `--no-build` is for a local re-run against an artifact this
+// script already assembled.
 
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';

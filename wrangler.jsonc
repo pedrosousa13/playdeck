@@ -21,14 +21,16 @@
     "directory": "./deploy-dist/",
 
     // `"none"` — Cloudflare's default, restated because the alternatives are
-    // both wrong here rather than merely unchosen. The site renders a
-    // placeholder page and has no 404 page, so `"404-page"` would name a
-    // document that does not exist. `"single-page-application"` would be worse
-    // than absent: it rewrites every miss to the root `index.html` and answers
-    // it 200, so a mistyped workbench URL would render the placeholder page and
-    // report success. Neither surface is a single-page application in the sense
-    // that setting means — the workbench is a static build with real documents
-    // at real paths.
+    // both wrong here rather than merely unchosen. `"404-page"` would make this
+    // file depend on a document neither build is under any obligation to emit,
+    // and the dependency would break silently: with no such document the
+    // request falls back to Cloudflare's own 404, which is what `"none"` gives
+    // already, so nothing ever reports that the setting found nothing to serve.
+    // `"single-page-application"` would be worse than absent: it rewrites every
+    // miss to the root `index.html` and answers it 200, so a mistyped workbench
+    // URL would render the site's root document and report success. Neither
+    // surface is a single-page application in the sense that setting means —
+    // the workbench is a static build with real documents at real paths.
     "not_found_handling": "none"
 
     // `html_handling` is left at its default, `auto-trailing-slash`, and the

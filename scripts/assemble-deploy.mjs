@@ -15,8 +15,12 @@ import { cp, mkdir, rm, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
+// As in scripts/verify-packaging.mjs: the lint config gives this directory node
+// globals, but `console` and `process` still have to be reached through
+// globalThis.
 const console = globalThis.console;
 const process = globalThis.process;
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Every source directory, and where it lands inside the artifact. */

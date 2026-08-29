@@ -20,12 +20,11 @@ name: Deploy site
 # what the deployment itself is; this one records when it runs.
 #
 # `main` only. Deploying a branch would overwrite the published documentation
-# with unreviewed content; `ci.yml`'s `storybook` job already proves on every
-# pull request that the workbench build still succeeds, which is the part a pull
-# request needs. It does not build the site, so a site build that only breaks
-# under a base path breaks here rather than on the pull request that introduced
-# it; carrying the site into that gate is #528. `workflow_dispatch` is here to
-# re-publish without an empty commit.
+# with unreviewed content; `ci.yml` already builds both surfaces on every pull
+# request, which is the part a pull request needs. What no pull-request gate
+# does is assemble the artifact and serve it, so a failure that only appears
+# once the two builds share one origin appears here first. `workflow_dispatch`
+# is here to re-publish without an empty commit.
 on:
   push:
     branches: [main]
@@ -70,18 +69,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      # The site is handed no base path, and that is not an omission. It is
+      # served from the apex, so its prefix is the root its build already
+      # defaults to and there is nothing to say (#519).
+      - run: pnpm --filter @playdeck/site build
+
       # `PLAYDECK_BASE_PATH` is the one mechanism for telling a build what
       # prefix it is served from: `apps/storybook/.storybook/main.ts` reads it
       # into its bundler's `base`. The workbench is served one segment inside
       # the deployment, which is precisely the value below, and it has to be
       # passed here because where the workbench lands in the artifact is this
       # file's decision and the assemble script's, not the workbench's.
-      #
-      # The site is handed nothing, and that is not an omission. It is served
-      # from the apex, so its prefix is the root its build already defaults to
-      # and there is nothing to say (#519).
-      - run: pnpm --filter @playdeck/site build
-
       - run: pnpm --filter @playdeck/storybook build
         env:
           PLAYDECK_BASE_PATH: /storybook/
@@ -93,11 +91,11 @@ jobs:
       - run: node scripts/assemble-deploy.mjs deploy-dist
 
       # Cloudflare's documented choice for the token is the "Edit Cloudflare
-      # Workers" API token template. A narrower set — Workers Scripts: Edit,
-      # Account Settings: Read, and Workers Routes: Edit on the zone the custom
-      # domain belongs to — is inferred from what this deploy touches rather
-      # than documented, so it is offered as a starting point and not as a
-      # supported configuration.
+      # Workers" API token template (their documentation, read 2026-08-29). A
+      # narrower set — Workers Scripts: Edit, Account Settings: Read, and
+      # Workers Routes: Edit on the zone the custom domain belongs to — is
+      # inferred from what this deploy touches rather than documented, so it is
+      # offered as a starting point and not as a supported configuration.
       #
       # `command` is left at the action's default, `deploy`, which publishes the
       # version and puts it in front of traffic in one step. `versions upload`
@@ -108,7 +106,15 @@ jobs:
       # A run with either secret missing fails here rather than skipping, which
       # is the correct outcome: a publish that quietly did not happen looks
       # exactly like a publish that did.
+      #
+      # `wranglerVersion` is pinned because the action's SHA pin does not reach
+      # it: the action installs the CLI at run time, so without a version here a
+      # new Wrangler could change how this repository publishes with no diff to
+      # review. Everything else this repository depends on is pinned exactly,
+      # and the tool that does the publishing is the last thing that should
+      # float.
       - uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.127.1'
