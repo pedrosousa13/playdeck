@@ -492,6 +492,7 @@ system not owned by one component, and a new one has to earn that:
 | `src/components/Sweep.astro`          | The one gradient, and its two forms           |
 | `src/components/HeroPlayer.astro`     | The hero's player panel, and the player theme |
 | `src/components/HeroPlayerIsland.tsx` | The hero player's composition. The one island |
+| `src/pages/archetypes.astro`          | Two composed players, and the files they are  |
 | `src/pages/design.astro`              | The specimen sheet, served at `/design`       |
 | `src/pages/index.astro`               | The landing page at `/`, and its links        |
 | `src/pages/reference/index.astro`     | The package index, served at `/reference`     |

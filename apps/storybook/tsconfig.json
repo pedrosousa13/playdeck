@@ -4,11 +4,41 @@
     "composite": true,
     "noEmit": true,
     "types": ["node", "vite/client"],
+    // Stated rather than left to node resolution, because of the two archetype
+    // examples in `include` below. Module specifiers resolve from the importing
+    // file's own directory, and `examples/` sits outside this app — so the walk
+    // up from there never reaches `apps/storybook/node_modules`, where the
+    // workspace links to these two packages live, and `@playdeck/react` was
+    // unresolvable in a file this project is otherwise happy to compile.
+    //
+    // The targets are the built declarations, which is what node resolution was
+    // already reaching through each package's `exports` and is what
+    // `examples/tsconfig.json` maps the same specifiers to. So this changes
+    // nothing about how the files in `.storybook/` and `stories/` see either
+    // package; it only gives the examples the same answer. The project
+    // references below are what make `tsc -b` build those declarations first.
+    "paths": {
+      "@playdeck/core": ["../../packages/core/dist/index.d.ts"],
+      "@playdeck/react": ["../../packages/react/dist/index.d.ts"]
+    },
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/react" }
   ],
-  "include": [".storybook/**/*", "stories/**/*", "vitest.config.ts"]
+  // The two archetype compositions are named one by one rather than swept in
+  // with a glob. Both surfaces mount the same file — Storybook as a story, the
+  // site as an island — and the story here imports them, so this project has to
+  // list them or `tsc` refuses a file it is compiling but was not told about.
+  // They are also members of the `examples` project, which checks them against
+  // the same declarations; being in two projects costs a second check and
+  // nothing else, and it is what keeps `examples/` the single source.
+  "include": [
+    ".storybook/**/*",
+    "stories/**/*",
+    "vitest.config.ts",
+    "../../examples/archetype-streaming-service.tsx",
+    "../../examples/archetype-course-platform.tsx"
+  ]
 }

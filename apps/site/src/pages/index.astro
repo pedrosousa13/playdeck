@@ -17,6 +17,7 @@ import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
 // prevent (#435) and nothing would flag it.
 const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
 const designUrl = `${import.meta.env.BASE_URL}design/`;
+const archetypesUrl = `${import.meta.env.BASE_URL}archetypes/`;
 // The workbench, which `scripts/assemble-deploy.mjs` places under `storybook/`
 // beside this page. It is also what `scripts/check-deploy-artifact.mjs` follows
 // from here in a browser, which is how the two surfaces are proven reachable
@@ -181,39 +182,15 @@ const providers = [
          * item; everything inside it is `HeroPlayer.astro`'s. */
       }
       <div class="hero__stage">
-        <div class="hero__player"><HeroPlayer /></div>
-
         {
-          /* The capability ledger. A player reports what it can do as a list
-           * of these rows, and this is that list's shape with rows this
-           * repository documents in it. The caption is not decoration: the
-           * panel is a sample and says so, because the one claim this page
-           * must never make is a measurement it did not take. */
+          /* Both grid items at once. `HeroPlayer.astro` mounts one island that
+           * renders the player panel and the ledger panel reading it, and an
+           * `<astro-island>` is `display: contents` — so the two panels are the
+           * children this grid lays out, with no wrapper of this page's in
+           * between. A wrapper here would put them in one track and leave the
+           * other empty. */
         }
-        <figure class="ledger">
-          <div class="ledger__panel">
-            <h2 class="ledger__title">Capability ledger</h2>
-            <ul class="ledger__rows">
-              {
-                ledger.map(({ provider, capability, status, reason }) => (
-                  <li class="row" data-status={status}>
-                    <span class="row__dot" aria-hidden="true" />
-                    <span class="row__capability">{capability}</span>
-                    <span class="row__status">{status}</span>
-                    <span class="row__reason">
-                      {provider}
-                      {reason === undefined ? '' : ` · ${reason}`}
-                    </span>
-                  </li>
-                ))
-              }
-            </ul>
-          </div>
-          <figcaption class="ledger__caption">
-            Sample rows, quoted from the provider packages' own READMEs. Nothing
-            here is read from a player running on this page.
-          </figcaption>
-        </figure>
+        <HeroPlayer />
       </div>
     </section>
 
@@ -387,6 +364,11 @@ const providers = [
         <li>
           <a href={referenceUrl}>Package reference</a> renders every published
           package from the README inside its own npm tarball.
+        </li>
+        <li>
+          <a href={archetypesUrl}>Two archetypes</a> compose the primitives into
+          a streaming-service layout and a course-platform one, each printed
+          beside the file it is.
         </li>
         <li>
           <a href={designUrl}>Visual system</a> lists every colour, face and size
@@ -592,13 +574,6 @@ const providers = [
       grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
       column-gap: var(--space-6);
     }
-  }
-
-  /* The player's grid item. `HeroPlayer.astro` owns everything inside it; this
-   * only says where it sits and stops the picture pushing the column wider
-   * than its track. */
-  .hero__player {
-    min-inline-size: 0;
   }
 
   /* ---- the capability ledger ----------------------------------------------

@@ -58,6 +58,38 @@ export default defineConfig({
   vite: {
     define: {
       'import.meta.env.PLAYDECK_REPO_ROOT': JSON.stringify(repoRoot)
+    },
+    resolve: {
+      /*
+       * Where `@playdeck/react` is, stated once for every importer rather than
+       * left to a walk up the directory tree.
+       *
+       * `/archetypes` mounts two compositions that live in `examples/`, and a
+       * bare specifier resolves from the importing file's own directory: the
+       * walk up from `examples/` never reaches `apps/site/node_modules`, where
+       * the workspace link to this package is, so the resolver fell through to
+       * the `paths` entry in `examples/tsconfig.json` and handed the bundler a
+       * `.d.ts` — a declaration file, with no code in it and no sibling modules
+       * to follow. That is the failure this replaces, and it was a build error
+       * rather than something subtle.
+       *
+       * The target is the built ESM entry, which is what the package's own
+       * `exports` field already resolves `.` to, so nothing changes for the
+       * hero island in `src/` that was resolving through `node_modules`.
+       *
+       * A `RegExp` anchored at both ends, deliberately. A string `find` is a
+       * prefix match, and `@playdeck/react/theme.css` — the stylesheet
+       * `HeroPlayer.astro` imports — would be rewritten into a path inside
+       * `dist/` that does not exist.
+       */
+      alias: [
+        {
+          find: /^@playdeck\/react$/,
+          replacement: fileURLToPath(
+            new URL('../../packages/react/dist/index.js', import.meta.url)
+          )
+        }
+      ]
     }
   },
   markdown: {

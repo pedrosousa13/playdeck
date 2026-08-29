@@ -1,0 +1,256 @@
+---
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Code } from 'astro:components';
+import Base from '../layouts/Base.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { shikiConfig } from '../shiki';
+import { StreamingServicePlayer } from '../../../../examples/archetype-streaming-service';
+import { CoursePlatformPlayer } from '../../../../examples/archetype-course-platform';
+
+/**
+ * Two composed players, and the files they are.
+ *
+ * The claim a headless library makes is that its primitives compose into
+ * genuinely different products, and one example cannot make it — one example
+ * proves a library can build a player. So this page carries two, arranged for
+ * two different jobs, and puts each one beside its own source so a reader can
+ * check that the thing running is the thing printed.
+ *
+ * Each archetype is named for the job it does and never for a company that does
+ * it. A functional pattern — a scrubber, a chapter rail, a settings menu — is
+ * not anybody's property and every player converges on them; a name, a logo and
+ * an icon set are, and none of those appears here.
+ *
+ * The compositions live in `examples/`, which is the directory the `examples`
+ * TypeScript project compiles on every `pnpm typecheck`, and both surfaces
+ * mount the same file: the Storybook workbench as a story, this page as an
+ * island. There is no second copy to drift.
+ */
+
+// The two archetypes, read as bytes from the files this page mounts. Not a
+// string typed into this template: a hand-written example is a second copy of
+// an API, and the only kind of copy that matters is the kind that can be wrong
+// while everything around it stays green. Editing the prose below cannot make
+// the code wrong, because this page never says what the code is — it prints the
+// file.
+//
+// The same discipline `scripts/docs-examples.mjs` enforces for the fences in
+// the package READMEs, applied where its machinery does not reach: that script
+// matches fences in Markdown and never looks at `.astro`. `src/pages/index.astro`
+// prints `examples/react-composition.tsx` the same way.
+//
+// Addressed from `PLAYDECK_REPO_ROOT` — the repository root `astro.config.ts`
+// resolves from its own URL and substitutes in here — because `process.cwd()`
+// is whatever directory the command was typed in and this file has to find one
+// fixed path from any of them.
+const read = (path: string): string =>
+  readFileSync(join(import.meta.env.PLAYDECK_REPO_ROOT, path), 'utf8')
+    // The trailing newline is a property of the file rather than of the
+    // example, and Shiki would render it as an empty final line inside the
+    // well. Nothing else about the text is touched.
+    .trimEnd();
+
+const streamingPath = 'examples/archetype-streaming-service.tsx';
+const coursePath = 'examples/archetype-course-platform.tsx';
+const streamingSource = read(streamingPath);
+const courseSource = read(coursePath);
+
+// Served from this app's own `public/`, resolved against the configured base
+// the way every other address on this site is. An Astro build serves only its
+// own `public/`, so the workbench's copy of the same fixture is a second file
+// rather than a shared one — the compositions take the URL as a prop precisely
+// so neither surface has to know about the other's.
+const captionsSrc = `${import.meta.env.BASE_URL}archetype-captions.vtt`;
+---
+
+<Base title="Playdeck — two archetypes">
+  <SiteHeader crumbs={[{ label: 'Archetypes' }]} />
+
+  <main class="page">
+    <h1>Archetypes</h1>
+    <p class="lead">
+      Two composed players, built from the same primitives for two different
+      jobs. Each is named for its job and not for a company that does it, and
+      each is printed below exactly as it is on disk.
+    </p>
+    <p class="muted">
+      Both players are dormant until you press them.
+      {' '}
+      <code>loading="interaction"</code> holds the root closed, so no clip is
+      fetched and no provider is attached before that press — this page makes no
+      third-party request until you ask it to. Every control you then see is one
+      the player reported it can honour; the ones it cannot are absent rather
+      than present and disabled.
+    </p>
+
+    <section class="archetype">
+      <h2 id="streaming-service">A streaming service</h2>
+      <p>
+        Long-form viewing. The picture owns the frame, the chrome sits on top of
+        it, chapters are marks on the scrubber, and the one thing a viewer
+        chooses — quality — is folded into a settings menu. That menu is absent
+        here, and that is the point: the native provider cannot switch renditions
+        of a progressive file, so <code>selectQuality</code> reads
+        {' '}
+        <code>unavailable</code> and nothing draws a ladder the provider never
+        published. The caption toggle prints the renderer that actually honoured
+        it beside itself.
+      </p>
+      <div class="stage">
+        <StreamingServicePlayer
+          captionsSrc={captionsSrc}
+          client:only="react"
+          resumeAt={18}
+        />
+      </div>
+      <details class="source">
+        <summary>
+          <code>{streamingPath}</code>
+        </summary>
+        <div class="source__well">
+          <Code code={streamingSource} lang="tsx" {...shikiConfig} />
+        </div>
+      </details>
+    </section>
+
+    <section class="archetype">
+      <h2 id="course-platform">A course platform</h2>
+      <p>
+        Study rather than viewing, and deliberately not the layout above with
+        different colours. The video shares the page with the lesson instead of
+        owning it; the transport is docked under the picture rather than laid
+        over it, so nothing ever covers what is being read; playback speed is a
+        visible row rather than a menu entry, because somebody working through a
+        recording changes it constantly; and navigation is an outline of real
+        buttons rather than ticks on a bar.
+      </p>
+      <div class="stage">
+        <CoursePlatformPlayer
+          captionsSrc={captionsSrc}
+          client:only="react"
+          resumeAt={14}
+        />
+      </div>
+      <details class="source">
+        <summary>
+          <code>{coursePath}</code>
+        </summary>
+        <div class="source__well">
+          <Code code={courseSource} lang="tsx" {...shikiConfig} />
+        </div>
+      </details>
+    </section>
+
+    <section class="archetype">
+      <h2 id="media">Media and licence</h2>
+      <p>
+        Both clips are Blender Foundation open-movie trailers, played from the
+        foundation's own download host: <em>Sintel</em> above and
+        {' '}
+        <em>Big Buck Bunny</em> below it. Both are &copy; Blender Foundation and
+        licensed
+        {' '}
+        <a href="https://creativecommons.org/licenses/by/3.0/" rel="license">
+          CC BY 3.0
+        </a>, which is the attribution this line exists to give.
+      </p>
+      <p class="muted">
+        Chapter marks, outline titles and caption text are fixtures the examples
+        ship. They mark time in each clip and describe neither film — a demo
+        that implied it had read metadata it invented would be the one dishonest
+        thing on a page about honesty.
+      </p>
+    </section>
+  </main>
+</Base>
+
+<style>
+  /* Wider than a prose column because each section holds a player and a
+     full-width code well, and narrower than the landing page because there is
+     no three-column comparison here. This page's own decision, and a literal
+     where it is made — `DESIGN.md` keeps one column width from being evidence
+     about another. Prose inside is still held to the measure. */
+  .page {
+    max-inline-size: 64rem;
+    margin-inline: auto;
+    padding: var(--space-7) var(--space-5) var(--space-9);
+  }
+
+  .page > p {
+    max-inline-size: var(--measure);
+  }
+
+  .lead {
+    margin-block-start: var(--space-4);
+    font-size: var(--text-lg);
+    color: var(--color-ink-muted);
+  }
+
+  .muted {
+    margin-block-start: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  /* Sections separate by space and nothing else, which is the rule the landing
+     page keeps: the sweep is spent in that page's hero and is not a
+     general-purpose separator. */
+  .archetype {
+    display: grid;
+    gap: var(--space-4);
+    margin-block-start: var(--space-9);
+  }
+
+  .archetype p {
+    max-inline-size: var(--measure);
+  }
+
+  /* The box a composition is mounted in, and the whole of what this site says
+     about how one looks.
+
+     Each archetype carries its own appearance in its own file, because a
+     headless library ships none and an example that borrowed this site's would
+     be proving something about this site. So this is a container and not a
+     bezel: no surface colour, no elevation, no hairline. `DESIGN.md`'s
+     elevation allowlist is unchanged by this page for exactly that reason.
+
+     `min-inline-size: 0` so a player cannot push the grid wider than its
+     column, and `client:only` means the box is empty until the island mounts —
+     nothing here reserves a height, because each composition sizes itself from
+     a ratio it sets on its own stage. */
+  .stage {
+    min-inline-size: 0;
+  }
+
+  /* The source, closed by default and open in one press.
+
+     A `<details>` and not a script: the affordance, the keyboard behaviour, the
+     announced state and the focus ring all arrive with the element, which is
+     the same reasoning the reference pages' rail is built on. Closed, because
+     each of these files runs to several hundred lines and a reader who came to
+     look at the players should not scroll past two of them to reach the second
+     one. The page's claim is that the running player and its real source are
+     both here, and they are — one press apart, on the same screen. */
+  .source > summary {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    min-block-size: var(--hit-target);
+    color: var(--color-ink-muted);
+    cursor: pointer;
+  }
+
+  .source > summary:hover {
+    color: var(--color-ink);
+  }
+
+  /* The well scrolls inside its own box rather than growing the page to the
+     length of the file. `scrollbar-width` matches what `base.css` does for a
+     code block: a platform-width bar inside a box reads as a second border. */
+  .source__well {
+    max-block-size: 32rem;
+    overflow: auto;
+    scrollbar-width: thin;
+  }
+</style>
