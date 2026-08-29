@@ -113,6 +113,18 @@
     border-radius: var(--radius-pill);
   }
 
+  /* Hover and press, both of them a surface change rather than a shadow or a
+   * lift: this site's depth is a surface colour and a hairline, and there is no
+   * shadow token to reach for. Neither is transitioned — colour is not one of
+   * the two properties this system animates. */
+  .toggle:hover {
+    background-color: var(--color-sunken);
+  }
+
+  .toggle:active {
+    border-color: var(--color-accent);
+  }
+
   .toggle__label {
     line-height: 1;
   }
@@ -136,12 +148,12 @@
     block-size: 0.875rem;
     background-color: var(--color-ink-muted);
     border-radius: 50%;
-    /* `transform` and nothing else. Animating `inset-inline-start` would move
-     * the knob by laying the track out again on every frame; a translate is
-     * composited and produces the identical travel. */
-    transition:
-      transform var(--duration-fast) var(--ease),
-      background-color var(--duration-fast) var(--ease);
+    /* `transform` and nothing else, which is the rule rather than a shorthand:
+     * animating `inset-inline-start` would move the knob by laying the track out
+     * again on every frame, and the colour it also changes on is not one of the
+     * two properties this system animates. The colour therefore snaps while the
+     * knob travels, which is what `DESIGN.md` says happens. */
+    transition: transform var(--duration-fast) var(--ease);
   }
 
   .toggle[aria-checked='true'] .toggle__knob {

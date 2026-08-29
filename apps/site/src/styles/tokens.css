@@ -161,6 +161,29 @@
    * pick apart. This opens it instead. */
   --tracking-fn: 0.01em;
 
+  /* The other direction, for Plex Sans set large: the face spaces its display
+   * sizes slightly loose for a screen. `base.css` closes the headings with it,
+   * and the header's wordmark asks for it because that word is the same kind of
+   * set — a name at semibold, read as a shape rather than as prose. Body text
+   * keeps the face's own metrics. */
+  --tracking-tight: -0.015em;
+
+  /* The measure: the inline size prose is held to, so a reader's eye finds the
+   * start of the next line. At the body rung in Plex Sans this lands inside the
+   * 65–75 character band, which is the band it was chosen to land in — a page
+   * that sets prose at another rung is choosing a different character count and
+   * should say so where it does it. It is a property of a paragraph and not of
+   * a page: a page's own width is that page's layout decision and stays a
+   * literal there, because the two are different jobs and one column width is
+   * not evidence about another. */
+  --measure: 42rem;
+
+  /* The smallest comfortable pointer target, and in rem so it grows with a root
+   * size the reader has raised rather than being pinned to a pixel count. Used
+   * as a minimum rather than a size: a control is free to be visually shorter,
+   * and its padding is what makes it hittable. */
+  --hit-target: 2.75rem;
+
   /* ---- space --------------------------------------------------------------
    * A 4px base. Named by step rather than by use, because a spacing token that
    * names a component stops being reusable the moment a second component wants

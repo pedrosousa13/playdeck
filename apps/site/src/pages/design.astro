@@ -1,6 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
-import ThemeToggle from '../components/ThemeToggle.astro';
+import SiteHeader from '../components/SiteHeader.astro';
 import Sweep from '../components/Sweep.astro';
 
 // The workbench, which `scripts/assemble-deploy.mjs` places under `storybook/`
@@ -63,9 +63,12 @@ const inks = [
 ---
 
 <Base title="Playdeck visual system — design reference">
-  <header class="bar">
-    <ThemeToggle />
-  </header>
+  {
+    /* The sheet is not part of the site's navigation — `/` links to it only so
+     * it is reachable — but it is served from the site's origin and a reader who
+     * lands on it needs the same way back that every other page gives them. */
+  }
+  <SiteHeader crumbs={[{ label: 'Visual system' }]} />
 
   <main class="page">
     <section class="hero">
@@ -190,15 +193,6 @@ const inks = [
    * being demonstrated is the token layer, and a layout with opinions of its
    * own would make it harder to see which of the two is responsible for how
    * something looks. */
-  .bar {
-    display: flex;
-    gap: var(--space-4);
-    align-items: center;
-    justify-content: flex-end;
-    padding: var(--space-3) var(--space-5);
-    border-block-end: var(--line-width) solid var(--color-line);
-  }
-
   .page {
     max-inline-size: 46rem;
     margin-inline: auto;

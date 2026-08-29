@@ -45,7 +45,7 @@ h3 {
   line-height: var(--leading-tight);
   /* Plex Sans sets its display sizes slightly loose for a screen. This closes
    * the headings only; body text keeps the face's own metrics. */
-  letter-spacing: -0.015em;
+  letter-spacing: var(--tracking-tight);
   text-wrap: balance;
 }
 
@@ -104,6 +104,12 @@ pre {
   background-color: var(--color-sunken);
   border-radius: var(--radius-md);
   line-height: var(--leading-snug);
+  /* Astro emits `overflow-x: auto` and `tabindex="0"` on the block itself, so a
+   * fence too wide for the column scrolls and is reachable from the keyboard
+   * with the site's own focus ring. What is left is the bar's weight: a
+   * platform-width scrollbar inside a well this small reads as a second border.
+   * The colour is inherited from the root. */
+  scrollbar-width: thin;
 }
 
 /*
@@ -138,6 +144,70 @@ a {
    * the rule clear of Plex Sans's descenders. */
   text-decoration-thickness: from-font;
   text-underline-offset: 0.15em;
+}
+
+/* The pressed state, for every link the site does not give one of its own. A
+ * step down the ink scale rather than a lift, because depth here is a surface
+ * colour and a hairline and there is no shadow token to reach for. A component
+ * that styles `a:hover` outranks this selector and has to restate the press
+ * itself — the rail, the crumbs and the package index each do. */
+a:active {
+  color: var(--color-ink-subtle);
+}
+
+/*
+ * The surfaces the browser draws for us, themed from the same roles as
+ * everything else. Left alone they are the engine's defaults, which belong to
+ * no design system: a light-blue selection over dark ink, and a scrollbar in
+ * whatever grey the platform picked. `color-scheme` already gets the scrollbar
+ * into the right half of the range, and these take it the rest of the way.
+ *
+ * Selection is the accent on the page colour rather than a tint of its own, so
+ * it needs no token the system does not already have, and both directions are
+ * measured pairs in `DESIGN.md`: 6.37:1 in light, 8.99:1 in dark. Setting
+ * `color` as well as the background is what makes a selection inside a code
+ * block legible — the highlighter has written a colour onto every span, and
+ * without this the selection would paint behind whatever that colour is.
+ */
+::selection {
+  color: var(--color-field);
+  background-color: var(--color-accent);
+}
+
+:root {
+  /* The thumb is non-text UI and `--color-line-strong` is the token that
+   * carries 3:1 against all three grounds, which is exactly the obligation a
+   * scrollbar thumb has. The track is left transparent so it takes whichever
+   * surface it is scrolling over rather than pinning a fourth grey into the
+   * page. Standard properties only: `::-webkit-scrollbar` would be a second,
+   * engine-specific description of the same thing. */
+  scrollbar-color: var(--color-line-strong) transparent;
+
+  /* No text input exists on this site today, so this is for caret browsing and
+   * for whatever a later page adds. A caret in the platform's own colour is the
+   * same class of unthemed surface as the two above. */
+  caret-color: var(--color-accent);
+}
+
+/* Figures that sit above one another have to line up, and Plex Sans's default
+ * figures are proportional. Applied by class rather than to `code`, because a
+ * package name or an identifier gains nothing from it. */
+.u-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Present for assistive technology, absent for everyone else. Used where the
+ * visible text is a fragment of the real name — the rail's package list shows
+ * `core`, and this is what keeps its link named `@playdeck/core`. */
+.u-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* One focus treatment for the whole site. `:focus-visible` rather than `:focus`
