@@ -40,9 +40,11 @@
  * risk this page has no reason to take, not a defect anyone has reproduced.
  *
  * `client:only` renders nothing on the server, so neither problem exists. What
- * it costs is a hero row that is empty until the island mounts, and
- * `index.astro` reserves that row's height against the empty island so the page
- * below it does not move when the two panels arrive.
+ * it costs is a hero row that is empty until the island mounts, and nothing
+ * reserves that row's height today — the page below it moves down when the two
+ * panels arrive. Stated rather than left to be discovered: it is a real cost of
+ * the directive above, and the paragraph that used to claim `index.astro`
+ * reserved the height was describing a stage this file no longer renders.
  *
  * ---- the two theme systems, and why they do not meet ------------------------
  *

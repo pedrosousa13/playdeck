@@ -342,50 +342,50 @@ const HeroPlayerIsland = ({ source }: Props) => {
        * because `Player.Root` has to stand above both panels, and an Astro
        * component cannot be a child of a React one. What that costs is the
        * reservation `HeroPlayer.astro`'s stage used to make before the island
-       * mounted; `index.astro` makes it on the empty island instead, and says
-       * so where it does it.
+       * mounted, and nothing has replaced it: `HeroPlayer.astro` records that
+       * cost beside the directive that incurs it.
        */}
       <figure className="demo">
         <div className="demo__bezel">
           <div className="demo__stage">
             <Player.Viewport>
               <Player.Media />
-        {/*
-         * Before the control bar and after the picture, which is the order the
-         * stacking in `HeroPlayer.astro` reads: at equal `z-index` the later
-         * sibling paints in front, so the bar's own buttons stay on top of this
-         * and keep their clicks.
-         */}
-        <SurfaceToggle />
-        {/*
-         * The affordance that starts everything. It is a real `<button>` from
-         * the library, so it is reachable by Tab and answers Enter, and it takes
-         * the site's own focus ring: `base.css` styles `:focus-visible` by
-         * element rather than by class, and nothing here opts out of it.
-         *
-         * Named rather than left to the built-in "Play", because this button
-         * both loads and plays and the name has to say the first part. Its
-         * children are the icon, so the name stands alone rather than
-         * disagreeing with a word printed beside it.
-         *
-         * It is also the whole picture and not the badge drawn on it, and that
-         * is the library's own default rather than something added here: the
-         * button ships `position: absolute; inset: 0` with auto margins, so it
-         * is full-bleed until a stylesheet gives it a size. The bundled theme
-         * gives it 4rem, and `HeroPlayer.astro` takes that back and redraws the
-         * badge as a background, so a click anywhere on the stage loads and
-         * plays — one control, one accessible name, no second click target.
-         */}
-        <Player.ActivationButton
-          aria-label="Load and play the sample clip"
-          onClick={(event) => {
-            fromKeyboardRef.current =
-              event.currentTarget.matches(':focus-visible');
-          }}
-        >
-          <Player.PlayIcon />
-        </Player.ActivationButton>
-        <ControlBar fromKeyboardRef={fromKeyboardRef} />
+              {/*
+               * Before the control bar and after the picture, which is the order the
+               * stacking in `HeroPlayer.astro` reads: at equal `z-index` the later
+               * sibling paints in front, so the bar's own buttons stay on top of this
+               * and keep their clicks.
+               */}
+              <SurfaceToggle />
+              {/*
+               * The affordance that starts everything. It is a real `<button>` from
+               * the library, so it is reachable by Tab and answers Enter, and it takes
+               * the site's own focus ring: `base.css` styles `:focus-visible` by
+               * element rather than by class, and nothing here opts out of it.
+               *
+               * Named rather than left to the built-in "Play", because this button
+               * both loads and plays and the name has to say the first part. Its
+               * children are the icon, so the name stands alone rather than
+               * disagreeing with a word printed beside it.
+               *
+               * It is also the whole picture and not the badge drawn on it, and that
+               * is the library's own default rather than something added here: the
+               * button ships `position: absolute; inset: 0` with auto margins, so it
+               * is full-bleed until a stylesheet gives it a size. The bundled theme
+               * gives it 4rem, and `HeroPlayer.astro` takes that back and redraws the
+               * badge as a background, so a click anywhere on the stage loads and
+               * plays — one control, one accessible name, no second click target.
+               */}
+              <Player.ActivationButton
+                aria-label="Load and play the sample clip"
+                onClick={(event) => {
+                  fromKeyboardRef.current =
+                    event.currentTarget.matches(':focus-visible');
+                }}
+              >
+                <Player.PlayIcon />
+              </Player.ActivationButton>
+              <ControlBar fromKeyboardRef={fromKeyboardRef} />
             </Player.Viewport>
           </div>
         </div>
@@ -393,8 +393,8 @@ const HeroPlayerIsland = ({ source }: Props) => {
           A real player, composed from the published primitives. The clip is a
           one-second test pattern served from this origin, and{' '}
           <code>loading="interaction"</code> holds the player dormant until the
-          button is pressed — so nothing is fetched, and no provider is attached,
-          before that press.
+          button is pressed — so nothing is fetched, and no provider is
+          attached, before that press.
         </figcaption>
       </figure>
       <Ledger />

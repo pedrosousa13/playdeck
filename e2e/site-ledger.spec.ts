@@ -86,7 +86,9 @@ test('the ledger leaves unknown once a provider has answered', async ({
   // that refuses nothing, which is why it is not the assertion above.
   const reasons = await rows(page).evaluateAll((elements) =>
     elements
-      .filter((element) => element.getAttribute('data-status') === 'unavailable')
+      .filter(
+        (element) => element.getAttribute('data-status') === 'unavailable'
+      )
       .map(
         (element) =>
           element.querySelector('.row__reason')?.textContent?.trim() ?? ''

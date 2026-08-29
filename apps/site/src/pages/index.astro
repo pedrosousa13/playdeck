@@ -20,8 +20,7 @@ const designUrl = `${import.meta.env.BASE_URL}design/`;
 // The workbench, which `scripts/assemble-deploy.mjs` places under `storybook/`
 // beside this page. It is also what `scripts/check-deploy-artifact.mjs` follows
 // from here in a browser, which is how the two surfaces are proven reachable
-// from each other rather than merely present in the same directory — and it has
-// to be the LAST internal link in this document. See the note above it below.
+// from each other rather than merely present in the same directory.
 const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
 
 // The composition example, read as bytes from the file the `examples`
@@ -109,9 +108,8 @@ const providers = [
 <Base title="Playdeck — a headless React video player">
   {
     /* No crumbs, which is what tells the header it is on `/`: the wordmark
-     * stops being a link there, so the header adds no internal link above the
-     * three in the Start section and the order the deploy check depends on is
-     * untouched. */
+     * stops being a link on the page it points at, so the header renders no
+     * link of its own here. */
   }
   <SiteHeader />
 
@@ -175,45 +173,17 @@ const providers = [
          * be a different one. `HeroPlayer.astro` carries the reasoning for
          * both the island and the two theme systems meeting here.
          *
-         * Wrapped because a component's own root element carries that
-         * component's scope and not this page's, so a rule here could not
-         * place `.demo` in the hero grid. The wrapper is this page's grid
-         * item; everything inside it is `HeroPlayer.astro`'s. */
+         * Both panels come out of the one island, and neither is wrapped here.
+         * `Player.Root` has to stand above the player and the ledger for the
+         * ledger to read the player's own controller, and an Astro component
+         * cannot be a child of a React one — so the composition is
+         * `HeroPlayerIsland.tsx`'s and this row holds a single `<astro-island>`
+         * carrying both figures. That element is `display: contents`, so the
+         * two figures are this grid's items directly and no rule here has to
+         * reach past a wrapper to place them. */
       }
       <div class="hero__stage">
-        <div class="hero__player"><HeroPlayer /></div>
-
-        {
-          /* The capability ledger. A player reports what it can do as a list
-           * of these rows, and this is that list's shape with rows this
-           * repository documents in it. The caption is not decoration: the
-           * panel is a sample and says so, because the one claim this page
-           * must never make is a measurement it did not take. */
-        }
-        <figure class="ledger">
-          <div class="ledger__panel">
-            <h2 class="ledger__title">Capability ledger</h2>
-            <ul class="ledger__rows">
-              {
-                ledger.map(({ provider, capability, status, reason }) => (
-                  <li class="row" data-status={status}>
-                    <span class="row__dot" aria-hidden="true" />
-                    <span class="row__capability">{capability}</span>
-                    <span class="row__status">{status}</span>
-                    <span class="row__reason">
-                      {provider}
-                      {reason === undefined ? '' : ` · ${reason}`}
-                    </span>
-                  </li>
-                ))
-              }
-            </ul>
-          </div>
-          <figcaption class="ledger__caption">
-            Sample rows, quoted from the provider packages' own READMEs. Nothing
-            here is read from a player running on this page.
-          </figcaption>
-        </figure>
+        <HeroPlayer />
       </div>
     </section>
 
@@ -393,14 +363,16 @@ const providers = [
           this site is allowed to use.
         </li>
         {
-          /* The workbench comes last, and the order is load-bearing:
-           * `scripts/check-deploy-artifact.mjs` follows every internal link on
-           * this page in document order, and the workbench goes on fetching its
-           * own scripts well after its document has arrived. Following another
-           * link after it abandons those requests, and an abandoned request is
-           * exactly what that check reports — it cannot tell a navigation that
-           * dropped one from a wrong prefix that never had it. Every link this
-           * page gains goes above this one. */
+          /* The workbench comes last because it is the least likely of the
+           * three to be what a reader came for, and for no other reason. The
+           * order used to be load-bearing: `scripts/check-deploy-artifact.mjs`
+           * followed every internal link on this page in one page context, and
+           * the workbench goes on fetching its own scripts well after its
+           * document has arrived, so navigating away from it abandoned those
+           * requests and the check reported the abandonment it cannot tell from
+           * a wrong-prefix asset. That check now visits each link in a page of
+           * its own (#528), where no navigation can abandon another surface's
+           * requests, so a link added below this one breaks nothing. */
         }
         <li>
           <a href={storybookUrl}>Storybook workbench</a> stages every primitive
@@ -592,13 +564,6 @@ const providers = [
       grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
       column-gap: var(--space-6);
     }
-  }
-
-  /* The player's grid item. `HeroPlayer.astro` owns everything inside it; this
-   * only says where it sits and stops the picture pushing the column wider
-   * than its track. */
-  .hero__player {
-    min-inline-size: 0;
   }
 
   /* ---- the capability ledger ----------------------------------------------

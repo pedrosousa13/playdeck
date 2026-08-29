@@ -798,6 +798,70 @@ jobs:
   # documents the gap. The `hls-paths` job that gated the macOS run went with
   # it, having nothing left to gate.
 
+  # The site, gated on every pull request rather than discovered broken after a
+  # merge (#528). Its own job, which is the whole shape of the requirement: this
+  # runs beside `static`, `unit`, `audit` and the rest rather than in front of
+  # them, so the gate a pull request already waited for is not slower for the
+  # site existing. The trade is one more runner, which this workflow already
+  # spends seven of.
+  #
+  # A job rather than two steps bolted onto `static`, for two reasons. `static`
+  # deliberately does not build — it is the fast pass, and every check in it
+  # reads source — while both checks here read build output, and the second one
+  # cannot exist without the first. And `static` at 52s is the job a pull
+  # request's author watches; prepending a package build and an Astro build to
+  # it would move the fastest signal in this file behind the slowest thing it
+  # newly does.
+  #
+  # What is *not* here is a typecheck, and its absence is deliberate rather than
+  # an omission: `apps/site` is a project reference of the root `tsconfig.json`,
+  # so `pnpm typecheck` in `static` above already builds it, and a second `tsc`
+  # over the same project would report the same errors one job later. The
+  # `.astro` templates are not in that project — `tsc` cannot parse them — and
+  # what checks them is the build below: `astro build` renders every page, so a
+  # template that names something undefined fails here by name.
+  #
+  # `pnpm exec turbo run build --filter=@playdeck/site...` and not
+  # `pnpm --filter @playdeck/site build`, because the trailing `...` is what
+  # pulls in the packages the site cannot be built without: the landing page
+  # imports `@playdeck/react` through its published entry and measures every
+  # built bundle for the figures it prints, so a site build against an unbuilt
+  # tree fails on the measurement. `deploy-site.yml` builds the same two halves
+  # in the same order, spelled as two commands because the deploy hands the
+  # workbench a base path between them.
+  #
+  # Nor does anything here drive a browser over the site, and that is not a gap
+  # either: `e2e/site-ledger.spec.ts` does, in the `e2e` matrix above, whose
+  # Playwright `webServer` builds this same site and serves it on 4322. Running
+  # it here as well would build the site twice per pull request to assert the
+  # same things in the same browser.
+  #
+  # 15 minutes, matching `static` and `audit`: this job installs no browser and
+  # drives none. What it does that they do not is reach the network, and the
+  # link check bounds every request it makes at 15 seconds with at most three
+  # attempts — so a wholly unreachable third party costs it under a minute per
+  # URL rather than a hung job. The bound is reasoned rather than measured: no
+  # run of this job on a GitHub runner exists to read a figure off yet, unlike
+  # every number in the block at the head of this file.
+  site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run build --filter=@playdeck/site...
+      # Reads the build the step above produced, which is what lets it see the
+      # base path a visitor sees rather than the template that was meant to
+      # produce it. It checks the external URLs too, and distinguishes a
+      # transient network failure from a definitive removal — only the second
+      # fails this job. scripts/check-site-links.mjs carries both arguments.
+      - run: pnpm test:site-links
+
   # 25 rather than 20: the install step is bounded at 22 minutes (see
   # .github/actions/playwright-install), and a 20-minute job cap left no room
   # above it. This job's own install measured 690s on a successful run, so 20
