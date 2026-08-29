@@ -6,15 +6,19 @@ name: Pages
 # has no reason and no instruction to do (#435). Publishing it makes that claim
 # true for a consumer who has only ever seen npm.
 #
-# The build here is `ci.yml`'s `storybook` build with `PLAYDECK_BASE_PATH` set,
-# and differs from it in exactly that: a Pages project site is served from a
-# subpath, so the story fixtures resolve against one. See the build step below.
+# A repository has one Pages site and this workflow now publishes two surfaces
+# into it: `apps/site` at the root, the workbench under `storybook/` (#519).
+# They are built separately and assembled into one directory here, because
+# neither build knows the other exists — each is handed the prefix it is served
+# from and nothing else.
 #
-# `main` only. A repository has one Pages site, so deploying a branch would
-# overwrite the published documentation with unreviewed content; `ci.yml`'s
-# `storybook` job already proves on every pull request that this build still
-# succeeds, which is the part a pull request needs. `workflow_dispatch` is here
-# to re-publish without an empty commit.
+# `main` only. Deploying a branch would overwrite the published documentation
+# with unreviewed content; `ci.yml`'s `storybook` job already proves on every
+# pull request that the workbench build still succeeds, which is the part a
+# pull request needs. The site build has no such pull-request gate yet — that
+# is its own ticket (#528) — so until it lands a site build that only breaks
+# under a base path breaks here first. `workflow_dispatch` is here to
+# re-publish without an empty commit.
 on:
   push:
     branches: [main]
@@ -41,11 +45,12 @@ jobs:
     # a fork.
     if: github.repository == 'pedrosousa13/playdeck'
     runs-on: ubuntu-latest
-    # Install plus `storybook build` and nothing else — no browsers, no
-    # packaging harness. `ci.yml` records its `storybook` job at 37s whole-job,
-    # install included (2026-08-20, run 32337178101); this job does the same
-    # work plus an upload, so 15 minutes is several times it, in the same
-    # spirit as the bounds there.
+    # Install plus two static builds, an assembly and an upload — no browsers,
+    # no packaging harness. `ci.yml` records its `storybook` job at 37s
+    # whole-job, install included (2026-08-20, run 32337178101); the Astro
+    # build of a placeholder page and a directory copy are small beside it, so
+    # 15 minutes is still several times the work, in the same spirit as the
+    # bounds there. Revisit it if the site grows a build that is not.
     timeout-minutes: 15
     permissions:
       # Naming a job-level `permissions` block replaces the workflow's rather
@@ -88,25 +93,34 @@ jobs:
           enablement: true
 
       # A Pages project site is served from `/<repo>/` and never from the
-      # domain root, so the fixtures the stories load out of `staticDirs` have
-      # to be resolved against that prefix — `apps/storybook/stories/asset-url.ts`
-      # is where that happens and `.storybook/main.ts` is where the prefix
-      # arrives. `base_path` comes back from the step above as `/playdeck`,
-      # without a trailing slash, and Vite's `base` wants one.
+      # domain root, so both surfaces have to resolve their assets and links
+      # against that prefix. `PLAYDECK_BASE_PATH` is the one mechanism for
+      # saying so: `apps/site/astro.config.ts` and
+      # `apps/storybook/.storybook/main.ts` each read it into their bundler's
+      # `base`, and this is the only place the two values differ. The site is
+      # served from the artifact root and the workbench from `storybook/`
+      # inside it, which is precisely the extra path segment below (#519).
       #
-      # Taken from the step's output rather than written out, so the repository
-      # name appears nowhere in the tree and a custom domain later would need no
-      # edit here. Everything Storybook itself emits is already relative, so
-      # this moves the story fixtures and nothing else.
-      - run: pnpm --filter @playdeck/storybook build
+      # `base_path` comes back from the step above as `/playdeck`, without a
+      # trailing slash, and a bundler `base` wants one. Taken from the step's
+      # output rather than written out, so the repository name appears nowhere
+      # in the tree and a custom domain later would need no edit here.
+      - run: pnpm --filter @playdeck/site build
         env:
           PLAYDECK_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
 
-      # `storybook build`'s output directory, which it writes relative to the
-      # app and not to the repository root.
+      - run: pnpm --filter @playdeck/storybook build
+        env:
+          PLAYDECK_BASE_PATH: ${{ steps.pages.outputs.base_path }}/storybook/
+
+      # Where each build output lands in the artifact is the script's to say,
+      # not this file's — the verification harness assembles the same layout,
+      # and one definition is what keeps the two from drifting.
+      - run: node scripts/assemble-pages.mjs pages-dist
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
-          path: apps/storybook/storybook-static
+          path: pages-dist
 
       - id: deploy
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5

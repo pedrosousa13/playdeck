@@ -9,6 +9,15 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/storybook-static/**',
+      // Gitignored and generated, and listed for the reason `.scratch/**`
+      // below is: flat config does not read .gitignore, so without this the
+      // ambient types `astro build` writes are linted as project source and
+      // fail the gate on code nobody in this repo wrote (#519).
+      '**/.astro/**',
+      // The assembled Pages artifact (scripts/assemble-pages.mjs) is a copy of
+      // the two build outputs above, so linting it lints minified bundles that
+      // were already excluded under the names they were built as (#519).
+      'pages-dist/**',
       'playwright-report/**',
       'test-results/**',
       // Gitignored, unlike the two entries below — and not redundant for it.

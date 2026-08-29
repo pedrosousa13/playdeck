@@ -1,0 +1,29 @@
+---
+// A placeholder, and deliberately nothing more: #519 scaffolds the app and the
+// one Pages artifact, while the design, tokens, fonts and copy that will replace
+// this page are #520 and #521. Anything written here beyond proving the build
+// works would be thrown away by those tickets.
+//
+// The link is not decoration. `astro.config.ts` can only be shown to honour the
+// base path by something on the page resolving against it, so the page carries
+// the one link the finished site will need anyway — the workbench, which
+// `.github/workflows/pages.yml` now assembles under `storybook/` beside this
+// page. `import.meta.env.BASE_URL` is what Astro fills the configured `base`
+// into, so a root-absolute `/storybook/` written by hand is exactly the bug the
+// base path exists to prevent.
+const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Playdeck</title>
+  </head>
+  <body>
+    <h1>Playdeck</h1>
+    <p>A headless video player for React.</p>
+    <p><a href={storybookUrl}>Storybook workbench</a></p>
+  </body>
+</html>

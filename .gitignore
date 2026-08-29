@@ -2,6 +2,13 @@ node_modules/
 dist/
 .worktrees/
 storybook-static/
+# Astro's generated ambient types, written by `astro sync` and by every build.
+# Build output, so never committed -- `apps/site/tsconfig.json` records why it
+# is also outside what `tsc -b` reads.
+.astro/
+# The assembled GitHub Pages artifact, composed from the two build outputs above
+# by scripts/assemble-pages.mjs (#519).
+pages-dist/
 *storybook.log
 playwright-report/
 test-results/

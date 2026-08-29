@@ -16,6 +16,7 @@
     { "path": "./packages/provider-wistia/tsconfig.test.json" },
     { "path": "./packages/react" },
     { "path": "./packages/react/tsconfig.test.json" },
+    { "path": "./apps/site" },
     { "path": "./apps/storybook" },
     { "path": "./e2e" },
     { "path": "./scripts" },
