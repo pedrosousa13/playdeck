@@ -1,0 +1,130 @@
+/*
+ * Element defaults, expressed entirely through the tokens in `tokens.css`. The
+ * split is deliberate: that file is the vocabulary and this one is the first
+ * sentence spoken in it, so a page that wants a different look changes rules
+ * here and a page that wants a different palette changes nothing at all.
+ *
+ * No component stylesheet in this site may write a colour, a font stack, a font
+ * size or a duration literal. If a value is missing, the fix is a token.
+ */
+
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* The type scale is in rem, so this is the multiplier every size on the site
+   * is expressed against. Left at the browser default on purpose: a reader who
+   * raised their default text size has said something, and a fixed px root
+   * would discard it. */
+  font-family: var(--font-sans);
+  /* Both, and in this order. `color-scheme` (set per theme in `tokens.css`) is
+   * what makes form controls, scrollbars and the canvas outside the page follow
+   * the theme; `background-color` is what makes the page itself follow it. */
+  background-color: var(--color-field);
+  color: var(--color-ink);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  /* Plex Sans sets its display sizes slightly loose for a screen. This closes
+   * the headings only; body text keeps the face's own metrics. */
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--text-3xl);
+}
+
+h2 {
+  font-size: var(--text-xl);
+}
+
+h3 {
+  font-size: var(--text-lg);
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* Functional text: values, identifiers, states, machine output. Everything the
+ * site says about what a provider does lands in this face, and none of it goes
+ * below `--text-fn`. */
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-fn);
+}
+
+a {
+  color: var(--color-accent);
+  /* Underlined, not coloured-only: colour alone does not mark a link for a
+   * reader who cannot separate it from the surrounding ink. The offset keeps
+   * the rule clear of Plex Sans's descenders. */
+  text-decoration-thickness: from-font;
+  text-underline-offset: 0.15em;
+}
+
+/* One focus treatment for the whole site. `:focus-visible` rather than `:focus`
+ * so a mouse click does not leave a ring behind, and an outline rather than a
+ * shadow so it follows the element's own shape and survives forced-colors
+ * mode. The offset is what makes it legible on a control whose own background
+ * is the accent colour. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* There is no `hr` rule, and the separator between sections is not an `hr`.
+ * The separator carries the chroma sweep, and `hr` is a void element that can
+ * only be given a gradient through a CSS background — which the poster gate
+ * over `apps/**` and `packages/**` forbids for good reason. `Sweep.astro`
+ * paints it as an SVG `<linearGradient>` instead and carries the full
+ * reasoning. */
+
+/*
+ * Reduced motion, once, for the whole site. `0.01ms` rather than `0` because
+ * some engines skip a zero-duration transition's `transitionend` entirely, and
+ * a listener that never fires is a state machine that never advances.
+ *
+ * The important half is what this does NOT do: nothing here freezes an
+ * animation part-way. Every transition on this site moves `transform` or
+ * `opacity` from one settled state to another, so collapsing the duration lands
+ * on the settled state immediately, which is what a reader who asked for
+ * reduced motion wants to see. An effect whose meaning lives in its motion —
+ * one that leaves an element mid-travel or invisible when the motion is removed
+ * — is a bug in the effect, not a reason to weaken this rule.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,384 @@
+---
+import Base from '../layouts/Base.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+import Sweep from '../components/Sweep.astro';
+
+// The workbench, which `scripts/assemble-deploy.mjs` places under `storybook/`
+// beside the site: this sheet names the tokens, and the components built on
+// them are over there.
+//
+// Written through `import.meta.env.BASE_URL`, which is what Astro fills the
+// configured `base` into, rather than as a literal. That prefix is the root
+// today and the literal would be identical, which is precisely why the habit is
+// worth keeping here: the day the site moves under a prefix, a hand-written
+// `/storybook/` is the bug a base path exists to prevent (#435) and nothing
+// would flag it.
+const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
+
+// The three capability states, with the shape of reason line the site will
+// actually carry. They are here as a specimen of the system rather than as
+// content: the landing page's own copy is somebody else's work, and what this
+// page has to prove is that the state colours survive both themes and that the
+// smallest functional text on the site is still legible.
+const capabilities = [
+  { state: 'available', provider: 'native', reason: '└ browser' },
+  { state: 'unknown', provider: 'hls', reason: '└ probe pending' },
+  { state: 'unavailable', provider: 'wistia', reason: '└ no consent' }
+] as const;
+
+// The scale, read back out of the tokens it defines. Naming each rung's token
+// here rather than restating its size is what keeps the specimen honest: it
+// renders whatever `tokens.css` currently says, so a rung that changed value
+// shows the change rather than a stale caption.
+//
+// Each caption names what `base.css` actually resolves the rung to, not what
+// the rung sounds like it is for. `DESIGN.md`'s table is the same mapping and
+// the two have to agree: a specimen that captions a rung by mood is how a later
+// page ends up reaching for `--text-2xl` because it wanted an `h2`.
+const typeScale = [
+  { token: '--text-3xl', use: 'Page title — h1' },
+  { token: '--text-2xl', use: 'No element; a heavier section title, by class' },
+  { token: '--text-xl', use: 'Section title — h2' },
+  { token: '--text-lg', use: 'Subsection — h3, and the lead paragraph' },
+  { token: '--text-md', use: 'Body' },
+  { token: '--text-sm', use: 'Secondary prose, and code at rest' },
+  { token: '--text-xs', use: 'Captions and table labels' },
+  { token: '--text-fn', use: 'The floor. Functional text only' }
+] as const;
+
+const surfaces = [
+  { token: '--color-field', use: 'The page' },
+  { token: '--color-surface', use: 'A raised panel' },
+  { token: '--color-sunken', use: 'A recessed well' },
+  { token: '--color-line', use: 'Hairline' },
+  { token: '--color-line-strong', use: 'Hairline, on a surface' }
+] as const;
+
+const inks = [
+  { token: '--color-ink', use: 'Body and headings' },
+  { token: '--color-ink-muted', use: 'Secondary prose' },
+  { token: '--color-ink-subtle', use: 'Labels and captions' },
+  { token: '--color-accent', use: 'Links and focus' }
+] as const;
+---
+
+<Base title="Playdeck visual system — design reference">
+  <header class="bar">
+    <ThemeToggle />
+  </header>
+
+  <main class="page">
+    <section class="hero">
+      {
+        /* This heading deliberately does not read "Playdeck".
+         * `scripts/check-deploy-artifact.mjs` identifies the site's root
+         * document in a browser by a heading named exactly that, which is how
+         * the deployed artifact is proven to serve the site rather than
+         * something else at the origin root. Two documents answering to the
+         * name would make that identification ambiguous, and this sheet is a
+         * reference rather than a page of the site. */
+      }
+      <h1>The visual system</h1>
+      <p class="lead">
+        Not a page of the site: every colour, face and size the site is allowed
+        to use, laid out so a value that fails in one theme has nowhere to hide.
+      </p>
+      <Sweep form="accent" />
+    </section>
+
+    <section class="section">
+      <h2>Capability</h2>
+      <p class="muted">
+        Three points on the same sweep the gradient runs through, so colour
+        carries the domain meaning. Each one is paired with its own word,
+        because a reader who cannot separate the three hues still has to be able
+        to read the answer.
+      </p>
+      <ul class="states">
+        {
+          capabilities.map(({ state, provider, reason }) => (
+            <li class="state" data-state={state}>
+              <span class="state__dot" aria-hidden="true" />
+              <span class="state__provider">{provider}</span>
+              <span class="state__word">{state}</span>
+              <span class="state__reason">{reason}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    {
+      /* Wrapped rather than given a class, because Astro's scoped styles are
+       * scoped by an attribute it stamps on this page's own elements: a class
+       * handed to a component lands on markup the page's stylesheet cannot
+       * select. The box the page owns carries the rhythm; the sweep inside it
+       * carries the paint. */
+    }
+    <div class="rule"><Sweep form="hairline" /></div>
+
+    <section class="section">
+      <h2>Type</h2>
+      <ul class="specimens">
+        {
+          typeScale.map(({ token, use }) => (
+            <li class="specimen">
+              <p class="specimen__sample" style={`font-size: var(${token})`}>
+                Provider capability, resolved before a click
+              </p>
+              <p class="specimen__meta">
+                <code>{token}</code> <span class="specimen__use">{use}</span>
+              </p>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>Colour</h2>
+      <div class="panels">
+        <div class="panel">
+          <h3>Surfaces</h3>
+          <ul class="swatches">
+            {
+              surfaces.map(({ token, use }) => (
+                <li class="swatch">
+                  <span
+                    class="swatch__chip"
+                    style={`background-color: var(${token})`}
+                    aria-hidden="true"
+                  />
+                  <code>{token}</code>
+                  <span class="swatch__use">{use}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+
+        <div class="panel">
+          <h3>Ink</h3>
+          <ul class="swatches">
+            {
+              inks.map(({ token, use }) => (
+                <li class="swatch">
+                  <span class="swatch__ink" style={`color: var(${token})`}>
+                    Aa
+                  </span>
+                  <code>{token}</code>
+                  <span class="swatch__use">{use}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p class="muted">
+        The components are in the <a href={storybookUrl}>Storybook workbench</a>.
+      </p>
+    </footer>
+  </main>
+</Base>
+
+<style>
+  /* This page is a specimen sheet, so its layout is deliberately plain: a
+   * single measure-constrained column with a rule between sections. What is
+   * being demonstrated is the token layer, and a layout with opinions of its
+   * own would make it harder to see which of the two is responsible for how
+   * something looks. */
+  .bar {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+    justify-content: flex-end;
+    padding: var(--space-3) var(--space-5);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  .page {
+    max-inline-size: 46rem;
+    margin-inline: auto;
+    padding: var(--space-7) var(--space-5) var(--space-8);
+  }
+
+  .hero {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-ink-muted);
+  }
+
+  .section {
+    display: grid;
+    gap: var(--space-4);
+    margin-block-start: var(--space-7);
+  }
+
+  .muted {
+    color: var(--color-ink-muted);
+  }
+
+  /* The separator's spacing is the page's business; its thickness and its paint
+   * are `Sweep.astro`'s. Sizing it from here would be this page choosing a
+   * third form of the one gradient. */
+  .rule {
+    margin-block-start: var(--space-7);
+  }
+
+  .states,
+  .specimens,
+  .swatches {
+    display: grid;
+    gap: var(--space-3);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  /* Depth is a surface colour and a hairline, and there is no shadow anywhere
+   * on this site. A one-pixel border under a wide blur is the pairing the
+   * design audit named, so the system has no shadow token to reach for and
+   * this is what a raised thing looks like instead. */
+  .state,
+  .panel {
+    background-color: var(--color-surface);
+    border: var(--line-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+  }
+
+  .state {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    align-items: baseline;
+    padding: var(--space-3) var(--space-4);
+  }
+
+  /* Each state's colour is selected here, once, from the role tokens. The dot
+   * is redundant with the word beside it on purpose: the colour is an
+   * accelerator for a reader who has learnt it, never the only carrier. */
+  .state[data-state='available'] {
+    --state-color: var(--color-available);
+  }
+
+  .state[data-state='unknown'] {
+    --state-color: var(--color-unknown);
+  }
+
+  .state[data-state='unavailable'] {
+    --state-color: var(--color-unavailable);
+  }
+
+  .state__dot {
+    align-self: center;
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    background-color: var(--state-color);
+    border-radius: 50%;
+  }
+
+  .state__provider {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .state__word {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    color: var(--state-color);
+  }
+
+  /* The reason line: the smallest text on the site, and the text carrying its
+   * whole argument. `--text-fn` is the bottom rung of the scale and there is
+   * nothing below it, in rem so that a reader who raised their root size gets a
+   * larger floor rather than the same one. */
+  .state__reason {
+    margin-inline-start: auto;
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .specimen {
+    display: grid;
+    gap: var(--space-1);
+    padding-block-end: var(--space-3);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  .specimen__sample {
+    line-height: var(--leading-snug);
+  }
+
+  .specimen__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
+  .specimen__meta code {
+    font-size: var(--text-xs);
+    color: var(--color-ink-muted);
+  }
+
+  .panels {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  }
+
+  .panel {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+
+  .swatch {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    font-size: var(--text-xs);
+  }
+
+  .swatch code {
+    font-size: var(--text-xs);
+  }
+
+  .swatch__chip,
+  .swatch__ink {
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+    border: var(--line-width) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+  }
+
+  .swatch__ink {
+    font-weight: var(--weight-semibold);
+    border-color: transparent;
+  }
+
+  .swatch__use {
+    margin-inline-start: auto;
+    color: var(--color-ink-subtle);
+    text-align: end;
+  }
+
+  .footer {
+    margin-block-start: var(--space-7);
+    font-size: var(--text-sm);
+  }
+</style>

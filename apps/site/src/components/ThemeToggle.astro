@@ -1,0 +1,152 @@
+---
+/**
+ * The theme switch: the only thing on the site that writes the reader's stored
+ * preference, and the only thing that writes `data-theme` in response to a
+ * click. It is not the only writer of either — `Base.astro`'s pre-paint script
+ * reads the same stored value and applies it to the root element before the
+ * browser paints, which is the half of the job a deferred module script cannot
+ * do.
+ *
+ * Three states exist and only two are stored. A reader who has never chosen
+ * follows the operating system, and that is represented by the ABSENCE of
+ * `data-theme` rather than by a third stored value — so `tokens.css`'s
+ * `prefers-color-scheme` block keeps deciding, and a machine that switches to
+ * dark at sunset takes the site with it. Storing a resolved 'light' the first
+ * time the page loaded would silently freeze that reader out of their own
+ * setting forever, which is the bug this shape exists to avoid.
+ *
+ * The switch is rendered with `aria-checked="false"` and corrected by script on
+ * load. That is a real, if brief, inconsistency for a reader on a dark machine,
+ * and it is the smaller of the two available wrongs: the alternative is
+ * resolving the theme on the server, which a statically built page cannot do
+ * for a reader it has never met. What must NOT be wrong even briefly is the
+ * painted theme, and that is handled before first paint in `Base.astro`.
+ */
+---
+
+<button
+  type="button"
+  role="switch"
+  aria-checked="false"
+  data-theme-toggle
+  class="toggle"
+>
+  <span class="toggle__label">Dark</span>
+  <span class="toggle__track" aria-hidden="true">
+    <span class="toggle__knob"></span>
+  </span>
+</button>
+
+<script>
+  // This literal is duplicated in `Base.astro`'s pre-paint script and the two
+  // have to stay identical: change one and the theme still switches on a click
+  // but silently stops surviving a reload, which nothing here would fail on.
+  // They cannot share a module, because that script is `is:inline` precisely so
+  // it runs before first paint and an inline script cannot import.
+  const STORAGE_KEY = 'playdeck-theme';
+
+  const root = document.documentElement;
+  const toggle = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+  /**
+   * What the reader is actually looking at: their explicit choice if they have
+   * made one, and the operating system's answer if they have not. Read from the
+   * DOM rather than from a variable, because the attribute is written before
+   * this module runs and is therefore the older, more authoritative source.
+   */
+  const effectiveTheme = (): 'light' | 'dark' =>
+    root.dataset.theme === 'light' || root.dataset.theme === 'dark'
+      ? root.dataset.theme
+      : prefersDark.matches
+        ? 'dark'
+        : 'light';
+
+  if (toggle !== null) {
+    const render = (): void => {
+      toggle.setAttribute('aria-checked', String(effectiveTheme() === 'dark'));
+    };
+
+    toggle.addEventListener('click', () => {
+      const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+      root.dataset.theme = next;
+      // Every access is guarded: reading and writing `localStorage` throws
+      // rather than returning null when storage is blocked, and a switch that
+      // threw would leave the theme applied but the control dead.
+      try {
+        window.localStorage.setItem(STORAGE_KEY, next);
+      } catch {
+        // A reader who blocks storage still gets the switch, for this page
+        // view only. Nothing else here depends on the write having happened.
+      }
+      render();
+    });
+
+    // Only reaches the control while no explicit choice is stored, because
+    // `effectiveTheme` stops consulting the media query once `data-theme` is
+    // set. So this follows the operating system for as long as the reader has
+    // not overridden it, and goes quiet the moment they do.
+    prefersDark.addEventListener('change', render);
+
+    render();
+  }
+</script>
+
+<style>
+  .toggle {
+    display: inline-flex;
+    gap: var(--space-3);
+    align-items: center;
+    /* 2.75rem, which is the smallest comfortable pointer target at the usual
+     * root size and grows with a root the reader has raised — the reason the
+     * target is expressed in rem rather than pinned to a pixel count. The
+     * control is visually shorter than this; the padding is what makes it
+     * hittable. */
+    min-height: 2.75rem;
+    padding: var(--space-2) var(--space-3);
+    font: inherit;
+    font-size: var(--text-sm);
+    color: var(--color-ink);
+    cursor: pointer;
+    background-color: var(--color-surface);
+    border: var(--line-width) solid var(--color-line-strong);
+    border-radius: var(--radius-pill);
+  }
+
+  .toggle__label {
+    line-height: 1;
+  }
+
+  .toggle__track {
+    position: relative;
+    display: block;
+    inline-size: 2.25rem;
+    block-size: 1.25rem;
+    background-color: var(--color-sunken);
+    border: var(--line-width) solid var(--color-line-strong);
+    border-radius: var(--radius-pill);
+  }
+
+  .toggle__knob {
+    position: absolute;
+    inset-block-start: 0.125rem;
+    inset-inline-start: 0.125rem;
+    display: block;
+    inline-size: 0.875rem;
+    block-size: 0.875rem;
+    background-color: var(--color-ink-muted);
+    border-radius: 50%;
+    /* `transform` and nothing else. Animating `inset-inline-start` would move
+     * the knob by laying the track out again on every frame; a translate is
+     * composited and produces the identical travel. */
+    transition:
+      transform var(--duration-fast) var(--ease),
+      background-color var(--duration-fast) var(--ease);
+  }
+
+  .toggle[aria-checked='true'] .toggle__knob {
+    background-color: var(--color-accent);
+    /* The track's inner width less the knob and both insets. */
+    transform: translateX(1rem);
+  }
+</style>

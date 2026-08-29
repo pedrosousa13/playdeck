@@ -1,0 +1,64 @@
+---
+/**
+ * The document every page of this site is served inside: the head, the
+ * stylesheet, and the one script that has to run before the browser paints.
+ *
+ * A layout rather than markup repeated per page, because the theme script below
+ * is not optional decoration — a page that forgot it would flash the wrong
+ * theme, and a defect that only appears on a page somebody forgot something on
+ * is the kind worth making structurally impossible.
+ *
+ * That script is inline, unbundled and first in the head, all three for the
+ * same reason: it has to have run before the first paint. A module script —
+ * which is what Astro produces without `is:inline` — is deferred by definition
+ * and runs after the document is parsed, so the reader would see the light
+ * theme painted and then replaced. A theme that arrives in two steps is worse
+ * than no theme switch at all.
+ *
+ * It sets `data-theme` only when a choice is stored. Leaving the attribute
+ * unset otherwise is what hands the decision to `tokens.css`'s
+ * `prefers-color-scheme` block, which is both correct with no JavaScript at all
+ * and live to the operating system changing its mind.
+ */
+
+// Imported here rather than linked from the head, so the build hashes the
+// stylesheet, follows its `@import`s and emits the font files it references
+// beside it. A hand-written `<link>` to a source path would ship a URL that
+// only exists during development.
+import '../styles/base.css';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <script is:inline>
+      // `'playdeck-theme'` is duplicated from `ThemeToggle.astro`'s
+      // `STORAGE_KEY` and the two have to stay identical: change one and the
+      // theme still switches on a click but silently stops surviving a reload,
+      // which nothing here would fail on. They cannot share a module, because
+      // this script is `is:inline` precisely so it runs before first paint and
+      // an inline script cannot import.
+      try {
+        const stored = localStorage.getItem('playdeck-theme');
+        if (stored === 'light' || stored === 'dark') {
+          document.documentElement.dataset.theme = stored;
+        }
+      } catch {
+        // Storage can throw rather than return null when a reader blocks it.
+        // The unset attribute that results is the correct fallback anyway.
+      }
+    </script>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
