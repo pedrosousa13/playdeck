@@ -132,26 +132,39 @@ performance preference: this is a library whose headline behaviour is contacting
 no provider before a click, and a site that phoned a font host to say so would be
 arguing against itself.
 
-| Token        | Size             | Use                                      |
-| ------------ | ---------------- | ---------------------------------------- |
-| `--text-3xl` | 2.75rem (44px)   | Page title                               |
-| `--text-2xl` | 2rem (32px)      | Section title                            |
-| `--text-xl`  | 1.5rem (24px)    | Subsection                               |
-| `--text-lg`  | 1.125rem (18px)  | Lead paragraph                           |
-| `--text-md`  | 1rem (16px)      | Body                                     |
-| `--text-sm`  | 0.875rem (14px)  | Secondary prose, functional text at rest |
-| `--text-xs`  | 0.75rem (12px)   | Captions and labels                      |
-| `--text-fn`  | 0.6875rem (11px) | The floor. Functional text only          |
+The `Applied to` column is what `base.css` actually sets, not a description of
+the rung's mood — a heading's size is whatever that file gives its element, and
+a page that wants another rung has to ask for it in a class.
+
+| Token        | Size             | Applied to                                    |
+| ------------ | ---------------- | --------------------------------------------- |
+| `--text-3xl` | 2.75rem (44px)   | `h1`                                          |
+| `--text-2xl` | 2rem (32px)      | No element. Opt-in only — see below           |
+| `--text-xl`  | 1.5rem (24px)    | `h2`                                          |
+| `--text-lg`  | 1.125rem (18px)  | `h3`, and the lead paragraph                  |
+| `--text-md`  | 1rem (16px)      | `body`, and so every paragraph                |
+| `--text-sm`  | 0.875rem (14px)  | `code`, `kbd`, `samp`, `pre`; secondary prose |
+| `--text-xs`  | 0.75rem (12px)   | Captions and table labels, by class           |
+| `--text-fn`  | 0.6875rem (11px) | The floor, by class. Functional text only     |
+
+**Nothing defaults to `--text-2xl`.** It is the rung between the page title and
+`h2`, and it exists for a page that needs a section title heavier than `h2`'s
+default — set it in a class on that page rather than by moving `h2`. The heading
+elements keep whatever `base.css` gives them above, which was reviewed as
+rendered, so changing what `h2` resolves to is a change to every page at once.
 
 Sizes are in `rem` against the browser's own root size, which is left alone: a
 reader who raised their default has said something, and a fixed pixel root
-discards it.
+discards it. The pixel figures in the table are therefore what the rungs come
+out at when that default is the usual 16px, not fixed measurements.
 
 **`--text-fn` is the floor and the scale has no rung beneath it.** The comps put
 reason lines such as `└ browser` at 10.88px, and that is the text carrying the
-product's whole argument. Weights are 400 and 600 only. `--tracking-fn` opens the
-two smallest mono sizes slightly, because mono at 11px loses more to tight
-tracking than it gains.
+product's whole argument. Weights are 400 and 600 only. `--tracking-fn` is
+applied wherever Plex Mono is — `base.css` sets it on `code`, `kbd`, `samp` and
+`pre` along with the face itself — and it opens the tracking slightly rather
+than closing it, because mono is already set tight relative to its own width and
+functional text at 11px loses more to that than it gains.
 
 ## The one gradient
 
@@ -228,7 +241,13 @@ the element's own shape and survives forced-colors mode.
 | `src/styles/tokens.css`            | Every value. The only file with hex literals |
 | `src/styles/base.css`              | Element defaults, spoken in tokens           |
 | `src/layouts/Base.astro`           | The document, and the pre-paint theme script |
-| `src/components/ThemeToggle.astro` | The only writer of `data-theme`              |
+| `src/components/ThemeToggle.astro` | The control that stores a theme choice       |
+
+`data-theme` has two writers and they are not interchangeable: the pre-paint
+script in `Base.astro` applies a stored choice before the browser paints, and
+`ThemeToggle.astro` writes the attribute and the stored value on a click. The
+storage key is a literal in both, because an `is:inline` script cannot import
+the module that would otherwise hold it.
 
 This system is separate from `@playdeck/react/theme.css`, which is the player's
 theme and ships to consumers. That file is layered and zero-specificity because a

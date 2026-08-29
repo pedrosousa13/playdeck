@@ -11,7 +11,8 @@
  * yield to, and adding the same ceremony would suggest a constraint that does
  * not exist. The two themes share no tokens and are not meant to match.
  *
- * Three rules hold the system together.
+ * The rules this file is the enforcement point for — `DESIGN.md` carries the
+ * full set, including the ones about depth and motion that live in `base.css`.
  *
  *   1. A hex literal appears exactly once, in the raw scale below. Role tokens
  *      (`--color-ink`, `--color-accent`, ...) point at the scale, components
@@ -112,9 +113,10 @@
   --color-line-strong: var(--light-line-strong);
   --color-accent: var(--light-blue);
 
-  /* The three capability states are three points on the same sweep the gradient
-   * runs through, in that order: blue, then green, then amber, then red. Colour
-   * carries the domain meaning here — a provider is available, unknown or
+  /* The capability states are points on the same sweep the gradient runs
+   * through, and they take its warm three quarters in sweep order: green, then
+   * amber, then red. The blue the sweep starts from is `--color-accent` above
+   * and is not a state. Colour carries the domain meaning here — a provider is available, unknown or
    * unavailable — so these are never used decoratively, and decoration never
    * borrows them. Each is paired with a shape or a word wherever it appears,
    * because colour alone is not a status. */

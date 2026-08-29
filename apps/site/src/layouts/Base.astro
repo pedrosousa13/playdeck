@@ -41,6 +41,12 @@ const { title } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <script is:inline>
+      // `'playdeck-theme'` is duplicated from `ThemeToggle.astro`'s
+      // `STORAGE_KEY` and the two have to stay identical: change one and the
+      // theme still switches on a click but silently stops surviving a reload,
+      // which nothing here would fail on. They cannot share a module, because
+      // this script is `is:inline` precisely so it runs before first paint and
+      // an inline script cannot import.
       try {
         const stored = localStorage.getItem('playdeck-theme');
         if (stored === 'light' || stored === 'dark') {

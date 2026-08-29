@@ -383,6 +383,12 @@ geometry and appearance are separate, and
 [ADR-0002](docs/adr/0002-published-measurements-are-outputs.md) for why an
 output is not a token.
 
+The marketing site has its own visual system, and its rules bind anything added
+to it: see [`apps/site/DESIGN.md`](apps/site/DESIGN.md) for the palette, the
+type scale, the one-gradient rule and the four audit constraints. That system is
+not the player's theme — `packages/react/theme.css` ships to consumers and
+shares no tokens with it, and the two are deliberately separate.
+
 **Structural geometry**:
 The positioning a primitive needs in order to function — stacking, insets, the
 media element filling its viewport. Set inline by the primitive, ahead of the
