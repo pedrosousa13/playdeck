@@ -1,21 +1,24 @@
 #!/usr/bin/env node
-// Proves both Pages surfaces work under the project-page prefix, against the
+// Proves both deployed surfaces work where they are served from, against the
 // built artifact rather than against the configuration that produced it (#519).
 //
 // The bug this exists to catch is #435: a root-absolute URL emitted by a build
-// that was told nothing about the prefix. `pedrosousa13.github.io/tracer.mp4`
-// is a different site's root, so the only symptom is a 404 at request time —
-// which is why neither a unit test over `astro.config.ts` nor a grep of the
-// emitted HTML would do. Storybook resolves most of its own navigation in the
-// browser, so a static reading of the artifact cannot see the half that breaks.
+// that was told nothing about the prefix it sits under. The site holds the root
+// of `playdeck.video` and the workbench sits at `/storybook/`, so a workbench
+// asset written as `/assets/...` asks the site for a file the site does not
+// have, and the only symptom is a 404 at request time — which is why neither a
+// unit test over `.storybook/main.ts` nor a grep of the emitted HTML would do.
+// Storybook resolves most of its own navigation in the browser, so a static
+// reading of the artifact cannot see the half that breaks.
 //
 // So the artifact is assembled the way the deploy assembles it, served the way
-// GitHub Pages serves it — reachable under `/playdeck/` and nowhere else — and
-// visited by a real browser, with every response, console error and page error
-// recorded for the whole visit. Every failure is reported, not the first, so
-// one run tells the reader everything that is wrong.
+// the Worker serves it — one directory at the origin root, a miss answered with
+// a 404 rather than with an index — and visited by a real browser, with every
+// response, console error and page error recorded for the whole visit. Every
+// failure is reported, not the first, so one run tells the reader everything
+// that is wrong.
 //
-// Run on demand as `pnpm test:pages` rather than from a pull-request gate: it
+// Run on demand as `pnpm test:site` rather than from a pull-request gate: it
 // builds both surfaces from scratch and drives a browser through them, which is
 // several times the work `ci.yml` does per pull request. Extending the gate to
 // cover it is #528. It builds by default, because a run against whatever
@@ -28,7 +31,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
-import { assemblePages } from './assemble-pages.mjs';
+import { assembleSite } from './assemble-site.mjs';
 
 // As in scripts/verify-packaging.mjs: the lint config gives this directory node
 // globals, but `console` and `process` still have to be reached through
@@ -38,11 +41,14 @@ const process = globalThis.process;
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
-// Any prefix but `/` would do, and `/` would do nothing: the whole class of bug
-// only exists where the site is not served from the domain root. This is what
-// the deploy uses, so the artifact under test is the artifact that ships.
-const basePath = '/playdeck/';
-const artifactDir = join(repoRoot, 'pages-dist');
+// Where each surface is served from, and the values the builds under test are
+// handed. The site is at the root, so nothing about it can get a prefix wrong;
+// the workbench is the surface with a prefix to honour, and one segment is as
+// much of a prefix as ten. These are what the deploy uses, so the artifact
+// under test is the artifact that ships.
+const sitePath = '/';
+const storybookPath = '/storybook/';
+const artifactDir = join(repoRoot, 'site-dist');
 
 // The story the Storybook visit navigates to. It renders against the mock
 // player, so nothing here depends on media loading — what is being proven is
@@ -67,10 +73,11 @@ const mimeTypes = {
 };
 
 /**
- * Serves the assembled artifact under `basePath` and nothing at the root, which
- * is what a Pages project site does. The 404 is load-bearing rather than
- * incidental: a server that fell back to the artifact root for an unprefixed
- * URL would answer exactly the requests this check exists to catch.
+ * Serves the assembled artifact at the origin root, which is what the Worker
+ * does with the directory `wrangler.jsonc` names. The 404 is load-bearing
+ * rather than incidental: `not_found_handling` is `"none"` precisely so a miss
+ * stays a miss, and a server that fell back to the artifact's own index would
+ * answer exactly the requests this check exists to catch with a 200.
  *
  * @param {string} directory
  */
@@ -82,16 +89,12 @@ const serveArtifact = async (directory) => {
       response.end();
     };
 
-    if (!pathname.startsWith(basePath)) {
-      notFound();
-      return;
-    }
-
-    const relative = pathname.slice(basePath.length);
+    const relative = pathname.slice(1);
     try {
       const target = join(directory, relative);
       // A directory request is what an internal link to `storybook/` produces,
-      // and Pages answers one with the index inside it.
+      // and `html_handling: "auto-trailing-slash"` — the default the deploy
+      // leaves in place — answers one with the index inside it.
       const entry = await stat(target).catch(() => null);
       const file = entry?.isDirectory() ? join(target, 'index.html') : target;
       const body = await readFile(file);
@@ -147,7 +150,7 @@ const serveArtifact = async (directory) => {
 // no base path exists to get wrong — and visit it with the same listeners
 // attached.
 const abortedRequest = 'net::ERR_ABORTED';
-const previewIframePath = `${basePath}storybook/iframe.html`;
+const previewIframePath = `${storybookPath}iframe.html`;
 const managerChannelDiagnostic =
   /^%c manager %c received .* but was unable to determine the source of the event/;
 
@@ -194,7 +197,7 @@ const recordFailures = (page, failures, surface) => {
 const checkSite = async (browser, origin, failures) => {
   const page = await browser.newPage();
   recordFailures(page, failures, 'site');
-  await page.goto(`${origin}${basePath}`);
+  await page.goto(`${origin}${sitePath}`);
   await page.getByRole('heading', { name: 'Playdeck', exact: true }).waitFor();
 
   // Every internal link, rather than the one the placeholder page happens to
@@ -208,7 +211,7 @@ const checkSite = async (browser, origin, failures) => {
   // Following one would put a network request in the middle of a check that
   // must pass with no egress, and its 404 or its console errors would be
   // reported as this artifact's.
-  const served = `${origin}${basePath}`;
+  const served = `${origin}${sitePath}`;
   const links = await page
     .locator('a[href]')
     .evaluateAll(
@@ -241,7 +244,7 @@ const checkSite = async (browser, origin, failures) => {
 const checkStorybook = async (browser, origin, failures) => {
   const page = await browser.newPage();
   recordFailures(page, failures, 'storybook');
-  await page.goto(`${origin}${basePath}storybook/`);
+  await page.goto(`${origin}${storybookPath}`);
 
   // The sidebar rendering is the signal that the workbench booted: `load`
   // fires as soon as the shell's HTML is in, which a build whose scripts all
@@ -264,21 +267,31 @@ const checkStorybook = async (browser, origin, failures) => {
 
 const shouldBuild = !process.argv.includes('--no-build');
 if (shouldBuild) {
-  for (const [filter, prefix] of [
-    ['@playdeck/site', basePath],
-    ['@playdeck/storybook', `${basePath}storybook/`]
-  ]) {
-    console.log(`--- Building ${filter} for ${prefix} ---`);
+  // Each surface is built the way `.github/workflows/deploy-site.yml` builds
+  // it, including the site being handed nothing: `PLAYDECK_BASE_PATH` is
+  // explicitly removed rather than left to whatever the shell running this
+  // happens to export, so a stray value cannot make the harness build something
+  // the deploy never would.
+  /** @type {[string, string | undefined][]} */
+  const builds = [
+    ['@playdeck/site', undefined],
+    ['@playdeck/storybook', storybookPath]
+  ];
+  for (const [filter, prefix] of builds) {
+    console.log(`--- Building ${filter} for ${prefix ?? sitePath} ---`);
+    const env = { ...process.env };
+    if (prefix === undefined) delete env.PLAYDECK_BASE_PATH;
+    else env.PLAYDECK_BASE_PATH = prefix;
     execFileSync('pnpm', ['--filter', filter, 'build'], {
       cwd: repoRoot,
       stdio: 'inherit',
-      env: { ...process.env, PLAYDECK_BASE_PATH: prefix }
+      env
     });
   }
   // The deploy's own layout, imported rather than restated: two copies would
   // drift, and a harness that went green against a shape the deploy no longer
   // produces is worse than no harness.
-  await assemblePages(artifactDir);
+  await assembleSite(artifactDir);
   console.log(`--- Assembled the artifact at ${artifactDir} ---`);
 } else {
   console.log(`--- Reusing the artifact at ${artifactDir} (--no-build) ---`);
@@ -291,9 +304,9 @@ const failures = [];
 let browser;
 try {
   browser = await chromium.launch({ headless: true });
-  console.log(`--- Visiting ${origin}${basePath} ---`);
+  console.log(`--- Visiting ${origin}${sitePath} ---`);
   await checkSite(browser, origin, failures);
-  console.log(`--- Visiting ${origin}${basePath}storybook/ ---`);
+  console.log(`--- Visiting ${origin}${storybookPath} ---`);
   await checkStorybook(browser, origin, failures);
 } catch (error) {
   // A thrown navigation or a locator that timed out is itself a failure, and
@@ -309,11 +322,13 @@ try {
 
 if (failures.length > 0) {
   console.error(
-    `\nThe Pages artifact does not work under ${basePath} (#519):\n${failures
+    `\nThe deployed artifact does not work as served (#519):\n${failures
       .map((failure) => `  ${failure}`)
       .join('\n')}`
   );
   process.exit(1);
 }
 
-console.log(`\nBoth surfaces load correctly under ${basePath}.`);
+console.log(
+  `\nBoth surfaces load correctly: the site at ${sitePath}, the workbench at ${storybookPath}.`
+);

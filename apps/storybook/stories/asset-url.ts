@@ -5,9 +5,10 @@
  *
  * That path is `/` on `storybook dev` and under the Vitest browser run, so
  * every caller below produces exactly the root-absolute URL it used to carry.
- * On the hosted build it is `/playdeck/`, because a GitHub Pages project site
- * is never served from the domain root — and there a literal `/tracer.mp4`
- * resolves to another site's root and 404s (#435).
+ * On the deployed build it is `/storybook/`, because `apps/site` takes the root
+ * of `playdeck.video` and the workbench is assembled one segment inside it —
+ * and there a literal `/tracer.mp4` resolves to the site's root, where no
+ * fixture is served, and 404s (#435).
  *
  * `import.meta.env.BASE_URL` is Vite's name for that prefix, and it always ends
  * in a slash. `.storybook/main.ts` is where it is set.

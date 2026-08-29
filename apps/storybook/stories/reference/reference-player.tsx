@@ -17,7 +17,7 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
 // rule scoping this directory denies relative imports that leave it. The
 // fixtures below are served
 // from the workbench's own base path, which is `/` on the dev server and under
-// Vitest and `/playdeck/` on the hosted build — a root-absolute literal 404s
+// Vitest and `/storybook/` on the deployed build — a root-absolute literal 404s
 // there (#435). `import.meta.env.BASE_URL` is Vite's name for that prefix and
 // always ends in a slash; it is not part of the primitives' API, and a consumer
 // copying this file writes their own URLs here.

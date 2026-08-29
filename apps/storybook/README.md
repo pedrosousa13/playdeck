@@ -10,24 +10,23 @@ the test origin.
 
 - `pnpm dev` — workbench at `http://localhost:6006`.
 - `pnpm build` — static build (also part of the root `pnpm build`). This is
-  what `.github/workflows/pages.yml` publishes from `main` to
-  [pedrosousa13.github.io/playdeck/storybook](https://pedrosousa13.github.io/playdeck/storybook/).
-  The repository has one Pages site and `apps/site` takes its root, so the
-  workbench is assembled one segment inside it (#519).
+  what `.github/workflows/deploy-site.yml` publishes from `main` to
+  [playdeck.video/storybook](https://playdeck.video/storybook/). `apps/site`
+  takes the root of that domain, so the workbench is assembled one segment
+  inside it (#519).
 - `pnpm test` — run every story as a browser test (root: `pnpm test:storybook`).
 
-A GitHub Pages project site is served from `/playdeck/` and never from `/`, and
-the workbench sits under `storybook/` within it, so the deploy sets
-`PLAYDECK_BASE_PATH` to the whole prefix and the fixtures under `public/` are
+The workbench is served from `/storybook/` and never from `/`, so the deploy
+sets `PLAYDECK_BASE_PATH` to that prefix and the fixtures under `public/` are
 addressed through `stories/asset-url.ts` rather than by a root-absolute
-literal. To reproduce the hosted build locally, pass the value the deploy
+literal. To reproduce the deployed build locally, pass the value the deploy
 passes:
 
 ```sh
-PLAYDECK_BASE_PATH=/playdeck/storybook/ pnpm build
+PLAYDECK_BASE_PATH=/storybook/ pnpm build
 ```
 
-`scripts/check-pages-artifact.mjs` builds both surfaces this way, assembles the
+`scripts/check-site-artifact.mjs` builds both surfaces this way, assembles the
 artifact and drives a browser through it, which is what proves the prefix is
 honoured rather than merely configured.
 

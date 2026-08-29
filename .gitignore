@@ -6,9 +6,9 @@ storybook-static/
 # Build output, so never committed -- `apps/site/tsconfig.json` records why it
 # is also outside what `tsc -b` reads.
 .astro/
-# The assembled GitHub Pages artifact, composed from the two build outputs above
-# by scripts/assemble-pages.mjs (#519).
-pages-dist/
+# The assembled deployment, composed from the two build outputs above by
+# scripts/assemble-site.mjs and published as the Worker's assets (#519).
+site-dist/
 *storybook.log
 playwright-report/
 test-results/

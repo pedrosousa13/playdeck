@@ -1,12 +1,15 @@
-// Composes the one GitHub Pages artifact out of the two builds behind it: the
-// Astro site at the root, the Storybook workbench under `storybook/` (#519).
+// Composes the one deployed artifact out of the two builds behind it: the Astro
+// site at the root, the Storybook workbench under `storybook/` (#519). The
+// directory this writes is what `wrangler.jsonc` publishes as its assets, so
+// the layout below is the URL space of `playdeck.video`.
 //
 // A script rather than a few `cp` lines inline in
-// `.github/workflows/pages.yml`, because the verification harness assembles the
-// same artifact in order to prove both surfaces load under the project-page
-// prefix. Two copies of the layout would drift, and the drift would be silent:
-// the harness would go green against a shape the deploy no longer produces.
-// One caller cannot disagree with the other about where Storybook lands.
+// `.github/workflows/deploy-site.yml`, because the verification harness
+// assembles the same artifact in order to prove both surfaces load under the
+// prefixes they are served from. Two copies of the layout would drift, and the
+// drift would be silent: the harness would go green against a shape the deploy
+// no longer produces. One caller cannot disagree with the other about where
+// Storybook lands.
 
 import { cp, mkdir, rm, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +28,7 @@ const layout = [
 /**
  * @param {string} destination Where to assemble the artifact.
  */
-export const assemblePages = async (destination) => {
+export const assembleSite = async (destination) => {
   for (const { from } of layout) {
     // Loudly, and before anything is copied: a missing source means a build
     // did not run, and half an artifact deployed is worse than a red run.
@@ -45,11 +48,11 @@ export const assemblePages = async (destination) => {
   }
 };
 
-// Only when run as a command. `scripts/check-pages-artifact.mjs` imports the
+// Only when run as a command. `scripts/check-site-artifact.mjs` imports the
 // function above so the harness and the deploy cannot disagree about the
 // layout, and an import must not assemble anything as a side effect (#519).
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const destination = resolve(process.argv[2] ?? join(repoRoot, 'pages-dist'));
-  await assemblePages(destination);
-  console.log(`Assembled the Pages artifact at ${destination}`);
+  const destination = resolve(process.argv[2] ?? join(repoRoot, 'site-dist'));
+  await assembleSite(destination);
+  console.log(`Assembled the deployed artifact at ${destination}`);
 }

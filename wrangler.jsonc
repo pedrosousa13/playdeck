@@ -1,0 +1,52 @@
+// What `playdeck.video` is: a Cloudflare Worker that serves static assets and
+// nothing else. `.github/workflows/deploy-site.yml` builds the two surfaces,
+// assembles them into the directory named below and hands this file to
+// Wrangler (#519).
+//
+// At the repository root rather than in `apps/site`, because the directory it
+// publishes is not either app's. `scripts/assemble-site.mjs` composes it out of
+// both builds — the site at the root, the workbench under `storybook/` — and a
+// configuration file living inside one of the two surfaces would claim the
+// other one's output as its own.
+{
+  "name": "playdeck",
+  "compatibility_date": "2026-08-29",
+
+  // No `main`. Cloudflare's documentation makes the key optional for an
+  // assets-only Worker, and there is no Worker script here to point it at:
+  // every request this deployment answers is a file on disk. `assets.binding`
+  // is absent for the same reason — a binding exists so a Worker script can
+  // fetch an asset, and adding one would declare a handler that does not exist.
+  "assets": {
+    "directory": "./site-dist/",
+
+    // `"none"` — Cloudflare's default, restated because the alternatives are
+    // both wrong here rather than merely unchosen. The site renders a
+    // placeholder page and has no 404 page, so `"404-page"` would name a
+    // document that does not exist. `"single-page-application"` would be worse
+    // than absent: it rewrites every miss to the root `index.html` and answers
+    // it 200, so a mistyped workbench URL would render the placeholder page and
+    // report success. Neither surface is a single-page application in the sense
+    // that setting means — the workbench is a static build with real documents
+    // at real paths.
+    "not_found_handling": "none"
+
+    // `html_handling` is left at its default, `auto-trailing-slash`, and the
+    // default is load-bearing: it is what makes `/storybook/` serve
+    // `storybook/index.html` with no configuration, and what redirects
+    // `/storybook` onto it. Astro's default build format writes directories
+    // with an `index.html` inside them, so the two agree already; pinning the
+    // site to extensionless URLs instead would put them at odds.
+  },
+
+  // Cloudflare creates the DNS record and the certificate for a custom domain
+  // itself, which is why an apex works here at all — nothing in this repository
+  // ever writes a CNAME, so the rule that a zone apex cannot carry one never
+  // comes up. Two conditions have to hold for the route to attach: the zone is
+  // active in Cloudflare, which means the domain's nameservers point at
+  // Cloudflare rather than at the registrar's; and the hostname carries no
+  // existing CNAME record, which Cloudflare refuses to take a custom domain
+  // over. A deploy that runs before both hold uploads the assets and fails to
+  // bind the hostname.
+  "routes": [{ "pattern": "playdeck.video", "custom_domain": true }]
+}

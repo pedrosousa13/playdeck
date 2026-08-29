@@ -3,14 +3,16 @@
   "compilerOptions": {
     "composite": true,
     "noEmit": true,
-    // `astro.config.ts` reads `process.env`, and that is the whole of what the
-    // checked TypeScript here needs.
-    "types": ["node"],
+    // Empty rather than absent: nothing under this package reaches a Node
+    // global, and the default is to pull in every `@types` package the
+    // workspace install happens to have hoisted, which would let a global
+    // resolve here that no dependency of this package provides.
+    "types": [],
     // Outside the package, unlike `apps/storybook`, which writes its own to
     // `dist/`. Here `dist/` is Astro's *output* directory: `astro build` clears
     // it, so a buildinfo kept there is destroyed by every build, and one written
-    // after a build is copied into the published Pages artifact by
-    // `scripts/assemble-pages.mjs`. `scripts/tsconfig.json` already keeps its
+    // after a build is copied into the published artifact by
+    // `scripts/assemble-site.mjs`. `scripts/tsconfig.json` already keeps its
     // buildinfo here for the analogous reason.
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/site.tsbuildinfo"
   },
