@@ -1,0 +1,178 @@
+---
+import Base from '../../layouts/Base.astro';
+import Sweep from '../../components/Sweep.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { providerPages } from '../../provider-pages.mjs';
+import { referencePackages } from '../../reference-packages.mjs';
+
+/*
+ * The way into the provider setup pages, and deliberately thin.
+ *
+ * Everything a reader came for is on the page they are about to open, and every
+ * word of that is `docs/provider-setup.md`'s. An index that summarised each
+ * provider here would be the second copy this whole arrangement exists to
+ * avoid — with the additional problem that a summary of "which URL forms
+ * resolve" is the one kind of sentence that is either the table itself or
+ * wrong. So a row is a name, and the adapter behind it in its own words: the
+ * `description` field npm shows beside the package.
+ */
+const providers = await providerPages();
+const packages = await referencePackages();
+const byDir = new Map(packages.map((entry) => [entry.dir, entry]));
+
+// Through `import.meta.env.BASE_URL` rather than as literals, for the reason
+// `src/pages/index.astro` gives at length: the prefix is the root today, so a
+// hand-written path would be identical and would stop being identical silently
+// (#435).
+const providerUrl = (slug) => `${import.meta.env.BASE_URL}providers/${slug}/`;
+
+// The same throw `src/pages/providers/[provider].astro` makes, for the same
+// reason: a package named by the provider table that has no reference page is a
+// renamed directory or a package that stopped being publishable, and a row with
+// a blank second column would say neither.
+const adapters = (dirs, title) =>
+  dirs.map((dir) => {
+    const entry = byDir.get(dir);
+    if (entry === undefined) {
+      throw new Error(
+        `The ${title} setup page names packages/${dir}, which has no reference page. Update PROVIDERS in src/provider-pages.mjs, or check that the package is still publishable.`
+      );
+    }
+    return entry;
+  });
+---
+
+<Base title="Provider setup — Playdeck">
+  <SiteHeader crumbs={[{ label: 'Provider setup' }]} />
+
+  <main class="page">
+    <h1>Provider setup</h1>
+    <p class="lead">
+      Which source values each provider accepts, which it refuses, and what its
+      own options are — a page per provider, rendered from{' '}
+      <code>docs/provider-setup.md</code>. There is no second copy: the page and
+      the document in the repository are the same text.
+    </p>
+    <Sweep form="accent" />
+
+    {
+      /* A list and not a grid of cards, which is the finding the package index
+       * already records: boxes of identical size are what a layout defaults to
+       * when nothing has been decided about the contents, and they cost a
+       * reader every name being close enough to the next to compare in one
+       * glance. */
+    }
+    <ul class="providers">
+      {
+        providers.map((provider) => (
+          <li class="provider">
+            <h2 class="provider__name">
+              <a href={providerUrl(provider.slug)}>{provider.title}</a>
+            </h2>
+            <ul class="provider__adapters">
+              {adapters(provider.packages, provider.title).map((entry) => (
+                <li>
+                  <code>{entry.name}</code> {entry.description}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))
+      }
+    </ul>
+  </main>
+</Base>
+
+<style>
+  /* The same width and the same rhythm as the package index, because it is the
+   * same kind of page: a table of names rather than a document, so the measure
+   * that keeps a paragraph readable would force a one-line description to wrap.
+   * A literal rather than a token, as `DESIGN.md` requires of a page's own
+   * maximum — one column width is not evidence about another. */
+  .page {
+    display: grid;
+    gap: var(--space-4);
+    max-inline-size: 52rem;
+    margin-inline: auto;
+    padding: var(--space-7) var(--space-5) var(--space-8);
+  }
+
+  /* Held to the same measure as prose anywhere else on the site. It is set one
+   * rung up, so the same inline size is fewer characters than the token was
+   * measured at — the right direction for a lead. */
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-ink-muted);
+    max-inline-size: var(--measure);
+  }
+
+  .lead code {
+    font-size: var(--text-md);
+  }
+
+  .providers {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    border-block-start: var(--line-width) solid var(--color-line);
+  }
+
+  /* Stacked below the breakpoint and two columns above it. The name column is
+   * sized to the longest provider name — `Native files and HLS`, which wraps to
+   * two lines rather than pushing the second column off the axis every other
+   * row starts on. */
+  .provider {
+    display: grid;
+    gap: var(--space-1);
+    padding-block: var(--space-3);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  @media (min-width: 40rem) {
+    .provider {
+      grid-template-columns: 12rem minmax(0, 1fr);
+      gap: var(--space-2) var(--space-5);
+      align-items: baseline;
+    }
+  }
+
+  /* A proper noun and not an identifier, so it is set in the sans face — which
+   * is what tells this column from the package index's, where every row is a
+   * name you type. At the body rung rather than the section rung: a column of
+   * names at `h2`'s own rung would out-shout the page's title, and the row's job
+   * is to be compared with the rows around it rather than to be a heading
+   * first. */
+  .provider__name {
+    font-size: var(--text-md);
+  }
+
+  .provider__name a {
+    text-decoration: none;
+  }
+
+  /* Rest, hover and focus are the site's own; the row adds and removes an
+   * underline, and the pressed state is `base.css`'s, which nothing here
+   * outranks — the rules above name no colour. */
+  .provider__name a:hover {
+    text-decoration: underline;
+  }
+
+  /* A list because one page covers two adapters, and a list of one is what the
+   * other three rows are. The markers are dropped: a single item with a bullet
+   * beside it reads as an outline of nothing. */
+  .provider__adapters {
+    padding: 0;
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+    list-style: none;
+  }
+
+  .provider__adapters li + li {
+    margin-block-start: var(--space-1);
+  }
+
+  .provider__adapters code {
+    color: var(--color-ink);
+  }
+</style>

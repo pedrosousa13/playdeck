@@ -1,0 +1,178 @@
+/*
+ * The layout and the typography of a rendered document: a rail, a column of
+ * prose, and a foot.
+ *
+ * Two sets of pages are built out of documents this repository keeps true
+ * elsewhere — the package READMEs at `/reference/<package>/`, and the provider
+ * setup pages at `/providers/<provider>/`, sliced out of
+ * `docs/provider-setup.md` — and they are the same page shape twice. This file
+ * is imported by both rather than copied into each, so a correction to how a
+ * table scrolls or where a heading sits happens once. `DocRail.astro` is the
+ * other half of the same extraction.
+ *
+ * A real stylesheet rather than a scoped `<style>` block, and that is what the
+ * rendered Markdown forces: compiled Markdown carries none of the attributes
+ * Astro scopes a component's styles by, so every rule below `.doc` was already
+ * having to be written `:global`. A file that is global anyway is better named
+ * as one. Every selector here is under `.shell`, `.doc` or `.foot` — this
+ * stylesheet reaches nothing a page has not opted into by using those classes.
+ *
+ * It writes no colour, no size and no duration of its own: every value is a
+ * role token from `tokens.css`, as `DESIGN.md`'s first rule requires.
+ */
+
+/* Rail and document, side by side on a wide screen and stacked below it. The
+ * rail comes first in the source in both, so a reader arriving on a phone or
+ * with a screen reader meets the contents before several hundred lines of prose
+ * rather than after them. */
+.shell {
+  display: grid;
+  /* `minmax(0, 1fr)` and never a bare `auto`. An `auto` track is floored at its
+   * content's max-content size, and the widest thing in one of these documents
+   * is a code fence whose line length is decided by `examples/` — so the column
+   * grows to the longest line and the whole document scrolls sideways on a
+   * phone. Flooring the track at zero hands the overflow back to the `<pre>`,
+   * which has a scroller of its own. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+  max-inline-size: 74rem;
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-5);
+}
+
+@media (min-width: 60rem) {
+  .shell {
+    grid-template-columns: 16rem minmax(0, 1fr);
+    gap: var(--space-8);
+  }
+}
+
+/* The measure. These are pages of prose rather than a landing page, and a
+ * paragraph the full width of a desktop window is the thing that makes a long
+ * document unreadable — the eye loses the start of the next line. The code
+ * blocks inside are allowed the full column, because a fence that wraps or
+ * scrolls is worse than a wide one and `docs:check` decides how long its lines
+ * are, not this file. */
+.doc {
+  min-inline-size: 0;
+  /* Inherited by everything in the document, and needed because these are
+   * someone else's words: a package name is one unbroken token and
+   * `@playdeck/provider-youtube` set at the `h1` rung is wider than a phone.
+   * Without this the title alone gives the page a horizontal scrollbar, which
+   * then moves the whole document rather than the one thing that did not fit.
+   * It has no effect inside a fence, where nothing wraps in the first place. */
+  overflow-wrap: break-word;
+}
+
+/* The measure, which is the token's job and not a page's to pick: it was set to
+ * land a line of prose inside the 65–75 character band at the body rung, and
+ * this is prose at the body rung. */
+.doc p,
+.doc ul,
+.doc ol,
+.doc blockquote {
+  max-inline-size: var(--measure);
+}
+
+.doc h1 {
+  margin-block-end: var(--space-4);
+}
+
+.doc h2 {
+  margin-block: var(--space-7) var(--space-3);
+}
+
+.doc h3 {
+  margin-block: var(--space-6) var(--space-2);
+}
+
+/* `base.css` stops at `h3`, so without this rule a document's fourth level
+ * arrives at the browser's own default and reads as body text in bold. Styled
+ * even though the rail stops indexing at depth 3: a heading a reader scrolls
+ * past still has to look like one. It sits at the body rung and is separated by
+ * weight, which is what a fourth level has left. */
+.doc h4 {
+  margin-block: var(--space-5) var(--space-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+
+/* `base.css` sets `p { margin: 0 }` for the site's laid-out pages, where the gap
+ * belongs to the grid. A document is the case that rule does not cover: its
+ * paragraphs are a stream and the space between them is the paragraph break. */
+.doc p,
+.doc ul,
+.doc ol,
+.doc pre,
+.doc blockquote,
+.doc table {
+  margin-block: var(--space-4);
+}
+
+.doc li {
+  margin-block: var(--space-2);
+}
+
+.doc blockquote {
+  padding-inline-start: var(--space-4);
+  border-inline-start: var(--line-width) solid var(--color-line-strong);
+  color: var(--color-ink-muted);
+}
+
+/* Inline code, set apart from the prose by a well rather than by colour: the
+ * accent is the link colour on this site and an identifier is not a link. */
+.doc :not(pre) > code {
+  padding: 0.1em 0.3em;
+  background-color: var(--color-sunken);
+  border-radius: var(--radius-sm);
+}
+
+/* These documents carry wide tables — props and events in a README, accepted
+ * URL forms in the provider setup. The scroller is on the table rather than on
+ * the page, so a narrow window scrolls the table and never the document. */
+.doc table {
+  display: block;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.doc th,
+.doc td {
+  padding: var(--space-2) var(--space-3);
+  border-block-end: var(--line-width) solid var(--color-line);
+  text-align: start;
+  vertical-align: top;
+}
+
+.doc th {
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+/* A `hr` is a section break in someone else's document, so it is a hairline and
+ * not the chroma sweep: the sweep has exactly two forms and a horizontal rule
+ * inside rendered prose is neither of them. */
+.doc hr {
+  block-size: 0;
+  margin-block: var(--space-6);
+  border: 0;
+  border-block-start: var(--line-width) solid var(--color-line);
+}
+
+.foot {
+  max-inline-size: 74rem;
+  margin-inline: auto;
+  padding: 0 var(--space-5) var(--space-8);
+  font-size: var(--text-sm);
+}
+
+/* The separator's spacing is this layout's business; its thickness and its
+ * paint are `Sweep.astro`'s. More above than below: a whole document ends over
+ * it, and `.shell`'s bottom padding is the same figure as its top, which is the
+ * gap the rail wanted rather than the gap a document's end does. */
+.foot__rule {
+  margin-block: var(--space-7) var(--space-4);
+}

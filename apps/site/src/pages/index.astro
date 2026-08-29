@@ -16,6 +16,7 @@ import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
 // under a prefix, a hand-written `/reference/` is the bug a base path exists to
 // prevent (#435) and nothing would flag it.
 const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
+const providersUrl = `${import.meta.env.BASE_URL}providers/`;
 const designUrl = `${import.meta.env.BASE_URL}design/`;
 // The workbench, which `scripts/assemble-deploy.mjs` places under `storybook/`
 // beside this page. It is also what `scripts/check-deploy-artifact.mjs` follows
@@ -412,6 +413,10 @@ const providers = [
         <li>
           <a href={referenceUrl}>Package reference</a> renders every published
           package from the README inside its own npm tarball.
+        </li>
+        <li>
+          <a href={providersUrl}>Provider setup</a> gives a page per provider:
+          the source URLs it reads, the ones it refuses, and what a refusal says.
         </li>
         <li>
           <a href={designUrl}>Visual system</a> lists every colour, face and size
