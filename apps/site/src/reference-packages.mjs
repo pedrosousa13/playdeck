@@ -42,9 +42,9 @@ import { publishablePackages } from '../../../scripts/workspace-packages.mjs';
  *
  * The ordering is derived rather than chosen, which is the point: an order that
  * put the two entry points first would read better and would be a decision
- * somebody has to remember to revisit the next time a package is added. There
- * are seven names and they are all `@playdeck/…`, so alphabetical costs a
- * reader very little.
+ * somebody has to remember to revisit the next time a package is added. These
+ * are scoped names that share a prefix and differ at the end, so alphabetical
+ * costs a reader very little.
  *
  * @returns {Promise<ReferencePackage[]>}
  */

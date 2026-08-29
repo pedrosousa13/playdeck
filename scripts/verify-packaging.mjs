@@ -147,6 +147,15 @@ const linkTargets = (source) => {
 // `repoRoot` in the middle of a function that is otherwise reading tarball
 // entries. Nothing here touches the network: a url on any other host is not
 // checked at all, and a broken one there is not something a local gate can see.
+//
+// `apps/site/src/content.config.ts` holds the second copy of this url, built
+// there out of each package's own `repository` field and a `branch` constant,
+// and the two have to agree. They are not one exported value because they are
+// not one shape -- that side needs a url per package, this side needs a single
+// prefix to match against -- so the agreement is kept by these two comments.
+// Change the branch on either side alone and nothing fails: the site rewrites
+// into a url this gate no longer recognises, and every link of that shape stops
+// being checked rather than starting to fail.
 const repositoryBlobUrl = 'https://github.com/pedrosousa13/playdeck/blob/main/';
 
 // A relative link resolves against wherever its file landed, and for a consumer

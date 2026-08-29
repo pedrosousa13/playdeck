@@ -55,8 +55,12 @@ export default defineConfig({
      * byte — a highlighter that re-indented or re-wrapped would put the site
      * and the gate into disagreement about what the example is.
      *
-     * `defaultColor: false` is the whole reason both themes work here. Left at
-     * its default, Shiki writes one theme's colours into a `color:` declaration
+     * `defaultColor: false` is the whole reason both themes work here. What it
+     * changes about the emitted markup was read off the Shiki that `astro`
+     * 7.2.9 ships, which is the exact version `package.json` pins rather than a
+     * range, so the upgrade that moves that pin is the moment to re-read this.
+     * Left at its default, Shiki writes one theme's colours into a `color:`
+     * declaration
      * on every span and leaves the other theme's in a `--shiki-dark` custom
      * property, which a stylesheet can then only reach past with `!important`.
      * Turned off, neither theme is privileged: every span carries

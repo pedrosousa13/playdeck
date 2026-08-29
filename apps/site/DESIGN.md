@@ -326,6 +326,12 @@ whose words are not written in this app: each renders one package's whole
 README from `packages/`, word for word. What follows about them is design
 decision rather than incident.
 
+**The rail** is the narrow sticky column beside a reference document, the
+`nav.rail` in `src/pages/reference/[pkg].astro`. It holds two lists — which
+package, and where in this one — and it is the word this document and that file
+both use for it, in preference to "sidebar", which says where a thing sits
+rather than what it does.
+
 **The measure is on the prose and not on the column.** Paragraphs, lists and
 quotes are held to `40rem`; code blocks and tables get the full column. A fence
 is generated from a real file and this site does not get to decide how long its
@@ -335,8 +341,10 @@ lines are, so narrowing it would only add scrolling.
 down. A parallel list of section names would go stale the first time somebody
 renamed a heading in a README with no idea this page existed, which is the whole
 failure the pages exist to avoid. It carries depth 2 and 3: depth 1 is the
-document's own title, and depth 4 — which only `packages/react` reaches — would
-make a rail that restates an outline rather than one a reader jumps with.
+document's own title, and depth 4 would make a rail that restates an outline
+rather than one a reader jumps with. A README that goes deeper is still rendered
+in full, and its fourth level is still styled — a heading a reader scrolls past
+has to look like one whether or not the rail indexes it.
 
 **The version sits at the foot of the rail, not above the title.** A line of
 small type on top of an `h1` is the eyebrow this document names as a tell, and
@@ -344,9 +352,9 @@ that one would have restated the heading underneath it.
 
 **Two classes of link are re-addressed on the way in, and only two.** A README is
 one document read in two places, and a link that is right in the npm tarball can
-be wrong here. A target relative to the package directory — `LICENSE` is the one
-these documents use — sits beside the README on npm and on GitHub and nowhere
-under `/reference/<package>/`, so it is pointed at the file's real home on
+be wrong here. A target relative to the package directory sits beside the README
+on npm and on GitHub and nowhere under `/reference/<package>/`, so it is pointed
+at the file's real home on
 GitHub. A link to another package's README, written as a GitHub blob URL because
 that is the only address that works from inside a tarball, would send a reader
 out to raw Markdown, so it becomes that package's own reference page with its

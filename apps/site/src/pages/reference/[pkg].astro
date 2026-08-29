@@ -42,10 +42,10 @@ const { Content, headings } = await render(current.entry);
 // somebody renamed a heading in a README with no idea this page existed.
 //
 // Depth 1 is the README's own title, which is the page's `h1` and is already at
-// the top of what the link would scroll to. Depth 4 is dropped as well:
-// `packages/react` is the only README that goes that deep, and including it
-// would put four levels in a rail whose job is to let a reader jump to a section
-// rather than to restate the document's outline.
+// the top of what the link would scroll to. Depth 4 is dropped as well: the
+// rail's job is to let a reader jump to a section, and four levels of it restate
+// the document's outline instead. A README that goes deeper still is rendered in
+// full and simply not indexed past depth 3.
 const contents = headings.filter(
   (heading) => heading.depth === 2 || heading.depth === 3
 );
@@ -169,10 +169,12 @@ const contents = headings.filter(
     font-size: var(--text-sm);
   }
 
-  /* Sticky, and bounded by the viewport with its own scroller, because
-   * `packages/core` has more sections than fit on a laptop screen: a rail that
-   * is taller than the window scrolls its own tail out of reach and never
-   * brings it back. */
+  /* Sticky, and bounded by the viewport with its own scroller. A sticky element
+   * taller than the window is the failure this guards: it pins at the top, its
+   * tail hangs past the bottom edge, and page scrolling never brings that tail
+   * back because the element is not moving. Capping the height and giving it a
+   * scroller of its own means every entry stays reachable however many sections
+   * the README it indexes turns out to have. */
   @media (min-width: 60rem) {
     .rail__inner {
       position: sticky;
@@ -296,10 +298,11 @@ const contents = headings.filter(
     margin-block: var(--space-6) var(--space-2);
   }
 
-  /* `packages/react` is the only README that reaches this depth, and `base.css`
-   * stops at `h3`, so without this rule its fourth level arrives at the
-   * browser's own default and reads as body text in bold. It sits at the body
-   * rung and is separated by weight, which is what a fourth level has left. */
+  /* `base.css` stops at `h3`, so without this rule a README's fourth level
+   * arrives at the browser's own default and reads as body text in bold. Styled
+   * even though the rail stops indexing at depth 3: a heading a reader scrolls
+   * past still has to look like one. It sits at the body rung and is separated
+   * by weight, which is what a fourth level has left. */
   .doc :global(h4) {
     margin-block: var(--space-5) var(--space-2);
     font-size: var(--text-md);

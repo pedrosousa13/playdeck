@@ -22,11 +22,22 @@
  * That is why the navigation is derived from the same parse that produced the
  * document rather than from a parallel list somebody has to maintain.
  *
+ * Everything this file says about the content layer -- what `glob()` hands on,
+ * what `renderMarkdown()` is built from, and the `watcher` the loader context
+ * supplies in dev and not in a build -- was read off `astro` 7.2.9, which is the
+ * exact version `apps/site/package.json` pins rather than a range. These are
+ * claims about one release's loader API and not guarantees it makes across
+ * versions, so the upgrade that moves that pin is the moment to re-read them.
+ *
  * Every `packages/*` README is loaded, publishable or not. Which of them get a
  * page is a separate question with a definition of its own -- a manifest that
  * does not set `private`, per `scripts/workspace-packages.mjs` -- and
  * `src/pages/reference/[pkg].astro` asks it there rather than encoding an answer
- * in this file's directory scan.
+ * in this file's directory scan. What does turn on the answer is the link
+ * rewriting: it resolves a README's relative targets against that package's own
+ * `repository` field, so it runs only for a package that has a page, and only
+ * that package is required to carry the field. A private package is loaded with
+ * its text untouched, which is all a document nothing renders needs.
  *
  * No schema. A schema validates frontmatter, and these files have none: they are
  * documents for npm first, and requiring frontmatter of them would be this site
@@ -44,19 +55,34 @@ const repoRoot = import.meta.env.PLAYDECK_REPO_ROOT;
 const packagesDir = join(repoRoot, 'packages');
 
 /*
- * The branch a link into the repository resolves against. It is written here
- * because there is nowhere to read it from: a manifest's `repository` field
- * carries a clone URL and a directory and never a ref, and the branch this
- * repository publishes from is `main` -- the same one every `homepage` and every
- * hand-written link in the READMEs already names.
+ * The branch a link into the repository resolves against. It cannot be derived
+ * from a manifest -- a `repository` field carries a clone URL and a directory
+ * and never a ref -- and the branch this repository publishes from is `main`,
+ * the same one every `homepage` and every hand-written link in the READMEs
+ * already names.
+ *
+ * `scripts/verify-packaging.mjs` holds the second copy of this, as the whole
+ * literal `https://github.com/pedrosousa13/playdeck/blob/main/` at its
+ * `repositoryBlobUrl`, and the two have to agree: that gate only checks the
+ * links that already start with its own url, so a branch changed here and not
+ * there would leave the site rewriting into `blob/<new>` while every one of
+ * those targets silently stopped being checked at all. They are not extracted
+ * into one module because they are not one value -- this builds a url per
+ * package out of that package's own `repository` field, that one is a single
+ * literal for this repository -- so a shared export would have to be
+ * decomposed on one side or recomposed on the other to be used.
  */
 const branch = 'main';
 
 /**
  * Where a file inside a package lives on GitHub, derived from that package's own
  * `repository` field rather than written out. Every publishable manifest carries
- * one, npm reads it, and `pnpm test:packages` would notice its absence long
- * before this file did.
+ * one and npm reads it, but nothing in the packaging gates would catch a missing
+ * one on this file's behalf: `scripts/verify-packaging.mjs` never reads the
+ * field, and its link checking begins at a hardcoded blob url, so a package
+ * whose manifest lost its `repository` would simply have no link of that shape
+ * to check. The throw below is therefore the only thing that reports it, which
+ * is why it is a throw and not a fallback.
  *
  * @param {string} dir
  * @returns {string}
@@ -82,9 +108,9 @@ const blobUrl = (dir) => {
  * A README is one document read in two places, and two kinds of link in it are
  * correct in the tarball and wrong here:
  *
- * A target relative to the package directory -- `LICENSE` is the one these
- * documents use -- resolves beside the README on npm and on GitHub, where the
- * file it names really does sit. On this site it would resolve under
+ * A target relative to the package directory resolves beside the README on npm
+ * and on GitHub, where the file it names really does sit. On this site it would
+ * resolve under
  * `/reference/<package>/`, where nothing sits: the site publishes the README and
  * not the package. So it is pointed at the file's real home on GitHub, which is
  * where a reader of the site was always going to have to end up.
@@ -132,12 +158,33 @@ const rewriteTarget = (target, { dir, pages, blob }) => {
  * else touched. A transform of the source and not a second copy of it: a README
  * edit still changes the page, and there is no forked text to fall out of date.
  *
- * Fenced blocks are stepped over rather than scanned. Nothing in them matches
- * today, and that is the point -- those fences are generated from `examples/`
- * and `pnpm docs:check` compares them byte for byte, so an example that happened
- * to contain Markdown link syntax must come out of this function unchanged
- * rather than come out rewritten and put the site and the gate into disagreement
- * about what the example is.
+ * Fenced blocks are stepped over rather than scanned. That is a requirement and
+ * not a tidiness: those fences are generated from `examples/` and `pnpm
+ * docs:check` compares them byte for byte, so an example containing Markdown
+ * link syntax must come out of this function unchanged rather than come out
+ * rewritten and put the site and the gate into disagreement about what the
+ * example is.
+ *
+ * What it handles, stated plainly, because the person who needs this is somebody
+ * adding a link to a README and wondering whether the site will re-address it.
+ * Rewritten: an inline link written `[text](target)` whose target has no spaces
+ * and no parentheses, on a line outside a ``` or `~~~` fence. Deliberately left
+ * alone, every one of them safe to leave because leaving a link as the README
+ * wrote it is this function's own fallback: an image, `![alt](target)`, which
+ * points at a file the site does not publish and for which a rewrite is never
+ * the right answer; a title, `[text](target "title")`; an angle-bracketed
+ * target, `[text](<target>)`; a target containing parentheses; and a
+ * reference-style definition, `[label]: target`. A link in one of those forms
+ * simply ships as written, which on the site means a relative target that
+ * 404s -- so write cross-package links and `LICENSE`-style targets as plain
+ * inline links and they will be re-addressed.
+ *
+ * Two things it reads more widely than Markdown does, both harmless on the
+ * current corpus and neither worth a parser: a code block indented by four
+ * spaces is prose to the fence tracking above, and the tracking is one shared
+ * flag for both fence characters, so an unclosed fence would invert the rest of
+ * a file. `pnpm docs:check` is what would notice either, by failing on a fence
+ * that no longer matches its source.
  *
  * @param {string} markdown
  * @param {{ dir: string; pages: ReadonlySet<string>; blob: string }} context
@@ -155,7 +202,7 @@ const rewriteLinks = (markdown, context) => {
       return fenced
         ? line
         : line.replace(
-            /\]\(([^()\s]+)\)/g,
+            /(?<!!)\]\(([^()\s]+)\)/g,
             (_, target) => `](${rewriteTarget(target, context)})`
           );
     })
@@ -198,6 +245,14 @@ const reference = defineCollection({
           return;
         }
         const source = await readFile(file, 'utf8');
+        // Rewriting is for the packages that get a page, and so is the demand
+        // that a manifest carry a `repository` field: `blobUrl` throws without
+        // one, and a private package has no page for that throw to be protecting
+        // -- failing the whole site build over a document nobody can navigate to
+        // would be the loader deciding publishability after all. For a package
+        // that does have a page the throw stands, because a reference page whose
+        // relative links resolve nowhere is a real misconfiguration.
+        const blob = pages.has(dir) ? blobUrl(dir) : undefined;
         store.set({
           id: dir,
           data: {},
@@ -205,7 +260,9 @@ const reference = defineCollection({
           filePath: relative(root, file),
           digest: generateDigest(source),
           rendered: await renderMarkdown(
-            rewriteLinks(source, { dir, pages, blob: blobUrl(dir) }),
+            blob === undefined
+              ? source
+              : rewriteLinks(source, { dir, pages, blob }),
             { fileURL: pathToFileURL(file) }
           )
         });
