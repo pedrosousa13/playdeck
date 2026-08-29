@@ -1,0 +1,106 @@
+---
+/**
+ * The chroma sweep: blue through green and amber to red, the path a
+ * chromaticity diagram traces round the spectral locus. It is the one gradient
+ * the system has, and this component is the only thing that draws it, so
+ * "exactly one gradient" is a fact about the tree rather than a rule somebody
+ * has to remember.
+ *
+ * Its stops are the role tokens rather than colours of its own, so it re-tunes
+ * with the theme and the states it passes through are literally the state
+ * colours. They are unevenly spaced because the perceptual distance from blue
+ * to green is far larger than from amber to red, and even stops make the warm
+ * end read as a single smear.
+ *
+ * ---- why an SVG and not a CSS background -----------------------------------
+ *
+ * A CSS gradient would be the obvious way to paint this, and it is the one way
+ * this repo forbids. A poster must be a real `<img>`/`<picture>` element — the
+ * player's geometry guarantees and its poster state machine both depend on that
+ * element existing — so a CSS background image is a regression class rather
+ * than a style preference, and two gates say so: the ESLint
+ * `no-restricted-syntax` block over `apps/**` and `packages/**`, and
+ * `e2e/poster.spec.ts`'s "CSS source files do not declare background images",
+ * which scans every stylesheet under those same trees. This site is inside
+ * their scope and belongs there: it will mount real players, so it has to keep
+ * the guard rather than be carved out of it.
+ *
+ * Reaching for the `background` shorthand to slip a gradient past the text scan
+ * would defeat the gate rather than satisfy it. Painting the sweep as geometry
+ * satisfies it honestly: an SVG `<linearGradient>` is not a background at all.
+ *
+ * ---- the two permitted forms -----------------------------------------------
+ *
+ * `hairline`, the separator between sections, and `accent`, a single band in
+ * the hero. Not a wash, not a fill behind text, not a card border. The forms
+ * are a prop rather than something a caller styles, so the whole set of them is
+ * this file and adding a third is a visible edit here.
+ */
+import { nextSweepId } from './sweep-id';
+
+interface Props {
+  form: 'hairline' | 'accent';
+}
+
+const { form } = Astro.props;
+
+// One id per instance. `sweep-id.ts` explains why the counter is not local.
+const gradientId = nextSweepId();
+---
+
+{
+  /* The graphic is decorative in both forms and is hidden from assistive
+   * technology in both. What differs is the box around it: the hairline is a
+   * real separator and keeps the role, so a reader who cannot see the sweep
+   * still hears that the sections are divided; the accent divides nothing and
+   * is hidden outright.
+   *
+   * A `<div role="separator">` rather than an `<hr>` because `hr` is a void
+   * element: it can hold no `<svg>`, so the only way to give it the sweep is a
+   * CSS background — the construct this component exists to avoid. */
+}
+<div
+  class="sweep"
+  data-form={form}
+  role={form === 'hairline' ? 'separator' : undefined}
+  aria-hidden={form === 'hairline' ? undefined : 'true'}
+>
+  <svg
+    class="sweep__paint"
+    viewBox="0 0 1 1"
+    preserveAspectRatio="none"
+    aria-hidden="true"
+  >
+    <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="var(--color-accent)"></stop>
+      <stop offset="42%" stop-color="var(--color-available)"></stop>
+      <stop offset="72%" stop-color="var(--color-unknown)"></stop>
+      <stop offset="100%" stop-color="var(--color-unavailable)"></stop>
+    </linearGradient>
+    <rect width="1" height="1" fill={`url(#${gradientId})`}></rect>
+  </svg>
+</div>
+
+<style>
+  .sweep[data-form='hairline'] {
+    block-size: 2px;
+  }
+
+  .sweep[data-form='accent'] {
+    block-size: 0.375rem;
+    /* The corners belong to the box, not to the paint: an SVG stretched to fill
+     * a rounded box would still square off at its own edges, so the box clips
+     * it. */
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+  }
+
+  /* `preserveAspectRatio="none"` above and these two together are what let a
+   * one-by-one viewBox stretch to whatever the box is: the sweep has no
+   * intrinsic proportion to keep, only a direction. */
+  .sweep__paint {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+  }
+</style>

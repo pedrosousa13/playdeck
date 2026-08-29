@@ -168,16 +168,17 @@ functional text at 11px loses more to that than it gains.
 
 ## The one gradient
 
-`--gradient-chroma` is the only gradient in the system. It sweeps blue through
-green and amber to red — the path a chromaticity diagram traces round the
-spectral locus — and it is built from the role tokens rather than from colours of
-its own, so it re-tunes with the theme and the states it passes through are
+`src/components/Sweep.astro` draws the only gradient in the system. It sweeps
+blue through green and amber to red — the path a chromaticity diagram traces
+round the spectral locus — and its stops are the role tokens rather than colours
+of its own, so it re-tunes with the theme and the states it passes through are
 literally the state colours.
 
-It is allowed in exactly two forms:
+It is allowed in exactly two forms, and they are the component's `form` prop
+rather than something a caller styles:
 
-- a hairline, as the `hr` rule;
-- one accent in the hero.
+- `hairline`, the separator between sections;
+- `accent`, one band in the hero.
 
 It is **not** a background wash, not a fill behind text, not a border on a card,
 and never a second gradient with different stops. Gradients creeping outward
@@ -188,6 +189,37 @@ answer is the flat surface tokens.
 Its stops are unevenly spaced because the perceptual distance from blue to green
 is much larger than from amber to red, and even stops make the warm end read as
 one smear.
+
+### It is an SVG, and it must stay one
+
+There is no gradient token, and the sweep is never a CSS background. It is an
+inline `<svg>` with a `<linearGradient>` whose `stop-color`s are `var(--color-…)`
+references.
+
+The reason is a gate, not a preference. A poster in this library must be a real
+`<img>`/`<picture>` element — the player's geometry guarantees and its poster
+state machine both depend on that element existing — so a CSS background image is
+a regression class. Two halves of one guard enforce that over `apps/**` and
+`packages/**`: an AST-based `no-restricted-syntax` block in `eslint.config.js`
+for JS and TS, and `e2e/poster.spec.ts`'s "CSS source files do not declare
+background images", which scans every stylesheet under those trees. This site is
+inside that scope and belongs there — it mounts real players — so it keeps the
+guard rather than being carved out of it, and CI fails the moment a stylesheet
+here declares one.
+
+Two consequences worth stating outright, because both look like simplifications:
+
+- **The `background` shorthand is not a way out.** It would pass the CSS text
+  scan, which matches one literal string, while doing exactly what the guard
+  forbids. Reaching for it defeats the gate rather than satisfying it.
+- **The separator is a `<div role="separator">`, not an `<hr>`.** `hr` is a void
+  element, so the only way to give it the sweep is a CSS background. The role
+  keeps the separator announced; the `<svg>` inside is `aria-hidden`, as is the
+  hero accent in full, because the sweep is decoration in both forms.
+
+Each rendered sweep gets its own `<linearGradient>` id from a build-wide counter
+in `src/components/sweep-id.ts`. Two elements sharing an id is invalid, and the
+second `url(#…)` would resolve to the first element rather than its own.
 
 ## Themes
 
@@ -242,6 +274,19 @@ the element's own shape and survives forced-colors mode.
 | `src/styles/base.css`              | Element defaults, spoken in tokens           |
 | `src/layouts/Base.astro`           | The document, and the pre-paint theme script |
 | `src/components/ThemeToggle.astro` | The control that stores a theme choice       |
+| `src/components/Sweep.astro`       | The one gradient, and its two forms          |
+| `src/pages/design.astro`           | The specimen sheet, served at `/design`      |
+| `src/pages/index.astro`            | The placeholder at `/`, and its two links    |
+
+The specimen sheet at `/design` renders every token in both themes — the type
+scale, the surface and ink swatches, the capability colours and both forms of the
+sweep — from the tokens themselves rather than from restated values, so a rung or
+a role that changed shows the change. It is the living reference a later ticket
+checks its work against, and the place to add a specimen when a token is added.
+
+It is not part of the site's own navigation, and `/` links to it only so it is
+reachable. The placeholder at `/` is a placeholder: #521 replaces it with the
+real landing page, and `/design` stays where it is.
 
 `data-theme` has two writers and they are not interchangeable: the pre-paint
 script in `Base.astro` applies a stored choice before the browser paints, and

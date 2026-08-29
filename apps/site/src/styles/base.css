@@ -98,16 +98,12 @@ a {
   border-radius: var(--radius-sm);
 }
 
-/* The one gradient, as a hairline. A rule element rather than a border, because
- * a border of a gradient needs `border-image` and paints on all four edges of
- * the box by default. Non-decorative separators keep `--color-line`; this is
- * for the few places the sweep itself is the point. */
-hr {
-  height: 2px;
-  margin: 0;
-  border: 0;
-  background-image: var(--gradient-chroma);
-}
+/* There is no `hr` rule, and the separator between sections is not an `hr`.
+ * The separator carries the chroma sweep, and `hr` is a void element that can
+ * only be given a gradient through a CSS background — which the poster gate
+ * over `apps/**` and `packages/**` forbids for good reason. `Sweep.astro`
+ * paints it as an SVG `<linearGradient>` instead and carries the full
+ * reasoning. */
 
 /*
  * Reduced motion, once, for the whole site. `0.01ms` rather than `0` because

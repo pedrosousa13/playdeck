@@ -18,11 +18,11 @@
  *      (`--color-ink`, `--color-accent`, ...) point at the scale, components
  *      point at the roles, and no component ever names a colour. That is what
  *      makes a theme switch a remapping rather than a rewrite.
- *   2. There is exactly one gradient in the system — `--gradient-chroma`, the
- *      sweep through the primaries — and it is a hairline and a single hero
- *      accent. It is never a background wash. A second gradient is the failure
- *      mode this rule exists to prevent, so if a design seems to want one, the
- *      answer is the flat surface tokens.
+ *   2. There is exactly one gradient in the system — the chroma sweep through
+ *      the primaries, drawn by `components/Sweep.astro` — and it is a hairline
+ *      and a single hero accent. It is never a background wash. A second
+ *      gradient is the failure mode this rule exists to prevent, so if a design
+ *      seems to want one, the answer is the flat surface tokens.
  *   3. Functional text never goes below `--text-fn` (11px). Small monospace is
  *      where this site carries its actual argument, and 10.88px is where it
  *      stops being readable, so the scale simply has no rung underneath.
@@ -188,24 +188,18 @@
   --line-width: 1px;
 
   /* ---- the one gradient ---------------------------------------------------
-   * The chroma sweep: blue through green and amber to red, the path a
-   * chromaticity diagram traces round the spectral locus. It is built from the
-   * role tokens above rather than from its own colours, so it re-tunes with the
-   * theme and so the states it passes through are literally the state colours
-   * rather than a decorative echo of them.
+   * There is no gradient token, and that is the whole design. The chroma sweep
+   * is drawn by `components/Sweep.astro` as an SVG `<linearGradient>` whose
+   * stops read the role tokens above, so it still re-tunes with the theme while
+   * never becoming a CSS background — which the poster gate over `apps/**` and
+   * `packages/**` forbids, for reasons `Sweep.astro` sets out. A token here
+   * would be a `linear-gradient()` value, and a value like that exists to be
+   * assigned to a background.
    *
-   * Used as a hairline, and once in the hero. Not as a fill, not as a wash,
-   * not twice. Its stops are unevenly spaced because the perceptual distance
-   * between blue and green is far larger than between amber and red, and even
-   * stops make the warm end read as a single smear.
+   * That is also what keeps rule 2 above enforceable: one component draws the
+   * sweep, so a second gradient cannot arrive by someone assigning an existing
+   * token somewhere new.
    */
-  --gradient-chroma: linear-gradient(
-    90deg,
-    var(--color-accent) 0%,
-    var(--color-available) 42%,
-    var(--color-unknown) 72%,
-    var(--color-unavailable) 100%
-  );
 
   /* ---- motion -------------------------------------------------------------
    * Short, and only ever applied to `transform` and `opacity`. Those two are
