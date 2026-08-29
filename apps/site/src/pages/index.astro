@@ -107,13 +107,21 @@ const providers = [
 ] as const;
 ---
 
-<Base title="Playdeck — a headless React video player">
+{
+  /* `documentation={false}` on both, and it is one decision seen twice: this
+   * page is an argument, not a document, so it does not belong in the search
+   * index and does not carry the control that queries it. Everything worth
+   * finding here is said again, at length, on a reference page — a reader who
+   * searched for "hls" and landed on a landing-page heading would have been
+   * sent to the sales copy instead of the API. */
+}
+<Base title="Playdeck — a headless React video player" documentation={false}>
   {
     /* No crumbs, which is what tells the header it is on `/`: the wordmark
      * stops being a link on the page it points at, so the header renders no
      * link of its own here. */
   }
-  <SiteHeader />
+  <SiteHeader documentation={false} />
 
   <main class="page">
     <section class="hero">

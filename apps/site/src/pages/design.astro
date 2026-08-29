@@ -63,13 +63,19 @@ const inks = [
 ] as const;
 ---
 
-<Base title="Playdeck visual system — design reference">
+{
+  /* `documentation={false}`: this sheet documents the site rather than the
+   * library, and it is a wall of token names. Indexed, it would answer a query
+   * for "surface" or "accent" ahead of the package that uses the word, which is
+   * the only place a reader of these documents means it. */
+}
+<Base title="Playdeck visual system — design reference" documentation={false}>
   {
     /* The sheet is not part of the site's navigation — `/` links to it only so
      * it is reachable — but it is served from the site's origin and a reader who
      * lands on it needs the same way back that every other page gives them. */
   }
-  <SiteHeader crumbs={[{ label: 'Visual system' }]} />
+  <SiteHeader crumbs={[{ label: 'Visual system' }]} documentation={false} />
 
   <main class="page">
     <section class="hero">

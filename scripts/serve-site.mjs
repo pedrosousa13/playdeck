@@ -1,75 +1,159 @@
-// Serves `apps/site/dist` in the foreground, for the Playwright `webServer`
-// entry in `playwright.config.ts` that the landing page's specs need.
-//
-// `astro preview` is what a person would reach for and it cannot be used here:
-// Astro 7's CLI starts the preview server as a background daemon and exits, and
-// Playwright treats a server command that exits before its URL answers as a
-// failure. `astro dev` refuses outright to start a second server for a project
-// that already has one. Neither is a foreground process holding a port for as
-// long as a test run, which is the whole of what a `webServer` entry needs.
-//
-// `scripts/check-deploy-artifact.mjs` also serves a directory over
-// `node:http`, and this is not that. That script assembles the deploy artifact,
-// serves it on an ephemeral port and runs its own checks against it — it is a
-// check with a server inside it, and it exits when the check is done. This is a
-// server and nothing else.
-//
-// Usage: node scripts/serve-site.mjs <port>
+/*
+ * A static file server for the built site, for the e2e suite to drive.
+ *
+ * The site is `output: 'static'` and the Worker that serves it in production
+ * runs no code of this repository's, so the thing a test has to exercise is a
+ * directory of files served over HTTP and nothing else. `astro dev` would be
+ * the wrong server twice over: it transforms modules on request rather than
+ * serving the artifact, and `apps/site/package.json`'s `build` runs Pagefind
+ * over `dist/` *after* Astro has finished, so the search index only exists in
+ * the built output. A test against the dev server would be testing a site with
+ * no index in it.
+ *
+ * ---- why it mounts more than one directory ---------------------------------
+ *
+ * The site ships from the apex, so `base` is `/`, and every path a page emits
+ * is built from `import.meta.env.BASE_URL`. That habit is only worth anything
+ * if something checks it, and it cannot be checked at the prefix where a
+ * correct answer and a hard-coded one are the same string. So `e2e/
+ * site-search.spec.ts` builds the site a second time under a non-root prefix
+ * and runs the same assertions against it, which needs both builds reachable
+ * at once — the shipped one at `/`, the second at the prefix it was built for.
+ *
+ * Mounts are given longest-prefix-first at match time, so a mount at `/` does
+ * not swallow one at `/playdeck/`.
+ *
+ * Usage:
+ *   node scripts/serve-site.mjs --port 4322 \
+ *     --mount /=apps/site/dist --mount /playdeck/=apps/site/dist-base
+ */
+
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import { extname, join } from 'node:path';
-// `process` and `URL` are imported rather than taken from the global scope.
-// `eslint.config.js` grants Node globals to `**/*.{js,ts}` only, so a `.mjs`
-// file reaching for either fails `no-undef` — and every other script here
-// happens to name them only in prose. Importing them is the smaller fix: it
-// keeps this file self-contained and leaves the shared config, which would
-// newly cover every `.mjs` in the repo, alone.
-import process from 'node:process';
-import { fileURLToPath, URL } from 'node:url';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 
-const root = fileURLToPath(new URL('../apps/site/dist/', import.meta.url));
+// As in scripts/assemble-deploy.mjs: these still have to be reached through
+// globalThis for the lint config to see them declared.
+const console = globalThis.console;
+const process = globalThis.process;
+const URL = globalThis.URL;
 
-const port = Number(process.argv[2]);
-if (!Number.isInteger(port) || port <= 0) {
-  throw new Error(`serve-site: expected a port, got ${process.argv[2]}`);
-}
+/** What the browser is told a file is. Only the types this site emits. */
+const CONTENT_TYPES = new Map(
+  Object.entries({
+    '.css': 'text/css; charset=utf-8',
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.mp4': 'video/mp4',
+    '.svg': 'image/svg+xml',
+    '.wasm': 'application/wasm',
+    '.woff2': 'font/woff2',
+    // Pagefind's own index shards and metadata. It fetches them itself and does
+    // not care what they are called, but a server that returns them as
+    // `application/octet-stream` is the honest description.
+    '.pagefind': 'application/octet-stream',
+    '.pf_meta': 'application/octet-stream',
+    '.pf_fragment': 'application/octet-stream',
+    '.pf_index': 'application/octet-stream'
+  })
+);
 
-/** @type {Record<string, string>} */
-const mimeTypes = {
-  '.css': 'text/css',
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.json': 'application/json',
-  '.mp4': 'video/mp4',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-  '.woff2': 'font/woff2'
+/**
+ * @param {string[]} argv
+ * @returns {{ port: number; mounts: { prefix: string; dir: string }[] }}
+ */
+const parseArgs = (argv) => {
+  let port = 4322;
+  const mounts = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const flag = argv[index];
+    if (flag === '--port') {
+      index += 1;
+      port = Number(argv[index]);
+    } else if (flag === '--mount') {
+      index += 1;
+      const value = argv[index] ?? '';
+      const split = value.indexOf('=');
+      if (split === -1) {
+        throw new Error(`--mount wants <prefix>=<directory>, got '${value}'`);
+      }
+      const prefix = value.slice(0, split);
+      if (!prefix.startsWith('/') || !prefix.endsWith('/')) {
+        throw new Error(
+          `--mount prefix has to start and end with '/', got '${prefix}'`
+        );
+      }
+      mounts.push({ prefix, dir: resolve(value.slice(split + 1)) });
+    } else {
+      throw new Error(`Unrecognised argument '${flag}'`);
+    }
+  }
+  if (mounts.length === 0) {
+    throw new Error('At least one --mount is required');
+  }
+  // Longest first, so a mount at `/` cannot answer for a path another mount
+  // claims.
+  mounts.sort((a, b) => b.prefix.length - a.prefix.length);
+  return { port, mounts };
 };
 
-const server = createServer(async (request, response) => {
-  const { pathname } = new URL(request.url ?? '/', 'http://127.0.0.1');
-  try {
-    const target = join(root, pathname.slice(1));
-    // A trailing-slash route is a directory holding an `index.html`, which is
-    // how Astro's static output addresses every page it builds.
-    const entry = await stat(target).catch(() => null);
-    const file = entry?.isDirectory() ? join(target, 'index.html') : target;
-    const body = await readFile(file);
-    response.writeHead(200, {
-      'content-type': mimeTypes[extname(file)] ?? 'application/octet-stream'
-    });
-    response.end(body);
-  } catch {
-    // A miss stays a miss. Falling back to the site's own index would answer a
-    // request for something that is not there with a page that looks fine.
-    response.writeHead(404);
-    response.end();
+const { port, mounts } = parseArgs(process.argv.slice(2));
+
+/**
+ * The file a request resolves to, or `undefined` for a path no mount claims or
+ * that escapes the directory it was resolved inside.
+ *
+ * @param {string} pathname
+ * @returns {Promise<string | undefined>}
+ */
+const resolveFile = async (pathname) => {
+  for (const { prefix, dir } of mounts) {
+    if (!pathname.startsWith(prefix)) continue;
+    // `normalize` collapses any `..` the request tried to smuggle in; the
+    // containment check below is what makes that a refusal rather than a
+    // traversal. A test server still gets this right — it is served on
+    // localhost with a repository behind it.
+    const candidate = normalize(join(dir, pathname.slice(prefix.length)));
+    if (candidate !== dir && !candidate.startsWith(dir + sep)) continue;
+
+    for (const attempt of [candidate, join(candidate, 'index.html')]) {
+      try {
+        const stats = await stat(attempt);
+        if (stats.isFile()) return attempt;
+      } catch {
+        // Not a file, so try the next shape of the same request.
+      }
+    }
   }
+  return undefined;
+};
+
+const server = createServer((request, response) => {
+  const { pathname } = new URL(
+    request.url ?? '/',
+    `http://${request.headers.host}`
+  );
+  void resolveFile(decodeURIComponent(pathname)).then((file) => {
+    if (file === undefined) {
+      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      response.end(`Not found: ${pathname}\n`);
+      return;
+    }
+    response.writeHead(200, {
+      'content-type':
+        CONTENT_TYPES.get(extname(file)) ?? 'application/octet-stream',
+      // The suite rebuilds the site between runs and a cached document would
+      // hide the change under test.
+      'cache-control': 'no-store'
+    });
+    createReadStream(file).pipe(response);
+  });
 });
 
-// The (port, host, listener) overload, for the reason
-// `scripts/check-deploy-artifact.mjs` gives at its own call: a `resolve` passed
-// straight through takes an argument, and matches (port, backlog, listener).
 server.listen(port, '127.0.0.1', () => {
-  process.stdout.write(`serve-site: http://127.0.0.1:${port}/\n`);
+  for (const { prefix, dir } of mounts) {
+    console.log(`serving ${dir} at http://127.0.0.1:${port}${prefix}`);
+  }
 });

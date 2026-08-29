@@ -41,27 +41,32 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120_000
     },
-    // The site, for the landing page's capability ledger.
-    //
-    // Built here rather than assumed built. The site cannot be served at all
-    // until the packages are: it imports `@playdeck/react` through its
-    // published entry, and the landing page reads the built bundles for the
-    // figures it prints. No e2e job builds anything today, so the server
-    // command has to — and `turbo run build` makes an already-built tree a
-    // cache hit of a few seconds rather than a rebuild.
-    //
-    // Served by `scripts/serve-site.mjs` and not by `astro preview`, which
-    // starts a background daemon and exits; that file carries the rest.
-    //
-    // Port 4322, one past the Astro default, so a `pnpm --filter @playdeck/site
-    // dev` on 4321 is neither reused nor trampled.
+    /*
+     * The built site, for `e2e/site-search.spec.ts` (#525). A second server
+     * rather than a second Playwright project: it serves a different artifact,
+     * not a different engine, and the specs that use it want the same three
+     * engines as everything else.
+     *
+     * It is built rather than served by `astro dev` because the search index is
+     * a build artifact — `apps/site/package.json` runs Pagefind over `dist/`
+     * after Astro has finished — so the dev server would serve a site with no
+     * index in it and the search tests would fail for a reason that is not a
+     * defect.
+     *
+     * Two builds, at two prefixes, from the same source. The site ships from
+     * the apex so `base` is `/`, which is the one prefix at which a path
+     * written as a literal and a path derived from `import.meta.env.BASE_URL`
+     * are the same string. The second build is what makes the difference
+     * observable; `scripts/serve-site.mjs` mounts both at once so one server
+     * answers for both.
+     */
     {
       command:
-        'pnpm exec turbo run build --filter=@playdeck/site... && node scripts/serve-site.mjs 4322',
-      url: 'http://127.0.0.1:4322/',
+        'pnpm exec turbo run build --filter=@playdeck/site... && pnpm --filter @playdeck/site run build:based && node scripts/serve-site.mjs --port 4322 --mount /=apps/site/dist --mount /playdeck/=apps/site/dist-base',
+      url: 'http://127.0.0.1:4322/playdeck/reference/',
       gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
       reuseExistingServer: !process.env.CI,
-      timeout: 120_000
+      timeout: 300_000
     }
   ],
   projects: [

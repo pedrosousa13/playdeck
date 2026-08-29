@@ -67,7 +67,17 @@ const { label, group, contents } = Astro.props;
    * the same question at two scales: which document, and where in it. The
    * headings inside it are the labels a screen reader lists them by. */
 }
-<nav class="rail" aria-label={label}>
+{
+  /* `data-pagefind-ignore`, for the reason the site header carries it: this
+   * rail is repeated on every document page, so indexed it would put the same
+   * navigation into the excerpt of every result and make a document's name
+   * match every other document. It sits here rather than on each caller, so a
+   * new route that renders a rail is excluded by having one rather than by
+   * remembering to say so. The headings themselves are still indexed where
+   * they belong — in the document beside this, which is where a result should
+   * land a reader. */
+}
+<nav class="rail" aria-label={label} data-pagefind-ignore>
   {
     /* A disclosure, closed, which the script below opens for real once there is
      * a column to put it in.

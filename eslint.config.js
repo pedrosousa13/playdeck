@@ -7,6 +7,12 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
+      // The site built a second time under a non-root prefix, by
+      // `apps/site`'s `build:based` for `e2e/site-search.spec.ts`. It is the
+      // same build output as `dist/` above under a name that pattern does not
+      // reach, so without this the gate lints Pagefind's own bundles and the
+      // minified islands (#525).
+      'apps/site/dist-base/**',
       '**/node_modules/**',
       '**/storybook-static/**',
       // Gitignored and generated, and listed for the reason `.scratch/**`

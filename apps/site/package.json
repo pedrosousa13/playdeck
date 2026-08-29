@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
+    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && pagefind --site dist",
+    "build:based": "ASTRO_TELEMETRY_DISABLED=1 astro build --base /playdeck/ --outDir dist-base && pagefind --site dist-base",
     "preview": "astro preview"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "@fontsource/ibm-plex-sans": "5.3.0",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
-    "astro": "7.2.9"
+    "astro": "7.2.9",
+    "pagefind": "^1.5.2"
   }
 }

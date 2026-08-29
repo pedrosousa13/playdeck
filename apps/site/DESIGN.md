@@ -409,9 +409,12 @@ is not a way to tint an edge.
 **What may spend an elevation, by name.** `--elevation-instrument` belongs to
 the capability ledger on `/` and to nothing else — it is the panel that page is
 built around, and a second instrument on one page means neither is the
-instrument. `--elevation-panel` belongs to the bezel around the hero's player —
-`.demo__bezel` in `HeroPlayer.astro`, and not the stage inside it, which is a
-recessed colour and a hairline. Everything
+instrument. `--elevation-panel` belongs to two things: the bezel around the
+hero's player — `.demo__bezel` in `HeroPlayer.astro`, and not the stage inside
+it, which is a recessed colour and a hairline — and the search dialog in
+`DocsSearch.astro`, which is a panel over a page rather than the panel a page is
+built around, and which carries no border because rule 4 forbids an elevated
+surface one. Everything
 else on this site is a surface colour and a hairline, as before. A new elevated
 element is an edit to this list, not a local decision.
 
@@ -450,6 +453,59 @@ press: the rail's links and the header's crumbs both do.
 Colour changes are not transitioned, because colour is not one of the two
 properties this system animates. The one transition on a control is the switch's
 knob, which translates; its colour changes at the same moment and snaps.
+
+## Search
+
+Search is **Pagefind**: an index built from the emitted HTML after `astro build`
+finishes, shipped as files beside the pages, and queried by WebAssembly in the
+reader's browser. There is no service, no key and no query log, and that is the
+decision rather than a side effect. This site's whole argument is that
+`loading="interaction"` contacts no provider before a click, and a page that
+posted every keystroke of its search box to a search vendor would be arguing
+against itself — the same reasoning that self-hosts the fonts.
+
+**The claim is observed, not asserted, in both directions.** At query time,
+`e2e/site-search.spec.ts` records every request the page makes while searching
+and fails if any of them leaves this origin; it also checks that the Pagefind
+bundle was among them, so an empty list is evidence rather than a listener
+attached to the wrong page. At build time, `apps/site`'s build was traced with
+`strace -f -e trace=connect` — Pagefind opened no socket at all, and Astro
+opened one to port 443, which is its anonymous telemetry. Hence
+`ASTRO_TELEMETRY_DISABLED=1` in front of every `astro` invocation in
+`package.json`, after which the traced build makes no outbound connection. That
+figure is a measurement and re-measurable the same way; the environment variable
+is the durable part.
+
+**Which pages are indexed is opt-out, and that is the design.** Pagefind walks
+the built directory and indexes every page whose `<body>` does not carry
+`data-pagefind-ignore`, which `Base.astro` writes for a page passing
+`documentation={false}`. So a documentation page added later is searchable with
+nothing to remember — no glob to widen, no list to append to — which is what a
+list of files could not have given, since the provider pages were being written
+in parallel with this and would have landed unsearchable with nothing failing to
+say so. The two pages that opt out are `/`, which is an argument rather than a
+document, and `/design`, which is this sheet. The header and a reference page's
+rail carry the same attribute for a different reason: they appear on every page,
+so indexed they would put the navigation into every excerpt.
+
+**The keyboard model is the platform's wherever it can be.** `/` opens and
+focuses, arrows move, Enter opens the highlighted result, Escape dismisses —
+and the focus trap, the Escape handling and the return of focus to the button
+that opened it all arrive with `<dialog>` and `showModal()`. The field is
+`type="text"` and not `type="search"` because a search field eats the first
+Escape to clear itself. The results are an ARIA listbox named by
+`aria-activedescendant`, so focus stays in the field while a screen reader
+follows the highlighted row, and the count is announced through a `role="status"`
+line.
+
+**Both URLs it needs are derived from `import.meta.env.BASE_URL`** — where the
+bundle is fetched from, and what a result's recorded path resolves against.
+Pagefind stores a page's path inside the build output, which is the site root
+and not the prefix the site is served under, so `baseUrl` has to be handed to it.
+Both ways of getting this wrong are silent, so the spec runs everything twice:
+against the shipped build at `/`, and against a second build made with
+`--base /playdeck/` and served at that prefix. A literal and a derived path are
+the same string at the root, which is why a root-only test would prove nothing.
 
 ## Browser surfaces
 
@@ -493,6 +549,7 @@ system not owned by one component, and a new one has to earn that:
 | `src/layouts/Base.astro`               | The document, and the pre-paint theme script    |
 | `src/components/SiteHeader.astro`      | The shell above every page                      |
 | `src/components/ThemeToggle.astro`     | The control that stores a theme choice          |
+| `src/components/DocsSearch.astro`      | Search over the documentation, and its dialog   |
 | `src/components/Sweep.astro`           | The one gradient, and its two forms             |
 | `src/components/DocRail.astro`         | The rail beside a document, both sets of them   |
 | `src/components/HeroPlayer.astro`      | The hero's two panels, and the player theme     |
@@ -509,13 +566,24 @@ system not owned by one component, and a new one has to earn that:
 | `src/provider-pages.mjs`               | Which providers get a page, and which sections  |
 | `src/shiki.ts`                         | The two theme names, for both readers of them   |
 
-**The header** is the same three things on every page: the wordmark returning
-home, the path from the root to where the reader currently is, and the theme
-switch. Three jobs and no fourth — this is a documentation shell, not a
-marketing bar, so there is no call to action and no product navigation. It is
-not sticky: a reference page is a whole README, and the one element a reader
-navigates a long document with is the rail, which is sticky already. One per
-page.
+**The header** carries the wordmark returning home, the path from the root to
+where the reader currently is, search, and the theme switch. This is a
+documentation shell and not a marketing bar, so there is still no call to action
+and no product navigation. It is not sticky: a reference page is a whole README,
+and the one element a reader navigates a long document with is the rail, which is
+sticky already. One per page.
+
+**It used to read "three jobs and no fourth", search named among the things it
+would not carry.** That rule was aimed at everything a reader did not come for,
+and search is the one thing in that strip a reader of a long document does come
+for — see _Search_ below. What the rule still forbids is unchanged: a header
+here gains nothing that sells, and nothing that duplicates a page's own
+navigation.
+
+Search is on documentation pages only. `/` and `/design` pass
+`documentation={false}` to both `SiteHeader.astro` and `Base.astro`, which is
+the same fact said to the two halves that need it — the control, and the search
+index.
 
 **The wordmark is the trail's first item, not a thing beside it.** It sits
 inside `<nav aria-label="Breadcrumb">` as the root of the path, and the
@@ -738,11 +806,11 @@ the module that would otherwise hold it.
 
 ## The hero player, and the site's one island
 
-The hero mounts a real player. It is the only interactive thing on the site, the
-only place any JavaScript of this site's hydrates, and the only route that ships
-a renderer at all — every other page is still HTML, CSS and the two inline theme
-scripts. A prose section that shipped a framework would be the defect; a landing
-page for a video-player library that showed no player would be a different one.
+The hero mounts a real player. It is the only place any JavaScript of this site's
+hydrates and the only route that ships a renderer at all — every other page is
+HTML, CSS, the inline theme and rail scripts, and the search module. A prose
+section that shipped a framework would be the defect; a landing page for a
+video-player library that showed no player would be a different one.
 
 **The clip is `public/tracer.mp4`, this app's own copy.** An Astro build serves
 only its own `public/`, so the file is copied in rather than reached for across
