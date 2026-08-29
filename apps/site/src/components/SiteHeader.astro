@@ -10,19 +10,31 @@
  * search — a docs reader arrived to read one document, and everything in the
  * strip above it is a tax on that.
  *
- * Deliberately not sticky. These pages are long — `@playdeck/core` renders to
- * around eighteen thousand pixels — and a bar that followed the reader down
- * would be defensible, but it would also have to fight the rail's own sticky
- * offset for the top of the viewport, and the rail is the thing a reader
- * actually navigates a long document with. One sticky element per page.
+ * Deliberately not sticky. A reference page is a whole README, long enough that
+ * a bar following the reader down would be defensible — but it would also have
+ * to fight the rail's own sticky offset for the top of the viewport, and the
+ * rail is the thing a reader actually navigates a long document with. One
+ * sticky element per page.
  *
  * ---- the wordmark and the crumb --------------------------------------------
  *
  * `crumbs` is the path from the site root to this page, not including the root
  * itself, and its last entry is always the page the reader is on. An entry with
- * an `href` is a link; the last one has none, and carries `aria-current="page"`.
+ * an `href` is a link; the last one has none, which is what marks it as the
+ * page rather than a destination.
  *
- * On `/` the list is empty and the wordmark is not rendered at all. There is
+ * The wordmark is the root of that path, so it is the trail's first item and
+ * sits inside the breadcrumb landmark rather than beside it. A trail whose
+ * first named ancestor is `Reference` claims the site has no root.
+ *
+ * `aria-current="page"` is deliberately absent here. The rail on a reference
+ * page marks the current package with it, on a link among sibling links, which
+ * is where the attribute does work; a second one on a non-interactive `span` in
+ * the header would put two current-page markers in one document and leave a
+ * reader to work out which is meant. The leaf is identified structurally
+ * instead — last in the trail and not a link — and styled from `:last-child`.
+ *
+ * On `/` the list is empty and the trail is not rendered at all. There is
  * nowhere for it to return to, the page's own `h1` is already the wordmark at
  * the title rung — `scripts/check-deploy-artifact.mjs` identifies the site's
  * root document by a heading named exactly `Playdeck`, so that `h1` cannot move
@@ -57,25 +69,20 @@ const atHome = crumbs.length === 0;
   <div class="bar__place">
     {
       !atHome && (
-        <>
-          <a class="bar__mark" href={homeUrl}>
-            Playdeck
-          </a>
-
-          <nav class="bar__crumbs" aria-label="Breadcrumb">
-            <ol class="bar__trail">
-              {crumbs.map(({ label, href }) => (
-                <li class="bar__crumb">
-                  {href === undefined ? (
-                    <span aria-current="page">{label}</span>
-                  ) : (
-                    <a href={href}>{label}</a>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </nav>
-        </>
+        <nav class="bar__crumbs" aria-label="Breadcrumb">
+          <ol class="bar__trail">
+            <li class="bar__crumb">
+              <a class="bar__mark" href={homeUrl}>
+                Playdeck
+              </a>
+            </li>
+            {crumbs.map(({ label, href }) => (
+              <li class="bar__crumb">
+                {href === undefined ? <span>{label}</span> : <a href={href}>{label}</a>}
+              </li>
+            ))}
+          </ol>
+        </nav>
       )
     }
   </div>
@@ -93,13 +100,14 @@ const atHome = crumbs.length === 0;
     border-block-end: var(--line-width) solid var(--color-line);
   }
 
-  /* The wordmark and the trail are one shrinkable group and the switch is not:
-   * at 320px the trail is what gives way, and a switch that had wrapped its
-   * label under its track would be the more obvious break. */
+  /* The trail is the shrinkable group and the switch is not: at 320px the trail
+   * is what gives way, and a switch that had wrapped its label under its track
+   * would be the more obvious break. The element is kept even on `/`, where the
+   * trail is not rendered, because it is what holds the switch at the far end
+   * of a `space-between` row. */
   .bar__place {
     display: flex;
     min-inline-size: 0;
-    gap: var(--space-3);
     align-items: baseline;
   }
 
@@ -108,17 +116,26 @@ const atHome = crumbs.length === 0;
    * `Playdeck`, so a second element answering to that role and name on every
    * page of the site would make the identification ambiguous. It is set in the
    * body rung rather than larger: the loudest thing on a documentation page is
-   * the document's own title. */
-  .bar__mark {
-    flex: none;
+   * the document's own title. That rung has to be asked for, because the trail
+   * it now sits inside is set one rung down.
+   *
+   * Every declaration here is a link's, so the selector carries the element as
+   * well as the class: `.bar__crumb a` below would otherwise outrank a bare
+   * `.bar__mark` and paint the root of the trail in the ancestors' ink. */
+  a.bar__mark {
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
     color: var(--color-ink);
     text-decoration: none;
-    letter-spacing: -0.015em;
+    letter-spacing: var(--tracking-tight);
   }
 
   a.bar__mark:hover {
     color: var(--color-accent);
+  }
+
+  a.bar__mark:active {
+    color: var(--color-ink-subtle);
   }
 
   /* The trail truncates rather than wraps or pushes. A package name is one
@@ -155,17 +172,27 @@ const atHome = crumbs.length === 0;
     white-space: nowrap;
   }
 
+  /* The leaf, which is the page the reader is on: last in the trail, and the
+   * only entry rendered without an `href`. Weight and ink rather than colour
+   * alone, and no `aria-current` — see the note at the top of this file. */
   .bar__crumb:last-child {
     flex: 0 1 auto;
+    font-weight: var(--weight-semibold);
+    color: var(--color-ink);
   }
 
-  /* The separator is generated rather than written, so the trail carries no
-   * character a screen reader would read out between two names. On every crumb
-   * and not only between them: the wordmark is the root of the same path, and
-   * without one `Playdeck Reference` reads as a single phrase. */
-  .bar__crumb::before {
+  /* The separator is generated rather than typed into the markup, so the crumb
+   * labels stay the names themselves and a later trail cannot arrive with the
+   * slashes baked into its strings. It is NOT hidden from assistive
+   * technology: VoiceOver and NVDA both announce generated content, so the
+   * trail is heard as the path it draws — root, separator, ancestor, separator,
+   * leaf — which is what a breadcrumb is meant to say. Between crumbs only; the
+   * root of the path is the first of them and has nothing to be separated
+   * from. */
+  .bar__crumb + .bar__crumb::before {
     margin-inline-end: var(--space-2);
     content: '/';
+    font-weight: var(--weight-regular);
     color: var(--color-ink-subtle);
   }
 
@@ -179,10 +206,10 @@ const atHome = crumbs.length === 0;
     text-decoration: underline;
   }
 
-  /* The page the reader is on, marked by weight and ink rather than by colour
-   * alone — and by `aria-current`, which is what says it to everyone else. */
-  .bar__crumb [aria-current='page'] {
-    font-weight: var(--weight-semibold);
-    color: var(--color-ink);
+  /* Pressed, the fourth state every control on this site carries. A step down
+   * the ink scale rather than a lift: this system has no shadow, and the state
+   * has to read the same way from any of the rest colours a link here takes. */
+  .bar__crumb a:active {
+    color: var(--color-ink-subtle);
   }
 </style>

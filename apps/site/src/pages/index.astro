@@ -41,47 +41,41 @@ const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
 
   <main class="page">
     <h1>Playdeck</h1>
-    <ul class="links">
-      <li><a href={designUrl}>Visual system reference</a></li>
-      {
-        /* Before the workbench link, and that is the whole reason it is here
-         * rather than under it: the note below explains why nothing may follow
-         * the workbench, so anything the site gains goes above it. */
-      }
-      <li><a href={referenceUrl}>Package reference</a></li>
-      {
-        /* The workbench comes last, and the order is load-bearing:
-         * `scripts/check-deploy-artifact.mjs` follows every internal link on
-         * this page in document order, and the workbench goes on fetching its
-         * own scripts well after its document has arrived. Following another
-         * link after it abandons those requests, and an abandoned request is
-         * exactly what that check reports — it cannot tell a navigation that
-         * dropped one from a wrong prefix that never had it. */
-      }
-      <li><a href={storybookUrl}>Storybook workbench</a></li>
-    </ul>
+    <p><a href={designUrl}>Visual system reference</a></p>
+    {
+      /* Before the workbench link, and that is the whole reason it is here
+       * rather than under it: the note below explains why nothing may follow
+       * the workbench, so anything the site gains goes above it. */
+    }
+    <p><a href={referenceUrl}>Package reference</a></p>
+    {
+      /* The workbench comes last, and the order is load-bearing:
+       * `scripts/check-deploy-artifact.mjs` follows every internal link on this
+       * page in document order, and the workbench goes on fetching its own
+       * scripts well after its document has arrived. Following another link
+       * after it abandons those requests, and an abandoned request is exactly
+       * what that check reports — it cannot tell a navigation that dropped one
+       * from a wrong prefix that never had it. */
+    }
+    <p><a href={storybookUrl}>Storybook workbench</a></p>
   </main>
 </Base>
 
 <style>
-  /* Still a placeholder — #521 replaces what this page says — but it is served
-   * at the apex and it was rendering flush to the viewport's top-left corner
-   * with no shell, which is a page that looks unfinished rather than one that
-   * is deliberately spare. The layout is `/design`'s and `/reference/`'s, so
-   * the three pages read as one site. */
+  /* The shell, and only the shell. This page was rendering flush to the
+   * viewport's top-left corner with nothing around it, which is a page that
+   * looks unfinished rather than one that is deliberately spare — and it is the
+   * apex. The layout is `/design`'s and `/reference/`'s so the pages read as one
+   * site; what the page says is not this file's design to make.
+   *
+   * The width is this page's own and not the measure: it is a heading and three
+   * lines rather than prose, and it holds them narrower than the index's list of
+   * names. */
   .page {
     display: grid;
     gap: var(--space-5);
     max-inline-size: 46rem;
     margin-inline: auto;
     padding: var(--space-7) var(--space-5) var(--space-8);
-  }
-
-  .links {
-    display: grid;
-    gap: var(--space-3);
-    padding: 0;
-    margin: 0;
-    list-style: none;
   }
 </style>

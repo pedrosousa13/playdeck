@@ -76,42 +76,45 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
     }
     <nav class="rail" aria-label="Reference navigation">
       {
-        /* A disclosure, closed, and open again by CSS as soon as there is a
-         * column to put it in.
+        /* A disclosure, closed, which the script below opens for real once
+         * there is a column to put it in.
          *
-         * Stacked above the document on a phone, these two lists ran to about
-         * 1,100px — seven package links, twenty contents entries and the
-         * version — so a reader who followed a link to `/reference/core/` on a
-         * 390px screen scrolled past the whole of the site's navigation before
-         * reaching the first word of the document they asked for. Moving the
-         * rail below the document was the other option and it is worse: the
-         * source order is what a screen reader and a keyboard follow, and it
-         * would have put the navigation somewhere neither of them meets it
-         * until after several hundred lines of prose.
+         * Stacked above the document on a phone, these two lists run to roughly
+         * the height of a phone screen several times over — a link per package,
+         * an entry per heading of the README and the version — so a reader who
+         * followed a link to `/reference/core/` on a narrow screen scrolled past
+         * the whole of the site's navigation before reaching the first word of
+         * the document they asked for. Moving the rail below the document was
+         * the other option and it is worse: the source order is what a screen
+         * reader and a keyboard follow, and it would have put the navigation
+         * somewhere neither of them meets it until after several hundred lines
+         * of prose.
          *
          * `<details>` rather than a button and a script, because it is the
          * element the platform already made for this: the affordance, the
-         * keyboard behaviour, the announced expanded state and the focus ring
-         * all arrive without JavaScript, and the page still works with none.
+         * keyboard behaviour and the focus ring all arrive with no JavaScript,
+         * and with none the page is a working closed disclosure at every width.
          *
-         * At `60rem` and up the summary is taken out of the flow and the
-         * content is forced open. `::details-content` is what makes the second
-         * half possible — the content of a closed `<details>` is hidden by the
-         * user agent and no author rule could reach past it before that pseudo
-         * element existed — so the rule is behind `@supports`. An engine
-         * without it leaves the rail as a closed disclosure at every width:
-         * both lists are still there, still labelled and still keyboard
-         * operable, which is the right thing to degrade to. */
+         * What the script adds is the one thing CSS cannot do: change the
+         * element's own state. The wide layout wants the rail permanently
+         * revealed, and the ways to get there with CSS alone all reveal the
+         * content while leaving the element closed — so a screen reader is told
+         * "collapsed" about a list the reader is looking at, and at that width
+         * the only control that could correct it has been taken out of the tree
+         * as well. `open` is a property, not a presentation, and the accessible
+         * state follows it; so the property is what gets set. */
       }
-      <details class="rail__disclosure">
-        <summary class="rail__summary">Contents</summary>
+      <details class="rail__disclosure" data-rail>
+        <summary class="rail__summary">
+          <span class="rail__marker" aria-hidden="true">▸</span>Contents
+        </summary>
         <div class="rail__inner">
           <section class="rail__group">
             {
               /* The label states the shared prefix once, and the list below it
-               * carries only what differs. `@playdeck/` seven times down a
-               * 16rem column spent the width that tells `provider-vimeo` from
-               * `provider-wistia` on seven identical characters. */
+               * carries only what differs. Repeated down a 16rem column, the
+               * scope spent the width that tells `provider-vimeo` from
+               * `provider-wistia` on characters identical in every row. */
             }
             <h2 class="rail__label">
               <span>Packages</span>
@@ -163,6 +166,47 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
         </div>
       </details>
     </nav>
+
+    {
+      /* `is:inline`, and written here rather than bundled, for the reason
+       * `Base.astro`'s theme script is: a module script is deferred by
+       * definition, so it would run after the document had already been laid
+       * out and the rail would be seen to open. Inline and immediately after
+       * the element, it runs while the parser is still working through the
+       * page.
+       *
+       * It owns two things and they are the same decision seen twice: whether
+       * the element is open, which is what assistive technology is told, and
+       * `data-rail`, which is what the stylesheet keys the column layout off.
+       * Neither is written without the other, so the announced state and the
+       * visible state cannot disagree — at a narrow width a closed disclosure
+       * with its summary, at a wide one an open element whose summary is gone
+       * because there is nothing left for it to toggle.
+       *
+       * `60rem` is the same figure as the media queries in this file's
+       * stylesheet, which is the drift worth naming: the two are a dozen lines
+       * apart on purpose, because a query cannot read a custom property and
+       * there is no way to state the breakpoint once.
+       *
+       * With no JavaScript at all nothing here runs, `data-rail` stays empty,
+       * and the rules below it never match — leaving the closed disclosure the
+       * markup already is, at every width, with its summary visible, keyboard
+       * operable and announcing the state it is actually in. */
+    }
+    <script is:inline>
+      {
+        const rail = document.querySelector('[data-rail]');
+        const columned = window.matchMedia('(min-width: 60rem)');
+
+        const apply = () => {
+          rail.open = columned.matches;
+          rail.dataset.rail = columned.matches ? 'column' : 'disclosure';
+        };
+
+        apply();
+        columned.addEventListener('change', apply);
+      }
+    </script>
 
     {
       /* `Content` is the README, compiled. Everything the reader sees below is
@@ -222,7 +266,7 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
     display: flex;
     gap: var(--space-3);
     align-items: center;
-    min-block-size: 2.75rem;
+    min-block-size: var(--hit-target);
     padding-inline: var(--space-3);
     font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
@@ -234,25 +278,39 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
     list-style: none;
   }
 
-  /* Safari still draws the marker through this pseudo element, which
-   * `list-style: none` above does not reach. */
+  /* Belt and braces, and named as that rather than as a fact about a browser.
+   * `list-style: none` above is what removes the marker in every engine this
+   * has been opened in; WebKit once needed this pseudo element as well, and no
+   * engine has been checked here to establish that it still does. The rule
+   * costs one selector and removes a marker that is already gone, so it stays
+   * until somebody has a reason to say otherwise. */
   .rail__summary::-webkit-details-marker {
     display: none;
   }
 
-  .rail__summary::before {
+  /* An element in the markup rather than generated content, and hidden from
+   * assistive technology rather than left to be read. Generated content is
+   * announced — the breadcrumb separator in `SiteHeader.astro` relies on that
+   * being so — and a marker announced here lands inside the accessible name of
+   * the control itself, which becomes the glyph plus the word. The name is what
+   * a reader hears before deciding whether this is the thing that opens the
+   * navigation, so it is the word alone; the triangle is decoration on it. */
+  .rail__marker {
     font-size: var(--text-xs);
-    content: '▸';
     color: var(--color-ink-subtle);
     transition: transform var(--duration-fast) var(--ease);
   }
 
-  .rail__disclosure[open] > .rail__summary::before {
+  .rail__disclosure[open] > .rail__summary > .rail__marker {
     transform: rotate(90deg);
   }
 
   .rail__summary:hover {
     color: var(--color-accent);
+  }
+
+  .rail__summary:active {
+    color: var(--color-ink-subtle);
   }
 
   .rail__disclosure[open] > .rail__summary {
@@ -266,31 +324,39 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
    * scroller of its own means every entry stays reachable however many sections
    * the README it indexes turns out to have. */
   @media (min-width: 60rem) {
-    /* Wide enough for a column, so the disclosure stops being one. See the
-     * comment on the element for why the second rule needs `@supports` and what
-     * an engine without `::details-content` gets instead. */
+    /* Wide enough for a column, so the disclosure stops being one — but only
+     * once the script has opened it for real. Keyed off the attribute that
+     * script writes rather than off the width alone, because a summary hidden
+     * at a width where nothing had opened the element would leave the rail
+     * unreachable. */
+    .rail__disclosure[data-rail='column'] > .rail__summary {
+      display: none;
+    }
+
+    /* The chain a sticky element needs, and the reason the grid no longer
+     * aligns its items to `start`. `position: sticky` travels inside its own
+     * containing block, so an element exactly as tall as its parent has nowhere
+     * to travel and simply scrolls away — which is what the rail did before
+     * this, never sticking at any scroll offset. Each box between the grid row
+     * and the sticky one is given the row's height instead: the rail by
+     * stretching, the disclosure by asking for it.
+     *
+     * Unconditional, and that is the correction: a reader who opens the rail by
+     * hand in an engine with no `::details-content`, or with no JavaScript in
+     * any engine, gets a sticky element inside a box exactly its own height —
+     * which is the original defect, kept alive for exactly those readers. */
+    .rail,
+    .rail__disclosure {
+      block-size: 100%;
+    }
+
+    /* The third box in that chain, and the only part of it that is a pseudo
+     * element the engine may not have. `::details-content` is the anonymous box
+     * the user agent puts between a `<details>` and its content, so where it
+     * exists the height has to pass through it; where it does not, there is no
+     * box between the two and the two rules above are the whole chain. */
     @supports selector(::details-content) {
-      .rail__summary {
-        display: none;
-      }
-
-      /* The chain a sticky element needs, and the reason the grid no longer
-       * aligns its items to `start`. `position: sticky` travels inside its own
-       * containing block, so an element exactly as tall as its parent has
-       * nowhere to travel and simply scrolls away — which is what the rail did:
-       * measured against the page before this change, the rail's inner box sat
-       * at -3,899px after a 4,000px scroll, so it had never stuck at all. Each
-       * box between the grid row and the sticky one is given the row's height
-       * instead — the rail by stretching, the disclosure and its content box by
-       * asking for it — and all three sit here rather than outside because they
-       * only matter in the engines where the rail is expanded. */
-      .rail,
-      .rail__disclosure {
-        block-size: 100%;
-      }
-
       .rail__disclosure::details-content {
-        content-visibility: visible;
         block-size: 100%;
       }
     }
@@ -359,6 +425,11 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
     text-decoration: underline;
   }
 
+  /* Pressed, restating `base.css`'s rule because the hover above outranks it. */
+  .rail__list a:active {
+    color: var(--color-ink-subtle);
+  }
+
   /* Package names are identifiers and are set in the mono face wherever they
    * appear on this site. Here that also does the work of joining each one to
    * the `@playdeck/` above the column. */
@@ -419,17 +490,16 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
     overflow-wrap: break-word;
   }
 
-  /* 42rem, measured rather than chosen: at the body rung in Plex Sans that
-   * comes out at 67 characters, inside the 65–75 band a line of prose is
-   * comfortable to read across. The 40rem it replaces measured 64, which is
-   * under it — close enough to look right and far enough to be worth the two
-   * rem. Measured with the harness in `.scratch/inspect-535.mjs`, which divides
-   * the rendered paragraph width by the rendered width of a digit. */
+  /* The measure, which is the token's job and not this page's to pick: it was
+   * set to land a line of prose inside the 65–75 character band at the body
+   * rung, and this is prose at the body rung. The value it replaced was under
+   * that band — close enough to look right, and far enough out to be worth
+   * changing. */
   .doc :global(p),
   .doc :global(ul),
   .doc :global(ol),
   .doc :global(blockquote) {
-    max-inline-size: 42rem;
+    max-inline-size: var(--measure);
   }
 
   /* Rendered Markdown carries none of the attributes Astro scopes this
@@ -533,10 +603,9 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
   }
 
   /* The separator's spacing is this page's business; its thickness and its paint
-   * are `Sweep.astro`'s. More above than below: the document that ends over it
-   * runs to eighteen thousand pixels, and `.shell`'s bottom padding is the same
-   * figure as its top, which is the gap the rail wanted rather than the gap a
-   * document's end does. */
+   * are `Sweep.astro`'s. More above than below: a whole README ends over it,
+   * and `.shell`'s bottom padding is the same figure as its top, which is the
+   * gap the rail wanted rather than the gap a document's end does. */
   .foot__rule {
     margin-block: var(--space-7) var(--space-4);
   }

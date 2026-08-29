@@ -45,7 +45,7 @@ h3 {
   line-height: var(--leading-tight);
   /* Plex Sans sets its display sizes slightly loose for a screen. This closes
    * the headings only; body text keeps the face's own metrics. */
-  letter-spacing: -0.015em;
+  letter-spacing: var(--tracking-tight);
   text-wrap: balance;
 }
 
@@ -144,6 +144,15 @@ a {
    * the rule clear of Plex Sans's descenders. */
   text-decoration-thickness: from-font;
   text-underline-offset: 0.15em;
+}
+
+/* The pressed state, for every link the site does not give one of its own. A
+ * step down the ink scale rather than a lift, because depth here is a surface
+ * colour and a hairline and there is no shadow token to reach for. A component
+ * that styles `a:hover` outranks this selector and has to restate the press
+ * itself — the rail, the crumbs and the package index each do. */
+a:active {
+  color: var(--color-ink-subtle);
 }
 
 /*

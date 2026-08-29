@@ -19,11 +19,11 @@ const scope = '@playdeck/';
 const scoped = packages.every((entry) => entry.name.startsWith(scope));
 
 // The version, stated once when there is one version to state. These packages
-// are released together, so the seven rows carried `version 1.0.0` seven times
-// and the repetition was the reason none of them was read. Derived rather than
-// assumed: the day a package is released on its own, `common` is undefined and
-// every row carries its own figure again — which is the only arrangement in
-// which the figure is worth reading.
+// are released together, so every row carried the same figure and the
+// repetition was the reason none of them was read. Derived rather than assumed:
+// the day a package is released on its own, `common` is undefined and every row
+// carries its own figure again — which is the only arrangement in which the
+// figure is worth reading.
 const versions = new Set(packages.map((entry) => entry.version));
 const common = versions.size === 1 ? packages[0].version : undefined;
 ---
@@ -71,11 +71,11 @@ const common = versions.size === 1 ? packages[0].version : undefined;
     </p>
 
     {
-      /* A list and not a grid of cards. Seven cards of identical size are the
-       * shape a container reaches for when nothing has been decided about the
-       * contents, and they cost a reader the one thing an index is for: seven
-       * names close enough together to compare in one glance. Rows separated by
-       * a hairline, name aligned in its own column, no chrome. */
+      /* A list and not a grid of cards. Cards of identical size are the shape a
+       * container reaches for when nothing has been decided about the contents,
+       * and they cost a reader the one thing an index is for: every name close
+       * enough to the next to compare in one glance. Rows separated by a
+       * hairline, name aligned in its own column, no chrome. */
     }
     <ul class="packages">
       {
@@ -119,15 +119,21 @@ const common = versions.size === 1 ? packages[0].version : undefined;
     padding: var(--space-7) var(--space-5) var(--space-8);
   }
 
+  /* Held to the same measure as prose anywhere else on the site. It is set one
+   * rung up, so the same inline size is fewer characters than the token was
+   * measured at — which is the right direction for a lead: it is read once,
+   * before the list, and a lead as wide as the page is what a paragraph at this
+   * rung looks like when nobody has held it. */
   .lead {
     font-size: var(--text-lg);
     color: var(--color-ink-muted);
-    max-inline-size: 40rem;
+    max-inline-size: var(--measure);
   }
 
   /* The two facts that used to be repeated down the column, said once each. At
    * the caption rung, because neither is what a reader came for — they are what
-   * a reader would otherwise have had to infer from seven identical lines. */
+   * a reader would otherwise have had to infer from a column of identical
+   * lines. */
   .summary {
     font-size: var(--text-xs);
     color: var(--color-ink-subtle);
@@ -171,9 +177,10 @@ const common = versions.size === 1 ? packages[0].version : undefined;
   }
 
   /* An identifier, so it is set in the mono face like every other identifier on
-   * this site, and at the body rung rather than the section rung: seven names
-   * at `h2`'s own 24px would out-shout the page's title, and the row's job is to
-   * be compared with the six rows around it rather than to be a heading first. */
+   * this site, and at the body rung rather than the section rung: a column of
+   * names at `h2`'s own rung would out-shout the page's title, and the row's job
+   * is to be compared with the rows around it rather than to be a heading
+   * first. */
   .package__name {
     font-family: var(--font-mono);
     font-size: var(--text-md);
@@ -184,6 +191,9 @@ const common = versions.size === 1 ? packages[0].version : undefined;
     text-decoration: none;
   }
 
+  /* Rest, hover and focus are the site's own; the row adds and removes an
+   * underline, and the pressed state is `base.css`'s, which nothing here
+   * outranks — the rules above name no colour. */
   .package__name a:hover {
     text-decoration: underline;
   }

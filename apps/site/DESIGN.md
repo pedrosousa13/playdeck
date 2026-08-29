@@ -171,6 +171,26 @@ reader who raised their default has said something, and a fixed pixel root
 discards it. The pixel figures in the table are therefore what the rungs come
 out at when that default is the usual 16px, not fixed measurements.
 
+Three non-colour values are tokens because more than one component wants them,
+and each is named for what it does rather than for where it was first needed:
+
+| Token              | Value    | What it is                                         |
+| ------------------ | -------- | -------------------------------------------------- |
+| `--tracking-fn`    | 0.01em   | Opens Plex Mono. Applied wherever the mono is      |
+| `--tracking-tight` | -0.015em | Closes Plex Sans set large: headings, the wordmark |
+| `--measure`        | 42rem    | The inline size prose is held to                   |
+| `--hit-target`     | 2.75rem  | The smallest comfortable pointer target            |
+
+**The measure is a property of a paragraph, not of a page.** `--measure` holds
+prose — the reference documents' paragraphs, lists and quotes, and the lead on
+the package index. It was chosen to put a line at the body rung inside the 65–75
+character band, so a page that sets prose at another rung is choosing a
+different character count and says so where it does it. A page's own maximum
+width is a separate decision and stays a literal in that page: `46rem` at `/`,
+`52rem` on the package index, `74rem` for a reference page's rail-and-document
+shell. One column width is not evidence about another, and a shared token would
+claim it was.
+
 **`--text-fn` is the floor and the scale has no rung beneath it.** The comps put
 reason lines such as `└ browser` at 10.88px, and that is the text carrying the
 product's whole argument. Weights are 400 and 600 only. `--tracking-fn` is
@@ -317,12 +337,17 @@ Focus is one treatment for the whole site: a 2px `--color-accent` outline on
 the element's own shape and survives forced-colors mode.
 
 Every control carries a rest, a hover, a focus and a pressed state, and none of
-them is a lift: the theme switch darkens to `--color-sunken` on hover and takes
-an accent border while pressed, the rail's links change ink and gain an
-underline, the header's crumbs do the same. Colour changes are not transitioned,
-because colour is not one of the two properties this system animates. The one
-transition on a control is the switch's knob, which translates; its colour
-changes at the same moment and snaps.
+them is a lift. The theme switch darkens to `--color-sunken` on hover and takes
+an accent border while pressed. Every link on the site presses to
+`--color-ink-subtle`, which is one rule in `base.css` — a step down the ink
+scale reads the same way from any of the rest colours a link here takes, whether
+that is the accent, the muted ink of a crumb or the full ink of the wordmark. A
+component that styles its own `a:hover` outranks that selector and restates the
+press: the rail's links and the header's crumbs both do.
+
+Colour changes are not transitioned, because colour is not one of the two
+properties this system animates. The one transition on a control is the switch's
+knob, which translates; its colour changes at the same moment and snaps.
 
 ## Browser surfaces
 
@@ -344,8 +369,8 @@ sitting on top of one. They are themed in `base.css` from the roles above:
 - **The caret** is `--color-accent`. Nothing on the site takes text input today;
   this is for caret browsing and for whatever a later page adds.
 
-Two utility classes live beside them in `base.css`, and they are the only
-classes in this system not owned by one component:
+The utility classes live beside them in `base.css`. They are the classes in this
+system not owned by one component, and a new one has to earn that:
 
 - `.u-tabular` sets `font-variant-numeric: tabular-nums`, for figures that sit
   above one another — a version number in a list. Plex Sans's default figures
@@ -377,9 +402,24 @@ classes in this system not owned by one component:
 home, the path from the root to where the reader currently is, and the theme
 switch. Three jobs and no fourth — this is a documentation shell, not a
 marketing bar, so there is no call to action and no product navigation. It is
-not sticky: these pages run to eighteen thousand pixels, and the one element a
-reader navigates a long document with is the rail, which is sticky already. One
-per page.
+not sticky: a reference page is a whole README, and the one element a reader
+navigates a long document with is the rail, which is sticky already. One per
+page.
+
+**The wordmark is the trail's first item, not a thing beside it.** It sits
+inside `<nav aria-label="Breadcrumb">` as the root of the path, and the
+separator is generated between crumbs rather than before every one, so the trail
+opens with a name instead of a stray slash. The separator is not hidden from
+assistive technology and could not usefully be: generated content is announced,
+and a breadcrumb read as root-separator-ancestor-separator-leaf is the trail
+saying what it draws.
+
+**The leaf carries no `aria-current`.** It is identified by being last in the
+trail and by being the one entry rendered without an `href`, and styled from
+`:last-child`. On a reference page the rail already marks the current package
+with `aria-current="page"`, on a link among sibling links, which is where the
+attribute does work; a second marker on a non-interactive `span` in the header
+would leave a reader to work out which of the two was meant.
 
 On `/` the header renders only the switch. There is nowhere for a wordmark to
 return to, the page's own `h1` is already the wordmark at the title rung — and
@@ -400,62 +440,70 @@ package, and where in this one — and it is the word this document and that fil
 both use for it, in preference to "sidebar", which says where a thing sits
 rather than what it does.
 
-**On a phone the rail is a disclosure, closed.** Stacked above the document it
-ran to about 1,100px — seven package links, twenty contents entries and the
-version — so a reader who followed a link to `/reference/core/` at 390px
-scrolled past the whole of the site's navigation before reaching the first word
-of the document they had asked for. Closed, the document's `h1` sits at 169px.
+**On a narrow screen the rail is a disclosure, closed.** Stacked above the
+document it ran to several phone screens — a link per package, an entry per
+heading of the README, and the version — so a reader who followed a link to
+`/reference/core/` scrolled past the whole of the site's navigation before
+reaching the first word of the document they had asked for. Closed, the
+document's own title is the first thing under the header.
 
 It is a `<details>` and not a button with a script, because that is the element
-the platform already made for this: the affordance, the keyboard behaviour, the
-announced expanded state and the focus ring all arrive with no JavaScript, and
-the page still works with none. Moving the rail below the document was the other
-option and it is worse — source order is what a screen reader and the keyboard
-follow, and it would have put the navigation where neither meets it until after
-several hundred lines of prose.
+the platform already made for this: the affordance, the keyboard behaviour and
+the focus ring all arrive with no JavaScript. Moving the rail below the document
+was the other option and it is worse — source order is what a screen reader and
+the keyboard follow, and it would have put the navigation where neither meets it
+until after several hundred lines of prose.
 
-At `60rem` and up the summary leaves the flow and the content is forced open
-with `::details-content`, which is the only thing that makes the second half
-possible: the content of a closed `<details>` is hidden by the user agent, and
-before that pseudo element existed no author rule could reach past it. The rule
-is therefore behind `@supports`, and an engine without it leaves the rail as a
-closed disclosure at every width — both lists still present, still labelled,
-still keyboard operable. That is the right thing to degrade to.
+**At `60rem` and up a script opens the element and the summary leaves the
+flow.** This is the one place on the site where a script is load-bearing for
+layout, and the reason is that CSS cannot change an element's state. Revealing
+the content with `::details-content` while the element stays closed tells
+assistive technology "collapsed" about a list the reader is looking at, and at
+that width the summary that could have corrected it is gone from the tree as
+well. `open` is a property and the accessible state follows it, so the property
+is what the script sets — together with the `data-rail` attribute the column
+rules key off, so the announced state and the visible state are written in one
+place and cannot disagree.
+
+With no JavaScript nothing runs, the attribute is never written, the column
+rules never match, and the rail is the closed disclosure the markup already is
+at every width — both lists present, labelled, keyboard operable, announcing the
+state they are in. That is the right thing to degrade to.
 
 **The rail is sticky, and for a while it only said so.** `position: sticky`
 travels inside its own containing block, and the grid aligned its items to
-`start`, so the rail was exactly as tall as the box inside it and had nowhere to
-travel: measured, its inner box sat at -3,899px after a 4,000px scroll. It now
-stretches to the grid row, and the disclosure and its content box are given that
-height too, because every box between the scrollport and the sticky one has to
-be tall enough for it to move inside.
+`start`, so the rail was exactly as tall as the box inside it, had nowhere to
+travel, and had never stuck at any scroll offset. It now stretches to the grid
+row and the disclosure is given that height too, because every box between the
+scrollport and the sticky one has to be tall enough for it to move inside. Those
+rules are unconditional at that width and not behind the `@supports` guard: a
+reader who opens the rail by hand — in an engine without `::details-content`, or
+with JavaScript off in any engine — would otherwise get the original defect
+back. Only the `::details-content` rule itself sits behind the guard, because
+where that anonymous box exists the height has to pass through it and where it
+does not there is no box between the two.
 
-**The rail states `@playdeck/` once and lists what differs.** Seven copies of
-the scope down a 16rem column spent the width that tells `provider-vimeo` from
-`provider-wistia` on seven identical characters. The prefix sits in the group's
-own label; each link keeps the whole name in its accessible name through
+**The rail states `@playdeck/` once and lists what differs.** Repeated down a
+16rem column, the scope spent the width that tells `provider-vimeo` from
+`provider-wistia` on characters identical in every row. The prefix sits in the
+group's own label; each link keeps the whole name in its accessible name through
 `.u-visually-hidden`, because `core` on its own is not what a reader would say
 out loud.
 
 **The measure is on the prose and not on the column.** Paragraphs, lists and
-quotes are held to `42rem`; code blocks and tables get the full column. A fence
-is generated from a real file and this site does not get to decide how long its
-lines are, so narrowing it would only add scrolling.
+quotes are held to `--measure`; code blocks and tables get the full column. A
+fence is generated from a real file and this site does not get to decide how
+long its lines are, so narrowing it would only add scrolling.
 
-`42rem` is measured rather than chosen: at the body rung in Plex Sans it comes
-out at 67 characters, inside the 65–75 band a line of prose is comfortable to
-read across. The `40rem` it replaced measured 64 — close enough to look right,
-and far enough out to be worth the two rem.
-
-**The package index is a list and not a grid of cards.** Seven cards of
-identical size are the shape a container reaches for when nothing has been
-decided about the contents, and they cost a reader the one thing an index is
-for: seven names close enough together to compare in one glance. Rows separated
-by a hairline, the name aligned in its own column, no chrome. The version is
-stated once above the list rather than seven times inside it, and whether it can
-be is derived — the page collects the set of versions, prints one line when
-there is one member, and falls back to a figure per row when there is more than
-one. A number repeated seven times is a number nobody reads.
+**The package index is a list and not a grid of cards.** Cards of identical size
+are the shape a container reaches for when nothing has been decided about the
+contents, and they cost a reader the one thing an index is for: every name close
+enough to the next to compare in one glance. Rows separated by a hairline, the
+name aligned in its own column, no chrome. The version is stated once above the
+list rather than in every row, and whether it can be is derived — the page
+collects the set of versions, prints one line when there is one member, and
+falls back to a figure per row when there is more than one. A number repeated
+down a column is a number nobody reads.
 
 **The table of contents is derived from the rendered headings**, never written
 down. A parallel list of section names would go stale the first time somebody
