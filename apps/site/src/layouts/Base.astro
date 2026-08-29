@@ -29,9 +29,22 @@ import '../styles/base.css';
 
 interface Props {
   title: string;
+  /**
+   * Whether this page belongs in the documentation search index. True unless a
+   * page says otherwise, which is the important half: Pagefind walks the built
+   * `dist/` after the build and indexes every page that does not opt out, so a
+   * documentation page added later is searchable with nothing to remember. The
+   * cost of that default is that a page which is *not* documentation has to say
+   * so, and there are exactly two — `/` and `/design`.
+   *
+   * `SiteHeader.astro` takes a prop of the same name for the other half of the
+   * same decision, whether the page carries the search control. See its header
+   * for why they are two props rather than one.
+   */
+  documentation?: boolean;
 }
 
-const { title } = Astro.props;
+const { title, documentation = true } = Astro.props;
 ---
 
 <!doctype html>
@@ -58,7 +71,14 @@ const { title } = Astro.props;
       }
     </script>
   </head>
-  <body>
+  {
+    /* `data-pagefind-ignore` on the `<body>` is how Pagefind is told to skip a
+     * page entirely rather than merely to skip a region of it, so this is the
+     * whole of the opt-out. Written as `undefined` rather than `false` because
+     * Pagefind reads the attribute's presence and not its value — `data-
+     * pagefind-ignore="false"` would exclude the page just as firmly. */
+  }
+  <body data-pagefind-ignore={documentation ? undefined : true}>
     <slot />
   </body>
 </html>

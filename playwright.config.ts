@@ -29,14 +29,43 @@ export default defineConfig({
   // while pixelmatch's own antialiasing detection still absorbs edge noise.
   expect: { toHaveScreenshot: { threshold: 0.1 } },
   use: { baseURL: 'http://127.0.0.1:4173' },
-  webServer: {
-    command:
-      'pnpm --filter @playdeck/storybook exec storybook dev --ci --no-open -p 4173 --host 127.0.0.1',
-    url: 'http://127.0.0.1:4173/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story',
-    gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000
-  },
+  webServer: [
+    {
+      command:
+        'pnpm --filter @playdeck/storybook exec storybook dev --ci --no-open -p 4173 --host 127.0.0.1',
+      url: 'http://127.0.0.1:4173/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story',
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000
+    },
+    /*
+     * The built site, for `e2e/site-search.spec.ts` (#525). A second server
+     * rather than a second Playwright project: it serves a different artifact,
+     * not a different engine, and the specs that use it want the same three
+     * engines as everything else.
+     *
+     * It is built rather than served by `astro dev` because the search index is
+     * a build artifact — `apps/site/package.json` runs Pagefind over `dist/`
+     * after Astro has finished — so the dev server would serve a site with no
+     * index in it and the search tests would fail for a reason that is not a
+     * defect.
+     *
+     * Two builds, at two prefixes, from the same source. The site ships from
+     * the apex so `base` is `/`, which is the one prefix at which a path
+     * written as a literal and a path derived from `import.meta.env.BASE_URL`
+     * are the same string. The second build is what makes the difference
+     * observable; `scripts/serve-site.mjs` mounts both at once so one server
+     * answers for both.
+     */
+    {
+      command:
+        'pnpm exec turbo run build --filter=@playdeck/site... && pnpm --filter @playdeck/site run build:based && node scripts/serve-site.mjs --port 4322 --mount /=apps/site/dist --mount /playdeck/=apps/site/dist-base',
+      url: 'http://127.0.0.1:4322/playdeck/reference/',
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
+      reuseExistingServer: !process.env.CI,
+      timeout: 300_000
+    }
+  ],
   projects: [
     // `visual` runs chromium only, so a visual test is +1 to the suite, not
     // +3. The three engine projects ignore it explicitly rather than relying

@@ -74,7 +74,15 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
        * it. The headings inside it are the labels a screen reader lists them
        * by. */
     }
-    <nav class="rail" aria-label="Reference navigation">
+    {
+      /* `data-pagefind-ignore`, for the reason the site header carries it: the
+       * package list and the table of contents are repeated on every reference
+       * page, so indexed they would put the same navigation into the excerpt of
+       * every result and make a package's name match every document. The
+       * headings themselves are still indexed where they belong — in the
+       * document below, which is where a result should land a reader. */
+    }
+    <nav class="rail" aria-label="Reference navigation" data-pagefind-ignore>
       {
         /* A disclosure, closed, which the script below opens for real once
          * there is a column to put it in.

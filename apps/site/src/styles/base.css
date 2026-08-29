@@ -183,9 +183,9 @@ a:active {
    * engine-specific description of the same thing. */
   scrollbar-color: var(--color-line-strong) transparent;
 
-  /* No text input exists on this site today, so this is for caret browsing and
-   * for whatever a later page adds. A caret in the platform's own colour is the
-   * same class of unthemed surface as the two above. */
+  /* The search field is the one place a reader types on this site, and caret
+   * browsing puts a caret on every other page. A caret in the platform's own
+   * colour is the same class of unthemed surface as the two above. */
   caret-color: var(--color-accent);
 }
 
