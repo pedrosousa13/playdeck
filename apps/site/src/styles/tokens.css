@@ -58,8 +58,8 @@
    */
 
   /* Light. `--light-field` is warm off-white rather than #fff so that
-   * `--light-surface`, which is #fff, can raise a panel off the page with no
-   * border and no shadow at all. */
+   * `--light-surface`, which is #fff, can raise a panel off the page on colour
+   * alone — with no border, and without needing the elevation below either. */
   --light-field: #fafaf8;
   --light-surface: #ffffff;
   --light-sunken: #f1f1ed;
@@ -72,6 +72,14 @@
   --light-green: #0b7355;
   --light-amber: #7d5a00;
   --light-red: #c7325e;
+
+  /* The two shadow inks, and the only entries in this scale carrying an alpha
+   * channel — a shadow is the one thing here that has to sit on top of a colour
+   * rather than replace it. In light they are `--light-ink` at 10% and at 17%,
+   * so the shade a panel casts is the page's own ink thinned rather than a
+   * neutral grey nothing else on the site uses. */
+  --light-shadow: #1313161a;
+  --light-shadow-deep: #1313162b;
 
   /* Dark. Not the light values inverted: the near-black field is dark enough
    * that saturated mid-tones disappear into it, so the accents move up the
@@ -88,6 +96,16 @@
   --dark-green: #2fd6a0;
   --dark-amber: #f0c33c;
   --dark-red: #ff5c8a;
+
+  /* Pure black at 45% and at 65%, and not `--dark-ink` thinned. A shadow is a
+   * light calculation rather than a colour choice: on a near-black field the
+   * ink is far LIGHTER than the ground, so thinning it would lay a haze over
+   * the page instead of a shade under a panel. What a near-black field needs is
+   * black, and much more of it — 10% of anything is invisible against `#08080b`.
+   * That difference is the whole reason these are per-theme values rather than
+   * one shadow with a theme-independent alpha. */
+  --dark-shadow: #00000073;
+  --dark-shadow-deep: #000000a6;
 
   /* ---- roles: light -------------------------------------------------------
    * The default assignment. It is the light theme rather than a neutral base
@@ -123,6 +141,8 @@
   --color-available: var(--light-green);
   --color-unknown: var(--light-amber);
   --color-unavailable: var(--light-red);
+  --color-shadow: var(--light-shadow);
+  --color-shadow-deep: var(--light-shadow-deep);
 
   /* ---- type ---------------------------------------------------------------
    * Two families from one superfamily. Plex Sans carries prose; Plex Mono
@@ -147,6 +167,20 @@
   --text-xl: 1.5rem; /* 24px */
   --text-2xl: 2rem; /* 32px */
   --text-3xl: 2.75rem; /* 44px */
+  /* The display rung, and the only one above the `h1` default. It exists for
+   * the landing page's first screen, where the title is a thesis rather than a
+   * document's name, and it is opt-in by class for the same reason
+   * `--text-2xl` is: `base.css` gives `h1` the rung below, and moving that
+   * would resize the title of every reference document at once.
+   *
+   * It is deliberately NOT the next term of the ratio the rungs below it run
+   * at. That would put it at 60px, which is what it was, and 60px on a
+   * 1440-wide canvas is a heading rather than a thesis — measured against the
+   * page it sits on, it lost to the picture beside it. A display size is a
+   * different job from a text size and answers to the width of the page rather
+   * than to the rung under it, so this one is 2x the `h1` default and the
+   * spacing of the scale stops at `--text-3xl`. */
+  --text-4xl: 5.5rem; /* 88px */
 
   --leading-tight: 1.15;
   --leading-snug: 1.35;
@@ -197,18 +231,42 @@
   --space-6: 2rem;
   --space-7: 3rem;
   --space-8: 4rem;
+  /* The step between one section of a page and the next, where nothing is
+   * drawn between them. It continues the scale's own progression at the top
+   * (32 → 48 → 64 → 96) and it is the token that lets a page separate its
+   * sections with space instead of reaching for a second separator. */
+  --space-9: 6rem;
 
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-pill: 999px;
 
-  /* The hairline, and the whole depth system with it. Depth on this site comes
-   * from a surface colour and a one-pixel line, never from a border and a wide
-   * shadow together: that pairing is a recognisable generated-interface tell,
-   * and it was the entire depth system of the comps this design replaces. There
-   * is deliberately no shadow token to reach for. */
+  /* The hairline. It is the boundary of a box whose fill sits close enough to
+   * its ground that the colour alone would not say where the box ends. */
   --line-width: 1px;
+
+  /* ---- elevation ----------------------------------------------------------
+   * Depth has three vocabularies here and they do not stack: a surface colour,
+   * a hairline, or one of the two shadows below. `DESIGN.md` rule 4 carries the
+   * amendment that introduced these and the reasoning for it; what matters at
+   * this file is the shape of the values.
+   *
+   * The defect the audit named was a 1px border UNDER A WIDE BLUR — 24px and
+   * 60px, with no offset worth the name — which reads as a card floating in
+   * fog. So these are the opposite construction: a real vertical offset, a blur
+   * of twice it and no more, and a single shadow rather than two or three
+   * stacked to fake one soft one. An elevated element draws no border, which is
+   * the half of the rule that keeps the tell unreachable from here.
+   *
+   * The geometry is theme-independent and only the ink changes, so the two
+   * themes cannot drift into casting differently-shaped shadows. Naming is by
+   * job and not by size: `panel` is a surface at rest on the field, `instrument`
+   * is the one panel a page is built around. Which elements may spend either is
+   * `DESIGN.md`'s to say, and it says it by name.
+   */
+  --elevation-panel: 0 2px 4px var(--color-shadow);
+  --elevation-instrument: 0 8px 16px var(--color-shadow-deep);
 
   /* ---- the one gradient ---------------------------------------------------
    * There is no gradient token, and that is the whole design. The chroma sweep
@@ -233,6 +291,12 @@
    */
   --duration-fast: 120ms;
   --duration-base: 180ms;
+  /* The step above the two a control uses, for the one thing on the site that
+   * is not a control's own state change: a reveal that happens once, on
+   * arrival, and has to be long enough to be seen as a movement rather than as
+   * a repaint. Named by step like the two above it, so nothing here names the
+   * component that spends it. */
+  --duration-slow: 600ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
 
   color-scheme: light;
@@ -268,6 +332,8 @@
     --color-available: var(--dark-green);
     --color-unknown: var(--dark-amber);
     --color-unavailable: var(--dark-red);
+    --color-shadow: var(--dark-shadow);
+    --color-shadow-deep: var(--dark-shadow-deep);
 
     color-scheme: dark;
   }
@@ -286,6 +352,8 @@
   --color-available: var(--dark-green);
   --color-unknown: var(--dark-amber);
   --color-unavailable: var(--dark-red);
+  --color-shadow: var(--dark-shadow);
+  --color-shadow-deep: var(--dark-shadow-deep);
 
   color-scheme: dark;
 }

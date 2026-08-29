@@ -26,7 +26,16 @@
   // into — is left out for the same reason it is gitignored: it is build output,
   // it does not exist on a clean checkout, and a project reference that only
   // typechecks after a build has run is a broken reference.
-  "include": ["astro.config.ts", "src/**/*.ts"],
+  //
+  // `.tsx` is here for the site's one React island. It is real TypeScript that
+  // `tsc` can parse, so it belongs in this pass rather than being left to the
+  // Astro tooling that has to handle the templates.
+  "include": ["astro.config.ts", "src/**/*.ts", "src/**/*.tsx"],
+  // The island imports `@playdeck/react`, which resolves to declarations that
+  // package emits rather than to its source, so this project cannot be checked
+  // until that one has been built. Declaring the reference is what makes
+  // `tsc -b` build it first instead of failing on a missing file.
+  "references": [{ "path": "../../packages/react" }],
   // The one file that cannot be covered by the line above, and it is the
   // exclusion above that puts it here rather than anything about the file. It
   // imports `astro:content`, a virtual module whose declarations exist only in

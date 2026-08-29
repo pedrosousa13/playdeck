@@ -272,6 +272,21 @@ if (shouldBuild) {
   // explicitly removed rather than left to whatever the shell running this
   // happens to export, so a stray value cannot make the harness build something
   // the deploy never would.
+  //
+  // The packages come first, and they are a prerequisite rather than a surface:
+  // the site's landing page renders the gzipped size of every bundle
+  // `pnpm test:budgets` gates, measured at build time from the module that gate
+  // measures with, and that module reads build output. Building them here is
+  // what makes `pnpm test:deploy` prove the tree under test rather than
+  // whichever `dist/` happened to be lying around. `deploy-site.yml` runs the
+  // same filter for the same reason, and `pnpm run` resolves it
+  // topologically, so a package is built after the packages it depends on.
+  console.log('--- Building the packages the site measures ---');
+  execFileSync('pnpm', ['--filter', './packages/*', 'build'], {
+    cwd: repoRoot,
+    stdio: 'inherit'
+  });
+
   /** @type {[string, string | undefined][]} */
   const builds = [
     ['@playdeck/site', undefined],

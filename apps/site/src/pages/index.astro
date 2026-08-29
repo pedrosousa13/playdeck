@@ -1,81 +1,1078 @@
 ---
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Code } from 'astro:components';
 import Base from '../layouts/Base.astro';
 import SiteHeader from '../components/SiteHeader.astro';
+import Sweep from '../components/Sweep.astro';
+import HeroPlayer from '../components/HeroPlayer.astro';
+import { shikiConfig } from '../shiki';
+import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
 
-// The link is not decoration. It is the one link the site needs anyway — the
-// workbench, which `scripts/assemble-deploy.mjs` places under `storybook/` beside
-// this page — and it is also what `scripts/check-deploy-artifact.mjs` follows
-// from here in a browser, which is how the two surfaces are proven to be
-// reachable from each other rather than merely present in the same directory.
-//
-// Written through `import.meta.env.BASE_URL`, which is what Astro fills the
-// configured `base` into, rather than as a literal. That prefix is the root
-// today and the literal would be identical, which is precisely why the habit is
-// worth keeping here: the day the site moves under a prefix, a hand-written
-// `/storybook/` is the bug a base path exists to prevent (#435) and nothing
-// would flag it.
+// Every link on this page goes through `import.meta.env.BASE_URL`, which is
+// what Astro fills the configured `base` into, rather than being written as a
+// literal. That prefix is the root today and the literals would be identical,
+// which is precisely why the habit is worth keeping: the day the site moves
+// under a prefix, a hand-written `/reference/` is the bug a base path exists to
+// prevent (#435) and nothing would flag it.
+const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
+const designUrl = `${import.meta.env.BASE_URL}design/`;
+// The workbench, which `scripts/assemble-deploy.mjs` places under `storybook/`
+// beside this page. It is also what `scripts/check-deploy-artifact.mjs` follows
+// from here in a browser, which is how the two surfaces are proven reachable
+// from each other rather than merely present in the same directory — and it has
+// to be the LAST internal link in this document. See the note above it below.
 const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
 
-// The specimen sheet, addressed the same way and for the same reason. It is a
-// design reference rather than a destination for a reader of the site, which is
-// why it is one line at the bottom of a placeholder and not navigation.
-const designUrl = `${import.meta.env.BASE_URL}design/`;
+// The composition example, read as bytes from the file the `examples`
+// TypeScript project compiles on every `pnpm typecheck`. Not a string typed
+// into this page: a hand-written example is a second copy of an API, and the
+// only kind of copy that matters here is the kind that can be wrong while
+// everything around it stays green. Editing the prose in the Headless section
+// below cannot make this code wrong, because this page never says what the code
+// is — it prints the file.
+//
+// `scripts/docs-examples.mjs` enforces the same rule for the fences in the
+// package READMEs and compares them byte for byte. It matches fences in
+// Markdown and does not look at `.astro`, so this is that discipline applied
+// where its machinery does not reach, rather than a second user of it.
+//
+// Addressed from `PLAYDECK_REPO_ROOT` — the repository root that
+// `astro.config.ts` resolves from its own URL and substitutes in here — for the
+// reason that file gives: `process.cwd()` is whatever directory the command was
+// typed in, and this file has to find one fixed path from any of them.
+const compositionPath = 'examples/react-composition.tsx';
+const composition = readFileSync(
+  join(import.meta.env.PLAYDECK_REPO_ROOT, compositionPath),
+  'utf8'
+  // The trailing newline is a property of the file rather than of the example,
+  // and Shiki would render it as an empty final line inside the well. Nothing
+  // else about the text is touched.
+).trimEnd();
 
-// The package reference, addressed the same way and for the same reason (#523).
-const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
+// The figures in the Budgets section, measured at build time from the same
+// module `pnpm test:budgets` measures with — `scripts/bundle-budgets.mjs`,
+// which gzips each built artifact and reports its size against its ceiling.
+//
+// Derived rather than typed in, because a page whose argument is that a number
+// is enforced cannot be printing a second copy of that number. A copy would go
+// stale the first time a package grew inside its budget: nothing would fail,
+// and the page would be the only wrong thing in the repository.
+//
+// It throws when a package has not been built, which is what
+// `.github/workflows/deploy-site.yml` builds the packages before this site for.
+const bundles = await measureBundles(import.meta.env.PLAYDECK_REPO_ROOT);
+
+// The three statuses, in the order `tokens.css` and `DESIGN.md` put them —
+// which is sweep order — with what `packages/core/README.md` says each one
+// means. Data rather than three near-identical blocks of markup, so the shape
+// of a card is written once and a status cannot end up styled differently from
+// its neighbours.
+const statuses = [
+  {
+    status: 'available',
+    summary: 'The command can be issued.',
+    detail:
+      'This status carries no reason at all. There is nothing left to qualify.'
+  },
+  {
+    status: 'unknown',
+    summary: 'Undecided, and not the same as pending.',
+    detail:
+      'Nothing promises that it resolves. A provider may leave a capability here rather than pay what answering costs. A control reading it renders nothing, so it is a state to render for and not a state to wait on.'
+  },
+  {
+    status: 'unavailable',
+    summary: 'No, with a reason for it.',
+    detail:
+      'The reason names what refused: the browser, a policy, the provider, the build of a third-party engine, the account plan behind the video, or the media itself.'
+  }
+] as const;
+
+// The ledger's rows. Every one is a status this repository documents, quoted
+// from the package README that documents it, and the caption under the panel
+// says so — this panel reads nothing from a running player, and a hero that
+// implied it did would be the one dishonest thing on a page about honesty.
+const ledger = [
+  {
+    provider: 'vimeo',
+    capability: 'selectQuality',
+    status: 'available',
+    reason: undefined
+  },
+  {
+    provider: 'vimeo',
+    capability: 'customControls',
+    status: 'unknown',
+    reason: 'provider-check'
+  },
+  {
+    provider: 'native',
+    capability: 'selectQuality',
+    status: 'unavailable',
+    reason: 'source'
+  }
+] as const;
+
+// The five, and what each one drives. Taken from the package table in the root
+// README rather than described again here.
+const providers = [
+  {
+    name: 'native',
+    detail: 'HTMLMediaElement: progressive MP4 and WebM, and native HLS.'
+  },
+  {
+    name: 'hls',
+    detail: "hls.js, or the browser's own engine, chosen per environment."
+  },
+  { name: 'youtube', detail: 'The YouTube IFrame Player API.' },
+  { name: 'vimeo', detail: 'The Vimeo player SDK.' },
+  { name: 'wistia', detail: "Wistia's Aurora <wistia-player> element." }
+] as const;
 ---
 
-{
-  /* Rendered through `Base.astro` so the placeholder gets the stylesheet, the
-   * self-hosted faces and the pre-paint theme script that every page of this
-   * site is served with. A page holding its own `<html>` would look right until
-   * the moment the theme it painted was the wrong one. */
-}
-<Base title="Playdeck">
+<Base title="Playdeck — a headless React video player">
   {
     /* No crumbs, which is what tells the header it is on `/`: the wordmark
-     * stops being a link there, so this page gains no internal link above the
-     * three below and the order the check depends on is untouched. */
+     * stops being a link there, so the header adds no internal link above the
+     * three in the Start section and the order the deploy check depends on is
+     * untouched. */
   }
   <SiteHeader />
 
   <main class="page">
-    <h1>Playdeck</h1>
-    <p><a href={designUrl}>Visual system reference</a></p>
-    {
-      /* Before the workbench link, and that is the whole reason it is here
-       * rather than under it: the note below explains why nothing may follow
-       * the workbench, so anything the site gains goes above it. */
-    }
-    <p><a href={referenceUrl}>Package reference</a></p>
-    {
-      /* The workbench comes last, and the order is load-bearing:
-       * `scripts/check-deploy-artifact.mjs` follows every internal link on this
-       * page in document order, and the workbench goes on fetching its own
-       * scripts well after its document has arrived. Following another link
-       * after it abandons those requests, and an abandoned request is exactly
-       * what that check reports — it cannot tell a navigation that dropped one
-       * from a wrong prefix that never had it. */
-    }
-    <p><a href={storybookUrl}>Storybook workbench</a></p>
+    <section class="hero">
+      <div class="hero__thesis">
+        {
+          /* Exactly `Playdeck`, and it cannot become anything else.
+           * `scripts/check-deploy-artifact.mjs` identifies the site's root
+           * document in a browser by a heading with that accessible name, which
+           * is how the deployed artifact is proven to serve this site rather
+           * than something else at the origin root. Adding a word to it is a
+           * rename, and the check has to move with it. */
+        }
+        <h1 class="hero__title">Playdeck</h1>
+        {
+          /* The page's one authored moment, and the only motion on the site
+           * outside a control's own states: the sweep draws itself once, left
+           * to right, in the direction the spectral locus runs.
+           *
+           * Two nested boxes rather than a transform on the sweep itself,
+           * because scaling the band horizontally would compress the gradient
+           * instead of revealing it — the stops would move with the box and
+           * the warm end would arrive first. A translate under `overflow:
+           * hidden` is the composited equivalent `DESIGN.md` names, and it
+           * moves the paint across a fixed window at its final width.
+           *
+           * The clip carries the pill radius so the band's rounded left cap
+           * emerges from a rounded edge rather than a square one. At rest the
+           * inner box is exactly the outer box, so nothing is clipped.
+           *
+           * Under `prefers-reduced-motion` the site-wide rule in `base.css`
+           * collapses the duration and this lands on `translateX(0)`
+           * immediately — the settled state, not a band frozen off-screen.
+           * That only holds because the animation moves between two settled
+           * states, which is the condition that rule is written against. */
+        }
+        <div class="hero__accent">
+          <div class="hero__accent-travel"><Sweep form="accent" /></div>
+        </div>
+        <p class="lead">
+          A headless React video player. You compose the parts you want, and
+          every control is gated on what the player behind it can do. A button
+          whose command cannot be honoured is absent rather than present and
+          disabled.
+        </p>
+        <p class="hero__install"><code>pnpm add @playdeck/react</code></p>
+      </div>
+
+      {
+        /* The two instruments, on one row where there is room for it. They are
+         * built the same way on purpose — a raised body holding a recessed
+         * screen — because they are the two halves of one claim: the thing
+         * running, and what it reports about itself. A page that drew them as
+         * unrelated boxes would be hiding that they are a pair.
+         *
+         * The player. It is the only interactive thing on this site and the
+         * only place any of it hydrates: a prose section that shipped
+         * JavaScript would be the defect this page argues against, and a
+         * landing page for a video-player library that showed no player would
+         * be a different one. `HeroPlayer.astro` carries the reasoning for
+         * both the island and the two theme systems meeting here.
+         *
+         * Wrapped because a component's own root element carries that
+         * component's scope and not this page's, so a rule here could not
+         * place `.demo` in the hero grid. The wrapper is this page's grid
+         * item; everything inside it is `HeroPlayer.astro`'s. */
+      }
+      <div class="hero__stage">
+        <div class="hero__player"><HeroPlayer /></div>
+
+        {
+          /* The capability ledger. A player reports what it can do as a list
+           * of these rows, and this is that list's shape with rows this
+           * repository documents in it. The caption is not decoration: the
+           * panel is a sample and says so, because the one claim this page
+           * must never make is a measurement it did not take. */
+        }
+        <figure class="ledger">
+          <div class="ledger__panel">
+            <h2 class="ledger__title">Capability ledger</h2>
+            <ul class="ledger__rows">
+              {
+                ledger.map(({ provider, capability, status, reason }) => (
+                  <li class="row" data-status={status}>
+                    <span class="row__dot" aria-hidden="true" />
+                    <span class="row__capability">{capability}</span>
+                    <span class="row__status">{status}</span>
+                    <span class="row__reason">
+                      {provider}
+                      {reason === undefined ? '' : ` · ${reason}`}
+                    </span>
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+          <figcaption class="ledger__caption">
+            Sample rows, quoted from the provider packages' own READMEs. Nothing
+            here is read from a player running on this page.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>The three-state rule</h2>
+      <p class="section__lead">
+        A capability is not a boolean. Every entry a player publishes answers
+        {' '}
+        <code>available</code>, <code>unknown</code> or <code>unavailable</code>,
+        and the two negative-looking answers are not degrees of one thing.
+      </p>
+      <ul class="statuses">
+        {
+          statuses.map(({ status, summary, detail }) => (
+            <li class="status" data-status={status}>
+              <h3 class="status__name">
+                <span class="status__dot" aria-hidden="true" />
+                {status}
+              </h3>
+              <p class="status__summary">{summary}</p>
+              <p class="status__detail">{detail}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>Headless</h2>
+      <div class="split">
+        <div class="split__prose">
+          <p>
+            You get parts, not a player. The primitives import no CSS and render
+            nothing you did not compose. They set the geometry they need inline,
+            so a player works with no stylesheet at all. What it lacks is
+            appearance, and the default theme is one optional import.
+          </p>
+          <p class="muted">
+            Nothing below is written by this page. It is the file
+            {' '}
+            <code>{compositionPath}</code>, printed as it is on disk. The
+            {' '}
+            <code>examples</code> TypeScript project compiles it on every
+            {' '}
+            <code>pnpm typecheck</code>, so an example that stopped compiling
+            would fail the build before it could be published here.
+          </p>
+        </div>
+        <div class="split__code">
+          <Code code={composition} lang="tsx" {...shikiConfig} />
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Providers</h2>
+      <p class="section__lead">
+        The source decides which provider loads, and nothing else changes. You
+        install only <code>@playdeck/react</code>. It depends on the rest and
+        loads each one lazily, once source detection says the active source
+        needs it, so a page playing MP4 ships no YouTube, Vimeo, Wistia or
+        hls.js code in its initial graph.
+      </p>
+      <ul class="providers">
+        {
+          providers.map(({ name, detail }) => (
+            <li class="provider">
+              <span class="provider__name">{name}</span>
+              <span class="provider__detail">{detail}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p>
+        Parity is not faked. YouTube will not honour a quality choice, Vimeo
+        needs a paid plan for chromeless playback, and Wistia reports no
+        buffered range at all. Each package README says so, and each difference
+        is measured against the real SDK rather than inferred from its
+        documentation.
+      </p>
+      <p>
+        <code>loading="interaction"</code> is where that honesty reaches the
+        network. Nothing attaches until the viewer activates the play
+        affordance, and no provider request leaves the page before that click.
+        Not the YouTube API script, not the Vimeo iframe, not Wistia's player
+        bundle.
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>Budgets</h2>
+      <p class="section__lead">
+        Gzipped, and measured on the built packages rather than estimated. The
+        first three have ceilings and a build that goes over one of them fails.
+        The adapters have no ceiling, because they load lazily and never compete
+        for the initial graph.
+      </p>
+      {
+        /* The table scrolls inside its own box rather than widening the page.
+         * Package names are single unbroken tokens and the narrowest screen
+         * this is checked at is 320px. */
+      }
+      <div class="budgets">
+        <table class="budgets__table">
+          <thead>
+            <tr>
+              <th scope="col">Package</th>
+              <th scope="col" class="budgets__figure">Gzipped</th>
+              <th scope="col" class="budgets__figure">Ceiling</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              bundles.map(({ name, size, budget }) => (
+                <tr>
+                  <th scope="row" class="budgets__name">
+                    {name}
+                  </th>
+                  <td class="budgets__figure u-tabular">
+                    {size.toFixed(2)} KB
+                  </td>
+                  <td class="budgets__figure u-tabular">
+                    {budget === null ? 'lazy' : `${budget} KB`}
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">
+        This page reads the figures at build time from the module
+        {' '}
+        <code>pnpm test:budgets</code> gates with, so the page and the gate
+        cannot disagree about a figure.
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>Start</h2>
+      <p class="hero__install"><code>pnpm add @playdeck/react</code></p>
+      <dl class="facts">
+        <dt>React</dt>
+        <dd>
+          19. <code>react</code> and <code>react-dom</code> at
+          {' '}
+          <code>&gt;=19 &lt;20</code>, as peer dependencies.
+        </dd>
+        <dt>Modules</dt>
+        <dd>
+          ESM only. The package refuses a <code>require()</code> by name, rather
+          than leaving the resolver to report a missing export.
+        </dd>
+        <dt>Exports</dt>
+        <dd>
+          Named, with no default. <code>import * as Player</code> is the whole
+          API, and every icon tree-shakes out when unused.
+        </dd>
+        <dt>Browsers</dt>
+        <dd>
+          Chrome and Edge 99, Firefox 97, Safari and iOS 15.4.
+          {' '}
+          <code>theme.css</code> sets that floor, because it uses
+          {' '}
+          <code>@layer</code>. The built JavaScript needs nothing above Safari
+          14.1, so a consumer who never imports the stylesheet is bound only by
+          the lower one.
+        </dd>
+      </dl>
+      <ul class="routes">
+        <li>
+          <a href={referenceUrl}>Package reference</a> renders every published
+          package from the README inside its own npm tarball.
+        </li>
+        <li>
+          <a href={designUrl}>Visual system</a> lists every colour, face and size
+          this site is allowed to use.
+        </li>
+        {
+          /* The workbench comes last, and the order is load-bearing:
+           * `scripts/check-deploy-artifact.mjs` follows every internal link on
+           * this page in document order, and the workbench goes on fetching its
+           * own scripts well after its document has arrived. Following another
+           * link after it abandons those requests, and an abandoned request is
+           * exactly what that check reports — it cannot tell a navigation that
+           * dropped one from a wrong prefix that never had it. Every link this
+           * page gains goes above this one. */
+        }
+        <li>
+          <a href={storybookUrl}>Storybook workbench</a> stages every primitive
+          and runs it, against a mock provider and against real playback.
+        </li>
+      </ul>
+    </section>
   </main>
 </Base>
 
+
 <style>
-  /* The shell, and only the shell. This page was rendering flush to the
-   * viewport's top-left corner with nothing around it, which is a page that
-   * looks unfinished rather than one that is deliberately spare — and it is the
-   * apex. The layout is `/design`'s and `/reference/`'s so the pages read as one
-   * site; what the page says is not this file's design to make.
-   *
-   * The width is this page's own and not the measure: it is a heading and three
-   * lines rather than prose, and it holds them narrower than the index's list of
-   * names. */
+  /* Wider than the reference pages' prose column and wider than a document
+   * would want, because this page is a hero, a comparison and two tables
+   * rather than a text. The value is this page's own and stays a literal here:
+   * `--measure` is a property of a paragraph, and one column width is not
+   * evidence about another. Prose inside is still held to the measure, so what
+   * this width buys is the room a three-column comparison and a full-width
+   * table need — not longer lines. */
   .page {
+    max-inline-size: 72rem;
+    margin-inline: auto;
+    padding: var(--space-7) var(--space-5) var(--space-9);
+  }
+
+  /* Sections separate by space and nothing else. There is no rule between
+   * them: `DESIGN.md` allows the sweep as a hairline and once in a hero, and a
+   * page that spent it after every section would be the creeping-gradient
+   * failure that rule exists to prevent. The one on this page is in the hero.
+   *
+   * `--space-9` outside against `--space-4` inside is what does the
+   * separator's work — six times the gap between a heading and its paragraph
+   * is not read as the same boundary. */
+  .section {
+    display: grid;
+    gap: var(--space-4);
+    margin-block-start: var(--space-9);
+  }
+
+  /* The rung between the page title and `h2`'s default, opted into by class
+   * exactly as `DESIGN.md` says a page has to. `h2` keeps whatever `base.css`
+   * gives it everywhere else on the site; this page is the one that needs a
+   * section title to hold its own under a display-rung hero, and moving `h2`
+   * itself would have resized every reference document's headings too.
+   *
+   * Scoped to a direct child so the ledger's own `h2` — a label above a list,
+   * set at the caption rung — is untouched. */
+  .section > h2 {
+    font-size: var(--text-2xl);
+  }
+
+  .section p {
+    max-inline-size: var(--measure);
+  }
+
+  .section__lead {
+    font-size: var(--text-lg);
+    color: var(--color-ink-muted);
+  }
+
+  .muted {
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  /* ---- the hero -----------------------------------------------------------
+   *
+   * The hero is a stack across the page's full width, not a column beside a
+   * picture. The thesis reads first and is the loudest thing on the site; the
+   * two instruments sit under it on one row, because the sentence they
+   * illustrate has already been made by then.
+   *
+   * That is a change of mind. The thesis used to hold a 30rem column on the
+   * left with the player beside it, which made the picture the largest thing
+   * in the first screen and the argument the second largest — a landing page
+   * whose loudest element is its own demo is arguing for the demo.
+   */
+  .hero {
+    display: grid;
+    gap: var(--space-6);
+    align-items: start;
+  }
+
+  @media (min-width: 60rem) {
+    .hero {
+      row-gap: var(--space-7);
+    }
+  }
+
+  .hero__thesis {
     display: grid;
     gap: var(--space-5);
-    max-inline-size: 46rem;
-    margin-inline: auto;
-    padding: var(--space-7) var(--space-5) var(--space-8);
+    align-content: start;
+  }
+
+  /* The display rung, and the whole of the boldness this page spends. It is
+   * the one place on the site that reaches above `h1`'s default, and it steps
+   * down to that default on a phone, where the word would otherwise take three
+   * quarters of the width and leave the lead below the fold. A step between two
+   * existing rungs rather than a `clamp()`, because a clamp is a font size
+   * written into a component and this system has no literal sizes outside
+   * `tokens.css`. */
+  .hero__title {
+    font-size: var(--text-3xl);
+  }
+
+  @media (min-width: 48rem) {
+    .hero__title {
+      font-size: var(--text-4xl);
+    }
+  }
+
+  /* The thesis. `--text-lg` on a phone and `--text-xl` beside a display title,
+   * because 18px under 88px reads as a caption rather than as the sentence the
+   * page is about.
+   *
+   * `--measure` holds it at both rungs, which means the line is deliberately
+   * shorter than the 65–75 characters that token was measured for: at
+   * `--text-xl` the same 42rem is nearer 55. `DESIGN.md` asks a page setting
+   * prose at another rung to say what character count it is choosing, and this
+   * is that. Fewer characters is the right direction for four lines read once
+   * at the top of a page. */
+  .lead {
+    max-inline-size: var(--measure);
+    font-size: var(--text-lg);
+    color: var(--color-ink-muted);
+  }
+
+  @media (min-width: 48rem) {
+    .lead {
+      font-size: var(--text-xl);
+    }
+  }
+
+  /* The window the sweep travels across. Its height is the band's, taken from
+   * the band itself rather than restated: `Sweep.astro` owns the accent form's
+   * thickness, and a number here would be this page inventing a third form of
+   * the one gradient. */
+  .hero__accent {
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+  }
+
+  .hero__accent-travel {
+    animation: sweep-in var(--duration-slow) var(--ease) both;
+  }
+
+  /* `both`, so the band is off-screen before the first frame and stays at
+   * `translateX(0)` after the last. The settled state is the second keyframe,
+   * which is what makes the site-wide reduced-motion rule land on a band fully
+   * drawn rather than on one hidden to the left. */
+  @keyframes sweep-in {
+    from {
+      transform: translateX(-100%);
+    }
+
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  /* The install line reads as a command rather than as a control: this site has
+   * no clipboard button and no call to action, and a line a reader selects and
+   * copies needs neither. */
+  .hero__install code {
+    display: inline-block;
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--color-sunken);
+    border-radius: var(--radius-md);
+  }
+
+  /* The two instruments' row. One under the other until there is room, then
+   * side by side with the player given the larger share — it has a picture to
+   * be, and the ledger is text.
+   *
+   * `start`, so the shorter panel keeps its own height rather than being
+   * stretched to leave a strip of empty screen under its last row. */
+  .hero__stage {
+    display: grid;
+    gap: var(--space-6);
+    align-items: start;
+  }
+
+  @media (min-width: 64rem) {
+    .hero__stage {
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      column-gap: var(--space-6);
+    }
+  }
+
+  /* The player's grid item. `HeroPlayer.astro` owns everything inside it; this
+   * only says where it sits and stops the picture pushing the column wider
+   * than its track. */
+  .hero__player {
+    min-inline-size: 0;
+  }
+
+  /* ---- the capability ledger ----------------------------------------------
+   *
+   * The most on-thesis element on the page: the product's claim is that what a
+   * player reports about itself is true, and this is the shape of that report.
+   * It used to be a full-width strip of white with three rows adrift in it and
+   * the reason column flung against the far edge — a faint table, which is the
+   * one thing the page's signature could not afford to be.
+   *
+   * It is now built the way the player beside it is: a raised body holding a
+   * recessed readout. Same two boxes, same two roles, and the pairing is what
+   * makes them read as a matched pair of instruments rather than as two
+   * unrelated panels that happen to share a row.
+   */
+  .ledger {
+    display: grid;
+    gap: var(--space-2);
+    margin: 0;
+  }
+
+  /* The one element on the site that takes `--elevation-instrument`, which is
+   * the deeper of the two steps and exists for exactly this: the panel a page
+   * is built around. `DESIGN.md` rule 4 names it here by name.
+   *
+   * No border, which is not a stylistic preference but the whole of the
+   * amended rule — a hairline under a blur is the tell that stays banned, and
+   * an elevated box drawing one is how it would come back. Colour alone
+   * already raises this panel (`--color-surface` on `--color-field` is built
+   * for it); the elevation is what makes it the thing the eye lands on. */
+  .ledger__panel {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--color-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--elevation-instrument);
+  }
+
+  @media (min-width: 48rem) {
+    .ledger__panel {
+      padding: var(--space-5);
+    }
+  }
+
+  /* An `h2` set at the caption rung rather than a styled `div`: the panel is a
+   * named region of the page, so it keeps a heading a reader can navigate to,
+   * and what it does not keep is `h2`'s default size — this is the label on an
+   * instrument, not a section title competing with the ones below. In the mono,
+   * because everything else inside this panel is machine output and a label in
+   * the prose face would be the one part of the readout written by the page. */
+  .ledger__title {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-regular);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .ledger__rows,
+  .statuses,
+  .providers,
+  .routes {
+    display: grid;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  /* The readout. A recessed well inside the raised body, which is the same
+   * pair of roles the player's screen and bezel use — `--color-sunken` is what
+   * `tokens.css` calls a recessed well, and three rows sitting in one read as
+   * output rather than as a list somebody typed.
+   *
+   * `--space-4` between rows rather than `--space-3`, because each row is now
+   * two lines and the gap has to be larger than the gap inside a row for the
+   * three to separate at all. */
+  .ledger__rows {
+    gap: var(--space-4);
+    padding: var(--space-4);
+    background-color: var(--color-sunken);
+    border-radius: var(--radius-md);
+  }
+
+  /* Each status selects its colour here, once, from the role tokens. The dot is
+   * redundant with the word beside it on purpose: colour is an accelerator for
+   * a reader who has learnt it and never the only carrier. */
+  [data-status='available'] {
+    --status-color: var(--color-available);
+  }
+
+  [data-status='unknown'] {
+    --status-color: var(--color-unknown);
+  }
+
+  [data-status='unavailable'] {
+    --status-color: var(--color-unavailable);
+  }
+
+  /* Below 24rem a row wraps, because the four parts are of very different
+   * lengths and there is no width to align them in. */
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    align-items: baseline;
+  }
+
+  /* An entry, not a table row: what is being asked sits on the first line with
+   * the answer pushed to the far end of it, and what qualifies the answer sits
+   * under both. Two lines rather than four columns because the reason is the
+   * one part with no fixed length, and giving it a column of its own is what
+   * used to strand it against the far edge of a full-width panel with the
+   * question it belongs to a hand's width away.
+   *
+   * The status words still sit under one another, which is the whole point of
+   * printing three of them: a reader compares `available` with `unknown` by
+   * looking down. They align to the end of the row rather than to a column of
+   * fixed width, so nothing has to guess how long the longest one is. */
+  @media (min-width: 24rem) {
+    .row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      column-gap: var(--space-3);
+      row-gap: var(--space-1);
+    }
+
+    .row__dot {
+      grid-row: 1;
+    }
+
+    .row__reason {
+      grid-column: 2 / -1;
+    }
+  }
+
+  .row__dot,
+  .status__dot {
+    align-self: center;
+    flex: none;
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    background-color: var(--status-color);
+    border-radius: 50%;
+  }
+
+  /* The capability is the subject of its row and takes the body rung in the
+   * mono where the panel has the width for it — a readout whose largest text
+   * is the same size as its captions is what made this panel read as faint. */
+  .row__capability {
+    min-inline-size: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  @media (min-width: 48rem) {
+    .row__capability {
+      font-size: var(--text-md);
+    }
+  }
+
+  .row__status {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    color: var(--status-color);
+  }
+
+  /* The reason line: the smallest text on the site, and the text carrying the
+   * product's whole argument. `--text-fn` is the bottom rung and there is
+   * nothing below it, in rem so a reader who raised their root size gets a
+   * larger floor rather than the same one.
+   *
+   * It sits under the entry it qualifies and starts where that entry starts,
+   * so a reader reads down rather than across: `unknown` and `provider-check`
+   * are one answer in two parts, and the panel that separated them by the
+   * width of the page was making them look like two facts. */
+  .row__reason {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .ledger__caption {
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
+  /* ---- the three states ---------------------------------------------------
+   *
+   * One comparison of three related things, and not three cards. Cards of
+   * identical size are what a container reaches for when nothing has been
+   * decided about the contents — the package index says the same thing about
+   * its own list — and they cost a reader the thing a comparison is for: every
+   * name, every summary and every detail on a line with its counterparts, so
+   * the eye travels across rather than round three boxes.
+   *
+   * Each column opens with a hairline instead of being enclosed by one. A
+   * plain `--color-line`, not the sweep: this is a line where a line is
+   * genuinely wanted, and the sweep is spent in the hero.
+   */
+  .statuses {
+    gap: var(--space-5);
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  }
+
+  .status {
+    display: grid;
+    gap: var(--space-2);
+    align-content: start;
+    padding-block-start: var(--space-4);
+    border-block-start: var(--line-width) solid var(--color-line);
+  }
+
+  /* Three explicit rows and a subgrid per column, which is what actually
+   * aligns the three summaries with each other rather than merely stacking
+   * each one under its own name. Without it the `unknown` column's two-line
+   * summary would push its detail a line below the other two.
+   *
+   * Only above the breakpoint. In one column the items would land on implicit
+   * rows, and a subgrid has no track to inherit there. */
+  @media (min-width: 52rem) {
+    .statuses {
+      grid-template-rows: auto auto auto;
+      column-gap: var(--space-6);
+    }
+
+    .status {
+      grid-row: span 3;
+      grid-template-rows: subgrid;
+      gap: var(--space-3);
+    }
+  }
+
+  .status__name {
+    display: flex;
+    gap: var(--space-2);
+    align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: var(--text-md);
+    color: var(--status-color);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .status__summary {
+    font-weight: var(--weight-semibold);
+  }
+
+  .status__detail {
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  /* ---- headless -----------------------------------------------------------
+   *
+   * Prose beside the example where there is room for both, and above it where
+   * there is not. The code column is `minmax(0, …)` so a long line scrolls
+   * inside the block rather than widening the grid.
+   */
+  .split {
+    display: grid;
+    gap: var(--space-5);
+  }
+
+  @media (min-width: 56rem) {
+    .split {
+      /* The prose column is fixed and the code column takes what is left,
+       * rather than the two sharing in proportion. The example's longest line
+       * is a fact about a file this page does not get to reformat, so the
+       * column that has to hold it is the one given the room; the prose beside
+       * it reads at a shorter line, which is what a column beside a figure is
+       * for. It still scrolls if the file grows a longer line — that is
+       * `base.css`'s behaviour for every fence on the site — but at this width
+       * it does not have to. */
+      grid-template-columns: 22rem minmax(0, 1fr);
+      column-gap: var(--space-7);
+      align-items: start;
+    }
+  }
+
+  .split__prose {
+    display: grid;
+    gap: var(--space-4);
+    align-content: start;
+  }
+
+  .split__code {
+    min-inline-size: 0;
+  }
+
+  /* ---- providers ---------------------------------------------------------- */
+
+  .providers {
+    gap: 0;
+    margin-block: var(--space-2);
+  }
+
+  /* Rows separated by a hairline rather than cards of identical size. The
+   * package index makes the same choice for the same reason: a reader comparing
+   * five names wants them close enough to take in at once. */
+  .provider {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+    align-items: baseline;
+    padding-block: var(--space-3);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  .provider__name {
+    flex: none;
+    min-inline-size: 8rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .provider__detail {
+    color: var(--color-ink-muted);
+  }
+
+  /* ---- budgets ------------------------------------------------------------
+   *
+   * The table scrolls inside its own box rather than widening the page.
+   * Package names are single unbroken tokens and the narrowest screen this is
+   * checked at is 320px. `scrollbar-width` is the same choice `base.css` makes
+   * for a code block: a platform-width bar inside a box this small reads as a
+   * second border.
+   */
+  .budgets {
+    overflow-x: auto;
+    scrollbar-width: thin;
+    margin-block-start: var(--space-2);
+  }
+
+  .budgets__table {
+    inline-size: 100%;
+    border-collapse: collapse;
+    text-align: start;
+  }
+
+  .budgets__table th,
+  .budgets__table td {
+    padding: var(--space-2) var(--space-3);
+    border-block-end: var(--line-width) solid var(--color-line);
+    text-align: start;
+    white-space: nowrap;
+  }
+
+  /* The roomier row, and only where the table is not already in the scroller.
+   * The longest package name is wider than a phone on its own, so this table
+   * scrolls at 390 whatever the padding is — and every pixel spent on a cell
+   * there is a pixel further a reader has to scroll to reach the first
+   * figure. */
+  @media (min-width: 48rem) {
+    .budgets__table th,
+    .budgets__table td {
+      padding: var(--space-3) var(--space-4);
+    }
+  }
+
+  /* The first column takes the slack so the two figure columns sit together at
+   * the end of the row, where a measurement and the ceiling it is under can be
+   * compared without crossing the width of the page.
+   *
+   * Only where the whole table fits. Inside the scroller it would push the two
+   * figure columns past the visible edge, and a table that has to be scrolled
+   * before a single number is visible is worse than one whose columns are
+   * merely spread. */
+  @media (min-width: 48rem) {
+    .budgets__table th:first-child,
+    .budgets__table td:first-child {
+      inline-size: 100%;
+    }
+  }
+
+  .budgets__table thead th {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--color-ink-subtle);
+  }
+
+  .budgets__name {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-regular);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .budgets__figure {
+    text-align: end;
+  }
+
+  /* The measured figure is the section's subject and keeps full ink at the
+   * body rung; the ceiling is what it is being read against and steps back a
+   * rung in both. Two steps down scales this system already has, rather than a
+   * second colour, and the pair is what makes a row say "this, under that"
+   * without a word of prose. */
+  .budgets__table td.budgets__figure {
+    font-size: var(--text-md);
+  }
+
+  .budgets__table td.budgets__figure + td.budgets__figure {
+    font-size: var(--text-sm);
+    color: var(--color-ink-subtle);
+  }
+
+  /* ---- start -------------------------------------------------------------- */
+
+  .facts {
+    display: grid;
+    gap: var(--space-1) var(--space-4);
+    margin: 0;
+    margin-block-start: var(--space-2);
+  }
+
+  @media (min-width: 40rem) {
+    .facts {
+      grid-template-columns: 7rem minmax(0, 1fr);
+      gap: var(--space-3) var(--space-4);
+      align-items: baseline;
+    }
+  }
+
+  .facts dt {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--color-ink-subtle);
+  }
+
+  .facts dd {
+    max-inline-size: var(--measure);
+    margin: 0;
+    margin-block-end: var(--space-3);
+    color: var(--color-ink-muted);
+  }
+
+  @media (min-width: 40rem) {
+    .facts dd {
+      margin-block-end: 0;
+    }
+  }
+
+  .routes {
+    gap: var(--space-3);
+    margin-block-start: var(--space-5);
+  }
+
+  .routes li {
+    max-inline-size: var(--measure);
+    color: var(--color-ink-muted);
   }
 </style>
