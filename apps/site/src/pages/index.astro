@@ -1,4 +1,7 @@
 ---
+import Base from '../layouts/Base.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+
 // The link is not decoration. It is the one link the site needs anyway — the
 // workbench, which `scripts/assemble-deploy.mjs` places under `storybook/` beside
 // this page — and it is also what `scripts/check-deploy-artifact.mjs` follows
@@ -12,17 +15,362 @@
 // `/storybook/` is the bug a base path exists to prevent (#435) and nothing
 // would flag it.
 const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
+
+// The three capability states, with the shape of reason line the site will
+// actually carry. They are here as a specimen of the system rather than as
+// content: the landing page's own copy is somebody else's work, and what this
+// page has to prove is that the state colours survive both themes and that the
+// smallest functional text on the site is still legible.
+const capabilities = [
+  { state: 'available', provider: 'native', reason: '└ browser' },
+  { state: 'unknown', provider: 'hls', reason: '└ probe pending' },
+  { state: 'unavailable', provider: 'wistia', reason: '└ no consent' }
+] as const;
+
+// The scale, read back out of the tokens it defines. Naming each rung's token
+// here rather than restating its size is what keeps the specimen honest: it
+// renders whatever `tokens.css` currently says, so a rung that changed value
+// shows the change rather than a stale caption.
+const typeScale = [
+  { token: '--text-3xl', use: 'Page title' },
+  { token: '--text-2xl', use: 'Section title' },
+  { token: '--text-xl', use: 'Subsection' },
+  { token: '--text-lg', use: 'Lead paragraph' },
+  { token: '--text-md', use: 'Body' },
+  { token: '--text-sm', use: 'Secondary, and functional text at rest' },
+  { token: '--text-xs', use: 'Captions and table labels' },
+  { token: '--text-fn', use: 'The floor: 11px, functional text only' }
+] as const;
+
+const surfaces = [
+  { token: '--color-field', use: 'The page' },
+  { token: '--color-surface', use: 'A raised panel' },
+  { token: '--color-sunken', use: 'A recessed well' },
+  { token: '--color-line', use: 'Hairline' },
+  { token: '--color-line-strong', use: 'Hairline, on a surface' }
+] as const;
+
+const inks = [
+  { token: '--color-ink', use: 'Body and headings' },
+  { token: '--color-ink-muted', use: 'Secondary prose' },
+  { token: '--color-ink-subtle', use: 'Labels and captions' },
+  { token: '--color-accent', use: 'Links and focus' }
+] as const;
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Playdeck</title>
-  </head>
-  <body>
-    <h1>Playdeck</h1>
-    <p><a href={storybookUrl}>Storybook workbench</a></p>
-  </body>
-</html>
+<Base title="Playdeck — visual system">
+  <header class="bar">
+    <ThemeToggle />
+  </header>
+
+  <main class="page">
+    <section class="hero">
+      {
+        /* `scripts/check-deploy-artifact.mjs` locates this page in a browser by
+         * a heading named exactly "Playdeck", which is how the deployed
+         * artifact is proven to serve the site rather than something else at
+         * the origin root. Rewording it is a rename, not a copy edit, and the
+         * check has to move with it. */
+      }
+      <h1>Playdeck</h1>
+      <p class="lead">
+        The visual system, not the page: every colour, face and size this site
+        is allowed to use, laid out so a value that fails in one theme has
+        nowhere to hide.
+      </p>
+      <div class="sweep" aria-hidden="true"></div>
+    </section>
+
+    <section class="section">
+      <h2>Capability</h2>
+      <p class="muted">
+        Three points on the same sweep the gradient runs through, so colour
+        carries the domain meaning. Each one is paired with its own word,
+        because a reader who cannot separate the three hues still has to be able
+        to read the answer.
+      </p>
+      <ul class="states">
+        {
+          capabilities.map(({ state, provider, reason }) => (
+            <li class="state" data-state={state}>
+              <span class="state__dot" aria-hidden="true" />
+              <span class="state__provider">{provider}</span>
+              <span class="state__word">{state}</span>
+              <span class="state__reason">{reason}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <hr />
+
+    <section class="section">
+      <h2>Type</h2>
+      <ul class="specimens">
+        {
+          typeScale.map(({ token, use }) => (
+            <li class="specimen">
+              <p class="specimen__sample" style={`font-size: var(${token})`}>
+                Provider capability, resolved before a click
+              </p>
+              <p class="specimen__meta">
+                <code>{token}</code> <span class="specimen__use">{use}</span>
+              </p>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>Colour</h2>
+      <div class="panels">
+        <div class="panel">
+          <h3>Surfaces</h3>
+          <ul class="swatches">
+            {
+              surfaces.map(({ token, use }) => (
+                <li class="swatch">
+                  <span
+                    class="swatch__chip"
+                    style={`background-color: var(${token})`}
+                    aria-hidden="true"
+                  />
+                  <code>{token}</code>
+                  <span class="swatch__use">{use}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+
+        <div class="panel">
+          <h3>Ink</h3>
+          <ul class="swatches">
+            {
+              inks.map(({ token, use }) => (
+                <li class="swatch">
+                  <span class="swatch__ink" style={`color: var(${token})`}>
+                    Aa
+                  </span>
+                  <code>{token}</code>
+                  <span class="swatch__use">{use}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p class="muted">
+        The components are in the <a href={storybookUrl}>Storybook workbench</a>.
+      </p>
+    </footer>
+  </main>
+</Base>
+
+<style>
+  /* This page is a specimen sheet, so its layout is deliberately plain: a
+   * single measure-constrained column with a rule between sections. What is
+   * being demonstrated is the token layer, and a layout with opinions of its
+   * own would make it harder to see which of the two is responsible for how
+   * something looks. */
+  .bar {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+    justify-content: flex-end;
+    padding: var(--space-3) var(--space-5);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  .page {
+    max-inline-size: 46rem;
+    margin-inline: auto;
+    padding: var(--space-7) var(--space-5) var(--space-8);
+  }
+
+  .hero {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  /* The one gradient's second and last appearance on this page: the hairline
+   * `<hr>` below is the other. Anything further would be the drift the rule
+   * exists to stop. */
+  .sweep {
+    block-size: 0.375rem;
+    background-image: var(--gradient-chroma);
+    border-radius: var(--radius-pill);
+  }
+
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-ink-muted);
+  }
+
+  .section {
+    display: grid;
+    gap: var(--space-4);
+    margin-block-start: var(--space-7);
+  }
+
+  .muted {
+    color: var(--color-ink-muted);
+  }
+
+  hr {
+    margin-block-start: var(--space-7);
+  }
+
+  .states,
+  .specimens,
+  .swatches {
+    display: grid;
+    gap: var(--space-3);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  /* Depth is a surface colour and a hairline, and there is no shadow anywhere
+   * on this site. A one-pixel border under a wide blur is the pairing the
+   * design audit named, so the system has no shadow token to reach for and
+   * this is what a raised thing looks like instead. */
+  .state,
+  .panel {
+    background-color: var(--color-surface);
+    border: var(--line-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+  }
+
+  .state {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    align-items: baseline;
+    padding: var(--space-3) var(--space-4);
+  }
+
+  /* Each state's colour is selected here, once, from the role tokens. The dot
+   * is redundant with the word beside it on purpose: the colour is an
+   * accelerator for a reader who has learnt it, never the only carrier. */
+  .state[data-state='available'] {
+    --state-color: var(--color-available);
+  }
+
+  .state[data-state='unknown'] {
+    --state-color: var(--color-unknown);
+  }
+
+  .state[data-state='unavailable'] {
+    --state-color: var(--color-unavailable);
+  }
+
+  .state__dot {
+    align-self: center;
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    background-color: var(--state-color);
+    border-radius: 50%;
+  }
+
+  .state__provider {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .state__word {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    color: var(--state-color);
+  }
+
+  /* The reason line: the smallest text on the site, and the text carrying its
+   * whole argument. `--text-fn` is 11px and there is nothing below it. */
+  .state__reason {
+    margin-inline-start: auto;
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .specimen {
+    display: grid;
+    gap: var(--space-1);
+    padding-block-end: var(--space-3);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  .specimen__sample {
+    line-height: var(--leading-snug);
+  }
+
+  .specimen__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
+  .specimen__meta code {
+    font-size: var(--text-xs);
+    color: var(--color-ink-muted);
+  }
+
+  .panels {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  }
+
+  .panel {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+
+  .swatch {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    font-size: var(--text-xs);
+  }
+
+  .swatch code {
+    font-size: var(--text-xs);
+  }
+
+  .swatch__chip,
+  .swatch__ink {
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+    border: var(--line-width) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+  }
+
+  .swatch__ink {
+    font-weight: var(--weight-semibold);
+    border-color: transparent;
+  }
+
+  .swatch__use {
+    margin-inline-start: auto;
+    color: var(--color-ink-subtle);
+    text-align: end;
+  }
+
+  .footer {
+    margin-block-start: var(--space-7);
+    font-size: var(--text-sm);
+  }
+</style>

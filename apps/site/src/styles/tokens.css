@@ -1,0 +1,280 @@
+/*
+ * The site's visual system: every colour, face, size and duration the pages are
+ * allowed to use. `apps/site/DESIGN.md` is the prose half of this file and
+ * records what each decision is for; this is the only place the values live.
+ *
+ * Not to be confused with `@playdeck/react/theme.css`, which is a different
+ * system with a different job. That file ships to consumers, so it is wrapped in
+ * a cascade layer and every selector is `:where()`d to zero specificity, because
+ * a stranger's stylesheet has to be able to win against it. Nothing here ships
+ * anywhere: this site is the only consumer of this file, there is no stranger to
+ * yield to, and adding the same ceremony would suggest a constraint that does
+ * not exist. The two themes share no tokens and are not meant to match.
+ *
+ * Three rules hold the system together.
+ *
+ *   1. A hex literal appears exactly once, in the raw scale below. Role tokens
+ *      (`--color-ink`, `--color-accent`, ...) point at the scale, components
+ *      point at the roles, and no component ever names a colour. That is what
+ *      makes a theme switch a remapping rather than a rewrite.
+ *   2. There is exactly one gradient in the system — `--gradient-chroma`, the
+ *      sweep through the primaries — and it is a hairline and a single hero
+ *      accent. It is never a background wash. A second gradient is the failure
+ *      mode this rule exists to prevent, so if a design seems to want one, the
+ *      answer is the flat surface tokens.
+ *   3. Functional text never goes below `--text-fn` (11px). Small monospace is
+ *      where this site carries its actual argument, and 10.88px is where it
+ *      stops being readable, so the scale simply has no rung underneath.
+ */
+
+/* The latin subset only, and only the three faces the type scale names: sans
+ * 400 for prose, sans 600 for headings and emphasis, mono 400 for functional
+ * text. Fontsource is a devDependency rather than a CDN link and rather than
+ * woff2 files committed here, so the faces arrive through the lockfile with
+ * integrity hashes; the `url()`s inside these stylesheets are relative, so the
+ * build emits the files beside its own assets and the served page asks no
+ * third party for anything. That is not a performance preference. This is a
+ * library whose headline behaviour is contacting no provider before a click,
+ * and a site that phoned a font host to say so would be arguing against
+ * itself. */
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+
+:root {
+  /* ---- the raw scale ------------------------------------------------------
+   * Every colour in the system, named by what it is rather than by where it is
+   * used. Nothing outside this block writes a hex, including the two dark
+   * assignment blocks further down.
+   *
+   * The measured contrast of every pair these produce is in `DESIGN.md`, along
+   * with the three values that are NOT the ones the design comp proposed. The
+   * comp's light green (3.67:1), its light amber (2.92:1) and its dark blue
+   * (2.78:1 on a raised surface) were chosen for hue and fail AA as text, which
+   * is exactly the class of defect that reading a palette cannot catch. Their
+   * hues are kept and their lightness is whatever AA required; every other
+   * value here is the comp's own.
+   */
+
+  /* Light. `--light-field` is warm off-white rather than #fff so that
+   * `--light-surface`, which is #fff, can raise a panel off the page with no
+   * border and no shadow at all. */
+  --light-field: #fafaf8;
+  --light-surface: #ffffff;
+  --light-sunken: #f1f1ed;
+  --light-ink: #131316;
+  --light-ink-muted: #55555e;
+  --light-ink-subtle: #63636c;
+  --light-line: #e3e3de;
+  --light-line-strong: #86867f;
+  --light-blue: #1b4fd8;
+  --light-green: #0b7355;
+  --light-amber: #7d5a00;
+  --light-red: #c7325e;
+
+  /* Dark. Not the light values inverted: the near-black field is dark enough
+   * that saturated mid-tones disappear into it, so the accents move up the
+   * lightness axis while keeping their hue. */
+  --dark-field: #08080b;
+  --dark-surface: #131318;
+  --dark-sunken: #0e0e12;
+  --dark-ink: #f0f0f2;
+  --dark-ink-muted: #a8a8b3;
+  --dark-ink-subtle: #92929d;
+  --dark-line: #26262e;
+  --dark-line-strong: #6a6a78;
+  --dark-blue: #8bacff;
+  --dark-green: #2fd6a0;
+  --dark-amber: #f0c33c;
+  --dark-red: #ff5c8a;
+
+  /* ---- roles: light -------------------------------------------------------
+   * The default assignment. It is the light theme rather than a neutral base
+   * because a document with no `data-theme` and no OS preference has to render
+   * as something, and light is the safer thing to be wrong about.
+   */
+  --color-field: var(--light-field);
+  --color-surface: var(--light-surface);
+  --color-sunken: var(--light-sunken);
+  --color-ink: var(--light-ink);
+  --color-ink-muted: var(--light-ink-muted);
+  --color-ink-subtle: var(--light-ink-subtle);
+  /* Two lines, and the difference is not weight but obligation.
+   * `--color-line` separates things a reader can already see are separate, so
+   * it is free to be quiet and WCAG asks nothing of it. `--color-line-strong`
+   * is the boundary of a control — it is what says "this is a switch" — so it
+   * carries the 3:1 that non-text UI has to meet, on all three grounds. That is
+   * why it is far darker than a separator wants to be. It is right anywhere the
+   * boundary itself is the information — a colour chip whose fill may equal the
+   * surface it sits on is the other case — and wrong for a panel edge, which
+   * would read as a box drawn round something rather than as depth. */
+  --color-line: var(--light-line);
+  --color-line-strong: var(--light-line-strong);
+  --color-accent: var(--light-blue);
+
+  /* The three capability states are three points on the same sweep the gradient
+   * runs through, in that order: blue, then green, then amber, then red. Colour
+   * carries the domain meaning here — a provider is available, unknown or
+   * unavailable — so these are never used decoratively, and decoration never
+   * borrows them. Each is paired with a shape or a word wherever it appears,
+   * because colour alone is not a status. */
+  --color-available: var(--light-green);
+  --color-unknown: var(--light-amber);
+  --color-unavailable: var(--light-red);
+
+  /* ---- type ---------------------------------------------------------------
+   * Two families from one superfamily. Plex Sans carries prose; Plex Mono
+   * carries functional text — anything that is a value, an identifier, a state
+   * or a piece of machine output rather than a sentence.
+   */
+  --font-sans:
+    'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', roboto, helvetica,
+    arial, sans-serif;
+  --font-mono:
+    'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', menlo, consolas,
+    monospace;
+
+  /* The floor, and the reason the scale starts here. Every rung above it is a
+   * ratio of about 1.2 up to `--text-lg` and then wider, so headings separate
+   * from prose by size before they separate by weight. */
+  --text-fn: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem; /* 12px */
+  --text-sm: 0.875rem; /* 14px */
+  --text-md: 1rem; /* 16px */
+  --text-lg: 1.125rem; /* 18px */
+  --text-xl: 1.5rem; /* 24px */
+  --text-2xl: 2rem; /* 32px */
+  --text-3xl: 2.75rem; /* 44px */
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-body: 1.6;
+
+  --weight-regular: 400;
+  --weight-semibold: 600;
+
+  /* Applied wherever Plex Mono is, and positive rather than negative: mono is
+   * set tighter relative to its own width than the sans at the same nominal
+   * size, and closing it further is what makes 11px functional text hard to
+   * pick apart. This opens it instead. */
+  --tracking-fn: 0.01em;
+
+  /* ---- space --------------------------------------------------------------
+   * A 4px base. Named by step rather than by use, because a spacing token that
+   * names a component stops being reusable the moment a second component wants
+   * the same gap.
+   */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-pill: 999px;
+
+  /* The hairline, and the whole depth system with it. Depth on this site comes
+   * from a surface colour and a one-pixel line, never from a border and a wide
+   * shadow together: that pairing is a recognisable generated-interface tell,
+   * and it was the entire depth system of the comps this design replaces. There
+   * is deliberately no shadow token to reach for. */
+  --line-width: 1px;
+
+  /* ---- the one gradient ---------------------------------------------------
+   * The chroma sweep: blue through green and amber to red, the path a
+   * chromaticity diagram traces round the spectral locus. It is built from the
+   * role tokens above rather than from its own colours, so it re-tunes with the
+   * theme and so the states it passes through are literally the state colours
+   * rather than a decorative echo of them.
+   *
+   * Used as a hairline, and once in the hero. Not as a fill, not as a wash,
+   * not twice. Its stops are unevenly spaced because the perceptual distance
+   * between blue and green is far larger than between amber and red, and even
+   * stops make the warm end read as a single smear.
+   */
+  --gradient-chroma: linear-gradient(
+    90deg,
+    var(--color-accent) 0%,
+    var(--color-available) 42%,
+    var(--color-unknown) 72%,
+    var(--color-unavailable) 100%
+  );
+
+  /* ---- motion -------------------------------------------------------------
+   * Short, and only ever applied to `transform` and `opacity`. Those two are
+   * the properties a compositor can animate without laying the page out again;
+   * `max-height` and `width` cannot be, and every effect that seems to need
+   * them has an equivalent that does not — a scale or a translate under
+   * `overflow: hidden`.
+   */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  color-scheme: light;
+}
+
+/*
+ * The dark assignment, twice. It has to be written twice because a media query
+ * cannot join a selector list, and the two conditions are genuinely different
+ * questions: below is "the OS asked for dark and the reader has not said
+ * otherwise", and further down is "the reader said dark". Neither implies the
+ * other, and an explicit choice has to beat the OS in BOTH directions — a
+ * reader who picks light on a dark-mode machine is the case that a lone
+ * `prefers-color-scheme` block gets wrong, which is why the media query is
+ * scoped away from `[data-theme='light']` rather than merely being overridden
+ * by it. Overriding would work only for as long as the two blocks assign
+ * exactly the same set of tokens.
+ *
+ * What is not duplicated is any colour. Both blocks assign `var(--dark-*)`
+ * references, so the values themselves still exist in exactly one place and the
+ * two blocks cannot drift into disagreeing about a hex.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-field: var(--dark-field);
+    --color-surface: var(--dark-surface);
+    --color-sunken: var(--dark-sunken);
+    --color-ink: var(--dark-ink);
+    --color-ink-muted: var(--dark-ink-muted);
+    --color-ink-subtle: var(--dark-ink-subtle);
+    --color-line: var(--dark-line);
+    --color-line-strong: var(--dark-line-strong);
+    --color-accent: var(--dark-blue);
+    --color-available: var(--dark-green);
+    --color-unknown: var(--dark-amber);
+    --color-unavailable: var(--dark-red);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --color-field: var(--dark-field);
+  --color-surface: var(--dark-surface);
+  --color-sunken: var(--dark-sunken);
+  --color-ink: var(--dark-ink);
+  --color-ink-muted: var(--dark-ink-muted);
+  --color-ink-subtle: var(--dark-ink-subtle);
+  --color-line: var(--dark-line);
+  --color-line-strong: var(--dark-line-strong);
+  --color-accent: var(--dark-blue);
+  --color-available: var(--dark-green);
+  --color-unknown: var(--dark-amber);
+  --color-unavailable: var(--dark-red);
+
+  color-scheme: dark;
+}
+
+/* The light assignment is `:root`'s already, so this block carries only
+ * `color-scheme` — which the media query above would otherwise still flip,
+ * leaving a reader who chose light with dark scrollbars and dark form
+ * controls. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
