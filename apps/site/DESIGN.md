@@ -70,15 +70,15 @@ two new raw entries take it: `--dark-raised` `#17171D` and `--dark-overlay`
 
 What makes the collapse acceptable rather than a hole is that `--color-raised`
 is still a real step in light wherever it sits on `--color-field` — 1.045, the
-same rung every other step of this ladder is worth. It collapses only in the one
-case where a raised surface sits directly on `--color-surface`, and that case is
-what the two elevations and the hairline are for. Depth was never only a colour
-here.
+same as the light `--color-field` → `--color-surface` step. It collapses only in
+the one case where a raised surface sits directly on `--color-surface`, and that
+case is what the two elevations and the hairline are for. Depth was never only a
+colour here.
 
 **The dark rungs were chosen by measurement, not by eye.** The ladder already
 steps 1.038 from field to sunken and 1.040 from sunken to surface; surface to
-raised is 1.040 and raised to overlay is 1.040. They are exactly as visible as
-the steps the system already spends, which is the whole argument for their size —
+raised is 1.038 and raised to overlay is 1.042. They sit in the same band as the
+steps the system already spends, which is the whole argument for their size —
 a new rung sized to be noticed would have said the old ones were too quiet.
 **The ceiling is around `#1F1F26`**, and it is `--color-line-strong` that sets
 it: at that value the control boundary falls to 3.08 and a third rung stops
@@ -191,9 +191,9 @@ Dark theme, on the two new grounds:
 themes**, and that is checked rather than assumed. Colour carries domain meaning
 on this site, and a ladder that had flattened available, unknown and unavailable
 against a new ground — or taken any of them under 4.5 — would have broken the
-site's central claim on whichever panel first used one. The lowest figure in
-either table is `--color-unavailable` at 5.19 on the light pair, which is the
-number the light `on surface` column already carried.
+site's central claim on whichever panel first used one. The lowest of the
+capability figures in either table is `--color-unavailable` at 5.19 on the light
+pair, which is the number the light `on surface` column already carried.
 
 The tightest new pair is dark `--color-line-strong` on the overlay, at 3.22.
 That is the measurement the ladder's ceiling is derived from: it clears the 3:1
@@ -552,20 +552,37 @@ are acceptance criteria for anything added to this site, not style advice.
   need them has a composited equivalent — a translate or a scale under
   `overflow: hidden`.
 
-### Elevation, and what rule 4 used to say
+### Depth, and what rule 4 used to say
 
-Rule 4 read **"Depth is a surface colour and a hairline. There is no shadow."**
-It was written that way because a 1px border under a 24px or 60px blur was the
-comps' whole depth system and is a named generated-interface tell, and the
-cheapest way to kill one combination is to ban the category it belongs to.
+Rule 4 first read **"Depth is a surface colour and a hairline. There is no
+shadow."** It was written that way because a 1px border under a 24px or 60px
+blur was the comps' whole depth system and is a named generated-interface tell,
+and the cheapest way to kill one combination is to ban the category it belongs
+to.
 
 That was too wide. The tell is the _pairing_, not the shadow: a border and a
 wide soft blur together, imitating depth that neither states on its own. An
 elevation with a real offset and a tight blur, standing alone, is not that
 thing — and without it every panel on the site had to be either flat or
-outlined, which is why the landing page read as a stack of boxes.
+outlined, which is why the landing page read as a stack of boxes. So the rule
+gained two tokens and one prohibition, and read **"Depth is a surface colour, a
+hairline, or one of two elevations — and an elevated surface never also carries
+a border."**
 
-So the rule is now two tokens and one prohibition.
+"A surface colour" was accurate while there were three of them and a panel had
+exactly one place to be. It stopped being accurate when the ladder grew: a row
+picked out of a panel and a dialog laid over the page are both a surface on a
+surface, and that wording made them sound like a choice of paint rather than a
+position on a scale. So the second amendment is one word. Depth is a _step_ on
+the surface ladder, which says the values are ordered and that the order is what
+carries the meaning. Nothing else in the rule moved. The two elevations are the
+same two tokens with the same two jobs, and **an elevated surface still never
+also carries a border** — which is the sentence that keeps the banned pairing
+unassemblable, and the new rungs are no help in assembling it, because a surface
+colour is not a blur and cannot become one. More depth here means a rung, never
+a wider shadow.
+
+The two elevations are these.
 
 | Token                    | Value                    | For                                  |
 | ------------------------ | ------------------------ | ------------------------------------ |
@@ -608,28 +625,9 @@ hero's player — `.demo__bezel` in `HeroPlayer.astro`, and not the stage inside
 it, which is a recessed colour and a hairline — and the search dialog in
 `DocsSearch.astro`, which is a panel over a page rather than the panel a page is
 built around, and which carries no border because rule 4 forbids an elevated
-surface one. Everything
-else on this site is a surface colour and a hairline, as before. A new elevated
-element is an edit to this list, not a local decision.
-
-### The surface steps, and what rule 4 used to say
-
-Rule 4 read **"Depth is a surface colour, a hairline, or one of two
-elevations — and an elevated surface never also carries a border."** "A surface
-colour" was accurate while there were three of them and a panel had exactly one
-place to be. It stopped being accurate when the ladder grew: a row picked out of
-a panel and a dialog laid over the page are both a surface on a surface, and the
-old wording made them sound like a choice of paint rather than a position on a
-scale.
-
-So the amendment is one word. Depth is a _step_ on the surface ladder, which
-says the values are ordered and that the order is what carries the meaning.
-Nothing else in the rule moved. The two elevations are the same two tokens with
-the same two jobs, and **an elevated surface still never also carries a
-border** — which is the sentence that keeps the banned pairing unassemblable,
-and the new rungs are no help in assembling it, because a surface colour is not
-a blur and cannot become one. More depth here means a rung, never a wider
-shadow.
+surface one. Everything else on this site is a step on the surface ladder and a
+hairline, as before. A new elevated element is an edit to this list, not a local
+decision.
 
 The ladder has a top, and it is measured rather than felt: see _Palette_ above
 for the `#1F1F26` ceiling and the rejected `#24242C`. Above the overlay the

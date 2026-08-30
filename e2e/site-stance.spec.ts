@@ -7,15 +7,17 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  * takes a `stance`: `argument` for `/`, `document` for every other route. The
  * stance is written to the `<body>` as `data-stance`, which is what the entry
  * motion's CSS is keyed off — so a document page cannot grow scattered reveals
- * by accident, and that is the property the third test below pins.
+ * by accident, and that is the property `a document-stance page animates
+ * nothing` pins.
  *
- * The first two tests are the ones a reviewer checks first, and they are about
- * what happens when the motion does *not* run. The animated elements rest
- * visible: the observer applies the from-state and then releases it, so a
- * reader whose script never arrives — or who asked for reduced motion — reads
- * the page rather than a blank column. Both failure modes are checked by
- * measuring the elements themselves rather than by trusting the absence of a
- * class.
+ * The two tests that run with the motion suppressed — the one under
+ * `with no JavaScript` and the one under `prefers-reduced-motion: reduce` — are
+ * the ones a reviewer checks first, and they are about what happens when the
+ * motion does *not* run. The animated elements rest visible: the observer
+ * applies the from-state and then releases it, so a reader whose script never
+ * arrives — or who asked for reduced motion — reads the page rather than a
+ * blank column. Both failure modes are checked by measuring the elements
+ * themselves rather than by trusting the absence of a class.
  *
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so these addresses are written out rather

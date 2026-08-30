@@ -176,9 +176,9 @@ a:active {
 
 :root {
   /* The thumb is non-text UI and `--color-line-strong` is the token that
-   * carries 3:1 against all three grounds, which is exactly the obligation a
+   * carries 3:1 against all five grounds, which is exactly the obligation a
    * scrollbar thumb has. The track is left transparent so it takes whichever
-   * surface it is scrolling over rather than pinning a fourth grey into the
+   * surface it is scrolling over rather than pinning another grey into the
    * page. Standard properties only: `::-webkit-scrollbar` would be a second,
    * engine-specific description of the same thing. */
   scrollbar-color: var(--color-line-strong) transparent;

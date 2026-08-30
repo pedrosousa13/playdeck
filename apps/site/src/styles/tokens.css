@@ -100,8 +100,8 @@
   /* Two more rungs of the same ladder, and the only theme that has room for
    * them. Each existing rung is a step of about 1.04 in contrast — field to
    * sunken is 1.038, sunken to surface 1.040 — so these continue at that pitch
-   * rather than at a size of their own: surface to raised is 1.040 and raised
-   * to overlay is 1.040. They are exactly as visible as the steps the system
+   * rather than at a size of their own: surface to raised is 1.038 and raised
+   * to overlay is 1.042. They sit in the same band as the steps the system
    * already spends, which is the argument for their size.
    *
    * The ceiling is `--dark-line-strong`, not taste. That token is a control
@@ -155,7 +155,7 @@
    * `--color-line` separates things a reader can already see are separate, so
    * it is free to be quiet and WCAG asks nothing of it. `--color-line-strong`
    * is the boundary of a control — it is what says "this is a switch" — so it
-   * carries the 3:1 that non-text UI has to meet, on all three grounds. That is
+   * carries the 3:1 that non-text UI has to meet, on all five grounds. That is
    * why it is far darker than a separator wants to be. It is right anywhere the
    * boundary itself is the information — a colour chip whose fill may equal the
    * surface it sits on is the other case — and wrong for a panel edge, which
