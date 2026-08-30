@@ -121,9 +121,8 @@ import {
  * `stories/reference` uses for its MP4-then-WebM pair, and it is the reason
  * this is a `<source>` set rather than a bare URL string.
  *
- * The URLs are absolute and belong to this file rather than arriving as a prop.
- * Nothing about them is resolved against a surface's base path, so there is no
- * decision for Storybook and the site to make differently.
+ * The URLs are absolute, so nothing about them is resolved against a surface's
+ * base path.
  */
 const sintelTrailer = {
   type: 'video',
@@ -138,6 +137,31 @@ const sintelTrailer = {
     }
   ]
 } as const satisfies Player.RootProps['source'];
+
+/*
+ * The clip AND every word on screen that describes it, as one value.
+ *
+ * This is what the composition plays and says unless a surface hands it
+ * something else through the `media` prop below. A surface needs that: a page
+ * whose own claim is that it makes no third-party request has to point this at
+ * a clip it serves itself, and a default that could not be replaced would make
+ * that page choose between the archetype and its own rule.
+ *
+ * The reason it is one object rather than a prop per field is a defect this
+ * file has already had. When only the source could be replaced, a page pointed
+ * it at its own test pattern and the title card went on announcing Sintel over
+ * colour bars, with the CC-BY credit under it still naming a film nobody was
+ * watching. Bundled, a surface cannot change the clip without being handed the
+ * words for it — the kicker, the title, the blurb and the credit are the clip's
+ * copy, and they travel with it.
+ */
+const sintel = {
+  source: sintelTrailer,
+  kicker: 'Short film',
+  title: 'Sintel',
+  blurb: 'A Blender Foundation open movie, played here from its own trailer.',
+  credit: 'Sintel © Blender Foundation, licensed CC BY 3.0.'
+} as const;
 
 /*
  * The chapter list this layout offers when the provider has none of its own.
@@ -422,6 +446,30 @@ export type StreamingServicePlayerProps = {
    * file inventing a persistence layer it would then have to defend.
    */
   readonly resumeAt?: number | null;
+  /**
+   * What to play, and what the layout says about it. Defaults to the trailer
+   * above with the copy that describes it, so a consumer who copies this file
+   * and passes nothing gets the whole archetype working from one paste.
+   *
+   * `source`, `kicker`, `title`, `blurb` and `credit` are one prop because they
+   * are one claim: the clip, the title card that announces it — kicker, title
+   * and blurb — and the line under the picture that says whose it is. A surface
+   * that replaces the clip and not the words would be describing a film it is
+   * not playing.
+   *
+   * The chapter fixture above is spaced for a clip of roughly the trailer's
+   * length, and `ChapterRail` draws only the marks that fall inside the
+   * duration. A shorter source therefore loses the marks past its last frame
+   * rather than drawing them off the end — silently, since a rail with a tick
+   * missing looks exactly like a fixture with fewer chapters.
+   */
+  readonly media?: {
+    readonly source: Player.RootProps['source'];
+    readonly kicker: string;
+    readonly title: string;
+    readonly blurb: string;
+    readonly credit: string;
+  };
 };
 
 /**
@@ -430,15 +478,22 @@ export type StreamingServicePlayerProps = {
  *
  * `loading="interaction"` is not decoration on a demo. Nothing is fetched and
  * no provider is attached until the viewer presses one of the two affordances
- * on the title card, so a page carrying this player makes no third-party
- * request until somebody asks for the film.
+ * on the title card, so a page carrying this player makes no request for media
+ * — third-party or otherwise — until somebody asks for whatever the `media`
+ * prop pointed it at, which is not always a film: on `/` it is a colour-bar
+ * test pattern this site serves itself.
  */
 export const StreamingServicePlayer = ({
   captionsSrc,
+  media = sintel,
   resumeAt = null
 }: StreamingServicePlayerProps): ReactElement => (
-  <Player.Root loading="interaction" source={sintelTrailer}>
-    <StreamingServiceSurface captionsSrc={captionsSrc} resumeAt={resumeAt} />
+  <Player.Root loading="interaction" source={media.source}>
+    <StreamingServiceSurface
+      captionsSrc={captionsSrc}
+      media={media}
+      resumeAt={resumeAt}
+    />
   </Player.Root>
 );
 
@@ -452,9 +507,18 @@ export const StreamingServicePlayer = ({
  * supplying its own root — so it mounts this and `StreamingServicePlayer`
  * mounts the clip. `stories/reference` splits itself the same way for the same
  * reason.
+ *
+ * It takes the same `media` prop, and reads every field of it except `source`:
+ * the words on the title card and in the credit are drawn here, the clip is
+ * mounted by the root above. That is the reason the two are one object — split
+ * across the two components as separate props, the copy and the clip are two
+ * decisions, and two decisions drift. A story that supplies its own root and
+ * passes no `media` gets the default bundle, so the workbench shows the title
+ * card the file ships with.
  */
 export const StreamingServiceSurface = ({
   captionsSrc,
+  media = sintel,
   resumeAt = null
 }: StreamingServicePlayerProps): ReactElement => {
   const state = Player.usePlayerState((snapshot) => ({
@@ -553,11 +617,9 @@ export const StreamingServiceSurface = ({
               card would be an empty box, and the `hidden` below is what takes
               it out of layout and out of the accessibility tree with them. */}
           <div className="stream-intro" hidden={ready}>
-            <p className="stream-kicker">Short film</p>
-            <h2 className="stream-title">Sintel</h2>
-            <p className="stream-blurb">
-              A Blender Foundation open movie, played here from its own trailer.
-            </p>
+            <p className="stream-kicker">{media.kicker}</p>
+            <h2 className="stream-title">{media.title}</h2>
+            <p className="stream-blurb">{media.blurb}</p>
             <div className="stream-actions">
               {resumeAt === null ? null : (
                 <Player.ActivationButton
@@ -649,8 +711,8 @@ export const StreamingServiceSurface = ({
         <p className="stream-note">
           {fromProvider
             ? 'Chapter marks come from the provider.'
-            : 'Chapter marks and caption text are fixtures this example ships. They mark time in the clip; they do not describe the film.'}{' '}
-          Sintel &copy; Blender Foundation, licensed CC BY 3.0.
+            : 'Chapter marks and caption text are fixtures this example ships. They mark time in the clip; they do not describe what is playing.'}{' '}
+          {media.credit}
         </p>
       </section>
     </>
@@ -1118,6 +1180,29 @@ const bigBuckBunnyTrailer = {
 } as const satisfies Player.RootProps['source'];
 
 /*
+ * The recording AND everything the lesson says about it, as one value.
+ *
+ * This is what the composition plays and says unless a surface hands it
+ * something else through the `media` prop below. A surface needs that: a page
+ * whose own claim is that it makes no cross-origin request has to point this at
+ * a recording it serves itself, and a default that could not be replaced would
+ * make that page choose between the archetype and its own rule.
+ *
+ * The clip and the copy are one object because this file has already been
+ * caught with them apart. When only the source could be replaced, a page
+ * pointed it at its own test pattern and the lesson heading, the note and the
+ * credit went on describing a Blender open movie that was not playing. Bundled,
+ * a surface cannot swap the recording without being handed the three places
+ * this layout talks about it.
+ */
+const openMovieLesson = {
+  source: bigBuckBunnyTrailer,
+  title: 'Rendering an open movie',
+  note: 'This lesson plays a Blender Foundation open movie. Its outline, the notes beside it and the caption text are fixtures this example ships — they mark time in the clip and make no claim about the film.',
+  credit: 'Big Buck Bunny © Blender Foundation, licensed CC BY 3.0.'
+} as const;
+
+/*
  * The lesson outline.
  *
  * It is the course's own data and deliberately not read from the media. A
@@ -1381,6 +1466,26 @@ export type CoursePlatformPlayerProps = {
    * to defend.
    */
   readonly resumeAt?: number | null;
+  /**
+   * The recording to play, and what the lesson says about it. Defaults to the
+   * trailer above with the copy that describes it, so a consumer who copies
+   * this file and passes nothing gets the whole archetype from one paste.
+   *
+   * The four fields are one prop because they are one claim: `source` is the
+   * recording, `title` is the lesson heading over it, `note` is the first
+   * paragraph of the notes panel beside it, and `credit` is the attribution
+   * line under those notes. A surface that replaced the recording and not the
+   * words would be teaching a lesson about something it is not playing.
+   *
+   * The outline above is spaced for a recording at least as long as the
+   * trailer, and a much shorter one would leave sections nobody could reach.
+   */
+  readonly media?: {
+    readonly source: Player.RootProps['source'];
+    readonly title: string;
+    readonly note: string;
+    readonly credit: string;
+  };
 };
 
 /**
@@ -1389,14 +1494,19 @@ export type CoursePlatformPlayerProps = {
  *
  * `loading="interaction"` means nothing is fetched and no provider is attached
  * until the learner starts the lesson, so a course page carrying this player
- * makes no third-party request before that press.
+ * makes no request for media — cross-origin or otherwise — before that press.
  */
 export const CoursePlatformPlayer = ({
   captionsSrc,
+  media = openMovieLesson,
   resumeAt = null
 }: CoursePlatformPlayerProps): ReactElement => (
-  <Player.Root loading="interaction" source={bigBuckBunnyTrailer}>
-    <CoursePlatformSurface captionsSrc={captionsSrc} resumeAt={resumeAt} />
+  <Player.Root loading="interaction" source={media.source}>
+    <CoursePlatformSurface
+      captionsSrc={captionsSrc}
+      media={media}
+      resumeAt={resumeAt}
+    />
   </Player.Root>
 );
 
@@ -1409,9 +1519,17 @@ export const CoursePlatformPlayer = ({
  * capabilities in — which is the only way to see the whole control surface
  * without media and without a network — while `CoursePlatformPlayer` mounts the
  * recording.
+ *
+ * It takes the same `media` prop and reads every field of it except `source`:
+ * the heading, the note and the credit are drawn here, the recording is mounted
+ * by the root above. That is why the two are one object — split across the two
+ * components as separate props they would be two decisions, and two decisions
+ * drift. A story that supplies its own root and passes no `media` gets the
+ * default bundle, so the workbench shows the lesson the file ships with.
  */
 export const CoursePlatformSurface = ({
   captionsSrc,
+  media = openMovieLesson,
   resumeAt = null
 }: CoursePlatformPlayerProps): ReactElement => {
   const state = Player.usePlayerState((snapshot) => ({
@@ -1556,7 +1674,7 @@ export const CoursePlatformSurface = ({
           </Player.Controls>
 
           <div className="study-heading">
-            <h2 className="study-title">Rendering an open movie</h2>
+            <h2 className="study-title">{media.title}</h2>
             <Progress />
           </div>
 
@@ -1566,12 +1684,7 @@ export const CoursePlatformSurface = ({
               plays, and this is the half of the screen that says so. */}
           <div className="study-notes">
             <h3 className="study-panel__title">Notes</h3>
-            <p>
-              This lesson plays a Blender Foundation open movie. Its outline,
-              the notes beside it and the caption text are fixtures this example
-              ships — they mark time in the clip and make no claim about the
-              film.
-            </p>
+            <p>{media.note}</p>
             <p>
               Every control under the picture is drawn only where the player
               reports it can honour the command. Change the source to one that
@@ -1579,9 +1692,7 @@ export const CoursePlatformSurface = ({
               one that refuses a rate change and the speed row is not drawn at
               all.
             </p>
-            <p className="study-credit">
-              Big Buck Bunny &copy; Blender Foundation, licensed CC BY 3.0.
-            </p>
+            <p className="study-credit">{media.credit}</p>
           </div>
         </div>
 

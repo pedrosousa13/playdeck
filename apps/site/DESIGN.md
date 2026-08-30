@@ -41,7 +41,7 @@ the light and dark columns are the raw scale entries behind it.
 | --------------------- | --------- | --------- | ---------------------------------------------- |
 | `--color-field`       | `#FAFAF8` | `#08080B` | The page                                       |
 | `--color-surface`     | `#FFFFFF` | `#131318` | A raised panel                                 |
-| `--color-raised`      | `#FFFFFF` | `#17171D` | A surface on a surface — a row, an inner card  |
+| `--color-raised`      | `#FFFFFF` | `#17171D` | A step up from its ground — a row, a readout   |
 | `--color-overlay`     | `#FFFFFF` | `#1B1B22` | A surface over the page — a dialog, a popover  |
 | `--color-sunken`      | `#F1F1ED` | `#0E0E12` | A recessed well — a switch track, a code block |
 | `--color-ink`         | `#131316` | `#F0F0F2` | Body and headings                              |
@@ -394,15 +394,28 @@ brings its own appearance would be this site's paint on a consumer's example.
 
 **On `/` they are mounted `client:visible`, which has a consequence worth
 stating.** The directive defers hydration until the reader scrolls to them, but
-it still server-renders the components, so their markup — including headings this
-app did not write — is in the document before any script runs. There is no Astro
-directive that both defers the mount and skips the server render, so this is the
-cost of the deferral rather than an oversight. What it means in practice is that
-`/`'s heading outline carries headings written in `examples/`, `Sintel` and
-`Rendering an open movie` among them, and that none of them may ever be named
-`Playdeck`: `scripts/check-deploy-artifact.mjs` identifies this site's root
-document by a heading with exactly that name, and `e2e/site-nav.spec.ts` asserts
-there is exactly one such heading on the page and that it is the `h1`.
+it still server-renders the components, so their markup — including whatever
+heading each composition puts over its picture — is in the document before any
+script runs. There is no Astro directive that both defers the mount and skips the
+server render, so this is the cost of the deferral rather than an oversight.
+
+What it means in practice is that `/`'s heading outline carries headings rendered
+by files under `examples/`. This paragraph used to add that the words in them
+were written there too, and named `Sintel` and `Rendering an open movie` as the
+two. They are the page's own now — `Thirty seconds of colour bars` and `A lesson
+with a test pattern for a recording` — because `/` hands each composition a
+`media` prop that carries the clip and the copy describing it as one thing. That
+the prop is one and not two is the whole of its design. An earlier version of
+this page overrode the source alone, and the streaming card went on announcing
+the title `Sintel` over a colour-bar test pattern, on the page whose argument is
+that nothing here claims what it cannot show. So a surface that replaces the clip
+replaces the words for it, and bundling them is what makes the omission
+inexpressible rather than merely discouraged.
+
+None of those headings may ever be named `Playdeck`:
+`scripts/check-deploy-artifact.mjs` identifies this site's root document by a
+heading with exactly that name, and `e2e/site-nav.spec.ts` asserts there is
+exactly one such heading on the page and that it is the `h1`.
 
 ## The one gradient
 
@@ -664,16 +677,24 @@ that seems to want one is a page with too many surfaces on it.
 was written when the two rungs had been declared in `tokens.css` and rendered as
 swatches on `/design` and nowhere else, and the point it was making was that the
 ladder had been stated and measured before anything leaned on it, so the first
-panel that wanted a surface on a surface would reach for a rung already checked
-against ink rather than inventing one.
+panel that wanted a step above `--color-surface` would reach for a rung already
+checked against ink rather than inventing one.
 
-`--color-raised` now has that first consumer, and it is the one the rung was
-argued for: `/`'s `.readout`, the box the proof strip's budget table sits in. It
-is a panel on the page rather than a panel over it, so it takes colour and
-nothing else — no elevation, because rule 4's allowlist names by hand what may
-spend one and this is not on it, and therefore no border either, which is the
-half of that rule that keeps the banned pairing unassemblable. In light the rung
-resolves to `#FFFFFF` and is a real 1.045 step against the field, so it reads as
+**`--color-raised` now has that first consumer, and it sits on the field rather
+than on a surface.** The rung was argued for as the step above `--color-surface`
+and its first use is `/`'s `.readout`, the box the proof strip's budget table
+sits in, laid straight on the page. That is not a misuse and the role's
+description follows it: what the rung names is a panel raised off whatever it
+sits on, and the ground it is measured against is the ground it is drawn on. On
+the field in light it is a 1.045 step, which is the figure _Palette_ above gives;
+the case that collapses is the other one, a raised surface directly on
+`--color-surface`, and that case is what the elevations and the hairline are for.
+A row picked out of a panel is still the rung's other use and still available.
+
+The readout is a panel on the page rather than a panel over it, so it takes
+colour and nothing else — no elevation, because rule 4's allowlist names by hand
+what may spend one and this is not on it, and therefore no border either, which
+is the half of that rule that keeps the banned pairing unassemblable. It reads as
 raised in both themes rather than only in the one that has the room.
 
 `--color-overlay` still has no consumer, and the original point survives for it
@@ -928,9 +949,11 @@ still be refused.
 What the rule still forbids is unchanged and is worth restating, because the
 list is now three names long and the fourth is the tempting one. **A header here
 gains nothing that sells, and nothing that duplicates a page's own navigation.**
-The workbench is not among the destinations and will not be: #534 records that
-it is not served as a public surface, and the same ruling was made about a
-Storybook link on `/`. No link to it survives anywhere on the site: `/design`
+The workbench is not among the destinations and will not be: #534 records the
+decision that it is not to be a public surface, and the same ruling was made
+about a Storybook link on `/`. What the site carries out is the absence of
+links, which is the half of that decision that is a design question at all. No
+link to it survives anywhere on the site: `/design`
 carried the last one and no longer does, and `design.astro`'s own header records
 the absence rather than leaving it to be rediscovered.
 `scripts/check-deploy-artifact.mjs` still visits the workbench, from its own
@@ -1214,18 +1237,17 @@ a `--color-surface` panel of its own, lifted off the field by
 provider comparison brings no surface at all and sits directly on the field,
 because its sticky question column needs the field as an opaque ground. Prose
 inside any of them is still held to `--measure` — the width buys columns, not
-longer lines — and
-the page's own maximum is `72rem`, which is the literal that section names as a
-page's own decision.
+longer lines — and the page's own maximum is `72rem`, which is the literal that
+section names as a page's own decision.
 
 **Cards of identical size are the container this page does not reach for.** It
 is the same finding the package index records: three or five boxes the same size
 are what a layout defaults to when nothing has been decided about the contents,
 and they cost a reader the alignment that makes a set comparable. It is why the
 provider comparison is one grid read across rather than a card per provider, and
-why the
-two archetypes are stacked one above the other rather than set as a pair of equal
-columns — the claim there is that they are different, and equal columns would
+why the two archetypes are stacked one above the other rather than set as a pair
+of equal columns — the claim there is that they are different, and equal columns
+would
 both deny that and halve the width each has to be itself in. The capability
 ledger takes the opposite treatment for the opposite reason — it is genuinely
 one panel of machine output, so it is one raised surface, and it carries no
@@ -1305,6 +1327,12 @@ with a package name it inferred, and the lower panel states which adapter the
 page's own media needs and which the page has no way to ask for. The live
 evidence is the log's own count. If the emitted chunk names ever become knowable
 at build time, that state should become measured.
+
+The limit is carried in the visible caption and not only here. A panel drawn in
+the register of a measurement, on a page whose thesis is that nothing is claimed
+that cannot be shown, has to say which half of it is measured where a reader can
+read it — so `receipt__caption` names the derivation and its reason in the same
+sentence that names what the sizes are.
 
 **A cached resource is printed as a cache hit, not as zero bytes.**
 `transferSize` is 0 for a resource served from the cache, and printing that 0 as
@@ -1411,6 +1439,47 @@ surfaces — this site and the workbench — and each build serves only its own
 rather than drift is that neither copy is authored: it is a fixture whose text
 marks time in a clip, and a change to one that did not reach the other would
 show up as a caption that did not match what the other surface played.
+
+**There is a second fixture, `public/tracer-45s.mp4`, and two rather than one is
+the point.** It is the same colour-bar pattern looped to forty-five seconds —
+92,824 bytes, measured at exactly 45.000000s — and it is what the two archetypes
+play on `/`. The hero needs a frame: one second is enough for a picture to exist
+and be described, and the smaller file is the right one for the thing that
+decides whether the page has a player in it. The archetypes need a _timeline_.
+They mount with `resumeAt={18}` and `{14}`, their chapter fixture marks 18s and
+38s, the lesson's outline runs to 28s and the caption cues to 22s — none of which
+a one-second clip can carry, and all of which are the layout the section is
+claiming. A single fixture would mean either a hero paying for forty-five seconds
+it never plays, or archetypes whose scrubbers have nowhere to go.
+
+**The length is chosen against the last mark rather than around it.** The
+streaming rail drops any chapter at or past the duration — see
+`ChapterRail`'s filter in `examples/archetype-streaming-service.tsx` — so a clip
+that ends before 38s would draw one tick where the fixture asks for two, and
+would do it silently. Forty-five seconds clears the last mark with room, which is
+what makes "both ticks are drawn" an observable property of this page rather than
+a coincidence of the fixture.
+
+The rule stated for `archetype-captions.vtt` a paragraph above does not extend to
+this file, and the asymmetry is deliberate rather than an omission somebody
+should tidy. The captions fixture exists byte-identically in both `public/`
+directories because both surfaces mount it. This one has no counterpart in
+`apps/storybook/public` because only `/` overrides the media: the stories pass no
+`media` prop and keep the Blender trailers the examples ship, so a copy there
+would be an asset nothing loads.
+
+**And the honesty rule all of this serves.** The examples' default source is a
+Blender open-movie trailer on that foundation's own host, and it stays pointed
+there, because the default in a file somebody pastes into their own project
+should be a clip that plays rather than a path into this repository's `public/`.
+`/` overrides it for two reasons and not one: it is the only page carrying #542's
+no-third-party-request criterion, and `Receipt.astro` sits directly below the two
+players printing every request the page made. A press that pulled a clip off
+another origin would have the page's own instrument reporting the page breaking
+its own claim. `/archetypes` passes nothing and keeps the trailers, because that
+page makes no such claim and is where a reader reads the files as they ship — and
+CC BY's attribution is why the licence line under those players is the one piece
+of copy `/` still writes for itself.
 
 **Nothing about the player contacts a third party, and that is the point.** The
 source is a file on this origin, driven through the native provider, and

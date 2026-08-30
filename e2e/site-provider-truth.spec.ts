@@ -40,10 +40,6 @@ const cells = (page: Page) => table(page).locator('.truth__cell');
 const row = (page: Page, index: number) =>
   table(page).locator('tbody tr').nth(index).locator('.truth__cell');
 
-// Held at `fixme` while nothing rendered the component: every locator below
-// would have resolved to nothing and the suite would have reported a page
-// defect that was really a missing import. `/` mounts it now, as its provider
-// comparison, and none of the assertions moved.
 test('the table asks three questions of four providers', async ({ page }) => {
   await page.goto(landing);
 

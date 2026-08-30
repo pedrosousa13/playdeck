@@ -53,9 +53,11 @@ const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
 const designUrl = `${import.meta.env.BASE_URL}design/`;
 
 // The workbench is deliberately absent, from this page and from the header.
-// #534 records that it is not served as a public surface and the maintainer
-// ruled the same on a Storybook link. `scripts/check-deploy-artifact.mjs` still
-// visits it, from its own address rather than by following a link from here.
+// #534 records the decision that it is not to be a public surface, and the
+// maintainer ruled the same on a Storybook link. What is carried out here is
+// the absence of links, not the absence of the build: the workbench still ships
+// in the deploy artifact and `scripts/check-deploy-artifact.mjs` still visits
+// it, from its own address rather than by following a link from here.
 
 // The composition example, read as bytes from the file the `examples`
 // TypeScript project compiles on every `pnpm typecheck`. Not a string typed
@@ -102,6 +104,60 @@ const bundles = await measureBundles(import.meta.env.PLAYDECK_REPO_ROOT);
 // reason: an Astro build serves only its own `public/`, so the compositions
 // take the URL rather than knowing about either surface's copy of it.
 const captionsSrc = `${import.meta.env.BASE_URL}archetype-captions.vtt`;
+
+// What the two archetypes play HERE, and the reason they are handed anything at
+// all. Both examples default to a Blender open-movie trailer on that
+// foundation's own host, which is the right default for a file a consumer
+// copies and the wrong one for this page: `/` claims it makes no third-party
+// request, the receipt section below prints every request the page issues, and
+// a press that pulled a clip off another origin would have the page's own
+// honesty instrument documenting the page breaking its own rule.
+//
+// So the clip is this app's copy of the same colour-bar test pattern the hero
+// plays, looped to forty-five seconds — long enough for the chapter marks, the
+// outline and the caption cues the fixtures are spaced against, the last of
+// which is the streaming archetype's `Close` chapter at 38s, and none of which
+// the hero's one-second file could carry. `/archetypes` passes nothing and
+// keeps the trailers, because that page makes no such claim and is where a
+// reader reads the files as they ship.
+//
+// The clip travels with the copy that describes it, in one `media` prop each,
+// and that is not tidiness. The first version of this page replaced the source
+// alone: the streaming card went on announcing a film by name over colour bars
+// and both credits went on attributing a picture nobody was watching, on the
+// page whose whole argument is that nothing here claims what it cannot show.
+// Bundled, the swap is not expressible without the words for it.
+const archetypeSource = {
+  type: 'video',
+  sources: [
+    { src: `${import.meta.env.BASE_URL}tracer-45s.mp4`, mimeType: 'video/mp4' }
+  ]
+} as const;
+
+// The streaming archetype's title card, describing what it is actually over.
+// Same register as the hero's caption directly above it — the picture is a
+// fixture and the page says so rather than dressing it as a title somebody
+// could watch. What the section claims is the layout, so that is what the copy
+// points at.
+const streamingMedia = {
+  source: archetypeSource,
+  kicker: 'Test pattern',
+  title: 'Forty-five seconds of colour bars',
+  blurb:
+    'A fixture served from this origin, not footage. What is on show is the layout around it: this card, the bar over the picture, the marks on the scrubber.',
+  credit:
+    'The clip is a colour-bar test pattern this site serves itself — a fixture, not a film.'
+} as const;
+
+// The course archetype's, in that file's own register: a heading over the
+// picture, the first paragraph of the notes panel, and the credit line under
+// them. A lesson is a claim about a recording, so it says which recording.
+const courseMedia = {
+  source: archetypeSource,
+  title: 'A lesson with a test pattern for a recording',
+  note: 'The recording here is a colour-bar test pattern, not a lesson anybody sat through. The outline, these notes and the caption text are fixtures the example ships — they mark time in the clip and describe nothing in it.',
+  credit: 'The clip is a test pattern served from this origin.'
+} as const;
 
 // The three statuses, in the order `tokens.css` and `DESIGN.md` put them —
 // which is sweep order — with what `packages/core/README.md` says each one
@@ -368,6 +424,7 @@ const install = 'pnpm add @playdeck/react';
             <StreamingServicePlayer
               captionsSrc={captionsSrc}
               client:visible
+              media={streamingMedia}
               resumeAt={18}
             />
           </div>
@@ -386,6 +443,7 @@ const install = 'pnpm add @playdeck/react';
             <CoursePlatformPlayer
               captionsSrc={captionsSrc}
               client:visible
+              media={courseMedia}
               resumeAt={14}
             />
           </div>
@@ -400,9 +458,23 @@ const install = 'pnpm add @playdeck/react';
           </figcaption>
         </figure>
       </div>
+      {
+        /* The licence, and only the licence. Both players above now say what
+         * they are playing in their own copy — the title card, the note and the
+         * credit under each picture all describe the test pattern, because the
+         * clip and the words for it arrive as one prop — so a paragraph
+         * repeating that here would be the page explaining itself twice. What
+         * is left is the one fact neither player can carry: the same two files
+         * on `/archetypes` play media somebody else owns, and CC BY asks for
+         * attribution wherever it is played. */
+      }
       <p class="archetypes__licence">
-        Both clips are Blender Foundation open-movie trailers, &copy; Blender
-        Foundation and licensed
+        The same two files on
+        {' '}
+        <a href={`${import.meta.env.BASE_URL}archetypes/`}>the archetypes page</a
+        >{' '}
+        play the Blender Foundation open-movie trailers they ship pointed at,
+        &copy; Blender Foundation and licensed
         {' '}
         <a href="https://creativecommons.org/licenses/by/3.0/" rel="license">
           CC BY 3.0
@@ -1028,6 +1100,48 @@ const install = 'pnpm add @playdeck/react';
    * it sets on its own stage. */
   .stage {
     min-inline-size: 0;
+  }
+
+  /* The activation buttons, given their size back.
+   *
+   * This page is the first to mount `@playdeck/react/theme.css` — the hero
+   * imports it, in `HeroPlayer.astro`, for the reason stated there — and an
+   * archetype in the same document. While that theme gives the activation part
+   * a size of its own, a composition mounted beside it inherits that size
+   * unless something says otherwise — and neither archetype says otherwise,
+   * because neither has ever needed to: `/archetypes` mounts no player theme,
+   * so on that page there is nothing to win against and the boxes size
+   * themselves from their content. Here there is, and left alone it wins. The
+   * shape that costs is the one a reader sees: the two labelled pills on the
+   * streaming title card and the third in the lesson's resume banner become
+   * squares with their labels spilling out of them, and the lesson's full-bleed
+   * start affordance collapses to a badge in the middle of the picture. It is
+   * that shape rather than any width that `e2e/site-landing.spec.ts` pins — a
+   * labelled control wider than it is tall, a full-bleed control covering its
+   * picture — because the widths belong to the font and the engine.
+   *
+   * `auto` rather than a number, and on the stage rather than on either
+   * composition's own classes. A number would be this page deciding how big
+   * somebody else's button is, which is exactly what the theme did wrong; and
+   * a rule naming `.stream-primary` would leave the next archetype mounted
+   * beside a themed player to rediscover this. What the stage says is only
+   * that a composition inside it sizes its own parts, which is what it gets
+   * with no theme loaded at all — so this restores `/archetypes`' geometry
+   * here rather than inventing a third one.
+   *
+   * Unlayered, so it wins: every selector in `theme.css` is inside
+   * `@layer playdeck` and loses to any unlayered rule whatever the two
+   * specificities are. `DESIGN.md` records that the file is built that way
+   * deliberately, so that a stranger's stylesheet can beat it — this is a
+   * stranger's stylesheet doing that, and not a change to the library.
+   * `:global()` because the parts come out of a React island, which carries no
+   * scope attribute of this page's.
+   *
+   * `e2e/site-landing.spec.ts` fails without this rule — it measures all four
+   * boxes and reports every one of them, in chromium and in firefox. */
+  .stage :global([data-playdeck-part='activation']) {
+    inline-size: auto;
+    block-size: auto;
   }
 
   .archetype__caption {

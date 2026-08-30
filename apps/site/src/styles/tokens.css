@@ -138,8 +138,12 @@
    */
   --color-field: var(--light-field);
   --color-surface: var(--light-surface);
-  /* The two steps above a panel. `--color-raised` is a surface on a surface —
-   * a row picked out of a panel, a card inside one. `--color-overlay` is a
+  /* The two steps above a panel. `--color-raised` is the rung above
+   * `--color-surface` — a panel raised off whatever it sits on, which is a
+   * surface where it is a row or a card picked out of one, and the field where
+   * it is a readout laid straight on the page. `/`'s `.readout` is the second
+   * of those and is the rung's first consumer; `DESIGN.md`'s palette section
+   * has the measurement for both grounds. `--color-overlay` is a
    * surface over the page rather than in it: a dialog, a popover. Both are
    * surface COLOUR, which is the point: rule 4 already has two elevations and a
    * hairline, and more depth here must not mean a wider blur, because a border

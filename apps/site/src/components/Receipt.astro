@@ -154,7 +154,10 @@ if (used !== undefined && !adapters.some(({ needed }) => needed)) {
   <figcaption class="receipt__caption">
     Every address above is one this browser really asked for, in the order it
     asked. The adapter sizes are gzipped and measured at build time by the same
-    module that fails the build when a bundle goes over budget.
+    module that fails the build when a bundle goes over budget; which of them
+    went unrequested is derived from what this page mounts rather than read off
+    the log above, because a chunk's name in the artifact is not knowable when
+    this panel is built.
   </figcaption>
 </figure>
 

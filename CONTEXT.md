@@ -413,8 +413,9 @@ _Avoid_: network panel, waterfall, audit
 
 **Provider asymmetry readout**:
 The table on the marketing site's landing page that asks the same three
-questions — which hosts, which source forms, which options — of every provider
-and prints where the answers differ in kind. Asymmetry rather than comparison,
+questions — which hosts, which source forms, which options — of each of its four
+columns, native files and HLS sharing one because a file extension is what
+chooses either, and prints where the answers differ in kind. Asymmetry rather than comparison,
 because what it exists to show is that a cell can answer `unknown` with a reason
 and that flattening the five into one shape would be the lie. Site-only, and it
 writes down no facts: `apps/site/src/provider-asymmetry.mjs` derives every host,

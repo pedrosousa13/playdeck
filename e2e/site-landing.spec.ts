@@ -83,10 +83,11 @@ test('the h1 is exactly Playdeck, and nothing else answers to that name', async 
 
 test('nothing on the page links to the workbench', async ({ page }) => {
   await page.goto(landing);
-  // #534 records that the workbench is not a public surface, and the
-  // maintainer ruled the same on a Storybook link. It is absent from the page
-  // and from the header above it, so this is asserted over the whole document
-  // rather than over `main`.
+  // #534 records the decision that the workbench is not to be a public
+  // surface, and the maintainer ruled the same on a Storybook link. What that
+  // costs this page is every link to it, from the page and from the header
+  // above it, so this is asserted over the whole document rather than over
+  // `main`.
   await expect(page.locator('a[href*="storybook" i]')).toHaveCount(0);
 
   // And neither word is written anywhere in the rendered document. Read out of
@@ -233,4 +234,262 @@ test('the hero is dormant: no media request before the press', async ({
   // claim — an empty list from a page that never loads anything would prove
   // nothing.
   await expect.poll(() => media.length).toBeGreaterThan(0);
+});
+
+test('pressing an archetype fetches from this origin and nowhere else', async ({
+  page
+}) => {
+  /*
+   * #542's acceptance criterion in the one state that can break it.
+   *
+   * The test above it, and the same-origin check that has always been here,
+   * both measure a page at rest — and at rest this page was already clean,
+   * because every root on it is `loading="interaction"` and fetches nothing
+   * until it is pressed. That is exactly why a defect survived review: both
+   * archetype examples ship pointed at a clip on `download.blender.org`, so the
+   * page was one press away from issuing a cross-origin request, and the
+   * receipt section directly underneath would have printed it. A page whose
+   * own honesty instrument documents it breaking its own rule is worse than a
+   * page that never made the claim.
+   *
+   * So this presses, and then holds the WHOLE page to the criterion: every
+   * request the document has issued from navigation onwards, not just the media
+   * one, and by origin rather than by a deny-list of hosts anybody could grow
+   * past.
+   */
+  const origin = new URL(landing).origin;
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+
+  await page.goto(landing);
+
+  /*
+   * The archetypes are `client:visible`, so the markup is in the document from
+   * the server render and the JavaScript that makes it a player is not. The
+   * distinction matters here and nowhere else in this file: an activation
+   * button that is present but not yet hydrated answers a click by doing
+   * nothing, and a press that did nothing would leave the request list empty
+   * and this test green for the wrong reason.
+   *
+   * So the figure is scrolled into view — the directive's observer fires on
+   * intersection, and a single jump to the foot of the page scrolls straight
+   * past it without ever intersecting — and hydration is then waited for. Astro
+   * drops the `ssr` attribute off an island when it has hydrated it, which is
+   * the only signal for this on the page.
+   */
+  const figure = page.locator('.archetype').first();
+  await figure.scrollIntoViewIfNeeded();
+  await expect.poll(() => figure.locator('astro-island[ssr]').count()).toBe(0);
+
+  const start = figure.locator('[data-playdeck-part="activation"]');
+  await expect(start.first()).toBeVisible();
+  await start.first().click();
+
+  // Wait for the press to have actually cost a media request. Without this the
+  // assertion below could pass on a page that had not yet asked for anything,
+  // which would make the guard prove nothing — the same trap the dormancy test
+  // above avoids by pressing after it asserts the empty list.
+  await expect
+    .poll(() => requests.filter((url) => /\.(mp4|ogv|ogg|m4v)(\?|$)/.test(url)))
+    .not.toEqual([]);
+  await page.waitForLoadState('networkidle');
+
+  // `data:` and `blob:` are the page addressing itself and reach no host.
+  // Everything else must be this origin: the clip, the captions fixture, the
+  // island's own JavaScript, the fonts. #542 says every asset is served from
+  // here, and after a press is the only moment at which that can be false.
+  const foreign = requests.filter(
+    (url) =>
+      !url.startsWith(`${origin}/`) &&
+      !url.startsWith('data:') &&
+      !url.startsWith('blob:')
+  );
+  expect(foreign).toEqual([]);
+});
+
+test('the archetypes describe the clip they actually play', async ({
+  page
+}) => {
+  /*
+   * The other half of the criterion above, and the half that was broken by
+   * fixing it. Pointing both archetypes at this origin's test pattern left
+   * their copy behind: the title card still announced a film by name, both
+   * credits still attributed a picture to the Blender Foundation, and the
+   * lesson notes still said a Blender open movie was playing — over colour
+   * bars, on the page whose whole argument is that it claims nothing it cannot
+   * show. The request check could not see it, because false copy costs no
+   * request.
+   *
+   * So this reads what a person reads. The two film names are the specific
+   * claim, `Blender` the general one, and both are checked against the whole
+   * of the archetypes section's visible text rather than against the elements
+   * that happened to carry them — the point is that the words are gone from
+   * the page, not that three particular nodes changed.
+   *
+   * `/archetypes` names all three, correctly, and `site-archetypes.spec.ts`
+   * leaves that alone. The only place they may not appear is here.
+   */
+  await page.goto(landing);
+
+  const section = page.locator('[data-section="archetypes"]');
+  await expect(section).toBeVisible();
+
+  const spoken = (await section.innerText()).replace(/\s+/g, ' ');
+  expect(spoken).not.toContain('Sintel');
+  expect(spoken).not.toContain('Big Buck Bunny');
+  expect(spoken).not.toContain('open movie, played here');
+
+  /*
+   * `Blender` survives in exactly one sentence, and it has to: the copies of
+   * these files on `/archetypes` do play that foundation's trailers, and CC BY
+   * asks for the credit wherever the media is played. What the assertion pins
+   * is that the sentence is about the other page rather than about this one —
+   * the licence paragraph, and nothing inside either player.
+   */
+  const licence = section.locator('.archetypes__licence');
+  await expect(licence).toContainText('the archetypes page');
+  await expect(licence).toContainText('CC BY 3.0');
+  expect(spoken.split('Blender').length - 1).toBe(
+    (await licence.innerText()).split('Blender').length - 1
+  );
+
+  // And the copy that replaced it says what is really behind the two layouts.
+  // Asserted as well as the absence above, so a future edit that deleted the
+  // Blender copy without replacing it with anything true also fails here.
+  await expect(section).toContainText('Test pattern');
+  await expect(section).toContainText('colour-bar test pattern');
+  await expect(section).toContainText('test pattern served from this origin');
+});
+
+test('no archetype control is squashed into the theme activation circle', async ({
+  page
+}) => {
+  /*
+   * The defect this pins shipped, and nothing caught it.
+   *
+   * `/` is the first page in this site to mount `@playdeck/react/theme.css`
+   * — the hero imports it — and an archetype composition in the same
+   * document. The theme sizes the activation part `inline-size: 4rem;
+   * block-size: 4rem` with a 50% radius, neither archetype writes a size for
+   * that part (on `/archetypes` there is no theme to win against), and so all
+   * four activation controls on this page rendered as 64x64 circles: two
+   * labelled pills with their text spilling out of them, a third in the
+   * lesson's resume banner, and `.study-start` — a full-bleed press-anywhere
+   * target — collapsed to a badge floating in the middle of the picture. The
+   * unlayered rule on `.stage` in `index.astro` is what gives them their size
+   * back. Whether the theme should size that part at all is a library question
+   * and is tracked as #552; what this file asserts is a property of the page,
+   * so it holds however that question is answered.
+   *
+   * Every other spec in this repo passed throughout, which is the finding. So
+   * this measures geometry off the rendered boxes, because the bug was
+   * geometry: a test that read the stylesheet back would have agreed with
+   * whichever rule happened to be in it.
+   *
+   * What is pinned is SHAPE, not size. No width in pixels appears here: the
+   * pills are as wide as their labels, so a font metric, a viewport or a
+   * wording change moves those numbers and chromium and firefox do not agree
+   * on them to begin with. What does not vary is that a labelled control is
+   * wider than it is tall — every one of these is a word or a phrase on a
+   * single line above a 2.75rem minimum height — and that a full-bleed
+   * overlay covers its picture. Both are false under the defect, in every
+   * engine, by construction: 64x64 is square, and 64x64 over a stage several
+   * hundred pixels wide is not a full bleed.
+   */
+  await page.goto(landing);
+
+  /*
+   * Both figures, hydrated, before anything is measured.
+   *
+   * `client:visible` server-renders the island, so all four buttons are in the
+   * document from the first byte and a measurement taken now would be of
+   * markup React has not touched. Astro drops the `ssr` attribute off an
+   * `astro-island` once it has hydrated it, and that is the only signal on the
+   * page for this.
+   *
+   * Scrolled per figure rather than in one jump to the foot of the document:
+   * the directive's IntersectionObserver needs to see an intersection, and a
+   * single `scrollTo(0, scrollHeight)` travels past both figures between
+   * frames without ever producing one.
+   */
+  const figures = page.locator('.archetype');
+  await expect.poll(() => figures.count()).toBe(2);
+  for (let i = 0; i < 2; i += 1) {
+    await figures.nth(i).scrollIntoViewIfNeeded();
+  }
+  await expect.poll(() => page.locator('astro-island[ssr]').count()).toBe(0);
+
+  const controls = page.locator('.stage [data-playdeck-part="activation"]');
+
+  // Four: resume and from-the-beginning on the streaming title card, resume in
+  // the lesson's banner, and the lesson's full-bleed start. Asserted so that a
+  // composition that stopped rendering its buttons cannot make the loop below
+  // vacuous.
+  await expect.poll(() => controls.count()).toBe(4);
+
+  for (const control of await controls.all()) {
+    await expect(control).toBeVisible();
+    const box = await control.boundingBox();
+    expect(box).not.toBeNull();
+    if (box === null) continue;
+
+    if ((await control.getAttribute('class'))?.includes('study-start')) {
+      /*
+       * The opposite shape, and it needs its own assertion: this control is
+       * the whole picture, so "wider than tall" is true of it under the defect
+       * as well once the box is square — it is not, but a 64x64 badge would
+       * pass any test that only asked for a landscape box. What is checked is
+       * that it still covers the viewport it is laid over. A fraction rather
+       * than a size, so it holds at any width the page is read at.
+       */
+      const viewport = control.locator(
+        'xpath=ancestor::*[@data-playdeck-part="viewport"][1]'
+      );
+      const frame = await viewport.boundingBox();
+      expect(frame).not.toBeNull();
+      if (frame === null) continue;
+      expect
+        .soft(
+          box.width / frame.width,
+          'the full-bleed start does not cover its picture'
+        )
+        .toBeGreaterThan(0.9);
+      expect
+        .soft(
+          box.height / frame.height,
+          'the full-bleed start does not cover its picture'
+        )
+        .toBeGreaterThan(0.9);
+      continue;
+    }
+
+    /*
+     * The other three carry a label on one line. Wider than tall is the
+     * property the defect destroyed, and the only one of them that survives a
+     * change of font, engine or viewport.
+     */
+    await expect(control).not.toBeEmpty();
+    expect
+      .soft(
+        box.width,
+        'a labelled activation control is no wider than it is tall'
+      )
+      .toBeGreaterThan(box.height);
+
+    /*
+     * And the defect's own value, named as itself, last. `4rem` at this site's
+     * root font size is 64px, and it is the one absolute number in this test —
+     * not a measurement of anything the page chose, but the size the theme
+     * forces. It is redundant against the line above by construction, since a
+     * square is not wider than it is tall; it is here so that the failure
+     * report says WHICH square when both fire, and it is second so that the
+     * durable invariant is the one a reader sees first.
+     */
+    expect
+      .soft(
+        { w: Math.round(box.width), h: Math.round(box.height) },
+        'an activation control is the theme 64x64 square'
+      )
+      .not.toEqual({ w: 64, h: 64 });
+  }
 });

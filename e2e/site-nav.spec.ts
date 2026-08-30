@@ -13,8 +13,9 @@ import { expect, test, type Page } from '@playwright/test';
  * only one marked, and that three more names in a strip that already holds a
  * trail, search and a switch do not push a 320px page sideways.
  *
- * The workbench is deliberately absent and asserted absent: #534 records that it
- * is not a public surface, and it is the link most likely to be added back by
+ * The workbench is deliberately absent and asserted absent: #534 records the
+ * decision that it is not to be a public surface, and it is the link most
+ * likely to be added back by
  * someone who reads this header as a list of everything the repo builds.
  *
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
@@ -77,8 +78,8 @@ for (const [where, url] of [
     // link to the workbench is that page's decision and its own tests', and
     // `scripts/check-deploy-artifact.mjs` follows the one it has. What is
     // settled here is the strip that appears on every page — three site
-    // destinations, and not a fourth pointing at a surface #534 says is not
-    // public.
+    // destinations, and not a fourth pointing at a surface #534 rules out as a
+    // public one.
     const header = page.locator('header');
     await expect(header.locator('a[href*="storybook" i]')).toHaveCount(0);
     await expect(header.locator('a[href*="workbench" i]')).toHaveCount(0);

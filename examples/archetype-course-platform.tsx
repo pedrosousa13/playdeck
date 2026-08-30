@@ -68,6 +68,29 @@ const bigBuckBunnyTrailer = {
 } as const satisfies Player.RootProps['source'];
 
 /*
+ * The recording AND everything the lesson says about it, as one value.
+ *
+ * This is what the composition plays and says unless a surface hands it
+ * something else through the `media` prop below. A surface needs that: a page
+ * whose own claim is that it makes no cross-origin request has to point this at
+ * a recording it serves itself, and a default that could not be replaced would
+ * make that page choose between the archetype and its own rule.
+ *
+ * The clip and the copy are one object because this file has already been
+ * caught with them apart. When only the source could be replaced, a page
+ * pointed it at its own test pattern and the lesson heading, the note and the
+ * credit went on describing a Blender open movie that was not playing. Bundled,
+ * a surface cannot swap the recording without being handed the three places
+ * this layout talks about it.
+ */
+const openMovieLesson = {
+  source: bigBuckBunnyTrailer,
+  title: 'Rendering an open movie',
+  note: 'This lesson plays a Blender Foundation open movie. Its outline, the notes beside it and the caption text are fixtures this example ships — they mark time in the clip and make no claim about the film.',
+  credit: 'Big Buck Bunny © Blender Foundation, licensed CC BY 3.0.'
+} as const;
+
+/*
  * The lesson outline.
  *
  * It is the course's own data and deliberately not read from the media. A
@@ -331,6 +354,26 @@ export type CoursePlatformPlayerProps = {
    * to defend.
    */
   readonly resumeAt?: number | null;
+  /**
+   * The recording to play, and what the lesson says about it. Defaults to the
+   * trailer above with the copy that describes it, so a consumer who copies
+   * this file and passes nothing gets the whole archetype from one paste.
+   *
+   * The four fields are one prop because they are one claim: `source` is the
+   * recording, `title` is the lesson heading over it, `note` is the first
+   * paragraph of the notes panel beside it, and `credit` is the attribution
+   * line under those notes. A surface that replaced the recording and not the
+   * words would be teaching a lesson about something it is not playing.
+   *
+   * The outline above is spaced for a recording at least as long as the
+   * trailer, and a much shorter one would leave sections nobody could reach.
+   */
+  readonly media?: {
+    readonly source: Player.RootProps['source'];
+    readonly title: string;
+    readonly note: string;
+    readonly credit: string;
+  };
 };
 
 /**
@@ -339,14 +382,19 @@ export type CoursePlatformPlayerProps = {
  *
  * `loading="interaction"` means nothing is fetched and no provider is attached
  * until the learner starts the lesson, so a course page carrying this player
- * makes no third-party request before that press.
+ * makes no request for media — cross-origin or otherwise — before that press.
  */
 export const CoursePlatformPlayer = ({
   captionsSrc,
+  media = openMovieLesson,
   resumeAt = null
 }: CoursePlatformPlayerProps): ReactElement => (
-  <Player.Root loading="interaction" source={bigBuckBunnyTrailer}>
-    <CoursePlatformSurface captionsSrc={captionsSrc} resumeAt={resumeAt} />
+  <Player.Root loading="interaction" source={media.source}>
+    <CoursePlatformSurface
+      captionsSrc={captionsSrc}
+      media={media}
+      resumeAt={resumeAt}
+    />
   </Player.Root>
 );
 
@@ -359,9 +407,17 @@ export const CoursePlatformPlayer = ({
  * capabilities in — which is the only way to see the whole control surface
  * without media and without a network — while `CoursePlatformPlayer` mounts the
  * recording.
+ *
+ * It takes the same `media` prop and reads every field of it except `source`:
+ * the heading, the note and the credit are drawn here, the recording is mounted
+ * by the root above. That is why the two are one object — split across the two
+ * components as separate props they would be two decisions, and two decisions
+ * drift. A story that supplies its own root and passes no `media` gets the
+ * default bundle, so the workbench shows the lesson the file ships with.
  */
 export const CoursePlatformSurface = ({
   captionsSrc,
+  media = openMovieLesson,
   resumeAt = null
 }: CoursePlatformPlayerProps): ReactElement => {
   const state = Player.usePlayerState((snapshot) => ({
@@ -506,7 +562,7 @@ export const CoursePlatformSurface = ({
           </Player.Controls>
 
           <div className="study-heading">
-            <h2 className="study-title">Rendering an open movie</h2>
+            <h2 className="study-title">{media.title}</h2>
             <Progress />
           </div>
 
@@ -516,12 +572,7 @@ export const CoursePlatformSurface = ({
               plays, and this is the half of the screen that says so. */}
           <div className="study-notes">
             <h3 className="study-panel__title">Notes</h3>
-            <p>
-              This lesson plays a Blender Foundation open movie. Its outline,
-              the notes beside it and the caption text are fixtures this example
-              ships — they mark time in the clip and make no claim about the
-              film.
-            </p>
+            <p>{media.note}</p>
             <p>
               Every control under the picture is drawn only where the player
               reports it can honour the command. Change the source to one that
@@ -529,9 +580,7 @@ export const CoursePlatformSurface = ({
               one that refuses a rate change and the speed row is not drawn at
               all.
             </p>
-            <p className="study-credit">
-              Big Buck Bunny &copy; Blender Foundation, licensed CC BY 3.0.
-            </p>
+            <p className="study-credit">{media.credit}</p>
           </div>
         </div>
 

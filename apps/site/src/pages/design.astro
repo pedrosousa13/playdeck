@@ -4,8 +4,9 @@ import SiteHeader from '../components/SiteHeader.astro';
 import Sweep from '../components/Sweep.astro';
 
 // The workbench is deliberately absent from this sheet, as it is from the
-// landing page and the site header. #534 records that it is not served as a
-// public surface, and the maintainer ruled the same on a Storybook link.
+// landing page and the site header. #534 records the decision that it is not to
+// be a public surface, and the maintainer ruled the same on a Storybook link.
+// The decision is carried out as an absence of links rather than of the build:
 // `scripts/check-deploy-artifact.mjs` still visits it, from its own address
 // rather than by following a link from here.
 
@@ -51,7 +52,7 @@ const surfaces = [
   // identical chips in light and three distinct ones in dark is the asymmetry
   // shown rather than asserted, and the chip's `--color-line-strong` boundary is
   // what keeps a swatch whose fill equals its ground legible at all.
-  { token: '--color-raised', use: 'A surface on a surface' },
+  { token: '--color-raised', use: 'A step up from its ground' },
   { token: '--color-overlay', use: 'A surface over the page' },
   { token: '--color-sunken', use: 'A recessed well' },
   { token: '--color-line', use: 'Hairline' },
