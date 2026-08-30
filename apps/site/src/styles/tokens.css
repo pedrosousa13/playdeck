@@ -63,6 +63,16 @@
   --light-field: #fafaf8;
   --light-surface: #ffffff;
   --light-sunken: #f1f1ed;
+  /* There is no `--light-raised` and no `--light-overlay`, and that is a fact
+   * about the colour space rather than an omission. The light ladder runs
+   * sunken -> field -> surface and `--light-surface` is #fff, so there is no
+   * value above it to continue the ladder with: a lighter step does not exist,
+   * and a darker one would read backwards — a raised panel dimmer than the
+   * thing it sits on. So the two roles below both resolve to `--light-surface`
+   * in light, which is still a real step above `--color-field`, and the
+   * difference between a panel and the panel over it is carried by the two
+   * elevations and the hairline. The ladder is genuinely asymmetric between the
+   * themes and this comment is where that is stated rather than discovered. */
   --light-ink: #131316;
   --light-ink-muted: #55555e;
   --light-ink-subtle: #63636c;
@@ -87,6 +97,20 @@
   --dark-field: #08080b;
   --dark-surface: #131318;
   --dark-sunken: #0e0e12;
+  /* Two more rungs of the same ladder, and the only theme that has room for
+   * them. Each existing rung is a step of about 1.04 in contrast — field to
+   * sunken is 1.038, sunken to surface 1.040 — so these continue at that pitch
+   * rather than at a size of their own: surface to raised is 1.038 and raised
+   * to overlay is 1.042. They sit in the same band as the steps the system
+   * already spends, which is the argument for their size.
+   *
+   * The ceiling is `--dark-line-strong`, not taste. That token is a control
+   * boundary and owes 3:1 against every ground, and it measures 3.35 on raised
+   * and 3.22 on overlay. A third rung would be near #24242c, where it falls to
+   * 2.89 and fails — so the ladder stops here, and it stops for a measured
+   * reason. Depth above this is an elevation, never a lighter surface. */
+  --dark-raised: #17171d;
+  --dark-overlay: #1b1b22;
   --dark-ink: #f0f0f2;
   --dark-ink-muted: #a8a8b3;
   --dark-ink-subtle: #92929d;
@@ -114,6 +138,15 @@
    */
   --color-field: var(--light-field);
   --color-surface: var(--light-surface);
+  /* The two steps above a panel. `--color-raised` is a surface on a surface —
+   * a row picked out of a panel, a card inside one. `--color-overlay` is a
+   * surface over the page rather than in it: a dialog, a popover. Both are
+   * surface COLOUR, which is the point: rule 4 already has two elevations and a
+   * hairline, and more depth here must not mean a wider blur, because a border
+   * under a 24px or 60px blur is the named tell the audit banned. It stays
+   * banned, and these add nothing that could assemble it. */
+  --color-raised: var(--light-surface);
+  --color-overlay: var(--light-surface);
   --color-sunken: var(--light-sunken);
   --color-ink: var(--light-ink);
   --color-ink-muted: var(--light-ink-muted);
@@ -122,7 +155,7 @@
    * `--color-line` separates things a reader can already see are separate, so
    * it is free to be quiet and WCAG asks nothing of it. `--color-line-strong`
    * is the boundary of a control — it is what says "this is a switch" — so it
-   * carries the 3:1 that non-text UI has to meet, on all three grounds. That is
+   * carries the 3:1 that non-text UI has to meet, on all five grounds. That is
    * why it is far darker than a separator wants to be. It is right anywhere the
    * boundary itself is the information — a colour chip whose fill may equal the
    * surface it sits on is the other case — and wrong for a panel edge, which
@@ -322,6 +355,8 @@
   :root:not([data-theme='light']) {
     --color-field: var(--dark-field);
     --color-surface: var(--dark-surface);
+    --color-raised: var(--dark-raised);
+    --color-overlay: var(--dark-overlay);
     --color-sunken: var(--dark-sunken);
     --color-ink: var(--dark-ink);
     --color-ink-muted: var(--dark-ink-muted);
@@ -342,6 +377,8 @@
 :root[data-theme='dark'] {
   --color-field: var(--dark-field);
   --color-surface: var(--dark-surface);
+  --color-raised: var(--dark-raised);
+  --color-overlay: var(--dark-overlay);
   --color-sunken: var(--dark-sunken);
   --color-ink: var(--dark-ink);
   --color-ink-muted: var(--dark-ink-muted);

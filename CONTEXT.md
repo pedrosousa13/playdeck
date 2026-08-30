@@ -389,6 +389,16 @@ type scale, the one-gradient rule and the four audit constraints. That system is
 not the player's theme — `packages/react/theme.css` ships to consumers and
 shares no tokens with it, and the two are deliberately separate.
 
+**Stance**:
+Which of the marketing site's two page treatments a route is served in:
+`argument` for `/`, `document` for every other route. `Base.astro` takes it as a
+prop, defaults it to `document`, and writes it to the `<body>` as `data-stance`,
+which is what the site's entry motion is keyed off. A separate axis from the
+`documentation` prop, which decides only whether a page is in the search index:
+`/design` is `documentation={false}` and `stance="document"`. Site-only — it
+says nothing about a player.
+_Avoid_: mode, register, treatment, archetype
+
 **Structural geometry**:
 The positioning a primitive needs in order to function — stacking, insets, the
 media element filling its viewport. Set inline by the primitive, ahead of the

@@ -115,7 +115,18 @@ const providers = [
    * searched for "hls" and landed on a landing-page heading would have been
    * sent to the sales copy instead of the API. */
 }
-<Base title="Playdeck — a headless React video player" documentation={false}>
+{
+  /* The one page served in the argument stance, and the only page that may be:
+   * larger type, more space, and the entry motion `base.css` keys off the
+   * attribute this prop writes. Every other route takes the default and passes
+   * nothing. It is a separate axis from `documentation` above — `Base.astro`
+   * says why — and this page happens to sit at one end of both. */
+}
+<Base
+  title="Playdeck — a headless React video player"
+  documentation={false}
+  stance="argument"
+>
   {
     /* No crumbs, which is what tells the header it is on `/`: the wordmark
      * stops being a link on the page it points at, so the header renders no
@@ -209,10 +220,20 @@ const providers = [
         <code>available</code>, <code>unknown</code> or <code>unavailable</code>,
         and the two negative-looking answers are not degrees of one thing.
       </p>
+      {
+        /* The only elements on the site that take entry motion, and there are
+         * three of them because they are one comparison rather than three
+         * things: the columns fade and rise together, as the page's central
+         * claim arriving, and nothing below them moves at all. `DESIGN.md`
+         * argues that one authored moment is worth more than six scattered
+         * reveals; the hero already spends the site's other one on the sweep,
+         * and this is the first thing under it. A reveal per section is the
+         * templated-marketing tell this count exists to refuse. */
+      }
       <ul class="statuses">
         {
           statuses.map(({ status, summary, detail }) => (
-            <li class="status" data-status={status}>
+            <li class="status u-enter" data-status={status}>
               <h3 class="status__name">
                 <span class="status__dot" aria-hidden="true" />
                 {status}
@@ -406,6 +427,55 @@ const providers = [
   </main>
 </Base>
 
+<script>
+  /**
+   * The entry motion, applied. This page is the only one that ships it, and
+   * `base.css` holds the vocabulary it drives — the class is inert on any page
+   * not in the argument stance.
+   *
+   * The observer *adds* the from-state and then releases it, which is the whole
+   * of the no-script story: nothing in the stylesheet hides these elements, so
+   * a reader whose script fails or is blocked reads the comparison rather than
+   * an empty row. A default of `opacity: 0` undone by a script would blank the
+   * page on the one failure it has to survive.
+   *
+   * `matchMedia` is checked here rather than left to the site-wide duration
+   * collapse in `base.css`. That rule lands a transition on its settled state,
+   * which is correct for every other transition on the site, but the honest
+   * answer for a reader who asked for no motion is that the observer is never
+   * constructed and the from-state is never written to anything — so there is
+   * no state for a collapsed duration to have to rescue.
+   */
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  if (!reduced.matches) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          // Removed rather than rewritten: the resting state is the CSS's, and
+          // an element that has arrived is one this script has no further
+          // business with.
+          entry.target.removeAttribute('data-enter');
+          observer.unobserve(entry.target);
+        }
+      },
+      // A little inside the viewport rather than at its edge, so the movement
+      // is under way by the time the element is somewhere a reader is looking.
+      { rootMargin: '0px 0px -10% 0px' }
+    );
+
+    for (const target of document.querySelectorAll('.u-enter')) {
+      // An element already on screen when this runs is not entering anything.
+      // The script is deferred, so it arrives after the first paint: giving
+      // the from-state to something the reader is already looking at would
+      // take it away and hand it back, which is a blink rather than a reveal.
+      if (target.getBoundingClientRect().top < window.innerHeight) continue;
+      target.setAttribute('data-enter', '');
+      observer.observe(target);
+    }
+  }
+</script>
 
 <style>
   /* Wider than the reference pages' prose column and wider than a document

@@ -50,6 +50,15 @@ const typeScale = [
 const surfaces = [
   { token: '--color-field', use: 'The page' },
   { token: '--color-surface', use: 'A raised panel' },
+  // The two steps above a panel. In dark they are new rungs of the ladder; in
+  // light they both resolve to `--light-surface`, because the light ladder tops
+  // out at #fff and has nowhere above it to go. Rendering them anyway is the
+  // point of a sheet that reads the tokens rather than a table of values: three
+  // identical chips in light and three distinct ones in dark is the asymmetry
+  // shown rather than asserted, and the chip's `--color-line-strong` boundary is
+  // what keeps a swatch whose fill equals its ground legible at all.
+  { token: '--color-raised', use: 'A surface on a surface' },
+  { token: '--color-overlay', use: 'A surface over the page' },
   { token: '--color-sunken', use: 'A recessed well' },
   { token: '--color-line', use: 'Hairline' },
   { token: '--color-line-strong', use: 'Hairline, on a surface' }

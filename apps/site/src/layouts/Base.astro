@@ -42,9 +42,35 @@ interface Props {
    * for why they are two props rather than one.
    */
   documentation?: boolean;
+  /**
+   * Which of the site's two page treatments this page is served in, written to
+   * the `<body>` as `data-stance`.
+   *
+   * `document` unless a page says otherwise, and the default is the important
+   * half: every route here except `/` is a document — the reference pages, the
+   * provider pages, the archetypes and this system's own specimen sheet — so a
+   * page added later gets the quiet treatment with nothing to remember, and the
+   * one page that argues has to say so. `argument` buys larger type, more
+   * space, and the entry motion `base.css` keys off this attribute; keying it
+   * here rather than on a class is what stops a document page growing scattered
+   * reveals by accident.
+   *
+   * `/archetypes` is a `document` deliberately rather than by omission: the
+   * persuading happens on `/`, and that page exists so a reader can read the
+   * source.
+   *
+   * **This is not the same axis as `documentation` above**, and the two are
+   * only correlated. `documentation` answers whether a page belongs in the
+   * search index; `stance` answers how it is dressed. `/design` is
+   * `documentation={false}` — it is this system's specimen sheet and not
+   * something to find by searching for a word in it — and `stance="document"`
+   * all the same, because it reads as a document. Collapsing them into one prop
+   * would make either fact unstatable without the other.
+   */
+  stance?: 'argument' | 'document';
 }
 
-const { title, documentation = true } = Astro.props;
+const { title, documentation = true, stance = 'document' } = Astro.props;
 ---
 
 <!doctype html>
@@ -78,7 +104,7 @@ const { title, documentation = true } = Astro.props;
      * Pagefind reads the attribute's presence and not its value — `data-
      * pagefind-ignore="false"` would exclude the page just as firmly. */
   }
-  <body data-pagefind-ignore={documentation ? undefined : true}>
+  <body data-pagefind-ignore={documentation ? undefined : true} data-stance={stance}>
     <slot />
   </body>
 </html>
