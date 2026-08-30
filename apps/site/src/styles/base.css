@@ -228,6 +228,45 @@ a:active {
  * paints it as an SVG `<linearGradient>` instead and carries the full
  * reasoning. */
 
+/* ---- entry motion -------------------------------------------------------
+ *
+ * The site's one entry-motion vocabulary: a fade and a small rise as an
+ * element comes into the viewport. `transform` and `opacity` only, which is
+ * the whole of what this system animates, and `--duration-slow` because this
+ * is the same kind of thing that token was added for — a reveal that happens
+ * once, on arrival, long enough to read as a movement rather than a repaint.
+ *
+ * **The resting state is what the CSS gives the element.** There is no
+ * `opacity: 0` default anywhere here: `data-enter` is applied *by* the
+ * observer on `/` and removed when the element arrives, so a reader whose
+ * script never ran, or who blocked it, or who asked for reduced motion — in
+ * which case the observer is never constructed at all — gets the settled page
+ * rather than a blank column. Written the other way round, a script failure
+ * would leave nothing on screen, which is the same reasoning that makes the
+ * hero's island `client:only`.
+ *
+ * Keyed off `[data-stance='argument']`, so it reaches `/` and can reach
+ * nothing else. A document page could carry the class and would still not
+ * move: scattered reveals down a page are the generated-landing-page tell in
+ * motion form, and the way to stop one is to make it unreachable rather than
+ * to ask a later page not to write it. Scroll-linked and parallax effects are
+ * outside this vocabulary entirely and have no expression in it.
+ */
+[data-stance='argument'] .u-enter {
+  transition:
+    opacity var(--duration-slow) var(--ease),
+    transform var(--duration-slow) var(--ease);
+}
+
+/* The from-state, and the only place either property is moved. The rise is a
+ * step of the spacing scale rather than a length of its own — it is the same
+ * small distance the page's other gaps are measured in, and a reveal that
+ * travels further reads as an arrival from off-screen. */
+[data-stance='argument'] .u-enter[data-enter] {
+  opacity: 0;
+  transform: translateY(var(--space-3));
+}
+
 /*
  * Reduced motion, once, for the whole site. `0.01ms` rather than `0` because
  * some engines skip a zero-duration transition's `transitionend` entirely, and

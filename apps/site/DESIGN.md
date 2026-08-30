@@ -22,8 +22,9 @@ its opposite is what a generated interface looks like.
    discovered — see below.
 2. **There is exactly one gradient.** See below.
 3. **Functional text never goes below 11px.**
-4. **Depth is a surface colour, a hairline, or one of two elevations — and an
-   elevated surface never also carries a border.** See below.
+4. **Depth is a step on the surface ladder, a hairline, or one of two
+   elevations — and an elevated surface never also carries a border.** See
+   below.
 5. **Only `transform` and `opacity` are animated.**
 
 Rules 1 and 5 govern what this app writes. The two archetype stylesheets
@@ -40,6 +41,8 @@ the light and dark columns are the raw scale entries behind it.
 | --------------------- | --------- | --------- | ---------------------------------------------- |
 | `--color-field`       | `#FAFAF8` | `#08080B` | The page                                       |
 | `--color-surface`     | `#FFFFFF` | `#131318` | A raised panel                                 |
+| `--color-raised`      | `#FFFFFF` | `#17171D` | A surface on a surface — a row, an inner card  |
+| `--color-overlay`     | `#FFFFFF` | `#1B1B22` | A surface over the page — a dialog, a popover  |
 | `--color-sunken`      | `#F1F1ED` | `#0E0E12` | A recessed well — a switch track, a code block |
 | `--color-ink`         | `#131316` | `#F0F0F2` | Body and headings                              |
 | `--color-ink-muted`   | `#55555E` | `#A8A8B3` | Secondary prose                                |
@@ -55,6 +58,35 @@ The dark values are not the light ones inverted. A near-black field swallows
 saturated mid-tones, so the accents move up the lightness axis and keep their
 hue.
 
+**The surface ladder is asymmetric between the themes, and that is a fact about
+the colour space rather than an omission.** In light the rungs run
+`--color-sunken` `#F1F1ED` → `--color-field` `#FAFAF8` → `--color-surface`
+`#FFFFFF`, and the top rung is white: no value exists above it, and a step
+_down_ from a panel would read backwards — a raised thing dimmer than what it
+sits on. So light has no `--light-raised` and no `--light-overlay` in the raw
+scale, and both roles resolve to `--light-surface`. Dark has the room, and the
+two new raw entries take it: `--dark-raised` `#17171D` and `--dark-overlay`
+`#1B1B22`.
+
+What makes the collapse acceptable rather than a hole is that `--color-raised`
+is still a real step in light wherever it sits on `--color-field` — 1.045, the
+same rung every other step of this ladder is worth. It collapses only in the one
+case where a raised surface sits directly on `--color-surface`, and that case is
+what the two elevations and the hairline are for. Depth was never only a colour
+here.
+
+**The dark rungs were chosen by measurement, not by eye.** The ladder already
+steps 1.038 from field to sunken and 1.040 from sunken to surface; surface to
+raised is 1.040 and raised to overlay is 1.040. They are exactly as visible as
+the steps the system already spends, which is the whole argument for their size —
+a new rung sized to be noticed would have said the old ones were too quiet.
+**The ceiling is around `#1F1F26`**, and it is `--color-line-strong` that sets
+it: at that value the control boundary falls to 3.08 and a third rung stops
+being available at all. `#24242C` was tried and rejected — line-strong measures
+2.89 against it, below the 3:1 a control boundary owes. That figure is recorded
+here so nobody re-derives it, and it is why depth above the overlay is an
+elevation rather than a lighter surface.
+
 **The three capability states are three points on the sweep**, in sweep order:
 available, then unknown, then unavailable. Colour carries domain meaning here, so
 it is never spent on decoration — and because colour alone is not a status, each
@@ -65,7 +97,9 @@ state is always paired with its word or a shape, never shown as a bare dot.
 free to be quiet and WCAG asks nothing of it. `--color-line-strong` is the
 boundary of a control, or of a swatch whose fill may equal the surface behind
 it — the boundary is the information — so it carries the 3:1 that non-text UI
-must meet, against all three grounds.
+must meet, against all five grounds. It was three until the ladder grew two
+rungs; it still clears 3:1 against every one of them, and where it would stop
+clearing it is what fixes the ladder's ceiling above.
 
 ### Three values changed from the design comp
 
@@ -119,10 +153,56 @@ Dark theme:
 | `--color-unavailable` | 6.81     | 6.30       | 6.56      | 4.5   |
 | `--color-line-strong` | 3.76     | 3.48       | 3.62      | 3     |
 
-The tightest pair in the system is light `--color-unavailable` on the sunken
-well, at 4.58. It is the comp's own value and it passes, so it stayed — but it
-has almost no headroom, and a sunken well that gets any lighter takes it below
-AA.
+The two grounds the ladder gained sit in tables of their own rather than as two
+more columns above, because in light they are not a second measurement: both
+grounds are `#FFFFFF`, so both columns repeat the `on surface` column exactly.
+That repetition is the point rather than an artefact of the layout — it is the
+collapse the palette section describes, stated in the arithmetic — and a pair of
+identical columns wedged into the light table would have read as a copying
+mistake instead.
+
+Light theme, on the two new grounds:
+
+| Foreground            | on raised | on overlay | Needs |
+| --------------------- | --------- | ---------- | ----- |
+| `--color-ink`         | 18.54     | 18.54      | 4.5   |
+| `--color-ink-muted`   | 7.38      | 7.38       | 4.5   |
+| `--color-ink-subtle`  | 5.95      | 5.95       | 4.5   |
+| `--color-accent`      | 6.65      | 6.65       | 4.5   |
+| `--color-available`   | 5.84      | 5.84       | 4.5   |
+| `--color-unknown`     | 6.30      | 6.30       | 4.5   |
+| `--color-unavailable` | 5.19      | 5.19       | 4.5   |
+| `--color-line-strong` | 3.66      | 3.66       | 3     |
+
+Dark theme, on the two new grounds:
+
+| Foreground            | on raised | on overlay | Needs |
+| --------------------- | --------- | ---------- | ----- |
+| `--color-ink`         | 15.68     | 15.04      | 4.5   |
+| `--color-ink-muted`   | 7.58      | 7.27       | 4.5   |
+| `--color-ink-subtle`  | 5.80      | 5.56       | 4.5   |
+| `--color-accent`      | 8.02      | 7.70       | 4.5   |
+| `--color-available`   | 9.56      | 9.17       | 4.5   |
+| `--color-unknown`     | 10.69     | 10.25      | 4.5   |
+| `--color-unavailable` | 6.08      | 5.83       | 4.5   |
+| `--color-line-strong` | 3.35      | 3.22       | 3     |
+
+**The three capability colours clear AA against both new surfaces in both
+themes**, and that is checked rather than assumed. Colour carries domain meaning
+on this site, and a ladder that had flattened available, unknown and unavailable
+against a new ground — or taken any of them under 4.5 — would have broken the
+site's central claim on whichever panel first used one. The lowest figure in
+either table is `--color-unavailable` at 5.19 on the light pair, which is the
+number the light `on surface` column already carried.
+
+The tightest new pair is dark `--color-line-strong` on the overlay, at 3.22.
+That is the measurement the ladder's ceiling is derived from: it clears the 3:1
+a control boundary owes, and the next rung up would not.
+
+The tightest text pair in the system is still light `--color-unavailable` on the
+sunken well, at 4.58. It is the comp's own value and it passes, so it stayed —
+but it has almost no headroom, and a sunken well that gets any lighter takes it
+below AA.
 
 **Selected text is `--color-field` on `--color-accent`**, which is the same two
 colours as the accent row of the table above with the ground and the ink
@@ -130,8 +210,8 @@ swapped, and contrast is symmetric: 6.37 in light, 8.99 in dark. So the
 selection needed no token of its own and moves nothing in the table. See
 _Browser surfaces_ below for why it sets `color` as well as a background.
 
-**The scrollbar thumb is `--color-line-strong`**, on whichever of the three
-grounds it happens to be scrolling. That is the row the table already carries at
+**The scrollbar thumb is `--color-line-strong`**, on whichever of the five
+grounds it happens to be scrolling. That is the row the tables already carry at
 3.51 / 3.76 against the field, and a thumb is non-text UI, so 3:1 is what it
 owes.
 
@@ -177,12 +257,19 @@ was reviewed as rendered, so changing what `h1` or `h2` resolves to is a change
 to every page at once — including the reference documents, whose titles are
 package names and want no display treatment at all.
 
-`/` is the only page that spends either on a heading of its own. Its `h1` steps
-up to `--text-4xl` at `48rem` and keeps `h1`'s own rung below that, where 88px
-would take three quarters of a phone's width and cost the lead its first
-screen. A step between two rungs of this scale rather than a `clamp()`, because
-a clamp is a font size written into a component and no component here writes
-one. `/design` renders a specimen at every rung, these two included, which is
+**The display rung is what the `argument` stance spends and the `document`
+stance does not.** That is now sayable in one word where it used to take a
+sentence about which page: `/` is the only route served in the `argument`
+stance — see _Stances_ below — and it is the only page that spends either of
+these two rungs on a heading of its own. A document page's title names the
+document — a package, a provider, this sheet — and no stance in this system
+dresses a name as a thesis.
+
+That page's `h1` steps up to `--text-4xl` at `48rem` and keeps `h1`'s own rung
+below that, where 88px would take three quarters of a phone's width and cost
+the lead its first screen. A step between two rungs of this scale rather than a
+`clamp()`, because a clamp is a font size written into a component and no
+component here writes one. `/design` renders a specimen at every rung, these two included, which is
 the same exemption a specimen sheet already has for both forms of the sweep: it
 is showing the scale, not spending it.
 
@@ -378,6 +465,77 @@ the light theme and then replace it.
 Neither block writes a colour. Both assign `var(--dark-*)` references, so the
 values still exist in one place and the two blocks cannot drift apart.
 
+## Stances
+
+A marketing page and a reference document have different jobs, and pretending
+otherwise costs one of them. So a page declares which of two treatments it is
+served in. `Base.astro` takes `stance?: 'argument' | 'document'`, defaulting to
+`document`, and writes it to the `<body>` as `data-stance`.
+
+| Route                   | Stance     |
+| ----------------------- | ---------- |
+| `/`                     | `argument` |
+| `/reference`            | `document` |
+| `/reference/<package>`  | `document` |
+| `/providers`            | `document` |
+| `/providers/<provider>` | `document` |
+| `/archetypes`           | `document` |
+| `/design`               | `document` |
+
+`argument` is the treatment `/` is written in: larger type, more negative space,
+the entry motion below, and the demos. `document` is the quiet treatment every
+other page on this site already had. Only `/` passes anything; every other route
+takes the default and says nothing.
+
+**What the attribute itself drives today is the entry motion, and only that.**
+The larger type and the wider gaps on `/` are that page's own rules in its own
+`<style>`, as they were before the prop existed; the stance did not move them
+and does not need to. What the attribute buys is a place for the rules that must
+_not_ be one page's private decision — a reveal is the first of them, because a
+reveal written locally is a reveal every later page can write locally too. The
+name is the fact stated on the document; the CSS keyed off it is what the fact
+is spent on.
+
+**The word is `stance`, and it was chosen the same way `rail` was.** A stance is
+the posture a page takes toward its reader, which is what the two treatments
+differ in — not where anything sits, and not what a page is made of. Every
+shorter word was taken. `archetype` already means a composed example player here
+and is also a route. `surface` already names two things. `register` had 151 hits
+across the repository, `treatment` 20, and `mode` and `kind` are both the
+player's own domain. `stance` had none, in `apps/`, `packages/`, `docs/` or
+`CONTEXT.md`, so it arrives meaning one thing.
+
+**The default is the load-bearing half.** Every route but one is a document, so
+a page added later gets the quiet treatment with nothing to remember — no list
+to append to and no attribute to copy — and the one page that argues is the one
+that has to say so. That is the same shape of decision the `documentation` prop
+already makes about its own default, for the same reason: the property that
+holds for almost every page is the one that must not need an author to remember
+it.
+
+**`/archetypes` is a `document` deliberately, not by omission.** The persuading
+happens on `/`; that page exists so a reader can read the source of two composed
+players. A second marketing register there would be the site making its argument
+twice and being inconsistent about how, which is worse than either treatment on
+its own.
+
+**`/design`'s public status is not decided here.** Whether this sheet is listed,
+unlisted or moved is another issue's to rule on. It is given a stance so that it
+has a shape whatever that ruling is, and nothing more should be read into it.
+
+**`stance` and `documentation` are two axes and only correlated.**
+`documentation` answers whether a page belongs in the search index; `stance`
+answers how it is dressed. `/design` is `documentation={false}` and
+`stance="document"`, and that pair is the proof they are not one prop:
+collapsing them would make either fact unstatable without the other. `/` happens
+to sit at one end of both, which is what makes the two look like the same
+question until a third page appears.
+
+`e2e/site-stance.spec.ts` pins the parts of this a reviewer would otherwise have
+to take on trust: that `/` carries the argument stance, that a document route
+carries the other and animates nothing, and that the entry motion's targets rest
+visible when the motion does not run.
+
 ## Depth, motion, and the four audit constraints
 
 A deterministic detector was run against the comps and found real defects. These
@@ -454,15 +612,55 @@ surface one. Everything
 else on this site is a surface colour and a hairline, as before. A new elevated
 element is an edit to this list, not a local decision.
 
-**There is one animation on the site, and it is on `/`.** The hero's sweep band
-travels in from the left once on arrival — a `translateX(-100%)` to
-`translateX(0)` on an inner box inside an `overflow: hidden` window, at
-`--duration-slow`. A translate under a clip rather than a scale, because scaling
-the band would compress the gradient instead of revealing it and the warm end
-would arrive first; a translate moves the paint across a fixed window at its
-final width. Everything below the hero is still. Scattered reveals down a page
-are the generated-landing-page tell in motion form, and one authored moment is
-worth more than six of them.
+### The surface steps, and what rule 4 used to say
+
+Rule 4 read **"Depth is a surface colour, a hairline, or one of two
+elevations — and an elevated surface never also carries a border."** "A surface
+colour" was accurate while there were three of them and a panel had exactly one
+place to be. It stopped being accurate when the ladder grew: a row picked out of
+a panel and a dialog laid over the page are both a surface on a surface, and the
+old wording made them sound like a choice of paint rather than a position on a
+scale.
+
+So the amendment is one word. Depth is a _step_ on the surface ladder, which
+says the values are ordered and that the order is what carries the meaning.
+Nothing else in the rule moved. The two elevations are the same two tokens with
+the same two jobs, and **an elevated surface still never also carries a
+border** — which is the sentence that keeps the banned pairing unassemblable,
+and the new rungs are no help in assembling it, because a surface colour is not
+a blur and cannot become one. More depth here means a rung, never a wider
+shadow.
+
+The ladder has a top, and it is measured rather than felt: see _Palette_ above
+for the `#1F1F26` ceiling and the rejected `#24242C`. Above the overlay the
+answer is an elevation. There is no third rung waiting to be added, and a page
+that seems to want one is a page with too many surfaces on it.
+
+**No component spends either new role yet.** The two are declared in
+`tokens.css` and rendered as swatches on `/design`, and that is the whole of
+their present use: the ladder is stated and measured before anything leans on
+it, so the first panel that wants a surface on a surface reaches for a rung that
+has already been checked against ink rather than inventing one. Stating that
+here is what keeps a later reader from inferring, from the roles' existence,
+that some panel on this site is already relying on them.
+
+**There are two animations on the site, and both are on `/`.** The count is the
+rule; the argument it was making is why the count is two and not seven.
+Scattered reveals down a page are the generated-landing-page tell in motion
+form, and one authored moment is worth more than six of them — a second one is
+spent here only because it is the same moment, on the page's central claim.
+
+The first is the hero's sweep band, which travels in from the left once on
+arrival — a `translateX(-100%)` to `translateX(0)` on an inner box inside an
+`overflow: hidden` window, at `--duration-slow`. A translate under a clip rather
+than a scale, because scaling the band would compress the gradient instead of
+revealing it and the warm end would arrive first; a translate moves the paint
+across a fixed window at its final width.
+
+The second is the entry motion below, which reaches exactly three elements: the
+three `.status` columns of the three-state comparison on `/`, which are one
+comparison rather than three things and move together as such. Nothing else on
+the site moves on entry, and the hero's band is untouched by any of it.
 
 `prefers-reduced-motion: reduce` collapses durations, which lands each transition
 on its settled state immediately. That only works because every transition moves
@@ -489,6 +687,47 @@ press: the rail's links and the header's crumbs both do.
 Colour changes are not transitioned, because colour is not one of the two
 properties this system animates. The one transition on a control is the switch's
 knob, which translates; its colour changes at the same moment and snaps.
+
+### Entry motion
+
+`base.css` holds the site's one entry-motion vocabulary: a fade and a small
+rise, `opacity` and `transform` only, at `--duration-slow` and `--ease`. Both
+tokens already existed and no token was added for this. The rise is
+`var(--space-3)`, a step of the spacing scale rather than a length of its own,
+because a reveal that travels further reads as an arrival from off-screen rather
+than as a thing settling.
+
+It is keyed off `[data-stance='argument']`, so it reaches `/` and can reach
+nothing else. A document page could carry the class and would still not move.
+That is the point: the way to stop a page growing scattered reveals is to make
+them unreachable, not to write a rule asking a later author not to write one.
+
+Three constraints, and each is a rule rather than a description of what the code
+happens to do today.
+
+- **The resting state is what the CSS gives the element.** There is no
+  `opacity: 0` default anywhere in this vocabulary. The script on `/` _adds_
+  `data-enter` and removes it on intersection, so a reader whose script fails or
+  is blocked gets the settled page. Written the other way round it would blank
+  the page on the one failure it has to survive — the same reasoning that makes
+  the hero's island `client:only`.
+- **`prefers-reduced-motion: reduce` skips the observer entirely.**
+  `matchMedia` is checked before anything else and the `IntersectionObserver` is
+  never constructed, so the from-state is never written to anything and there is
+  no state for the site-wide duration collapse above to have to rescue. That
+  collapse is deliberately not what handles this case: it rescues a transition
+  by landing it on its settled state, and the honest answer to a reader who
+  asked for no motion is that no transition was started.
+- **Scroll-linked and parallax effects are rejected outright.** They have no
+  expression in this vocabulary and are not to be given one. A page whose paint
+  is a function of scroll offset is this section's tell drawn continuously
+  instead of once.
+
+One implementation detail is worth a sentence, because it is not obvious and a
+later reader would undo it: an element already inside the viewport when the
+deferred script runs is skipped rather than given the from-state. Handing an
+element the from-state after first paint and then taking it back is a blink
+rather than a reveal.
 
 ## Search
 
@@ -557,7 +796,7 @@ sitting on top of one. They are themed in `base.css` from the roles above:
   background alone would paint behind whatever that colour is.
 - **Scrollbars** use `scrollbar-color` with a `--color-line-strong` thumb and a
   transparent track, so the track takes the surface it is scrolling over rather
-  than pinning a fourth grey into the page. `scrollbar-width: thin` is applied
+  than pinning another grey into the page. `scrollbar-width: thin` is applied
   only to the inner scrollers — a code block and the rail — where a
   platform-width bar reads as a second border; the page's own scrollbar keeps
   its full hit target. Standard properties only, never `::-webkit-scrollbar`,
@@ -576,33 +815,40 @@ system not owned by one component, and a new one has to earn that:
   everyone else. It exists for the case where the visible text is deliberately a
   fragment of the real name: the rail shows `core`, and this is what keeps the
   link named `@playdeck/core`.
+- `.u-enter` marks an element the entry motion applies to. What earned it is
+  that the alternative is worse: written into `/`'s own `<style>` it would be
+  one page's private effect, and the next page that wanted a reveal would write
+  a second one with its own duration and its own distance. Site-wide, there is
+  one fade, one rise and one easing, and the `[data-stance='argument']` key on
+  the rule is what keeps a site-wide class from being a site-wide effect — the
+  class is inert on every page but one. See _Entry motion_ above.
 
 ## Where things live
 
-| File                                   | What it is                                      |
-| -------------------------------------- | ----------------------------------------------- |
-| `src/styles/tokens.css`                | Every value. The only file with hex literals    |
-| `src/styles/base.css`                  | Element defaults, spoken in tokens              |
-| `src/styles/doc.css`                   | The shell and the prose of a rendered document  |
-| `src/layouts/Base.astro`               | The document, and the pre-paint theme script    |
-| `src/components/SiteHeader.astro`      | The shell above every page                      |
-| `src/components/ThemeToggle.astro`     | The control that stores a theme choice          |
-| `src/components/DocsSearch.astro`      | Search over the documentation, and its dialog   |
-| `src/components/Sweep.astro`           | The one gradient, and its two forms             |
-| `src/components/DocRail.astro`         | The rail beside a document, both sets of them   |
-| `src/components/HeroPlayer.astro`      | The hero's two panels, and the player theme     |
-| `src/components/HeroPlayerIsland.tsx`  | The hero's composition: the player and ledger   |
-| `src/pages/index.astro`                | The landing page at `/`, and its links          |
-| `src/pages/design.astro`               | The specimen sheet, served at `/design`         |
-| `src/pages/archetypes.astro`           | Two composed players, and the files they are    |
-| `src/pages/reference/index.astro`      | The package index, served at `/reference`       |
-| `src/pages/reference/[pkg].astro`      | One reference page per publishable package      |
-| `src/pages/providers/index.astro`      | The provider index, served at `/providers`      |
-| `src/pages/providers/[provider].astro` | A setup page per provider group                 |
-| `src/content.config.ts`                | The two document collections, and their loaders |
-| `src/reference-packages.mjs`           | Which packages get a page, and from where       |
-| `src/provider-pages.mjs`               | Which providers get a page, and which sections  |
-| `src/shiki.ts`                         | The two theme names, for both readers of them   |
+| File                                   | What it is                                               |
+| -------------------------------------- | -------------------------------------------------------- |
+| `src/styles/tokens.css`                | Every value. The only file with hex literals             |
+| `src/styles/base.css`                  | Element defaults, spoken in tokens                       |
+| `src/styles/doc.css`                   | The shell and the prose of a rendered document           |
+| `src/layouts/Base.astro`               | The document, its stance, and the pre-paint theme script |
+| `src/components/SiteHeader.astro`      | The shell above every page                               |
+| `src/components/ThemeToggle.astro`     | The control that stores a theme choice                   |
+| `src/components/DocsSearch.astro`      | Search over the documentation, and its dialog            |
+| `src/components/Sweep.astro`           | The one gradient, and its two forms                      |
+| `src/components/DocRail.astro`         | The rail beside a document, both sets of them            |
+| `src/components/HeroPlayer.astro`      | The hero's two panels, and the player theme              |
+| `src/components/HeroPlayerIsland.tsx`  | The hero's composition: the player and ledger            |
+| `src/pages/index.astro`                | The landing page at `/`, and its links                   |
+| `src/pages/design.astro`               | The specimen sheet, served at `/design`                  |
+| `src/pages/archetypes.astro`           | Two composed players, and the files they are             |
+| `src/pages/reference/index.astro`      | The package index, served at `/reference`                |
+| `src/pages/reference/[pkg].astro`      | One reference page per publishable package               |
+| `src/pages/providers/index.astro`      | The provider index, served at `/providers`               |
+| `src/pages/providers/[provider].astro` | A setup page per provider group                          |
+| `src/content.config.ts`                | The two document collections, and their loaders          |
+| `src/reference-packages.mjs`           | Which packages get a page, and from where                |
+| `src/provider-pages.mjs`               | Which providers get a page, and which sections           |
+| `src/shiki.ts`                         | The two theme names, for both readers of them            |
 
 **The header** carries the wordmark returning home, the path from the root to
 where the reader currently is, search, and the theme switch. This is a
