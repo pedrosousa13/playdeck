@@ -17,12 +17,15 @@
 // Every failure names the URL and the page carrying it, because "a link is
 // dead" is not actionable and "this link on this page is dead" is.
 //
-// The two verdicts an external URL can reach are deliberately not the same
-// verdict, which is the criterion this check was asked for above all: a request
-// that never got an answer is not evidence that a video was taken down. Only a
-// definitive removal fails the run. Everything else is retried, and then
-// reported as unverified — visible in the log, not fatal — so a runner with a
-// flaky egress path does not redden a pull request that changed nothing.
+// An external URL reaches one of three verdicts, and keeping them apart is the
+// criterion this check was asked for above all: a request that never got an
+// answer is not evidence that a video was taken down. Gone (404, 410) and
+// refused (401, 403) both fail the run, and are reported separately because
+// they send a reader somewhere different. Everything else — a timeout, a
+// refused connection, a 429, a 5xx — is retried and then reported as
+// unverified, visible in the log and not fatal, so a runner with a flaky egress
+// path does not redden a pull request that changed nothing. The reasoning for
+// putting 401 and 403 on the fatal side is above `inspect`.
 //
 // Run as `pnpm test:site-links`, from a job that has already built the site.
 // Unlike `pnpm test:deploy` it starts no browser and builds nothing, which is
@@ -33,6 +36,7 @@ import { join, posix, relative, sep } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, URL } from 'node:url';
+import { layout } from './assemble-deploy.mjs';
 
 // As in scripts/serve-site.mjs and scripts/check-deploy-artifact.mjs: the lint
 // config grants Node globals to `**/*.{js,ts}` only, so a `.mjs` file reaching
@@ -55,13 +59,28 @@ const distDir = join(repoRoot, 'apps', 'site', 'dist');
 // root-absolute link that did not move fails here.
 const basePath = '/';
 
-// The workbench. It is not in this build at all — `scripts/assemble-deploy.mjs`
-// copies `apps/storybook/storybook-static` in beside the site, and the landing
-// page links to it across that seam — so resolving `/storybook/` against
-// `apps/site/dist` finds nothing and would report a link that is correct. It is
-// skipped here and proven elsewhere: `pnpm test:deploy` assembles both surfaces
-// into one directory, serves it, and follows this exact link in a browser.
-const workbenchPrefix = `${basePath}storybook/`;
+// The surfaces that are not in this build. `scripts/assemble-deploy.mjs` copies
+// each one in beside the site, and the landing page links across that seam — so
+// resolving `/storybook/` against `apps/site/dist` finds nothing and would
+// report a link that is correct.
+//
+// Derived from that script's own `layout` rather than written here as a string.
+// The exemption then says what it means — "a link into a surface this build
+// does not contain" — and it moves when the thing it describes moves: rename a
+// destination there and the link into the old one stops matching any mount and
+// fails here, which is the failure a hard-coded `/storybook/` would have
+// skipped forever.
+//
+// What this does NOT prove is that the workbench is actually reachable once
+// assembled. `pnpm test:deploy` proves that, by assembling both surfaces,
+// serving them and following this link in a browser — and it runs on demand
+// rather than per pull request, deliberately: its own header records that it is
+// several times the work `ci.yml` does. So the honest statement of the gap is
+// that this check proves the link points into a surface the deploy places, and
+// the deploy check proves the surface answers.
+const externalSurfacePrefixes = layout
+  .filter(({ to }) => to !== '.')
+  .map(({ to }) => `${basePath}${to}/`);
 
 // Schemes that address nothing this check can resolve. `data:` and `blob:`
 // carry their own payload, and the rest hand the URL to something that is not a
@@ -171,6 +190,15 @@ const failures = [];
 /** Links that could not be resolved either way. @type {string[]} */
 const unverified = [];
 /**
+ * Links a host answered and turned down — 401 or 403. Fatal, and kept apart
+ * from `failures` so the report can say which of the two things went wrong:
+ * "this is gone" and "this is no longer ours to read" send a reader to
+ * different places.
+ *
+ * @type {string[]}
+ */
+const refused = [];
+/**
  * External URLs, each mapped to every page that carries it. One request per
  * URL rather than one per occurrence: seven reference pages linking the same
  * repository is one fact about that repository, and asking a third party the
@@ -222,7 +250,8 @@ for (const page of pages) {
       );
       continue;
     }
-    if (pathname.startsWith(workbenchPrefix)) continue;
+    if (externalSurfacePrefixes.some((prefix) => pathname.startsWith(prefix)))
+      continue;
 
     // What a static host answers this path with: the file at it, or the
     // `index.html` inside the directory at it. `scripts/serve-site.mjs` and the
@@ -260,13 +289,30 @@ for (const page of pages) {
   }
 }
 
-// One request, and what it can and cannot decide.
+// One request, and what it can and cannot decide. Three verdicts, not two,
+// because the two obvious ones cannot hold the case this check was built for.
 //
 // A 404 or a 410 is the server saying the thing is not there any more, and that
-// is the removal this check exists to catch. Every other unhappy answer — a
-// refused connection, a timeout, a 429, a 5xx, a 403 from a host that dislikes
-// automation — is a statement about the request rather than about the resource,
-// so it is retried with a widening pause and then reported as unverified.
+// is the plainest removal. A refused connection, a timeout, a 429 or a 5xx is a
+// statement about the request rather than about the resource, so it is retried
+// with a widening pause and then reported as unverified — not fatal, because a
+// gate that reddened a pull request over a flaky egress path would teach its
+// readers to ignore it.
+//
+// A 401 or a 403 is neither. The answer arrived, so nothing about it is
+// transient, and it says the resource is there and not for us — which is
+// exactly what an upload made private looks like, and #528 names that as the
+// failure it exists to catch. Filing it under unverified would have printed
+// "reachability could not be established" about a request that established
+// reachability and was turned down. So it is its own verdict, it fails the run,
+// and it is not retried: a deliberate access change does not come good on the
+// second ask.
+//
+// The cost, stated rather than discovered: a host that answers 403 to anything
+// that looks automated fails this gate. That is the right way round — a false
+// failure here is one person reading one URL, and the silent pass it replaces
+// is a dead embed on the documentation site of a library whose whole argument
+// is honesty about what works. `user-agent` below is set for this reason.
 //
 // The residual, stated rather than left to be discovered: a host that answers
 // 200 with a page saying the video is unavailable is indistinguishable here
@@ -279,7 +325,7 @@ const requestTimeout = 15_000;
 
 /**
  * @param {string} url
- * @returns {Promise<{ removed: boolean, detail: string } | undefined>}
+ * @returns {Promise<{ verdict: 'gone' | 'refused' | 'unverified', detail: string } | undefined>}
  */
 const inspect = async (url) => {
   let last = 'no attempt was made';
@@ -298,7 +344,12 @@ const inspect = async (url) => {
       // unread body holds the connection open.
       await response.body?.cancel();
       if (response.status === 404 || response.status === 410) {
-        return { removed: true, detail: `HTTP ${response.status}` };
+        return { verdict: 'gone', detail: `HTTP ${response.status}` };
+      }
+      // Returned rather than retried: see the note above. The answer arrived
+      // and it was "not for you", which the next two asks will also be.
+      if (response.status === 401 || response.status === 403) {
+        return { verdict: 'refused', detail: `HTTP ${response.status}` };
       }
       if (response.ok) return undefined;
       last = `HTTP ${response.status}`;
@@ -309,7 +360,10 @@ const inspect = async (url) => {
     // short enough that a genuinely unreachable host does not hold a job.
     if (attempt < attempts) await delay(1000 * attempt);
   }
-  return { removed: false, detail: `${last} (after ${attempts} attempts)` };
+  return {
+    verdict: 'unverified',
+    detail: `${last} (after ${attempts} attempts)`
+  };
 };
 
 // `--internal-only` is for working offline and for reproducing an internal
@@ -324,11 +378,12 @@ if (skipExternal) {
     one.localeCompare(other)
   );
   for (const [url, carriers] of inOrder) {
-    const verdict = await inspect(url);
-    if (verdict === undefined) continue;
+    const outcome = await inspect(url);
+    if (outcome === undefined) continue;
     const where = [...carriers].map((page) => `      on ${page}`).join('\n');
-    const line = `${url} — ${verdict.detail}\n${where}`;
-    if (verdict.removed) failures.push(line);
+    const line = `${url} — ${outcome.detail}\n${where}`;
+    if (outcome.verdict === 'gone') failures.push(line);
+    else if (outcome.verdict === 'refused') refused.push(line);
     else unverified.push(line);
   }
 }
@@ -348,13 +403,25 @@ if (unverified.length > 0) {
   );
 }
 
+if (refused.length > 0) {
+  // Its own paragraph rather than folded into the list below, because the
+  // action differs: a removed upload has to be replaced, and a refused one may
+  // only have been made private and can be asked back.
+  console.error(
+    `\nAccess refused — the host answered and declined, which is not transient (#528):\n${refused
+      .map((entry) => `  ${entry}`)
+      .join('\n')}`
+  );
+}
+
 if (failures.length > 0) {
   console.error(
     `\nThe built site has broken links (#528):\n${failures
       .map((failure) => `  ${failure}`)
       .join('\n')}`
   );
-  process.exit(1);
 }
+
+if (failures.length > 0 || refused.length > 0) process.exit(1);
 
 console.log('\nEvery link in the built site resolves.');
