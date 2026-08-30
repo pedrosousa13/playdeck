@@ -831,7 +831,7 @@ jobs:
   # workbench a base path between them.
   #
   # Nor does anything here drive a browser over the site, and that is not a gap
-  # either: `e2e/site-ledger.spec.ts` does, in the `e2e` matrix above, whose
+  # either: the `site-*` specs do, in the `e2e` matrix above, whose
   # Playwright `webServer` builds this same site and serves it on 4322. Running
   # it here as well would build the site twice per pull request to assert the
   # same things in the same browser.

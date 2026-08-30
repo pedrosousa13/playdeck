@@ -309,7 +309,12 @@ neither a string nor an object — is refused as `invalid-source`.
 
 A refused source is published on `PlayerState.error` and rendered by
 `Player.ErrorDisplay`. The message names which of the four failures occurred
-and quotes the value that was rejected, truncated to 120 characters:
+and quotes the value that was rejected, truncated to 120 characters.
+
+Each quotation below is the **opening** of the message, so a phrase pasted from
+a console lands here. Every one of them ends with the same further sentence,
+pointing a reader at this document — omitted from the four blockquotes because
+repeating it four times would say nothing the fourth time:
 
 **Not readable** — a string that broke one of the shared rules, or a recognised
 provider host in a path shape not listed above:

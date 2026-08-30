@@ -34,7 +34,7 @@ export default defineConfig({
   use: { baseURL: 'http://127.0.0.1:4173' },
   // Two servers, and `baseURL` above names the first: the workbench is what
   // almost every spec here drives, so a relative `page.goto` stays a story.
-  // `site-ledger.spec.ts` writes its address out in full for that reason.
+  // The site specs write their address out in full for that reason.
   webServer: [
     {
       command:
@@ -45,7 +45,8 @@ export default defineConfig({
       timeout: 120_000
     },
     /*
-     * The built site, for `e2e/site-search.spec.ts` (#525). A second server
+     * The built site, for the three specs that drive it — `site-ledger`,
+     * `site-archetypes` and `site-search`. A second server
      * rather than a second Playwright project: it serves a different artifact,
      * not a different engine, and the specs that use it want the same three
      * engines as everything else.

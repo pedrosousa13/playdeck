@@ -27,7 +27,8 @@
  * unsearchable, with nothing failing to say so.
  *
  * The chrome is excluded separately and for a different reason: `data-
- * pagefind-ignore` sits on the site header and on a reference page's rail, so
+ * pagefind-ignore` sits on the site header and on `DocRail.astro`, which is
+ * the rail both the reference and the provider pages render, so
  * a query does not match the package list that appears on every page. Without
  * that, every result's excerpt is the navigation.
  *

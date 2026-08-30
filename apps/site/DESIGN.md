@@ -520,9 +520,11 @@ nothing to remember — no glob to widen, no list to append to — which is what
 list of files could not have given, since the provider pages were being written
 in parallel with this and would have landed unsearchable with nothing failing to
 say so. The two pages that opt out are `/`, which is an argument rather than a
-document, and `/design`, which is this sheet. The header and a reference page's
+document, and `/design`, which is this sheet. The header and the document
 rail carry the same attribute for a different reason: they appear on every page,
-so indexed they would put the navigation into every excerpt.
+so indexed they would put the navigation into every excerpt. The rail's copy of
+it sits in `DocRail.astro` rather than on the routes that render one, so the
+provider pages inherited the exclusion without anyone wiring it a second time.
 
 **The keyboard model is the platform's wherever it can be.** `/` opens and
 focuses, arrows move, Enter opens the highlighted result, Escape dismisses —
@@ -589,14 +591,14 @@ system not owned by one component, and a new one has to earn that:
 | `src/components/Sweep.astro`           | The one gradient, and its two forms             |
 | `src/components/DocRail.astro`         | The rail beside a document, both sets of them   |
 | `src/components/HeroPlayer.astro`      | The hero's two panels, and the player theme     |
-| `src/components/HeroPlayerIsland.tsx`  | The hero's composition. The one island          |
+| `src/components/HeroPlayerIsland.tsx`  | The hero's composition: the player and ledger   |
 | `src/pages/index.astro`                | The landing page at `/`, and its links          |
 | `src/pages/design.astro`               | The specimen sheet, served at `/design`         |
 | `src/pages/archetypes.astro`           | Two composed players, and the files they are    |
 | `src/pages/reference/index.astro`      | The package index, served at `/reference`       |
 | `src/pages/reference/[pkg].astro`      | One reference page per publishable package      |
 | `src/pages/providers/index.astro`      | The provider index, served at `/providers`      |
-| `src/pages/providers/[provider].astro` | One setup page per provider                     |
+| `src/pages/providers/[provider].astro` | A setup page per provider group                 |
 | `src/content.config.ts`                | The two document collections, and their loaders |
 | `src/reference-packages.mjs`           | Which packages get a page, and from where       |
 | `src/provider-pages.mjs`               | Which providers get a page, and which sections  |
@@ -845,13 +847,18 @@ script in `Base.astro` applies a stored choice before the browser paints, and
 storage key is a literal in both, because an `is:inline` script cannot import
 the module that would otherwise hold it.
 
-## The hero player, and the site's one island
+## The hero player, and the site's islands
 
-The hero mounts a real player. It is the only place any JavaScript of this site's
-hydrates and the only route that ships a renderer at all — every other page is
-HTML, CSS, the inline theme and rail scripts, and the search module. A prose
-section that shipped a framework would be the defect; a landing page for a
-video-player library that showed no player would be a different one.
+The hero mounts a real player. Two routes ship a renderer — `/`, whose island is
+the player and the capability ledger reading it, and `/archetypes`, which mounts
+the two compositions beside the source of each. Every other page is HTML, CSS,
+the inline theme and rail scripts, and the search module. A prose section that
+shipped a framework would be the defect; a landing page for a video-player
+library that showed no player would be a different one.
+
+The two are the same decision applied twice, not a drift: a page whose argument
+is what a player does has to run one, and no page here mounts a framework for
+anything else.
 
 **The clip is `public/tracer.mp4`, this app's own copy.** An Astro build serves
 only its own `public/`, so the file is copied in rather than reached for across
@@ -859,6 +866,14 @@ an app boundary. It is a one-second colour-bar test pattern with no audio track,
 and the caption under the panel says what it is — the picture is a fixture, not
 footage, and a hero that implied otherwise would be the page's only dishonest
 frame.
+
+`public/archetype-captions.vtt` is the same rule a second time, and is stated
+here so the copy does not read as an accident. The archetypes mount in two
+surfaces — this site and the workbench — and each build serves only its own
+`public/`, so the fixture exists byte-identically in both. What makes that safe
+rather than drift is that neither copy is authored: it is a fixture whose text
+marks time in a clip, and a change to one that did not reach the other would
+show up as a caption that did not match what the other surface played.
 
 **Nothing about the player contacts a third party, and that is the point.** The
 source is a file on this origin, driven through the native provider, and

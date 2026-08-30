@@ -534,8 +534,11 @@ export const StreamingServiceSurface = ({
             )}
           </Player.ErrorDisplay>
 
-          {/* Before `Player.Controls`: `Player.Gestures` is full-bleed and takes
-              no `z-index`, so a later sibling without one would sit under it. */}
+          {/* Before `Player.Controls`, and that order is the whole of it:
+              `Player.Gestures` is full-bleed and takes no `z-index`, so among
+              positioned siblings at the same level the LATER one paints on top.
+              Put after the bar it would cover the bar and swallow its clicks;
+              put here, every interactive layer below stays above it. */}
           <Player.Gestures />
 
           {/* The title block, and the two ways in. It is one absolutely
@@ -906,9 +909,9 @@ const streamingCss = `
   inline-size: 5rem;
 }
 /* The effective caption mode, printed beside the toggle that turns captions on.
-   Colour is an accelerator and never the only carrier: the word itself is
-   always there, and the dot is what a reader who has learnt the palette reads
-   first. */
+   The renderer is spelled out as a word, so the readout carries itself; the one
+   colour below is an accelerator on top of that word and never the only carrier
+   of it. */
 .stream-mode {
   display: inline-flex;
   gap: 0.35rem;
@@ -1011,9 +1014,14 @@ const streamingCss = `
   font-size: 0.75rem;
   line-height: 1.5;
 }
-/* Below this the bar alone needs the width. The volume slider goes and the mute
-   button stays, so no command is lost — which is the test for hiding a control
-   rather than folding it into a menu. */
+/* Below this the bar alone needs the width, and two things go rather than wrap.
+   The chapter name is a readout and costs nothing; the volume slider is a
+   control, and setting a level IS lost here — the mute button that stays
+   answers a different command. It goes anyway because at this width the slider
+   is a 5rem target on a surface that almost certainly has hardware volume of
+   its own, and because the alternative — folding it into the settings menu —
+   would put a continuous control two presses deep. Named as a cost rather than
+   claimed to be free. */
 @container (max-width: 30rem) {
   .stream-volume,
   .stream-chapter {
@@ -1236,10 +1244,20 @@ const RateControl = (): ReactElement | null => {
  * The outline, and the study layout's way of getting around.
  *
  * Every entry is a real button that seeks, gated as a set on
- * `capabilities.seek`: where seeking is refused the same list is rendered as
- * plain text, so the structure is still readable and nothing offers an action
- * that cannot be taken. That is the library's rule applied to a control the
- * library does not ship.
+ * `capabilities.seek`: anywhere seeking is not `available` the same list is
+ * rendered as plain text, so the structure is still readable and nothing
+ * offers an action that cannot be taken. That is the library's rule applied to
+ * a control the library does not ship.
+ *
+ * All three states, and not two. `unavailable` is a refusal and says so;
+ * `unknown` is undecided — which is what every capability reads before a
+ * provider has attached, and this player is `loading="interaction"`, so it is
+ * the state a visitor meets first. Printing the refusal there would state
+ * something false about the source on the page whose argument is that this
+ * distinction is the product. So the hint is bound to `unavailable` alone, and
+ * `unknown` renders the list without a claim about why — the library's own
+ * "a control reading `unknown` renders nothing" applied to the sentence rather
+ * than to the control.
  *
  * The section being played is marked with `aria-current`, which is the
  * attribute for "the one of these you are on" and is what a screen reader
@@ -1300,12 +1318,12 @@ const Outline = (): ReactElement => {
           );
         })}
       </ol>
-      {navigable ? null : (
+      {seekStatus === 'unavailable' ? (
         <p className="study-hint">
           This source cannot be seeked, so the outline reads rather than
           navigates.
         </p>
-      )}
+      ) : null}
     </nav>
   );
 };
@@ -1336,9 +1354,11 @@ const Progress = (): ReactElement => {
  * zero, and it stops being one the moment the box becomes a flex item, whose
  * auto margins absorb the free space in its line.
  *
- * The picture's own start affordance a few lines down does NOT take this. It is
- * left exactly as the library ships it, because there the full-bleed overlay is
- * the design.
+ * The picture's own start affordance a few lines down does NOT take this: its
+ * POSITIONING is left exactly as the library ships it, because there the
+ * full-bleed overlay is the design. `.study-start` in the stylesheet gives it a
+ * look — a centring grid, no border, no radius, no background — and touches
+ * none of the four properties above.
  */
 const inFlow: CSSProperties = {
   position: 'static',
@@ -1486,8 +1506,10 @@ export const CoursePlatformSurface = ({
             {/* The library ships this part full-bleed with auto margins, so
                 left at its own size it is the whole picture — one control, one
                 accessible name, and a press anywhere on the frame starts the
-                lesson. The badge is drawn as a ring on the button rather than
-                as a second element over the picture. */}
+                lesson. The badge inside it is one `aria-hidden` span rather
+                than an image or a second control: it is the button's mark, not
+                a target of its own, so it adds nothing to the tab order and
+                nothing to the accessible name above. */}
             <Player.ActivationButton
               aria-label="Start the lesson"
               className="study-start"
@@ -1664,8 +1686,9 @@ const courseCss = `
   background-color: transparent;
   cursor: pointer;
 }
-/* The badge is a ring with a triangle inside it, built from borders so the
-   button needs no second element and no image. */
+/* The badge is a ring with a triangle inside it, both drawn from borders — the
+   ring from the span's own, the triangle from a pseudo-element's — so it costs
+   no image and no request. */
 .study-start__badge {
   width: 4rem;
   height: 4rem;

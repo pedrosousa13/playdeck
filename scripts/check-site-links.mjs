@@ -138,8 +138,10 @@ const servedAt = (page) => `${basePath}${page.replace(/index\.html$/, '')}`;
  * the right one for this: the input is one generator's output rather than the
  * open web, every address is in a quoted attribute, and the alternative is a
  * parser dependency for a check that runs on ten files. What it cannot see is
- * an address a script assembles at runtime — the site ships one island, and
- * nothing links into it.
+ * an address a script assembles at runtime. Nothing links into an island, so no
+ * navigation is missed that way — but the archetypes declare their clips inside
+ * a component rather than in an attribute, which is what `mediaIn` below is
+ * for.
  *
  * @param {string} html
  */
@@ -161,6 +163,54 @@ const addressesIn = (html) => {
   }
   return found;
 };
+
+// Media this site plays but does not host, wherever it appears in a document.
+//
+// `addressesIn` above reads quoted attributes, and that is not where these are.
+// The archetypes declare their clips as a `sources` array inside the component
+// (`examples/archetype-*.tsx`), so the URL reaches the built page twice — once
+// inside the island's bundled props and once inside the printed source beside
+// it — and never as an `href` or a `src`. The page carrying it renders a
+// `<video>` the provider creates at runtime.
+//
+// That is not a detail. #528 exists because the archetypes point at existing
+// public uploads and whoever posted one can delete it, and a check that read
+// only attributes would have reported "19 external URLs" without ever asking
+// about a single clip — the exact silent pass the ticket was filed to close.
+//
+// Matched by extension rather than by scanning every absolute URL in the text,
+// which is the other way to find them and is worse. The built pages carry about
+// a hundred URLs in prose and code samples, including RFC 2606 placeholders
+// (`example.com`) that are supposed to go nowhere and provider documentation
+// links that answer automated requests unpredictably. Asking all of them turns
+// a link gate into a flake generator. The ticket asks for external *media*, and
+// a container extension is what says a URL is media.
+const mediaUrls = /https?:\/\/[^\s"'<>\\)]+\.(?:mp4|m4v|webm|ogv|ogg|mov|m3u8|mpd)\b/gi;
+
+// Names RFC 2606 and RFC 6761 reserve for documentation, which resolve nowhere
+// by design. A `<Player.Root source="https://example.com/clip.mp4" />` in a
+// README is doing exactly what it should, and asking the network about it earns
+// a 404 that would fail this run for the one reason that is never a defect.
+// Reserved names are the right thing to key on rather than a hand-kept list of
+// this repo's placeholders: the guarantee is the RFC's, so it holds for a
+// placeholder somebody writes tomorrow.
+const reservedHosts = /(^|\.)(example\.(com|net|org)|invalid|test|localhost|example)$/i;
+
+/**
+ * @param {string} html
+ */
+const mediaIn = (html) =>
+  [...html.matchAll(mediaUrls)]
+    .map((match) => match[0].replaceAll('&amp;', '&'))
+    .filter((address) => {
+      try {
+        return !reservedHosts.test(new URL(address).hostname);
+      } catch {
+        // Not a URL after the trailing punctuation came off. The attribute
+        // scan is what reports a malformed address; this one only collects.
+        return false;
+      }
+    });
 
 /**
  * @param {string} html
@@ -215,6 +265,16 @@ const external = new Map();
 let internalChecked = 0;
 for (const page of pages) {
   const from = servedAt(page);
+
+  // The clips, before the addresses. They join the same `external` map and are
+  // asked the same question by `inspect` below — the only thing that differs is
+  // how they were found, and once found there is nothing special about them.
+  for (const media of mediaIn(documents.get(page) ?? '')) {
+    const carriers = external.get(media) ?? new Set();
+    carriers.add(from);
+    external.set(media, carriers);
+  }
+
   for (const address of addressesIn(documents.get(page) ?? '')) {
     /** @type {URL} */
     let resolved;
