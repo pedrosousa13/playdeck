@@ -586,6 +586,23 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     }
   }
 
+  /* The state dot. The same shape and the same `--status-color` the three-state
+   * comparison on the landing page marks a status with, drawn here because
+   * these rows are the island's and a rule in that page cannot reach them.
+   *
+   * `--radius-pill` is the token that means "fully round" here; `50%` would be
+   * a second spelling of it. The 8px is a one-off — a shape's own size, not a
+   * step of the spacing scale — so it is written here rather than promoted to a
+   * token nothing else would read. */
+  :global(.row__dot) {
+    align-self: center;
+    flex: none;
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    background-color: var(--status-color);
+    border-radius: var(--radius-pill);
+  }
+
   /* The capability is the subject of its row and takes the body rung in the
    * mono where the panel has the width for it — a readout whose largest text
    * is the same size as its captions is what made this panel read as faint. */
@@ -602,9 +619,14 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     }
   }
 
-  /* The answer, in the colour its status selects — `--status-color` is assigned
-   * by the `[data-status]` rules in `index.astro`, which the comparison further
-   * down that page reads too.
+  /* The answer, in the colour its status selects. `--status-color` is assigned
+   * by the `[data-status]` rules in `base.css`, and it has to be a shared
+   * stylesheet rather than either component: Astro scopes a component's styles
+   * to the markup that component compiled, and these rows come out of the
+   * island, so a rule written here or in `index.astro` would match nothing
+   * they render. It was written in `index.astro` first, and the whole ledger
+   * lost its colour — the variable resolved to nothing, so the word went plain
+   * and the dot painted transparent.
    *
    * Nothing here transitions. A row changes the moment the controller does,
    * which is the behaviour this panel exists to show, and a colour is not one

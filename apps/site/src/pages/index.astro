@@ -598,21 +598,6 @@ const providers = [
     list-style: none;
   }
 
-  /* Each status selects its colour here, once, from the role tokens. The dot is
-   * redundant with the word beside it on purpose: colour is an accelerator for
-   * a reader who has learnt it and never the only carrier. */
-  [data-status='available'] {
-    --status-color: var(--color-available);
-  }
-
-  [data-status='unknown'] {
-    --status-color: var(--color-unknown);
-  }
-
-  [data-status='unavailable'] {
-    --status-color: var(--color-unavailable);
-  }
-
   /* The comparison's state dot. The ledger's rows mark a state with the same
    * shape and read the same `--status-color`, and it is drawn in
    * `HeroPlayer.astro` where those rows are rendered — the two are a matched
