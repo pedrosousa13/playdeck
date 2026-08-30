@@ -26,6 +26,11 @@ its opposite is what a generated interface looks like.
    elevated surface never also carries a border.** See below.
 5. **Only `transform` and `opacity` are animated.**
 
+Rules 1 and 5 govern what this app writes. The two archetype stylesheets
+mounted on `/archetypes` are outside both, and that is named here rather than
+left to be found — see _The archetypes, and why they are outside rules 1 and 5_
+below.
+
 ## Palette
 
 Roles, and what each theme assigns them. `--color-*` is what a component reads;
@@ -201,10 +206,16 @@ prose — the reference documents' paragraphs, lists and quotes, and the lead on
 the package index. It was chosen to put a line at the body rung inside the 65–75
 character band, so a page that sets prose at another rung is choosing a
 different character count and says so where it does it. A page's own maximum
-width is a separate decision and stays a literal in that page: `46rem` at `/`,
-`52rem` on the package index, `74rem` for a reference page's rail-and-document
-shell. One column width is not evidence about another, and a shared token would
-claim it was.
+width is a separate decision and stays a literal where that decision is made:
+`72rem` at `/`, `64rem` on `/archetypes`, `46rem` on `/design`, `52rem` on each
+of the two indexes — written twice, once in `src/pages/reference/index.astro`
+and once in `src/pages/providers/index.astro`, because two pages agreeing on a
+number is not the same fact as one number. The `74rem` rail-and-document shell
+is the exception and lives in `src/styles/doc.css`: the reference pages and the
+provider pages are one page shape rendered from two sources, so their width is
+one decision and the stylesheet they already share is where it belongs. One
+column width is not evidence about another, and a shared token would claim it
+was.
 
 **`--text-fn` is the floor and the scale has no rung beneath it.** The comps put
 reason lines such as `└ browser` at 10.88px, and that is the text carrying the
@@ -217,9 +228,13 @@ functional text at 11px loses more to that than it gains.
 ## Code, and the one exception to rule 1
 
 The reference pages at `/reference/<package>/` are the package READMEs rendered,
-and those documents are mostly code. The landing page carries one block of it
-too, the composition example. Colouring it is the one place a colour on this site
-comes from somewhere other than `tokens.css`.
+and those documents are mostly code; two of the provider setup pages at
+`/providers/<provider>/` carry a highlighted code example, because
+`docs/provider-setup.md` writes one for YouTube and one for Vimeo and none for
+the other three. No provider page mounts a player — the hero island is still
+the site's only one. The landing page carries one block of code too, the
+composition example. Colouring it is the one place a colour on this site comes
+from somewhere other than `tokens.css`.
 
 The highlighter is **Shiki**, which Astro already ships — no new dependency —
 set to the `github-light` and `github-dark` themes. The two names live in
@@ -254,6 +269,30 @@ every marked fence in those READMEs from a real file in `examples/`, and
 `pnpm docs:check` compares them byte for byte. A highlighter that re-indented,
 re-wrapped or reformatted would put the site and that gate into disagreement
 about what the example is.
+
+## The archetypes, and why they are outside rules 1 and 5
+
+`/archetypes` mounts `examples/archetype-streaming-service.tsx` and
+`examples/archetype-course-platform.tsx`. Each carries its own stylesheet as a
+`<style>` element inside the component, and each writes hex literals by the
+dozen and animates `background-color`. Read against rules 1 and 5 those are
+violations; they are allowed, and the reason is what the page is for.
+
+Those two files are not this app's. They live in `examples/`, they are the
+files a consumer copies, and `apps/storybook` mounts the same two. A stylesheet
+spoken in `tokens.css`'s role tokens would render as unstyled text everywhere
+outside this one site, and an archetype that borrowed its look from the page
+around it would be proving something about this page rather than about the
+library. The point of mounting them here is that the site and the workbench show
+the same player; that is only true if the appearance travels with the
+composition.
+
+So the boundary is ownership rather than taste: a file under `apps/site/src`
+writes no colour and animates nothing but `transform` and `opacity`. A file
+under `examples/` is a consumer's code that this site happens to render, and it
+answers to `examples/`'s own constraints — one paste, no imports, no design
+system. `/archetypes` itself, everything around the two players, is inside the
+rules like every other page.
 
 ## The one gradient
 
@@ -406,9 +445,12 @@ is not a way to tint an edge.
 **What may spend an elevation, by name.** `--elevation-instrument` belongs to
 the capability ledger on `/` and to nothing else — it is the panel that page is
 built around, and a second instrument on one page means neither is the
-instrument. `--elevation-panel` belongs to the bezel around the hero's player —
-`.demo__bezel` in `HeroPlayer.astro`, and not the stage inside it, which is a
-recessed colour and a hairline. Everything
+instrument. `--elevation-panel` belongs to two things: the bezel around the
+hero's player — `.demo__bezel` in `HeroPlayer.astro`, and not the stage inside
+it, which is a recessed colour and a hairline — and the search dialog in
+`DocsSearch.astro`, which is a panel over a page rather than the panel a page is
+built around, and which carries no border because rule 4 forbids an elevated
+surface one. Everything
 else on this site is a surface colour and a hairline, as before. A new elevated
 element is an edit to this list, not a local decision.
 
@@ -448,6 +490,61 @@ Colour changes are not transitioned, because colour is not one of the two
 properties this system animates. The one transition on a control is the switch's
 knob, which translates; its colour changes at the same moment and snaps.
 
+## Search
+
+Search is **Pagefind**: an index built from the emitted HTML after `astro build`
+finishes, shipped as files beside the pages, and queried by WebAssembly in the
+reader's browser. There is no service, no key and no query log, and that is the
+decision rather than a side effect. This site's whole argument is that
+`loading="interaction"` contacts no provider before a click, and a page that
+posted every keystroke of its search box to a search vendor would be arguing
+against itself — the same reasoning that self-hosts the fonts.
+
+**The claim is observed, not asserted, in both directions.** At query time,
+`e2e/site-search.spec.ts` records every request the page makes while searching
+and fails if any of them leaves this origin; it also checks that the Pagefind
+bundle was among them, so an empty list is evidence rather than a listener
+attached to the wrong page. At build time, `apps/site`'s build was traced with
+`strace -f -e trace=connect` — Pagefind opened no socket at all, and Astro
+opened one to port 443, which is its anonymous telemetry. Hence
+`ASTRO_TELEMETRY_DISABLED=1` in front of every `astro` invocation in
+`package.json`, after which the traced build makes no outbound connection. That
+figure is a measurement and re-measurable the same way; the environment variable
+is the durable part.
+
+**Which pages are indexed is opt-out, and that is the design.** Pagefind walks
+the built directory and indexes every page whose `<body>` does not carry
+`data-pagefind-ignore`, which `Base.astro` writes for a page passing
+`documentation={false}`. So a documentation page added later is searchable with
+nothing to remember — no glob to widen, no list to append to — which is what a
+list of files could not have given, since the provider pages were being written
+in parallel with this and would have landed unsearchable with nothing failing to
+say so. The two pages that opt out are `/`, which is an argument rather than a
+document, and `/design`, which is this sheet. The header and the document
+rail carry the same attribute for a different reason: they appear on every page,
+so indexed they would put the navigation into every excerpt. The rail's copy of
+it sits in `DocRail.astro` rather than on the routes that render one, so the
+provider pages inherited the exclusion without anyone wiring it a second time.
+
+**The keyboard model is the platform's wherever it can be.** `/` opens and
+focuses, arrows move, Enter opens the highlighted result, Escape dismisses —
+and the focus trap, the Escape handling and the return of focus to the button
+that opened it all arrive with `<dialog>` and `showModal()`. The field is
+`type="text"` and not `type="search"` because a search field eats the first
+Escape to clear itself. The results are an ARIA listbox named by
+`aria-activedescendant`, so focus stays in the field while a screen reader
+follows the highlighted row, and the count is announced through a `role="status"`
+line.
+
+**Both URLs it needs are derived from `import.meta.env.BASE_URL`** — where the
+bundle is fetched from, and what a result's recorded path resolves against.
+Pagefind stores a page's path inside the build output, which is the site root
+and not the prefix the site is served under, so `baseUrl` has to be handed to it.
+Both ways of getting this wrong are silent, so the spec runs everything twice:
+against the shipped build at `/`, and against a second build made with
+`--base /playdeck/` and served at that prefix. A literal and a derived path are
+the same string at the root, which is why a root-only test would prove nothing.
+
 ## Browser surfaces
 
 `::selection`, the scrollbars and the caret are drawn by the browser, and left
@@ -482,31 +579,49 @@ system not owned by one component, and a new one has to earn that:
 
 ## Where things live
 
-| File                                  | What it is                                    |
-| ------------------------------------- | --------------------------------------------- |
-| `src/styles/tokens.css`               | Every value. The only file with hex literals  |
-| `src/styles/base.css`                 | Element defaults, spoken in tokens            |
-| `src/layouts/Base.astro`              | The document, and the pre-paint theme script  |
-| `src/components/SiteHeader.astro`     | The shell above every page                    |
-| `src/components/ThemeToggle.astro`    | The control that stores a theme choice        |
-| `src/components/Sweep.astro`          | The one gradient, and its two forms           |
-| `src/components/HeroPlayer.astro`     | The hero's player panel, and the player theme |
-| `src/components/HeroPlayerIsland.tsx` | The hero player's composition. The one island |
-| `src/pages/design.astro`              | The specimen sheet, served at `/design`       |
-| `src/pages/index.astro`               | The landing page at `/`, and its links        |
-| `src/pages/reference/index.astro`     | The package index, served at `/reference`     |
-| `src/pages/reference/[pkg].astro`     | One reference page per publishable package    |
-| `src/content.config.ts`               | The READMEs, loaded from `packages/`          |
-| `src/reference-packages.mjs`          | Which packages get a page, and from where     |
-| `src/shiki.ts`                        | The two theme names, for both readers of them |
+| File                                   | What it is                                      |
+| -------------------------------------- | ----------------------------------------------- |
+| `src/styles/tokens.css`                | Every value. The only file with hex literals    |
+| `src/styles/base.css`                  | Element defaults, spoken in tokens              |
+| `src/styles/doc.css`                   | The shell and the prose of a rendered document  |
+| `src/layouts/Base.astro`               | The document, and the pre-paint theme script    |
+| `src/components/SiteHeader.astro`      | The shell above every page                      |
+| `src/components/ThemeToggle.astro`     | The control that stores a theme choice          |
+| `src/components/DocsSearch.astro`      | Search over the documentation, and its dialog   |
+| `src/components/Sweep.astro`           | The one gradient, and its two forms             |
+| `src/components/DocRail.astro`         | The rail beside a document, both sets of them   |
+| `src/components/HeroPlayer.astro`      | The hero's two panels, and the player theme     |
+| `src/components/HeroPlayerIsland.tsx`  | The hero's composition: the player and ledger   |
+| `src/pages/index.astro`                | The landing page at `/`, and its links          |
+| `src/pages/design.astro`               | The specimen sheet, served at `/design`         |
+| `src/pages/archetypes.astro`           | Two composed players, and the files they are    |
+| `src/pages/reference/index.astro`      | The package index, served at `/reference`       |
+| `src/pages/reference/[pkg].astro`      | One reference page per publishable package      |
+| `src/pages/providers/index.astro`      | The provider index, served at `/providers`      |
+| `src/pages/providers/[provider].astro` | A setup page per provider group                 |
+| `src/content.config.ts`                | The two document collections, and their loaders |
+| `src/reference-packages.mjs`           | Which packages get a page, and from where       |
+| `src/provider-pages.mjs`               | Which providers get a page, and which sections  |
+| `src/shiki.ts`                         | The two theme names, for both readers of them   |
 
-**The header** is the same three things on every page: the wordmark returning
-home, the path from the root to where the reader currently is, and the theme
-switch. Three jobs and no fourth — this is a documentation shell, not a
-marketing bar, so there is no call to action and no product navigation. It is
-not sticky: a reference page is a whole README, and the one element a reader
-navigates a long document with is the rail, which is sticky already. One per
-page.
+**The header** carries the wordmark returning home, the path from the root to
+where the reader currently is, search, and the theme switch. This is a
+documentation shell and not a marketing bar, so there is still no call to action
+and no product navigation. It is not sticky: a reference page is a whole README,
+and the one element a reader navigates a long document with is the rail, which is
+sticky already. One per page.
+
+**It used to read "three jobs and no fourth", search named among the things it
+would not carry.** That rule was aimed at everything a reader did not come for,
+and search is the one thing in that strip a reader of a long document does come
+for — see _Search_ below. What the rule still forbids is unchanged: a header
+here gains nothing that sells, and nothing that duplicates a page's own
+navigation.
+
+Search is on documentation pages only. `/` and `/design` pass
+`documentation={false}` to both `SiteHeader.astro` and `Base.astro`, which is
+the same fact said to the two halves that need it — the control, and the search
+index.
 
 **The wordmark is the trail's first item, not a thing beside it.** It sits
 inside `<nav aria-label="Breadcrumb">` as the root of the path, and the
@@ -531,16 +646,20 @@ same check follows every internal link on `/` in document order and needs the
 workbench to be the last, which is a second reason a header there does not add
 one.
 
-The reference pages are the site's long-form reading, and the only pages here
-whose words are not written in this app: each renders one package's whole
-README from `packages/`, word for word. What follows about them is design
-decision rather than incident.
+The reference pages and the provider setup pages are the site's long-form
+reading, and the only pages here whose words are not written in this app. A
+reference page renders one package's whole README from `packages/`, word for
+word. A provider setup page is a selection of `docs/provider-setup.md` — the
+introduction, that provider's own material and every section that applies to all
+of them — with nothing paraphrased and nothing added. What follows about them is
+design decision rather than incident, and it holds for both: they are the same
+page shape, which is why `src/components/DocRail.astro` and `src/styles/doc.css`
+are shared rather than written twice.
 
-**The rail** is the narrow sticky column beside a reference document, the
-`nav.rail` in `src/pages/reference/[pkg].astro`. It holds two lists — which
-package, and where in this one — and it is the word this document and that file
-both use for it, in preference to "sidebar", which says where a thing sits
-rather than what it does.
+**The rail** is the narrow sticky column beside one of those documents,
+`DocRail.astro`. It holds two lists — which document, and where in this one —
+and it is the word this document and that file both use for it, in preference to
+"sidebar", which says where a thing sits rather than what it does.
 
 **On a narrow screen the rail is a disclosure, closed.** Stacked above the
 document it ran to several phone screens — a link per package, an entry per
@@ -585,12 +704,17 @@ back. Only the `::details-content` rule itself sits behind the guard, because
 where that anonymous box exists the height has to pass through it and where it
 does not there is no box between the two.
 
-**The rail states `@playdeck/` once and lists what differs.** Repeated down a
-16rem column, the scope spent the width that tells `provider-vimeo` from
-`provider-wistia` on characters identical in every row. The prefix sits in the
-group's own label; each link keeps the whole name in its accessible name through
-`.u-visually-hidden`, because `core` on its own is not what a reader would say
-out loud.
+**On a reference page the rail states `@playdeck/` once and lists what
+differs.** Repeated down a 16rem column, the scope spent the width that tells
+`provider-vimeo` from `provider-wistia` on characters identical in every row.
+The prefix sits in the group's own label; each link keeps the whole name in its
+accessible name through `.u-visually-hidden`, because `core` on its own is not
+what a reader would say out loud. It is a prop rather than something the rail
+assumes, and so is the mono face those names are set in: a provider setup page
+lists `YouTube` and `Vimeo`, which are proper nouns and share no prefix. The
+foot of the rail is a slot for the same reason — the version on a reference
+page, the adapter's package on a provider page, and neither route describing the
+other by naming what it carries.
 
 **The measure is on the prose and not on the column.** Paragraphs, lists and
 quotes are held to `--measure`; code blocks and tables get the full column. A
@@ -607,6 +731,14 @@ collects the set of versions, prints one line when there is one member, and
 falls back to a figure per row when there is more than one. A number repeated
 down a column is a number nobody reads.
 
+**The provider index is that same list, and its second column is the adapter's
+own sentence.** The rows are the four setup pages, and beside each is the
+package that ships the adapter with the `description` npm shows for it — which
+is the only description of a provider on this site that this app did not have to
+write. One row carries two, because native files and HLS are one passage of
+`docs/provider-setup.md` and two packages. The names are set in the mono face
+and the provider is not, which is what says one of them is a thing you type.
+
 **The table of contents is derived from the rendered headings**, never written
 down. A parallel list of section names would go stale the first time somebody
 renamed a heading in a README with no idea this page existed, which is the whole
@@ -619,6 +751,18 @@ has to look like one whether or not the rail indexes it.
 **The version sits at the foot of the rail, not above the title.** A line of
 small type on top of an `h1` is the eyebrow this document names as a tell, and
 that one would have restated the heading underneath it.
+
+**A provider setup page is a selection of one document, and the selection is
+made in code.** `src/provider-pages.mjs` slices `docs/provider-setup.md` at its
+own headings and composes a page out of the pieces; no sentence of it is written
+in this app. Two things are done to the text and both are transforms rather than
+edits — the heading or the bold lead naming the provider is dropped, because the
+page's `h1` is that name, and the provider's own material is moved above the
+shared sections, because a reader on `/providers/vimeo/` came for Vimeo. A
+section of that document that the module can place in neither category fails the
+build rather than appearing on all four pages or on none, which is what keeps a
+sixth provider from being documented and never published. One sentence of the
+source reaches no page, and the module names it.
 
 **Two classes of link are re-addressed on the way in, and only two.** A README is
 one document read in two places, and a link that is right in the npm tarball can
@@ -635,6 +779,14 @@ before the Markdown is parsed, and it steps over fenced blocks: those fences are
 generated from `examples/` and compared byte for byte by `pnpm docs:check`, so
 nothing inside one may be touched. It is a transform of the source rather than a
 copy of it, so editing a README still changes the page.
+
+`docs/provider-setup.md` gets the same treatment under its own rules, in
+`src/provider-pages.mjs` rather than in the loader: its relative targets are
+resolved against `docs/` and sent to GitHub, except a link to a package the site
+publishes, which becomes that package's reference page. A fragment is left as
+written, and that is load-bearing rather than lazy — the two the document links
+to name shared sections, and every provider page carries every shared section,
+so the fragment resolves wherever the link was read.
 
 The specimen sheet at `/design` renders every token in both themes — the type
 scale, the surface and ink swatches, the capability colours and both forms of the
@@ -677,12 +829,17 @@ hairline at all. `--color-surface` on `--color-field` is built to raise a panel
 with no border; the player's stage beside it is `--color-sunken`, which sits
 close to the field, and that is what a hairline is for.
 
-Two constraints on that page are `scripts/check-deploy-artifact.mjs`'s rather
-than this system's, and both are load-bearing. Its `h1` is exactly `Playdeck`,
-which is how that check identifies the site's root document in a browser. And the
-workbench link is the last internal link in the document, because the check
-follows every internal link in document order and navigating away from the
-workbench abandons requests it is still making.
+One constraint on that page is `scripts/check-deploy-artifact.mjs`'s rather
+than this system's, and it is load-bearing: its `h1` is exactly `Playdeck`,
+which is how that check identifies the site's root document in a browser.
+
+There used to be a second — the workbench link had to be the last internal link
+in the document, because the check followed every internal link in one page
+context and navigating away from the workbench abandoned requests it was still
+making. That check now visits each link in a page of its own (#528), so a link
+may be added anywhere in the list. The constraint is written down here as gone
+rather than deleted silently, because it governed the order of that list for
+long enough to look deliberate.
 
 `data-theme` has two writers and they are not interchangeable: the pre-paint
 script in `Base.astro` applies a stored choice before the browser paints, and
@@ -690,13 +847,18 @@ script in `Base.astro` applies a stored choice before the browser paints, and
 storage key is a literal in both, because an `is:inline` script cannot import
 the module that would otherwise hold it.
 
-## The hero player, and the site's one island
+## The hero player, and the site's islands
 
-The hero mounts a real player. It is the only interactive thing on the site, the
-only place any JavaScript of this site's hydrates, and the only route that ships
-a renderer at all — every other page is still HTML, CSS and the two inline theme
-scripts. A prose section that shipped a framework would be the defect; a landing
-page for a video-player library that showed no player would be a different one.
+The hero mounts a real player. Two routes ship a renderer — `/`, whose island is
+the player and the capability ledger reading it, and `/archetypes`, which mounts
+the two compositions beside the source of each. Every other page is HTML, CSS,
+the inline theme and rail scripts, and the search module. A prose section that
+shipped a framework would be the defect; a landing page for a video-player
+library that showed no player would be a different one.
+
+The two are the same decision applied twice, not a drift: a page whose argument
+is what a player does has to run one, and no page here mounts a framework for
+anything else.
 
 **The clip is `public/tracer.mp4`, this app's own copy.** An Astro build serves
 only its own `public/`, so the file is copied in rather than reached for across
@@ -704,6 +866,14 @@ an app boundary. It is a one-second colour-bar test pattern with no audio track,
 and the caption under the panel says what it is — the picture is a fixture, not
 footage, and a hero that implied otherwise would be the page's only dishonest
 frame.
+
+`public/archetype-captions.vtt` is the same rule a second time, and is stated
+here so the copy does not read as an accident. The archetypes mount in two
+surfaces — this site and the workbench — and each build serves only its own
+`public/`, so the fixture exists byte-identically in both. What makes that safe
+rather than drift is that neither copy is authored: it is a fixture whose text
+marks time in a clip, and a change to one that did not reach the other would
+show up as a caption that did not match what the other surface played.
 
 **Nothing about the player contacts a third party, and that is the point.** The
 source is a file on this origin, driven through the native provider, and

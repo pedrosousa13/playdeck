@@ -29,17 +29,23 @@ export default defineConfig({
    */
   base: '/',
   /**
-   * React, for one island: the hero's player. Playdeck is a React library and
-   * a landing page for it that showed no player would be arguing from
-   * description alone, so the renderer is here to make one claim on this page
+   * React, for the routes that mount a player. Playdeck is a React library and
+   * pages arguing for it that showed no player would be arguing from
+   * description alone, so the renderer is here to make those claims
    * demonstrable rather than to open the site to components in general.
    *
-   * Registering it costs nothing by itself. Astro ships a renderer only to a
-   * page that mounts an island, so every other route in this build stays what
-   * it was: HTML, CSS and the two inline theme scripts. `src/pages/index.astro`
-   * carries the only `client:` directive in the site, and it is `client:only`
-   * there — see `src/components/HeroPlayer.astro` for why that one rather than
-   * a hydrating variant.
+   * Two routes carry one: `src/pages/index.astro` mounts the hero, whose island
+   * renders the player and the capability ledger reading it, and
+   * `src/pages/archetypes.astro` mounts the two composed archetypes beside the
+   * source of each. Every `client:` directive in the site is on one of those
+   * two pages and every one of them is `client:only` — see
+   * `src/components/HeroPlayer.astro` for why that rather than a hydrating
+   * variant.
+   *
+   * Registering the integration costs nothing by itself. Astro ships a renderer
+   * only to a page that mounts an island, so every other route in this build
+   * stays what it was: HTML, CSS, the inline theme and rail scripts, and the
+   * search module.
    */
   integrations: [react()],
   // Sitemap and canonical URLs, and deliberately not routing: `base` above is
@@ -58,6 +64,38 @@ export default defineConfig({
   vite: {
     define: {
       'import.meta.env.PLAYDECK_REPO_ROOT': JSON.stringify(repoRoot)
+    },
+    resolve: {
+      /*
+       * Where `@playdeck/react` is, stated once for every importer rather than
+       * left to a walk up the directory tree.
+       *
+       * `/archetypes` mounts two compositions that live in `examples/`, and a
+       * bare specifier resolves from the importing file's own directory: the
+       * walk up from `examples/` never reaches `apps/site/node_modules`, where
+       * the workspace link to this package is, so the resolver fell through to
+       * the `paths` entry in `examples/tsconfig.json` and handed the bundler a
+       * `.d.ts` — a declaration file, with no code in it and no sibling modules
+       * to follow. That is the failure this replaces, and it was a build error
+       * rather than something subtle.
+       *
+       * The target is the built ESM entry, which is what the package's own
+       * `exports` field already resolves `.` to, so nothing changes for the
+       * hero island in `src/` that was resolving through `node_modules`.
+       *
+       * A `RegExp` anchored at both ends, deliberately. A string `find` is a
+       * prefix match, and `@playdeck/react/theme.css` — the stylesheet
+       * `HeroPlayer.astro` imports — would be rewritten into a path inside
+       * `dist/` that does not exist.
+       */
+      alias: [
+        {
+          find: /^@playdeck\/react$/,
+          replacement: fileURLToPath(
+            new URL('../../packages/react/dist/index.js', import.meta.url)
+          )
+        }
+      ]
     }
   },
   markdown: {

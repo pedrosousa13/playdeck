@@ -23,8 +23,17 @@ const process = globalThis.process;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Every source directory, and where it lands inside the artifact. */
-const layout = [
+/**
+ * Every source directory, and where it lands inside the artifact.
+ *
+ * Exported for `scripts/check-site-links.mjs`, which checks the built site on
+ * every pull request and therefore has to know which addresses are answered by
+ * a surface that is not in `apps/site/dist`. Reading this list is what makes
+ * that check derive the exemption instead of hard-coding a prefix: rename `to`
+ * here and the link check fails on the link that no longer has a mount, rather
+ * than going on skipping a string nothing produces any more.
+ */
+export const layout = [
   { from: join(repoRoot, 'apps/site/dist'), to: '.' },
   { from: join(repoRoot, 'apps/storybook/storybook-static'), to: 'storybook' }
 ];

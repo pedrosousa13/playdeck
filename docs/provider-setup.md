@@ -1,7 +1,8 @@
 # Provider setup
 
 Which source values each provider accepts, what each provider's own options are,
-and a working player per provider. These are `detectSource`'s rules, not a
+and a worked example wherever the source forms need one. These are
+`detectSource`'s rules, not a
 provider's own documentation, because a form a provider publishes is not a form
 this library reads. The refused forms are named alongside the accepted ones: a
 setup guide that lists a form the detector turns down is worse than one that
@@ -308,7 +309,12 @@ neither a string nor an object — is refused as `invalid-source`.
 
 A refused source is published on `PlayerState.error` and rendered by
 `Player.ErrorDisplay`. The message names which of the four failures occurred
-and quotes the value that was rejected, truncated to 120 characters:
+and quotes the value that was rejected, truncated to 120 characters.
+
+Each quotation below is the **opening** of the message, so a phrase pasted from
+a console lands here. Every one of them ends with the same further sentence,
+pointing a reader at this document — omitted from the four blockquotes because
+repeating it four times would say nothing the fourth time:
 
 **Not readable** — a string that broke one of the shared rules, or a recognised
 provider host in a path shape not listed above:

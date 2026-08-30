@@ -1,0 +1,13 @@
+WEBVTT
+
+1
+00:00:01.000 --> 00:00:07.000
+These captions are a fixture the archetype examples ship.
+
+2
+00:00:07.000 --> 00:00:14.000
+They exercise the caption pipeline, and transcribe nothing.
+
+3
+00:00:14.000 --> 00:00:22.000
+The toggle beside them appears only where a track can be selected.

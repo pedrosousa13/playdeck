@@ -1,14 +1,31 @@
 ---
 /**
  * The shell every page of this site is served under: the wordmark, where the
- * reader currently is, and the theme switch.
+ * reader currently is, search, and the theme switch.
  *
  * It replaces a lone underlined link sitting in the site-navigation slot, which
  * read as a stray link rather than as a header and said different things on
- * different pages. Three jobs and no fourth: this is a documentation shell, not
- * a marketing bar, so there is no call to action, no product navigation and no
- * search — a docs reader arrived to read one document, and everything in the
- * strip above it is a tax on that.
+ * different pages. This is a documentation shell and not a marketing bar, so
+ * there is still no call to action and no product navigation — but search is
+ * neither of those, and the rule it used to be excluded by ("three jobs and no
+ * fourth") was aimed at things a reader did not come for. A docs reader who
+ * arrived to read one document is exactly the reader who then needs to find the
+ * next one, and the only element on the page that is present while they are
+ * reading is this strip.
+ *
+ * Search is on documentation pages only, which is what the `documentation` prop
+ * says. It defaults to true — a page added later is documentation unless it
+ * says otherwise — and `Base.astro` takes a prop of the same name for the same
+ * decision on the indexing side. The two are separate props because the layout
+ * cannot pass anything to a component a page renders into its slot, and they
+ * are named alike so that a page turning one off and not the other reads as the
+ * mistake it is.
+ *
+ * The whole header is `data-pagefind-ignore`. Its words are the same on every
+ * page, so indexed they would be indexed once per document — a query for
+ * "reference" or "search" would match the whole site, and the words nearest the
+ * top of each page, which is where an excerpt is drawn from, would be this
+ * strip rather than the document.
  *
  * Deliberately not sticky. A reference page is a whole README, long enough that
  * a bar following the reader down would be defensible — but it would also have
@@ -39,11 +56,15 @@
  * the title rung — `scripts/check-deploy-artifact.mjs` identifies the site's
  * root document by a heading named exactly `Playdeck`, so that `h1` cannot move
  * — and a strip repeating it directly above would be the same word twice in
- * eighty pixels. It also keeps that check's other constraint intact: it follows
- * every internal link on `/` in document order and the workbench must be the
- * last one, so a header that quietly added a link there would change what the
- * check means as well as what the page looks like.
+ * eighty pixels.
+ *
+ * That check used to carry a second constraint this decision protected: it
+ * followed every internal link on `/` in one page context, so the workbench had
+ * to be the last one and a header that quietly added a link would have changed
+ * what the check meant. It visits each link in a page of its own now (#528), so
+ * only the reason above is still doing any work here.
  */
+import DocsSearch from './DocsSearch.astro';
 import ThemeToggle from './ThemeToggle.astro';
 
 interface Crumb {
@@ -53,9 +74,10 @@ interface Crumb {
 
 interface Props {
   crumbs?: Crumb[];
+  documentation?: boolean;
 }
 
-const { crumbs = [] } = Astro.props;
+const { crumbs = [], documentation = true } = Astro.props;
 
 // Through `import.meta.env.BASE_URL` rather than as a literal, for the reason
 // `src/pages/index.astro` gives at length: the prefix is the root today, so a
@@ -65,7 +87,7 @@ const homeUrl = import.meta.env.BASE_URL;
 const atHome = crumbs.length === 0;
 ---
 
-<header class="bar">
+<header class="bar" data-pagefind-ignore>
   <div class="bar__place">
     {
       !atHome && (
@@ -87,7 +109,14 @@ const atHome = crumbs.length === 0;
     }
   </div>
 
-  <ThemeToggle />
+  {
+    /* Search and the switch travel together at the far end of the row, and
+     * neither shrinks: the trail above is the flexible box. */
+  }
+  <div class="bar__tools">
+    {documentation && <DocsSearch />}
+    <ThemeToggle />
+  </div>
 </header>
 
 <style>
@@ -109,6 +138,19 @@ const atHome = crumbs.length === 0;
     display: flex;
     min-inline-size: 0;
     align-items: baseline;
+    /* The trail gives way by being clipped here, not by sliding under the
+     * controls beside it. A crumb that cannot shrink does not disappear when
+     * the room runs out, and once search joined the strip (#525) `Reference`
+     * was overflowing this box and painting under the search button at 360px.
+     * Clipping is the give the rule on `.bar__crumb` below already assumes. */
+    overflow: hidden;
+  }
+
+  .bar__tools {
+    display: flex;
+    flex: none;
+    gap: var(--space-3);
+    align-items: center;
   }
 
   /* The wordmark is not a heading. `scripts/check-deploy-artifact.mjs`
@@ -162,7 +204,10 @@ const atHome = crumbs.length === 0;
    * the leaf is a package name chosen by npm, so it is both the longest and the
    * one the reader can read in full from the `h1` a line below. Letting them all
    * shrink in proportion truncated `Reference` to `Refer…` at 390px to save room
-   * a crumb that was already legible did not need. */
+   * a crumb that was already legible did not need — and, measured again when
+   * search arrived, to `P…` and `R…` at 360px, which is a trail that has stopped
+   * saying anything at all. The clip on `.bar__place` above is what keeps the
+   * consequence inside the trail's own box. */
   .bar__crumb {
     flex: none;
     min-inline-size: 0;

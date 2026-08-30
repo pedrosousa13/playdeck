@@ -1,5 +1,13 @@
 node_modules/
+# Covers the site's search index too: Pagefind writes it into
+# `apps/site/dist/pagefind/` after Astro has emitted the pages, so it is inside
+# the build output rather than beside it, and it is never committed for the same
+# reason nothing else in there is — it is derived from the pages on every build.
 dist/
+# The site built a second time under a non-root prefix, by
+# `apps/site`'s `build:based`. `e2e/site-search.spec.ts` searches it to prove
+# the base path is derived rather than written down; it ships nowhere.
+apps/site/dist-base/
 .worktrees/
 storybook-static/
 # Astro's generated ambient types, written by `astro sync` and by every build.

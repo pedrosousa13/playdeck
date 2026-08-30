@@ -17,10 +17,20 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/site.tsbuildinfo"
   },
   // `tsc` cannot parse `.astro` files, so this covers the TypeScript the site
-  // actually has and never `**/*.astro`: the templates are checked by Astro's
-  // own tooling, and naming them here would fail `pnpm typecheck` on syntax it
-  // has no parser for. `src/**/*.ts` is here so a module the site grows is
-  // checked without anyone remembering to come back (#519).
+  // actually has and never `**/*.astro`: naming them here would fail
+  // `pnpm typecheck` on syntax it has no parser for. `src/**/*.ts` is here so a
+  // module the site grows is checked without anyone remembering to come back
+  // (#519).
+  //
+  // What that leaves is a real gap and not a handoff: nothing in this
+  // repository type-checks the `.astro` templates or the inline scripts inside
+  // them. There is no `astro check` here — no dependency, no script, no CI step
+  // — so the frontmatter and the `<script>` blocks are compiled by the bundler
+  // and never checked. `astro build` renders every page, which catches a
+  // template that names something undefined at module scope, and it is the only
+  // gate over those files; a `ReferenceError` inside an event handler in
+  // `index.astro` reached a commit on this branch precisely because rendering is
+  // not checking.
   //
   // `.astro/` — the directory `astro sync` writes its generated ambient types
   // into — is left out for the same reason it is gitignored: it is build output,
@@ -41,7 +51,8 @@
   // imports `astro:content`, a virtual module whose declarations exist only in
   // the generated `.astro/` directory this project deliberately does not read,
   // so `tsc` resolves the import to nothing and fails on a file that is
-  // perfectly well-formed. Astro's own tooling checks it, in the same pass that
-  // checks the `.astro` templates for the same reason.
+  // perfectly well-formed. Nothing else checks it either — see the gap named
+  // above — so what stands behind this file is `astro build` running its
+  // loaders, and the reference pages being empty if they are wrong.
   "exclude": ["src/content.config.ts"]
 }

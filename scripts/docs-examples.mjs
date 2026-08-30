@@ -297,6 +297,7 @@ const docs = [
   'packages/provider-youtube/README.md',
   'packages/provider-vimeo/README.md',
   'packages/provider-wistia/README.md',
+  'docs/archetypes.md',
   'docs/provider-setup.md',
   'docs/third-party-requests.md',
   'apps/storybook/stories/CapabilitiesMatrix.mdx',

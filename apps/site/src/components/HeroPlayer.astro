@@ -1,13 +1,29 @@
 ---
 /**
- * The hero's player panel: the box, the caption, the no-JavaScript fallback,
- * and the `--playdeck-*` values the library's optional theme reads.
+ * The hero's two instruments as they look: the player's box, the ledger's
+ * panel, the no-JavaScript fallback, and the `--playdeck-*` values the
+ * library's optional theme reads.
  *
  * The split with `HeroPlayerIsland.tsx` is deliberate and is the same split the
- * library itself draws. That file composes primitives and points them at a
- * source; this one decides what the result looks like. Nothing about the
- * composition is expressible here and nothing about the appearance is
- * expressible there, so neither file can quietly grow the other's job.
+ * library itself draws. That file composes primitives, points them at a source
+ * and reads what they report; this one decides what the result looks like.
+ * Nothing about the composition is expressible here and nothing about the
+ * appearance is expressible there, so neither file can quietly grow the other's
+ * job.
+ *
+ * ---- why every selector below is `:global()` --------------------------------
+ *
+ * Astro scopes a component's rules by stamping an attribute onto the elements
+ * in its own template, and the elements these rules address are not in it: both
+ * panels are rendered by React inside the island, which no scope attribute
+ * reaches. So the choice is not between scoped and global rules, it is between
+ * global rules and rules that match nothing.
+ *
+ * `:global()` per selector rather than `<style is:global>` for the whole block:
+ * this file already had to write it that way for the library's own parts, so
+ * the file keeps one spelling throughout, and each rule states at its own head
+ * that it is addressing markup produced elsewhere. The class names are this
+ * page's and appear nowhere else on the site, which is what makes that safe.
  *
  * ---- why `client:only` and not a hydrating directive ------------------------
  *
@@ -24,8 +40,11 @@
  * risk this page has no reason to take, not a defect anyone has reproduced.
  *
  * `client:only` renders nothing on the server, so neither problem exists. What
- * it costs is a box that is empty until the island mounts, and the stage below
- * reserves that box's height so the hero does not move when it does.
+ * it costs is a hero row that is empty until the island mounts, and nothing
+ * reserves that row's height today — the page below it moves down when the two
+ * panels arrive. Stated rather than left to be discovered: it is a real cost of
+ * the directive above, and the paragraph that used to claim `index.astro`
+ * reserved the height was describing a stage this file no longer renders.
  *
  * ---- the two theme systems, and why they do not meet ------------------------
  *
@@ -63,64 +82,69 @@ import HeroPlayerIsland from './HeroPlayerIsland';
 const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
 ---
 
-<figure class="demo">
-  {
-    /* The bezel, and the reason the dormant panel is worth looking at.
-     *
-     * Nothing is loaded until the affordance is pressed, so there is no frame
-     * to show and this component may not invent one — no poster, no still, no
-     * gradient standing in for a picture. What it can do instead is make the
-     * emptiness read as a switched-off instrument rather than as a missing
-     * image: a raised surface holding a recessed screen, which is the same
-     * construction the ledger beside it uses and is a claim about this page's
-     * furniture rather than about any media.
-     *
-     * The bezel is elevated and therefore draws no border, which is the whole
-     * of `DESIGN.md` rule 4 as amended. The screen inside it keeps a hairline,
-     * because `--color-sunken` on `--color-surface` is a small step and the
-     * hairline is what says where the screen ends — two different elements,
-     * two different depth vocabularies, neither doubling the other. */
-  }
-  <div class="demo__bezel">
-    <div class="demo__stage">
-    <HeroPlayerIsland client:only="react" source={clipUrl} />
-    {
-      /* With JavaScript the island owns this box and the markup below is inert
-       * text the parser never fetches from. Without it, this is the whole
-       * player: the browser's own controls over the same file, and
-       * `preload="none"` so the page keeps the property it argues from —
-       * nothing is fetched until the reader asks for it. `muted` for the reason
-       * the island passes `defaultMuted`.
-       *
-       * A real `<video>` rather than a paragraph explaining what is missing,
-       * because the clip is a static file on this origin and the platform
-       * already ships a player for it. */
-    }
-    <noscript>
-      <video
-        class="demo__fallback"
-        controls
-        muted
-        playsinline
-        preload="none"
-        src={clipUrl}></video>
-    </noscript>
+{
+  /* The island, which renders both of the hero's panels: the player and the
+   * ledger reading it. An `<astro-island>` is `display: contents`, so the two
+   * land as grid items of `.hero__stage` in `index.astro` rather than inside a
+   * box of this component's.
+   *
+   * `HeroPlayerIsland.tsx` carries why one component renders both — in short,
+   * `Player.Root` renders no DOM, so one controller can stand above two panels
+   * and the ledger has no second one to be reading. */
+}
+<HeroPlayerIsland client:only="react" source={clipUrl} />
+{
+  /* With JavaScript the island above is the whole hero and this is inert text
+   * the parser never fetches from. Without it, this is the whole player: the
+   * browser's own controls over the same file, and `preload="none"` so the page
+   * keeps the property it argues from — nothing is fetched until the reader
+   * asks for it. `muted` for the reason the island passes `defaultMuted`.
+   *
+   * A real `<video>` rather than a paragraph explaining what is missing,
+   * because the clip is a static file on this origin and the platform already
+   * ships a player for it.
+   *
+   * It repeats the bezel and the stage so that the fallback is a switched-off
+   * instrument rather than a bare video in a gap, and it does NOT repeat the
+   * ledger or the caption above it. There is no Playdeck player on this page
+   * without JavaScript, so there is nothing for a ledger to report and the
+   * caption's sentence about `loading="interaction"` would be describing
+   * something that is not running. The caption here says what is true instead.
+   *
+   * `<noscript>` is `display: none` while scripts run, so this is not a grid
+   * item beside the island — it is the hero's only item exactly when the island
+   * is not there. */
+}
+<noscript>
+  <figure class="demo">
+    <div class="demo__bezel">
+      <div class="demo__stage">
+        <video
+          class="demo__fallback"
+          controls
+          muted
+          playsinline
+          preload="none"
+          src={clipUrl}></video>
+      </div>
     </div>
-  </div>
-  <figcaption class="demo__caption">
-    A real player, composed from the published primitives. The clip is a
-    one-second test pattern served from this origin, and
-    {' '}
-    <code>loading="interaction"</code> holds the player dormant until the button
-    is pressed — so nothing is fetched, and no provider is attached, before that
-    press.
-  </figcaption>
-</figure>
+    <figcaption class="demo__caption">
+      The same clip in the browser's own player, because this page's player is a
+      React component and scripts are off. Nothing is fetched until the controls
+      are used.
+    </figcaption>
+  </figure>
+</noscript>
 
 <style>
-  .demo {
+  /* The player panel, and one of the hero row's two grid items. `min-inline-size`
+   * because a grid item's automatic minimum is its content and the content here
+   * is a picture: without it the clip's intrinsic width pushes the column wider
+   * than its track. */
+  :global(.demo) {
     display: grid;
     gap: var(--space-2);
+    min-inline-size: 0;
     margin: 0;
   }
 
@@ -129,7 +153,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * exactly one of the two, and border-under-blur is the pairing that stays
    * banned. `--space-3` all round is what makes it read as a body holding a
    * screen rather than as a card with a picture in it. */
-  .demo__bezel {
+  :global(.demo__bezel) {
     display: grid;
     padding: var(--space-3);
     background-color: var(--color-surface);
@@ -137,21 +161,24 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     box-shadow: var(--elevation-panel);
   }
 
-  /* The screen, and the box that exists before the player does.
+  /* The screen, and the reason a dormant panel is worth looking at.
    *
-   * `client:only` means nothing is here until the island mounts, so without a
-   * reserved height the hero would lay out once without a player and again with
-   * one. The ratio is the library's own documented fallback and is also the
-   * ratio of `public/tracer.mp4`, so the reservation and what fills it are the
-   * same shape and the box does not resize on mount. The background is stated
-   * here as well as passed to the player as `--playdeck-color-backdrop`, so the
-   * reserved box is already the screen at first paint rather than a hole
-   * showing the page through it.
+   * Nothing is loaded until the affordance is pressed, so there is no frame to
+   * show and this component may not invent one — no poster, no still, no
+   * gradient standing in for a picture. What it can do instead is make the
+   * emptiness read as a switched-off instrument rather than as a missing image.
+   *
+   * The ratio is the library's own documented fallback and is also the ratio of
+   * `public/tracer.mp4`, so the box is the right shape before a frame is
+   * decoded and does not resize when one arrives. The background is stated here
+   * as well as passed to the player as `--playdeck-color-backdrop`, so the box
+   * is already the screen at first paint rather than a hole showing the page
+   * through it.
    *
    * A recessed colour and a hairline, which is the depth treatment for a box
    * whose fill sits a step or two from its ground. Nothing here is elevated —
    * the bezel around it is. */
-  .demo__stage {
+  :global(.demo__stage) {
     display: grid;
     aspect-ratio: 16 / 9;
     overflow: hidden;
@@ -242,14 +269,14 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * once a provider has measured its media, with the same fallback as the stage
    * above. So the box is right before anything has loaded and stays right if
    * the media turns out not to be the shape the fallback assumed. */
-  .demo__stage :global([data-playdeck-part='viewport']) {
+  :global(.demo__stage) :global([data-playdeck-part='viewport']) {
     display: grid;
     grid-template-areas: 'stack';
     aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9);
     inline-size: 100%;
   }
 
-  .demo__stage :global([data-playdeck-part='media']) {
+  :global(.demo__stage) :global([data-playdeck-part='media']) {
     grid-area: stack;
     /* A grid item's automatic minimum is its content, and a video's content is
      * its intrinsic width. Without this the picture would refuse to shrink
@@ -304,7 +331,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * `place-items: center` centres the badge inside its grid area, and the area
    * is one auto-sized row that a full-height button leaves standing at the top
    * — `start` being what `align-content` defaults to. Both are needed. */
-  .demo__stage :global([data-playdeck-part='activation']) {
+  :global(.demo__stage) :global([data-playdeck-part='activation']) {
     grid-area: stack;
     grid-template-areas: 'face';
     place-content: center;
@@ -315,7 +342,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     outline-offset: calc(-1 * var(--space-1));
   }
 
-  .demo__stage :global([data-playdeck-part='activation'])::before {
+  :global(.demo__stage) :global([data-playdeck-part='activation'])::before {
     content: '';
     grid-area: face;
     inline-size: var(--space-8);
@@ -335,7 +362,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * comes out of the island, where no scope attribute reaches. Written that way
    * first, and caught by the badge and the glyph rendering as two stacked rows.
    */
-  .demo__stage :global([data-playdeck-part='activation'] > svg) {
+  :global(.demo__stage) :global([data-playdeck-part='activation'] > svg) {
     grid-area: face;
   }
 
@@ -353,7 +380,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    *
    * No focus rule: it is not in the tab order, and a pointer press on a
    * `:focus-visible` site leaves no ring. */
-  .demo__stage :global([data-surface-toggle]) {
+  :global(.demo__stage) :global([data-surface-toggle]) {
     grid-area: stack;
     position: relative;
     z-index: 1;
@@ -362,7 +389,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     border-radius: 0;
   }
 
-  .demo__stage :global([data-surface-toggle]:hover) {
+  :global(.demo__stage) :global([data-surface-toggle]:hover) {
     background-color: transparent;
   }
 
@@ -375,7 +402,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * unpositioned in the same cell paints underneath it however late it comes in
    * the markup — measured, by watching the bar disappear when the first frame
    * arrived. Stacking here is asked for, not inherited from source order. */
-  .demo__stage :global([data-playdeck-part='controls']) {
+  :global(.demo__stage) :global([data-playdeck-part='controls']) {
     grid-area: stack;
     position: relative;
     z-index: 1;
@@ -390,7 +417,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * otherwise. Unlayered and unqualified, which is enough — the theme's own
    * declaration sits inside a cascade layer and loses to this one whatever the
    * two specificities are. */
-  .demo__stage :global([data-playdeck-part='controls'][hidden]) {
+  :global(.demo__stage) :global([data-playdeck-part='controls'][hidden]) {
     display: none;
   }
 
@@ -415,25 +442,221 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    *
    * The 44px target is untouched: this changes the input's outer display type
    * and none of its box. */
-  .demo__stage :global([data-playdeck-part='seek-slider-input']) {
+  :global(.demo__stage) :global([data-playdeck-part='seek-slider-input']) {
     display: block;
   }
 
   /* Plex Mono is set tight relative to its own width, and this is the site's
    * rule for opening it wherever it appears. The theme sets the family from the
    * token above but has no tracking of its own to set. */
-  .demo__stage :global([data-playdeck-part='time']) {
+  :global(.demo__stage) :global([data-playdeck-part='time']) {
     letter-spacing: var(--tracking-fn);
   }
 
-  /* The fallback fills the reserved box rather than sizing itself from the
-   * clip, so the two states occupy the same space. */
-  .demo__fallback {
+  /* The fallback fills its stage rather than sizing itself from the clip, so
+   * the no-JavaScript panel is the same box the player's is. */
+  :global(.demo__fallback) {
     inline-size: 100%;
     block-size: 100%;
   }
 
-  .demo__caption {
+  :global(.demo__caption) {
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
+  /* ---- the capability ledger ----------------------------------------------
+   *
+   * The most on-thesis element on the page: the product's claim is that what a
+   * player reports about itself is true, and this is a player's report. It used
+   * to be a full-width strip of white with three rows adrift in it and the
+   * reason column flung against the far edge — a faint table, which is the one
+   * thing the page's signature could not afford to be.
+   *
+   * It is built the way the player above it is: a raised body holding a
+   * recessed readout. Same two boxes, same two roles, and the pairing is what
+   * makes them read as a matched pair of instruments rather than as two
+   * unrelated panels that happen to share a row.
+   *
+   * These rules used to live in `index.astro`, beside the sample data they
+   * styled. They are here because the markup is: the panel is rendered by the
+   * island this component mounts, so its look belongs to the component that
+   * decides how the island looks. */
+  :global(.ledger) {
+    display: grid;
+    gap: var(--space-2);
+    min-inline-size: 0;
+    margin: 0;
+  }
+
+  /* The one element on the site that takes `--elevation-instrument`, which is
+   * the deeper of the two steps and exists for exactly this: the panel a page
+   * is built around. `DESIGN.md` rule 4 names it here by name.
+   *
+   * No border, which is not a stylistic preference but the whole of the
+   * amended rule — a hairline under a blur is the tell that stays banned, and
+   * an elevated box drawing one is how it would come back. Colour alone
+   * already raises this panel (`--color-surface` on `--color-field` is built
+   * for it); the elevation is what makes it the thing the eye lands on. */
+  :global(.ledger__panel) {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--color-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--elevation-instrument);
+  }
+
+  @media (min-width: 48rem) {
+    :global(.ledger__panel) {
+      padding: var(--space-5);
+    }
+  }
+
+  /* An `h2` set at the caption rung rather than a styled `div`: the panel is a
+   * named region of the page, so it keeps a heading a reader can navigate to,
+   * and what it does not keep is `h2`'s default size — this is the label on an
+   * instrument, not a section title competing with the ones below. In the mono,
+   * because everything else inside this panel is machine output and a label in
+   * the prose face would be the one part of the readout written by the page. */
+  :global(.ledger__title) {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-regular);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  /* The readout. A recessed well inside the raised body, which is the same
+   * pair of roles the player's screen and bezel use — `--color-sunken` is what
+   * `tokens.css` calls a recessed well, and rows sitting in one read as output
+   * rather than as a list somebody typed.
+   *
+   * `--space-4` between rows rather than `--space-3`, because a row is two
+   * lines whenever it carries a reason and the gap has to be larger than the
+   * gap inside a row for the five to separate at all.
+   *
+   * The list reset is written here rather than shared with the lists in
+   * `index.astro`, for the reason at the head of this block: a rule in that
+   * file cannot reach markup the island renders. */
+  :global(.ledger__rows) {
+    display: grid;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    margin: 0;
+    background-color: var(--color-sunken);
+    border-radius: var(--radius-md);
+    list-style: none;
+  }
+
+  /* Below 24rem a row wraps, because the four parts are of very different
+   * lengths and there is no width to align them in. */
+  :global(.row) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    align-items: baseline;
+  }
+
+  /* An entry, not a table row: what is being asked sits on the first line with
+   * the answer pushed to the far end of it, and what qualifies the answer sits
+   * under both. Two lines rather than four columns because the reason is the
+   * one part with no fixed length, and giving it a column of its own is what
+   * used to strand it against the far edge of a full-width panel with the
+   * question it belongs to a hand's width away.
+   *
+   * The status words still sit under one another, which is the whole point of
+   * printing five of them: a reader compares `available` with `unknown` by
+   * looking down. They align to the end of the row rather than to a column of
+   * fixed width, so nothing has to guess how long the longest one is. */
+  @media (min-width: 24rem) {
+    :global(.row) {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      column-gap: var(--space-3);
+      row-gap: var(--space-1);
+    }
+
+    :global(.row__dot) {
+      grid-row: 1;
+    }
+
+    :global(.row__reason) {
+      grid-column: 2 / -1;
+    }
+  }
+
+  /* The state dot. The same shape and the same `--status-color` the three-state
+   * comparison on the landing page marks a status with, drawn here because
+   * these rows are the island's and a rule in that page cannot reach them.
+   *
+   * `--radius-pill` is the token that means "fully round" here; `50%` would be
+   * a second spelling of it. The 8px is a one-off — a shape's own size, not a
+   * step of the spacing scale — so it is written here rather than promoted to a
+   * token nothing else would read. */
+  :global(.row__dot) {
+    align-self: center;
+    flex: none;
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    background-color: var(--status-color);
+    border-radius: var(--radius-pill);
+  }
+
+  /* The capability is the subject of its row and takes the body rung in the
+   * mono where the panel has the width for it — a readout whose largest text
+   * is the same size as its captions is what made this panel read as faint. */
+  :global(.row__capability) {
+    min-inline-size: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  @media (min-width: 48rem) {
+    :global(.row__capability) {
+      font-size: var(--text-md);
+    }
+  }
+
+  /* The answer, in the colour its status selects. `--status-color` is assigned
+   * by the `[data-status]` rules in `base.css`, and it has to be a shared
+   * stylesheet rather than either component: Astro scopes a component's styles
+   * to the markup that component compiled, and these rows come out of the
+   * island, so a rule written here or in `index.astro` would match nothing
+   * they render. It was written in `index.astro` first, and the whole ledger
+   * lost its colour — the variable resolved to nothing, so the word went plain
+   * and the dot painted transparent.
+   *
+   * Nothing here transitions. A row changes the moment the controller does,
+   * which is the behaviour this panel exists to show, and a colour is not one
+   * of the two properties this system animates (`DESIGN.md` rule 5). So there
+   * is no motion for `prefers-reduced-motion` to suppress and no way for a
+   * suppressed transition to leave a row displaying an answer that is no longer
+   * true. */
+  :global(.row__status) {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    color: var(--status-color);
+  }
+
+  /* The reason line: the smallest text on the site, and the text carrying the
+   * product's whole argument. `--text-fn` is the bottom rung and there is
+   * nothing below it, in rem so a reader who raised their root size gets a
+   * larger floor rather than the same one.
+   *
+   * It sits under the entry it qualifies and starts where that entry starts,
+   * so a reader reads down rather than across: `unknown` and `not-ready` are
+   * one answer in two parts, and a panel that separated them by the width of
+   * the page would be making them look like two facts. */
+  :global(.row__reason) {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  :global(.ledger__caption) {
     font-size: var(--text-xs);
     color: var(--color-ink-subtle);
   }

@@ -183,9 +183,9 @@ a:active {
    * engine-specific description of the same thing. */
   scrollbar-color: var(--color-line-strong) transparent;
 
-  /* No text input exists on this site today, so this is for caret browsing and
-   * for whatever a later page adds. A caret in the platform's own colour is the
-   * same class of unthemed surface as the two above. */
+  /* The search field is the one place a reader types on this site, and caret
+   * browsing puts a caret on every other page. A caret in the platform's own
+   * colour is the same class of unthemed surface as the two above. */
   caret-color: var(--color-accent);
 }
 
@@ -250,4 +250,34 @@ a:active {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---- capability status --------------------------------------------------
+ *
+ * A capability's status, mapped to the role token that draws it. Three
+ * declarations and nothing else: whatever carries `data-status` reads
+ * `--status-color` for its dot, its word, or both.
+ *
+ * Here rather than in a component because two now render it and they are not
+ * in the same file — the hero's live ledger, which the island produces, and the
+ * three-state comparison on the landing page, which `index.astro` produces.
+ * Astro scopes a component's `<style>` by stamping an attribute on the elements
+ * it compiled, so a rule written in either file matches only that file's own
+ * markup; the ledger's rows come out of React and would carry no such
+ * attribute. Written there, the variable resolves to nothing, the dot paints
+ * transparent and the word loses its colour — which is what happened, and is
+ * why this is unlayered and unscoped.
+ *
+ * The dot is redundant with the word beside it on purpose: colour is an
+ * accelerator for a reader who has learnt it, and never the only carrier. */
+[data-status='available'] {
+  --status-color: var(--color-available);
+}
+
+[data-status='unknown'] {
+  --status-color: var(--color-unknown);
+}
+
+[data-status='unavailable'] {
+  --status-color: var(--color-unavailable);
 }

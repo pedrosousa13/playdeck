@@ -64,6 +64,11 @@ const preview: Preview = {
           ],
           'Player',
           'Reference',
+          // The two composed archetypes, after the primitives they are built
+          // from and after the reference composition that proves the surface is
+          // sufficient — they are what the parts add up to, so they read last
+          // among the things a visitor is meant to look at.
+          'Archetypes',
           'Theme',
           // Both hit the network or exist to be driven by e2e, so they sit
           // below everything a visitor reads.

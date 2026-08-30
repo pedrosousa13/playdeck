@@ -1,18 +1,29 @@
 /*
- * The hero's player, composed from the published primitives and nothing else.
+ * The hero's two instruments, composed from the published primitives and
+ * nothing else: the player, and the ledger of what that player reports about
+ * the browser it is running in.
  *
  * This file is the site's whole React surface, and the hero is the only place
  * on the site that hydrates anything. It is here because the page's central
- * claim — that no provider request leaves the page before a click — is a claim
- * about behaviour, and the honest way to make it on a landing page is to run
- * the thing that behaves that way rather than to describe it in a paragraph
- * above a still image.
+ * claim — that no provider request leaves the page before a click, and that
+ * what a player says it can do is true — is a claim about behaviour, and the
+ * honest way to make it on a landing page is to run the thing that behaves
+ * that way rather than to describe it in a paragraph above a still image.
  *
- * Everything visual belongs to `HeroPlayer.astro`: the box, the caption, and
- * the `--playdeck-*` values the optional theme reads. This file is the
- * composition and the source, so the two questions a reader brings here — what
- * is mounted, and what it is pointed at — are answered by the markup below
- * without a stylesheet in the way.
+ * ---- why one file holds both panels -----------------------------------------
+ *
+ * `Player.Root` renders no DOM at all: it is two context providers around its
+ * children. So one root can stand above two panels that sit side by side on the
+ * page, and the ledger reads the same controller the player is driven by rather
+ * than a second one of its own. That is the whole architecture, and it is what
+ * makes the panel a report rather than an illustration — there is no other
+ * controller for a row to be reading.
+ *
+ * Both panels are therefore produced here, including their markup, and both are
+ * grid items of `.hero__stage` in `src/pages/index.astro`: an `<astro-island>`
+ * is `display: contents`, so what this renders lands in that grid directly.
+ * `HeroPlayer.astro` keeps every rule that decides how they look, and carries
+ * why those rules are written the way they are.
  *
  * `source` arrives as a prop rather than being written here, because the URL a
  * page serves the clip from is resolved against `import.meta.env.BASE_URL` in
@@ -177,6 +188,115 @@ const SurfaceToggle = () => {
   );
 };
 
+/*
+ * The five rows, in the order the panel prints them. They are the capabilities
+ * a viewer of a video can tell apart by looking — can this go fullscreen, can
+ * it pop out, can it be sent to a television, can the picture be chosen, can
+ * the subtitles be — rather than the whole of `PlayerCapabilities`, which also
+ * carries entries about seeking and volume that no browser refuses.
+ *
+ * A tuple of literals, so `snapshot.capabilities[capability]` below is checked
+ * against the published state's own shape and a renamed capability is a type
+ * error here rather than a row that quietly reads `undefined`.
+ */
+const capabilityRows = [
+  'fullscreen',
+  'pictureInPicture',
+  'airPlay',
+  'selectQuality',
+  'selectTextTrack'
+] as const;
+
+interface LedgerRowProps {
+  readonly capability: (typeof capabilityRows)[number];
+  /** The attached provider, or `null` while none is. */
+  readonly provider: string | null;
+}
+
+/**
+ * One capability, as the live controller currently answers for it.
+ *
+ * Every value on screen is read here, through the published selector hook, from
+ * the state of the controller `Player.Root` created above. Nothing is timed,
+ * seeded or assumed: before the activation button is pressed the root is
+ * dormant, no provider has been asked anything, and each row says exactly that
+ * — `unknown`, because the answer is not known, with `not-ready` under it
+ * saying why it is not. A panel that hid that state, or guessed past it, would
+ * be the one dishonest thing on a page arguing that a player's own report is
+ * worth trusting.
+ *
+ * A component per row rather than one selector over all five, because
+ * `usePlayerState` compares what it selected: an `Availability` is a small
+ * plain object, so a row re-renders when its own answer changes and sits still
+ * while another row's moves.
+ *
+ * The reason line is rendered whenever the state carries one, which is both of
+ * the two answers that qualify themselves — `unknown` and `unavailable` — and
+ * never for `available`, which has nothing left to qualify. It prints whatever
+ * reason the state holds rather than matching against a list of the ones this
+ * page happens to know about: `Availability` in `@playdeck/core` is the
+ * authority on that set, and a page with its own copy of it would print nothing
+ * at all the day a new member is added.
+ */
+const LedgerRow = ({ capability, provider }: LedgerRowProps) => {
+  const availability = Player.usePlayerState(
+    (snapshot) => snapshot.capabilities[capability]
+  );
+  // The context for the answer, in the order a reader needs it: which provider
+  // answered, then what it said. Both are optional — there is no provider until
+  // one attaches, and `available` carries no reason — so the line is assembled
+  // rather than formatted, and is absent entirely when it would be empty.
+  const detail: string[] = [];
+  if (provider !== null) detail.push(provider);
+  if ('reason' in availability) detail.push(availability.reason);
+  return (
+    <li className="row" data-status={availability.status}>
+      <span className="row__dot" aria-hidden="true" />
+      <span className="row__capability">{capability}</span>
+      <span className="row__status">{availability.status}</span>
+      {detail.length === 0 ? null : (
+        <span className="row__reason">{detail.join(' · ')}</span>
+      )}
+    </li>
+  );
+};
+
+/**
+ * The panel, and the site's most on-thesis element: what the player beside it
+ * reports about the browser this page is open in, now.
+ *
+ * The provider is read once here rather than in each row, because it is one
+ * fact about the player and not five: every row's context line names the same
+ * attached provider.
+ *
+ * An `h2` at the caption rung, kept because the panel is a named region of the
+ * page a reader can navigate to — see `HeroPlayer.astro` for the size.
+ */
+const Ledger = () => {
+  const provider = Player.usePlayerState((snapshot) => snapshot.provider);
+  return (
+    <figure className="ledger">
+      <div className="ledger__panel">
+        <h2 className="ledger__title">Capability ledger</h2>
+        <ul className="ledger__rows">
+          {capabilityRows.map((capability) => (
+            <LedgerRow
+              capability={capability}
+              key={capability}
+              provider={provider}
+            />
+          ))}
+        </ul>
+      </div>
+      <figcaption className="ledger__caption">
+        Read from the player beside it, in this browser, as it answers. Every
+        row opens <code>unknown</code>: nothing has been asked of a provider
+        until the clip is loaded.
+      </figcaption>
+    </figure>
+  );
+};
+
 const HeroPlayerIsland = ({ source }: Props) => {
   /*
    * How the activation was given, carried from the press to the render that
@@ -212,45 +332,72 @@ const HeroPlayerIsland = ({ source }: Props) => {
      * closing off at the prop rather than at the media.
      */
     <Player.Root loading="interaction" source={source} defaultMuted>
-      <Player.Viewport>
-        <Player.Media />
-        {/*
-         * Before the control bar and after the picture, which is the order the
-         * stacking in `HeroPlayer.astro` reads: at equal `z-index` the later
-         * sibling paints in front, so the bar's own buttons stay on top of this
-         * and keep their clicks.
-         */}
-        <SurfaceToggle />
-        {/*
-         * The affordance that starts everything. It is a real `<button>` from
-         * the library, so it is reachable by Tab and answers Enter, and it takes
-         * the site's own focus ring: `base.css` styles `:focus-visible` by
-         * element rather than by class, and nothing here opts out of it.
-         *
-         * Named rather than left to the built-in "Play", because this button
-         * both loads and plays and the name has to say the first part. Its
-         * children are the icon, so the name stands alone rather than
-         * disagreeing with a word printed beside it.
-         *
-         * It is also the whole picture and not the badge drawn on it, and that
-         * is the library's own default rather than something added here: the
-         * button ships `position: absolute; inset: 0` with auto margins, so it
-         * is full-bleed until a stylesheet gives it a size. The bundled theme
-         * gives it 4rem, and `HeroPlayer.astro` takes that back and redraws the
-         * badge as a background, so a click anywhere on the stage loads and
-         * plays — one control, one accessible name, no second click target.
-         */}
-        <Player.ActivationButton
-          aria-label="Load and play the sample clip"
-          onClick={(event) => {
-            fromKeyboardRef.current =
-              event.currentTarget.matches(':focus-visible');
-          }}
-        >
-          <Player.PlayIcon />
-        </Player.ActivationButton>
-        <ControlBar fromKeyboardRef={fromKeyboardRef} />
-      </Player.Viewport>
+      {/*
+       * The player panel: a raised body holding a recessed screen. The same two
+       * boxes the ledger below is built from, because the two are the halves of
+       * one claim — the thing running, and what it reports about itself — and a
+       * page that drew them as unrelated panels would be hiding that.
+       *
+       * The bezel and the stage are here rather than in `HeroPlayer.astro`
+       * because `Player.Root` has to stand above both panels, and an Astro
+       * component cannot be a child of a React one. What that costs is the
+       * reservation `HeroPlayer.astro`'s stage used to make before the island
+       * mounted, and nothing has replaced it: `HeroPlayer.astro` records that
+       * cost beside the directive that incurs it.
+       */}
+      <figure className="demo">
+        <div className="demo__bezel">
+          <div className="demo__stage">
+            <Player.Viewport>
+              <Player.Media />
+              {/*
+               * Before the control bar and after the picture, which is the order the
+               * stacking in `HeroPlayer.astro` reads: at equal `z-index` the later
+               * sibling paints in front, so the bar's own buttons stay on top of this
+               * and keep their clicks.
+               */}
+              <SurfaceToggle />
+              {/*
+               * The affordance that starts everything. It is a real `<button>` from
+               * the library, so it is reachable by Tab and answers Enter, and it takes
+               * the site's own focus ring: `base.css` styles `:focus-visible` by
+               * element rather than by class, and nothing here opts out of it.
+               *
+               * Named rather than left to the built-in "Play", because this button
+               * both loads and plays and the name has to say the first part. Its
+               * children are the icon, so the name stands alone rather than
+               * disagreeing with a word printed beside it.
+               *
+               * It is also the whole picture and not the badge drawn on it, and that
+               * is the library's own default rather than something added here: the
+               * button ships `position: absolute; inset: 0` with auto margins, so it
+               * is full-bleed until a stylesheet gives it a size. The bundled theme
+               * gives it 4rem, and `HeroPlayer.astro` takes that back and redraws the
+               * badge as a background, so a click anywhere on the stage loads and
+               * plays — one control, one accessible name, no second click target.
+               */}
+              <Player.ActivationButton
+                aria-label="Load and play the sample clip"
+                onClick={(event) => {
+                  fromKeyboardRef.current =
+                    event.currentTarget.matches(':focus-visible');
+                }}
+              >
+                <Player.PlayIcon />
+              </Player.ActivationButton>
+              <ControlBar fromKeyboardRef={fromKeyboardRef} />
+            </Player.Viewport>
+          </div>
+        </div>
+        <figcaption className="demo__caption">
+          A real player, composed from the published primitives. The clip is a
+          one-second test pattern served from this origin, and{' '}
+          <code>loading="interaction"</code> holds the player dormant until the
+          button is pressed — so nothing is fetched, and no provider is
+          attached, before that press.
+        </figcaption>
+      </figure>
+      <Ledger />
     </Player.Root>
   );
 };
