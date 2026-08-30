@@ -1,17 +1,44 @@
 ---
 /**
  * The shell every page of this site is served under: the wordmark, where the
- * reader currently is, search, and the theme switch.
+ * reader currently is, the site's own navigation, search, and the theme switch.
  *
  * It replaces a lone underlined link sitting in the site-navigation slot, which
  * read as a stray link rather than as a header and said different things on
  * different pages. This is a documentation shell and not a marketing bar, so
- * there is still no call to action and no product navigation — but search is
- * neither of those, and the rule it used to be excluded by ("three jobs and no
+ * there is still no call to action — but search is not one, and neither is the
+ * navigation below it. The rule both used to be excluded by ("three jobs and no
  * fourth") was aimed at things a reader did not come for. A docs reader who
  * arrived to read one document is exactly the reader who then needs to find the
  * next one, and the only element on the page that is present while they are
  * reading is this strip.
+ *
+ * ---- the site navigation ----------------------------------------------------
+ *
+ * Three destinations, the same three on every page: Reference, Providers,
+ * Archetypes. They were links at the foot of `/` and nowhere else, which is the
+ * one place a reader who has finished reading a README will not look. The
+ * header is the element that is present on every page, so it is where they go.
+ *
+ * The workbench is not among them and will not be: #534 records that it is not
+ * served as a public surface, and the maintainer ruled the same on a Storybook
+ * link. This list is the site's own pages.
+ *
+ * `aria-current="page"` marks the section the reader is inside, on a link among
+ * sibling links — which is exactly the case the note on the breadcrumb below
+ * says the attribute does work in, and the case the rail already uses it for.
+ * A reference document therefore carries two of them: this nav's `Reference`,
+ * and the rail's entry for the package being read. They are in differently
+ * labelled landmarks and they are both true — the reader is in Reference, and
+ * in that package — so the ambiguity the breadcrumb note avoids (two markers
+ * for the same trail, one of them not even a link) does not arise here.
+ *
+ * The section is derived from `Astro.url.pathname` rather than passed in, so a
+ * page added later is marked without being told to mark itself, and a page
+ * cannot claim a section it is not served from. The `BASE_URL` prefix is
+ * stripped first: the site ships from the apex, where the prefix is `/` and a
+ * comparison against a literal would look identical, and `astro build --base`
+ * is what makes the difference observable (#435).
  *
  * Search is on documentation pages only, which is what the `documentation` prop
  * says. It defaults to true — a page added later is documentation unless it
@@ -85,6 +112,20 @@ const { crumbs = [], documentation = true } = Astro.props;
 // (#435).
 const homeUrl = import.meta.env.BASE_URL;
 const atHome = crumbs.length === 0;
+
+// The section the reader is in: the first segment of this page's path with the
+// deployment prefix taken off. `/` and `/design/` are in none of the sections
+// listed below, so they simply match nothing.
+const path = Astro.url.pathname;
+const section = (
+  path.startsWith(homeUrl) ? path.slice(homeUrl.length) : path.replace(/^\//, '')
+).split('/')[0];
+
+const destinations = [
+  { label: 'Reference', segment: 'reference' },
+  { label: 'Providers', segment: 'providers' },
+  { label: 'Archetypes', segment: 'archetypes' }
+];
 ---
 
 <header class="bar" data-pagefind-ignore>
@@ -117,12 +158,36 @@ const atHome = crumbs.length === 0;
     {documentation && <DocsSearch />}
     <ThemeToggle />
   </div>
+
+  {
+    /* Last in the strip and last in the source, and it takes a line of its own
+     * at every width — see the note on `.bar__nav` below. Reading order and
+     * visual order are therefore the same thing at every width, which is what
+     * a second row placed with `order` would have cost. */
+  }
+  <nav class="bar__nav" aria-label="Site">
+    <ul class="bar__links">
+      {
+        destinations.map(({ label, segment }) => (
+          <li>
+            <a
+              href={`${homeUrl}${segment}/`}
+              aria-current={segment === section ? 'page' : undefined}
+            >
+              {label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </nav>
 </header>
 
 <style>
   .bar {
     display: flex;
-    gap: var(--space-3);
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
     align-items: center;
     justify-content: space-between;
     padding: var(--space-2) var(--space-5);
@@ -151,6 +216,64 @@ const atHome = crumbs.length === 0;
     flex: none;
     gap: var(--space-3);
     align-items: center;
+  }
+
+  /* The navigation takes a whole line of its own, at every width. Three names
+   * cannot share the first line with the trail, search and the switch at 320px
+   * — measured, the room left there is under a third of what they need — so
+   * the choice is a second line or a disclosure that hides them. The rail is a
+   * `<details>` because it is a list per package plus a list per heading,
+   * several phone screens of it; three short words are not that. A row that is
+   * always visible costs one line of header and needs no summary to open, no
+   * state to announce and no script.
+   *
+   * `flex-basis: 100%` rather than a media query, so the line is the same line
+   * at 320px and at 1600px: the reader who resizes finds the navigation where
+   * they left it, and the header has one layout to reason about instead of
+   * two. It is a flex item of `.bar` rather than a row inside a wrapper so
+   * that the trail above keeps the clipping box it already relies on. */
+  .bar__nav {
+    flex-basis: 100%;
+    font-size: var(--text-sm);
+  }
+
+  /* And the names wrap among themselves. They are the site's own words and
+   * short, so they fit on one line at 320px with room to spare — but a
+   * destination added later, or a reader who has scaled text up, must push the
+   * list down rather than push the page sideways. */
+  .bar__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-4);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .bar__links a {
+    display: inline-block;
+    padding-block: var(--space-1);
+    color: var(--color-ink-muted);
+    text-decoration: none;
+  }
+
+  .bar__links a:hover {
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
+
+  /* Pressed, the fourth state every control on this site carries. */
+  .bar__links a:active {
+    color: var(--color-ink-subtle);
+  }
+
+  /* The section the reader is in, marked by the same attribute that tells a
+   * screen reader which one it is rather than by a class that only says it
+   * visually — as the rail marks the current document. Weight and colour
+   * together, because colour alone is not a state. */
+  .bar__links a[aria-current='page'] {
+    font-weight: var(--weight-semibold);
+    color: var(--color-accent);
   }
 
   /* The wordmark is not a heading. `scripts/check-deploy-artifact.mjs`

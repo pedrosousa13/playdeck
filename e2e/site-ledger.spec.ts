@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import { activationButton } from './locators';
 
 /**
  * The landing page's capability ledger, which reports what Playdeck says about
@@ -34,6 +33,19 @@ const capabilities = [
 ];
 
 const rows = (page: Page) => page.locator('.ledger__rows .row');
+/**
+ * The hero's activation button, scoped to the hero panel.
+ *
+ * `./locators`' `activationButton` is page-wide, and `/` now mounts three
+ * players rather than one: the hero, and the two archetypes the page runs to
+ * show that the primitives compose into different products (#542). All three
+ * carry `data-playdeck-part="activation"`, so the shared locator is a
+ * strict-mode ambiguity here in a way it is not on a story that mounts one
+ * player. `.demo__stage` is the hero's own screen — `HeroPlayer.astro` draws
+ * it — so this says "the hero's" without inventing a hook for a test.
+ */
+const heroActivation = (page: Page) =>
+  page.locator('.demo__stage [data-playdeck-part="activation"]');
 
 test('the ledger opens unknown for the five capabilities it reports', async ({
   page
@@ -63,7 +75,7 @@ test('the ledger leaves unknown once a provider has answered', async ({
   await page.goto(landing);
   await expect(rows(page)).toHaveCount(capabilities.length);
 
-  await activationButton(page).click();
+  await heroActivation(page).click();
 
   // Which rows resolve, and to what, is a property of the browser running this
   // — that is the whole point of the panel — so what is asserted is that the

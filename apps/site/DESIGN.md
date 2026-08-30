@@ -27,10 +27,10 @@ its opposite is what a generated interface looks like.
    below.
 5. **Only `transform` and `opacity` are animated.**
 
-Rules 1 and 5 govern what this app writes. The two archetype stylesheets
-mounted on `/archetypes` are outside both, and that is named here rather than
-left to be found — see _The archetypes, and why they are outside rules 1 and 5_
-below.
+Rules 1 and 5 govern what this app writes. The two archetype stylesheets are
+outside both — on `/archetypes`, and now on `/` as well, which mounts the same
+two files — and that is named here rather than left to be found. See _The
+archetypes, and why they are outside rules 1 and 5_ below.
 
 ## Palette
 
@@ -265,6 +265,11 @@ these two rungs on a heading of its own. A document page's title names the
 document — a package, a provider, this sheet — and no stance in this system
 dresses a name as a thesis.
 
+A component mounted only on that page may set it in a class of its own for the
+same reason — `ProviderTruth.astro`'s heading does, at the same rung `/`'s own
+section titles take — and what the rule is against is moving what an element
+resolves to, not where the class is written.
+
 That page's `h1` steps up to `--text-4xl` at `48rem` and keeps `h1`'s own rung
 below that, where 88px would take three quarters of a phone's width and cost
 the lead its first screen. A step between two rungs of this scale rather than a
@@ -318,8 +323,9 @@ The reference pages at `/reference/<package>/` are the package READMEs rendered,
 and those documents are mostly code; two of the provider setup pages at
 `/providers/<provider>/` carry a highlighted code example, because
 `docs/provider-setup.md` writes one for YouTube and one for Vimeo and none for
-the other three. No provider page mounts a player — the hero island is still
-the site's only one. The landing page carries one block of code too, the
+the other three. No provider page mounts a player; the routes that do are `/`
+and `/archetypes`, and nothing about that changed when `/` grew from one island
+to three. The landing page carries one block of code too, the
 composition example. Colouring it is the one place a colour on this site comes
 from somewhere other than `tokens.css`.
 
@@ -360,13 +366,15 @@ about what the example is.
 ## The archetypes, and why they are outside rules 1 and 5
 
 `/archetypes` mounts `examples/archetype-streaming-service.tsx` and
-`examples/archetype-course-platform.tsx`. Each carries its own stylesheet as a
-`<style>` element inside the component, and each writes hex literals by the
-dozen and animates `background-color`. Read against rules 1 and 5 those are
-violations; they are allowed, and the reason is what the page is for.
+`examples/archetype-course-platform.tsx`, and `/` now mounts the same two files
+in its archetypes section. Each carries its own stylesheet as a `<style>`
+element inside the component, and each writes hex literals by the dozen and
+animates `background-color`. Read against rules 1 and 5 those are violations;
+they are allowed, and the reason is what the pages are for.
 
 Those two files are not this app's. They live in `examples/`, they are the
-files a consumer copies, and `apps/storybook` mounts the same two. A stylesheet
+files a consumer copies, and `apps/storybook` mounts the same two — three
+surfaces now, counting `/`. A stylesheet
 spoken in `tokens.css`'s role tokens would render as unstyled text everywhere
 outside this one site, and an archetype that borrowed its look from the page
 around it would be proving something about this page rather than about the
@@ -378,8 +386,23 @@ So the boundary is ownership rather than taste: a file under `apps/site/src`
 writes no colour and animates nothing but `transform` and `opacity`. A file
 under `examples/` is a consumer's code that this site happens to render, and it
 answers to `examples/`'s own constraints — one paste, no imports, no design
-system. `/archetypes` itself, everything around the two players, is inside the
-rules like every other page.
+system. Everything around the two players is inside the rules like every other
+page: `/archetypes` itself, and on `/` the container the compositions are
+mounted in, which is deliberately no container at all — no surface colour, no
+elevation, no hairline, because a bezel drawn by this site around a file that
+brings its own appearance would be this site's paint on a consumer's example.
+
+**On `/` they are mounted `client:visible`, which has a consequence worth
+stating.** The directive defers hydration until the reader scrolls to them, but
+it still server-renders the components, so their markup — including headings this
+app did not write — is in the document before any script runs. There is no Astro
+directive that both defers the mount and skips the server render, so this is the
+cost of the deferral rather than an oversight. What it means in practice is that
+`/`'s heading outline carries headings written in `examples/`, `Sintel` and
+`Rendering an open movie` among them, and that none of them may ever be named
+`Playdeck`: `scripts/check-deploy-artifact.mjs` identifies this site's root
+document by a heading with exactly that name, and `e2e/site-nav.spec.ts` asserts
+there is exactly one such heading on the page and that it is the `h1`.
 
 ## The one gradient
 
@@ -620,12 +643,15 @@ is not a way to tint an edge.
 **What may spend an elevation, by name.** `--elevation-instrument` belongs to
 the capability ledger on `/` and to nothing else — it is the panel that page is
 built around, and a second instrument on one page means neither is the
-instrument. `--elevation-panel` belongs to two things: the bezel around the
+instrument. `--elevation-panel` belongs to three things: the bezel around the
 hero's player — `.demo__bezel` in `HeroPlayer.astro`, and not the stage inside
-it, which is a recessed colour and a hairline — and the search dialog in
+it, which is a recessed colour and a hairline — the search dialog in
 `DocsSearch.astro`, which is a panel over a page rather than the panel a page is
 built around, and which carries no border because rule 4 forbids an elevated
-surface one. Everything else on this site is a step on the surface ladder and a
+surface one; and the receipt's body in `Receipt.astro`, mounted on `/`, which is
+the same shape of thing as the hero's bezel and takes the rung for the same
+reason — a panel at rest on the field, on a page whose one instrument is the
+ledger. Everything else on this site is a step on the surface ladder and a
 hairline, as before. A new elevated element is an edit to this list, not a local
 decision.
 
@@ -634,15 +660,34 @@ for the `#1F1F26` ceiling and the rejected `#24242C`. Above the overlay the
 answer is an elevation. There is no third rung waiting to be added, and a page
 that seems to want one is a page with too many surfaces on it.
 
-**No component spends either new role yet.** The two are declared in
-`tokens.css` and rendered as swatches on `/design`, and that is the whole of
-their present use: the ladder is stated and measured before anything leans on
-it, so the first panel that wants a surface on a surface reaches for a rung that
-has already been checked against ink rather than inventing one. Stating that
-here is what keeps a later reader from inferring, from the roles' existence,
-that some panel on this site is already relying on them.
+**This paragraph used to read "No component spends either new role yet."** It
+was written when the two rungs had been declared in `tokens.css` and rendered as
+swatches on `/design` and nowhere else, and the point it was making was that the
+ladder had been stated and measured before anything leaned on it, so the first
+panel that wanted a surface on a surface would reach for a rung already checked
+against ink rather than inventing one.
 
-**There are two animations on the site, and both are on `/`.** The count is the
+`--color-raised` now has that first consumer, and it is the one the rung was
+argued for: `/`'s `.readout`, the box the proof strip's budget table sits in. It
+is a panel on the page rather than a panel over it, so it takes colour and
+nothing else — no elevation, because rule 4's allowlist names by hand what may
+spend one and this is not on it, and therefore no border either, which is the
+half of that rule that keeps the banned pairing unassemblable. In light the rung
+resolves to `#FFFFFF` and is a real 1.045 step against the field, so it reads as
+raised in both themes rather than only in the one that has the room.
+
+`--color-overlay` still has no consumer, and the original point survives for it
+unchanged: nothing on this site relies on it, and a later reader should not infer
+from its existence that anything does.
+
+**This app writes two animations, and both are on `/`.** The count used to be
+stated as "there are two animations on the site", which was the same fact while
+the two archetypes were mounted only on `/archetypes`. They are mounted on `/`
+now, they animate `background-color`, and they are outside rule 5 for the
+ownership reason above — so a reader watching that page sees motion this count
+does not include. The count is a count of what this app authors, and it is worth
+saying so rather than letting a reader find a moving element and conclude the
+rule had quietly lapsed. The count is the
 rule; the argument it was making is why the count is two and not seven.
 Scattered reveals down a page are the generated-landing-page tell in motion
 form, and one authored moment is worth more than six of them — a second one is
@@ -657,8 +702,11 @@ across a fixed window at its final width.
 
 The second is the entry motion below, which reaches exactly three elements: the
 three `.status` columns of the three-state comparison on `/`, which are one
-comparison rather than three things and move together as such. Nothing else on
-the site moves on entry, and the hero's band is untouched by any of it.
+comparison rather than three things and move together as such. Nothing else this
+app writes moves on entry — not the receipt, whose rows appear the moment the
+browser records a request and are the behaviour that panel exists to show, and
+not the two mounted archetypes, which take no class of this vocabulary. The
+hero's band is untouched by any of it.
 
 `prefers-reduced-motion: reduce` collapses durations, which lands each transition
 on its settled state immediately. That only works because every transition moves
@@ -812,7 +860,10 @@ system not owned by one component, and a new one has to earn that:
 - `.u-visually-hidden` is present for assistive technology and absent for
   everyone else. It exists for the case where the visible text is deliberately a
   fragment of the real name: the rail shows `core`, and this is what keeps the
-  link named `@playdeck/core`.
+  link named `@playdeck/core`. Its second use is the same shape seen from the
+  other side — the install line's `role="status"` on `/` says in words what the
+  copy button's own text change says visually, because a button's name changing
+  under a reader who has already pressed it is announced by nothing.
 - `.u-enter` marks an element the entry motion applies to. What earned it is
   that the alternative is worse: written into `/`'s own `<style>` it would be
   one page's private effect, and the next page that wanted a reveal would write
@@ -829,13 +880,15 @@ system not owned by one component, and a new one has to earn that:
 | `src/styles/base.css`                  | Element defaults, spoken in tokens                       |
 | `src/styles/doc.css`                   | The shell and the prose of a rendered document           |
 | `src/layouts/Base.astro`               | The document, its stance, and the pre-paint theme script |
-| `src/components/SiteHeader.astro`      | The shell above every page                               |
+| `src/components/SiteHeader.astro`      | The shell above every page, and the site's navigation    |
 | `src/components/ThemeToggle.astro`     | The control that stores a theme choice                   |
 | `src/components/DocsSearch.astro`      | Search over the documentation, and its dialog            |
 | `src/components/Sweep.astro`           | The one gradient, and its two forms                      |
 | `src/components/DocRail.astro`         | The rail beside a document, both sets of them            |
 | `src/components/HeroPlayer.astro`      | The hero's two panels, and the player theme              |
 | `src/components/HeroPlayerIsland.tsx`  | The hero's composition: the player and ledger            |
+| `src/components/Receipt.astro`         | What `/` actually asked the network for                  |
+| `src/components/ProviderTruth.astro`   | The provider comparison on `/`, and its table            |
 | `src/pages/index.astro`                | The landing page at `/`, and its links                   |
 | `src/pages/design.astro`               | The specimen sheet, served at `/design`                  |
 | `src/pages/archetypes.astro`           | Two composed players, and the files they are             |
@@ -846,21 +899,67 @@ system not owned by one component, and a new one has to earn that:
 | `src/content.config.ts`                | The two document collections, and their loaders          |
 | `src/reference-packages.mjs`           | Which packages get a page, and from where                |
 | `src/provider-pages.mjs`               | Which providers get a page, and which sections           |
+| `src/provider-asymmetry.mjs`           | What that same document says each provider can answer    |
 | `src/shiki.ts`                         | The two theme names, for both readers of them            |
 
 **The header** carries the wordmark returning home, the path from the root to
-where the reader currently is, search, and the theme switch. This is a
-documentation shell and not a marketing bar, so there is still no call to action
-and no product navigation. It is not sticky: a reference page is a whole README,
-and the one element a reader navigates a long document with is the rail, which is
-sticky already. One per page.
+where the reader currently is, the site's own navigation, search, and the theme
+switch. This is a documentation shell and not a marketing bar, so there is still
+no call to action. It is not sticky: a reference page is a whole README, and the
+one element a reader navigates a long document with is the rail, which is sticky
+already. One per page.
 
 **It used to read "three jobs and no fourth", search named among the things it
 would not carry.** That rule was aimed at everything a reader did not come for,
 and search is the one thing in that strip a reader of a long document does come
-for — see _Search_ below. What the rule still forbids is unchanged: a header
-here gains nothing that sells, and nothing that duplicates a page's own
-navigation.
+for — see _Search_ below.
+
+**It then read "no call to action and no product navigation", and the second
+half of that is gone.** The header now carries three destinations — Reference,
+Providers, Archetypes — on every page. That is a maintainer's decision rather
+than drift, and it was asked for in those words: links at the foot of `/` and
+nowhere else, when the reader who most needs the next document is the one who
+has just finished reading one. The rule the amendment was written against is the
+same rule search was let past: what the strip may carry is what a reader came
+for, and a reader of a document did come for the next document. The site's own
+sections are that; a product navigation selling the library is not, and would
+still be refused.
+
+What the rule still forbids is unchanged and is worth restating, because the
+list is now three names long and the fourth is the tempting one. **A header here
+gains nothing that sells, and nothing that duplicates a page's own navigation.**
+The workbench is not among the destinations and will not be: #534 records that
+it is not served as a public surface, and the same ruling was made about a
+Storybook link on `/`. No link to it survives anywhere on the site: `/design`
+carried the last one and no longer does, and `design.astro`'s own header records
+the absence rather than leaving it to be rediscovered.
+`scripts/check-deploy-artifact.mjs` still visits the workbench, from its own
+address rather than by following a link from any page.
+`e2e/site-nav.spec.ts` asserts the absence on both page shapes, because it is
+the link most likely to be added back by someone reading this strip as a list of
+everything the repository builds.
+
+**The row is a second line, not a disclosure, and it needs no script.** Three
+names cannot share the first line with the trail, search and the switch at
+320px, so the choice was a second line or something that hides them. The rail is
+a `<details>` because it is a list per package plus a list per heading, several
+phone screens of it; three short words are not that, and a row that is always
+visible costs one line of header and has no state to announce. It takes
+`flex-basis: 100%` rather than a media query, so it is the same line at 320px
+and at 1600px and there is one layout to reason about instead of two, and it is
+last in the source as well as last in the strip, so reading order and visual
+order agree at every width — which is what placing it with `order` would have
+cost.
+
+**Which destination is marked is derived from the path, not passed in.** The
+first segment of `Astro.url.pathname` with the deployment prefix taken off, so a
+page added under one of the three sections is marked without being told to mark
+itself and no page can claim a section it is not served from. The prefix is
+stripped rather than compared against a literal for the reason every address on
+this site is built from `import.meta.env.BASE_URL`: at the apex the two are the
+same string, and `astro build --base` is what makes the difference observable
+(#435). `/` and `/design` sit in none of the three sections, so nothing in the
+strip claims to be the page the reader is on there.
 
 Search is on documentation pages only. `/` and `/design` pass
 `documentation={false}` to both `SiteHeader.astro` and `Base.astro`, which is
@@ -882,13 +981,32 @@ with `aria-current="page"`, on a link among sibling links, which is where the
 attribute does work; a second marker on a non-interactive `span` in the header
 would leave a reader to work out which of the two was meant.
 
-On `/` the header renders only the switch. There is nowhere for a wordmark to
-return to, the page's own `h1` is already the wordmark at the title rung — and
-that `h1` cannot move, because `scripts/check-deploy-artifact.mjs` identifies
-the site's root document in a browser by a heading named exactly `Playdeck`. The
-same check follows every internal link on `/` in document order and needs the
-workbench to be the last, which is a second reason a header there does not add
-one.
+**A reference page now carries two of the attribute, and that is sanctioned
+rather than a defect.** The site navigation marks `Reference` and the rail marks
+the package being read. Both are links among sibling links, which is the case
+the paragraph above says the attribute does work in, and they sit in two
+differently named landmarks — `Site` and the rail's own — answering two
+different questions. A reader is in Reference, and in that package; neither
+statement makes the other harder to act on. What the breadcrumb rule refuses is
+a different shape entirely: two markers describing one trail, one of them not
+even a link, where a reader has to decide which is meant. Two landmarks each
+naming their own current item is the ordinary case, and the rail's use of it was
+never conditional on being alone in the document. The provider pages are the
+same arrangement a second time. What would break the ruling is a third marker
+inside one of those landmarks, or a marker on something a reader cannot follow —
+so the nav emits the attribute on at most one link, and `e2e/site-nav.spec.ts`
+pins that it is the section the reader is actually in and only that one.
+
+On `/` the header renders the switch and the navigation row, and nothing else.
+The trail is not rendered at all: there is nowhere for a wordmark to return to,
+the page's own `h1` is already the wordmark at the title rung, and a strip
+repeating it eighty pixels above would be the same word twice. That `h1` cannot
+move, because `scripts/check-deploy-artifact.mjs` identifies the site's root
+document in a browser by a heading named exactly `Playdeck` — which is also why
+nothing in this header may be promoted to a heading with that name. The three
+destinations are the reason a reader on `/` is not stranded there without the
+foot of the page, and they are internal links on `/`, which that check requires
+at least one of.
 
 The reference pages and the provider setup pages are the site's long-form
 reading, and the only pages here whose words are not written in this app. A
@@ -1041,10 +1159,42 @@ checks its work against, and the place to add a specimen when a token is added.
 It is not part of the site's own navigation, and `/` links to it only so it is
 reachable.
 
-The landing page at `/` is the site's front door, and two of the things it prints
-are measured at build time rather than written down. The bundle figures come from
-`scripts/bundle-budgets.mjs`, the module `pnpm test:budgets` gates with, so the
-page and the gate cannot state different numbers. The composition example is
+`data-theme` has two writers and they are not interchangeable: the pre-paint
+script in `Base.astro` applies a stored choice before the browser paints, and
+`ThemeToggle.astro` writes the attribute and the stored value on a click. The
+storage key is a literal in both, because an `is:inline` script cannot import
+the module that would otherwise hold it.
+
+## The landing page
+
+`/` is the site's front door, and it is eight sections: hero, weight,
+archetypes, receipt, composition, truth, states, start. Each is marked with a
+`data-section` attribute naming it, which is how `e2e/site-landing.spec.ts` pins
+the order rather than pinning a heading a later edit is free to reword.
+
+**This passage used to describe a different page** — a spine of thesis, three
+states, headless, providers, budgets, start, with the figures at the bottom and
+the demonstrations replaced by prose about them. That page argued in sentences
+and asked to be believed. What replaced it argues by running the thing and then
+printing what running it cost, and the order changed to match: the budget figures
+moved four screens up, directly under the hero, because for a developer
+evaluating a player library the gzipped figure is the first thing that can be
+checked and the first thing that is usually wrong. The parts of the old
+description that were about the page's shape rather than its contents survive
+below, because they were never about which sections it had.
+
+**Every section is a claim and then the machine answering it**, and the
+alternation is the page's structure. The claim is prose held to `--measure`, in
+the sans; the answer is the page's full width, in the mono — a table, a running
+player, a request log, a printed file. Nothing is asserted that is not then
+shown, which is a rule about what may be added here and not only a description
+of what is here.
+
+**Three things it prints are measured at build time rather than written down.**
+The bundle figures come from `scripts/bundle-budgets.mjs`, the module
+`pnpm test:budgets` gates with, so the page and the gate cannot state different
+numbers; the receipt reads adapter sizes from the same module; and the provider
+comparison is derived from `docs/provider-setup.md`. The composition example is
 `examples/react-composition.tsx`, read as bytes and highlighted with the same two
 Shiki themes the reference pages use — which is why those two names now live in
 `src/shiki.ts`: Astro's `<Code>` component reads nothing from
@@ -1056,22 +1206,54 @@ page whose every section is a small heading, a paragraph and a block gives the
 thesis and the budget table the same weight, which is a way of saying nothing
 about either. So the three capability states are one comparison in three
 columns on a `subgrid`, aligned row for row so a reader travels across rather
-than round three boxes; the composition example is prose beside code; the
-providers and the budgets are a list and a table, at the page's full width
-rather than at the measure. Prose inside any of them is still held to
-`--measure` — the width buys columns, not longer lines — and the page's own
-maximum is `72rem`, which is the literal that section names as a page's own
-decision.
+than round three boxes; the composition example is the file printed at the page's
+full width in the recessed well `base.css` gives every fence on the site; the
+budget figures are a table inside a `--color-raised` readout; the receipt brings
+a `--color-surface` panel of its own, lifted off the field by
+`--elevation-panel` rather than by a further step up the ladder; and the
+provider comparison brings no surface at all and sits directly on the field,
+because its sticky question column needs the field as an opaque ground. Prose
+inside any of them is still held to `--measure` — the width buys columns, not
+longer lines — and
+the page's own maximum is `72rem`, which is the literal that section names as a
+page's own decision.
 
 **Cards of identical size are the container this page does not reach for.** It
 is the same finding the package index records: three or five boxes the same size
 are what a layout defaults to when nothing has been decided about the contents,
-and they cost a reader the alignment that makes a set comparable. The capability
+and they cost a reader the alignment that makes a set comparable. It is why the
+provider comparison is one grid read across rather than a card per provider, and
+why the
+two archetypes are stacked one above the other rather than set as a pair of equal
+columns — the claim there is that they are different, and equal columns would
+both deny that and halve the width each has to be itself in. The capability
 ledger takes the opposite treatment for the opposite reason — it is genuinely
 one panel of machine output, so it is one raised surface, and it carries no
 hairline at all. `--color-surface` on `--color-field` is built to raise a panel
 with no border; the player's stage beside it is `--color-sunken`, which sits
 close to the field, and that is what a hairline is for.
+
+**The install line is the call to action, and it is click-to-copy.** It is
+printed twice, in the hero and in the closing section, from one string in the
+page's frontmatter — a call to action that was two different strings is a defect
+a reader would find before a test would. The command is selectable text; the
+copy button is `hidden` in the markup and revealed by a script, which is the
+pattern `DocsSearch.astro` established. Writing to the clipboard is the whole of
+what the control does, so with no script there is nothing to press rather than a
+control that swallows a click, and nothing is lost, because the command was never
+behind the button. The feedback is a text swap on the button with the same words
+said once through a `role="status"` line, and it is a text swap rather than a
+flash because this app animates `transform` and `opacity` only and spends
+exactly two animations, neither of them here — the count above, of what this app
+authors rather than of everything that moves on the page.
+
+**The archetypes are mounted `client:visible`, and the page says so out loud.**
+A sceptic who opens devtools and finds requests the page never mentioned has
+caught the site doing the exact thing it claims not to do, so the disclosure is
+visible copy rather than a comment — `e2e/site-landing.spec.ts` asserts that it
+is. It is set apart from the lede above it by a hairline on its leading edge
+rather than by a panel, because it is the page's own voice about the page's own
+behaviour and a box around it would read as a warning.
 
 One constraint on that page is `scripts/check-deploy-artifact.mjs`'s rather
 than this system's, and it is load-bearing: its `h1` is exactly `Playdeck`,
@@ -1085,24 +1267,135 @@ may be added anywhere in the list. The constraint is written down here as gone
 rather than deleted silently, because it governed the order of that list for
 long enough to look deliberate.
 
-`data-theme` has two writers and they are not interchangeable: the pre-paint
-script in `Base.astro` applies a stored choice before the browser paints, and
-`ThemeToggle.astro` writes the attribute and the stored value on a click. The
-storage key is a literal in both, because an `is:inline` script cannot import
-the module that would otherwise hold it.
+### The receipt
+
+`Receipt.astro` is mounted on `/` and prints what the page actually asked the
+network for, read from the browser's own record of it, beside what ships in the
+same artifact and was never asked for. It answers two claims with one
+instrument, because both are answered by the same evidence. The first is that an
+adapter a page does not use is never fetched, which is the whole argument for
+lazy provider loading and a sentence a reader has no way to check. The second is
+the one the page would rather not raise: the hero is a React island, so this page
+ships React and `react-dom` in order to argue that the library is small. The log
+is printed in full, largest cost included, which is the only way the second claim
+can be made without the page choosing what to leave out.
+
+It sits after the archetypes on purpose. A receipt is what a reader reads after a
+transaction, and the section directly above it has just disclosed that two
+players loaded when the reader scrolled there.
+
+**Be exact about which half is measured, because the component is.** The rows in
+the upper panel are measured, in the reader's browser, from a
+`PerformanceObserver` over `resource` entries: every request, its real transfer
+size, and whether it started after `loadEventEnd`, which is what the `after load`
+tag means. Nothing there is seeded, sampled or simulated — the same rule the
+capability ledger is held to, and for the same reason: a plausible list would look
+identical to a reader and to a screenshot, and would be the one untrue thing on
+the page. The adapter names and gzipped sizes in the lower panel are measured too,
+at build time, from `scripts/bundle-budgets.mjs`.
+
+**The `not requested` state in that lower panel is derived, not measured, and
+the component says so rather than blurring it.** An adapter reaches a browser as
+a bundler chunk under a hashed name decided after the component's frontmatter has
+run — a build cannot hand a component the URL of an artifact it has not emitted
+yet — so mapping `@playdeck/provider-hls` to `/_astro/dist.<hash>.js` is not
+available from inside the component at any price. What it does instead is refuse
+to guess: the log prints the real address of every request and never labels one
+with a package name it inferred, and the lower panel states which adapter the
+page's own media needs and which the page has no way to ask for. The live
+evidence is the log's own count. If the emitted chunk names ever become knowable
+at build time, that state should become measured.
+
+**A cached resource is printed as a cache hit, not as zero bytes.**
+`transferSize` is 0 for a resource served from the cache, and printing that 0 as
+a size would tell a reader on a warm reload that this page weighs nothing —
+which is the most convincing lie the panel could tell. So a row with no transfer
+and a recorded body prints that body size and says `from cache`; a row with
+neither prints `size not reported`, which is the genuinely different third case a
+cross-origin response without `Timing-Allow-Origin` produces.
+
+That last behaviour is why `scripts/serve-site.mjs` now serves `/_astro/` with
+`cache-control: public, max-age=600` while everything else it serves stays
+`no-store`. `e2e/site-receipt.spec.ts` has to observe a cache hit to check that
+the receipt prints one as a cache hit, and `no-store` on every response made that
+unobservable. It is safe for the reason a production CDN caches that directory
+forever: every file under it is content-addressed, so a rebuild that changes a
+file changes its address and a cached copy can only ever be a copy of the bytes
+that were asked for. Everything addressed by a stable path stays `no-store`,
+because the suite rebuilds the site between runs and a cached document would hide
+the change under test.
+
+With no script the upper panel is not empty: it holds a sentence saying the
+measurement is the browser's and cannot be made without one. That is the resting
+state the entry-motion section asks for, applied to a panel — what a reader gets
+when the script does not run has to be the settled, honest thing rather than a
+hole. The lower panel needs no script at all and prints the same figures either
+way.
+
+### The provider asymmetry readout
+
+`ProviderTruth.astro` is the provider comparison on `/`, and its section's claim
+is asymmetry: five providers behind one API is the kind of sentence that invites
+a reader to assume they are interchangeable, and they are not. So the table asks
+three questions of the four provider groups and prints `unknown` as an answer
+with the document's own reason beside it, never as a blank or a dash — a table
+that flattened the difference would be the lie the section exists to refuse.
+
+**Nothing in it is written down.** `src/provider-asymmetry.mjs` derives every
+host, source form, option key and reason from `docs/provider-setup.md` at build
+time, through the slicing `src/provider-pages.mjs` already does for the provider
+pages. One source, two renderings, and the same discipline recorded above for
+those pages holds here twice over: a `## ` section that module can place in
+neither category fails the build, and this module inherits that throw exactly,
+plus one of its own — a provider whose material answers one of the three
+questions in none of the shapes the module reads stops the build with a message
+naming which file to edit. The alternative is a cell that quietly reads empty,
+which would be the page claiming a provider says nothing about its hosts. What
+the module does write down is the three _questions_, for the reason
+`provider-pages.mjs` writes down its shared sections: a question the page asks is
+a decision somebody made. No answer is written down anywhere.
+
+**Its three colours are correctly spent.** `--color-available`, `--color-unknown`
+and `--color-unavailable` carry domain meaning on this site and are never spent
+on decoration; this section is literally about those three states. Every one of
+them is drawn as its own word in the mono face, never as a bare dot, so removing
+the colour leaves the table readable.
+
+**It survives 320px by scrolling inside its own container.** Four columns of
+machine output cannot be made narrow enough for that viewport, and a URL form
+broken over four lines is not more readable than one a reader scrolls to. So the
+table keeps a real minimum width and the container scrolls, which is a scroll the
+reader chose rather than the page going sideways underneath them; the container
+is a named `role="region"` with `tabindex="0"`, so the scroll is reachable from
+the keyboard as well as from a trackpad, and the question column is sticky
+against `--color-field`, so the thing being compared stays on screen while the
+comparison moves past it. Sticky needs an opaque ground, and the field is the
+ground because this section sits on the field rather than on a panel.
 
 ## The hero player, and the site's islands
 
-The hero mounts a real player. Two routes ship a renderer — `/`, whose island is
-the player and the capability ledger reading it, and `/archetypes`, which mounts
-the two compositions beside the source of each. Every other page is HTML, CSS,
-the inline theme and rail scripts, and the search module. A prose section that
-shipped a framework would be the defect; a landing page for a video-player
-library that showed no player would be a different one.
+The hero mounts a real player. Two routes ship a renderer, and `/` now mounts
+three islands rather than one: the hero — the player and the capability ledger
+reading it, `client:only` — and the two archetype compositions, `client:visible`.
+`/archetypes` mounts the same two compositions beside the source of each. Every
+other page is HTML, CSS, the inline theme and rail scripts, and the search
+module. A prose section that shipped a framework would be the defect; a landing
+page for a video-player library that showed no player would be a different one.
 
-The two are the same decision applied twice, not a drift: a page whose argument
-is what a player does has to run one, and no page here mounts a framework for
-anything else.
+**Three live players on `/`, and no more.** Everything else on that page is a
+readout, a table or printed code. A landing page for a player library that ran
+six players would be arguing that it can run six players.
+
+The routes are the same decision applied twice, not a drift: a page whose
+argument is what a player does has to run one, and no page here mounts a
+framework for anything else. The two directives differ for a reason worth
+stating, because they look like a choice and are not. The hero is `client:only`
+so that no button exists in the document before the script that works it arrives
+— the resting-state rule, applied to an island. The archetypes are
+`client:visible` so that a reader who never scrolls past the hero pays for
+neither, which costs a request the page did not make on arrival, which is why the
+page discloses it in copy. See _The archetypes, and why they are outside rules 1
+and 5_ for what that directive's server render puts in the document.
 
 **The clip is `public/tracer.mp4`, this app's own copy.** An Astro build serves
 only its own `public/`, so the file is copied in rather than reached for across
@@ -1122,9 +1415,12 @@ show up as a caption that did not match what the other surface played.
 **Nothing about the player contacts a third party, and that is the point.** The
 source is a file on this origin, driven through the native provider, and
 `loading="interaction"` holds the root dormant until the play affordance is
-pressed: no fetch, no provider attached. The page argues that in prose two
-sections further down, and the hero is where it is either demonstrated or merely
-asserted.
+pressed: no fetch, no provider attached. That claim is no longer argued in prose
+elsewhere on the page — the receipt section below the archetypes prints the
+request log a reader can check it against, and `e2e/site-landing.spec.ts`
+records every request the page makes and fails if a media file is fetched before
+the press. The hero is where the claim is either demonstrated or merely
+asserted, and the receipt is where it is counted.
 
 **With no JavaScript the panel is a plain `<video controls preload="none">`** on
 the same file, inside `<noscript>`. The island is `client:only`, so it renders

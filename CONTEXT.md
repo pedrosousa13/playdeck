@@ -399,6 +399,30 @@ which is what the site's entry motion is keyed off. A separate axis from the
 says nothing about a player.
 _Avoid_: mode, register, treatment, archetype
 
+**Receipt**:
+The panel on the marketing site's landing page that prints what the page really
+asked the network for, read in the reader's browser from the Performance API,
+beside the adapters that ship in the same artifact and were never asked for.
+Site-only, and a receipt rather than a report because it is what a reader reads
+after a transaction: it is printed in full, including the cost of the page's own
+island. Its adapter sizes come from `scripts/bundle-budgets.mjs` and are
+measured; which adapters went unrequested is derived, because a chunk's hashed
+name is not knowable when the component runs. See
+[`apps/site/DESIGN.md`](apps/site/DESIGN.md) for that limit stated in full.
+_Avoid_: network panel, waterfall, audit
+
+**Provider asymmetry readout**:
+The table on the marketing site's landing page that asks the same three
+questions — which hosts, which source forms, which options — of every provider
+and prints where the answers differ in kind. Asymmetry rather than comparison,
+because what it exists to show is that a cell can answer `unknown` with a reason
+and that flattening the five into one shape would be the lie. Site-only, and it
+writes down no facts: `apps/site/src/provider-asymmetry.mjs` derives every host,
+form, key and reason from `docs/provider-setup.md`, and a section that document
+grows in a shape the module cannot place stops the build rather than rendering
+an empty cell.
+_Avoid_: provider matrix, feature table, comparison grid
+
 **Structural geometry**:
 The positioning a primitive needs in order to function — stacking, insets, the
 media element filling its viewport. Set inline by the primitive, ahead of the

@@ -6,8 +6,42 @@ import Base from '../layouts/Base.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import Sweep from '../components/Sweep.astro';
 import HeroPlayer from '../components/HeroPlayer.astro';
+import Receipt from '../components/Receipt.astro';
+import ProviderTruth from '../components/ProviderTruth.astro';
 import { shikiConfig } from '../shiki';
 import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
+import { StreamingServicePlayer } from '../../../../examples/archetype-streaming-service';
+import { CoursePlatformPlayer } from '../../../../examples/archetype-course-platform';
+
+/**
+ * The landing page, and the shape of its argument.
+ *
+ * ---- two registers, alternating ---------------------------------------------
+ *
+ * Every section on this page is a claim and then the machine answering it. The
+ * claim is the argument register: prose held to `--measure`, in the sans, quiet.
+ * The answer is the instrument register: the page's full width, in the mono, a
+ * readout or a running player or a printed file. Nothing here is asserted that
+ * is not then shown, and the alternation is what makes that visible rather than
+ * merely true — a reader who scrolls sees a sentence, then evidence, then a
+ * sentence, and never two sentences in a row claiming something.
+ *
+ * That is also why the sections are not alike. `DESIGN.md` asks for sections
+ * `shaped by what they hold`, and what they hold here is genuinely different:
+ * a table of figures, two running products, a request log, a printed file, a
+ * comparison grid, three columns of prose. A page that gave every one of them
+ * the same card would be saying nothing about any of them.
+ *
+ * ---- three live players, and no more ----------------------------------------
+ *
+ * The hero, and the two archetypes. Everything else on this page is a readout,
+ * a table or printed code. A landing page for a player library that ran six
+ * players would be arguing that it can run six players.
+ *
+ * The hero stays `loading="interaction"` and dormant. It is the page's most
+ * falsifiable claim, and three specs pin it — `site-landing`, `site-ledger` and
+ * `site-receipt` all open on a page that has fetched no media.
+ */
 
 // Every link on this page goes through `import.meta.env.BASE_URL`, which is
 // what Astro fills the configured `base` into, rather than being written as a
@@ -16,22 +50,20 @@ import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
 // under a prefix, a hand-written `/reference/` is the bug a base path exists to
 // prevent (#435) and nothing would flag it.
 const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
-const providersUrl = `${import.meta.env.BASE_URL}providers/`;
 const designUrl = `${import.meta.env.BASE_URL}design/`;
-const archetypesUrl = `${import.meta.env.BASE_URL}archetypes/`;
-// The workbench, which `scripts/assemble-deploy.mjs` places under `storybook/`
-// beside this page. It is also what `scripts/check-deploy-artifact.mjs` follows
-// from here in a browser, which is how the two surfaces are proven reachable
-// from each other rather than merely present in the same directory.
-const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
+
+// The workbench is deliberately absent, from this page and from the header.
+// #534 records that it is not served as a public surface and the maintainer
+// ruled the same on a Storybook link. `scripts/check-deploy-artifact.mjs` still
+// visits it, from its own address rather than by following a link from here.
 
 // The composition example, read as bytes from the file the `examples`
 // TypeScript project compiles on every `pnpm typecheck`. Not a string typed
 // into this page: a hand-written example is a second copy of an API, and the
 // only kind of copy that matters here is the kind that can be wrong while
-// everything around it stays green. Editing the prose in the Headless section
-// below cannot make this code wrong, because this page never says what the code
-// is — it prints the file.
+// everything around it stays green. Editing the prose in the composition
+// section below cannot make this code wrong, because this page never says what
+// the code is — it prints the file.
 //
 // `scripts/docs-examples.mjs` enforces the same rule for the fences in the
 // package READMEs and compares them byte for byte. It matches fences in
@@ -51,9 +83,9 @@ const composition = readFileSync(
   // else about the text is touched.
 ).trimEnd();
 
-// The figures in the Budgets section, measured at build time from the same
-// module `pnpm test:budgets` measures with — `scripts/bundle-budgets.mjs`,
-// which gzips each built artifact and reports its size against its ceiling.
+// The figures in the proof strip, measured at build time from the same module
+// `pnpm test:budgets` measures with — `scripts/bundle-budgets.mjs`, which gzips
+// each built artifact and reports its size against its ceiling.
 //
 // Derived rather than typed in, because a page whose argument is that a number
 // is enforced cannot be printing a second copy of that number. A copy would go
@@ -64,47 +96,42 @@ const composition = readFileSync(
 // `.github/workflows/deploy-site.yml` builds the packages before this site for.
 const bundles = await measureBundles(import.meta.env.PLAYDECK_REPO_ROOT);
 
+// The captions fixture the two archetypes take as a prop, served from this
+// app's own `public/` and resolved against the configured base the way every
+// other address here is. `/archetypes` passes the same file for the same
+// reason: an Astro build serves only its own `public/`, so the compositions
+// take the URL rather than knowing about either surface's copy of it.
+const captionsSrc = `${import.meta.env.BASE_URL}archetype-captions.vtt`;
+
 // The three statuses, in the order `tokens.css` and `DESIGN.md` put them —
 // which is sweep order — with what `packages/core/README.md` says each one
 // means. Data rather than three near-identical blocks of markup, so the shape
-// of a card is written once and a status cannot end up styled differently from
-// its neighbours.
+// of a column is written once and a status cannot end up styled differently
+// from its neighbours.
 const statuses = [
   {
     status: 'available',
     summary: 'The command can be issued.',
-    detail:
-      'This status carries no reason at all. There is nothing left to qualify.'
+    detail: 'This answer carries no reason. There is nothing left to qualify.'
   },
   {
     status: 'unknown',
     summary: 'Undecided, and not the same as pending.',
     detail:
-      'Nothing promises that it resolves. A provider may leave a capability here rather than pay what answering costs. A control reading it renders nothing, so it is a state to render for and not a state to wait on.'
+      'Nothing promises that it resolves. A control reading it renders nothing, so it is a state to render for and not a state to wait on.'
   },
   {
     status: 'unavailable',
     summary: 'No, with a reason for it.',
     detail:
-      'The reason names what refused: the browser, a policy, the provider, the build of a third-party engine, the account plan behind the video, or the media itself.'
+      'The reason names what refused: the browser, a policy, the provider, the build of a third-party engine, or the account plan behind the video.'
   }
 ] as const;
 
-// The five, and what each one drives. Taken from the package table in the root
-// README rather than described again here.
-const providers = [
-  {
-    name: 'native',
-    detail: 'HTMLMediaElement: progressive MP4 and WebM, and native HLS.'
-  },
-  {
-    name: 'hls',
-    detail: "hls.js, or the browser's own engine, chosen per environment."
-  },
-  { name: 'youtube', detail: 'The YouTube IFrame Player API.' },
-  { name: 'vimeo', detail: 'The Vimeo player SDK.' },
-  { name: 'wistia', detail: "Wistia's Aurora <wistia-player> element." }
-] as const;
+// The install command, written once and printed twice — in the hero and in the
+// closing section. One string, because the page's call to action being two
+// different strings is a defect a reader would find before a test would.
+const install = 'pnpm add @playdeck/react';
 ---
 
 {
@@ -130,12 +157,14 @@ const providers = [
   {
     /* No crumbs, which is what tells the header it is on `/`: the wordmark
      * stops being a link on the page it points at, so the header renders no
-     * link of its own here. */
+     * link of its own here. Its three destinations are the page's internal
+     * links, which `scripts/check-deploy-artifact.mjs` requires at least one
+     * of; the closing section adds three more. */
   }
   <SiteHeader documentation={false} />
 
   <main class="page">
-    <section class="hero">
+    <section class="hero" data-section="hero">
       <div class="hero__thesis">
         {
           /* Exactly `Playdeck`, and it cannot become anything else.
@@ -143,7 +172,9 @@ const providers = [
            * document in a browser by a heading with that accessible name, which
            * is how the deployed artifact is proven to serve this site rather
            * than something else at the origin root. Adding a word to it is a
-           * rename, and the check has to move with it. */
+           * rename, and the check has to move with it. Nothing else on this
+           * page may answer to that name either — the header renders no
+           * wordmark here, and neither mounted component carries one. */
         }
         <h1 class="hero__title">Playdeck</h1>
         {
@@ -158,41 +189,58 @@ const providers = [
            * hidden` is the composited equivalent `DESIGN.md` names, and it
            * moves the paint across a fixed window at its final width.
            *
-           * The clip carries the pill radius so the band's rounded left cap
-           * emerges from a rounded edge rather than a square one. At rest the
-           * inner box is exactly the outer box, so nothing is clipped.
-           *
            * Under `prefers-reduced-motion` the site-wide rule in `base.css`
            * collapses the duration and this lands on `translateX(0)`
-           * immediately — the settled state, not a band frozen off-screen.
-           * That only holds because the animation moves between two settled
-           * states, which is the condition that rule is written against. */
+           * immediately — the settled state, not a band frozen off-screen. */
         }
         <div class="hero__accent">
           <div class="hero__accent-travel"><Sweep form="accent" /></div>
         </div>
-        <p class="lead">
-          A headless React video player. You compose the parts you want, and
-          every control is gated on what the player behind it can do. A button
-          whose command cannot be honoured is absent rather than present and
-          disabled.
+        <p class="hero__lead">
+          A headless React video player. A control whose command the player
+          cannot honour is absent, not disabled.
         </p>
-        <p class="hero__install"><code>pnpm add @playdeck/react</code></p>
+
+        {
+          /* The call to action, and it is the install line rather than a word
+           * like "Get started": the reader this page is written for has already
+           * decided to evaluate something, and what they want next is the
+           * string to paste.
+           *
+           * The command is selectable text and the button is `hidden` in the
+           * markup until a script reveals it — the pattern `DocsSearch.astro`
+           * uses, and for the same reason. Copying to the clipboard is the
+           * whole of what the button does, so with no JavaScript there is
+           * nothing to press rather than a control that swallows a click, and
+           * nothing is lost: the command was always there to select. */
+        }
+        <div class="cta">
+          <div class="install" data-install>
+            <code class="install__command" data-install-command>{install}</code>
+            <button class="install__copy" type="button" hidden data-install-copy>
+              Copy
+            </button>
+            {
+              /* The feedback is a text swap on the button, which a reader sees
+               * and a screen reader does not: a button's own name changing
+               * under a reader who has already pressed it is announced by
+               * nothing. This is the same words, said once, where assistive
+               * technology will hear them. */
+            }
+            <span
+              class="u-visually-hidden"
+              role="status"
+              data-install-status></span>
+          </div>
+          <a class="cta__secondary" href={referenceUrl}>Reference &rarr;</a>
+        </div>
       </div>
 
       {
         /* The two instruments, on one row where there is room for it. They are
          * built the same way on purpose — a raised body holding a recessed
          * screen — because they are the two halves of one claim: the thing
-         * running, and what it reports about itself. A page that drew them as
-         * unrelated boxes would be hiding that they are a pair.
-         *
-         * The player. It is the only interactive thing on this site and the
-         * only place any of it hydrates: a prose section that shipped
-         * JavaScript would be the defect this page argues against, and a
-         * landing page for a video-player library that showed no player would
-         * be a different one. `HeroPlayer.astro` carries the reasoning for
-         * both the island and the two theme systems meeting here.
+         * running, and what it reports about itself.
          *
          * Both panels come out of one component, and both are grid items of
          * the row below rather than of a box of its own: an `<astro-island>`
@@ -212,23 +260,233 @@ const providers = [
       </div>
     </section>
 
-    <section class="section">
-      <h2>The three-state rule</h2>
-      <p class="section__lead">
-        A capability is not a boolean. Every entry a player publishes answers
-        {' '}
-        <code>available</code>, <code>unknown</code> or <code>unavailable</code>,
-        and the two negative-looking answers are not degrees of one thing.
-      </p>
+    {
+      /* ---- the proof strip -----------------------------------------------
+       *
+       * Four screens up from where it used to sit. For a developer evaluating
+       * a player library, the gzipped figure is the credibility line — it is
+       * the first thing that can be checked and the first thing that is
+       * usually wrong — so it goes directly under the hero rather than after
+       * three sections of prose. */
+    }
+    <section class="section" data-section="weight">
+      <div class="claim">
+        <h2 class="section__title">What it weighs</h2>
+        <p class="lede">
+          Gzipped, measured on the built packages by the module that fails the
+          build when one goes over. The first three have ceilings. The adapters
+          have none, because they load only once source detection says the
+          active source needs one.
+        </p>
+      </div>
+
       {
-        /* The only elements on the site that take entry motion, and there are
-         * three of them because they are one comparison rather than three
-         * things: the columns fade and rise together, as the page's central
-         * claim arriving, and nothing below them moves at all. `DESIGN.md`
-         * argues that one authored moment is worth more than six scattered
-         * reveals; the hero already spends the site's other one on the sweep,
-         * and this is the first thing under it. A reveal per section is the
-         * templated-marketing tell this count exists to refuse. */
+        /* The table scrolls inside its own box rather than widening the page.
+         * Package names are single unbroken tokens and the narrowest screen
+         * this is checked at is 320px. `scrollbar-width` is the same choice
+         * `base.css` makes for a code block: a platform-width bar inside a box
+         * this small reads as a second border. */
+      }
+      <div class="readout">
+        <div class="budgets">
+          <table class="budgets__table">
+            <thead>
+              <tr>
+                <th scope="col">Package</th>
+                <th scope="col" class="budgets__figure">Gzipped</th>
+                <th scope="col" class="budgets__figure">Ceiling</th>
+              </tr>
+            </thead>
+            <tbody>
+              {
+                bundles.map(({ name, size, budget }) => (
+                  <tr>
+                    <th scope="row" class="budgets__name">
+                      {name}
+                    </th>
+                    <td class="budgets__figure u-tabular">
+                      {size.toFixed(2)} KB
+                    </td>
+                    <td class="budgets__figure u-tabular">
+                      {budget === null ? 'lazy' : `${budget} KB`}
+                    </td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="readout__caption">
+          Read at build time from the module <code>pnpm test:budgets</code> gates
+          with, so this page and that gate cannot disagree about a figure.
+        </p>
+      </div>
+    </section>
+
+    {
+      /* ---- the archetypes -------------------------------------------------
+       *
+       * The single biggest claim a headless library makes, demonstrated rather
+       * than described. Two of them, because one example proves only that a
+       * library can build a player.
+       *
+       * `client:visible` and not `client:only`: these are the page's second and
+       * third players and a reader who never scrolls past the hero should not
+       * pay for either. What that costs is a request the page did not make on
+       * arrival, which is why the paragraph below says so out loud — see the
+       * note there. */
+    }
+    <section class="section" data-section="archetypes">
+      <div class="claim">
+        <h2 class="section__title">It can look like anything</h2>
+        <p class="lede">
+          Two products, one set of primitives, both running on this page.
+          Neither borrows this site's stylesheet and neither borrows the
+          other's: the appearance travels with the composition, which is what
+          headless means when it is true.
+        </p>
+        {
+          /* The disclosure, and it is here rather than in a comment because a
+           * sceptic who opens devtools and finds requests the page never
+           * mentioned has caught the site doing the exact thing it claims not
+           * to do. Saying it turns a gotcha into another instance of the page
+           * being straight with the reader. */
+        }
+        <p class="disclosure">
+          Both players below are mounted when you scroll to them, so their
+          JavaScript is fetched at that moment rather than when the page
+          arrived — as the hero's own runtime is, a little earlier. Neither
+          fetches a clip and neither attaches a provider until you press it.
+          The network receipt underneath prints every request either of them
+          makes, so none of this has to be taken on trust.
+        </p>
+      </div>
+
+      <div class="archetypes">
+        <figure class="archetype">
+          <div class="stage">
+            <StreamingServicePlayer
+              captionsSrc={captionsSrc}
+              client:visible
+              resumeAt={18}
+            />
+          </div>
+          <figcaption class="archetype__caption">
+            A streaming service. The picture owns the frame, chapters are marks
+            on the scrubber, and there is no quality menu — the native provider
+            cannot switch renditions of a progressive file, so
+            {' '}
+            <code>selectQuality</code> reads <code>unavailable</code> and
+            nothing draws a ladder the provider never published.
+          </figcaption>
+        </figure>
+
+        <figure class="archetype">
+          <div class="stage">
+            <CoursePlatformPlayer
+              captionsSrc={captionsSrc}
+              client:visible
+              resumeAt={14}
+            />
+          </div>
+          <figcaption class="archetype__caption">
+            A course platform. The video shares the page instead of owning it,
+            the transport is docked under the picture so nothing covers what is
+            being read, and speed is a visible row rather than a menu entry.
+            {' '}
+            <a href={`${import.meta.env.BASE_URL}archetypes/`}>
+              Both files, printed
+            </a>.
+          </figcaption>
+        </figure>
+      </div>
+      <p class="archetypes__licence">
+        Both clips are Blender Foundation open-movie trailers, &copy; Blender
+        Foundation and licensed
+        {' '}
+        <a href="https://creativecommons.org/licenses/by/3.0/" rel="license">
+          CC BY 3.0
+        </a>.
+      </p>
+    </section>
+
+    {
+      /* ---- the receipt ----------------------------------------------------
+       *
+       * Placed here on purpose. A receipt is what you read after a
+       * transaction: the hero is above it, so a reader who pressed play finds
+       * the row waiting, and the archetypes are directly above it, so the
+       * section that just disclosed "these loaded when you scrolled here" is
+       * immediately followed by the proof that it happened.
+       *
+       * `used` is the adapter this page's own media requires. The component
+       * fails the build if it names nothing it measured, which is the shape of
+       * wrongness a panel like this cannot afford. */
+    }
+    <section class="section section--bare" data-section="receipt">
+      <Receipt used="@playdeck/provider-native" />
+    </section>
+
+    <section class="section" data-section="composition">
+      <div class="claim">
+        <h2 class="section__title">Because you compose it</h2>
+        <p class="lede">
+          You get parts, not a player. The primitives import no CSS and render
+          nothing you did not compose. They set the geometry they need inline,
+          so a player works with no stylesheet at all — what it lacks is
+          appearance, and the default theme is one optional import.
+        </p>
+        <p class="muted">
+          Nothing below is written by this page. It is the file
+          {' '}
+          <code>{compositionPath}</code>, printed as it is on disk. The
+          {' '}
+          <code>examples</code> TypeScript project compiles it on every
+          {' '}
+          <code>pnpm typecheck</code>, so an example that stopped compiling
+          would fail the build before it could be published here.
+        </p>
+      </div>
+      <div class="composition">
+        <Code code={composition} lang="tsx" {...shikiConfig} />
+      </div>
+    </section>
+
+    {
+      /* ---- the provider comparison ----------------------------------------
+       *
+       * The component brings its own heading — `And it tells you the truth` —
+       * and its own scroll container, so this section is a wrapper and nothing
+       * else. Not held to the page's prose rules either: the table's question
+       * column is sticky against `--color-field`, so it has to sit on the
+       * field rather than on a panel. */
+    }
+    <section class="section section--bare" data-section="truth">
+      <ProviderTruth />
+    </section>
+
+    <section class="section" data-section="states">
+      <div class="claim">
+        <h2 class="section__title">The three-state rule</h2>
+        <p class="lede">
+          A capability is not a boolean. Every entry a player publishes answers
+          {' '}
+          <code>available</code>, <code>unknown</code> or <code>unavailable</code>,
+          and the two negative-looking answers are not degrees of one thing.
+        </p>
+      </div>
+      {
+        /* The only elements this app gives entry motion, and there are three
+         * of them because they are one comparison rather than three things:
+         * the columns fade and rise together, as the page's central claim
+         * arriving. `DESIGN.md` argues that one authored moment is worth more
+         * than six scattered reveals, and this is the second and last of the
+         * two animations this app writes — the hero's sweep is the other. A
+         * reveal per section is the templated-marketing tell this count exists
+         * to refuse, and the count has not moved. It counts what this app
+         * authors: the two archetypes above animate `background-color`, and
+         * that motion is `examples/`' own, outside these rules for the
+         * ownership reason `DESIGN.md` gives. */
       }
       <ul class="statuses">
         {
@@ -246,183 +504,51 @@ const providers = [
       </ul>
     </section>
 
-    <section class="section">
-      <h2>Headless</h2>
-      <div class="split">
-        <div class="split__prose">
-          <p>
-            You get parts, not a player. The primitives import no CSS and render
-            nothing you did not compose. They set the geometry they need inline,
-            so a player works with no stylesheet at all. What it lacks is
-            appearance, and the default theme is one optional import.
-          </p>
-          <p class="muted">
-            Nothing below is written by this page. It is the file
-            {' '}
-            <code>{compositionPath}</code>, printed as it is on disk. The
-            {' '}
-            <code>examples</code> TypeScript project compiles it on every
-            {' '}
-            <code>pnpm typecheck</code>, so an example that stopped compiling
-            would fail the build before it could be published here.
-          </p>
-        </div>
-        <div class="split__code">
-          <Code code={composition} lang="tsx" {...shikiConfig} />
+    <section class="section" data-section="start">
+      <div class="claim">
+        <h2 class="section__title">Start</h2>
+        <p class="lede">
+          One package. It depends on the rest and loads each adapter lazily, so
+          a page playing MP4 ships no YouTube, Vimeo, Wistia or hls.js code in
+          its initial graph.
+        </p>
+      </div>
+
+      <div class="cta">
+        <div class="install" data-install>
+          <code class="install__command" data-install-command>{install}</code>
+          <button class="install__copy" type="button" hidden data-install-copy>
+            Copy
+          </button>
+          <span
+            class="u-visually-hidden"
+            role="status"
+            data-install-status></span>
         </div>
       </div>
-    </section>
 
-    <section class="section">
-      <h2>Providers</h2>
-      <p class="section__lead">
-        The source decides which provider loads, and nothing else changes. You
-        install only <code>@playdeck/react</code>. It depends on the rest and
-        loads each one lazily, once source detection says the active source
-        needs it, so a page playing MP4 ships no YouTube, Vimeo, Wistia or
-        hls.js code in its initial graph.
-      </p>
-      <ul class="providers">
-        {
-          providers.map(({ name, detail }) => (
-            <li class="provider">
-              <span class="provider__name">{name}</span>
-              <span class="provider__detail">{detail}</span>
-            </li>
-          ))
-        }
-      </ul>
-      <p>
-        Parity is not faked. YouTube will not honour a quality choice, Vimeo
-        needs a paid plan for chromeless playback, and Wistia reports no
-        buffered range at all. Each package README says so, and each difference
-        is measured against the real SDK rather than inferred from its
-        documentation.
-      </p>
-      <p>
-        <code>loading="interaction"</code> is where that honesty reaches the
-        network. Nothing attaches until the viewer activates the play
-        affordance, and no provider request leaves the page before that click.
-        Not the YouTube API script, not the Vimeo iframe, not Wistia's player
-        bundle.
-      </p>
-    </section>
-
-    <section class="section">
-      <h2>Budgets</h2>
-      <p class="section__lead">
-        Gzipped, and measured on the built packages rather than estimated. The
-        first three have ceilings and a build that goes over one of them fails.
-        The adapters have no ceiling, because they load lazily and never compete
-        for the initial graph.
-      </p>
-      {
-        /* The table scrolls inside its own box rather than widening the page.
-         * Package names are single unbroken tokens and the narrowest screen
-         * this is checked at is 320px. */
-      }
-      <div class="budgets">
-        <table class="budgets__table">
-          <thead>
-            <tr>
-              <th scope="col">Package</th>
-              <th scope="col" class="budgets__figure">Gzipped</th>
-              <th scope="col" class="budgets__figure">Ceiling</th>
-            </tr>
-          </thead>
-          <tbody>
-            {
-              bundles.map(({ name, size, budget }) => (
-                <tr>
-                  <th scope="row" class="budgets__name">
-                    {name}
-                  </th>
-                  <td class="budgets__figure u-tabular">
-                    {size.toFixed(2)} KB
-                  </td>
-                  <td class="budgets__figure u-tabular">
-                    {budget === null ? 'lazy' : `${budget} KB`}
-                  </td>
-                </tr>
-              ))
-            }
-          </tbody>
-        </table>
-      </div>
       <p class="muted">
-        This page reads the figures at build time from the module
-        {' '}
-        <code>pnpm test:budgets</code> gates with, so the page and the gate
-        cannot disagree about a figure.
+        React 19 as a peer dependency, ESM only, named exports and no default.
       </p>
-    </section>
 
-    <section class="section">
-      <h2>Start</h2>
-      <p class="hero__install"><code>pnpm add @playdeck/react</code></p>
-      <dl class="facts">
-        <dt>React</dt>
-        <dd>
-          19. <code>react</code> and <code>react-dom</code> at
-          {' '}
-          <code>&gt;=19 &lt;20</code>, as peer dependencies.
-        </dd>
-        <dt>Modules</dt>
-        <dd>
-          ESM only. The package refuses a <code>require()</code> by name, rather
-          than leaving the resolver to report a missing export.
-        </dd>
-        <dt>Exports</dt>
-        <dd>
-          Named, with no default. <code>import * as Player</code> is the whole
-          API, and every icon tree-shakes out when unused.
-        </dd>
-        <dt>Browsers</dt>
-        <dd>
-          Chrome and Edge 99, Firefox 97, Safari and iOS 15.4.
-          {' '}
-          <code>theme.css</code> sets that floor, because it uses
-          {' '}
-          <code>@layer</code>. The built JavaScript needs nothing above Safari
-          14.1, so a consumer who never imports the stylesheet is bound only by
-          the lower one.
-        </dd>
-      </dl>
-      <ul class="routes">
-        <li>
-          <a href={referenceUrl}>Package reference</a> renders every published
-          package from the README inside its own npm tarball.
-        </li>
-        <li>
-          <a href={providersUrl}>Provider setup</a> covers all five: the source
-          URLs each one reads, the ones it refuses, and what a refusal says.
-        </li>
-        <li>
-          <a href={archetypesUrl}>Two archetypes</a> compose the primitives into
-          a streaming-service layout and a course-platform one, each printed
-          beside the file it is.
-        </li>
-        <li>
-          <a href={designUrl}>Visual system</a> lists every colour, face and size
-          this site is allowed to use.
-        </li>
-        {
-          /* The workbench comes last because it is the least likely of the
-           * three to be what a reader came for, and for no other reason. The
-           * order used to be load-bearing: `scripts/check-deploy-artifact.mjs`
-           * followed every internal link on this page in one page context, and
-           * the workbench goes on fetching its own scripts well after its
-           * document has arrived, so navigating away from it abandoned those
-           * requests and the check reported the abandonment it cannot tell from
-           * a wrong-prefix asset. That check now visits each link in a page of
-           * its own (#528), where no navigation can abandon another surface's
-           * requests, so a link added below this one breaks nothing. */
-        }
-        <li>
-          <a href={storybookUrl}>Storybook workbench</a> stages every primitive
-          and runs it, against a mock provider and against real playback.
-        </li>
-      </ul>
+      {
+        /* Not a list of routes. This section used to close the page with
+         * Reference, Providers and Visual system under the install line, and
+         * the first two of those are now in the header on every page — a
+         * second copy of the site's own navigation, printed once at the foot
+         * of one document, is the thing the header section says it took over.
+         * The hero already links the reference besides.
+         *
+         * What survives is the one address the header does not carry.
+         * `/design`'s public status is undecided — `DESIGN.md`, _Stances_ —
+         * so it is listed in no navigation anywhere, and `/` is the only
+         * document that links it at all. This sentence exists so that link
+         * does; it is reachability, not a way through the site. */
+      }
+      <p class="muted">
+        The <a href={designUrl}>visual system</a> lists every colour, face and
+        size this site is allowed to use.
+      </p>
     </section>
   </main>
 </Base>
@@ -475,16 +601,81 @@ const providers = [
       observer.observe(target);
     }
   }
+
+  /**
+   * The install line's copy button, on both of them.
+   *
+   * Revealed here rather than rendered visible and wired up afterwards, which
+   * is the pattern `DocsSearch.astro` established: writing to the clipboard is
+   * the whole of what this control does, so a page with no script should carry
+   * no control. What it degrades to is the command itself, which is selectable
+   * text either way and was never behind the button.
+   *
+   * The feedback is a text swap and nothing else. `DESIGN.md` animates
+   * `transform` and `opacity` only and puts this app's animation count at two,
+   * both of them elsewhere on this page; a control that flashed an icon would
+   * be a third, spent on the least interesting event on the page.
+   */
+  const COPIED_MS = 2000;
+
+  for (const group of document.querySelectorAll<HTMLElement>('[data-install]')) {
+    const command = group.querySelector<HTMLElement>('[data-install-command]');
+    const button = group.querySelector<HTMLButtonElement>(
+      '[data-install-copy]'
+    );
+    const status = group.querySelector<HTMLElement>('[data-install-status]');
+    if (command === null || button === null || status === null) continue;
+
+    // Nothing to reveal where the API does not exist. A button that could not
+    // copy would be the "present and disabled" shape this whole site argues
+    // against.
+    if (!navigator.clipboard) continue;
+
+    const idle = button.textContent ?? 'Copy';
+    let restore: ReturnType<typeof setTimeout> | undefined;
+
+    button.hidden = false;
+    button.addEventListener('click', () => {
+      // The command as it is on screen, so the two cannot drift: a string
+      // repeated in a script is a second copy of the page's call to action.
+      const text = (command.textContent ?? '').trim();
+      void navigator.clipboard.writeText(text).then(
+        () => {
+          button.textContent = 'Copied';
+          status.textContent = `Copied ${text} to the clipboard.`;
+        },
+        () => {
+          // A refusal from the clipboard — a permission the reader declined, a
+          // context the browser will not write from — said rather than
+          // swallowed. The command is still on screen to select.
+          button.textContent = 'Press to select';
+          status.textContent =
+            'The clipboard refused. Select the command to copy it.';
+          const range = document.createRange();
+          range.selectNodeContents(command);
+          const selection = window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }
+      );
+
+      clearTimeout(restore);
+      restore = setTimeout(() => {
+        button.textContent = idle;
+        status.textContent = '';
+      }, COPIED_MS);
+    });
+  }
 </script>
 
 <style>
   /* Wider than the reference pages' prose column and wider than a document
-   * would want, because this page is a hero, a comparison and two tables
-   * rather than a text. The value is this page's own and stays a literal here:
-   * `--measure` is a property of a paragraph, and one column width is not
-   * evidence about another. Prose inside is still held to the measure, so what
-   * this width buys is the room a three-column comparison and a full-width
-   * table need — not longer lines. */
+   * would want, because this page is a hero, two players, three readouts and a
+   * comparison rather than a text. The value is this page's own and stays a
+   * literal here: `--measure` is a property of a paragraph, and one column
+   * width is not evidence about another. Prose inside is still held to the
+   * measure, so what this width buys is the room the instruments need — not
+   * longer lines. */
   .page {
     max-inline-size: 72rem;
     margin-inline: auto;
@@ -496,55 +687,114 @@ const providers = [
    * page that spent it after every section would be the creeping-gradient
    * failure that rule exists to prevent. The one on this page is in the hero.
    *
-   * `--space-9` outside against `--space-4` inside is what does the
-   * separator's work — six times the gap between a heading and its paragraph
+   * `--space-9` outside against `--space-3` inside a claim is what does the
+   * separator's work — eight times the gap between a heading and its paragraph
    * is not read as the same boundary. */
   .section {
     display: grid;
-    gap: var(--space-4);
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
     margin-block-start: var(--space-9);
+  }
+
+  /* A section whose whole content is a component that brings its own heading,
+   * its own width behaviour and its own surface. There is nothing for this
+   * page to add and it deliberately adds nothing. */
+  .section--bare {
+    gap: 0;
+  }
+
+  /* ---- the argument register ---------------------------------------------
+   *
+   * Prose, at the measure, in the sans. Every section opens in it and then
+   * hands over to the machine. The two registers are the page's structure and
+   * they are meant to be legible as one: a reader who cannot see a claim
+   * answered by evidence directly under it is reading a page that has stopped
+   * doing what it says it does.
+   */
+  .claim {
+    display: grid;
+    gap: var(--space-3);
+    max-inline-size: var(--measure);
   }
 
   /* The rung between the page title and `h2`'s default, opted into by class
    * exactly as `DESIGN.md` says a page has to. `h2` keeps whatever `base.css`
    * gives it everywhere else on the site; this page is the one that needs a
    * section title to hold its own under a display-rung hero, and moving `h2`
-   * itself would have resized every reference document's headings too.
-   *
-   * Scoped to a direct child so the ledger's own `h2` — a label above a list,
-   * set at the caption rung — is untouched. */
-  .section > h2 {
+   * itself would have resized every reference document's headings too. The two
+   * mounted components set their own, at the rungs they chose. */
+  .section__title {
     font-size: var(--text-2xl);
   }
 
-  .section p {
-    max-inline-size: var(--measure);
-  }
-
-  .section__lead {
+  .lede {
     font-size: var(--text-lg);
     color: var(--color-ink-muted);
   }
 
   .muted {
+    max-inline-size: var(--measure);
     font-size: var(--text-sm);
     color: var(--color-ink-muted);
   }
 
+  /* The scroll-loading disclosure. It is set apart from the lede above it by a
+   * hairline on its leading edge rather than by a colour or a box: it is an
+   * aside in the page's own voice about the page's own behaviour, and a panel
+   * around it would make it look like a warning. */
+  .disclosure {
+    padding-inline-start: var(--space-4);
+    border-inline-start: var(--line-width) solid var(--color-line);
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  /* ---- the instrument register -------------------------------------------
+   *
+   * A surface on the page holding machine output, at the page's full width
+   * rather than at the measure. `--color-raised` is the rung above the field,
+   * and this is its first consumer outside the specimen sheet.
+   *
+   * It carries no elevation and no border. `DESIGN.md` rule 4 names by hand
+   * the four elements allowed to spend a shadow and this is not one of them;
+   * the same rule forbids an elevated surface a border, so raising this on
+   * colour alone is what keeps the banned pairing unassemblable here. In light
+   * `--color-raised` resolves to white, which is a real step against the
+   * field — 1.045, the same as field-to-surface — so the panel reads as raised
+   * in both themes rather than depending on a rung only the dark theme has.
+   */
+  .readout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+    min-inline-size: 0;
+    padding: var(--space-4);
+    background-color: var(--color-raised);
+    border-radius: var(--radius-lg);
+  }
+
+  @media (min-width: 48rem) {
+    .readout {
+      padding: var(--space-5);
+    }
+  }
+
+  .readout__caption {
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
   /* ---- the hero -----------------------------------------------------------
    *
-   * The hero is a stack across the page's full width, not a column beside a
-   * picture. The thesis reads first and is the loudest thing on the site; the
-   * two instruments sit under it on one row, because the sentence they
-   * illustrate has already been made by then.
-   *
-   * That is a change of mind. The thesis used to hold a 30rem column on the
-   * left with the player beside it, which made the picture the largest thing
-   * in the first screen and the argument the second largest — a landing page
-   * whose loudest element is its own demo is arguing for the demo.
+   * A stack across the page's full width, not a column beside a picture. The
+   * thesis reads first and is the loudest thing on the site; the two
+   * instruments sit under it on one row, because the sentence they illustrate
+   * has already been made by then.
    */
   .hero {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-6);
     align-items: start;
   }
@@ -589,16 +839,16 @@ const providers = [
    * shorter than the 65–75 characters that token was measured for: at
    * `--text-xl` the same 42rem is nearer 55. `DESIGN.md` asks a page setting
    * prose at another rung to say what character count it is choosing, and this
-   * is that. Fewer characters is the right direction for four lines read once
+   * is that. Fewer characters is the right direction for two lines read once
    * at the top of a page. */
-  .lead {
+  .hero__lead {
     max-inline-size: var(--measure);
     font-size: var(--text-lg);
     color: var(--color-ink-muted);
   }
 
   @media (min-width: 48rem) {
-    .lead {
+    .hero__lead {
       font-size: var(--text-xl);
     }
   }
@@ -630,14 +880,74 @@ const providers = [
     }
   }
 
-  /* The install line reads as a command rather than as a control: this site has
-   * no clipboard button and no call to action, and a line a reader selects and
-   * copies needs neither. */
-  .hero__install code {
-    display: inline-block;
+  /* ---- the call to action -------------------------------------------------
+   *
+   * A command and a link, and the ranking between them is size and surface
+   * rather than a filled button beside an outlined one. The command is the
+   * primary because it is the thing a reader came to paste.
+   */
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-5);
+    align-items: center;
+  }
+
+  /* The command sits in a recessed well, which is what `--color-sunken` is
+   * for, with the copy control at its end. One box rather than two adjacent
+   * ones, so the button reads as belonging to the string it copies. */
+  .install {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+    min-block-size: var(--hit-target);
+    /* Block padding as well as inline, because at 320px the command and the
+     * button do not share a line and the wrapped pair would otherwise sit hard
+     * against the top and bottom of the well. */
     padding: var(--space-2) var(--space-3);
     background-color: var(--color-sunken);
     border-radius: var(--radius-md);
+  }
+
+  /* Selectable, always, and the reason the button is allowed to be optional.
+   * `overflow-wrap` so the command breaks rather than pushing the page sideways
+   * at 320px, where it is wider than the room a padded well leaves it. */
+  .install__command {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    font-size: var(--text-sm);
+    color: var(--color-ink);
+  }
+
+  /* The control boundary that non-text UI owes 3:1, on a control whose fill is
+   * the well it sits in. Its four states are the site's: rest, hover, the
+   * shared focus ring from `base.css`, and a pressed state that steps down the
+   * ink scale rather than lifting. */
+  .install__copy {
+    flex: none;
+    min-block-size: var(--space-6);
+    padding-inline: var(--space-3);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+    cursor: pointer;
+    background-color: transparent;
+    border: var(--line-width) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+  }
+
+  .install__copy:hover {
+    color: var(--color-ink);
+  }
+
+  .install__copy:active {
+    color: var(--color-ink-subtle);
+    border-color: var(--color-accent);
+  }
+
+  .cta__secondary {
+    font-size: var(--text-md);
   }
 
   /* The two instruments' row. One under the other until there is room, then
@@ -648,6 +958,7 @@ const providers = [
    * stretched to leave a strip of empty screen under its last row. */
   .hero__stage {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-6);
     align-items: start;
   }
@@ -659,9 +970,7 @@ const providers = [
     }
   }
 
-  .statuses,
-  .providers,
-  .routes {
+  .statuses {
     display: grid;
     padding: 0;
     margin: 0;
@@ -685,6 +994,54 @@ const providers = [
     border-radius: var(--radius-pill);
   }
 
+  /* ---- the archetypes -----------------------------------------------------
+   *
+   * The box a composition is mounted in, and the whole of what this page says
+   * about how one looks. Each archetype carries its own appearance in its own
+   * file, because a headless library ships none and an example that borrowed
+   * this site's would be proving something about this site. So this is a
+   * container and not a bezel: no surface colour, no elevation, no hairline,
+   * and `DESIGN.md`'s elevation allowlist is unchanged by this page.
+   *
+   * One under the other rather than side by side. They are two different
+   * shapes and the claim is that they are different — a pair of equal columns
+   * would be the cards-of-identical-size container this page does not reach
+   * for, and it would halve the width each one has to be itself in.
+   */
+  .archetypes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-7);
+    min-inline-size: 0;
+  }
+
+  .archetype {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+    min-inline-size: 0;
+    margin: 0;
+  }
+
+  /* `client:visible` means the box is empty until the island mounts, and
+   * nothing here reserves a height: each composition sizes itself from a ratio
+   * it sets on its own stage. */
+  .stage {
+    min-inline-size: 0;
+  }
+
+  .archetype__caption {
+    max-inline-size: var(--measure);
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  .archetypes__licence {
+    max-inline-size: var(--measure);
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
   /* ---- the three states ---------------------------------------------------
    *
    * One comparison of three related things, and not three cards. Cards of
@@ -697,11 +1054,12 @@ const providers = [
    * Each column opens with a hairline instead of being enclosed by one. A
    * plain `--color-line`, not the sweep: this is a line where a line is
    * genuinely wanted, and the sweep is spent in the hero.
-   */
-  /* `15rem` is the width below which a column's summary stops being a
+   *
+   * `15rem` is the width below which a column's summary stops being a
    * paragraph, so it is where the three fold into one. A one-off, like every
    * other layout literal on this page: it is a fact about this comparison's
-   * own text and not a step anything else would read. */
+   * own text and not a step anything else would read.
+   */
   .statuses {
     gap: var(--space-5);
     grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
@@ -754,79 +1112,20 @@ const providers = [
     color: var(--color-ink-muted);
   }
 
-  /* ---- headless -----------------------------------------------------------
+  /* ---- the composition ----------------------------------------------------
    *
-   * Prose beside the example where there is room for both, and above it where
-   * there is not. The code column is `minmax(0, …)` so a long line scrolls
-   * inside the block rather than widening the grid.
-   */
-  .split {
-    display: grid;
-    gap: var(--space-5);
-  }
-
-  @media (min-width: 56rem) {
-    .split {
-      /* The prose column is fixed and the code column takes what is left,
-       * rather than the two sharing in proportion. The example's longest line
-       * is a fact about a file this page does not get to reformat, so the
-       * column that has to hold it is the one given the room; the prose beside
-       * it reads at a shorter line, which is what a column beside a figure is
-       * for. It still scrolls if the file grows a longer line — that is
-       * `base.css`'s behaviour for every fence on the site — but at this width
-       * it does not have to. */
-      grid-template-columns: 22rem minmax(0, 1fr);
-      column-gap: var(--space-7);
-      align-items: start;
-    }
-  }
-
-  .split__prose {
-    display: grid;
-    gap: var(--space-4);
-    align-content: start;
-  }
-
-  .split__code {
+   * The file, at the page's full width and in the recessed well `base.css`
+   * gives every fence on the site. It is already an instrument surface, so it
+   * takes no panel of its own — a well inside a raised box would be two
+   * containers for one block of text.
+   *
+   * `min-inline-size: 0` so a long line scrolls inside the block rather than
+   * widening the grid. */
+  .composition {
     min-inline-size: 0;
   }
 
-  /* ---- providers ---------------------------------------------------------- */
-
-  .providers {
-    gap: 0;
-    margin-block: var(--space-2);
-  }
-
-  /* Rows separated by a hairline rather than cards of identical size. The
-   * package index makes the same choice for the same reason: a reader comparing
-   * five names wants them close enough to take in at once. */
-  .provider {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2) var(--space-4);
-    align-items: baseline;
-    padding-block: var(--space-3);
-    border-block-end: var(--line-width) solid var(--color-line);
-  }
-
-  /* `8rem` holds the longest provider name on one line so the details beside
-   * them start in the same place down the list. Another one-off measured from
-   * this list's own contents. */
-  .provider__name {
-    flex: none;
-    min-inline-size: 8rem;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--tracking-fn);
-  }
-
-  .provider__detail {
-    color: var(--color-ink-muted);
-  }
-
-  /* ---- budgets ------------------------------------------------------------
+  /* ---- the proof strip ----------------------------------------------------
    *
    * The table scrolls inside its own box rather than widening the page.
    * Package names are single unbroken tokens and the narrowest screen this is
@@ -837,7 +1136,6 @@ const providers = [
   .budgets {
     overflow-x: auto;
     scrollbar-width: thin;
-    margin-block-start: var(--space-2);
   }
 
   .budgets__table {
@@ -887,6 +1185,12 @@ const providers = [
     color: var(--color-ink-subtle);
   }
 
+  /* The last row's hairline is the panel's own edge and there is nothing under
+   * it to separate from. */
+  .budgets__table tbody tr:last-child :is(th, td) {
+    border-block-end: none;
+  }
+
   .budgets__name {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
@@ -910,53 +1214,5 @@ const providers = [
   .budgets__table td.budgets__figure + td.budgets__figure {
     font-size: var(--text-sm);
     color: var(--color-ink-subtle);
-  }
-
-  /* ---- start -------------------------------------------------------------- */
-
-  .facts {
-    display: grid;
-    gap: var(--space-1) var(--space-4);
-    margin: 0;
-    margin-block-start: var(--space-2);
-  }
-
-  /* `7rem` is the width of this list's own longest label, and one more layout
-   * one-off: a term column is measured from the terms in it. */
-  @media (min-width: 40rem) {
-    .facts {
-      grid-template-columns: 7rem minmax(0, 1fr);
-      gap: var(--space-3) var(--space-4);
-      align-items: baseline;
-    }
-  }
-
-  .facts dt {
-    font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
-    color: var(--color-ink-subtle);
-  }
-
-  .facts dd {
-    max-inline-size: var(--measure);
-    margin: 0;
-    margin-block-end: var(--space-3);
-    color: var(--color-ink-muted);
-  }
-
-  @media (min-width: 40rem) {
-    .facts dd {
-      margin-block-end: 0;
-    }
-  }
-
-  .routes {
-    gap: var(--space-3);
-    margin-block-start: var(--space-5);
-  }
-
-  .routes li {
-    max-inline-size: var(--measure);
-    color: var(--color-ink-muted);
   }
 </style>
