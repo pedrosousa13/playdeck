@@ -185,7 +185,8 @@ const addressesIn = (html) => {
 // links that answer automated requests unpredictably. Asking all of them turns
 // a link gate into a flake generator. The ticket asks for external *media*, and
 // a container extension is what says a URL is media.
-const mediaUrls = /https?:\/\/[^\s"'<>\\)]+\.(?:mp4|m4v|webm|ogv|ogg|mov|m3u8|mpd)\b/gi;
+const mediaUrls =
+  /https?:\/\/[^\s"'<>\\)]+\.(?:mp4|m4v|webm|ogv|ogg|mov|m3u8|mpd)\b/gi;
 
 // Names RFC 2606 and RFC 6761 reserve for documentation, which resolve nowhere
 // by design. A `<Player.Root source="https://example.com/clip.mp4" />` in a
@@ -194,7 +195,8 @@ const mediaUrls = /https?:\/\/[^\s"'<>\\)]+\.(?:mp4|m4v|webm|ogv|ogg|mov|m3u8|mp
 // Reserved names are the right thing to key on rather than a hand-kept list of
 // this repo's placeholders: the guarantee is the RFC's, so it holds for a
 // placeholder somebody writes tomorrow.
-const reservedHosts = /(^|\.)(example\.(com|net|org)|invalid|test|localhost|example)$/i;
+const reservedHosts =
+  /(^|\.)(example\.(com|net|org)|invalid|test|localhost|example)$/i;
 
 /**
  * @param {string} html
