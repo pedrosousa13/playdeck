@@ -2,27 +2,28 @@ import { expect, test, type Page } from '@playwright/test';
 import { activationButton } from './locators';
 
 /**
- * The bench on `/`: the switches, the composition they build, and the one line
- * of what the mounted provider refused.
+ * The bench on `/`: the switches, and the composition they build.
  *
- * This file replaces `site-ledger.spec.ts`, which pinned the five-row browser
- * panel `/` used to carry. The panel is gone; its argument is not. A readout of
- * five plausible-looking claims is identical, to a reader and to a screenshot,
- * to five rows of prose — so what a test pins is the one thing a static readout
- * could not do, which is change. Every assertion below is a change: a
- * composition that rewrites itself when a switch moves, and a line that is
- * absent until a provider says no and then carries that provider's own words.
+ * This file replaced `site-ledger.spec.ts`, which pinned the five-row browser
+ * panel `/` used to carry. The panel became a one-line report of what the
+ * mounted provider refused, and that line is gone too: it named one capability
+ * out of however many a provider actually refused, picked by the iteration
+ * order of a lookup table a reader could not see, so which refusal appeared
+ * read as arbitrary rather than as an answer. `ReasonLine.tsx` and
+ * `bench-capabilities.ts` went with it, and the `data-bench-reason` /
+ * `data-live` contract this file used to assert on is gone from the page.
+ * `apps/site/DESIGN.md` records both cuts and what they leave the capability
+ * argument as: nothing, on this page, having gone from a grid to a ledger to
+ * one line to no line.
  *
- * What is deliberately not pinned is *which* capability a given provider
- * refuses. That is the provider's business, it differs by browser, and a test
- * that named one would be a second copy of the library's answer sitting where
- * nobody would think to update it — which is the failure the reason line was
- * designed to be incapable of.
+ * What is left, and what this file pins, is the composition panel: a readout
+ * that rewrites itself when a switch moves, which a static readout could never
+ * do, and which is the one part of the original capability argument that
+ * survived every cut.
  *
- * The contract is `data-bench-switch`, `data-value`, `data-bench-reason` and
- * `data-bench-composition`, named in #542's plan. The switches are native
- * radios inside a label and `data-value` is on the input, which is what a click
- * lands on.
+ * The contract is `data-bench-switch`, `data-value` and `data-bench-composition`,
+ * named in #542's plan. The switches are native radios inside a label and
+ * `data-value` is on the input, which is what a click lands on.
  *
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so this address is written out rather than
@@ -31,31 +32,11 @@ import { activationButton } from './locators';
 const landing = 'http://127.0.0.1:4322/';
 
 const composition = (page: Page) => page.locator('[data-bench-composition]');
-const reason = (page: Page) => page.locator('[data-bench-reason]');
 const position = (page: Page, group: 'source' | 'skin', value: string) =>
   page.locator(`[data-bench-switch="${group}"] [data-value="${value}"]`);
 
 /** The library's one opt-in stylesheet, as a consumer would import it. */
 const THEME_IMPORT = "import '@playdeck/react/theme.css';";
-
-/**
- * The six clauses `reasonWords` in `apps/site/src/bench-capabilities.ts` can
- * print, one per `unavailable` reason the `Availability` type defines.
- *
- * Written out rather than imported, the way `site-nav.spec.ts` writes out the
- * navigation: a list read from the page's own source would agree with the page
- * whatever either of them said. What this pins is that the line's second row is
- * the library's vocabulary and not a sentence this page invented — which one of
- * the six lands is the browser's business.
- */
-const REASON_CLAUSES = [
-  'the browser cannot do it',
-  'the provider cannot do it',
-  "the provider's plan does not include it",
-  'the third-party runtime it was given leaves it out',
-  'the source does not offer it',
-  'a policy refuses it'
-];
 
 /**
  * The lines of the JSX block, from `<Player.Root` to its close.
@@ -88,21 +69,14 @@ const sourceLine = (printedText: string) => {
   return match[0];
 };
 
-test('nothing holds space for a reason at rest', async ({ page }) => {
+test('the composition is visible at rest', async ({ page }) => {
   await page.goto(landing);
 
-  // The island is `client:only`, so the panel's arrival is what makes the
-  // count below a fact about the page rather than about a document the island
-  // has not reached yet.
+  // The island is `client:only`, so the panel's arrival is what makes this a
+  // fact about the page rather than about a document the island has not
+  // reached yet.
   await expect(composition(page)).toBeVisible();
   await expect(activationButton(page)).toBeVisible();
-
-  // Absent, not hidden and not empty. A layout that reserved a row for this
-  // line would be the resting placeholder the design removed on purpose — a
-  // gap under the switches that stays empty unless a reader is lucky enough to
-  // pick a provider that refuses something — and the only way to make that
-  // unwritable is for there to be no element at all.
-  await expect(reason(page)).toHaveCount(0);
 });
 
 test('the composition tracks both switches', async ({ page }) => {
@@ -149,52 +123,3 @@ test('the composition tracks both switches', async ({ page }) => {
   await expect(composition(page)).toContainText(THEME_IMPORT);
   expect(jsxBlock(await printed(page))).toHaveLength(6);
 });
-
-test(
-  "a refusal reaches the line in the provider's own words @real",
-  { tag: '@real' },
-  async ({ page }) => {
-    await page.goto(landing);
-    await expect(composition(page)).toBeVisible();
-
-    // `youtube` refuses several capabilities outright and always -- quality
-    // selection among them, `providerUnavailable` in
-    // `packages/provider-youtube/src/adapter-values.ts` -- which it answers
-    // the instant it attaches, before its iframe has loaded anything. That
-    // answer does not need the network; attaching a real `<iframe>` pointed
-    // at youtube.com does, and a press is what creates one, so this is
-    // `@real` like the rest of this suite's hosted-provider presses. `hls`
-    // used to be the provider pressed here, served from this origin; there is
-    // no same-origin position left to press instead. Which capability it
-    // refuses is not asserted: that is the provider's answer and this page's
-    // job is to relay it.
-    await position(page, 'source', 'youtube').click();
-    await activationButton(page).click();
-
-    // A provider only answers once it has attached, which `loading="interaction"`
-    // holds back until the press above.
-    await expect(reason(page)).toHaveCount(1);
-    const line = reason(page);
-
-    // The line names the provider that is mounted right now, which is the one
-    // the reader just pressed. A line that could name a provider nobody asked
-    // about would be a table with the labels taken off.
-    await expect(line).toContainText('youtube');
-
-    // And the clause under it is the library's, out of `reasonWords`. This is
-    // what makes the line a report rather than a caption: the page never
-    // states a capability fact of its own, and never reads one out of a
-    // document.
-    const words = await line.innerText();
-    expect(
-      REASON_CLAUSES.some((clause) => words.includes(clause)),
-      `no reasonWords clause in:\n${words}`
-    ).toBe(true);
-
-    // The motion the line is given exists because its arrival is the moment
-    // the capability argument is made. `data-live` is written in the same
-    // React commit as the words, so an element carrying the words without it
-    // would be a change the page made silently.
-    await expect(line).toHaveAttribute('data-live', '');
-  }
-);

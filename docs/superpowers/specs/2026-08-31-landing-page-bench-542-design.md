@@ -341,24 +341,42 @@ people's demo assets. All three need replacing.
 The maintainer asked for openly licensed candidates. Searching for them turned up
 a split, and it is worth recording because it decides the shape of the answer.
 
-**YouTube and Vimeo are easy.** The Blender Foundation publishes its open movies
-on its own YouTube channel and on Vimeo, and every one of them is CC BY. Sintel,
-Big Buck Bunny, Tears of Steel and the rest are all available, all attributable
-to a named rights holder, and all safe to embed with a credit.
+**YouTube and Vimeo are easy.** Blender's own channels publish open movies under
+CC BY, on YouTube and on Vimeo both. Sintel, Big Buck Bunny, Sprite Fright and
+the rest are available, attributable to a named rights holder, and safe to embed
+with a credit.
 
 **Wistia has no equivalent.** It hosts business video for paying customers. There
 is no public catalogue of openly licensed media on it, and the demo ID currently
 in `examples/` is Wistia's own product footage, embedded with no licence grant to
 us. No amount of searching fixes this, because the content does not exist.
 
-**The ruling is to upload one clip to all three.** One Blender CC BY film, on our
-own YouTube, Vimeo and Wistia accounts. It settles the licensing on every
-provider at once, and it buys something the licensing question hides: all five
-providers then play the identical asset, so a refusal the reason line reports is
-a fact about the provider rather than about that provider's clip.
+**This section used to rule that one clip goes on all three, and that ruling is
+withdrawn.** It was written to buy a fair comparison for a capability grid: if
+every provider plays the identical asset, a refusal the grid reported was
+guaranteed to be a fact about the provider rather than about that provider's
+clip. The grid was cut — "doesn't fit at all" — and cut again in its one-line
+successor, the reason line, which is also gone; nothing on `/` now compares
+providers against each other on any axis a shared clip would have protected.
+With no comparison left to be fair, forcing one film onto every provider is a
+constraint with no purpose behind it any more, and the real ruling is narrower:
+**each ready position plays whichever Blender upload is verifiable as official
+on that specific account**, checked independently per provider rather than
+searched for as one film that has to clear every account at once. `youtube` and
+`vimeo` happened to land on the same film, _Sprite Fright_ — Blender Studio's
+account holds it on both platforms — but that is a fact about what turned up,
+not a rule the bundling in `bench-sources.ts` depends on: that file bundles the
+URL, poster, dimensions, start time and credit into one object per provider
+precisely so the two positions are free to diverge the day a second film clears
+verification on only one of them, with nothing left over from the old film to
+go stale. `wistia` has no Blender account and no upload, and stays
+`ready: false` until one exists — unchanged from this section's original
+finding.
 
 CC BY asks for attribution wherever the media plays, so the credit goes on the
-page beside the player, not in a footer.
+page beside the player, not in a footer, and travels with each position's own
+bundle rather than being written once for a film every position was guaranteed
+to share.
 
 **This is the one task in this work the maintainer has to do, and nothing else
 waits on it.** The three ids live in one module with placeholder values until the
@@ -386,13 +404,13 @@ enough to pick a provider that refuses something.
 
 Recorded so none of it is reopened by a later session reading this fresh.
 
-| Question                             | Ruling                                                          |
-| ------------------------------------ | --------------------------------------------------------------- |
-| Where the display rung goes          | The thesis paragraph, not the `h1`                              |
-| Third-party requests                 | Permitted once a reader asks, never before                      |
-| The clip each provider plays         | One Blender CC BY film on our own accounts, all three platforms |
-| A capability grid                    | No. "Doesn't fit at all"                                        |
-| The existing five-row browser panel  | Removed                                                         |
-| The archetypes on `/`                | No. They stay on `/archetypes`                                  |
-| What carries the capability argument | One reason line, only when a provider refuses something         |
-| Claims about other libraries         | None, of any kind                                               |
+| Question                             | Ruling                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Where the display rung goes          | The thesis paragraph, not the `h1`                                                                        |
+| Third-party requests                 | Permitted once a reader asks, never before                                                                |
+| The clip each provider plays         | Whichever Blender upload verifies as official on that account, checked per provider — not forced to agree |
+| A capability grid                    | No. "Doesn't fit at all"                                                                                  |
+| The existing five-row browser panel  | Removed                                                                                                   |
+| The archetypes on `/`                | No. They stay on `/archetypes`                                                                            |
+| What carries the capability argument | Nothing. The reason line that replaced the grid was cut too — see `DESIGN.md`'s animation section         |
+| Claims about other libraries         | None, of any kind                                                                                         |

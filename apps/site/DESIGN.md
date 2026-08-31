@@ -290,12 +290,14 @@ nobody asks for a font.
 providers only now.** `native` and `hls` are gone from `bench-sources.ts`,
 along with `public/bunny.mp4` and `public/hls/` — there is no same-origin clip
 left to point either one at. `youtube` and `vimeo` are `ready: true` and play
-the Blender Foundation's own uploads of the same film, `Big Buck Bunny`,
-verified by channel rather than re-uploaded: `bench-sources.ts` records the
-`oembed` check for each. `wistia` has no Blender upload and no account behind
-it, and stays `ready: false` — turning it on is still a three-character
-change, when there is a clip to point it at. `youtube` is listed first, which
-is what makes it the switch's default position.
+Blender Studio's own uploads of _Sprite Fright_, verified by channel rather
+than re-uploaded: `bench-sources.ts` records the `oembed` check for each.
+`wistia` has no Blender upload and no account behind it, and stays
+`ready: false` — turning it on is still a three-character change, when there
+is a clip to point it at. `youtube` is listed first, which is what makes it
+the switch's default position. See "The bench's player, and the site's
+islands" below for which film, why both positions currently play the same one,
+and why the fact that they do is not load-bearing.
 
 The `Applied to` column is what `base.css` actually sets, not a description of
 the rung's mood — a heading's size is whatever that file gives its element, and
@@ -643,23 +645,35 @@ the one authored moment of motion below, and the running player. `document` is
 the quiet treatment every other page on this site already had. Only `/` passes
 anything; every other route takes the default and says nothing.
 
-**What the attribute itself drives today is one animation, and only that.** It
-used to drive an entry-motion vocabulary that applied to a class any page could
-write; that vocabulary is deleted, and what is keyed off the stance now is the
-single rule in `base.css` that fades the bench's reason line in when a provider
-refuses something. The larger type and the wider gaps on `/` are that page's own
-rules in its own
-`<style>`, as they were before the prop existed; the stance did not move them
-and does not need to. What the attribute buys is a place for the rules that must
-_not_ be one page's private decision — a reveal is the first of them, because a
-reveal written locally is a reveal every later page can write locally too. That
-argument survived the vocabulary it was written for, and it is the reason the
-one remaining animation is keyed off the stance rather than written into a
-component: a rule in a site-wide stylesheet that only one stance can reach is
-unreachable elsewhere, where a rule in a component is merely somewhere nobody
-has copied yet. The
-name is the fact stated on the document; the CSS keyed off it is what the fact
-is spent on.
+**What the attribute drives today is nothing, and that is stated here as a
+judgement rather than left to be found.** It used to drive an entry-motion
+vocabulary that applied to a class any page could write; that vocabulary was
+deleted and replaced by a single rule in `base.css` that faded the bench's
+reason line in when a provider refused something. The reason line is deleted
+too — #542's capability argument went from a five-row panel, to a ledger, to
+one line, to nothing, because that one line picked which refusal to name by
+the iteration order of a lookup table, and the maintainer's own assessment was
+that this reads as arbitrary because it is. `bench-refusal`, the keyframe the
+rule played, is gone from `base.css` with it. **This app now authors no
+animation at all** — not counted down from a shrinking total the way this
+section used to, but zero, stated once.
+
+The larger type and the wider gaps on `/` remain that page's own rules in its
+own `<style>`, as they were before the prop existed and as they will stay
+regardless of what, if anything, is ever keyed off the stance again. `data-stance`
+itself is not deleted alongside the rule that used to read it: it still
+distinguishes `/` from every document route, correctly, in every state
+`e2e/site-stance.spec.ts` checks. What it buys today is only the place for a
+rule that must not be one page's private decision, should one be written again —
+a reveal written locally is a reveal every later page can write locally too,
+and a rule in a site-wide stylesheet that only one stance can reach is
+unreachable elsewhere in a way a component's own rule is merely unclaimed. That
+argument is what originally justified the attribute and is why it survives
+having nothing to key off twice now. Whether an attribute that drives no CSS
+still earns a place in `Base.astro`'s props and on the `<body>` of every page is
+a real question and this document does not answer it — that is a judgement for
+whoever next has a reason to touch this file, made with the fact above in hand
+rather than by rediscovering it.
 
 **The word is `stance`, and it was chosen the same way `rail` was.** A stance is
 the posture a page takes toward its reader, which is what the two treatments
@@ -698,12 +712,16 @@ question until a third page appears.
 
 `e2e/site-stance.spec.ts` pins the parts of this a reviewer would otherwise have
 to take on trust: that `/` carries the argument stance, that a document route
-carries the other and animates nothing, and that the reason line rests visible
-and untransformed when the motion does not run, with no script and under
-reduced motion alike. It used to pin the same three facts about `.u-enter` and
-`data-enter`, and it could not keep doing so once nothing on the site wrote
-either: a spec that had to mark an element itself in order to have something to
-assert about would be pinning its own fixture.
+carries the other, and that nothing on either is mid-travel, with no script and
+under reduced motion alike. It has moved subject twice now. It first pinned
+`.u-enter` and `data-enter`, and could not keep doing so once nothing on the
+site wrote either — a spec that had to mark an element itself in order to have
+something to assert about would be pinning its own fixture. It then moved to
+the reason line's arrival, and lost that subject the same way when the line
+was deleted rather than shrunk further. What is left to pin is narrower than
+either — that the attribute itself is correct, and that nothing on the page is
+caught mid-animation, which is true today by there being no animation to be
+caught in and worth continuing to check regardless.
 
 ## Depth, motion, and the four audit constraints
 
@@ -806,14 +824,16 @@ is not a way to tint an edge.
 `.bench__frame` in `Bench.astro`, the box the player sits in on `/`, and to
 nothing else. It is the element that page is built around, and a second
 instrument on one page means neither is the instrument. Nothing in the readout
-under it takes an elevation: the switches are controls on the page itself, the
-reason line is text, and the composition panel is a `--color-sunken` well, which
-is a step _down_ the ladder because printed code is a recess in this system
-wherever it appears. A report of what the instrument answered is not a second
-instrument, and the earlier version of this sentence named a capability grid as
-the thing that was not one. That grid was designed and cut and never existed, so
-naming it here was this document holding an allowlist open for an element the
-maintainer had already refused.
+under it takes an elevation: the switches and the quiet line under the frame are
+controls and text on the page itself, and the composition panel is a
+`--color-sunken` well, which is a step _down_ the ladder because printed code
+is a recess in this system wherever it appears. A report of what the instrument
+answered is not a second instrument, and two earlier versions of this sentence
+each named an element that was not one: a capability grid, and after it the
+bench's reason line — both designed, both cut, neither ever a candidate for an
+elevation of its own. Naming either here was this document holding an
+allowlist open for an element the maintainer had already refused, or that had
+since been refused in turn.
 
 `--elevation-panel` belongs to two things, and both of them are surfaces laid
 over the page rather than panels sitting in it: the search dialog in
@@ -877,17 +897,28 @@ consumer on the far end of a name. Two facts about the same pair of rungs moved
 in opposite directions at once, which is the argument for checking a document
 against the tree rather than against the last thing that changed.
 
-**This app writes one animation, and it is on `/`.** The count has been three,
-then two, and this document has been late to it twice, so the arithmetic is
-worth setting out rather than restating.
+**This app writes zero animations.** The count has been three, then one, then
+zero, and this document has been late to it more than once, so the arithmetic
+is worth setting out rather than restating and worth stating plainly rather
+than counted down from again.
 
-Three was the `.truth-card` entry motion, the capability ledger's resolution and
-the sweep band travelling in from the left. The band's rule lived in
-`index.astro`'s own `<style>` and went out with the shell rebuild in `f80c6d3`;
-the other two belonged to elements `/` no longer has. All three are gone, and an
-animation does not carry forward to what replaces it. What was added in their
-place is one: the bench's reason line, arriving when a provider refuses
-something.
+Three was the `.truth-card` entry motion, the capability ledger's resolution
+and the sweep band travelling in from the left. All three belonged to elements
+`/` no longer has, and an animation does not carry forward to what replaces it.
+One was what took their place across two further rebuilds: the bench's reason
+line, fading and rising `--space-1` at `--duration-base` when the mounted
+provider answered `unavailable` to something the page asked about — the
+`bench-refusal` keyframe, selected by
+`[data-stance='argument'] [data-bench-reason][data-live]`. That line is deleted
+in turn. It named one refused capability out of however many a provider
+actually refused, picked by the iteration order of a lookup table a reader had
+no way to see, and the maintainer's own assessment of the result was that it
+"feels random" — which is a design defect in what the line claimed to be
+reporting, not a reason it needed a lighter touch of the same idea. Given the
+choice between naming every refusal and continuing to name one chosen by
+object-key order, the capability argument left `/` outright. `ReasonLine.tsx`
+and `bench-capabilities.ts` are deleted, and `bench-refusal` and its
+`prefers-reduced-motion` override are deleted from `base.css` with them.
 
 The count is a count of what this app authors, and it is worth saying so rather
 than letting a reader find a moving element and conclude the rule had quietly
@@ -900,52 +931,33 @@ which is a dependency's keyframes applied by a utility class, and they move
 transitions to the bench the moment a reader presses the `theme` skin, which is
 that stylesheet doing on this page exactly what it does in a consumer's.
 
-The count is the rule; the argument it was making is why the count is one and
-not seven. Scattered reveals down a page are the generated-landing-page tell in
-motion form, and one authored moment is worth more than six of them. The page
-lost two of its three without losing anything it was arguing, which is the
-sharpest version of the same point: the motion was decoration on an argument
-that did not need it, and one moment marks a real state change.
+The count is the rule; the argument it was making is why the count went to zero
+rather than staying at one. Scattered reveals down a page are the
+generated-landing-page tell in motion form, and this section has always argued
+that one authored moment is worth more than several. What the last cut shows is
+that the same argument applies to a single moment that turns out not to be
+honest about what it is reporting: a line whose arrival looked like a real
+state change but whose content was an artefact of iteration order was decoration
+wearing the shape of an argument, and cutting it is the same move as cutting the
+five scattered reveals was, made once more against a smaller target.
 
-**The one animation is the reason line arriving.** One `<p>`, appearing the moment the
-mounted provider answers `unavailable` to something the page asked about, fading
-and rising `--space-1` at `--duration-base`. It is the `bench-refusal` keyframe
-in `base.css`, selected by `[data-stance='argument'] [data-bench-reason][data-live]`,
-and `data-live` is written by `ReasonLine.tsx` in the same React commit as the
-words it marks, so the motion cannot run early and cannot dress a state change
-that did not happen. It exists because that refusal is the whole of `/`'s
-capability argument and an unmarked appearance is a moment most readers blink
-through. Under `prefers-reduced-motion` it is removed outright
-(`animation: none`) rather than left to the duration collapse, because the
-honest answer to a reader who asked for no motion is that none was started.
+Nothing this app writes moves on entry, now in fact rather than only in
+standing prohibition. `[data-stance='argument']` still exists on `/`'s `<body>`
+— see Stances for what, if anything, that attribute is still worth without a
+rule to key off it.
 
-**This paragraph used to describe a grid column resolving**, with cells settling
-in sequence and delays in steps of `--duration-fast`. There is no grid: it was
-designed, rejected in the maintainer's own words, and never built, and the
-five-row panel that came closest to it is deleted. What replaced it is one line,
-which removes the two hazards the sequence carried with it. There are no delays,
-so the `prefers-reduced-motion` case is a rule rather than an argument about
-what the duration collapse does and does not shorten, and there is no sequence,
-so there is nothing that could grow into the scattered-reveal shape this section
-is against.
+Rule 5's list of animatable properties — `transform`, its longhands, and
+`opacity` — is unchanged by any of this and remains the list every future
+animation this app writes is bound by, should one be written. Every colour
+change on this site still snaps.
 
-Nothing else this app writes moves on entry. That is a standing prohibition
-rather than a description of what happens to sit on the page today, and it has
-now survived the deletion of every element that ever spent one.
-
-That animation moves `transform` and `opacity` only, so **rule 5's list of
-animatable properties is untouched by any of this**. Rule 5 was widened once,
-below, and the widening is about `transform`'s own longhands rather than about
-this. Every colour change on this site still snaps.
-
-`prefers-reduced-motion: reduce` collapses durations, which lands each transition
-on its settled state immediately. That only works because every transition moves
-between two settled states. An effect that leaves an element mid-travel or
-invisible when its motion is removed is a bug in the effect. The one animation
-does not rely on that rescue at all: its rule is switched off outright under
-reduced motion, and its resting state is what the rest of the CSS gives it, so
-there is nothing left mid-travel for the collapse to have to land. The collapse
-still covers what it always did, which is the transitions.
+`prefers-reduced-motion: reduce` collapses durations, which lands each
+transition on its settled state immediately. That only works because every
+transition moves between two settled states; an effect that leaves an element
+mid-travel or invisible when its motion is removed is a bug in the effect. With
+no animation authored, there is nothing left for that rule to apply to on this
+site's own rules — it still governs `tw-animate-css`'s dependency keyframes and
+the theme's own transitions, which is where its coverage now actually lands.
 
 Focus is one treatment for the whole site: a 2px `--color-accent` outline on
 `:focus-visible`, offset by 2px. An outline rather than a shadow, so it follows
@@ -1021,17 +1033,25 @@ episode actually shows is a different failure: a vocabulary can be correct and
 still be dead weight if nothing needs it yet, and the cost of keeping it was
 paid by every page on the site.
 
-**The entry motion the site has now is the reason line, and it is a different
-shape.** It is not a vocabulary and nothing else may key off it. It runs off
-`data-live`, an attribute written inside a React commit at the moment the
-element and its words first exist, rather than off an observer watching for an
-element to be scrolled to. That difference is the point rather than an
-implementation detail: an observer fires on a reader's scroll position, which is
-a fact about the reader, and this fires on a provider answering, which is a fact
-about the thing the page is arguing about.
+**The entry motion the site had after that was the bench's reason line, and it
+did not survive either.** It ran off `data-live`, an attribute written inside a
+React commit at the moment the element and its words first existed, rather than
+off an observer watching for an element to be scrolled to — a fact about a
+provider answering rather than a fact about a reader's scroll position, which
+was the point of building it that way. But the line itself was cut, in a later
+round of the same page's capability argument: it named one refused capability
+out of however many a provider actually refused, picked by a lookup table's
+iteration order, and the maintainer's assessment was that this reads as
+arbitrary. The animation left with the element it dressed.
 
-Three constraints survive the deletion, and each is a rule rather than a
-description of what the code happens to do today.
+**This app authors no animation at all, as of that cut.** Not the vocabulary
+above, not the reason line that replaced it as this section's subject, nothing
+else written since. `[data-stance='argument']` still exists on `/`'s `<body>`
+and still distinguishes it from every document route — see Stances — but there
+is no rule left anywhere in this codebase keyed off it. The three constraints
+below are kept as a record of what any animation this app writes has always had
+to satisfy, should one be written again, rather than as a description of
+something currently running:
 
 - **The resting state is what the CSS gives the element.** There is no
   `opacity: 0` default anywhere on this site. The animation is `both`-filled
@@ -1192,11 +1212,9 @@ that already existed, and both still have two.
 | `src/components/Bench.astro`           | The bench's frame, the band on it, and the player theme   |
 | `src/components/BenchIsland.tsx`       | The bench's composition, and the site's only hydration    |
 | `src/components/BenchSwitches.tsx`     | Source and skin, as native radios in a `<fieldset>`       |
-| `src/components/ReasonLine.tsx`        | The one refusal the mounted provider reports, or nothing  |
 | `src/components/CompositionPanel.tsx`  | The code the switches built, unhighlighted on purpose     |
-| `src/bench-sources.ts`                 | What each source position plays, and which are ready      |
+| `src/bench-sources.ts`                 | What each source position plays, bundled per provider     |
 | `src/bench-composition.ts`             | The switches' positions rendered as source to copy        |
-| `src/bench-capabilities.ts`            | The words for a capability and for a refusal's reason     |
 | `src/bench-quiet.ts`                   | What the page has fetched, and the sentence for it        |
 | `src/components/ProviderTruth.astro`   | The provider comparison, and its table                    |
 | `src/components/SearchCommand.tsx`     | Search's dialog and combobox, on `Command`                |
@@ -1683,13 +1701,17 @@ about something not on screen, and it is back near the frame — see below.
 from this site, so `native` and `hls` — and `public/bunny.mp4`,
 `public/hls/`, and the `<noscript>` fallback's `<video>` that played the
 former — are gone. `youtube` and `vimeo` took their place at `ready: true`,
-pointed at the Blender Foundation's own uploads of the same film rather than a
-third copy this project would have had to make, so the credit's terms hold a
-third time on the same grounds: the page plays Blender's work, wherever the
-switch is set. `public/bunny-poster.webp` is the one asset that survived —
-same-origin still matters for the still that loads before a press, which is
+pointed at Blender's own uploads rather than a third copy this project would
+have had to make, so the credit's terms hold a third time on the same grounds:
+the page plays Blender's work, wherever the switch is set. `public/bunny-poster.webp`
+did not survive this particular door either — it was the still for _Big Buck
+Bunny_, the film both positions played for one round of this section's own
+history, and both positions now play _Sprite Fright_ instead (see "The bench's
+player, and the site's islands" for why and for the poster that replaced it).
+Same-origin still matters for the still that loads before a press, which is
 the one thing on this page a hosted provider cannot be asked to do without
-lying about what has and has not been contacted.
+lying about what has and has not been contacted — that constraint outlived the
+film.
 
 **The bench is two switches and not three, and neither is a demonstration built
 for the page.** `source` is the members of `HostedProvider` that have a clip
@@ -1724,22 +1746,41 @@ between them as its own text. A consumer writing that composition by hand would
 do the same, which is the test of whether something belongs in the composition
 or in a stylesheet.
 
-**There is no capability table, grid or ledger, and two of those were designed
-in full before being cut.** The page that stood here carried a five-row panel headed "Asked of
-this browser, right now"; a draft of the replacement proposed a ten-by-five grid
-of every capability against every provider. The maintainer rejected both, in
-these words: "doesn't fit at all". They are right, and the reason is worth
-keeping: a matrix is a documentation object, it asks a reader to hold ten rows
-and five columns in their head while they are still deciding whether to keep
-reading, and it spends the largest block of space under the video on machinery.
-The word "ledger" is rejected outright and appears nowhere on the page.
+**There is no capability table, grid, ledger or line, and all four of those
+were designed in full before being cut.** The page that stood here carried a
+five-row panel headed "Asked of this browser, right now"; a draft of the
+replacement proposed a ten-by-five grid of every capability against every
+provider. The maintainer rejected both, in these words: "doesn't fit at all".
+They are right, and the reason is worth keeping: a matrix is a documentation
+object, it asks a reader to hold ten rows and five columns in their head while
+they are still deciding whether to keep reading, and it spends the largest
+block of space under the video on machinery. The word "ledger" is rejected
+outright and appears nowhere on the page.
 
-**Nothing holds space for the reason line.** There is no resting state, no
-"nothing asked yet", and no grey placeholder. `ReasonLine.tsx` returns `null`
-when there is nothing to report, which is the only way to make a placeholder
-unwritable rather than merely discouraged, and the reason line sits under the
-switches rather than in a row of its own so the composition panel beside it
-never moves when one arrives.
+**What replaced the grid was one line, and it did not survive either.** `ReasonLine.tsx`
+printed the mounted provider's name and the first capability `capabilityWords`
+in `bench-capabilities.ts` found refused, in that object's own key order —
+which is not an order a reader has any way to see, so which refusal appeared on
+screen depended on where its capability happened to sit in a lookup table
+rather than on anything about the refusal itself. The maintainer's assessment,
+in their own words: "this feels random". They are right, and the design error
+was in writing a rule that picked one arbitrarily and calling the result a
+report. Offered the choice between naming every refusal a provider makes and
+continuing to name one chosen by iteration order, the ruling was to cut the
+line rather than either grow it back into a list or keep the arbitrary version.
+`ReasonLine.tsx` and `bench-capabilities.ts` are deleted, along with
+`e2e/site-bench.spec.ts`'s assertions on `data-bench-reason` and `data-live`
+and the `@real` test that drove a refusal to check them.
+
+**`/`'s capability argument is now nothing, and that is stated as the end of a
+progression rather than as a gap.** Grid, panel, ledger, one line, no line —
+four designs and four cuts, each one attractive enough on its own to be
+reinvented by a later reader who has not seen the three before it, which is
+why every ruling above is recorded rather than left to be inferred from a diff.
+What is left of the four features `index.astro`'s own module comment used to
+list is two: composability, which the composition panel still demonstrates,
+and customisability, which the skin switch still does. Capability querying and
+autoplay recovery are not sold on `/` at all.
 
 **The page carries one block of code and it is generated, which retires the one
 exception `/` used to hold.** The fifth version wrote four snippets by hand in
@@ -1935,7 +1976,7 @@ its bottom edge, and an Astro component cannot be a child of a React one, so the
 player has to travel to reach it. `createPortal` keeps the stage inside this
 component's React tree, and therefore inside `Player.Root`'s context, while
 rendering its DOM somewhere else. That is what lets the player leave without the
-reason line losing the controller it reports on: there is one root above
+quiet line under it losing the controller it reports on: there is one root above
 everything, so the line is reading the same controller the picture is driven by
 rather than a second one of its own, which is what makes it a report rather than
 a caption.
@@ -1957,36 +1998,129 @@ document's life: `public/bunny.mp4`, a twenty-second excerpt of _Big Buck
 Bunny_ cut from `big_buck_bunny_720p_h264.mov`, and `public/hls/` carried the
 same seconds as a two-variant ladder. Both are gone, along with the file they
 were cut from, because the maintainer cannot serve video from this site. What
-plays now is the Blender Foundation's own upload of the same film — the whole
-of it, not a twenty-second cut — on whichever host the switch is set to:
-`https://www.youtube.com/watch?v=aqz-KE-bpKQ` or `https://vimeo.com/1084537`,
+plays now is Blender Studio's own upload of _Sprite Fright_ (2021) — the whole
+film, not a twenty-second cut — on whichever host the switch is set to:
+`https://www.youtube.com/watch?v=_cMxraX_5RE` or `https://vimeo.com/640499893`,
 both verified by channel through each provider's `oembed` endpoint rather than
 re-uploaded, and both recorded with that verification in `bench-sources.ts`.
-`Player.Root` takes `startTime={74}` on every position, so a reader presses
-into the same meadow scene the excerpt used to open on regardless of which
-provider answers, rather than the film's own title card at 0:00.
+`Player.Root` takes `startTime={60}` on every position, so a reader presses
+into the same forest scene the poster shows regardless of which provider
+answers, rather than the film's own title card at 0:00.
 
-**The poster is the one asset that survived, `public/bunny-poster.webp`.** It
-is a frame from inside the deleted excerpt, eight seconds in — which lands at
-roughly 74 seconds into the film itself, the number `startTime` now carries —
-scaled to 960x540 and 35,068 bytes. `Bench.astro` records the `ffmpeg` command
-that cut it, kept for the record though the file it read no longer exists. It
-stays same-origin on purpose: it is the one still a reader sees before any
-press, and a page whose central claim is that no provider has been contacted
-until then cannot fetch a thumbnail from one to make that claim. The bench is
-the largest element on the page and sits above the fold, and a blank rectangle
-is a worse first impression than a still of the thing the control beside it is
-labelled to play, so the trade was taken deliberately.
+**Both providers play the same film today, and that is a fact about what turned
+up rather than a rule.** Every hosted position needs Blender's own upload of
+something this project is entitled to embed on a marketing page, and the search
+for one happened twice, once for each provider, independently — it did not stop
+at the first film that satisfied both. It so happens that _Sprite Fright_ is the
+one film verified as an official upload on both YouTube's Blender Studio channel
+and Vimeo's `vimeo.com/blenderstudio` account, so both positions point at it.
+That is not guaranteed to stay true: nothing here assumes a future film would
+land the same way, or that the two positions must keep agreeing. `bench-sources.ts`
+bundles the URL, poster, intrinsic dimensions, start time and credit into one
+object per provider for exactly that reason — so that the day a second film is
+added to only one position, every fact about it moves together, and a lookup
+keyed by provider that quietly forgot the poster or the credit is a compile
+error rather than a defect on the page. See that file's own module comment for
+the failure this bundling replaced: an earlier version of `Bench.astro` set the
+source alone and left the poster pointed at the previous film, the same class of
+defect the `media` prop on `/archetypes` (below) was built against, one file
+over.
 
-**The attribution sits under the frame, static markup rather than part of the
-island.** CC BY asks for a credit wherever the media plays, and that includes
-the no-JavaScript path — the fallback link names the film in the same words —
-so the line is written in `Bench.astro` rather than in `BenchIsland.tsx`,
-where a script failure would take it with the player. It sets at `--text-fn` in
-`--color-ink-subtle`, the same size and ink `.bench__quiet` gets, because it
-qualifies the instrument rather than captioning it — but not the same family:
-it is a sentence rather than a value, an identifier, a state or machine output,
-and the type rule above gives sentences to Sans regardless of size. It is not a
+**The poster is two files, not one, and neither is `public/bunny-poster.webp`.**
+That file is deleted along with every other trace of _Big Buck Bunny_ on this
+page. In its place, `public/sprite-fright-poster-1024w.webp` (42,564 bytes) and
+`public/sprite-fright-poster-2048w.webp` (95,386 bytes), both a frame sixty
+seconds into _Sprite Fright_ — a character mid-scene in the forest, not a title
+card, a fade or one of the film's darker night shots — cut from Wikimedia
+Commons' mirror of the same official Blender Studio release
+(`commons.wikimedia.org/wiki/File:Sprite_Fright_-_Open_Movie_by_Blender_Studio.webm`,
+explicitly CC BY 4.0 on its own file page, which is the provenance a credit
+needs to be checkable). Fetched by an `ffmpeg` range request — `-ss` before
+`-i`, so only the bytes around the one frame needed were pulled rather than any
+part of the 163 MB source — from the master encode at the film's own native
+2048x858, not from a lower-resolution transcode: two frames extracted from a
+downscaled derivative were measured to disagree on the exact crop by a fraction
+of a percent, which is a rounding error at most sizes and a visible sliver of
+misalignment at this one's. Both files are exact integer divisions of that
+2048x858 — the full size and its exact half, 1024x429 — so neither is a
+scaler's rounding of the ratio the way a poster forced to an unrelated 16:9 was.
+`bench-sources.ts` records the same provenance beside the code that resolves
+both addresses, and the two ship together as an `<img>`'s `src`/`srcSet` pair —
+1024w for a narrow viewport, 2048w, the film's native width, for the frame this
+poster actually fills on a wide or a high-density display — in both
+`BenchIsland.tsx`'s `Player.PosterImage` and `Bench.astro`'s `<noscript>`
+fallback `<img>`, `sizes="100vw"` on both, on the reasoning that the frame is
+never wider than the viewport so that value never under-selects. Both stay
+same-origin on purpose: this is the one image a reader sees before any press,
+and a page whose central claim is that no provider has been contacted until then
+cannot fetch a thumbnail from one to make that claim. The bench is the largest
+element on the page and sits above the fold, and a blank rectangle is a worse
+first impression than a still of the thing the control beside it is labelled to
+play, so the trade was taken deliberately.
+
+**The frame around the picture takes its shape from the same bundle, rather
+than from a 16:9 literal.** `.bench__stage` in `Bench.astro` used to read
+`aspect-ratio: 16 / 9` unconditionally — the library's own generic fallback,
+and also _Big Buck Bunny_'s own ratio, which is what let it go unnoticed for as
+long as it did. _Sprite Fright_ is 2.39:1, and a 2.39:1 film forced into a 16:9
+box is letterboxed: the frame around a video of one shape drawn for another,
+the same defect class as a poster from one film over a video of another, just
+measured in bars down the sides rather than in a wrong title. `bench-sources.ts`
+carries the film's real pixel dimensions as two integers, `width` and `height`,
+rather than a rounded decimal — `2048 / 858` is what CSS computes from them
+exactly, where `2.39` is off by about a thousandth, which at this frame's
+rendered width is a visible sliver of the same letterboxing being fixed.
+`Bench.astro` writes `--bench-aspect-ratio` from those two integers as an
+inline style on `#bench-stage` for the position the page rests on, so the box is
+right before any script runs; `StagePortal` in `BenchIsland.tsx` updates the
+same custom property whenever a reader presses a different position. The
+viewport a level down reads `var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 2048 / 858))`
+rather than falling back to `16 / 9` directly — the library's own property
+still wins where a provider actually measures its media (Vimeo does; YouTube
+never publishes real dimensions at all, so for that provider the fallback is
+the only source of truth there is), and the fallback under it is this film's
+own shape rather than a generic one, so no frame of any state, scripted or not,
+disagrees with the picture inside it.
+
+**The whole picture is the target, in both directions, under every skin.**
+`Player.ActivationButton` ships full-bleed with no stylesheet at all — the
+`none` skin's own behaviour — but the bundled `theme` stylesheet sizes it into
+a roughly 4rem badge, so under `theme` only the badge was pressable and a click
+elsewhere on the picture did nothing (issue #552, filed against the library
+rather than fixed there). `Bench.astro` redraws the badge as a `::before`
+background rather than as the button's own box — the same technique
+`HeroPlayer.astro` used for the equivalent part before this page was rebuilt as
+a bench — so the element itself goes full-bleed and transparent under `theme`
+too, scoped to `[data-bench-skin='theme']` so `none` is untouched. The reverse
+direction — pressing the picture to pause a clip that is already playing — has
+no equivalent library default to fall back on, so `BenchIsland.tsx` adds
+`SurfaceToggle`, a `Player.PlayButton` sized full-bleed with `tabIndex={-1}` and
+no visible content of its own, rendered only once activation has produced a
+player and therefore never coexisting with the affordance it replaces.
+Adapted from the pre-rebuild `HeroPlayerIsland.tsx`'s own `SurfaceToggle`
+(`git show 61599a4855:apps/site/src/components/HeroPlayerIsland.tsx`), which
+carries the same reasoning: `tabIndex={-1}` keeps the tab order one control
+long, because the real, reachable control this toggle stands in for is the
+control bar's own play button, which focus lands on directly after a keyboard
+activation.
+
+**The attribution is reachable in every state, and lives in two files rather
+than one.** CC BY asks for a credit wherever the media plays, including the
+no-JavaScript path, and with the same film on both positions the credit no
+longer needs to change when the source switch does — but the bundling in
+`bench-sources.ts` is what makes that safe rather than what happens to be true
+today, and both files still read the credit from that bundle rather than
+writing a film's name by hand. `Bench.astro` prints a static `<p class="bench__credit">`,
+naming the switch's default position's film, inside a `<noscript>` — not
+unwrapped static markup, because with a script running `BenchIsland.tsx`'s own
+`Credit` component mounts in the same visual position and the static paragraph
+is `display: none`, so the two never appear together and a no-JavaScript reader
+still gets one. Both share the class, so `Bench.astro`'s `<style>` reaches it
+with `:global()` regardless of which tree rendered it, at `--text-fn` in
+`--color-ink-subtle` — the same size and ink `.bench__quiet` gets, because it
+qualifies the instrument rather than captioning it, but not the same family: it
+is a sentence rather than a value, an identifier, a state or machine output, and
+the type rule above gives sentences to Sans regardless of size. It is not a
 footer: a footer would put the credit somewhere a reader has to leave the
 argument to find, and CC BY does not ask for that, only for the credit to be
 findable near the work.
@@ -2126,20 +2260,35 @@ author rule beats.
 
 **A control the provider cannot honour is absent rather than disabled**, and
 that is the library's doing rather than this page's. `Player.FullscreenButton`
-renders only while the fullscreen capability reads `available`. It is the same
-fact the reason line under the switches prints in words, said twice in two
-registers, which is the closest thing on this page to a demonstration of the
-capability system that is not the line itself.
+renders only while the fullscreen capability reads `available`. `/`'s
+capability argument used to be demonstrated a second way, by the reason line
+under the switches printing the same kind of fact in words; that line is
+deleted (see the animation section above), so this absent-rather-than-disabled
+behaviour is what is left of the argument on this page, running rather than
+described.
 
-**This paragraph used to describe a second play button laid over the picture**,
-so that a click anywhere on a running clip toggled playback the way a desktop
-player's does, out of the tab order because the bar already reached the same
-command twice. The bench does not have it. A press on the picture starts the
-clip and after that the bar is where playback is worked. That is a reduction
-rather than a decision defended on its merits: the surface toggle was chrome the
-bench did not carry over, and a later session that wants it back should read
-this paragraph as a record of how it was built rather than as a ruling against
-it.
+**A second play button laid over the picture, so a click anywhere on a running
+clip toggles playback the way a desktop player's does.** This paragraph used to
+record that the bench did not have one — a reduction from the pre-rebuild hero,
+kept for a session that wanted it back to read as a record rather than a
+ruling. That session came: full-bleed pressing was only half solved by
+`Player.ActivationButton`'s own default (the `none` skin) plus `Bench.astro`'s
+badge redraw (the `theme` skin, working around library issue #552, where the
+bundled stylesheet sizes the button into a roughly 4rem badge and leaves the
+rest of the picture unpressable), because neither touches the reverse
+direction — pausing a clip that is already playing by pressing anywhere on it.
+`SurfaceToggle` in `BenchIsland.tsx` is that second control, adapted from the
+pre-rebuild `HeroPlayerIsland.tsx`'s own component of the same name
+(`git show 61599a4855:apps/site/src/components/HeroPlayerIsland.tsx`): a
+`Player.PlayButton`, sized full-bleed by the rules in `Bench.astro`'s
+`<style>`, `tabIndex={-1}` so it is a pointer target rather than a second tab
+stop, empty children so it paints nothing of its own. It mounts only once
+activation has produced a player — the same gate `ControlBar` puts on the
+control bar, and for the same reason — so it and `Player.ActivationButton`
+never coexist: there is never a frame with both mounted and never a frame with
+neither. The tab order stays one control long because the real, reachable
+control this toggle stands in for is the bar's own play button, which is where
+a keyboard activation already moves focus.
 
 **The seek input is `display: block`, and that is a library defect worked around
 rather than a choice.** A range input is inline-level, so the theme's

@@ -1,6 +1,18 @@
 /*
- * The bench: one player, two switches, one line of what the provider refused,
- * and the composition those switches just built.
+ * The bench: one player, two switches, and the composition those switches
+ * just built.
+ *
+ * There used to be a third thing here, a line of what the mounted provider
+ * refused. It named one capability out of however many a provider actually
+ * refused, picked by the iteration order of a lookup table a reader could not
+ * see, and reads as arbitrary because it was: which refusal appeared depended
+ * on where its capability sat in `capabilityWords`, not on anything about the
+ * refusal itself. Given the choice between naming every refusal a provider
+ * makes and naming one chosen by object-key order, the capability argument
+ * left `/` rather than keep doing the second -- the same page that had
+ * already cut a five-row panel and a ten-by-five grid for the same reason,
+ * one step further down. `bench-capabilities.ts` and `ReasonLine.tsx` went
+ * with it.
  *
  * This file is the site's whole React surface and the only thing on `/` that
  * hydrates. It is here because the page's argument is about behaviour — that
@@ -11,8 +23,8 @@
  * ---- one `Player.Root`, above everything -----------------------------------
  *
  * `Player.Root` renders no DOM at all: it is two context providers around its
- * children. So a single root stands above the player, the switches, the reason
- * line and the panel, and the reason line reads the same controller the player
+ * children. So a single root stands above the player, the switches, the quiet
+ * line and the panel, and the quiet line reads the same controller the player
  * is driven by rather than a second one of its own. That is what makes it a
  * report rather than a caption — there is no other controller for it to be
  * reading.
@@ -64,7 +76,12 @@ import * as Player from '@playdeck/react';
  */
 import themeHref from '@playdeck/react/theme.css?url';
 import type { PlayerProvider } from '@playdeck/core';
-import { benchSources } from '@/bench-sources';
+import {
+  benchSources,
+  readySources,
+  type BenchCredit,
+  type BenchPoster
+} from '@/bench-sources';
 import {
   buildComposition,
   type BenchPosition,
@@ -73,55 +90,63 @@ import {
 import { QUIET_START, quietLine, recordLoad } from '@/bench-quiet';
 import BenchSwitches from './BenchSwitches';
 import CompositionPanel from './CompositionPanel';
-import ReasonLine from './ReasonLine';
 
 interface Props {
   /** `import.meta.env.BASE_URL`, read in `Bench.astro` and passed down. */
   readonly base: string;
-  /**
-   * The still the dormant player shows, already resolved against the site's
-   * base path. A real image rather than an empty box: the frame is the largest
-   * thing on the page and sits above the fold, and without it the reader's
-   * first impression is a blank rectangle rather than a player waiting to be
-   * pressed. `Bench.astro` records which frame of the clip it is and the
-   * command that cut it.
-   */
-  readonly poster: string;
 }
 
 /**
- * The URL the source switch's position resolves to.
+ * The bundle a position resolves to: the URL, the poster, the frame's
+ * intrinsic dimensions, the start time and the credit, all read off one
+ * `benchSources` entry so they can never drift apart from each other.
+ * `sourceUrl` and `poster` are already resolved against the site's base path;
+ * `startTime` is where `poster` was cut from within the film, so the still a
+ * reader sees at rest and the first frame a press actually plays are the same
+ * moment -- without it a hosted embed starts at 0:00, the film's title card,
+ * while the poster shows a scene from further in, and the picture would
+ * promise one thing and play another, which is the same class of defect
+ * `bench-quiet.ts` exists to prevent in words rather than in pixels.
+ * `aspectRatio` is the CSS-ready `'width / height'` string, computed here
+ * once from the two integers `bench-sources.ts` carries rather than a rounded
+ * decimal anywhere -- `2048 / 858` is exact where `2.39` is not.
  *
  * Derived here rather than remembered separately, because `BenchPosition`
- * carries both the provider and its URL and the two must not drift:
- * `buildComposition` prints the URL and stays pure by having no opinion about
- * where one came from, so something has to hold them together and it is the
- * press that does it.
+ * carries the provider and its URL and the two must not drift: `buildComposition`
+ * prints the URL and stays pure by having no opinion about where one came
+ * from, so something has to hold them together and it is the press that does
+ * it. The poster, dimensions, start time and credit ride along with the same
+ * lookup for the same reason -- `bench-sources.ts` bundles all of it into one
+ * object per provider precisely so that nothing here can pick up the URL for
+ * one position and the poster, shape, start time or credit for another.
  *
  * The throw is the same shape `index.astro` uses for a missing bundle target.
  * `benchSources` is built from a `Record<PlayerProvider, …>` and is therefore
- * total, but `find` cannot say so in the type, and a silent fallback URL would
- * be a player pointed somewhere nobody chose.
+ * total, but `find` cannot say so in the type, and a silent fallback would be
+ * a player pointed somewhere, or shaped or naming something, nobody chose.
  */
-/**
- * Where playback starts, in seconds -- and where `bunny-poster.webp` was cut
- * from within the film itself, so the still a reader sees at rest and the
- * first frame a press actually plays are the same moment. Without this, a
- * hosted embed starts at 0:00, the film's title card, while the poster shows
- * the meadow scene: the picture would promise one thing and play another,
- * which is the same class of defect `bench-quiet.ts` exists to prevent in
- * words rather than in pixels.
- */
-const POSTER_TIME = 74;
+type ResolvedSource = {
+  readonly sourceUrl: string;
+  readonly poster: BenchPoster;
+  readonly aspectRatio: string;
+  readonly startTime: number;
+  readonly credit: BenchCredit;
+};
 
-const sourceUrlFor = (provider: PlayerProvider, base: string): string => {
+const entryFor = (provider: PlayerProvider, base: string): ResolvedSource => {
   const entry = benchSources.find(
     (candidate) => candidate.provider === provider
   );
   if (entry === undefined) {
     throw new Error(`BenchIsland: ${provider} is not a bench source.`);
   }
-  return entry.source(base);
+  return {
+    sourceUrl: entry.source(base),
+    poster: entry.poster(base),
+    aspectRatio: `${entry.width} / ${entry.height}`,
+    startTime: entry.startTime,
+    credit: entry.credit
+  };
 };
 
 interface ControlBarProps {
@@ -189,8 +214,7 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
      * Each control is capability-gated by the library rather than by this page.
      * `Player.FullscreenButton` is the visible instance: it renders only while
      * the fullscreen capability reads `available`, so where fullscreen is
-     * refused it is absent rather than present and dead. That is the same fact
-     * the reason line under the switches prints in words.
+     * refused it is absent rather than present and dead.
      *
      * Hidden until the activation has produced a player, which is the mirror of
      * the affordance's own render condition — the bar arrives exactly as the
@@ -232,6 +256,58 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
 };
 
 /**
+ * What a click on the picture does once the clip is running: toggle playback,
+ * which is the platform convention every desktop player follows. Adapted from
+ * `SurfaceToggle` in the pre-rebuild `HeroPlayerIsland.tsx` (`git show
+ * 61599a4855:apps/site/src/components/HeroPlayerIsland.tsx`) -- the same
+ * technique, carried over because the reasoning still holds and there is no
+ * reason to reinvent it.
+ *
+ * It is `Player.PlayButton` rather than a click handler on the viewport,
+ * because the thing being asked for is the play control with a bigger box —
+ * and the library's button already carries the parts of that which are easy to
+ * get wrong. Its accessible name follows the state, so the surface reads
+ * "Pause" while the clip runs and "Play" while it is stopped rather than
+ * saying one of the two forever; it tags its command `'user'`; and its
+ * `aria-pressed` states which way the toggle currently sits. A handler here
+ * would have reproduced all of that, or quietly not.
+ *
+ * Rendered only once the activation has produced a player, which is the same
+ * gate `ControlBar` puts on the bar and for the same reason: before that, a
+ * full-bleed play control would sit over the picture doing nothing, and
+ * clicking the stage would meet an inert button instead of the activation
+ * affordance beneath it. The two never coexist — `Player.ActivationButton`
+ * removes itself at exactly the moment this appears, so there is never a
+ * frame with both mounted and never a frame with neither.
+ *
+ * `tabIndex={-1}` because this is a pointer target and not a second control.
+ * A tab stop here would put a second thing named "Pause" in front of the bar
+ * without offering anything the bar's own `Player.PlayButton` does not.
+ * Driving it with a keyboard confirms the tab order stays one control long:
+ * from a source or skin switch, Tab lands on the bar's play button directly,
+ * never on this one first. What makes that safe is not that the keyboard has
+ * no other route to the command at the moment of activation — it has none,
+ * which is why `ControlBar` moves focus into the bar on a keyboard press —
+ * but that once focus is in the bar there are two: the bar's own play button,
+ * and Space or `k` anywhere inside `Player.Controls`.
+ *
+ * The empty fragment is how a `Player` button is given no visible content: the
+ * library falls back to printing its own English wording for `children` that
+ * are nullish, and this control's whole face is the picture behind it.
+ */
+const SurfaceToggle = () => {
+  const ready = Player.usePlayerState(
+    (snapshot) => snapshot.activation === 'ready'
+  );
+  if (!ready) return null;
+  return (
+    <Player.PlayButton data-surface-toggle="" tabIndex={-1}>
+      <></>
+    </Player.PlayButton>
+  );
+};
+
+/**
  * The player, which is the largest thing on the page and the thing every
  * switch under it operates.
  *
@@ -243,7 +319,7 @@ const Stage = ({
   poster,
   skin
 }: {
-  readonly poster: string;
+  readonly poster: BenchPoster;
   readonly skin: SkinName;
 }) => {
   /*
@@ -281,10 +357,28 @@ const Stage = ({
        *
        * `alt=""` because the still is decorative here. It is a frame of the
        * clip the control beside it is labelled to play, so describing it would
-       * announce the same thing twice to a reader who cannot see either. */}
+       * announce the same thing twice to a reader who cannot see either.
+       *
+       * `srcSet` carries both widths `bench-sources.ts` ships -- 1024w and the
+       * film's own 2048w -- and `sizes` is `100vw` rather than a measurement of
+       * this frame's actual CSS width at every breakpoint: the frame is never
+       * wider than the viewport, so `100vw` never under-selects and asks a
+       * browser to pick the smaller file only where the viewport itself is
+       * narrow. `src` stays the 1024w file, for the one reader whose browser
+       * reads neither attribute. */}
       <Player.Poster>
-        <Player.PosterImage alt="" src={poster} />
+        <Player.PosterImage
+          alt=""
+          src={poster.src}
+          srcSet={poster.srcSet}
+          sizes="100vw"
+        />
       </Player.Poster>
+      {/* Before the control bar and after the picture, which is the order the
+       * stacking in the `<style>` block below reads: at equal `z-index` the
+       * later sibling paints in front, so the bar's own buttons stay on top of
+       * this and keep their clicks. */}
+      <SurfaceToggle />
       <Player.ActivationButton
         aria-label="Load and play the sample clip"
         onClick={(event) => {
@@ -401,26 +495,32 @@ const QuietLine = ({ sourceUrl }: { readonly sourceUrl: string }) => {
 };
 
 /**
- * The one line of what the mounted provider refused, wired to the live
- * controller.
+ * The CC BY credit for whichever film the source switch has selected.
  *
- * One selector for both values rather than two hooks, for the reason
- * `ControlBar` reads one: `usePlayerState` compares what it selected, so this
- * component wakes when a capability moves and sits still through the clock.
+ * `Bench.astro` prints this same markup as static text inside `<noscript>`,
+ * for the one film that position resolves to without any script running. This
+ * is the live counterpart: once the island has mounted, the static paragraph
+ * is never on screen (it is `<noscript>`, and `display: none` while scripts
+ * run), and every position the source switch can reach -- not only the
+ * default one -- needs its own credit naming its own film, holder and
+ * licence. Deriving it from `credit` rather than writing it once is what
+ * keeps a source press from leaving the previous film's name under a
+ * different film's picture, the mirror image of the poster mismatch this
+ * bundle exists to rule out.
  *
- * `ReasonLine` decides whether there is anything to print, and mounts no
- * visible line when there is not -- only its always-present, visually-hidden
- * live region. Nothing here holds space for the visible line and nothing here
- * wraps it, which is what keeps the resting placeholder the design removed
- * unwritable.
+ * `bench__credit` rather than a name of its own: this is the same visual
+ * treatment as `Bench.astro`'s static paragraph, and `:global(.bench__credit)`
+ * in that file's stylesheet reaches an element from either tree.
  */
-const Report = () => {
-  const { provider, capabilities } = Player.usePlayerState((snapshot) => ({
-    provider: snapshot.provider,
-    capabilities: snapshot.capabilities
-  }));
-  return <ReasonLine capabilities={capabilities} provider={provider} />;
-};
+const Credit = ({ credit }: { readonly credit: BenchCredit }) => (
+  <p className="bench__credit">
+    <em>{credit.title}</em> &copy; {credit.holder}, licensed{' '}
+    <a href={credit.licenceUrl} rel="license">
+      {credit.licenceLabel}
+    </a>
+    .
+  </p>
+);
 
 /**
  * Where the stage actually lands: not here, but inside the frame
@@ -431,20 +531,39 @@ const Report = () => {
  * markup, mount element included, and there is nothing to wait on with an
  * effect. A lookup that failed would mean `Bench.astro` stopped rendering the
  * element, which is a defect this line is not the place to guard against.
- */
+ *
+ * ---- why the shape of the box is written here rather than read from the media
+ *
+ * `#bench-stage` is `Bench.astro`'s box, sized before any player exists and
+ * still the thing that has to be the right shape once one does -- so its
+ * `aspect-ratio` cannot come from the media element inside it, which is
+ * further down the tree and, for a provider like `youtube` that never
+ * publishes real dimensions (see `MEDIA_ASPECT_RATIO_PROPERTY` in
+ * `viewport-media.tsx`), may never report one at all. `bench-sources.ts`'s
+ * `width`/`height` are the honest source of the film's own shape regardless
+ * of what any given provider measures, so this writes them straight onto the
+ * mount node as `--bench-aspect-ratio` -- the custom property
+ * `.bench__stage`'s own rule in `Bench.astro` reads -- the same way
+ * `Bench.astro` sets it inline for the position the page rests on before this
+ * component ever mounts. */
 const StagePortal = ({
   poster,
+  aspectRatio,
   skin
 }: {
-  readonly poster: string;
+  readonly poster: BenchPoster;
+  readonly aspectRatio: string;
   readonly skin: SkinName;
 }) => {
   const [mount] = useState(() => document.getElementById('bench-stage'));
+  useEffect(() => {
+    mount?.style.setProperty('--bench-aspect-ratio', aspectRatio);
+  }, [mount, aspectRatio]);
   if (mount === null) return null;
   return createPortal(<Stage poster={poster} skin={skin} />, mount);
 };
 
-const BenchIsland = ({ base, poster }: Props) => {
+const BenchIsland = ({ base }: Props) => {
   /*
    * `theme` is the resting position, and the reasoning is worth keeping because
    * the opposite was tried first.
@@ -461,11 +580,25 @@ const BenchIsland = ({ base, poster }: Props) => {
    * demonstration survives the reversal intact. What changes is which of the
    * two a reader has to ask for.
    */
-  const [position, setPosition] = useState<BenchPosition>({
-    source: 'youtube',
-    sourceUrl: sourceUrlFor('youtube', base),
-    skin: 'theme'
-  });
+  const [position, setPosition] = useState<BenchPosition & ResolvedSource>(
+    () => {
+      // `readySources[0]` rather than a literal `'youtube'`: that entry is the
+      // switch's default position because it is first among the ready entries
+      // in `bench-sources.ts`, and reading the same fact from the same place
+      // `Bench.astro`'s fallback does -- `benchSources.find((entry) => entry.ready)`
+      // -- is what keeps the two in agreement without either naming a provider
+      // by hand.
+      const initial = readySources[0];
+      if (initial === undefined) {
+        throw new Error('BenchIsland: no ready bench source to default to.');
+      }
+      return {
+        source: initial.provider,
+        skin: 'theme',
+        ...entryFor(initial.provider, base)
+      };
+    }
+  );
 
   // The skin, applied and removed as a real `<link>` — see the import above
   // for why that rather than an import of either kind. The cleanup is what
@@ -516,15 +649,18 @@ const BenchIsland = ({ base, poster }: Props) => {
     <Player.Root
       loading="interaction"
       source={position.sourceUrl}
-      startTime={POSTER_TIME}
+      startTime={position.startTime}
       defaultMuted
     >
-      <StagePortal poster={poster} skin={position.skin} />
+      <StagePortal
+        poster={position.poster}
+        aspectRatio={position.aspectRatio}
+        skin={position.skin}
+      />
+      <Credit credit={position.credit} />
       <QuietLine sourceUrl={position.sourceUrl} />
       {/* The readout: the switches and what the provider answered on one side,
-       * the composition they built on the other, stacked below 48rem. The
-       * reason line sits under the switches rather than in its own row, so the
-       * column beside it never moves when one arrives. */}
+       * the composition they built on the other, stacked below 48rem. */}
       <div className="grid items-start gap-[var(--space-6)] md:grid-cols-2">
         <div className="grid gap-[var(--space-4)]">
           <BenchSwitches
@@ -535,13 +671,12 @@ const BenchIsland = ({ base, poster }: Props) => {
               setPosition((current) => ({
                 ...current,
                 source,
-                sourceUrl: sourceUrlFor(source, base)
+                ...entryFor(source, base)
               }))
             }
             skin={position.skin}
             source={position.source}
           />
-          <Report />
         </div>
         <CompositionPanel composition={buildComposition(position)} />
       </div>

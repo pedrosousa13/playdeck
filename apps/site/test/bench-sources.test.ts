@@ -41,15 +41,69 @@ describe('benchSources', () => {
     }
   });
 
-  it('resolves the youtube entry to a Blender Foundation upload', () => {
+  it('resolves the youtube entry to the Blender Studio upload of Sprite Fright', () => {
     const youtube = benchSources.find((entry) => entry.provider === 'youtube');
     expect(youtube?.source('/')).toBe(
-      'https://www.youtube.com/watch?v=aqz-KE-bpKQ'
+      'https://www.youtube.com/watch?v=_cMxraX_5RE'
     );
   });
 
-  it('resolves the vimeo entry to a Blender Foundation upload', () => {
+  it('resolves the vimeo entry to the Blender Studio upload of Sprite Fright', () => {
     const vimeo = benchSources.find((entry) => entry.provider === 'vimeo');
-    expect(vimeo?.source('/')).toBe('https://vimeo.com/1084537');
+    expect(vimeo?.source('/')).toBe('https://vimeo.com/640499893');
+  });
+
+  // Both providers play the same film today, so every ready entry's poster is
+  // the same asset -- which is the point being pinned here, rather than a
+  // difference between them the way an earlier version of this file asserted.
+  it('gives every ready entry the same poster', () => {
+    const posters = readySources.map((entry) => entry.poster('/').src);
+    expect(new Set(posters).size).toBe(1);
+  });
+
+  it("resolves the youtube entry's poster to the Sprite Fright still, at both widths", () => {
+    const youtube = benchSources.find((entry) => entry.provider === 'youtube');
+    expect(youtube?.poster('/')).toEqual({
+      src: '/sprite-fright-poster-1024w.webp',
+      srcSet:
+        '/sprite-fright-poster-1024w.webp 1024w, /sprite-fright-poster-2048w.webp 2048w'
+    });
+  });
+
+  // The film's real pixel dimensions, not a rounded aspect ratio -- every
+  // entry's `width`/`height` should be exact integers a browser can compute
+  // `width / height` from without any decimal in between.
+  it('gives every entry the film’s exact intrinsic dimensions', () => {
+    for (const entry of benchSources) {
+      expect(entry.width).toBe(2048);
+      expect(entry.height).toBe(858);
+      expect(Number.isInteger(entry.width)).toBe(true);
+      expect(Number.isInteger(entry.height)).toBe(true);
+    }
+  });
+
+  // Every entry's credit names the same film, holder and licence, since every
+  // entry plays the same film -- a hardcoded credit would happen to be right
+  // today, which is exactly why this bundles the credit with the source
+  // rather than writing it once: the day a second film joins this file, only
+  // an entry that is wrong stays wrong silently.
+  it('credits Sprite Fright to Blender Studio under CC BY 4.0 on every entry', () => {
+    for (const entry of benchSources) {
+      expect(entry.credit).toEqual({
+        title: 'Sprite Fright',
+        holder: 'Blender Studio',
+        licenceLabel: 'CC BY 4.0',
+        licenceUrl: 'https://creativecommons.org/licenses/by/4.0/'
+      });
+    }
+  });
+
+  // Every entry, ready or not, carries a real start time -- `bySource`'s
+  // object type requires the field on every member, so this is really a check
+  // that nobody weakened the type to make it optional.
+  it('gives every entry a start time', () => {
+    for (const entry of benchSources) {
+      expect(typeof entry.startTime).toBe('number');
+    }
   });
 });

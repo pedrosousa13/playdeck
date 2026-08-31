@@ -84,43 +84,37 @@ import { benchSources } from '../bench-sources';
 const base = import.meta.env.BASE_URL;
 
 /*
- * The still the dormant player shows, and where it came from.
+ * The still the dormant player shows for the no-JavaScript fallback, and the
+ * credit that goes with it — both read off `bench-sources.ts` rather than
+ * written here, because that file bundles a provider's URL, poster, start
+ * time and credit into one object precisely so a page reading any one of them
+ * cannot pick up a different provider's value for another. This file used to
+ * hold its own `posterUrl` constant and its own hardcoded credit paragraph,
+ * back when both providers played the same film; with `youtube` and `vimeo`
+ * now playing different films, a constant here would be exactly the "override
+ * the source alone" mistake the module comment in `bench-sources.ts`
+ * describes.
  *
- * `public/bunny-poster.webp` predates the switch to hosted-only providers: it
- * was cut from this app's own former copy of the clip, `public/bunny.mp4`,
- * eight seconds into that file's twenty-second excerpt of the same meadow
- * scene — mid-action rather than the first frame, so the still reads as a
- * moment rather than a slate. That source file is gone; the still it produced
- * is not, and needs no edit now that nothing on this page reads
- * `public/bunny.mp4` any more. The cut command, kept for the record:
- *
- *   ffmpeg -i apps/site/public/bunny.mp4 -ss 8 -frames:v 1 \
- *     -vf "scale=960:540" -c:v libwebp -lossless 0 -q:v 80 -preset picture \
- *     apps/site/public/bunny-poster.webp
- *
- * 960x540 and 35,068 bytes. The dimensions are smaller than the clip's own
- * 1280x720: this is a still of real footage rather than a synthetic pattern,
- * so downscaling loses detail a reader would not miss rather than inventing
- * detail that was never there. The format was measured rather than assumed —
- * at this frame and size, JPEG at matching quality is 38,121 bytes and AVIF is
- * 35,749; WebP at q80 is both the smallest and the format the rest of this
- * file already commits to.
- *
- * The eight seconds into that excerpt landed at roughly 74 seconds into the
- * film itself, which is what `BenchIsland.tsx`'s `POSTER_TIME` starts every
- * hosted embed at: the still at rest and the first frame a press actually
- * plays are the same moment, on every provider the switch offers.
+ * The fallback link's target and the still it uses are both whichever
+ * position is the switch's default. Resolved from `bench-sources.ts` rather
+ * than written as a literal, so a change to the default position is one
+ * file's edit rather than several.
  */
-const posterUrl = `${base}bunny-poster.webp`;
-
-// The fallback link's target: whichever position is the switch's default.
-// Resolved from `bench-sources.ts` rather than written as a literal, so a
-// change to the default position is one file's edit rather than two.
 const fallback = benchSources.find((entry) => entry.ready);
 if (fallback === undefined) {
   throw new Error('Bench.astro: no ready source for the no-JavaScript fallback.');
 }
 const fallbackUrl = fallback.source(base);
+const poster = fallback.poster(base);
+const credit = fallback.credit;
+// `'width / height'`, not a rounded decimal: CSS computes the ratio those two
+// integers describe exactly, so nothing here approximates a number a browser
+// can compute itself. Written onto `#bench-stage` below as
+// `--bench-aspect-ratio`, the same custom property `BenchIsland.tsx`'s
+// `StagePortal` updates once a reader presses a different position -- so the
+// box is the right shape before any script runs and stays the right shape
+// after one does.
+const aspectRatio = `${fallback.width} / ${fallback.height}`;
 ---
 
 <div class="bench">
@@ -136,7 +130,11 @@ const fallbackUrl = fallback.source(base);
        * only ever the portal's target: it renders nothing of its own, and
        * with JavaScript blocked it holds the fallback below instead. */
     }
-    <div class="bench__stage" id="bench-stage">
+    <div
+      class="bench__stage"
+      id="bench-stage"
+      style={`--bench-aspect-ratio: ${aspectRatio}`}
+    >
       {
         /* With JavaScript the island is the whole player and this is inert
          * text the parser never fetches from. Without it, this is the whole
@@ -159,9 +157,19 @@ const fallbackUrl = fallback.source(base);
           {
             /* The same still the island's player shows, here as a real `<img>`
              * — not a CSS background, so this path keeps the guarantee the
-             * rest of the page does. */
+             * rest of the page does. `srcset`/`sizes` for the same reason
+             * `BenchIsland.tsx`'s `Player.PosterImage` carries them: this is
+             * the largest image on the page, and a no-JavaScript reader on a
+             * narrow or a high-density screen is owed the same match between
+             * screen and file a scripted reader gets. */
           }
-          <img class="bench__fallback-image" src={posterUrl} alt="" />
+          <img
+            class="bench__fallback-image"
+            src={poster.src}
+            srcset={poster.srcSet}
+            sizes="100vw"
+            alt=""
+          />
           <span class="bench__fallback-label">Watch on {fallback.label} &rarr;</span>
         </a>
       </noscript>
@@ -177,32 +185,45 @@ const fallbackUrl = fallback.source(base);
 
   {
     /* The credit CC BY asks for wherever this media plays, including the
-     * `<noscript>` path above — which is why this is static markup here
-     * rather than a line the island prints. Set at `--text-fn` in
-     * `--color-ink-subtle`, the same treatment `.bench__quiet` gets: it
-     * qualifies the instrument rather than captioning it, and it is not a
-     * footer, because CC BY asks for the credit to be findable near the work
-     * rather than at the end of the page. */
+     * no-JavaScript path above — which is why this is `<noscript>` rather
+     * than a line the island prints unconditionally. It is not unwrapped
+     * static markup: with a script running, `BenchIsland`'s own `Credit`
+     * mounts in its place and this paragraph is `display: none`, because it
+     * names only the switch's *default* film and a reader who has pressed the
+     * source switch is looking at a different one. Naming the wrong film
+     * would itself be the omission CC BY exists to prevent, only pointed the
+     * other way — so this is the no-script case, not a fallback that also
+     * happens to render first.
+     *
+     * Set at `--text-fn` in `--color-ink-subtle`, the same treatment
+     * `.bench__quiet` gets: it qualifies the instrument rather than
+     * captioning it, and it is not a footer, because CC BY asks for the
+     * credit to be findable near the work rather than at the end of the
+     * page. */
   }
-  <p class="bench__credit">
-    <em>Big Buck Bunny</em> &copy; Blender Foundation, licensed{' '}
-    <a href="https://creativecommons.org/licenses/by/3.0/" rel="license">
-      CC BY 3.0
-    </a>.
-  </p>
+  <noscript>
+    <p class="bench__credit">
+      <em>{credit.title}</em> &copy; {credit.holder}, licensed{' '}
+      <a href={credit.licenceUrl} rel="license">
+        {credit.licenceLabel}
+      </a>.
+    </p>
+  </noscript>
 
   {
-    /* The island renders the line under the frame as well as the readout — see
-     * `QuietLine` in `BenchIsland.tsx`. It is not static markup here because it
-     * is a report on the player rather than a caption on the frame: it has to
-     * say something different once the clip has loaded, and something different
-     * again once the source is somebody else's host. A no-JavaScript reader
-     * gets no such line, because the fallback below is a different player with
-     * its own behaviour and the sentence would be describing one that is not
-     * running. `e2e` proves the resting claim: a spec records every request `/`
-     * makes at rest and fails if one leaves this origin. */
+    /* The island renders the credit for whichever film is actually selected
+     * (`Credit` in `BenchIsland.tsx`) as well as the line under the frame —
+     * see `QuietLine` there. Neither is static markup here: the credit has to
+     * say a different film's name the moment the source switch moves, and the
+     * quiet line has to say something different once the clip has loaded, and
+     * something different again once the source is somebody else's host. A
+     * no-JavaScript reader gets neither — the credit above stands in for the
+     * first, and the fallback link is a different player with its own
+     * behaviour that the quiet line would be describing incorrectly. `e2e`
+     * proves the resting claim: a spec records every request `/` makes at
+     * rest and fails if one leaves this origin. */
   }
-  <BenchIsland base={base} client:only="react" poster={posterUrl} />
+  <BenchIsland base={base} client:only="react" />
 </div>
 
 <style>
@@ -228,16 +249,27 @@ const fallbackUrl = fallback.source(base);
    *
    * Nothing is loaded until the affordance is pressed, so there is no frame to
    * show and this component may not invent one — no poster, no still, no
-   * gradient standing in for a picture. The ratio is the library's own
-   * documented fallback and is also the film's own -- 16:9 whichever hosted
-   * provider answers -- so the box is the right shape before a frame is
-   * decoded and does not resize when one arrives.
+   * gradient standing in for a picture.
+   *
+   * The ratio is `--bench-aspect-ratio`, not a literal: the inline `style`
+   * above sets it from `bench-sources.ts`'s own `width`/`height` for whichever
+   * position the page rests on, and `StagePortal` in `BenchIsland.tsx` moves
+   * it to match whenever a reader presses a different one. A literal 16:9 here
+   * once left a 2.39:1 film letterboxed inside a box shaped for a different
+   * ratio — the same class of defect as a poster from one film over a video
+   * of another, measured in bars down the sides rather than in a wrong title.
+   * The fallback, `2048 / 858`, is every current entry's own shape rather than
+   * the library's generic 16:9 one, so there is no frame — scripted or not,
+   * before or after a press — in which the box and the picture disagree. It
+   * stops being right the day a film of a different shape joins this file,
+   * which is the same day it would need to become source-derived rather than
+   * written here; nothing today makes that necessary.
    *
    * Always dark. `--stage-*` never moves with `data-theme`, so the picture
    * reads the same in both themes — a cinema is dark regardless of the room. */
   .bench__stage {
     display: grid;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: var(--bench-aspect-ratio, 2048 / 858);
     background-color: var(--stage-sunken);
 
     /* ---- the player's tokens, spoken in this site's roles ----------------
@@ -302,13 +334,21 @@ const fallbackUrl = fallback.source(base);
    * a height the media already determines.
    *
    * The ratio is read from the property the library writes onto this element
-   * once a provider has measured its media, with the same fallback as the
-   * stage above. So the box is right before anything has loaded and stays right
-   * if the media turns out not to be the shape the fallback assumed. */
+   * once a provider has measured its media -- right to keep reading, because
+   * the library knows the truth for a real `<video>` element where one exists.
+   * What changed is the fallback. `16 / 9` was a guess about a film nobody had
+   * measured; `var(--bench-aspect-ratio, 2048 / 858)` is the same property
+   * `.bench__stage` reads above, so before a provider has measured anything --
+   * and for `youtube`, which never does, see `MEDIA_ASPECT_RATIO_PROPERTY` in
+   * `viewport-media.tsx` -- this cell is already the film's own shape rather
+   * than the library's generic one. A stale fallback here is how a 2.39:1
+   * poster ended up stretched to 16:9 inside this exact cell: the poster lives
+   * in the `stack` area this element defines, so its box was this element's
+   * box. */
   :global(.bench__stage) :global([data-playdeck-part='viewport']) {
     display: grid;
     grid-template-areas: 'stack';
-    aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9);
+    aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 2048 / 858));
     inline-size: 100%;
   }
 
@@ -359,6 +399,99 @@ const fallbackUrl = fallback.source(base);
     :global([data-bench-skin='none'] [data-playdeck-part='activation']) {
     background-color: transparent;
     border: 0;
+  }
+
+  /* The other half of the same defect, on the other skin -- issue #552,
+   * filed against the library rather than fixed there: under `theme`, this
+   * part is sized into a roughly 4rem badge, so only the badge was pressable
+   * and the rest of the picture did nothing. Measured directly: a click two
+   * inches from the badge, well inside the frame, reached no control at all.
+   *
+   * The fix redraws the badge as a background rather than as the button's own
+   * box, the technique `HeroPlayer.astro` used for the same part before this
+   * page was rebuilt as a bench (`git show 61599a4855:apps/site/src/components/HeroPlayer.astro`):
+   * the element itself goes full-bleed and transparent, and a `::before`
+   * paints the badge in its place. `--space-8` is 4rem, so the face is the
+   * size the theme drew it and the only thing that moved is the target. The
+   * icon shares the badge's grid area and paints over it because it comes
+   * later in the tree.
+   *
+   * `border-radius: 0` on the button's own box for the reason `HeroPlayer.astro`
+   * records: the theme rounds this part to 50%, which on a 4rem square is the
+   * badge's circle and on a full-bleed box is an ellipse inscribed in the
+   * stage — and a rounded corner clips hit testing, not just paint. Squared
+   * off here; the badge below carries its own roundness instead.
+   *
+   * Unlayered and scoped to `[data-bench-skin='theme']` for the same two
+   * reasons the `none` block above is scoped rather than unconditional: this
+   * beats `theme.css`'s own layered rule for the same property regardless of
+   * specificity, and scoping it keeps `none` untouched -- that position is
+   * already full-bleed with no badge at all, and drawing one there would be
+   * this page adding chrome the `none` position exists to not have. */
+  :global(.bench__stage)
+    :global([data-bench-skin='theme'] [data-playdeck-part='activation']) {
+    grid-area: stack;
+    grid-template-areas: 'face';
+    place-content: center;
+    inline-size: 100%;
+    block-size: 100%;
+    background-color: transparent;
+    border-radius: 0;
+    outline-offset: calc(-1 * var(--space-1));
+  }
+
+  :global(.bench__stage)
+    :global(
+      [data-bench-skin='theme'] [data-playdeck-part='activation']
+    )::before {
+    content: '';
+    grid-area: face;
+    inline-size: var(--space-8);
+    block-size: var(--space-8);
+    background-color: var(--color-surface);
+    border-radius: var(--radius-pill);
+  }
+
+  :global(.bench__stage)
+    :global(
+      [data-bench-skin='theme'] [data-playdeck-part='activation'] > svg
+    ) {
+    grid-area: face;
+  }
+
+  /* The other direction: once the clip is running, the same gesture toggles
+   * it. `SurfaceToggle` in `BenchIsland.tsx` is `Player.PlayButton` with its
+   * box opened out, and everything below undoes the theme's control-bar
+   * treatment of that part for this one instance -- the bar's own buttons are
+   * 44px chips with a hover tint, and a hover tint at this size would wash
+   * the picture. `border: 0` and a transparent background hold under `none`
+   * too, where without them a bare `<button>` would paint the browser's own
+   * opaque fill full-bleed over the picture -- the same defect the `none`
+   * activation reset above exists to prevent, on a part that reset does not
+   * reach.
+   *
+   * `position` and `z-index` for the reason the control bar carries them —
+   * the media declares a layer of its own and an unpositioned box in the same
+   * cell paints underneath it. The bar takes the same `z-index` and comes
+   * later in the markup, so it wins the overlap and its own buttons keep
+   * their clicks.
+   *
+   * No focus rule: it is not in the tab order (`SurfaceToggle` sets
+   * `tabIndex={-1}`), and a pointer press on a `:focus-visible` site leaves no
+   * ring. */
+  :global(.bench__stage) :global([data-surface-toggle]) {
+    grid-area: stack;
+    position: relative;
+    z-index: 1;
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: 0;
+    background-color: transparent;
+    border: 0;
+  }
+
+  :global(.bench__stage) :global([data-surface-toggle]:hover) {
+    background-color: transparent;
   }
 
   /* Pinned to the foot of the picture.
@@ -462,14 +595,20 @@ const fallbackUrl = fallback.source(base);
   /* The CC BY credit, at the same floor and the same ink as the line under the
    * frame — but not mono: it is a sentence, not a value, an identifier, a
    * state or machine output, and `DESIGN.md`'s type rule gives sentences to
-   * Sans regardless of size. No `:global()`: this element is this file's own
-   * static markup, not one rendered by the island. */
-  .bench__credit {
+   * Sans regardless of size.
+   *
+   * `:global()`, like `.bench__quiet` above it: this element now renders from
+   * two places rather than one — this file's own `<noscript>` paragraph for
+   * the no-JavaScript case, and `Credit` in `BenchIsland.tsx` for every
+   * reachable state a script produces, both naming the film that is actually
+   * selected. Only one is ever on screen at once, but the rule has to reach
+   * whichever tree rendered it. */
+  :global(.bench__credit) {
     font-size: var(--text-fn);
     color: var(--color-ink-subtle);
   }
 
-  .bench__credit a {
+  :global(.bench__credit) a {
     color: inherit;
   }
 </style>

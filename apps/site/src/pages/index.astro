@@ -16,21 +16,29 @@ import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
  *
  * ---- the shape --------------------------------------------------------------
  *
- * Thesis, the player, the switches, what they built, the close. The four
- * features this page sells — capability querying, autoplay recovery,
- * composability, customisability — are each delivered by operating the bench
- * rather than by reading about them. There is no section per feature, because
- * the page is one instrument with knobs where the old page was six things with
- * none.
+ * Thesis, the player, the switches, what they built, the close. Composability
+ * and customisability — the two features this page still sells — are each
+ * delivered by operating the bench rather than by reading about them: the
+ * source switch is a real prop change to a real player, and the skin switch
+ * is a real stylesheet added and removed. There is no section per feature,
+ * because the page is one instrument with knobs where the old page was six
+ * things with none.
+ *
+ * Capability querying and autoplay recovery used to round the four out to a
+ * quartet, and neither is sold here any more. Autoplay recovery went first —
+ * `bench-composition.ts` carries why, and it comes down to `loading="interaction"`
+ * making the refusal this page would have demonstrated unreachable. Capability
+ * querying went last, and further than either of the two panels that preceded
+ * it: not to one line, but to nothing. See `DESIGN.md`'s capability-argument
+ * section for the full history and why a fourth cut rather than a fourth
+ * shrink was the maintainer's call.
  *
  * ---- what does not appear ---------------------------------------------------
  *
- * No capability table, grid or list of statuses. Two were designed and both
- * were cut, and the ruling is recorded in the spec because each was attractive
- * enough to be reinvented: a matrix is a documentation object, and it spends the
- * largest block of space under the video on machinery rather than on the
- * product. What survives of that argument is one line under the switches, and
- * only when a provider has actually refused something.
+ * No capability table, grid, list of statuses or one-line report. All four
+ * were designed, in that order, and all four were cut — the ruling for each is
+ * recorded in `DESIGN.md`, because each was attractive enough to be
+ * reinvented.
  *
  * No claim about any other library, named or implied. An earlier draft opened
  * with "every video player ships a design", which is false, and the maintainer
@@ -64,9 +72,34 @@ if (primitives === undefined || primitives.budget === null) {
 }
 
 /*
- * The close's four figures. The first is measured; the other three are facts
- * about the shape of the packages — how they are published, what they fetch,
- * and what they import — rather than measurements, so they are written.
+ * What one provider adapter costs, measured rather than written, so the close
+ * cannot claim a figure the packages have moved away from. YouTube because it
+ * is the switch's default and so the one a reader is most likely to reach for.
+ */
+const youtube = bundles.find(
+  (entry) => entry.name === '@playdeck/provider-youtube'
+);
+if (youtube === undefined) {
+  throw new Error(
+    'index.astro: the YouTube provider is not a bundle-budgets.mjs target.'
+  );
+}
+
+/*
+ * The close's four cells. Two are measurements and two are claims, and the
+ * mix is deliberate rather than a grid that decayed.
+ *
+ * Two used to be numbers that could not have been anything else. `0` — "CSS in
+ * the bundle" — was a definitional fact dressed as a measurement. `1 of 5` was
+ * worse: it read as a rating, and the maintainer said outright they could not
+ * tell what it meant. Neither was telling a reader something they had to be
+ * shown, which is the job the other two do.
+ *
+ * What replaces them says the same facts from the consumer's side rather than
+ * the bundle's. The provider cell keeps a real number inside its sentence,
+ * because "what does adding YouTube cost me" is the question a reader actually
+ * has, and that number is read from `measureBundles` like the first figure
+ * rather than typed.
  */
 const figures = [
   {
@@ -74,16 +107,16 @@ const figures = [
     line: `Every primitive, gzipped. CI fails the build at ${primitives.budget}.`
   },
   {
-    value: '1 of 5',
-    line: 'Providers are separate packages. You ship the one you use.'
+    value: 'One adapter, not five',
+    line: `Every provider is its own package. Adding YouTube costs ${youtube.size.toFixed(0)} kB; the other four never reach your bundle.`
   },
   {
     value: '0',
     line: 'Requests to a provider before someone presses play.'
   },
   {
-    value: '0 lines',
-    line: 'CSS in the bundle. The theme is an import you can skip.'
+    value: 'Unstyled by default',
+    line: 'Every pixel on screen is a decision you made, not one you undid.'
   }
 ];
 
