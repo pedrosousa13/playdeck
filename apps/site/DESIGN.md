@@ -1720,7 +1720,7 @@ because nothing else served either, and putting them back behind a skin switch
 was proposed and refused on the ground that it is still putting them back.
 
 **The line under the frame is live, and it is replaced rather than removed.** At
-rest it reads "Nothing above has loaded. No request has left this page", which
+rest it reads "No video has loaded yet. No provider has been contacted", which
 is the product's central claim stated as a fact about the page the reader is on.
 A static line stops being true the moment somebody presses play, so `QuietLine`
 prints one of four sentences and `bench-quiet.ts` decides which. The state
@@ -1729,17 +1729,33 @@ the root to `dormant`, so a line derived from the live state would deny a
 request the page had already made. History does not revert, and the sentence is
 about history.
 
-**One sentence on this page has been tightened once already and is worth
-watching.** The thesis of an earlier version read "zero requests until you press
-play", which was exact while the stages were black and stopped being exact the
-moment they were given a poster, since a poster is a same-origin image request
-before any press. It became "no video request until you press play". The bench's
-player now carries a poster of its own, `tracer-poster.webp`, cut from the clip
-it precedes, and the resting line reads "Nothing above has loaded. No request
-has left this page." The second clause is what
-`e2e/site-quiet.spec.ts` gates and it is exact, because it is about requests
-leaving this origin and the poster does not. The first clause is the one to read
-carefully next time somebody changes what the frame shows at rest.
+**One sentence on this page has now been tightened three times, and the third
+time is the one worth reading.** The thesis of an earlier version read "zero
+requests until you press play", which was exact while the stages were black and
+stopped being exact the moment they were given a poster, since a poster is a
+same-origin image request before any press. It became "no video request until
+you press play". The bench's resting line was then written as "Nothing above has
+loaded. No request has left this page", and the paragraph that recorded it
+defended the second clause as exact and flagged the first as the one to read
+carefully next time somebody changed what the frame shows at rest.
+
+**That happened, and both clauses turned out to be false rather than one.**
+`tracer-poster.webp` was added to the frame in the same work, so at rest an
+image above the line had loaded, which falsifies the first clause, and the
+request that fetched it had left the page, which falsifies the second. The
+defence of the second clause was a slip of scope: it argued about requests
+leaving this _origin_, and the sentence said this _page_. Those are different
+claims and the poster sits between them.
+
+So the resting line is now "No video has loaded yet. No provider has been
+contacted", which is what the library actually guarantees. `loading="interaction"`
+contacts no provider before a click, and a poster is neither a video nor a
+provider. The lesson is not that the wording was careless. It is that this
+sentence is the page's whole argument and it has been quietly falsified by three
+different changes to what the frame shows, none of which touched the sentence.
+`apps/site/test/bench-quiet.test.ts` now carries a test asserting the dormant
+string claims neither that nothing has loaded nor that no request has left, so
+the next change to the frame fails a gate instead of a reader.
 
 **The close is four figures, the command, the fine print and the ways onward.**
 The first figure is measured at build time from `scripts/bundle-budgets.mjs`,
