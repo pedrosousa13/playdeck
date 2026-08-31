@@ -6,8 +6,8 @@ import { activationButton } from './locators';
  * check: nothing is fetched from anybody before a reader asks for it, and the
  * line under the player never says otherwise once one has been.
  *
- * The page states it in words — "Nothing above has loaded. No request has left
- * this page." — directly under the thing that would falsify it. A sentence
+ * The page states it in words — "No video has loaded yet. No provider has been
+ * contacted." — directly under the thing that would falsify it. A sentence
  * printed beside the machinery it describes is worth exactly what the gate
  * behind it is worth, and this file is that gate.
  *
@@ -50,16 +50,19 @@ const foreign = (urls: readonly string[]) =>
   );
 
 /**
- * Whether a line claims the page has fetched nothing.
+ * Whether a line claims no provider has been contacted yet.
  *
  * Matched as a claim rather than as a sentence. The words are `bench-quiet.ts`'s
  * and are meant to be editable; what may never come back is the *assertion*,
  * after something has loaded. A copy edit that keeps the meaning keeps this
  * test passing, and one that reintroduces the meaning fails it whatever the
- * wording.
+ * wording. The claim is about a provider rather than about loading in
+ * general, because `Bench.astro` renders a poster before any press: an image
+ * has loaded and a request for it has left the page even at rest, so neither
+ * of those would be a true thing for this line to assert.
  */
-const claimsNothingHasLoaded = (line: string) =>
-  /nothing[^.]*loaded/i.test(line) || /no request[^.]*left/i.test(line);
+const claimsNoProviderContacted = (line: string) =>
+  /no provider[^.]*contacted/i.test(line);
 
 /** The URL the composition panel prints for the position selected right now. */
 const printedSource = async (page: Page) => {
@@ -113,7 +116,9 @@ test('at rest, / has contacted nobody', async ({ page }) => {
   expect(foreign(requests)).toEqual([]);
 
   // And the page says so, which is the claim a reader is actually given.
-  expect(claimsNothingHasLoaded(await quietLine(page).innerText())).toBe(true);
+  expect(
+    claimsNoProviderContacted(await quietLine(page).innerText())
+  ).toBe(true);
 });
 
 test('pressing a hosted provider does contact it', async ({ page }) => {
@@ -144,7 +149,7 @@ test('pressing a hosted provider does contact it', async ({ page }) => {
     .not.toEqual([]);
 });
 
-test('the quiet line never claims nothing has loaded once something has', async ({
+test('the quiet line never claims no provider has been contacted once one has', async ({
   page
 }) => {
   /*
@@ -165,7 +170,7 @@ test('the quiet line never claims nothing has loaded once something has', async 
   await expect(activationButton(page)).toBeVisible();
 
   const line = quietLine(page);
-  expect(claimsNothingHasLoaded(await line.innerText())).toBe(true);
+  expect(claimsNoProviderContacted(await line.innerText())).toBe(true);
 
   await activationButton(page).click();
   await expect.poll(() => media.length).toBeGreaterThan(0);
@@ -176,5 +181,5 @@ test('the quiet line never claims nothing has loaded once something has', async 
   // Replaced, never removed: a line that vanished would move everything below
   // it, and would also pass an assertion about what it does not say.
   await expect(line).toHaveCount(1);
-  expect(claimsNothingHasLoaded(await line.innerText())).toBe(false);
+  expect(claimsNoProviderContacted(await line.innerText())).toBe(false);
 });

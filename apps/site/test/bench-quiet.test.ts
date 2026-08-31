@@ -12,7 +12,7 @@ const HLS = '/hls/master.m3u8';
 const YOUTUBE = 'https://www.youtube.com/watch?v=example';
 const VIMEO = 'https://player.vimeo.com/video/1';
 
-const RESTING = 'Nothing above has loaded. No request has left this page.';
+const RESTING = 'No video has loaded yet. No provider has been contacted.';
 const CLEAN = 'Loaded from this origin. No third party has been contacted.';
 const AFTERWARDS = 'Loaded from this origin. A third party was contacted earlier.';
 
@@ -31,14 +31,28 @@ describe('the bench quiet line', () => {
   });
 
   /*
+   * The regression the resting sentence itself was in. `Bench.astro` renders
+   * `tracer-poster.webp` as a real `<img>` before any press, so at rest an
+   * image has already loaded and the request that fetched it has already left
+   * this page. A dormant sentence that claims either is false the moment a
+   * sceptical reader checks it -- the claim that is actually true and worth
+   * making is that no provider has been contacted yet.
+   */
+  it('does not claim that nothing has loaded or that no request has left the page, since the poster falsifies both', () => {
+    const line = quietLine(QUIET_START);
+    expect(line).not.toMatch(/nothing[^.]*loaded/i);
+    expect(line).not.toMatch(/no request[^.]*left/i);
+  });
+
+  /*
    * The regression this module exists for.
    *
    * Under `loading="interaction"` a source change returns `Player.Root` to
    * `dormant`, so a line derived from the live activation state printed the
    * resting sentence again after a fetch had already gone out. Two presses,
    * no timing trick. The `hls` press below is the second one: the first
-   * source has loaded, and whatever the player's current state is, "no request
-   * has left this page" is now false forever.
+   * source has loaded, and whatever the player's current state is, "no
+   * provider has been contacted" is now false forever.
    */
   it('never returns to the resting sentence once a source has loaded', () => {
     const played = recordLoad(QUIET_START, NATIVE, PAGE);

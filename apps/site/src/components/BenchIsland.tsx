@@ -282,10 +282,10 @@ const Stage = ({
  * The line under the frame, and the page's central claim stated as a fact about
  * the page the reader is on rather than as a sentence about the library.
  *
- * It is live because a static one stops being true. "Nothing above has loaded"
- * is exact until somebody presses play, and then it is a false sentence printed
- * directly under the thing that falsified it — on a page whose whole argument is
- * that its statements can be checked.
+ * It is live because a static one stops being true. "No provider has been
+ * contacted" is exact until somebody presses play, and then it is a false
+ * sentence printed directly under the thing that falsified it — on a page
+ * whose whole argument is that its statements can be checked.
  *
  * **It is replaced, never removed.** Deleting the line when it stops applying
  * would move everything below it on the same gesture that starts a video. So
@@ -328,7 +328,7 @@ const QuietLine = ({ sourceUrl }: { readonly sourceUrl: string }) => {
    * uses it a few files away for the same kind of job (`root.tsx`, where
    * `sourceTransition` is reset the moment `sourceKey` moves). An effect would
    * paint one frame of the previous sentence first, which for this line means
-   * printing "no request has left this page" for a frame after one has —
+   * printing "no provider has been contacted" for a frame after one has —
    * briefly, but the whole point of the line is that it is never that. It also
    * trips `react-hooks/set-state-in-effect`, which is the lint rule for exactly
    * this mistake.
@@ -353,9 +353,11 @@ const QuietLine = ({ sourceUrl }: { readonly sourceUrl: string }) => {
  * `ControlBar` reads one: `usePlayerState` compares what it selected, so this
  * component wakes when a capability moves and sits still through the clock.
  *
- * `ReasonLine` decides whether there is anything to print, and returns `null`
- * when there is not. Nothing here holds space for it and nothing here wraps it,
- * which is what keeps the resting placeholder the design removed unwritable.
+ * `ReasonLine` decides whether there is anything to print, and mounts no
+ * visible line when there is not -- only its always-present, visually-hidden
+ * live region. Nothing here holds space for the visible line and nothing here
+ * wraps it, which is what keeps the resting placeholder the design removed
+ * unwritable.
  */
 const Report = () => {
   const { provider, capabilities } = Player.usePlayerState((snapshot) => ({

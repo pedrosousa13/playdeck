@@ -17,7 +17,7 @@
  *
  *   press play   -> tracer.mp4 is fetched
  *   press `hls`  -> activation is `dormant` again
- *                -> "No request has left this page", after one had
+ *                -> "No provider has been contacted", after one had
  *
  * The second clause of that sentence is not a claim about the player's current
  * state. It is a claim about the page's history, and history does not revert.
@@ -122,7 +122,7 @@ export const quietLine = ({
   lastLoadedHost
 }: QuietHistory): string => {
   if (!everLoaded) {
-    return 'Nothing above has loaded. No request has left this page.';
+    return 'No video has loaded yet. No provider has been contacted.';
   }
   if (lastLoadedHost !== null) {
     return `Loaded from ${lastLoadedHost}, contacted because you asked.`;
