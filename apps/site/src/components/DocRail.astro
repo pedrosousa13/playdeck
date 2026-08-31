@@ -53,6 +53,7 @@
  * not on the critical path the way search or the theme switch are.
  */
 import { Separator } from './ui/separator';
+import RailDisclosure from './RailDisclosure';
 
 interface RailItem {
   href: string;
@@ -96,8 +97,8 @@ const { label, group, contents } = Astro.props;
 }
 <nav class="rail" aria-label={label} data-pagefind-ignore>
   {
-    /* A disclosure, closed, which the script below opens for real once there is
-     * a column to put it in.
+    /* A disclosure, closed, which opens for real once there is a column to put
+     * it in.
      *
      * Stacked above the document on a phone, these two lists run to roughly the
      * height of a phone screen several times over — a link per sibling
@@ -109,24 +110,14 @@ const { label, group, contents } = Astro.props;
      * navigation somewhere neither of them meets it until after several hundred
      * lines of prose.
      *
-     * `<details>` rather than a button and a script, because it is the element
-     * the platform already made for this: the affordance, the keyboard
-     * behaviour and the focus ring all arrive with no JavaScript, and with none
-     * the page is a working closed disclosure at every width.
-     *
-     * What the script adds is the one thing CSS cannot do: change the element's
-     * own state. The wide layout wants the rail permanently revealed, and the
-     * ways to get there with CSS alone all reveal the content while leaving the
-     * element closed — so a screen reader is told "collapsed" about a list the
-     * reader is looking at, and at that width the only control that could
-     * correct it has been taken out of the tree as well. `open` is a property,
-     * not a presentation, and the accessible state follows it; so the property
-     * is what gets set. */
+     * The disclosure itself is `RailDisclosure.tsx`, a shadcn `Collapsible`,
+     * and that file carries why it is one and what the swap from the platform's
+     * `<details>` cost. Everything below stays here: the two lists are rendered
+     * by Astro and handed to it as children, so they are in the served HTML
+     * whether or not React runs, and every rule that styles them in this file's
+     * stylesheet still reaches them. */
   }
-  <details class="rail__disclosure" data-rail>
-    <summary class="rail__summary">
-      <span class="rail__marker" aria-hidden="true">▸</span>Contents
-    </summary>
+  <RailDisclosure client:load>
     <div class="rail__inner">
       <section class="rail__group" data-mono={group.mono ? '' : undefined}>
         <h2 class="rail__label">
@@ -169,113 +160,21 @@ const { label, group, contents } = Astro.props;
 
       <slot name="foot" />
     </div>
-  </details>
+  </RailDisclosure>
 </nav>
-
-{
-  /* `is:inline`, and written here rather than bundled, for the reason
-   * `Base.astro`'s theme script is: a module script is deferred by definition,
-   * so it would run after the document had already been laid out and the rail
-   * would be seen to open. Inline and immediately after the element, it runs
-   * while the parser is still working through the page.
-   *
-   * It owns two things and they are the same decision seen twice: whether the
-   * element is open, which is what assistive technology is told, and
-   * `data-rail`, which is what the stylesheet keys the column layout off.
-   * Neither is written without the other, so the announced state and the
-   * visible state cannot disagree — at a narrow width a closed disclosure with
-   * its summary, at a wide one an open element whose summary is gone because
-   * there is nothing left for it to toggle.
-   *
-   * `60rem` is the same figure as the media queries in this file's stylesheet,
-   * which is the drift worth naming: the two are a few lines apart on purpose,
-   * because a query cannot read a custom property and there is no way to state
-   * the breakpoint once.
-   *
-   * With no JavaScript at all nothing here runs, `data-rail` stays empty, and
-   * the rules below it never match — leaving the closed disclosure the markup
-   * already is, at every width, with its summary visible, keyboard operable and
-   * announcing the state it is actually in. */
-}
-<script is:inline>
-  {
-    const rail = document.querySelector('[data-rail]');
-    const columned = window.matchMedia('(min-width: 60rem)');
-
-    const apply = () => {
-      rail.open = columned.matches;
-      rail.dataset.rail = columned.matches ? 'column' : 'disclosure';
-    };
-
-    apply();
-    columned.addEventListener('change', apply);
-  }
-</script>
 
 <style>
   .rail {
     font-size: var(--text-sm);
   }
 
-  /* The disclosure's own affordance: a row with a marker, a pointer target tall
-   * enough to hit, and the site's focus ring from `base.css`. The default
-   * triangle is replaced by one drawn from the same character in both states,
-   * rotated — a `transform`, which is one of the two properties this site
-   * animates, so it settles correctly with reduced motion. */
-  .rail__summary {
-    display: flex;
-    gap: var(--space-3);
-    align-items: center;
-    min-block-size: var(--hit-target);
-    padding-inline: var(--space-3);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
-    color: var(--color-ink);
-    cursor: pointer;
-    background-color: var(--color-surface);
-    border: var(--line-width) solid var(--color-line-strong);
-    border-radius: var(--radius-md);
-    list-style: none;
-  }
-
-  /* Belt and braces, and named as that rather than as a fact about a browser.
-   * `list-style: none` above is what removes the marker in every engine this
-   * has been opened in; WebKit once needed this pseudo element as well, and no
-   * engine has been checked here to establish that it still does. The rule
-   * costs one selector and removes a marker that is already gone, so it stays
-   * until somebody has a reason to say otherwise. */
-  .rail__summary::-webkit-details-marker {
-    display: none;
-  }
-
-  /* An element in the markup rather than generated content, and hidden from
-   * assistive technology rather than left to be read. Generated content is
-   * announced — the breadcrumb separator in `SiteHeader.astro` relies on that
-   * being so — and a marker announced here lands inside the accessible name of
-   * the control itself, which becomes the glyph plus the word. The name is what
-   * a reader hears before deciding whether this is the thing that opens the
-   * navigation, so it is the word alone; the triangle is decoration on it. */
-  .rail__marker {
-    font-size: var(--text-xs);
-    color: var(--color-ink-subtle);
-    transition: transform var(--duration-fast) var(--ease);
-  }
-
-  .rail__disclosure[open] > .rail__summary > .rail__marker {
-    transform: rotate(90deg);
-  }
-
-  .rail__summary:hover {
-    color: var(--color-accent);
-  }
-
-  .rail__summary:active {
-    color: var(--color-ink-subtle);
-  }
-
-  .rail__disclosure[open] > .rail__summary {
-    margin-block-end: var(--space-4);
-  }
+  /* The disclosure's own chrome — the control, its marker, and the reveal —
+   * is not styled here. It is rendered by `RailDisclosure.tsx`, and Astro
+   * scopes the rules in this block to the elements Astro renders, so a rule
+   * for it here would be one that matches nothing. It is styled in that
+   * component, in the same utilities-over-site-tokens vocabulary the rest of
+   * the shadcn surface uses. What stays below is everything Astro still
+   * renders: the rail itself, and the lists passed through as children. */
 
   /* Sticky, and bounded by the viewport with its own scroller. A sticky element
    * taller than the window is the failure this guards: it pins at the top, its
@@ -284,41 +183,22 @@ const { label, group, contents } = Astro.props;
    * scroller of its own means every entry stays reachable however many sections
    * the document it indexes turns out to have. */
   @media (min-width: 60rem) {
-    /* Wide enough for a column, so the disclosure stops being one — but only
-     * once the script has opened it for real. Keyed off the attribute that
-     * script writes rather than off the width alone, because a summary hidden
-     * at a width where nothing had opened the element would leave the rail
-     * unreachable. */
-    .rail__disclosure[data-rail='column'] > .rail__summary {
-      display: none;
-    }
-
     /* The chain a sticky element needs, and the reason the grid no longer
      * aligns its items to `start`. `position: sticky` travels inside its own
      * containing block, so an element exactly as tall as its parent has nowhere
      * to travel and simply scrolls away — which is what the rail did before
-     * this, never sticking at any scroll offset. Each box between the grid row
-     * and the sticky one is given the row's height instead: the rail by
-     * stretching, the disclosure by asking for it.
+     * this, never sticking at any scroll offset. Every box between the grid row
+     * and the sticky one has to be given the row's height instead.
      *
-     * Unconditional, and that is the correction: a reader who opens the rail by
-     * hand in an engine with no `::details-content`, or with no JavaScript in
-     * any engine, gets a sticky element inside a box exactly its own height —
-     * which is the original defect, kept alive for exactly those readers. */
-    .rail,
-    .rail__disclosure {
+     * This is the first link of that chain and the only one left in this file.
+     * The two boxes below it are the disclosure and its content, both rendered
+     * by `RailDisclosure.tsx` now, which carries `h-full` at this same width on
+     * each of them. The chain used to have a fourth link — `::details-content`,
+     * the anonymous box a user agent puts inside a `<details>` — and that box
+     * does not exist any more, so neither does the `@supports` test that had to
+     * ask whether the engine drew one. */
+    .rail {
       block-size: 100%;
-    }
-
-    /* The third box in that chain, and the only part of it that is a pseudo
-     * element the engine may not have. `::details-content` is the anonymous box
-     * the user agent puts between a `<details>` and its content, so where it
-     * exists the height has to pass through it; where it does not, there is no
-     * box between the two and the two rules above are the whole chain. */
-    @supports selector(::details-content) {
-      .rail__disclosure::details-content {
-        block-size: 100%;
-      }
     }
 
     .rail__inner {

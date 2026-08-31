@@ -5,6 +5,7 @@ import { Code } from 'astro:components';
 import Base from '../layouts/Base.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { shikiConfig } from '../shiki';
+import SourceDisclosure from '../components/SourceDisclosure';
 import { StreamingServicePlayer } from '../../../../examples/archetype-streaming-service';
 import { CoursePlatformPlayer } from '../../../../examples/archetype-course-platform';
 
@@ -104,14 +105,9 @@ const captionsSrc = `${import.meta.env.BASE_URL}archetype-captions.vtt`;
           resumeAt={18}
         />
       </div>
-      <details class="source">
-        <summary>
-          <code>{streamingPath}</code>
-        </summary>
-        <div class="source__well">
-          <Code code={streamingSource} lang="tsx" {...shikiConfig} />
-        </div>
-      </details>
+      <SourceDisclosure client:visible path={streamingPath}>
+        <Code code={streamingSource} lang="tsx" {...shikiConfig} />
+      </SourceDisclosure>
     </section>
 
     <section class="archetype">
@@ -132,14 +128,9 @@ const captionsSrc = `${import.meta.env.BASE_URL}archetype-captions.vtt`;
           resumeAt={14}
         />
       </div>
-      <details class="source">
-        <summary>
-          <code>{coursePath}</code>
-        </summary>
-        <div class="source__well">
-          <Code code={courseSource} lang="tsx" {...shikiConfig} />
-        </div>
-      </details>
+      <SourceDisclosure client:visible path={coursePath}>
+        <Code code={courseSource} lang="tsx" {...shikiConfig} />
+      </SourceDisclosure>
     </section>
 
     <section class="archetype">
@@ -225,32 +216,23 @@ const captionsSrc = `${import.meta.env.BASE_URL}archetype-captions.vtt`;
 
   /* The source, closed by default and open in one press.
 
-     A `<details>` and not a script: the affordance, the keyboard behaviour, the
-     announced state and the focus ring all arrive with the element, which is
-     the same reasoning the reference pages' rail is built on. Closed, because
-     each of these files runs to several hundred lines and a reader who came to
-     look at the players should not scroll past two of them to reach the second
-     one. The page's claim is that the running player and its real source are
-     both here, and they are — one press apart, on the same screen. */
-  .source > summary {
-    display: flex;
-    gap: var(--space-2);
-    align-items: center;
-    min-block-size: var(--hit-target);
-    color: var(--color-ink-muted);
-    cursor: pointer;
-  }
+     A shadcn `Collapsible` and not the platform's `<details>` this used to be:
+     shadcn is the site's design system by the maintainer's call, and the same
+     swap was made on the header's navigation a phase earlier. The trade is
+     stated in `SourceDisclosure.tsx` rather than hidden — the disclosure now
+     needs a script to open, and the file inside it does not need one to be
+     read, which is the half that mattered.
 
-  .source > summary:hover {
-    color: var(--color-ink);
-  }
+     Closed, because each of these files runs to several hundred lines and a
+     reader who came to look at the players should not scroll past two of them
+     to reach the second one. The page's claim is that the running player and
+     its real source are both here, and they are: one press apart, on the same
+     screen.
 
-  /* The well scrolls inside its own box rather than growing the page to the
-     length of the file. `scrollbar-width` matches what `base.css` does for a
-     code block: a platform-width bar inside a box reads as a second border. */
-  .source__well {
-    max-block-size: 32rem;
-    overflow: auto;
-    scrollbar-width: thin;
-  }
+     Nothing about it is styled here any more, including the well the file
+     scrolls inside. Astro scopes the rules in this block to the elements Astro
+     renders, and every part of the disclosure is now rendered by React, so a
+     rule left here would be one that matches nothing. It lives in that
+     component instead, in the same utilities-over-site-tokens vocabulary the
+     rest of the shadcn surface uses. */
 </style>

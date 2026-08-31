@@ -159,3 +159,54 @@ test("/'s heading is still exactly Playdeck, and there is one of it", async ({
   await expect(wordmark).toBeVisible();
   expect(await wordmark.evaluate((element) => element.tagName)).toBe('H1');
 });
+
+/*
+ * The doc rail's disclosure, at both widths (#542 phase 3).
+ *
+ * The rail moved from a native `<details>` to a shadcn `Collapsible`
+ * (`RailDisclosure.tsx`) and the swap has one silent failure mode, which was
+ * observed on the way in rather than imagined: `forceMount` keeps the rail's
+ * links in the DOM while closed, exactly as `<details>` did, but Radix then
+ * writes only `data-state` and leaves the appearance to CSS. Miss the rule
+ * that hides it and the control announces "collapsed" over a rail that is
+ * fully on screen — a page that looks perfect in a screenshot and lies to
+ * every reader who is not looking at one.
+ *
+ * So what is pinned is the agreement between the two: what the control says
+ * about itself, and whether the thing it names is actually drawn.
+ */
+const railDocument = `${SITE}/reference/react/`;
+const contents = (page: Page) =>
+  page.getByRole('button', { name: 'Contents', exact: true });
+
+test('the doc rail is a real closed disclosure on a narrow screen', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 390, height: 840 });
+  await page.goto(railDocument);
+
+  await expect(contents(page)).toBeVisible();
+  await expect(contents(page)).toHaveAttribute('aria-expanded', 'false');
+  // Announced shut, and drawn shut.
+  await expect(page.locator('.rail__inner')).toBeHidden();
+
+  await contents(page).click();
+  await expect(contents(page)).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.rail__inner')).toBeVisible();
+  // And the links inside it are reachable rather than merely present.
+  await expect(
+    page.locator('.rail__inner a[aria-current="page"]')
+  ).toBeVisible();
+});
+
+test('the doc rail is a column, with nothing to toggle, on a wide screen', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(railDocument);
+
+  // Revealed, and no control left over. A button that toggles nothing is not
+  // something to hide from sight and leave in the tab order.
+  await expect(page.locator('.rail__inner')).toBeVisible();
+  await expect(contents(page)).toHaveCount(0);
+});
