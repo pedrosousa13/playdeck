@@ -27,7 +27,10 @@ export type BenchPosition = {
   readonly sourceUrl: string;
 };
 
-export const buildComposition = ({ skin, sourceUrl }: BenchPosition): string => {
+export const buildComposition = ({
+  skin,
+  sourceUrl
+}: BenchPosition): string => {
   // The composition never names a provider: the library detects one from the
   // URL, so `source={source}` is the whole of `Player.Root`'s configuration
   // regardless of which provider switched on. What changes is the `const` line

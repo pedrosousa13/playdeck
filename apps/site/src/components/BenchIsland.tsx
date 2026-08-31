@@ -442,11 +442,7 @@ const BenchIsland = ({ base, poster }: Props) => {
      * at all, so remounting for it would discard the reader's position to
      * repaint the chrome.
      */
-    <Player.Root
-      loading="interaction"
-      source={position.sourceUrl}
-      defaultMuted
-    >
+    <Player.Root loading="interaction" source={position.sourceUrl} defaultMuted>
       <StagePortal poster={poster} skin={position.skin} />
       <QuietLine sourceUrl={position.sourceUrl} />
       {/* The readout: the switches and what the provider answered on one side,

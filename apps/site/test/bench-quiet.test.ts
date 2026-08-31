@@ -14,7 +14,8 @@ const VIMEO = 'https://player.vimeo.com/video/1';
 
 const RESTING = 'No video has loaded yet. No provider has been contacted.';
 const CLEAN = 'Loaded from this origin. No third party has been contacted.';
-const AFTERWARDS = 'Loaded from this origin. A third party was contacted earlier.';
+const AFTERWARDS =
+  'Loaded from this origin. A third party was contacted earlier.';
 
 /** The line after a sequence of loads, which is how a reader produces one. */
 const after = (...sources: string[]): string =>

@@ -116,9 +116,9 @@ test('at rest, / has contacted nobody', async ({ page }) => {
   expect(foreign(requests)).toEqual([]);
 
   // And the page says so, which is the claim a reader is actually given.
-  expect(
-    claimsNoProviderContacted(await quietLine(page).innerText())
-  ).toBe(true);
+  expect(claimsNoProviderContacted(await quietLine(page).innerText())).toBe(
+    true
+  );
 });
 
 test('pressing a hosted provider does contact it', async ({ page }) => {

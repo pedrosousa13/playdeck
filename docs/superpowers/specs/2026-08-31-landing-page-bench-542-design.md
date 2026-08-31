@@ -24,13 +24,13 @@ a sentence.
 
 One page, roughly two screens, in five parts.
 
-| Part        | What it is                                                    |
-| ----------- | ------------------------------------------------------------- |
-| Thesis      | The h1, one display line, one paragraph                        |
-| The star    | The player, the largest thing on the page                      |
-| The bench   | Three groups of switches that belong to the reader             |
+| Part        | What it is                                                                    |
+| ----------- | ----------------------------------------------------------------------------- |
+| Thesis      | The h1, one display line, one paragraph                                       |
+| The star    | The player, the largest thing on the page                                     |
+| The bench   | Three groups of switches that belong to the reader                            |
 | The readout | The composition the switches built, and one line of what the provider refused |
-| The close   | Four measured figures, the install line, the ways onward       |
+| The close   | Four measured figures, the install line, the ways onward                      |
 
 There is no section per feature. The four features from the brief (capability
 querying, autoplay recovery, composability, customisability) are each delivered
@@ -209,12 +209,12 @@ are compositions, not options, and the panel proves it by rewriting itself.
 
 Four figures, then the install line, then the links out.
 
-| Figure     | Line                                                        | Source                                       |
-| ---------- | ----------------------------------------------------------- | -------------------------------------------- |
-| `17 kB`    | Every primitive, gzipped. CI fails the build at 18.          | `scripts/bundle-budgets.mjs`, measured at build |
-| `1 of 5`   | Providers are separate packages. You ship the one you use.   | `packages/provider-*`                          |
-| `0`        | Requests to a provider before someone presses play.          | The e2e test below                             |
-| `0 lines`  | CSS in the bundle. The theme is an import you can skip.      | `@playdeck/react/theme.css` is a separate entry |
+| Figure    | Line                                                       | Source                                          |
+| --------- | ---------------------------------------------------------- | ----------------------------------------------- |
+| `17 kB`   | Every primitive, gzipped. CI fails the build at 18.        | `scripts/bundle-budgets.mjs`, measured at build |
+| `1 of 5`  | Providers are separate packages. You ship the one you use. | `packages/provider-*`                           |
+| `0`       | Requests to a provider before someone presses play.        | The e2e test below                              |
+| `0 lines` | CSS in the bundle. The theme is an import you can skip.    | `@playdeck/react/theme.css` is a separate entry |
 
 The first is read at build time from the same script CI fails the build with, as
 the current page already does for its two figures. It is never typed by hand.
@@ -379,13 +379,13 @@ enough to pick a provider that refuses something.
 
 Recorded so none of it is reopened by a later session reading this fresh.
 
-| Question | Ruling |
-| --- | --- |
-| Where the display rung goes | The thesis paragraph, not the `h1` |
-| Third-party requests | Permitted once a reader asks, never before |
-| The clip each provider plays | One Blender CC BY film on our own accounts, all three platforms |
-| A capability grid | No. "Doesn't fit at all" |
-| The existing five-row browser panel | Removed |
-| The archetypes on `/` | No. They stay on `/archetypes` |
-| What carries the capability argument | One reason line, only when a provider refuses something |
-| Claims about other libraries | None, of any kind |
+| Question                             | Ruling                                                          |
+| ------------------------------------ | --------------------------------------------------------------- |
+| Where the display rung goes          | The thesis paragraph, not the `h1`                              |
+| Third-party requests                 | Permitted once a reader asks, never before                      |
+| The clip each provider plays         | One Blender CC BY film on our own accounts, all three platforms |
+| A capability grid                    | No. "Doesn't fit at all"                                        |
+| The existing five-row browser panel  | Removed                                                         |
+| The archetypes on `/`                | No. They stay on `/archetypes`                                  |
+| What carries the capability argument | One reason line, only when a provider refuses something         |
+| Claims about other libraries         | None, of any kind                                               |
