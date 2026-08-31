@@ -80,33 +80,32 @@ import BenchIsland from './BenchIsland';
 
 // Resolved against the configured base the way every other address on this
 // site is, rather than written as a root-absolute literal. The file is this
-// app's own — `public/tracer.mp4` — because an Astro build serves only its own
+// app's own — `public/bunny.mp4` — because an Astro build serves only its own
 // `public/`.
 const base = import.meta.env.BASE_URL;
-const clipUrl = `${base}tracer.mp4`;
+const clipUrl = `${base}bunny.mp4`;
 
 /*
  * The still the dormant player shows, and where it came from.
  *
- * `public/tracer-poster.webp` is frame 15 of `public/tracer.mp4` — the middle
- * of a thirty-frame clip, chosen over frame 0 so the still cannot be a fade,
- * though on this fixture every frame carries the same test pattern. Cut with:
+ * `public/bunny-poster.webp` is a frame from inside `public/bunny.mp4`, eight
+ * seconds into the twenty-second excerpt — mid-action rather than the first
+ * frame, so the still reads as a moment rather than a slate. Cut with:
  *
- *   ffmpeg -i apps/site/public/tracer.mp4 -vf "select=eq(n\,15)" -frames:v 1 \
- *     -c:v libwebp -lossless 0 -q:v 90 -preset picture \
- *     apps/site/public/tracer-poster.webp
+ *   ffmpeg -i apps/site/public/bunny.mp4 -ss 8 -frames:v 1 \
+ *     -vf "scale=960:540" -c:v libwebp -lossless 0 -q:v 80 -preset picture \
+ *     apps/site/public/bunny-poster.webp
  *
- * 320x180 and 3,396 bytes. The dimensions are the clip's own: a larger poster
- * would show detail the media it stands in for does not have. The format and
- * quality were measured rather than assumed — at this frame, PNG is 13,133
- * bytes optimised, lossless WebP 9,944, JPEG at matching quality 8,006, and
- * AVIF 2,262. WebP at q90 is the point where the saving stops being worth
- * anything: AVIF's further kilobyte would cost a second `<source>` and a
- * `<picture>`, and JPEG rings on the saturated hard edges this pattern is made
- * of. The result is under half the 7,264-byte clip it precedes, on a page whose
- * headline figure is its own payload.
+ * 960x540 and 35,068 bytes. The dimensions are smaller than the clip's own
+ * 1280x720: this is a still of real footage rather than a synthetic pattern,
+ * so unlike the fixture it replaced, downscaling loses detail a reader would
+ * not miss rather than inventing detail that was never there. The format was
+ * measured rather than assumed, the way the fixture's poster was — at this
+ * frame and size, JPEG at matching quality is 38,121 bytes and AVIF is 35,749;
+ * WebP at q80 is both the smallest and the format the rest of this file
+ * already commits to.
  */
-const posterUrl = `${base}tracer-poster.webp`;
+const posterUrl = `${base}bunny-poster.webp`;
 ---
 
 <div class="bench">
@@ -161,6 +160,22 @@ const posterUrl = `${base}tracer-poster.webp`;
   </div>
 
   {
+    /* The credit CC BY asks for wherever this media plays, including the
+     * `<noscript>` path above — which is why this is static markup here
+     * rather than a line the island prints. Set at `--text-fn` in
+     * `--color-ink-subtle`, the same treatment `.bench__quiet` gets: it
+     * qualifies the instrument rather than captioning it, and it is not a
+     * footer, because CC BY asks for the credit to be findable near the work
+     * rather than at the end of the page. */
+  }
+  <p class="bench__credit">
+    <em>Big Buck Bunny</em> &copy; Blender Foundation, licensed{' '}
+    <a href="https://creativecommons.org/licenses/by/3.0/" rel="license">
+      CC BY 3.0
+    </a>.
+  </p>
+
+  {
     /* The island renders the line under the frame as well as the readout — see
      * `QuietLine` in `BenchIsland.tsx`. It is not static markup here because it
      * is a report on the player rather than a caption on the frame: it has to
@@ -198,7 +213,7 @@ const posterUrl = `${base}tracer-poster.webp`;
    * Nothing is loaded until the affordance is pressed, so there is no frame to
    * show and this component may not invent one — no poster, no still, no
    * gradient standing in for a picture. The ratio is the library's own
-   * documented fallback and is also the ratio of `public/tracer.mp4`, so the
+   * documented fallback and is also the ratio of `public/bunny.mp4`, so the
    * box is the right shape before a frame is decoded and does not resize when
    * one arrives.
    *
@@ -400,5 +415,19 @@ const posterUrl = `${base}tracer-poster.webp`;
     font-size: var(--text-fn);
     color: var(--color-ink-subtle);
     letter-spacing: var(--tracking-fn);
+  }
+
+  /* The CC BY credit, at the same floor and the same ink as the line under the
+   * frame — but not mono: it is a sentence, not a value, an identifier, a
+   * state or machine output, and `DESIGN.md`'s type rule gives sentences to
+   * Sans regardless of size. No `:global()`: this element is this file's own
+   * static markup, not one rendered by the island. */
+  .bench__credit {
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+  }
+
+  .bench__credit a {
+    color: inherit;
   }
 </style>

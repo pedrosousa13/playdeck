@@ -15,7 +15,7 @@
  * `loading="interaction"` a source change returns `Player.Root` to `dormant`
  * (`use-activation.ts:483`), so:
  *
- *   press play   -> tracer.mp4 is fetched
+ *   press play   -> bunny.mp4 is fetched
  *   press `hls`  -> activation is `dormant` again
  *                -> "No provider has been contacted", after one had
  *

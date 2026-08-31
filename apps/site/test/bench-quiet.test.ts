@@ -33,7 +33,7 @@ describe('the bench quiet line', () => {
 
   /*
    * The regression the resting sentence itself was in. `Bench.astro` renders
-   * `tracer-poster.webp` as a real `<img>` before any press, so at rest an
+   * `bunny-poster.webp` as a real `<img>` before any press, so at rest an
    * image has already loaded and the request that fetched it has already left
    * this page. A dormant sentence that claims either is false the moment a
    * sceptical reader checks it -- the claim that is actually true and worth

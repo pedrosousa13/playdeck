@@ -1668,6 +1668,17 @@ carry a Blender clip while `bench-sources.ts` holds the three hosted providers
 at `ready: false`, and the day one of them is turned on the attribution question
 comes back with it.
 
+**That day came sooner than expected, and by a different door.** `native` and
+`hls` are same-origin and were never behind `ready: false` — they carried
+`public/tracer.mp4`, the colour-bar fixture, not a hosted provider's clip. But
+that fixture was itself the wrong thing for a hero: one second, 320x180,
+upscaled to the width of the largest element on the page. It is replaced with a
+real excerpt of _Big Buck Bunny_, cut from the same source for both `native` and
+`hls` so the switch's argument — same footage, different URL — stays true. The
+reasoning above inverts on the same terms it was written: the page now plays
+Blender's work, so a Blender credit is an attribution again rather than a claim
+about something not on screen, and it is back near the frame — see below.
+
 **The bench is two switches and not three, and neither is a demonstration built
 for the page.** `source` is the members of `PlayerProvider` that have a clip
 this project may embed, which is `native` and `hls` today, both served from this
@@ -1905,21 +1916,39 @@ the rest of the page does. No quiet line is printed there, because the fallback
 is a different player with its own behaviour and the sentence would be describing
 one that is not running.
 
-**The clip is `public/tracer.mp4`, this app's own copy.** An Astro build serves
+**The clip is `public/bunny.mp4`, this app's own copy.** An Astro build serves
 only its own `public/`, so the file is copied in rather than reached for across
-an app boundary. It is a one-second colour-bar test pattern with no audio track.
+an app boundary. It is a twenty-second excerpt of _Big Buck Bunny_ — the meadow
+scene where the bunny wakes, plays with a butterfly and picks up the fallen
+cherry — 1280x720, no audio track, encoded with `+faststart` so playback begins
+without the whole file. `public/hls/` carries the same twenty seconds as a
+two-variant ladder, 854x480 and 426x240, so the source switch changes only the
+URL. Both are cut from `big_buck_bunny_720p_h264.mov`, the Blender Foundation's
+own 720p release, downloaded once from `download.blender.org`.
 
-**There is a poster now, `public/tracer-poster.webp`, and this document used to
-say there was not.** It is frame 15 of the clip, 320x180 and 3,396 bytes, and
-`Bench.astro` records the `ffmpeg` command that cut it and the four formats that
-were measured before WebP at q90 was chosen. The earlier version of this section
-argued that the hero carried no poster, and it was right about that page: a
-poster there was a same-origin request before any press, on a panel whose whole
-job was to have made none. The bench is the largest element on the page and sits
-above the fold, and a blank rectangle is a worse first impression than a still of
-the thing the control beside it is labelled to play. So the trade was taken
+**There is a poster now, `public/bunny-poster.webp`.** It is a frame from inside
+the same excerpt, scaled to 960x540 and 35,068 bytes — larger than the 3,396
+bytes the colour-bar poster cost, because the resolution it is honest about is
+larger: 960x540 shows real detail a 320x180 still could not, and WebP at q80 is
+the point on this frame where a further step in quality cost more than the
+saving was worth. The bench is the largest element on the page and sits above
+the fold, and a blank rectangle is a worse first impression than a still of the
+thing the control beside it is labelled to play. So the trade was taken
 deliberately, the poster is same-origin, and the claim the page actually defends
 is the one about requests leaving this origin.
+
+**The attribution sits under the frame, static markup rather than part of the
+island.** CC BY asks for a credit wherever the media plays, and that now
+includes the no-JavaScript path — the `<noscript>` fallback plays the same file
+— so the line is written in `Bench.astro` rather than in `BenchIsland.tsx`,
+where a script failure would take it with the player. It sets at `--text-fn` in
+`--color-ink-subtle`, the same size and ink `.bench__quiet` gets, because it
+qualifies the instrument rather than captioning it — but not the same family:
+it is a sentence rather than a value, an identifier, a state or machine output,
+and the type rule above gives sentences to Sans regardless of size. It is not a
+footer: a footer would put the credit somewhere a reader has to leave the
+argument to find, and CC BY does not ask for that, only for the credit to be
+findable near the work.
 
 `public/archetype-captions.vtt` is the same rule a second time, and is stated
 here so the copy does not read as an accident. The archetypes mount in two

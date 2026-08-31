@@ -32,7 +32,7 @@ const bySource: Record<PlayerProvider, Omit<BenchSource, 'provider'>> = {
   native: {
     label: 'native',
     ready: true,
-    source: (baseUrl) => `${baseUrl}tracer.mp4`
+    source: (baseUrl) => `${baseUrl}bunny.mp4`
   },
   hls: {
     label: 'hls',
