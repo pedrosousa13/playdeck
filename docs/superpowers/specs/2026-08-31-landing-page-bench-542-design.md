@@ -312,24 +312,37 @@ is no public catalogue of openly licensed media on it, and the demo ID currently
 in `examples/` is Wistia's own product footage, embedded with no licence grant to
 us. No amount of searching fixes this, because the content does not exist.
 
-So the honest options for Wistia are to upload a clip we control to a Wistia
-account of our own, or to leave Wistia off the source switch while it stays a
-supported provider everywhere else. **This is open and needs a ruling.**
+**The ruling is to upload one clip to all three.** One Blender CC BY film, on our
+own YouTube, Vimeo and Wistia accounts. It settles the licensing on every
+provider at once, and it buys something the licensing question hides: all five
+providers then play the identical asset, so the grid compares five providers
+rather than five different videos answering five different questions.
 
-Uploading one Blender CC BY clip to all three platforms would settle YouTube and
-Vimeo too, and it has a second benefit the licensing question hides: every
-provider would be playing the identical asset, which makes the grid a fair
-comparison instead of five different videos answering five different questions.
+CC BY asks for attribution wherever the media plays, so the credit goes on the
+page beside the player, not in a footer.
 
-Whatever is chosen, CC BY asks for attribution wherever the media plays, so the
-credit belongs on the page beside the player rather than in a footer.
+**This is the one task in this work the maintainer has to do, and nothing else
+waits on it.** The three ids live in one module with placeholder values until the
+uploads exist, and the real ids replace them in a one-line commit. Every other
+part of the bench is built and tested against `native` and `hls`, both of which
+this site already serves.
+
+## The grid stays silent
+
+Forty of the fifty cells only resolve once a reader has pressed every provider,
+and the page does not ask them to. No prompt, no instruction, and the `native`
+column is not resolved on load to give them a worked example.
+
+The grey is the argument. A reader who touches nothing sees a page admitting it
+knows nothing, and the caption under the grid says why. That fully grey at-rest
+state is the strongest single moment in the design and buying a reader's
+convenience with it would be a bad trade.
 
 ## Open questions
 
-1. **Wistia's clip.** See above. Upload our own, or drop Wistia from the switch.
-2. **Whether `ProviderTruth.astro` survives.** The grid may make it redundant on
+1. **Whether `ProviderTruth.astro` survives.** The grid may make it redundant on
    `/`, but it may still earn its place on `/providers`.
-3. **Mobile.** Three switch groups, a 16:9 video and a fifty-cell grid at 320px
+2. **Mobile.** Three switch groups, a 16:9 video and a fifty-cell grid at 320px
    needs a layout of its own. The grid probably becomes one column, the mounted
    provider's.
 
