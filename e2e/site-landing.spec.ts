@@ -261,32 +261,46 @@ test('the page does not go sideways at 320px', async ({ page }) => {
     .toBeLessThanOrEqual(0);
 });
 
-test('the player is dormant: no media request before the press', async ({
-  page
-}) => {
-  const media: string[] = [];
-  page.on('request', (request) => {
-    if (/\.(mp4|webm|m3u8|ogv|mpd|ts)(\?|$)/.test(request.url())) {
-      media.push(request.url());
-    }
-  });
+test(
+  'the player is dormant: no media request before the press @real',
+  { tag: '@real' },
+  async ({ page }) => {
+    // A foreign-origin listener rather than a media-extension filter: with no
+    // same-origin position left on the source switch, the default provider's
+    // first request is a cross-origin iframe document, not a file matching
+    // `.mp4`/`.webm`/`.m3u8`/etc. `site-quiet.spec.ts` defines the same
+    // `foreign` filter for the same reason; it is not imported from there
+    // because that file's is scoped to its own origin constant.
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(request.url()));
 
-  await page.goto(landing);
-  // The island is `client:only`, so its arrival is what makes the emptiness of
-  // the list below evidence rather than a listener attached before anything
-  // could have happened.
-  await expect(activationButton(page)).toBeVisible();
-  await page.waitForLoadState('networkidle');
+    await page.goto(landing);
+    // The island is `client:only`, so its arrival is what makes the emptiness
+    // of the list below evidence rather than a listener attached before
+    // anything could have happened.
+    await expect(activationButton(page)).toBeVisible();
+    await page.waitForLoadState('networkidle');
 
-  // `loading="interaction"` holds the root dormant: no clip, no provider, no
-  // request. This is the page's most falsifiable claim and the reason the
-  // player may not be given a preloading directive.
-  expect(media).toEqual([]);
+    const origin = new URL(landing).origin;
+    const foreign = () =>
+      requests.filter(
+        (url) =>
+          !url.startsWith(`${origin}/`) &&
+          !url.startsWith('data:') &&
+          !url.startsWith('blob:')
+      );
 
-  await activationButton(page).click();
+    // `loading="interaction"` holds the root dormant: no clip, no provider, no
+    // request. This is the page's most falsifiable claim and the reason the
+    // player may not be given a preloading directive.
+    expect(foreign()).toEqual([]);
 
-  // And the press is what fetches it, which is the other half of the same
-  // claim — an empty list from a page that never loads anything would prove
-  // nothing.
-  await expect.poll(() => media.length).toBeGreaterThan(0);
-});
+    await activationButton(page).click();
+
+    // And the press is what fetches it, which is the other half of the same
+    // claim — an empty list from a page that never loads anything would prove
+    // nothing. Pressing play now attaches a real hosted provider, which is
+    // what makes this test `@real`.
+    await expect.poll(() => foreign().length).toBeGreaterThan(0);
+  }
+);

@@ -75,13 +75,20 @@ const settled = async (locator: Locator) =>
 
 /**
  * Produce the refusal, which is the only way to get an animated element onto
- * this page. `hls` is served from this origin and refuses something on both
- * engines this suite runs, and a provider answers nothing until the activation
- * press attaches it.
+ * this page. `youtube` refuses quality selection outright and always
+ * (`providerUnavailable` in `packages/provider-youtube/src/adapter-values.ts`),
+ * answered the instant it attaches, and a provider answers nothing until the
+ * activation press attaches it.
+ *
+ * `hls` used to be pressed here instead, served from this origin. There is no
+ * same-origin position left, so every test that calls this now presses a real
+ * hosted provider and needs the network -- see the two `@real` tests below.
  */
 const provokeRefusal = async (page: Page) => {
   await expect(page.locator('[data-bench-composition]')).toBeVisible();
-  await page.locator('[data-bench-switch="source"] [data-value="hls"]').click();
+  await page
+    .locator('[data-bench-switch="source"] [data-value="youtube"]')
+    .click();
   await activationButton(page).click();
   await expect(reason(page)).toHaveCount(1);
 };
@@ -91,54 +98,61 @@ test('/ is served in the argument stance', async ({ page }) => {
   await expect(page.locator('body')).toHaveAttribute('data-stance', 'argument');
 });
 
-test('the motion runs on /, and the stance is what buys it', async ({
-  page
-}) => {
-  await page.goto(landing);
-  await provokeRefusal(page);
-
-  // The rule is unscoped CSS every page of this site carries, keyed off the
-  // stance so that only `/` can reach it. Reading the animation's name off the
-  // element is the evidence that it is applied at all rather than being a
-  // keyframe nothing names — and polled to the resting state because it is a
-  // real animation: measured directly after the press, the line is genuinely
-  // caught part-way through, at opacity 0.46 and two pixels low.
-  await expect
-    .poll(() => settled(reason(page)))
-    .toEqual([
-      { opacity: '1', transform: 'identity', animationName: 'bench-refusal' }
-    ]);
-});
-
-test.describe('under prefers-reduced-motion: reduce', () => {
-  test('the animated element is present and readable, and nothing was started', async ({
-    page
-  }) => {
-    // `page.emulateMedia` rather than the `reducedMotion` context option:
-    // measured on Playwright 1.61, `test.use({ reducedMotion: 'reduce' })`
-    // leaves `matchMedia('(prefers-reduced-motion: reduce)')` reporting false
-    // in the page, which would make this test pass while proving nothing. This
-    // call is checked below by asking the page the query itself.
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+test(
+  'the motion runs on /, and the stance is what buys it @real',
+  { tag: '@real' },
+  async ({ page }) => {
     await page.goto(landing);
-    expect(
-      await page.evaluate(
-        () => matchMedia('(prefers-reduced-motion: reduce)').matches
-      )
-    ).toBe(true);
-
     await provokeRefusal(page);
 
-    // The animation is removed outright rather than left to the site-wide
-    // duration collapse, because the collapse is a rescue for a transition
-    // between two settled states and this is a keyframe animation with `both`:
-    // left applied with a collapsed duration it would still hold a from-state.
-    // The line's resting state is what the rest of the CSS gives it, so
-    // removing the animation hides nothing — which is what this measures.
-    expect(await settled(reason(page))).toEqual([
-      { opacity: '1', transform: 'identity', animationName: 'none' }
-    ]);
-  });
+    // The rule is unscoped CSS every page of this site carries, keyed off the
+    // stance so that only `/` can reach it. Reading the animation's name off
+    // the element is the evidence that it is applied at all rather than
+    // being a keyframe nothing names — and polled to the resting state
+    // because it is a real animation: measured directly after the press, the
+    // line is genuinely caught part-way through, at opacity 0.46 and two
+    // pixels low.
+    await expect
+      .poll(() => settled(reason(page)))
+      .toEqual([
+        { opacity: '1', transform: 'identity', animationName: 'bench-refusal' }
+      ]);
+  }
+);
+
+test.describe('under prefers-reduced-motion: reduce', () => {
+  test(
+    'the animated element is present and readable, and nothing was started @real',
+    { tag: '@real' },
+    async ({ page }) => {
+      // `page.emulateMedia` rather than the `reducedMotion` context option:
+      // measured on Playwright 1.61, `test.use({ reducedMotion: 'reduce' })`
+      // leaves `matchMedia('(prefers-reduced-motion: reduce)')` reporting
+      // false in the page, which would make this test pass while proving
+      // nothing. This call is checked below by asking the page the query
+      // itself.
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.goto(landing);
+      expect(
+        await page.evaluate(
+          () => matchMedia('(prefers-reduced-motion: reduce)').matches
+        )
+      ).toBe(true);
+
+      await provokeRefusal(page);
+
+      // The animation is removed outright rather than left to the site-wide
+      // duration collapse, because the collapse is a rescue for a transition
+      // between two settled states and this is a keyframe animation with
+      // `both`: left applied with a collapsed duration it would still hold a
+      // from-state. The line's resting state is what the rest of the CSS
+      // gives it, so removing the animation hides nothing — which is what
+      // this measures.
+      expect(await settled(reason(page))).toEqual([
+        { opacity: '1', transform: 'identity', animationName: 'none' }
+      ]);
+    }
+  );
 });
 
 test.describe('with no JavaScript', () => {

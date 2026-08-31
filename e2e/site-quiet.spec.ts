@@ -14,15 +14,19 @@ import { activationButton } from './locators';
  * Three tests, and the second is what makes the first mean anything. An empty
  * list of foreign requests is also what a listener attached to the wrong page
  * produces, so the at-rest assertion is paired with one that presses a hosted
- * provider and demands the request happen. It is skipped while every hosted
- * provider is still `ready: false`, and the skip is computed rather than
- * written down, so it starts running by itself the day one is turned on.
+ * provider and demands the request happen. `youtube` and `vimeo` turned
+ * `ready: true` in `bench-sources.ts`, so this one runs now rather than
+ * skipping itself -- and pressing a hosted provider is a real request to a
+ * real host, so it is `@real`, same as the third.
  *
  * The third is a defect that nearly shipped rather than a property the page
  * was designed for. `bench-quiet.ts` and `apps/site/test/bench-quiet.test.ts`
  * carry it in full; what they cannot carry is the browser, because they drive
  * a pure function and the failure was a sequence of presses against a mounted
- * player. This is that sequence.
+ * player. This is that sequence, and it too presses a hosted provider twice,
+ * so it is `@real` as well -- moving real coverage of a defect that nearly
+ * shipped out of the default run is the cost of the source switch no longer
+ * having a same-origin position to press instead.
  *
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so this address is written out rather than
@@ -121,65 +125,84 @@ test('at rest, / has contacted nobody', async ({ page }) => {
   );
 });
 
-test('pressing a hosted provider does contact it', async ({ page }) => {
-  const requests: string[] = [];
-  page.on('request', (request) => requests.push(request.url()));
+test(
+  'pressing a hosted provider does contact it @real',
+  { tag: '@real' },
+  async ({ page }) => {
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(request.url()));
 
-  await page.goto(landing);
-  await expect(composition(page)).toBeVisible();
+    await page.goto(landing);
+    await expect(composition(page)).toBeVisible();
 
-  const hosted = await hostedPositions(page);
-  test.skip(
-    hosted.length === 0,
-    'Every hosted provider in apps/site/src/bench-sources.ts is still `ready: false`, so the source switch offers no position that leaves this origin. This test starts running when one is turned on.'
-  );
+    const hosted = await hostedPositions(page);
+    // Defensive rather than load-bearing: `youtube` and `vimeo` are both
+    // `ready: true` in `bench-sources.ts`, so this list is never empty today.
+    // Left in for the shape it protects against -- a page that quietly lost
+    // every hosted position would fail this test loudly rather than by
+    // skipping it.
+    test.skip(
+      hosted.length === 0,
+      'No position in apps/site/src/bench-sources.ts is `ready: true`, so the source switch offers no position that leaves this origin.'
+    );
 
-  const { token, host } = hosted[0];
-  await page
-    .locator(`[data-bench-switch="source"] [data-value="${token}"]`)
-    .click();
-  await activationButton(page).click();
+    const { token, host } = hosted[0];
+    await page
+      .locator(`[data-bench-switch="source"] [data-value="${token}"]`)
+      .click();
+    await activationButton(page).click();
 
-  // The other half of the at-rest claim. `DESIGN.md` permits this page to
-  // contact a third party once a reader has asked, and never before, so what
-  // is asserted here is that asking works — a page that fetched nothing from
-  // anybody would pass the test above by doing nothing at all.
-  await expect
-    .poll(() => requests.filter((url) => new URL(url).host === host))
-    .not.toEqual([]);
-});
+    // The other half of the at-rest claim. `DESIGN.md` permits this page to
+    // contact a third party once a reader has asked, and never before, so what
+    // is asserted here is that asking works — a page that fetched nothing from
+    // anybody would pass the test above by doing nothing at all.
+    await expect
+      .poll(() => requests.filter((url) => new URL(url).host === host))
+      .not.toEqual([]);
+  }
+);
 
-test('the quiet line never claims no provider has been contacted once one has', async ({
-  page
-}) => {
-  /*
-   * Two presses, no timing trick.
-   *
-   * Under `loading="interaction"` a source change returns `Player.Root` to
-   * `dormant`, so the first version of this line — which read the live
-   * activation state — printed the resting sentence again after a fetch had
-   * already gone out. The second clause of that sentence is a claim about the
-   * page's history, and history does not revert.
-   */
-  const media: string[] = [];
-  page.on('request', (request) => {
-    if (/\.(mp4|m3u8|ts)(\?|$)/.test(request.url())) media.push(request.url());
-  });
+test(
+  'the quiet line never claims no provider has been contacted once one has @real',
+  { tag: '@real' },
+  async ({ page }) => {
+    /*
+     * Two presses, no timing trick.
+     *
+     * Under `loading="interaction"` a source change returns `Player.Root` to
+     * `dormant`, so the first version of this line — which read the live
+     * activation state — printed the resting sentence again after a fetch had
+     * already gone out. The second clause of that sentence is a claim about
+     * the page's history, and history does not revert.
+     *
+     * Foreign requests rather than a media-extension filter: with no
+     * same-origin position left, a hosted provider's first request is an
+     * iframe document, not a file matching `.mp4`/`.m3u8`/`.ts`. `foreign`,
+     * defined above for the at-rest test, is the same test this needs --
+     * anything that left this origin.
+     */
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(request.url()));
 
-  await page.goto(landing);
-  await expect(activationButton(page)).toBeVisible();
+    await page.goto(landing);
+    await expect(activationButton(page)).toBeVisible();
 
-  const line = quietLine(page);
-  expect(claimsNoProviderContacted(await line.innerText())).toBe(true);
+    const line = quietLine(page);
+    expect(claimsNoProviderContacted(await line.innerText())).toBe(true);
 
-  await activationButton(page).click();
-  await expect.poll(() => media.length).toBeGreaterThan(0);
+    await activationButton(page).click();
+    await expect.poll(() => foreign(requests).length).toBeGreaterThan(0);
 
-  // The press that used to undo the sentence.
-  await page.locator('[data-bench-switch="source"] [data-value="hls"]').click();
+    // The press that used to undo the sentence. `vimeo` rather than `hls`:
+    // the second position now has to be a different hosted provider, because
+    // there is no same-origin one left to switch to.
+    await page
+      .locator('[data-bench-switch="source"] [data-value="vimeo"]')
+      .click();
 
-  // Replaced, never removed: a line that vanished would move everything below
-  // it, and would also pass an assertion about what it does not say.
-  await expect(line).toHaveCount(1);
-  expect(claimsNoProviderContacted(await line.innerText())).toBe(false);
-});
+    // Replaced, never removed: a line that vanished would move everything below
+    // it, and would also pass an assertion about what it does not say.
+    await expect(line).toHaveCount(1);
+    expect(claimsNoProviderContacted(await line.innerText())).toBe(false);
+  }
+);

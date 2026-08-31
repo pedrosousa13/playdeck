@@ -1,36 +1,26 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { benchSources, readySources } from '../src/bench-sources';
 import type { PlayerProvider } from '@playdeck/core';
 
 // Written by hand, and typed against `PlayerProvider` rather than inferred as
 // `string[]`, so a member removed from that union turns this line itself into
-// a type error instead of silently passing a shorter list.
-const ALL_PROVIDERS: PlayerProvider[] = [
-  'native',
-  'hls',
-  'youtube',
-  'vimeo',
-  'wistia'
-];
-
-// vitest.config.ts's `root` is the repo root, so `process.cwd()` at test time
-// is that root rather than this file's own directory (and happy-dom's global
-// `URL` resolves a relative `import.meta.url` against `http://localhost/`
-// instead of the file, which is the wrong base to use here).
-const publicDir = join(process.cwd(), 'apps/site/public');
+// a type error instead of silently passing a shorter list. `native` and `hls`
+// are not in it: the maintainer cannot serve video from this site, so the
+// switch is hosted providers only, and `bench-sources.ts`'s own
+// `HostedProvider` type is what enforces that this list stays exactly the
+// other three.
+const HOSTED_PROVIDERS: PlayerProvider[] = ['youtube', 'vimeo', 'wistia'];
 
 describe('benchSources', () => {
-  it('has exactly one entry per PlayerProvider, and no extras', () => {
+  it('has exactly one entry per hosted provider, and no extras', () => {
     expect(benchSources.map((entry) => entry.provider).sort()).toEqual(
-      [...ALL_PROVIDERS].sort()
+      [...HOSTED_PROVIDERS].sort()
     );
   });
 
-  it('marks only native and hls ready today', () => {
+  it('marks only youtube and vimeo ready today', () => {
     expect(readySources.map((entry) => entry.provider).sort()).toEqual(
-      ['hls', 'native'].sort()
+      ['vimeo', 'youtube'].sort()
     );
   });
 
@@ -40,23 +30,26 @@ describe('benchSources', () => {
     }
   });
 
-  it.each(['/', '/playdeck/'])(
-    'resolves both ready entries to a same-origin path under the given base (base %s)',
-    (base) => {
-      for (const entry of readySources) {
-        const url = entry.source(base);
-        expect(url.startsWith(base)).toBe(true);
-        expect(url.startsWith('http://')).toBe(false);
-        expect(url.startsWith('https://')).toBe(false);
-        expect(url.startsWith('//')).toBe(false);
-      }
-    }
-  );
-
-  it('resolves both ready entries to a fixture that actually exists in public/', () => {
+  // Every ready source is a hosted provider now, so its URL is a real
+  // cross-origin address rather than a same-origin path under `base` -- the
+  // opposite of what this file asserted while `native` and `hls` were the
+  // ready entries.
+  it('resolves both ready entries to a cross-origin URL, not a same-origin path', () => {
     for (const entry of readySources) {
-      const relativePath = entry.source('/').slice('/'.length);
-      expect(existsSync(join(publicDir, relativePath))).toBe(true);
+      const url = entry.source('/');
+      expect(url.startsWith('https://')).toBe(true);
     }
+  });
+
+  it('resolves the youtube entry to a Blender Foundation upload', () => {
+    const youtube = benchSources.find((entry) => entry.provider === 'youtube');
+    expect(youtube?.source('/')).toBe(
+      'https://www.youtube.com/watch?v=aqz-KE-bpKQ'
+    );
+  });
+
+  it('resolves the vimeo entry to a Blender Foundation upload', () => {
+    const vimeo = benchSources.find((entry) => entry.provider === 'vimeo');
+    expect(vimeo?.source('/')).toBe('https://vimeo.com/1084537');
   });
 });

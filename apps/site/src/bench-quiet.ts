@@ -15,14 +15,15 @@
  * `loading="interaction"` a source change returns `Player.Root` to `dormant`
  * (`use-activation.ts:483`), so:
  *
- *   press play   -> bunny.mp4 is fetched
- *   press `hls`  -> activation is `dormant` again
- *                -> "No provider has been contacted", after one had
+ *   press play      -> youtube is fetched
+ *   press `vimeo`   -> activation is `dormant` again
+ *                   -> "No provider has been contacted", after one had
  *
  * The second clause of that sentence is not a claim about the player's current
  * state. It is a claim about the page's history, and history does not revert.
- * The moment `bench-sources.ts` turns `youtube` on, those same two presses make
- * the page deny contacting a third party immediately after contacting one.
+ * Since `bench-sources.ts` turned `youtube` and `vimeo` on, those same two
+ * presses make the page deny contacting a third party immediately after
+ * contacting one.
  *
  * So the state below is monotonic. `everLoaded` never goes back to false and
  * `everCrossOrigin` never goes back to false, because neither fact can stop
@@ -74,9 +75,9 @@ export const QUIET_START: QuietHistory = {
  * `pageUrl` is passed rather than read from `window`, so this is a pure
  * function and a test can put the page on one origin and the source on
  * another without a DOM. The comparison is `URL#origin` against the page's own
- * -- never a provider name -- so a relative source is same-origin by
- * construction and the three hosted providers need no entry here the day their
- * clips exist.
+ * -- never a provider name -- so a hosted provider needs no entry here the day
+ * its clip exists, which is why turning `youtube` and `vimeo` on cost this
+ * file nothing.
  *
  * Returns the object it was given when nothing changed, so a caller can hand
  * this straight to a React setter without a render loop.

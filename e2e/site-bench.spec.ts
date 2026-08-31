@@ -125,9 +125,12 @@ test('the composition tracks both switches', async ({ page }) => {
   // And the source moves the line above the block rather than a prop inside
   // it. The library detects a provider from the URL, so `source={source}` is
   // the whole of `Player.Root`'s configuration whichever position is pressed —
-  // which is the claim the six-line count below is a check on.
+  // which is the claim the six-line count below is a check on. `vimeo` rather
+  // than `hls`: the switch offers hosted providers only now, and selecting a
+  // position moves the printed line without pressing play, so no network is
+  // needed here.
   const before = await printed(page);
-  await position(page, 'source', 'hls').click();
+  await position(page, 'source', 'vimeo').click();
   await expect
     .poll(async () => sourceLine(await printed(page)))
     .not.toBe(sourceLine(before));
@@ -143,41 +146,51 @@ test('the composition tracks both switches', async ({ page }) => {
   expect(jsxBlock(await printed(page))).toHaveLength(6);
 });
 
-test("a refusal reaches the line in the provider's own words", async ({
-  page
-}) => {
-  await page.goto(landing);
-  await expect(composition(page)).toBeVisible();
+test(
+  "a refusal reaches the line in the provider's own words @real",
+  { tag: '@real' },
+  async ({ page }) => {
+    await page.goto(landing);
+    await expect(composition(page)).toBeVisible();
 
-  // `hls` is the provider that refuses something on both engines this suite
-  // runs, and it is served from this origin, so the line can be produced
-  // without contacting anybody. Which capability it refuses is not asserted:
-  // that is the provider's answer and this page's job is to relay it.
-  await position(page, 'source', 'hls').click();
-  await activationButton(page).click();
+    // `youtube` refuses several capabilities outright and always -- quality
+    // selection among them, `providerUnavailable` in
+    // `packages/provider-youtube/src/adapter-values.ts` -- which it answers
+    // the instant it attaches, before its iframe has loaded anything. That
+    // answer does not need the network; attaching a real `<iframe>` pointed
+    // at youtube.com does, and a press is what creates one, so this is
+    // `@real` like the rest of this suite's hosted-provider presses. `hls`
+    // used to be the provider pressed here, served from this origin; there is
+    // no same-origin position left to press instead. Which capability it
+    // refuses is not asserted: that is the provider's answer and this page's
+    // job is to relay it.
+    await position(page, 'source', 'youtube').click();
+    await activationButton(page).click();
 
-  // A provider only answers once it has attached, which `loading="interaction"`
-  // holds back until the press above.
-  await expect(reason(page)).toHaveCount(1);
-  const line = reason(page);
+    // A provider only answers once it has attached, which `loading="interaction"`
+    // holds back until the press above.
+    await expect(reason(page)).toHaveCount(1);
+    const line = reason(page);
 
-  // The line names the provider that is mounted right now, which is the one
-  // the reader just pressed. A line that could name a provider nobody asked
-  // about would be a table with the labels taken off.
-  await expect(line).toContainText('hls');
+    // The line names the provider that is mounted right now, which is the one
+    // the reader just pressed. A line that could name a provider nobody asked
+    // about would be a table with the labels taken off.
+    await expect(line).toContainText('youtube');
 
-  // And the clause under it is the library's, out of `reasonWords`. This is
-  // what makes the line a report rather than a caption: the page never states
-  // a capability fact of its own, and never reads one out of a document.
-  const words = await line.innerText();
-  expect(
-    REASON_CLAUSES.some((clause) => words.includes(clause)),
-    `no reasonWords clause in:\n${words}`
-  ).toBe(true);
+    // And the clause under it is the library's, out of `reasonWords`. This is
+    // what makes the line a report rather than a caption: the page never
+    // states a capability fact of its own, and never reads one out of a
+    // document.
+    const words = await line.innerText();
+    expect(
+      REASON_CLAUSES.some((clause) => words.includes(clause)),
+      `no reasonWords clause in:\n${words}`
+    ).toBe(true);
 
-  // The motion the line is given exists because its arrival is the moment the
-  // capability argument is made. `data-live` is written in the same React
-  // commit as the words, so an element carrying the words without it would be
-  // a change the page made silently.
-  await expect(line).toHaveAttribute('data-live', '');
-});
+    // The motion the line is given exists because its arrival is the moment
+    // the capability argument is made. `data-live` is written in the same
+    // React commit as the words, so an element carrying the words without it
+    // would be a change the page made silently.
+    await expect(line).toHaveAttribute('data-live', '');
+  }
+);

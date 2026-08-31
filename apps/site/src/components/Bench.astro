@@ -77,20 +77,22 @@
  */
 import Sweep from './Sweep.astro';
 import BenchIsland from './BenchIsland';
+import { benchSources } from '../bench-sources';
 
 // Resolved against the configured base the way every other address on this
-// site is, rather than written as a root-absolute literal. The file is this
-// app's own — `public/bunny.mp4` — because an Astro build serves only its own
-// `public/`.
+// site is, rather than written as a root-absolute literal.
 const base = import.meta.env.BASE_URL;
-const clipUrl = `${base}bunny.mp4`;
 
 /*
  * The still the dormant player shows, and where it came from.
  *
- * `public/bunny-poster.webp` is a frame from inside `public/bunny.mp4`, eight
- * seconds into the twenty-second excerpt — mid-action rather than the first
- * frame, so the still reads as a moment rather than a slate. Cut with:
+ * `public/bunny-poster.webp` predates the switch to hosted-only providers: it
+ * was cut from this app's own former copy of the clip, `public/bunny.mp4`,
+ * eight seconds into that file's twenty-second excerpt of the same meadow
+ * scene — mid-action rather than the first frame, so the still reads as a
+ * moment rather than a slate. That source file is gone; the still it produced
+ * is not, and needs no edit now that nothing on this page reads
+ * `public/bunny.mp4` any more. The cut command, kept for the record:
  *
  *   ffmpeg -i apps/site/public/bunny.mp4 -ss 8 -frames:v 1 \
  *     -vf "scale=960:540" -c:v libwebp -lossless 0 -q:v 80 -preset picture \
@@ -98,14 +100,27 @@ const clipUrl = `${base}bunny.mp4`;
  *
  * 960x540 and 35,068 bytes. The dimensions are smaller than the clip's own
  * 1280x720: this is a still of real footage rather than a synthetic pattern,
- * so unlike the fixture it replaced, downscaling loses detail a reader would
- * not miss rather than inventing detail that was never there. The format was
- * measured rather than assumed, the way the fixture's poster was — at this
- * frame and size, JPEG at matching quality is 38,121 bytes and AVIF is 35,749;
- * WebP at q80 is both the smallest and the format the rest of this file
- * already commits to.
+ * so downscaling loses detail a reader would not miss rather than inventing
+ * detail that was never there. The format was measured rather than assumed —
+ * at this frame and size, JPEG at matching quality is 38,121 bytes and AVIF is
+ * 35,749; WebP at q80 is both the smallest and the format the rest of this
+ * file already commits to.
+ *
+ * The eight seconds into that excerpt landed at roughly 74 seconds into the
+ * film itself, which is what `BenchIsland.tsx`'s `POSTER_TIME` starts every
+ * hosted embed at: the still at rest and the first frame a press actually
+ * plays are the same moment, on every provider the switch offers.
  */
 const posterUrl = `${base}bunny-poster.webp`;
+
+// The fallback link's target: whichever position is the switch's default.
+// Resolved from `bench-sources.ts` rather than written as a literal, so a
+// change to the default position is one file's edit rather than two.
+const fallback = benchSources.find((entry) => entry.ready);
+if (fallback === undefined) {
+  throw new Error('Bench.astro: no ready source for the no-JavaScript fallback.');
+}
+const fallbackUrl = fallback.source(base);
 ---
 
 <div class="bench">
@@ -125,29 +140,30 @@ const posterUrl = `${base}bunny-poster.webp`;
       {
         /* With JavaScript the island is the whole player and this is inert
          * text the parser never fetches from. Without it, this is the whole
-         * player: the browser's own controls over the same file, and
-         * `preload="none"` so the page keeps the property it argues from.
-         * `muted` for the reason the island passes `defaultMuted`.
+         * frame: the still, and a link to where the switch's default position
+         * plays.
+         *
+         * There is no same-origin clip to hand a plain `<video>` any more, and
+         * a hosted provider is an iframe embed rather than a file, so there is
+         * nothing here for a browser with scripting off to attach to on its
+         * own — that embed's own player is itself a script. A link is the
+         * honest fallback: it costs one request, it costs it only on a click,
+         * and it never claims to be running a player it cannot run.
          *
          * `<noscript>` is `display: none` while scripts run, so this is never
-         * a second thing in the frame — it is the frame's only content
-         * exactly when the island is not there. */
+         * a second thing in the frame — it is the frame's only content exactly
+         * when the island is not there. */
       }
       <noscript>
-        {
-          /* The same still the island's player shows, here as the element's
-           * own `poster` attribute — a real image the browser paints, not a
-           * CSS background, so this path keeps the guarantee the rest of the
-           * page does. `preload="none"` still holds the media itself back. */
-        }
-        <video
-          class="bench__fallback"
-          controls
-          muted
-          playsinline
-          poster={posterUrl}
-          preload="none"
-          src={clipUrl}></video>
+        <a class="bench__fallback" href={fallbackUrl}>
+          {
+            /* The same still the island's player shows, here as a real `<img>`
+             * — not a CSS background, so this path keeps the guarantee the
+             * rest of the page does. */
+          }
+          <img class="bench__fallback-image" src={posterUrl} alt="" />
+          <span class="bench__fallback-label">Watch on {fallback.label} &rarr;</span>
+        </a>
       </noscript>
     </div>
     {
@@ -213,9 +229,9 @@ const posterUrl = `${base}bunny-poster.webp`;
    * Nothing is loaded until the affordance is pressed, so there is no frame to
    * show and this component may not invent one — no poster, no still, no
    * gradient standing in for a picture. The ratio is the library's own
-   * documented fallback and is also the ratio of `public/bunny.mp4`, so the
-   * box is the right shape before a frame is decoded and does not resize when
-   * one arrives.
+   * documented fallback and is also the film's own -- 16:9 whichever hosted
+   * provider answers -- so the box is the right shape before a frame is
+   * decoded and does not resize when one arrives.
    *
    * Always dark. `--stage-*` never moves with `data-theme`, so the picture
    * reads the same in both themes — a cinema is dark regardless of the room. */
@@ -390,11 +406,37 @@ const posterUrl = `${base}bunny-poster.webp`;
     letter-spacing: var(--tracking-fn);
   }
 
-  /* The fallback fills its stage rather than sizing itself from the clip, so
-   * the no-JavaScript frame is the same box the player's is. */
+  /* The fallback fills its stage rather than sizing itself from the still, so
+   * the no-JavaScript frame is the same box the player's is. A link, not a
+   * button: it is one, and it says so in its label. */
   :global(.bench__fallback) {
+    position: relative;
+    display: grid;
     inline-size: 100%;
     block-size: 100%;
+  }
+
+  :global(.bench__fallback-image) {
+    grid-area: 1 / 1;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  /* Set over the still rather than beside it, the way the activation button it
+   * stands in for is: this frame has no room under the picture for it while
+   * scripting is off, because nothing here reserves height for the rest of the
+   * readout either. */
+  :global(.bench__fallback-label) {
+    grid-area: 1 / 1;
+    align-self: end;
+    justify-self: start;
+    margin: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--stage-ink);
+    background-color: var(--stage-surface);
+    border-radius: var(--radius-sm);
   }
 
   @media (scripting: none) {

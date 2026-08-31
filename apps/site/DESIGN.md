@@ -286,16 +286,16 @@ and fails if none does, so an empty list is evidence rather than a listener
 attached to the wrong page. The fonts keep the absolute guarantee above, because
 nobody asks for a font.
 
-The source switch's hosted positions are not on the page yet. `youtube`, `vimeo`
-and `wistia` sit in `bench-sources.ts` at `ready: false` and draw no button,
-because each needs a clip this project is entitled to embed on a marketing page
-and the ruling is that one Blender CC BY film goes on this project's own
-accounts on all three platforms. That buys something the licensing question
-hides: all five providers then play the identical asset, so a refusal the reason
-line reports is a fact about the provider rather than about that provider's
-clip. Until then the switch offers `native` and `hls`, both served from this
-origin, and the paragraph above is a rule the page is built to keep rather than
-one it currently exercises.
+**The maintainer cannot serve video from this site, and the switch is hosted
+providers only now.** `native` and `hls` are gone from `bench-sources.ts`,
+along with `public/bunny.mp4` and `public/hls/` — there is no same-origin clip
+left to point either one at. `youtube` and `vimeo` are `ready: true` and play
+the Blender Foundation's own uploads of the same film, `Big Buck Bunny`,
+verified by channel rather than re-uploaded: `bench-sources.ts` records the
+`oembed` check for each. `wistia` has no Blender upload and no account behind
+it, and stays `ready: false` — turning it on is still a three-character
+change, when there is a clip to point it at. `youtube` is listed first, which
+is what makes it the switch's default position.
 
 The `Applied to` column is what `base.css` actually sets, not a description of
 the rung's mood — a heading's size is whatever that file gives its element, and
@@ -1679,11 +1679,23 @@ reasoning above inverts on the same terms it was written: the page now plays
 Blender's work, so a Blender credit is an attribution again rather than a claim
 about something not on screen, and it is back near the frame — see below.
 
+**And then the door itself was removed.** The maintainer cannot serve video
+from this site, so `native` and `hls` — and `public/bunny.mp4`,
+`public/hls/`, and the `<noscript>` fallback's `<video>` that played the
+former — are gone. `youtube` and `vimeo` took their place at `ready: true`,
+pointed at the Blender Foundation's own uploads of the same film rather than a
+third copy this project would have had to make, so the credit's terms hold a
+third time on the same grounds: the page plays Blender's work, wherever the
+switch is set. `public/bunny-poster.webp` is the one asset that survived —
+same-origin still matters for the still that loads before a press, which is
+the one thing on this page a hosted provider cannot be asked to do without
+lying about what has and has not been contacted.
+
 **The bench is two switches and not three, and neither is a demonstration built
-for the page.** `source` is the members of `PlayerProvider` that have a clip
-this project may embed, which is `native` and `hls` today, both served from this
-origin; the other three sit in `bench-sources.ts` at `ready: false` and become
-buttons with a three-character change once the uploads exist. `skin` is `none`
+for the page.** `source` is the members of `HostedProvider` that have a clip
+this project may embed, which is `youtube` and `vimeo` today; `wistia` sits in
+`bench-sources.ts` at `ready: false` and becomes a button with a
+three-character change once an upload exists. `skin` is `none`
 and `theme`, and `none` is the default and the honest one: it applies no CSS,
 because the switch loads and unloads `@playdeck/react/theme.css` as a real
 `<link>` rather than importing it, so the unstyled position really is unstyled.
@@ -1909,38 +1921,45 @@ a caption.
 **The `client:only` directive has one cost and it is stated rather than
 discovered.** The line under the frame and the whole readout are absent until
 the island mounts, and nothing reserves their height. With no JavaScript the
-frame holds a `<noscript>` fallback instead: a plain `<video controls muted
-playsinline preload="none">` on the same file, with the same poster as a real
-`poster` attribute rather than a CSS background, so that path keeps the guarantee
-the rest of the page does. No quiet line is printed there, because the fallback
-is a different player with its own behaviour and the sentence would be describing
-one that is not running.
+frame holds a `<noscript>` fallback instead: the same still as a real `<img>`,
+wrapped in a link to wherever the switch's default position plays. It is a
+link rather than a running player because there is no same-origin file left to
+hand a plain `<video>`, and a hosted provider's own player is an iframe embed
+that is itself a script — nothing here for a browser with scripting off to
+attach to on its own. No quiet line is printed there either, for the same
+reason it never was: the fallback is not the same player and the sentence
+would be describing one that is not running.
 
-**The clip is `public/bunny.mp4`, this app's own copy.** An Astro build serves
-only its own `public/`, so the file is copied in rather than reached for across
-an app boundary. It is a twenty-second excerpt of _Big Buck Bunny_ — the meadow
-scene where the bunny wakes, plays with a butterfly and picks up the fallen
-cherry — 1280x720, no audio track, encoded with `+faststart` so playback begins
-without the whole file. `public/hls/` carries the same twenty seconds as a
-two-variant ladder, 854x480 and 426x240, so the source switch changes only the
-URL. Both are cut from `big_buck_bunny_720p_h264.mov`, the Blender Foundation's
-own 720p release, downloaded once from `download.blender.org`.
+**The clip is no longer this app's own copy.** It was, for one page of this
+document's life: `public/bunny.mp4`, a twenty-second excerpt of _Big Buck
+Bunny_ cut from `big_buck_bunny_720p_h264.mov`, and `public/hls/` carried the
+same seconds as a two-variant ladder. Both are gone, along with the file they
+were cut from, because the maintainer cannot serve video from this site. What
+plays now is the Blender Foundation's own upload of the same film — the whole
+of it, not a twenty-second cut — on whichever host the switch is set to:
+`https://www.youtube.com/watch?v=aqz-KE-bpKQ` or `https://vimeo.com/1084537`,
+both verified by channel through each provider's `oembed` endpoint rather than
+re-uploaded, and both recorded with that verification in `bench-sources.ts`.
+`Player.Root` takes `startTime={74}` on every position, so a reader presses
+into the same meadow scene the excerpt used to open on regardless of which
+provider answers, rather than the film's own title card at 0:00.
 
-**There is a poster now, `public/bunny-poster.webp`.** It is a frame from inside
-the same excerpt, scaled to 960x540 and 35,068 bytes — larger than the 3,396
-bytes the colour-bar poster cost, because the resolution it is honest about is
-larger: 960x540 shows real detail a 320x180 still could not, and WebP at q80 is
-the point on this frame where a further step in quality cost more than the
-saving was worth. The bench is the largest element on the page and sits above
-the fold, and a blank rectangle is a worse first impression than a still of the
-thing the control beside it is labelled to play. So the trade was taken
-deliberately, the poster is same-origin, and the claim the page actually defends
-is the one about requests leaving this origin.
+**The poster is the one asset that survived, `public/bunny-poster.webp`.** It
+is a frame from inside the deleted excerpt, eight seconds in — which lands at
+roughly 74 seconds into the film itself, the number `startTime` now carries —
+scaled to 960x540 and 35,068 bytes. `Bench.astro` records the `ffmpeg` command
+that cut it, kept for the record though the file it read no longer exists. It
+stays same-origin on purpose: it is the one still a reader sees before any
+press, and a page whose central claim is that no provider has been contacted
+until then cannot fetch a thumbnail from one to make that claim. The bench is
+the largest element on the page and sits above the fold, and a blank rectangle
+is a worse first impression than a still of the thing the control beside it is
+labelled to play, so the trade was taken deliberately.
 
 **The attribution sits under the frame, static markup rather than part of the
-island.** CC BY asks for a credit wherever the media plays, and that now
-includes the no-JavaScript path — the `<noscript>` fallback plays the same file
-— so the line is written in `Bench.astro` rather than in `BenchIsland.tsx`,
+island.** CC BY asks for a credit wherever the media plays, and that includes
+the no-JavaScript path — the fallback link names the film in the same words —
+so the line is written in `Bench.astro` rather than in `BenchIsland.tsx`,
 where a script failure would take it with the player. It sets at `--text-fn` in
 `--color-ink-subtle`, the same size and ink `.bench__quiet` gets, because it
 qualifies the instrument rather than captioning it — but not the same family:
@@ -1986,18 +2005,18 @@ attribution beside them, which is where that line belongs now that it describes
 what is actually on screen.
 
 **Nothing about the player contacts a third party before a press, and that is
-the point.** The default source is a file on this origin, driven through the
-native provider, and `loading="interaction"` holds the root dormant until the
-play affordance is pressed: no fetch, no provider attached. What changed with the
-bench is that the claim is now about the order of events rather than about the
-absence of them, because the source switch can point the player at somebody
-else's host, and it does that only because a reader asked. `e2e/site-quiet.spec.ts`
-gates both halves: it records every request `/` makes at rest and fails if one
-leaves this origin, then presses a hosted provider and fails if none does, so an
-empty list is evidence rather than a listener attached to the wrong page. That
-second test skips itself while every hosted provider is `ready: false`, and the
-skip is computed rather than written down, so it starts running by itself the day
-one is turned on.
+the point.** `loading="interaction"` holds the root dormant until the play
+affordance is pressed: no fetch, no provider attached, whichever position the
+source switch is on — and every position is a hosted provider now, so this
+claim is entirely about the order of events rather than about the absence of a
+third party altogether. The switch points the player at somebody else's host
+only because a reader asked. `e2e/site-quiet.spec.ts` gates both halves: it
+records every request `/` makes at rest and fails if one leaves this origin,
+then presses a hosted provider and fails if none does, so an empty list is
+evidence rather than a listener attached to the wrong page. That second test
+used to skip itself while every hosted provider was `ready: false`; the skip
+was computed rather than written down, and it lifted itself the day `youtube`
+and `vimeo` were turned on, exactly as designed.
 
 **The player's theme is no longer imported, and that is the skin switch.**
 `@playdeck/react/theme.css` was a plain import while `/` had a hero, which meant

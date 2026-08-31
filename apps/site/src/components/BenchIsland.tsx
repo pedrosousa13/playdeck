@@ -103,6 +103,17 @@ interface Props {
  * total, but `find` cannot say so in the type, and a silent fallback URL would
  * be a player pointed somewhere nobody chose.
  */
+/**
+ * Where playback starts, in seconds -- and where `bunny-poster.webp` was cut
+ * from within the film itself, so the still a reader sees at rest and the
+ * first frame a press actually plays are the same moment. Without this, a
+ * hosted embed starts at 0:00, the film's title card, while the poster shows
+ * the meadow scene: the picture would promise one thing and play another,
+ * which is the same class of defect `bench-quiet.ts` exists to prevent in
+ * words rather than in pixels.
+ */
+const POSTER_TIME = 74;
+
 const sourceUrlFor = (provider: PlayerProvider, base: string): string => {
   const entry = benchSources.find(
     (candidate) => candidate.provider === provider
@@ -300,11 +311,9 @@ const Stage = ({
  * `Player.Root` to `dormant`. What this component owes that module is one call
  * at the moment a source begins loading, and nothing else.
  *
- * The cross-origin states are unreachable today, because every hosted provider
- * in `bench-sources.ts` is still `ready: false`. They are written as the general
- * rule rather than as speculation: the test is the source's origin against this
- * page's own, not a provider's name, so they stay correct the day those three
- * clips exist and need no edit to become live.
+ * The cross-origin states are reachable now that `youtube` and `vimeo` are
+ * `ready: true` in `bench-sources.ts`, which is what surfaced the race
+ * `sourceJustChanged` guards below -- see its comment.
  */
 const QuietLine = ({ sourceUrl }: { readonly sourceUrl: string }) => {
   const [history, setHistory] = useState(QUIET_START);
@@ -314,9 +323,45 @@ const QuietLine = ({ sourceUrl }: { readonly sourceUrl: string }) => {
   // load is committed — so a snapshot carrying it means the reader has already
   // asked and something is already on its way. Erring to that side is
   // deliberate: this line must never be later than the request it describes.
-  const loading = Player.usePlayerState(
+  const stillActive = Player.usePlayerState(
     (snapshot) => snapshot.activation !== 'dormant'
   );
+
+  /*
+   * Whether `sourceUrl` is the same one this component saw on its previous
+   * render.
+   *
+   * `Player.Root` resets its own activation to `'dormant'` on a source change
+   * from a `useLayoutEffect` in `use-activation.ts`, which fires after this
+   * component's render commits -- so on the exact render where `sourceUrl`
+   * changes, `stillActive` above can still read the *previous* source's
+   * activation, true because a clip was mid-playback a moment ago. Trusting
+   * it on that render would attribute an old provider's activity to the new
+   * `sourceUrl` and record a load that never happened: switching from a
+   * playing `youtube` position to `vimeo`, with no second press, made this
+   * line claim vimeo.com had been contacted -- measured, reliably, on every
+   * switch away from a source that was still active. `native` and `hls`
+   * could never have shown this: both resolved to `lastLoadedHost: null`, so
+   * the wrong record and the right one printed the same sentence and the
+   * defect was invisible until a hosted provider had a name to misattribute.
+   *
+   * A ref rather than a second `useState`: the guard only has to survive
+   * until the render after this one, and a `setState` here -- even inside an
+   * effect -- would ask React for a render this component does not need to
+   * ask for, on top of the one `Player.Root`'s own effect already causes.
+   * `stillActive` gets read fresh next render regardless, because the
+   * activation reset above triggers its own re-render; this ref only has to
+   * be *right* for the render in between, not cause one.
+   */
+  /* eslint-disable react-hooks/refs -- read and written in the same render,
+   * deliberately, to compare against the previous render's value; see the
+   * comment above. Root does the same for the same reason (`root.tsx`'s
+   * `controlledMuted.current = muted` block and its siblings). */
+  const lastSourceUrl = useRef(sourceUrl);
+  const sourceJustChanged = lastSourceUrl.current !== sourceUrl;
+  lastSourceUrl.current = sourceUrl;
+  /* eslint-enable react-hooks/refs */
+  const loading = !sourceJustChanged && stillActive;
 
   /*
    * Recorded when a source begins loading, never when one is selected — see
@@ -391,8 +436,8 @@ const StagePortal = ({
 
 const BenchIsland = ({ base, poster }: Props) => {
   const [position, setPosition] = useState<BenchPosition>({
-    source: 'native',
-    sourceUrl: sourceUrlFor('native', base),
+    source: 'youtube',
+    sourceUrl: sourceUrlFor('youtube', base),
     skin: 'none'
   });
 
@@ -442,7 +487,12 @@ const BenchIsland = ({ base, poster }: Props) => {
      * at all, so remounting for it would discard the reader's position to
      * repaint the chrome.
      */
-    <Player.Root loading="interaction" source={position.sourceUrl} defaultMuted>
+    <Player.Root
+      loading="interaction"
+      source={position.sourceUrl}
+      startTime={POSTER_TIME}
+      defaultMuted
+    >
       <StagePortal poster={poster} skin={position.skin} />
       <QuietLine sourceUrl={position.sourceUrl} />
       {/* The readout: the switches and what the provider answered on one side,
