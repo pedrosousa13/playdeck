@@ -40,7 +40,17 @@ function DropdownMenuContent({
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          'z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+          // `border` + `shadow-md` is the generated class shadcn ships, and it
+          // is exactly the pairing DESIGN.md rule 4 bans: an elevated surface
+          // never also carries a border. This is the theme toggle's menu, on
+          // every page, so the default shipped a live violation rather than a
+          // dormant one. Fixed the way `SearchCommand.tsx`'s `DialogContent`
+          // already fixes the same pairing: no border, and the shadow is the
+          // named `--elevation-panel` token rather than Tailwind's own
+          // untokenised `shadow-md` — this is a surface over the page, the
+          // same kind of thing a dialog is, not a step on the ladder with a
+          // hairline.
+          'z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border-0 bg-popover p-1 text-popover-foreground shadow-[var(--elevation-panel)] data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
           className
         )}
         {...props}

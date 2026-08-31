@@ -63,7 +63,25 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          'fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500',
+          // `transition-none`: the generated class here is the bare
+          // `transition` utility, which sets no `transition-property` and so
+          // falls back to CSS's own default, `all` — every property left
+          // changing on this element (background-color included, the moment a
+          // reader flips `data-theme` while the sheet is open) picks up a
+          // transition rule 5 never asked for. `DialogContent` in
+          // `SearchCommand.tsx` was given `transition-none` for exactly this;
+          // the entrance and exit motion is unaffected, since
+          // `animate-in`/`animate-out` are `tw-animate-css` keyframe
+          // animations rather than `transition`.
+          //
+          // `shadow-lg` is also dropped rather than kept alongside the
+          // per-side `border-*` below: this is the mobile nav sheet, an
+          // edge-anchored panel rather than a surface over the page, and the
+          // border is already its depth cue — pairing it with a shadow too is
+          // the border-under-shadow tell rule 4 bans, and it is not on that
+          // rule's elevation allowlist to be fixed by spending a token
+          // instead.
+          'fixed z-50 flex flex-col gap-4 bg-background transition-none data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500',
           side === 'right' &&
             'inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm',
           side === 'left' &&

@@ -35,8 +35,16 @@ const buttonVariants = cva(
         default: 'bg-primary text-primary-foreground hover:bg-primary/90',
         destructive:
           'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40',
+        // `shadow-xs` paired with `border` is the same border-under-shadow
+        // tell rule 4 bans, and this variant is unoverridden on the theme
+        // toggle trigger and the mobile nav sheet trigger, so it shipped on
+        // every page. A button is a control, not a panel, and it is not on
+        // rule 4's elevation allowlist, so the fix is not to spend an
+        // elevation on it — it is to drop the shadow and keep the border,
+        // which is already this variant's own depth cue (a step from `ghost`,
+        // which has none).
         outline:
-          'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50',
+          'border bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost:
