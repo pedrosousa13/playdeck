@@ -12,11 +12,17 @@
  *
  * Three rules, and each is easy to break by being helpful.
  *
- * **It renders `null` when there is nothing to report.** No wrapper, no empty
- * element, no reserved height, no "nothing asked yet". A layout that holds
- * space for this line is the resting placeholder the design removed on
- * purpose, and the only way to make that unwritable is for the component to
- * return nothing at all.
+ * **The visible line renders nothing when there is nothing to report.** No
+ * wrapper, no empty element, no reserved height, no "nothing asked yet". A
+ * layout that holds space for this line is the resting placeholder the
+ * design removed on purpose, and the only way to make that unwritable is for
+ * the visible `<p>` to not exist at rest. What the component returns instead
+ * is never `null` any more, because a screen reader needs a live region
+ * present and empty before it has anything to say -- one inserted already
+ * populated is not reliably announced. So a second, always-mounted,
+ * visually-hidden span carries `role="status"` and the same words, and it is
+ * `.u-visually-hidden` rather than absent, which is how it stays unwritable
+ * to layout while staying present to the DOM.
  *
  * **It reports the provider that is mounted right now**, which is the one the
  * reader just pressed, and only capabilities the controller answered
@@ -82,28 +88,50 @@ export default function ReasonLine({
   provider,
   capabilities
 }: ReasonLineProps) {
-  if (provider === null) return null;
-  const refusal = firstRefusal(capabilities);
-  if (refusal === null) return null;
+  const refusal = provider === null ? null : firstRefusal(capabilities);
+
+  // The live region a screen reader announces, and the reason it is a sibling
+  // rather than a role on the visible line below. A `role="status"` only
+  // starts being watched once it exists in the DOM: an element inserted
+  // already carrying its text is not reliably announced, because there was no
+  // moment at which the region was present and empty for the assistive
+  // technology to pick up first. So this span is unconditional -- it is
+  // always mounted, `.u-visually-hidden` so it takes no layout space, and
+  // empty until there is something to say. That satisfies the same rule the
+  // visible line answers to: nothing here holds space for it, because an
+  // empty visually-hidden span occupies none.
+  const words =
+    refusal === null
+      ? ''
+      : `${provider} · no ${capabilityWords[refusal.capability]}. ${reasonWords[refusal.reason]}`;
 
   return (
-    // `data-live` is written without a condition because the element itself is
-    // the condition: it exists only once a provider has attached and answered
-    // no. The attribute is what the animation in `base.css` keys off, and it
-    // arrives in the same React commit as the words it marks, so the motion
-    // can neither run early nor dress a state change that did not happen.
-    <p
-      role="status"
-      data-bench-reason=""
-      data-live=""
-      className="grid gap-[var(--space-1)] font-mono text-[length:var(--text-fn)] tracking-[var(--tracking-fn)] text-[var(--color-unavailable)]"
-    >
-      <span>
-        {provider} · no {capabilityWords[refusal.capability]}
+    <>
+      <span role="status" className="u-visually-hidden">
+        {words}
       </span>
-      <span className="text-[var(--color-ink-subtle)]">
-        └ {reasonWords[refusal.reason]}
-      </span>
-    </p>
+      {refusal !== null && (
+        // `data-live` is written without a condition because the element
+        // itself is the condition: it exists only once a provider has
+        // attached and answered no. The attribute is what the animation in
+        // `base.css` keys off, and it arrives in the same React commit as the
+        // words it marks, so the motion can neither run early nor dress a
+        // state change that did not happen. It carries no role: the live
+        // region above is what gets announced, so this line does not need to
+        // repeat that job.
+        <p
+          data-bench-reason=""
+          data-live=""
+          className="grid gap-[var(--space-1)] font-mono text-[length:var(--text-fn)] tracking-[var(--tracking-fn)] text-[var(--color-unavailable)]"
+        >
+          <span>
+            {provider} · no {capabilityWords[refusal.capability]}
+          </span>
+          <span className="text-[var(--color-ink-subtle)]">
+            └ {reasonWords[refusal.reason]}
+          </span>
+        </p>
+      )}
+    </>
   );
 }

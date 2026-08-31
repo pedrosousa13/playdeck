@@ -100,20 +100,25 @@ describe('firstRefusal', () => {
 
 // The selection logic above is the half a unit test reaches naturally. These
 // two are the requirement the component exists for, and they are what fails
-// when `return null` becomes `return <span />`: the design removed the resting
-// placeholder, and an empty wrapper is that placeholder with the text taken
-// out.
+// when the visible line stops being conditional: the design removed the
+// resting placeholder, and an empty wrapper is that placeholder with the text
+// taken out. What the component always mounts now is the hidden live region,
+// which is checked here for being present and empty rather than for being
+// absent -- an empty, visually-hidden span holds no layout space, so it does
+// not put the placeholder back.
 describe('ReasonLine', () => {
-  it('renders no node at all when there is nothing to report', () => {
+  it('renders no visible line when there is nothing to report', () => {
     const { container } = render(
       <ReasonLine provider="native" capabilities={allAvailable()} />
     );
 
-    expect(container.firstChild).toBeNull();
     expect(container.querySelectorAll('[data-bench-reason]')).toHaveLength(0);
+    const status = container.querySelector('[role="status"]');
+    expect(status).not.toBeNull();
+    expect(status?.textContent).toBe('');
   });
 
-  it('renders no node before a provider has attached, refusals or not', () => {
+  it('renders no visible line before a provider has attached, refusals or not', () => {
     const { container } = render(
       <ReasonLine
         provider={null}
@@ -124,8 +129,10 @@ describe('ReasonLine', () => {
       />
     );
 
-    expect(container.firstChild).toBeNull();
     expect(container.querySelectorAll('[data-bench-reason]')).toHaveLength(0);
+    const status = container.querySelector('[role="status"]');
+    expect(status).not.toBeNull();
+    expect(status?.textContent).toBe('');
   });
 
   it('renders one line, with the library words, when one was refused', () => {
@@ -150,6 +157,14 @@ describe('ReasonLine', () => {
     expect(line.textContent).toContain('hls');
     expect(line.textContent).toContain(capabilityWords.selectTextTrack);
     expect(line.textContent).toContain(reasonWords['provider-build']);
+
+    // The live region an assistive technology actually watches carries the
+    // same words, not the visible line's own role.
+    expect(line.hasAttribute('role')).toBe(false);
+    const status = container.querySelector('[role="status"]');
+    expect(status).not.toBeNull();
+    expect(status?.textContent).toContain(capabilityWords.selectTextTrack);
+    expect(status?.textContent).toContain(reasonWords['provider-build']);
   });
 
   it('renders one line and not two when two were refused', () => {
