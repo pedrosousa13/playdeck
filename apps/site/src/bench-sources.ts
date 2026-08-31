@@ -128,9 +128,14 @@ export type BenchSource = {
   readonly width: number;
   readonly height: number;
   /**
-   * Where playback starts, in seconds -- and where this entry's `poster` was
-   * cut from within the film itself, so the still a reader sees at rest and
-   * the first frame a press actually plays are the same moment.
+   * Where playback starts, in seconds. `0` for every entry today: a press
+   * plays the film from its own beginning, the way every hosted embed on the
+   * web does, rather than promising the moment `poster` happens to show. An
+   * earlier version of this field pinned it to the second `poster` was cut
+   * from, on the reasoning that the still and the first played frame should
+   * be the same instant -- worth doing when this repository cut its own
+   * poster from its own clip, and not worth asking of a film that would then
+   * appear to begin a minute in for no reason a reader could see.
    */
   readonly startTime: number;
   /** The attribution this film's clip is owed. */

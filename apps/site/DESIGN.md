@@ -2003,9 +2003,16 @@ film, not a twenty-second cut — on whichever host the switch is set to:
 `https://www.youtube.com/watch?v=_cMxraX_5RE` or `https://vimeo.com/640499893`,
 both verified by channel through each provider's `oembed` endpoint rather than
 re-uploaded, and both recorded with that verification in `bench-sources.ts`.
-`Player.Root` takes `startTime={60}` on every position, so a reader presses
-into the same forest scene the poster shows regardless of which provider
-answers, rather than the film's own title card at 0:00.
+`Player.Root` takes `startTime={0}` on every position, so a reader presses into
+the film's own beginning, the way every hosted embed on the web does. An
+earlier version pinned this to `60`, the same second `bunny-poster.webp` was
+cut from, so the still and the first played frame were the same instant — worth
+doing when this repository cut its own poster from its own clip, and not worth
+asking of a film whose poster comes from elsewhere: promising a reader the exact
+second a still was cut from is a smaller claim than it looks, and a film that
+appeared to begin a minute in for no reason a reader could see was a stranger
+one to make than simply starting at the beginning, the way a reader already
+expects a hosted embed to.
 
 **Both providers play the same film today, and that is a fact about what turned
 up rather than a rule.** Every hosted position needs Blender's own upload of

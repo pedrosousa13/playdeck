@@ -101,12 +101,10 @@ interface Props {
  * intrinsic dimensions, the start time and the credit, all read off one
  * `benchSources` entry so they can never drift apart from each other.
  * `sourceUrl` and `poster` are already resolved against the site's base path;
- * `startTime` is where `poster` was cut from within the film, so the still a
- * reader sees at rest and the first frame a press actually plays are the same
- * moment -- without it a hosted embed starts at 0:00, the film's title card,
- * while the poster shows a scene from further in, and the picture would
- * promise one thing and play another, which is the same class of defect
- * `bench-quiet.ts` exists to prevent in words rather than in pixels.
+ * `startTime` is `0` on every entry today, so a press plays the film from its
+ * own beginning rather than promising the moment the poster happens to show --
+ * see the field's own comment in `bench-sources.ts` for why that replaced an
+ * earlier version that pinned it to the poster's own timestamp.
  * `aspectRatio` is the CSS-ready `'width / height'` string, computed here
  * once from the two integers `bench-sources.ts` carries rather than a rounded
  * decimal anywhere -- `2048 / 858` is exact where `2.39` is not.
