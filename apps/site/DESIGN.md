@@ -1695,12 +1695,34 @@ lying about what has and has not been contacted.
 for the page.** `source` is the members of `HostedProvider` that have a clip
 this project may embed, which is `youtube` and `vimeo` today; `wistia` sits in
 `bench-sources.ts` at `ready: false` and becomes a button with a
-three-character change once an upload exists. `skin` is `none`
-and `theme`, and `none` is the default and the honest one: it applies no CSS,
-because the switch loads and unloads `@playdeck/react/theme.css` as a real
-`<link>` rather than importing it, so the unstyled position really is unstyled.
-That is what actually ships, and showing it argues better than a paragraph
-saying no stylesheet is in the bundle.
+three-character change once an upload exists. `skin` is `none` and `theme`, and
+the switch loads and unloads `@playdeck/react/theme.css` as a real `<link>`
+rather than importing it, so the unstyled position really is unstyled. That is
+what actually ships, and showing it argues better than a paragraph saying no
+stylesheet is in the bundle.
+
+**`theme` is the resting position, and it was `none` first.** `none` is the
+honest one and it is still what the argument is about, so leading with it looked
+right on paper. Rendered, it is a player with no chrome, a full-width native
+range input and two `<time>` elements the browser sets flush against each other,
+and it is what a reader meets before they have pressed anything. The maintainer
+looked at the two and said the unstyled position reads as a broken embed rather
+than as an argument. That is the right read: a first impression of a player that
+appears not to work sells the library worse than no demonstration at all would.
+
+So the page opens on the one stylesheet the library publishes and `none` is what
+a reader presses to see underneath. The demonstration survives the reversal
+whole, because both positions are still one press apart. What changed is which
+of them has to be asked for.
+
+**One thing did have to change in the composition rather than in the default.**
+`Player.Time` renders a bare `<time>`, so two of them adjacent print as
+`1:2410:34` with no CSS to separate them. That is not an unstyled control, it is
+a broken one, and the `none` position cannot afford to show a broken control
+when its whole job is to show what ships. `BenchIsland.tsx` prints a separator
+between them as its own text. A consumer writing that composition by hand would
+do the same, which is the test of whether something belongs in the composition
+or in a stylesheet.
 
 **There is no capability table, grid or ledger, and two of those were designed
 in full before being cut.** The page that stood here carried a five-row panel headed "Asked of

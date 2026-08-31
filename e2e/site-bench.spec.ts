@@ -109,18 +109,22 @@ test('the composition tracks both switches', async ({ page }) => {
   await page.goto(landing);
   await expect(composition(page)).toBeVisible();
 
+  // The page rests on `theme`, so the import is printed on arrival. That is a
+  // deliberate reversal: `none` is the honest position but an unstyled player
+  // is what a reader meets before pressing anything, and it reads as a broken
+  // embed rather than as an argument.
   const atRest = await printed(page);
-  expect(atRest).not.toContain(THEME_IMPORT);
+  expect(atRest).toContain(THEME_IMPORT);
   expect(jsxBlock(atRest)).toHaveLength(6);
 
   // The customisability argument, made by moving a real import rather than by
-  // describing one: `theme` is the one stylesheet the library publishes, and
-  // the switch loads it into the document as well as printing it here.
-  await position(page, 'skin', 'theme').click();
-  await expect(composition(page)).toContainText(THEME_IMPORT);
-
+  // describing one: `none` takes the one stylesheet the library publishes back
+  // out of the document as well as out of the printed composition.
   await position(page, 'skin', 'none').click();
   await expect(composition(page)).not.toContainText(THEME_IMPORT);
+
+  await position(page, 'skin', 'theme').click();
+  await expect(composition(page)).toContainText(THEME_IMPORT);
 
   // And the source moves the line above the block rather than a prop inside
   // it. The library detects a provider from the URL, so `source={source}` is

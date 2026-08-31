@@ -110,9 +110,16 @@ reach it because a reader asked. That is the claim, not a violation of it.
 `none` and `theme`. Two positions, and they are the product fact rather than a
 demonstration built for the page.
 
-`none` is the default and is the honest one. It applies no CSS at all, so the
-player renders as unstyled elements. That is what actually ships, and showing it
-is a better argument than a paragraph saying no stylesheet is in the bundle.
+`none` applies no CSS at all, so the player renders as unstyled elements. That is
+what actually ships, and showing it is a better argument than a paragraph saying
+no stylesheet is in the bundle.
+
+**`theme` is the resting position, and this was reversed after the page was
+built.** `none` was the default first, on the reasoning that the honest position
+should be the one a reader meets. Rendered, an unstyled player reads as a broken
+embed rather than as an argument, and it is the first impression of the product.
+The maintainer ruled the reversal. Both positions are still one press apart, so
+the demonstration is unchanged; only which one has to be asked for.
 
 `theme` imports `@playdeck/react/theme.css`, the one opt-in stylesheet the
 library publishes, for a consumer who wants somewhere to start rather than

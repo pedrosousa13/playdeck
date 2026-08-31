@@ -208,7 +208,17 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
         {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
       </Player.MuteButton>
       <Player.SeekSlider />
+      {/*
+       * The separator is the page's own text rather than a gap opened in CSS,
+       * because under the `none` skin there is no CSS to open one and the two
+       * `<time>` elements render flush against each other as `1:2410:34`. That
+       * reads as a defect rather than as an unstyled control, which is the one
+       * thing the `none` position must not do: it is here to show what ships,
+       * and what ships is not broken. A consumer writing this by hand would put
+       * a separator in for the same reason, so the composition prints one.
+       */}
       <Player.Time type="current" />
+      <span aria-hidden="true"> / </span>
       <Player.Time type="duration" />
       <Player.FullscreenButton>
         {state.fullscreen ? (
@@ -435,10 +445,26 @@ const StagePortal = ({
 };
 
 const BenchIsland = ({ base, poster }: Props) => {
+  /*
+   * `theme` is the resting position, and the reasoning is worth keeping because
+   * the opposite was tried first.
+   *
+   * `none` is the honest one: it applies no CSS at all, which is what the
+   * library actually ships. But an unstyled player is what a reader meets
+   * before they have pressed anything, and it reads as a broken embed rather
+   * than as an argument. The maintainer looked at both and said so. Leading
+   * with it sells the library badly, because the first impression is a player
+   * that appears not to work rather than a library that gets out of your way.
+   *
+   * So the page opens on the one opt-in stylesheet the library publishes, and
+   * `none` is the switch a reader presses to see what is underneath. The
+   * demonstration survives the reversal intact. What changes is which of the
+   * two a reader has to ask for.
+   */
   const [position, setPosition] = useState<BenchPosition>({
     source: 'youtube',
     sourceUrl: sourceUrlFor('youtube', base),
-    skin: 'none'
+    skin: 'theme'
   });
 
   // The skin, applied and removed as a real `<link>` — see the import above
