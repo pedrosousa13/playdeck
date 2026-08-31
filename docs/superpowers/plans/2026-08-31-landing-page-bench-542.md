@@ -696,6 +696,13 @@ way the page you are replacing already does. **The `17 kB` figure is never
 typed.** The other three (`1 of 5`, `0`, `0 lines`) are facts about the shape of
 the packages, not measurements, and may be written.
 
+- [ ] **Step 3b: Delete the ledger's animation with the ledger**
+
+`@keyframes ledger-resolve` in `HeroPlayer.astro` and `@keyframes bench-refusal`
+in `base.css` have byte-identical `from` and `to` blocks. The first goes with the
+file. Do not "reuse" it by moving it: the bench's copy is already scoped to
+`[data-stance='argument']` and already tested under `prefers-reduced-motion`.
+
 - [ ] **Step 4: Delete what it replaces**
 
 ```bash
@@ -904,6 +911,34 @@ line arriving: `opacity` and a `--space-1` rise at `--duration-base`, keyed off
 delays, and that the `prefers-reduced-motion` hazard the old ledger resolution
 was written around does not arise, because a single transition between two
 settled states is exactly what the site-wide duration collapse already handles.
+
+- [ ] **Step 1b: Fix the six paragraphs a reviewer already located**
+
+These were found during Task 5 and left deliberately, because the elements they
+describe were still in the tree until Task 6 deleted them. Line numbers are from
+that review and will have drifted; the text is what to search for.
+
+| Was at | Text | Why it is wrong now |
+| --- | --- | --- |
+| 695 | "The capability grid and the composition panel beside it are steps on the surface ladder" | Names a grid that was never built |
+| 742 | "This app writes two animations" and the claim that `.truth-card` and the ledger "belonged to elements that page no longer has" | True only after Task 6. Recount against the tree |
+| 796 | "Colour changes in the grid snap" | The grid |
+| 826 | "`base.css` holds the site's one entry-motion vocabulary" | It holds two now, the second scoped to the same stance |
+| 1000 | `HeroPlayerIsland.tsx` row, "the player and ledger" | The file is deleted |
+| 1510 | "`/` now mounts three islands" | `b348879` took the archetypes off `/` |
+
+Two more, neither found by grep:
+
+- **Record why `BenchSwitches` sits outside shadcn.** `DESIGN.md` says shadcn
+  "now covers every interactive part of the site" and lists five. The switches
+  are a sixth and are deliberately native radios: Radix's `ToggleGroup` measured
+  8.2 kB gzipped to re-implement what the browser already ships, and the
+  document's own case for shadcn is that it bought behaviour that would
+  otherwise be hand-rolled. There is nothing to hand-roll here. The argument is
+  written at the top of `BenchSwitches.tsx`; move it into the document, which is
+  where that document says exceptions get named rather than left to be found.
+- **Record that `/` no longer highlights its code.** Task 5 added this to the
+  Code section already. Check it still reads true after Task 6.
 
 - [ ] **Step 2: Fix every other stale sentence**
 
