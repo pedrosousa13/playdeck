@@ -25,7 +25,9 @@ its opposite is what a generated interface looks like.
 4. **Depth is a step on the surface ladder, a hairline, or one of two
    elevations — and an elevated surface never also carries a border.** See
    below.
-5. **Only `transform` and `opacity` are animated.**
+5. **Only `transform`, its individual longhands (`translate`, `scale`,
+   `rotate`) and `opacity` are animated.** It read `transform` and `opacity`
+   until the longhands were measured in the built page. See below.
 
 Rules 1 and 5 govern what this app writes. The two archetype stylesheets are
 outside both, on `/archetypes`, and that is named here rather than left to be
@@ -99,6 +101,26 @@ it — the boundary is the information — so it carries the 3:1 that non-text U
 must meet, against all five grounds. It was three until the ladder grew two
 rungs; it still clears 3:1 against every one of them, and where it would stop
 clearing it is what fixes the ladder's ceiling above.
+
+**There is a sixth set of colour roles, `--stage-*`, and it is not a third
+theme.** `--stage-field`, `--stage-ink`, `--stage-surface`, `--stage-sunken`,
+`--stage-line-strong` and `--stage-accent` are declared once in `tokens.css` and
+never reassigned, so they do not move with `data-theme` or with
+`prefers-color-scheme`. Five of the six are the dark theme's own raw values, and
+`--stage-field` `#0A0A0F` is a near-black of its own, a shade lighter than the
+dark theme's field. They exist because a picture
+is watched in the dark whatever the room is lit like, and a player frame that
+went white in the light theme would be the page changing what the media looks
+like to match its own chrome.
+
+They belong to `Bench.astro` and to nothing else. That file paints the frame
+with them and maps the whole of `@playdeck/react/theme.css`'s custom properties
+onto them, which is the one seam where this system speaks to the library's own.
+A page that wanted a dark panel of its own would be asking for a surface rung
+rather than for these, and the ladder above is where it should be looking. This
+document listed the five `--color-*` grounds for a long time without mentioning
+this set at all, which is why the player's own contrast table further down was
+measured in two columns when the pairs it holds are the same in both themes.
 
 ### Three values changed from the design comp
 
@@ -216,13 +238,33 @@ owes.
 
 ## Type
 
-**IBM Plex Sans and IBM Plex Mono**, one superfamily under the SIL Open Font
-Licence, and no third family. Sans carries prose and headings. Mono carries
-functional text: a value, an identifier, a state, or machine output — anything
-that is not a sentence.
+**IBM Plex Sans, IBM Plex Mono and IBM Plex Sans Condensed**, three cuts of one
+superfamily under the SIL Open Font Licence, and no second family. Sans carries
+prose and headings. Mono carries functional text: a value, an identifier, a
+state, or machine output — anything that is not a sentence. Condensed carries the
+display rung and nothing else, through `--font-display`, which falls back to
+`--font-sans` rather than to a generic, because a condensed cut is a width and a
+weight rather than a different voice.
+
+**This paragraph used to read "and no third family", and the site had already
+grown one.** The condensed cut arrived with the shell rebuild in `f80c6d3`, the
+sentence above it was left as written, and nothing on this site fails when a
+font import and a paragraph disagree, so it stayed false through every commit
+since. Why that cut was wanted is written down
+nowhere in the repository and this paragraph does not invent a reason. What the
+rule was actually defending is that a page may not reach for a face nobody
+chose, and three cuts of one superfamily is still one decision, so the count
+moves and the rule does not. A fourth family would still be refused.
+
+**Two places spend `--font-display` and they are both on `/`**: the thesis
+sentence under the `h1`, and the four figures in the close. Nothing else on the
+site may take it without an edit here, for the same reason the elevation
+allowlist below is written by hand. `tokens.css`'s own comment beside the face
+still claims the wordmark and a chapter title among its consumers; neither
+exists any more, and the file is wrong about that where this document is right.
 
 Self-hosted, and the only weights and the only subset the site uses: sans 400,
-sans 600, mono 400, latin. They arrive as devDependencies (`@fontsource/*`) so
+sans 600, mono 400, condensed 700, latin. They arrive as devDependencies (`@fontsource/*`) so
 the faces come through the lockfile with integrity hashes rather than as binaries
 committed here, and the build emits the `woff2` files beside its own assets. The
 served page makes **no third-party request of any kind** until a reader asks for
@@ -231,16 +273,29 @@ this is a library whose headline behaviour is contacting no provider before a
 click, and a site that phoned a font host to say so would be arguing against
 itself.
 
-**The bench on `/` is the one place this site reaches a third party, and it
-reaches one only because a reader asked.** Pressing `youtube`, `vimeo` or
-`wistia` on the source switch loads that provider, and nothing is contacted
-before that press. That is the claim worth defending, and it is the same claim
-the library itself makes about `loading="interaction"`. It is observed rather
-than asserted: `e2e/site-quiet.spec.ts` records every request the page makes at
+**This site reaches a third party in exactly two places, and both only because a
+reader asked.** The bench's source switch on `/` loads whichever provider is
+pressed, and the two archetypes on `/archetypes` play Blender open-movie
+trailers from that foundation's own host once somebody presses them. Nothing is
+contacted before that press on either page. That is the claim worth defending,
+and it is the same claim the library itself makes about `loading="interaction"`.
+On `/` it is observed rather than
+asserted: `e2e/site-quiet.spec.ts` records every request the page makes at
 rest and fails if any of them leaves this origin, then presses a hosted provider
 and fails if none does, so an empty list is evidence rather than a listener
 attached to the wrong page. The fonts keep the absolute guarantee above, because
 nobody asks for a font.
+
+The source switch's hosted positions are not on the page yet. `youtube`, `vimeo`
+and `wistia` sit in `bench-sources.ts` at `ready: false` and draw no button,
+because each needs a clip this project is entitled to embed on a marketing page
+and the ruling is that one Blender CC BY film goes on this project's own
+accounts on all three platforms. That buys something the licensing question
+hides: all five providers then play the identical asset, so a refusal the reason
+line reports is a fact about the provider rather than about that provider's
+clip. Until then the switch offers `native` and `hls`, both served from this
+origin, and the paragraph above is a rule the page is built to keep rather than
+one it currently exercises.
 
 The `Applied to` column is what `base.css` actually sets, not a description of
 the rung's mood — a heading's size is whatever that file gives its element, and
@@ -272,9 +327,17 @@ package names and want no display treatment at all.
 stance does not.** That is now sayable in one word where it used to take a
 sentence about which page: `/` is the only route served in the `argument`
 stance — see _Stances_ below — and it is the only page that spends either of
-these two rungs on a heading of its own. A document page's title names the
+these two rungs at all. A document page's title names the
 document — a package, a provider, this sheet — and no stance in this system
 dresses a name as a thesis.
+
+**Neither rung sets a heading on `/` either, and that is worth saying because
+the sentence above used to promise one.** `--text-4xl` goes to the thesis
+paragraph, for the reason below, and `--text-2xl` goes to the four figures in
+the close, which are `dt` elements and not headings. Both are still classes on
+that page and neither moves what an element resolves to, which is the whole of
+what the rule asks. What changed is that the argument stance no longer has a
+heading large enough to be worth an exception.
 
 **On `/` the display rung now sets a paragraph rather than the heading.**
 `scripts/check-deploy-artifact.mjs` finds this site's root document by an `h1`
@@ -286,10 +349,17 @@ below it. The rung follows what the page is arguing, which is the reason the
 rung exists at all. Every other page still takes whatever `base.css` gives its
 heading elements, and nothing here changes what an element resolves to.
 
-A component mounted only on that page may set it in a class of its own for the
-same reason — `ProviderTruth.astro`'s heading does, at the same rung `/`'s own
-section titles take — and what the rule is against is moving what an element
-resolves to, not where the class is written.
+A component mounted only on one page may set a rung in a class of its own for
+the same reason: what the rule is against is moving what an element resolves to,
+not where the class is written. **This paragraph used to name
+`ProviderTruth.astro`'s heading as the example, and it is no longer one.** That
+component moved to `/providers`, which is a document, and its heading takes
+`h2`'s own rung there. The sentence it was supporting also named "`/`'s own
+section titles", and `/` has no section titles now: it is a thesis, an
+instrument and a close, and the only thing in it at a heading rung is the `h1`
+the deploy check pins. The permission survives with no current user, which is
+the honest state to leave it in rather than deleting a rule because nothing is
+currently exercising it.
 
 That page's thesis paragraph takes `--text-4xl` at `48rem` and the rung below
 it under that, where 88px would take three quarters of a phone's width and cost
@@ -345,23 +415,29 @@ and those documents are mostly code; two of the provider setup pages at
 `/providers/<provider>/` carry a highlighted code example, because
 `docs/provider-setup.md` writes one for YouTube and one for Vimeo and none for
 the other three. No provider page mounts a player; the routes that do are `/`
-and `/archetypes`, and nothing about that changed when `/` grew from one island
-to three. The landing page carries one block of code too, the
-composition example. Colouring it is the one place a colour on this site comes
+and `/archetypes`, and that has held through every rebuild of the landing page,
+including the one that took `/` back down to a single island. The landing page
+carries one block of code too, the composition the bench's switches build, and
+that one is the exception to the exception: it is the only block on this site
+that is not coloured at all, for the reason two paragraphs down. Colouring the
+rest is the one place a colour on this site comes
 from somewhere other than `tokens.css`.
 
 The highlighter is **Shiki**, which Astro already ships — no new dependency —
 set to the `github-light` and `github-dark` themes. The two names live in
 `src/shiki.ts` and are read twice: `astro.config.ts` hands them to
-`markdown.shikiConfig` for the READMEs' fences, and the landing page hands them to
-Astro's `<Code>` component, which reads nothing from that configuration. The two
+`markdown.shikiConfig` for the READMEs' fences, and `/archetypes` hands them to
+Astro's `<Code>` component, which reads nothing from that configuration, for the
+two source wells it prints beside its players. That second reader used to be the
+landing page, which printed four hand-written snippets and one real file; it
+prints no highlighted code at all now. The two
 names are the exception in full: no hex is written by hand
 anywhere, the palette is regenerated from the source text on every build, and
 there is no way to express it in this system's own colours, because a scale of
 four accents cannot tell a keyword from a string from a comment.
 
 **`/`'s composition panel is not highlighted, and it is the one block on this
-site that is not.** The panel prints what the bench's three switches just
+site that is not.** The panel prints what the bench's two switches just
 composed, so it rewrites itself on every press, and Astro's `<Code>` runs on the
 server only: colouring it means shipping a highlighter to the reader. The
 smallest one that could do it — Shiki's `createHighlighterCore` with the
@@ -371,8 +447,9 @@ core are 52.6 kB. The close of that page prints 17 kB as the gzipped size of
 every primitive this library publishes. A page that spent four times its own
 product to colour four keywords would be arguing against itself in the object it
 was arguing with, so the panel is a plain `<pre>` in `--color-ink` and the
-highlighter stays where it costs a reader nothing: the reference pages' fences
-and the two provider examples, rendered at build time. That figure is a
+highlighter stays where it costs a reader nothing: the reference pages' fences,
+the two provider examples and `/archetypes`'s two source wells, all rendered at
+build time. That figure is a
 measurement and re-measurable the same way, with esbuild over the same imports.
 
 **What the exception does not cover is the block itself.** The well is
@@ -409,8 +486,9 @@ animates `background-color`. Read against rules 1 and 5 those are violations;
 they are allowed, and the reason is what the pages are for.
 
 Those two files are not this app's. They live in `examples/`, they are the
-files a consumer copies, and `apps/storybook` mounts the same two — three
-surfaces now, counting `/`. A stylesheet
+files a consumer copies, and `apps/storybook` mounts the same two. Two surfaces,
+not the three this paragraph once counted: `/` was the third for two of its
+lives and is not one now. A stylesheet
 spoken in `tokens.css`'s role tokens would render as unstyled text everywhere
 outside this one site, and an archetype that borrowed its look from the page
 around it would be proving something about this page rather than about the
@@ -428,25 +506,27 @@ mounted in, which is deliberately no container at all — no surface colour, no
 elevation, no hairline, because a bezel drawn by this site around a file that
 brings its own appearance would be this site's paint on a consumer's example.
 
-**On `/` they are mounted `client:visible`, which has a consequence worth
-stating.** The directive defers hydration until the reader scrolls to them, but
-it still server-renders the components, so their markup — including whatever
-heading each composition puts over its picture — is in the document before any
-script runs. There is no Astro directive that both defers the mount and skips the
-server render, so this is the cost of the deferral rather than an oversight.
+**Both are mounted `client:only`, and the two rules this used to need are
+retired rather than quietly dropped.** The first was about server rendering:
+`/` mounted them `client:visible`, which defers hydration but still renders the
+components on the server, so whatever heading each composition drew over its
+picture was in the document before any script ran and landed in `/`'s heading
+outline. There is no Astro directive that defers the mount and skips the server
+render, so that was the cost of the deferral rather than an oversight. It is
+gone because the mount is gone: `/` mounts no archetype, and `/archetypes` uses
+`client:only`, which renders nothing on the server at all.
 
-What it means in practice is that `/`'s heading outline carries headings rendered
-by files under `examples/`. This paragraph used to add that the words in them
-were written there too, and named `Sintel` and `Rendering an open movie` as the
-two. They are the page's own now — `Thirty seconds of colour bars` and `A lesson
-with a test pattern for a recording` — because `/` hands each composition a
-`media` prop that carries the clip and the copy describing it as one thing. That
-the prop is one and not two is the whole of its design. An earlier version of
-this page overrode the source alone, and the streaming card went on announcing
-the title `Sintel` over a colour-bar test pattern, on the page whose argument is
-that nothing here claims what it cannot show. So a surface that replaces the clip
-replaces the words for it, and bundling them is what makes the omission
-inexpressible rather than merely discouraged.
+The second was about the words. `/` handed each composition a `media` prop
+carrying the clip and the copy describing it as one thing, so that a surface
+replacing the clip could not fail to replace the sentence naming it, which is
+how the streaming card stopped announcing the title `Sintel` over a colour-bar
+test pattern. That prop still exists on both files and both compositions still
+take it. Nothing passes it now. `/archetypes` passes only the captions fixture
+and a resume position, so both players keep the Blender trailers the examples
+ship and the headings say what is actually on screen with no override at all.
+The design of the prop is worth keeping written down because the failure it was
+built against returns the moment any surface overrides a source again, and the
+next such surface will be written by somebody who never saw the first one.
 
 None of those headings may ever be named `Playdeck`:
 `scripts/check-deploy-artifact.mjs` identifies this site's root document by a
@@ -465,7 +545,7 @@ It is allowed in exactly two forms, and they are the component's `form` prop
 rather than something a caller styles:
 
 - `hairline`, the separator between sections;
-- `accent`, one band in the hero.
+- `accent`, one band, at most once per page.
 
 It is **not** a background wash, not a fill behind text, not a border on a card,
 and never a second gradient with different stops. Gradients creeping outward
@@ -477,8 +557,12 @@ answer is the flat surface tokens.
 was read for a while as a licence to place the hairline after every section,
 and `/` shipped five of them plus the hero band. Six sweeps down one page is the
 creep this rule exists to stop, drawn from the one component that was supposed
-to make it impossible. So the landing page now renders the sweep once — the
-hero band — and separates its sections with `--space-9` and nothing else. Where
+to make it impossible. So the landing page renders the sweep once, and the one
+render is the `accent` band along the bottom edge of the bench's frame,
+`Bench.astro`'s only call to the component. It is not a decorative strip above a
+heading any more: it sits on the one element the page is built around. The two
+parts either side of the frame are separated by space, and the close by
+`--color-line-strong`, not by a second sweep. Where
 a page genuinely needs a line, `--color-line` is the line; the sweep is not a
 general-purpose separator that happens to be pretty. `/design` is the exception
 that proves nothing, because a specimen sheet's job is to show both forms.
@@ -555,16 +639,25 @@ served in. `Base.astro` takes `stance?: 'argument' | 'document'`, defaulting to
 | `/design`               | `document` |
 
 `argument` is the treatment `/` is written in: larger type, more negative space,
-the entry motion below, and the demos. `document` is the quiet treatment every
-other page on this site already had. Only `/` passes anything; every other route
-takes the default and says nothing.
+the one authored moment of motion below, and the running player. `document` is
+the quiet treatment every other page on this site already had. Only `/` passes
+anything; every other route takes the default and says nothing.
 
-**What the attribute itself drives today is the entry motion, and only that.**
-The larger type and the wider gaps on `/` are that page's own rules in its own
+**What the attribute itself drives today is one animation, and only that.** It
+used to drive an entry-motion vocabulary that applied to a class any page could
+write; that vocabulary is deleted, and what is keyed off the stance now is the
+single rule in `base.css` that fades the bench's reason line in when a provider
+refuses something. The larger type and the wider gaps on `/` are that page's own
+rules in its own
 `<style>`, as they were before the prop existed; the stance did not move them
 and does not need to. What the attribute buys is a place for the rules that must
 _not_ be one page's private decision — a reveal is the first of them, because a
-reveal written locally is a reveal every later page can write locally too. The
+reveal written locally is a reveal every later page can write locally too. That
+argument survived the vocabulary it was written for, and it is the reason the
+one remaining animation is keyed off the stance rather than written into a
+component: a rule in a site-wide stylesheet that only one stance can reach is
+unreachable elsewhere, where a rule in a component is merely somewhere nobody
+has copied yet. The
 name is the fact stated on the document; the CSS keyed off it is what the fact
 is spent on.
 
@@ -605,8 +698,12 @@ question until a third page appears.
 
 `e2e/site-stance.spec.ts` pins the parts of this a reviewer would otherwise have
 to take on trust: that `/` carries the argument stance, that a document route
-carries the other and animates nothing, and that the entry motion's targets rest
-visible when the motion does not run.
+carries the other and animates nothing, and that the reason line rests visible
+and untransformed when the motion does not run, with no script and under
+reduced motion alike. It used to pin the same three facts about `.u-enter` and
+`data-enter`, and it could not keep doing so once nothing on the site wrote
+either: a spec that had to mark an element itself in order to have something to
+assert about would be pinning its own fixture.
 
 ## Depth, motion, and the four audit constraints
 
@@ -614,15 +711,31 @@ A deterministic detector was run against the comps and found real defects. These
 are acceptance criteria for anything added to this site, not style advice.
 
 - **No tracked-caps eyebrow chip above an `h1`.** A named tell, and it was on
-  every comp.
+  every comp. The bench's two switch legends, `SOURCE` and `SKIN`, are tracked
+  caps in mono and are not eyebrows: they sit below the `h1`, they name a group
+  of controls rather than dressing a heading, and they set at `--text-fn` rather
+  than under it. What the constraint is against is small caps used as a label
+  for a title that does not need one.
 - **No 1px border under a wide shadow blur** (24px, 60px). That pairing was the
   comps' entire depth system, and it is a named tell too. It is still banned,
   and the rule below is written so that it cannot be assembled by accident.
 - **Functional text at 11px or above.** See `--text-fn`.
-- **Animate `transform` and `opacity` only.** Never `max-height` or `width`:
-  those lay the page out again on every frame, and every effect that seems to
-  need them has a composited equivalent — a translate or a scale under
+- **Animate `transform`, its longhands and `opacity` only.** Never `max-height`
+  or `width`: those lay the page out again on every frame, and every effect that
+  seems to need them has a composited equivalent — a translate or a scale under
   `overflow: hidden`.
+
+**These four passed on `/` for a long time and they did not pass everywhere, and
+this document said otherwise.** The second was being broken on every page of the
+site by three shadcn defaults, each pairing a border with a shadow:
+`DropdownMenuContent`, the `Button` `outline` variant, and `SheetContent`. All
+three are fixed, and the fixes are recorded under _shadcn_ below. The honest
+thing to say is not that they were corrected but that the claim was false for
+however long those components had been in the tree, because nothing on this site
+checks it: the four constraints are read by people, and a component adopted from
+outside arrives with somebody else's depth system already assembled in a class
+string. The lesson is written into the adoption rule below rather than left as
+an incident.
 
 ### Depth, and what rule 4 used to say
 
@@ -690,21 +803,35 @@ imitating one large soft one. A shadow is cast by a surface above a surface. It
 is not a way to tint an edge.
 
 **What may spend an elevation, by name.** `--elevation-instrument` belongs to
-the player on `/` and to nothing else. It is the element that page is built
-around, and a second instrument on one page means neither is the instrument. The
-capability grid and the composition panel beside it are steps on the surface
-ladder with a hairline, like everything else here, because a readout of what the
-instrument answered is not a second instrument. `--elevation-panel` belongs to
-three things: the bezel around the
-hero's player — `.demo__bezel` in `HeroPlayer.astro`, and not the stage inside
-it, which is a recessed colour and a hairline — the search dialog in
-`SearchCommand.tsx`, which is a panel over a page rather than the panel a page
-is built around, and which carries no border because rule 4 forbids an elevated
-surface one. That is the whole list; it held a third entry, the receipt's body,
-until `/` stopped printing a request log. Everything else on this site is a step
-on the surface ladder and a
-hairline, as before. A new elevated element is an edit to this list, not a local
-decision.
+`.bench__frame` in `Bench.astro`, the box the player sits in on `/`, and to
+nothing else. It is the element that page is built around, and a second
+instrument on one page means neither is the instrument. Nothing in the readout
+under it takes an elevation: the switches are controls on the page itself, the
+reason line is text, and the composition panel is a `--color-sunken` well, which
+is a step _down_ the ladder because printed code is a recess in this system
+wherever it appears. A report of what the instrument answered is not a second
+instrument, and the earlier version of this sentence named a capability grid as
+the thing that was not one. That grid was designed and cut and never existed, so
+naming it here was this document holding an allowlist open for an element the
+maintainer had already refused.
+
+`--elevation-panel` belongs to two things, and both of them are surfaces laid
+over the page rather than panels sitting in it: the search dialog in
+`SearchCommand.tsx`, and `DropdownMenuContent`, which is what draws the theme
+switch's menu. Neither carries a border, because rule 4 forbids an elevated
+surface one. The menu is the newer of the two and arrived by correction rather
+than by design: shadcn ships that component with `border` and `shadow-md`
+together, which is the banned pairing exactly, and the fix was to drop the
+border and spend the named token rather than Tailwind's untokenised shadow, so
+the menu now takes its depth the same way the dialog beside it does.
+
+**This list held three entries and now holds two, and both departures are worth
+naming.** The receipt's body left when `/` stopped printing a request log. The
+bezel around the hero's player left when `HeroPlayer.astro` was deleted: the
+bench draws one frame where the hero drew a bezel around a stage, and one frame
+spending `--elevation-instrument` is the whole of the depth on that page.
+Everything else on this site is a step on the surface ladder and a hairline, as
+before. A new elevated element is an edit to this list, not a local decision.
 
 The ladder has a top, and it is measured rather than felt: see _Palette_ above
 for the `#1F1F26` ceiling and the rejected `#24242C`. Above the overlay the
@@ -718,145 +845,213 @@ ladder had been stated and measured before anything leaned on it, so the first
 panel that wanted a step above `--color-surface` would reach for a rung already
 checked against ink rather than inventing one.
 
-**`--color-raised` now has that first consumer, and it sits on the field rather
-than on a surface.** The rung was argued for as the step above `--color-surface`
-and its first use is `/`'s `.readout`, the box the proof strip's budget table
-sits in, laid straight on the page. That is not a misuse and the role's
-description follows it: what the rung names is a panel raised off whatever it
-sits on, and the ground it is measured against is the ground it is drawn on. On
-the field in light it is a 1.045 step, which is the figure _Palette_ above gives;
+**It then said `--color-raised` had found its first consumer, and that has since
+become untrue in the direction nobody watches for.** The consumer named was
+`/`'s `.readout`, the box a budget table sat in, and `/` was rebuilt as a bench
+without one. No element on this site paints `--color-raised` today. The rung is
+still declared, still measured against ink on both its grounds, and still
+rendered as a swatch on `/design`, so the original point is simply back: the
+ladder has been stated and checked before anything leans on it, and the first
+panel that wants a step above `--color-surface` reaches for a rung already
+verified instead of inventing one. `tokens.css`'s own comment beside the role has
+been corrected to match.
+
+What the retired paragraph was right about is worth keeping, because it is what
+the next consumer will need. The rung names a panel raised off whatever it sits
+on, and the ground it is measured against is the ground it is drawn on. On the
+field in light that is a 1.045 step, which is the figure _Palette_ above gives;
 the case that collapses is the other one, a raised surface directly on
 `--color-surface`, and that case is what the elevations and the hairline are for.
-A row picked out of a panel is still the rung's other use and still available.
+A row picked out of a panel is the rung's other use and is equally available.
+Whatever takes it will take colour and nothing else: no elevation, because rule
+4's allowlist names by hand what may spend one, and therefore no border either,
+which is the half of that rule that keeps the banned pairing unassemblable.
 
-The readout is a panel on the page rather than a panel over it, so it takes
-colour and nothing else — no elevation, because rule 4's allowlist names by hand
-what may spend one and this is not on it, and therefore no border either, which
-is the half of that rule that keeps the banned pairing unassemblable. It reads as
-raised in both themes rather than only in the one that has the room.
+**`--color-overlay` has gone the other way in the same sweep, and now has a real
+rendered consumer.** `shadcn-theme.css` maps `--popover` onto it and
+`DropdownMenuContent` reads `bg-popover`, so the theme switch's menu is drawn in
+this role on every page of the site. That is exactly what the role was declared
+for, a surface over the page rather than in it, and it arrived without anybody
+choosing it: aliasing shadcn's vocabulary onto these roles is what put a
+consumer on the far end of a name. Two facts about the same pair of rungs moved
+in opposite directions at once, which is the argument for checking a document
+against the tree rather than against the last thing that changed.
 
-`--color-overlay` still has no consumer, and the original point survives for it
-unchanged: nothing on this site relies on it, and a later reader should not infer
-from its existence that anything does.
+**This app writes one animation, and it is on `/`.** The count has been three,
+then two, and this document has been late to it twice, so the arithmetic is
+worth setting out rather than restating.
 
-**This app writes two animations, and both are on `/`.** The count was three
-until `/` became a bench. The `.truth-card` entry motion and the capability
-ledger's resolution both belonged to elements that page no longer has, and an
-animation does not carry forward to what replaces it. Before that, it was
-briefly hard to state: while the two archetypes were mounted on `/` they
-animated `background-color` from their own stylesheets, outside rule 5 for the
-ownership reason above, so a reader watching that page saw motion this count did
-not include. They are back to `/archetypes` only, and measured against the built
-page `/` now transitions `transform` and `opacity` and nothing else, which is
-rule 5 exactly. The count is a count of what this app authors, and it
-is worth saying so rather than letting a reader find a moving element and
-conclude the rule had quietly lapsed. The count is the rule; the argument it
-was making is why the count is two and not seven. Scattered reveals down a page
-are the generated-landing-page tell in motion form, and one authored moment is
-worth more than six of them. The second is spent here only because it is the
-same moment as the first, answered: the page's central claim, arriving and then
-being answered.
+Three was the `.truth-card` entry motion, the capability ledger's resolution and
+the sweep band travelling in from the left. The band's rule lived in
+`index.astro`'s own `<style>` and went out with the shell rebuild in `f80c6d3`;
+the other two belonged to elements `/` no longer has. All three are gone, and an
+animation does not carry forward to what replaces it. What was added in their
+place is one: the bench's reason line, arriving when a provider refuses
+something.
 
-The first is the sweep band, which travels in from the left once on arrival, a
-`translateX(-100%)` to `translateX(0)` on an inner box inside an
-`overflow: hidden` window, at `--duration-slow`. A translate under a clip rather
-than a scale, because scaling the band would compress the gradient instead of
-revealing it and the warm end would arrive first; a translate moves the paint
-across a fixed window at its final width. It is unchanged in kind from the
-version that sat above the heading, and it is now drawn along the bottom edge of
-the player's frame, on the one element the page is built around.
+The count is a count of what this app authors, and it is worth saying so rather
+than letting a reader find a moving element and conclude the rule had quietly
+lapsed. Three other things move on this site and none of them is in the count.
+The two archetypes animate `background-color` from their own stylesheets, on
+`/archetypes` only, outside rules 1 and 5 for the ownership reason above.
+shadcn's dialog, sheet and dropdown open and close through `tw-animate-css`,
+which is a dependency's keyframes applied by a utility class, and they move
+`opacity` and `transform`. And `@playdeck/react/theme.css` brings its own
+transitions to the bench the moment a reader presses the `theme` skin, which is
+that stylesheet doing on this page exactly what it does in a consumer's.
 
-The second is a grid column resolving. The moment a provider attaches and
-answers, that column's cells settle in sequence: `opacity` and a `--space-1`
-rise, `--duration-base`, delays in steps of `--duration-fast`. It is keyed off a
-`data-live` attribute the island writes in the same React commit that writes the
-answers into the DOM, so the motion marks a real state change and can neither
-run early nor dress a simulated one. The cells' content is already true before
-the first frame. It exists because that resolution is the page's whole
-demonstration and an unmarked swap is a moment most readers blink through. It
-runs once per column and is not a reveal vocabulary: nothing else may key off
-it. Under `prefers-reduced-motion` it is removed outright (`animation: none`)
-rather than left to the duration collapse, because the collapse shortens
-durations and not delays, and a delayed `both`-filled cell would sit invisible
-through its delay.
+The count is the rule; the argument it was making is why the count is one and
+not seven. Scattered reveals down a page are the generated-landing-page tell in
+motion form, and one authored moment is worth more than six of them. The page
+lost two of its three without losing anything it was arguing, which is the
+sharpest version of the same point: the motion was decoration on an argument
+that did not need it, and one moment marks a real state change.
+
+**The one animation is the reason line arriving.** One `<p>`, appearing the moment the
+mounted provider answers `unavailable` to something the page asked about, fading
+and rising `--space-1` at `--duration-base`. It is the `bench-refusal` keyframe
+in `base.css`, selected by `[data-stance='argument'] [data-bench-reason][data-live]`,
+and `data-live` is written by `ReasonLine.tsx` in the same React commit as the
+words it marks, so the motion cannot run early and cannot dress a state change
+that did not happen. It exists because that refusal is the whole of `/`'s
+capability argument and an unmarked appearance is a moment most readers blink
+through. Under `prefers-reduced-motion` it is removed outright
+(`animation: none`) rather than left to the duration collapse, because the
+honest answer to a reader who asked for no motion is that none was started.
+
+**This paragraph used to describe a grid column resolving**, with cells settling
+in sequence and delays in steps of `--duration-fast`. There is no grid: it was
+designed, rejected in the maintainer's own words, and never built, and the
+five-row panel that came closest to it is deleted. What replaced it is one line,
+which removes the two hazards the sequence carried with it. There are no delays,
+so the `prefers-reduced-motion` case is a rule rather than an argument about
+what the duration collapse does and does not shorten, and there is no sequence,
+so there is nothing that could grow into the scattered-reveal shape this section
+is against.
 
 Nothing else this app writes moves on entry. That is a standing prohibition
-rather than a description of what happens to sit on the page today, and it
-survived the deletion of the one element that used to spend it. The sweep band
-is untouched by it: the band runs once on arrival and is keyed off nothing.
+rather than a description of what happens to sit on the page today, and it has
+now survived the deletion of every element that ever spent one.
 
-Both of these move `transform` and `opacity` only, so **rule 5 is untouched by
-any of this** and no amendment to it was made or is coming. A later reader
-looking for one is looking for something that does not exist. Colour changes in
-the grid snap, as every colour change on this site does.
+That animation moves `transform` and `opacity` only, so **rule 5's list of
+animatable properties is untouched by any of this**. Rule 5 was widened once,
+below, and the widening is about `transform`'s own longhands rather than about
+this. Every colour change on this site still snaps.
 
 `prefers-reduced-motion: reduce` collapses durations, which lands each transition
 on its settled state immediately. That only works because every transition moves
 between two settled states. An effect that leaves an element mid-travel or
-invisible when its motion is removed is a bug in the effect. The hero's
-animation meets the same condition and meets it the same way: its second
-keyframe is the band in place, and `animation-fill-mode: both` is what holds it
-there, so a collapsed duration produces a drawn band rather than one parked off
-to the left.
+invisible when its motion is removed is a bug in the effect. The one animation
+does not rely on that rescue at all: its rule is switched off outright under
+reduced motion, and its resting state is what the rest of the CSS gives it, so
+there is nothing left mid-travel for the collapse to have to land. The collapse
+still covers what it always did, which is the transitions.
 
 Focus is one treatment for the whole site: a 2px `--color-accent` outline on
 `:focus-visible`, offset by 2px. An outline rather than a shadow, so it follows
 the element's own shape and survives forced-colors mode.
 
 Every control carries a rest, a hover, a focus and a pressed state, and none of
-them is a lift. The theme switch darkens to `--color-sunken` on hover and takes
-an accent border while pressed. Every link on the site presses to
+them is a lift. The theme switch darkens to `--color-sunken` on hover, and the
+bench's switches take an accent border while pressed, which is the same move
+made in the two vocabularies the site now speaks: the switch is a Tailwind
+`hover:bg-accent` resolving through `shadcn-theme.css` onto the sunken well, the
+bench's pills an `active:border-[var(--color-accent)]`. One treatment, two
+spellings, and the seam is where the alias is written rather than where the
+class is. Every link on the site presses to
 `--color-ink-subtle`, which is one rule in `base.css` — a step down the ink
 scale reads the same way from any of the rest colours a link here takes, whether
 that is the accent, the muted ink of a crumb or the full ink of the wordmark. A
 component that styles its own `a:hover` outranks that selector and restates the
 press: the rail's links and the header's crumbs both do.
 
-Colour changes are not transitioned, because colour is not one of the two
-properties this system animates. The one transition on a control is the switch's
-knob, which translates; its colour changes at the same moment and snaps.
+Colour changes are not transitioned, because colour is not one of the properties
+this system animates. The two transitions this app writes are the disclosure
+chevrons in `RailDisclosure.tsx` and `SourceDisclosure.tsx`, which rotate a
+quarter turn when the element opens, at `--duration-fast`, and stop transitioning
+outright under `motion-reduce`.
 
-### Entry motion
+### Rule 5 was widened, and `transform`'s longhands are why
 
-`base.css` holds the site's one entry-motion vocabulary: a fade and a small
-rise, `opacity` and `transform` only, at `--duration-slow` and `--ease`. Both
-tokens already existed and no token was added for this. The rise is
-`var(--space-3)`, a step of the spacing scale rather than a length of its own,
-because a reveal that travels further reads as an arrival from off-screen rather
-than as a thing settling.
+Rule 5 read **"Only `transform` and `opacity` are animated."** It now reads
+`transform` **and its individual longhands**, and `opacity`. The amendment is
+real rather than a tidy-up, and it was made because the rule as written would
+have failed the tree on a distinction with nothing behind it.
 
-It is keyed off `[data-stance='argument']`, so it reaches `/` and can reach
-nothing else. A document page could carry the class and would still not move.
-That is the point: the way to stop a page growing scattered reveals is to make
-them unreachable, not to write a rule asking a later author not to write one.
+Tailwind's `transition-transform` in this version expands to
+`transition-property: transform, translate, scale, rotate`. Those last three are
+transform's own longhands from CSS Transforms Level 2. They are the same
+property decomposed, the compositor treats them identically, and the browser
+lays nothing out again for any of them. A reader measuring the built page would
+find four names where the rule named one, and rewriting the two chevrons to
+spell `transition-[transform]` by hand would buy nothing but a rule that had
+been satisfied by fighting a tool. The maintainer ruled the two compliant and
+the rule follows the ruling.
 
-Three constraints, and each is a rule rather than a description of what the code
-happens to do today.
+What the rule is against is unchanged and is the reason it is worth stating
+precisely: a property whose animation costs layout or paint on every frame,
+`max-height`, `width`, `top`, `background-color`. Adding three names that
+composite exactly as the one already permitted costs the rule nothing. The
+nearest precedent on this site is the `enter` and `exit` keyframes
+`tw-animate-css` gives the tooltip and every other shadcn overlay: each declares
+`filter: blur(var(--tw-enter-blur, 0))`, the variable is never set to anything
+else here, so the declaration interpolates `blur(0)` to `blur(0)` and paints
+nothing. A property outside the rule's list, animated in name only, and left
+alone for the same reason. Both are cases where the honest reading of "what is
+animated" is what the frame actually does rather than how the declaration is
+spelled.
+
+### Entry motion, and the vocabulary that was built and never used
+
+`base.css` used to hold a site-wide entry-motion vocabulary: a `.u-enter` class,
+a `data-enter` from-state, a fade and a `--space-3` rise at `--duration-slow`,
+and an `IntersectionObserver` on `/` that removed the from-state as each marked
+element came into view. **All of it is deleted, and it is deleted because
+nothing ever applied the class.** The one page it could reach was rebuilt twice
+and neither rebuild marked an element, so the observer was constructed on every
+visit to `/` to watch an empty list, and the rules were unscoped CSS every page
+of the site carried in order to match nothing.
+
+That is worth recording rather than removing quietly, because the vocabulary was
+argued for at length and the argument was not wrong. A reveal written into one
+page's `<style>` is a reveal the next page writes again with its own duration and
+its own distance; a site-wide class keyed off `[data-stance='argument']` is one
+fade, one rise, one easing, inert everywhere but the page that argues. What the
+episode actually shows is a different failure: a vocabulary can be correct and
+still be dead weight if nothing needs it yet, and the cost of keeping it was
+paid by every page on the site.
+
+**The entry motion the site has now is the reason line, and it is a different
+shape.** It is not a vocabulary and nothing else may key off it. It runs off
+`data-live`, an attribute written inside a React commit at the moment the
+element and its words first exist, rather than off an observer watching for an
+element to be scrolled to. That difference is the point rather than an
+implementation detail: an observer fires on a reader's scroll position, which is
+a fact about the reader, and this fires on a provider answering, which is a fact
+about the thing the page is arguing about.
+
+Three constraints survive the deletion, and each is a rule rather than a
+description of what the code happens to do today.
 
 - **The resting state is what the CSS gives the element.** There is no
-  `opacity: 0` default anywhere in this vocabulary. The script on `/` _adds_
-  `data-enter` and removes it on intersection, so a reader whose script fails or
-  is blocked gets the settled page. Written the other way round it would blank
-  the page on the one failure it has to survive — the same reasoning that makes
-  the hero's island `client:only`.
-- **`prefers-reduced-motion: reduce` skips the observer entirely.**
-  `matchMedia` is checked before anything else and the `IntersectionObserver` is
-  never constructed, so the from-state is never written to anything and there is
-  no state for the site-wide duration collapse above to have to rescue. That
-  collapse is deliberately not what handles this case: it rescues a transition
-  by landing it on its settled state, and the honest answer to a reader who
-  asked for no motion is that no transition was started.
+  `opacity: 0` default anywhere on this site. The animation is `both`-filled
+  from a from-state it declares itself, so a reader whose script never runs, or
+  who has asked for no motion, gets the settled element. Written the other way
+  round, with an element hidden until something arrives to reveal it, the page
+  would blank itself on the one failure it has to survive — the same reasoning
+  that makes the bench's island `client:only`.
+- **`prefers-reduced-motion: reduce` removes the animation rather than
+  shortening it.** The site-wide duration collapse is deliberately not what
+  handles this case: it rescues a transition by landing it on its settled state,
+  and the honest answer to a reader who asked for no motion is that nothing was
+  started.
 - **Scroll-linked and parallax effects are rejected outright.** They have no
-  expression in this vocabulary and are not to be given one. A page whose paint
-  is a function of scroll offset is this section's tell drawn continuously
-  instead of once. The bench on `/` is driven by pointer and keyboard and never
-  by scroll offset, and an interactive page does not reopen this question.
-
-One implementation detail is worth a sentence, because it is not obvious and a
-later reader would undo it: an element already inside the viewport when the
-deferred script runs is skipped rather than given the from-state. Handing an
-element the from-state after first paint and then taking it back is a blink
-rather than a reveal.
+  expression here and are not to be given one. A page whose paint is a function
+  of scroll offset is this section's tell drawn continuously instead of once. The
+  bench on `/` is driven by pointer and keyboard and never by scroll offset, and
+  an interactive page does not reopen this question. This was the one of the
+  three that had nothing to do with the observer, and it is why the deletion of
+  everything above it changed nothing about what is banned.
 
 ## Search
 
@@ -949,12 +1144,13 @@ sitting on top of one. They are themed in `base.css` from the roles above:
 - **Scrollbars** use `scrollbar-color` with a `--color-line-strong` thumb and a
   transparent track, so the track takes the surface it is scrolling over rather
   than pinning another grey into the page. `scrollbar-width: thin` is applied
-  only to the inner scrollers — a code block and the rail — where a
+  only to the inner scrollers — a code block, the rail, and the bench's
+  composition panel — where a
   platform-width bar reads as a second border; the page's own scrollbar keeps
   its full hit target. Standard properties only, never `::-webkit-scrollbar`,
   which would be a second and engine-specific description of the same thing.
-- **The caret** is `--color-accent`. Nothing on the site takes text input today;
-  this is for caret browsing and for whatever a later page adds.
+- **The caret** is `--color-accent`. The search field is the one place on this
+  site a reader types, and caret browsing puts a caret on every other page.
 
 The utility classes live beside them in `base.css`. They are the classes in this
 system not owned by one component, and a new one has to earn that:
@@ -970,49 +1166,71 @@ system not owned by one component, and a new one has to earn that:
   other side — the install line's `role="status"` on `/` says in words what the
   copy button's own text change says visually, because a button's name changing
   under a reader who has already pressed it is announced by nothing.
-- `.u-enter` marks an element the entry motion applies to. What earned it is
-  that the alternative is worse: written into `/`'s own `<style>` it would be
-  one page's private effect, and the next page that wanted a reveal would write
-  a second one with its own duration and its own distance. Site-wide, there is
-  one fade, one rise and one easing, and the `[data-stance='argument']` key on
-  the rule is what keeps a site-wide class from being a site-wide effect — the
-  class is inert on every page but one. See _Entry motion_ above.
+
+There were three, and `.u-enter` is gone with the vocabulary it marked. It is
+named here rather than dropped because it is the counter-example the rule above
+needs: a class earns its place in `base.css` by having more than one owner, and
+that one was admitted on the strength of an argument about the second owner it
+would eventually have. It never got one. Both survivors were admitted for a use
+that already existed, and both still have two.
 
 ## Where things live
 
-| File                                   | What it is                                               |
-| -------------------------------------- | -------------------------------------------------------- |
-| `src/styles/tokens.css`                | Every value. The only file with hex literals             |
-| `src/styles/base.css`                  | Element defaults, spoken in tokens                       |
-| `src/styles/doc.css`                   | The shell and the prose of a rendered document           |
-| `src/layouts/Base.astro`               | The document, its stance, and the pre-paint theme script |
-| `src/components/SiteHeader.astro`      | The shell above every page, and the site's navigation    |
-| `src/components/ThemeToggle.astro`     | Mounts the theme control                                 |
-| `src/components/DocsSearch.astro`      | Mounts search, and owns the `/` shortcut                 |
-| `src/components/Sweep.astro`           | The one gradient, and its two forms                      |
-| `src/components/DocRail.astro`         | The rail beside a document, both sets of them            |
-| `src/components/HeroPlayer.astro`      | The hero's two panels, and the player theme              |
-| `src/components/HeroPlayerIsland.tsx`  | The hero's composition: the player and ledger            |
-| `src/components/ProviderTruth.astro`   | The provider comparison, and its table                   |
-| `src/components/SearchCommand.tsx`     | Search's dialog and combobox, on `Command`               |
-| `src/components/SiteNavSheet.tsx`      | The header's collapse below 40rem, on `Sheet`            |
-| `src/components/ThemeToggleIsland.tsx` | The theme choice, on `DropdownMenu`                      |
-| `src/components/RailDisclosure.tsx`    | The rail's "Contents", on `Collapsible`                  |
-| `src/components/SourceDisclosure.tsx`  | An archetype's source well, on `Collapsible`             |
-| `src/components/ui/*.tsx`              | shadcn components, owned here rather than depended on    |
-| `src/styles/shadcn-theme.css`          | shadcn's variable names, aliased onto this site's roles  |
-| `src/pages/index.astro`                | The landing page at `/`, and its links                   |
-| `src/pages/design.astro`               | The specimen sheet, served at `/design`                  |
-| `src/pages/archetypes.astro`           | Two composed players, and the files they are             |
-| `src/pages/reference/index.astro`      | The package index, served at `/reference`                |
-| `src/pages/reference/[pkg].astro`      | One reference page per publishable package               |
-| `src/pages/providers/index.astro`      | The provider index, served at `/providers`               |
-| `src/pages/providers/[provider].astro` | A setup page per provider group                          |
-| `src/content.config.ts`                | The two document collections, and their loaders          |
-| `src/reference-packages.mjs`           | Which packages get a page, and from where                |
-| `src/provider-pages.mjs`               | Which providers get a page, and which sections           |
-| `src/provider-asymmetry.mjs`           | What that same document says each provider can answer    |
-| `src/shiki.ts`                         | The two theme names, for both readers of them            |
+| File                                   | What it is                                                |
+| -------------------------------------- | --------------------------------------------------------- |
+| `src/styles/tokens.css`                | Every value. The only file with hex literals              |
+| `src/styles/base.css`                  | Element defaults, spoken in tokens                        |
+| `src/styles/doc.css`                   | The shell and the prose of a rendered document            |
+| `src/styles/tailwind.css`              | Tailwind without preflight, layered so it cannot win      |
+| `src/layouts/Base.astro`               | The document, its stance, and the pre-paint theme script  |
+| `src/components/SiteHeader.astro`      | The shell above every page, and the site's navigation     |
+| `src/components/ThemeToggle.astro`     | Mounts the theme control                                  |
+| `src/components/DocsSearch.astro`      | Mounts search, and owns the `/` shortcut                  |
+| `src/components/Sweep.astro`           | The one gradient, and its two forms                       |
+| `src/components/sweep-id.ts`           | One `<linearGradient>` id per render, build-wide          |
+| `src/components/DocRail.astro`         | The rail beside a document, both sets of them             |
+| `src/components/Bench.astro`           | The bench's frame, the band on it, and the player theme   |
+| `src/components/BenchIsland.tsx`       | The bench's composition, and the site's only hydration    |
+| `src/components/BenchSwitches.tsx`     | Source and skin, as native radios in a `<fieldset>`       |
+| `src/components/ReasonLine.tsx`        | The one refusal the mounted provider reports, or nothing  |
+| `src/components/CompositionPanel.tsx`  | The code the switches built, unhighlighted on purpose     |
+| `src/bench-sources.ts`                 | What each source position plays, and which are ready      |
+| `src/bench-composition.ts`             | The switches' positions rendered as source to copy        |
+| `src/bench-capabilities.ts`            | The words for a capability and for a refusal's reason     |
+| `src/bench-quiet.ts`                   | What the page has fetched, and the sentence for it        |
+| `src/components/ProviderTruth.astro`   | The provider comparison, and its table                    |
+| `src/components/SearchCommand.tsx`     | Search's dialog and combobox, on `Command`                |
+| `src/components/SiteNavSheet.tsx`      | The header's collapse below 40rem, on `Sheet`             |
+| `src/components/ThemeToggleIsland.tsx` | The theme choice, on `DropdownMenu`                       |
+| `src/components/RailDisclosure.tsx`    | The rail's "Contents", on `Collapsible`                   |
+| `src/components/SourceDisclosure.tsx`  | An archetype's source well, on `Collapsible`              |
+| `src/components/ui/*.tsx`              | shadcn components, owned here rather than depended on     |
+| `src/lib/utils.ts`                     | `cn`, the class merge every shadcn component calls        |
+| `src/styles/shadcn-theme.css`          | shadcn's variable names, aliased onto this site's roles   |
+| `src/pages/index.astro`                | The landing page at `/`, and its links                    |
+| `src/pages/design.astro`               | The specimen sheet, served at `/design`                   |
+| `src/pages/archetypes.astro`           | Two composed players, and the files they are              |
+| `src/pages/reference/index.astro`      | The package index, served at `/reference`                 |
+| `src/pages/reference/[pkg].astro`      | One reference page per publishable package                |
+| `src/pages/providers/index.astro`      | The provider index, served at `/providers`                |
+| `src/pages/providers/[provider].astro` | A setup page per provider group                           |
+| `src/content.config.ts`                | The two document collections, and their loaders           |
+| `src/reference-packages.mjs`           | Which packages get a page, and from where                 |
+| `src/provider-pages.mjs`               | Which providers get a page, and which sections            |
+| `src/provider-asymmetry.mjs`           | What that same document says each provider can answer     |
+| `src/shiki.ts`                         | The two theme names, for both readers of them             |
+| `src/asset-url.d.ts`                   | The type for a `?url` import, which is how the skin loads |
+
+Two of the rows this table used to carry, `HeroPlayer.astro` and
+`HeroPlayerIsland.tsx`, are deleted. Nine files replace them, and the split
+between them is the one the library itself draws: `Bench.astro` decides what the
+instrument looks like, `BenchIsland.tsx` composes primitives and reads what they
+report, and neither can quietly grow the other's job because neither can express
+the other's. The four `bench-*.ts` modules under `src/` rather than under
+`src/components/` are the parts with no markup in them at all: a table of
+sources, a string builder, two dictionaries and a small state machine. Each is
+pure, and each is unit-tested without a browser, which is the whole reason they
+are not inside the components that call them.
 
 **The header** carries the wordmark returning home, the path from the root to
 where the reader currently is, the site's own navigation, search, and the theme
@@ -1056,7 +1274,7 @@ everything the repository builds.
 **The row is a second line, not a disclosure, and it needs no script.** Three
 names cannot share the first line with the trail, search and the switch at
 320px, so the choice was a second line or something that hides them. The rail is
-a `<details>` because it is a list per package plus a list per heading, several
+a disclosure because it is a list per package plus a list per heading, several
 phone screens of it; three short words are not that, and a row that is always
 visible costs one line of header and has no state to announce. It takes
 `flex-basis: 100%` rather than a media query, so it is the same line at 320px
@@ -1144,41 +1362,47 @@ heading of the README, and the version — so a reader who followed a link to
 reaching the first word of the document they had asked for. Closed, the
 document's own title is the first thing under the header.
 
-It is a `<details>` and not a button with a script, because that is the element
-the platform already made for this: the affordance, the keyboard behaviour and
-the focus ring all arrive with no JavaScript. Moving the rail below the document
+Moving the rail below the document
 was the other option and it is worse — source order is what a screen reader and
 the keyboard follow, and it would have put the navigation where neither meets it
 until after several hundred lines of prose.
 
-**At `60rem` and up a script opens the element and the summary leaves the
-flow.** This is the one place on the site where a script is load-bearing for
-layout, and the reason is that CSS cannot change an element's state. Revealing
-the content with `::details-content` while the element stays closed tells
-assistive technology "collapsed" about a list the reader is looking at, and at
-that width the summary that could have corrected it is gone from the tree as
-well. `open` is a property and the accessible state follows it, so the property
-is what the script sets — together with the `data-rail` attribute the column
-rules key off, so the announced state and the visible state are written in one
-place and cannot disagree.
+**It was a `<details>` and it is a shadcn `Collapsible` now**, in
+`RailDisclosure.tsx`, and the swap is the one place on this site where the
+shadcn trade cost something a reader can lose. A `<details>` is a working closed
+disclosure at every width with no JavaScript; this is not. What does not change
+is what a reader without a script can reach: the two lists are rendered by
+Astro and passed in as children, so they are in the served HTML either way, and
+`forceMount` keeps them in the DOM rather than letting a closed disclosure
+delete them.
 
-With no JavaScript nothing runs, the attribute is never written, the column
-rules never match, and the rail is the closed disclosure the markup already is
-at every width — both lists present, labelled, keyboard operable, announcing the
-state they are in. That is the right thing to degrade to.
+**At `60rem` and up the element is open and the control is absent.** Both facts
+come from one value. The old implementation was a script that had to keep two
+things in step, whether the element was open and the `data-rail` attribute the
+column rules key off, and the component derives both from a single media query
+read, so they cannot disagree. It reads that query with `useSyncExternalStore`
+rather than into state in an effect, because a media query is an external store:
+it has a value and a subscription, and copying it into state is a second copy of
+something the platform already holds. Its server snapshot is `false`, so the
+markup Astro renders is the closed disclosure, which is also what a reader whose
+script never arrives is looking at.
+
+The reason the state has to be `open` rather than merely revealed is unchanged
+and is why a script was load-bearing here in the first place: CSS can show the
+content while the element stays closed, which tells assistive technology
+"collapsed" about a list its reader is looking at, and at that width the control
+that could have corrected it is gone from the tree as well.
 
 **The rail is sticky, and for a while it only said so.** `position: sticky`
 travels inside its own containing block, and the grid aligned its items to
 `start`, so the rail was exactly as tall as the box inside it, had nowhere to
 travel, and had never stuck at any scroll offset. It now stretches to the grid
 row and the disclosure is given that height too, because every box between the
-scrollport and the sticky one has to be tall enough for it to move inside. Those
-rules are unconditional at that width and not behind the `@supports` guard: a
-reader who opens the rail by hand — in an engine without `::details-content`, or
-with JavaScript off in any engine — would otherwise get the original defect
-back. Only the `::details-content` rule itself sits behind the guard, because
-where that anonymous box exists the height has to pass through it and where it
-does not there is no box between the two.
+scrollport and the sticky one has to be tall enough for it to move inside. The
+chain used to have a fourth link, `::details-content`, the anonymous box a user
+agent puts inside a `<details>`, and the `@supports` guard that went with it.
+Both left with the element: a `Collapsible` is ordinary elements all the way
+down, so the height passes through boxes this site can name.
 
 **On a reference page the rail states `@playdeck/` once and lists what
 differs.** Repeated down a 16rem column, the scope spent the width that tells
@@ -1270,8 +1494,14 @@ sweep — from the tokens themselves rather than from restated values, so a rung
 a role that changed shows the change. It is the living reference a later ticket
 checks its work against, and the place to add a specimen when a token is added.
 
-It is not part of the site's own navigation, and `/` links to it only so it is
-reachable.
+It is not part of the site's own navigation, and **nothing on the site links to
+it at all any more.** `/` carried the one link, in the ways-onward row at the
+foot of the page, and the rebuilt close carries Reference, Providers and
+Archetypes and nothing else. That was not ruled on: the link went out with the
+page it was on. The sheet is still built and still served at its own address,
+so it is reachable by typing it, and whether it should be listed is the open
+question the paragraph on its stance above says it is. Written down here so that
+a later reader finds a decision to make rather than a link they assume exists.
 
 `data-theme` has two writers and they are not interchangeable: the pre-paint
 script in `Base.astro` applies a stored choice before the browser paints, and
@@ -1283,9 +1513,28 @@ otherwise hold it.
 ## shadcn, and what it is allowed to bring
 
 shadcn is the site's component system by the maintainer's call, taken after
-being told what it costs in payload. It arrived in #542 and it now covers every
-interactive part of the site: the header's collapse below 40rem, the theme
+being told what it costs in payload. It arrived in #542 and it covers five
+interactive parts of the site: the header's collapse below 40rem, the theme
 switch, search, the rail's "Contents", and the source wells on `/archetypes`.
+
+**This paragraph used to say "every interactive part", and there is now a
+carve-out.** The bench's switches on `/` are a native `<fieldset>` of
+`<input type="radio">` elements and no component at all. The argument is this
+document's own, turned round: what shadcn bought here is behaviour that would
+otherwise have been hand-rolled, and a group of mutually exclusive positions has
+no behaviour to hand-roll. The grouping, the roving focus, the arrow keys and
+the group's accessible name from the `<legend>` all ship in the browser.
+Radix's `ToggleGroup` would re-implement them, correctly, for a measured 8.2 kB
+gzipped of client JavaScript, on the page whose closing figure is that every
+primitive this library publishes comes to 17 kB. A page cannot spend half its
+own product on a radio group in the controls it is arguing with.
+
+So the rule is not "use shadcn". It is: reach for a component when it brings
+behaviour the platform does not, and reach for the platform when it does. That
+line is where a payload argument and an accessibility argument agree, which is
+rare enough to be worth writing down as the test rather than as an exception to
+one. `BenchSwitches.tsx` carries the same reasoning at the point of use,
+including the two alternatives that were weighed and the measurement.
 
 **It brings components, not values.** This is the rule that keeps rule 1 intact.
 The `bg-*`, `text-*` and `border-*` classes those components carry read shadcn's
@@ -1319,128 +1568,216 @@ fixed here rather than worked around, and a component's default look is never
 what ships: the defaults are Tailwind's palette and radii, which is exactly the
 templated appearance the rest of this document exists to prevent.
 
+**Three of those defaults were breaking rule 4 on every page, and this document
+was claiming otherwise the whole time.** Each paired a border with a shadow,
+which is the named tell the audit banned:
+
+- `DropdownMenuContent` shipped `border` with `shadow-md`. It is the theme
+  switch's menu, on every page. The border is dropped and the shadow is now
+  `--elevation-panel`, the named token, because a menu is a surface over the
+  page and that is the token for one. It is on rule 4's allowlist above as a
+  result.
+- The `Button` `outline` variant shipped `border` with `shadow-xs`. That variant
+  is what the theme switch's trigger is. The border stays and the shadow goes,
+  because the trigger is a control in the header and not a panel over anything,
+  so spending an elevation on it would be the wrong half to keep.
+- `SheetContent` shipped `shadow-lg` beside a per-side border. It is the mobile
+  navigation below 40rem. Same fix as the button: the border is the depth cue a
+  panel flush to the edge of the screen needs, and the shadow is what has to go.
+
+`SheetContent` carried a second defect found in the same pass, and it is a
+different class of thing. It used the bare Tailwind `transition` utility, which
+sets a duration and no `transition-property`, and CSS's own default for that
+property is `all`. So a reader who flipped the theme while the sheet was open
+transitioned `background-color` and `border-color` over 200ms, which is a
+violation of rule 5 nobody wrote. It now carries `transition-none`, which is
+exactly the fix `DialogContent` had already been given for exactly this, and the
+repetition is the finding: `transition` with no property beside it is a trap this
+tree has now fallen into twice.
+
+**The honest statement is not that these are fixed but that the claim was
+false.** _Depth, motion, and the four audit constraints_ above said all four
+passed. Three of them did. The fourth failed from the moment these components
+were adopted until they were read against the rules by hand, and nothing failed
+in between, because the four constraints are checked by people and a component
+adopted from outside arrives with somebody else's depth system already written
+into a class string. Adopting one is therefore an audit rather than a copy, and
+that is now the rule rather than the lesson.
+
 ## The landing page
 
-`/` is the site's front door, and it is six sections: the hero, then one for
-each feature the page sells — `capabilities`, `autoplay`, `compose`, `custom` —
-then the close. Each is
-marked with a `data-section` attribute naming it, which is how
-`e2e/site-landing.spec.ts` pins the order rather than pinning a heading a later
-edit is free to reword.
+`/` is the site's front door, and it is one instrument in three parts: a thesis,
+the bench, and the close. There are no sections per feature, no `data-section`
+attributes and no headings below the `h1`. `e2e/site-landing.spec.ts` pins what
+the page says and does rather than the order of blocks it no longer has, and
+`e2e/site-bench.spec.ts` and `e2e/site-quiet.spec.ts` pin the two things about
+it that a screenshot cannot check.
 
-**This passage has now described five pages, and the count is the point.** The
+**This passage has now described six pages, and the count is the point.** The
 first argued in sentences and asked to be believed. The second argued by
 running the thing and printing what running it cost, across eight sections and
 8,679px, and was rejected as a documentation page wearing a landing page's
 spine. The third kept that instinct and lost the reader anyway: "this is a huge
 page that doesn't make sense", "nobody knows wtf a capability ledger is". The
 fourth said the right things in the wrong shape and was rejected for the shape.
+The fifth was six sections down one column, each a claim in a heading followed
+by the code backing it, and nothing was wrong with it that a reader could point
+at. It was correct, honest and dead: every section had the same shape, nothing
+on the page was larger than anything else, and the only element that was
+actually alive appeared once in the hero and never came back.
 
-**The fifth is written for the reader it actually has, which is the thing the
-first four never settled.** That reader is a React engineer choosing a video
-library, and what they buy on is the API. So the page names four features and
-shows each one as the code that uses it: querying what a player can do,
-autoplay that recovers from a policy block and reports that it did, composing
-two products out of one set of primitives, and owning all of the markup. The
-prose around each is short and the code is the evidence.
+**The sixth is not a page of sections at all, and that is the whole of what
+changed.** The diagnosis of the fifth was that a library whose argument is about
+behaviour was arguing in paragraphs. So the page becomes one thing a reader
+operates: a video player as the largest element by a wide margin, two groups of
+switches under it that belong to the reader, one line of what the mounted
+provider refused, and a panel printing the composition those switches just
+built. The features are delivered by working the bench rather than by reading
+about them.
 
-**Code is the page's texture, and that is a deliberate reversal.** The previous
-four carried no code at all outside the install line, on the reasoning that a
-landing page argues and a document explains. That reasoning produced four pages
-that a React engineer could read to the end without learning what calling this
-library looks like. `base.css` already gives every `pre` on the site its
-recessed well, so the blocks cost this page one rule of its own.
+**Two of the four features the brief named are no longer sold here, and a later
+reader will want to add them back.** Capability querying survives as the reason
+line and nothing else: a single line, only when a provider has actually refused
+something, in that provider's own words. Autoplay recovery is gone outright. It
+had a switch, and the switch could not work: `/` mounts its player with
+`loading="interaction"`, so playback can only begin from a user gesture, and
+after a gesture the browser permits the audible attempt. The refusal and muted
+retry the switch existed to demonstrate can never happen on this page. What was
+left was a control whose only effect was to add a prop to the printed
+composition, which is a knob arguing by printing itself. Recording this here
+because the shape of the mistake is attractive: the feature is real, the
+primitive that reports it is real, and the page simply cannot cause the
+condition.
 
-**The snippets are written in the page's frontmatter, and that is the one place
-`/` departs from a rule the rest of the site keeps.** Everywhere else a printed
-file is read as bytes from the file it claims to be, because a hand-typed
-example is a second copy of an API and the only copy that can be wrong while
-everything around it stays green. These four are not files: each is three or
-four lines of a real API with the rest of a working component left out, and
-compiling them would mean inventing the component. What holds them honest is
-narrower and worth stating rather than assuming — every identifier in them
-exists, and two were corrected against the source while this section was
-written, `Player.TimeDisplay` to `Player.Time` among them.
+**Four other things left this page across its last two rebuilds, and each is
+recorded as gone rather than deleted silently.** A `remote` section, which was a
+heading, a row of provider names, a sentence and two numbers spread over a
+screen's height to say one thing slowly; the five names are in the thesis
+paragraph now, where the scope is claimed in one line. A receipt printing a
+request log, which the page no longer needs because the line under the frame
+reports the same fact about the page the reader is on. The provider comparison,
+which moved to `/providers`, because a comparison table is what somebody chooses
+a provider with and that is a thing they do after being convinced rather than
+while. And the archetypes' licence paragraph, which is a correction rather than
+a cut: CC BY asks for attribution wherever the media is played, `/` plays a
+colour-bar fixture it serves itself, and a Blender credit on a page playing none
+of their work is a false claim about what is on screen rather than an
+attribution. `site-landing.spec.ts` used to assert that name appeared nowhere on
+`/` and no longer does, which is a gap rather than a decision: the page cannot
+carry a Blender clip while `bench-sources.ts` holds the three hosted providers
+at `ready: false`, and the day one of them is turned on the attribution question
+comes back with it.
 
-**The four sections share a shape and deliberately not a layout.** Each is a
-head that states the claim, a body that shows the API, and a note under it. The
-head is a vertical stack rather than a headline with its explainer set beside
-it, because that split is the section header every generated marketing page
-reaches for. The bodies differ on purpose: two columns with the code leading,
-one full-width block over a four-state sequence, two stacked players, then two
-columns with the code trailing. Four identical two-column bodies in a row would
-read as a template however different the words in them were.
+**The bench is two switches and not three, and neither is a demonstration built
+for the page.** `source` is the members of `PlayerProvider` that have a clip
+this project may embed, which is `native` and `hls` today, both served from this
+origin; the other three sit in `bench-sources.ts` at `ready: false` and become
+buttons with a three-character change once the uploads exist. `skin` is `none`
+and `theme`, and `none` is the default and the honest one: it applies no CSS,
+because the switch loads and unloads `@playdeck/react/theme.css` as a real
+`<link>` rather than importing it, so the unstyled position really is unstyled.
+That is what actually ships, and showing it argues better than a paragraph
+saying no stylesheet is in the bundle.
 
-**The hero is a split, and it fits one screen.** The thesis, the install line
-and one secondary link on one side; the real player, dormant, on the other.
-Measured at 1440x900 it runs from 117px to 539px, which leaves the fold well
-clear. It gets there by moving the live report out: `HeroPlayerIsland.tsx`
-mounts the panel at the hero and portals it into the `capabilities` section, so
-there is one player and one report, rendered once and read where each belongs. A
-second instance would have been a second thing to look at in the hero and a
-second set of answers to keep in step.
+**There is no capability table, grid or ledger, and two of those were designed
+in full before being cut.** The page that stood here carried a five-row panel headed "Asked of
+this browser, right now"; a draft of the replacement proposed a ten-by-five grid
+of every capability against every provider. The maintainer rejected both, in
+these words: "doesn't fit at all". They are right, and the reason is worth
+keeping: a matrix is a documentation object, it asks a reader to hold ten rows
+and five columns in their head while they are still deciding whether to keep
+reading, and it spends the largest block of space under the video on machinery.
+The word "ledger" is rejected outright and appears nowhere on the page.
 
-**One live player, and it is the hero's.** Two full archetypes ran in this
-page's composition section for two of its lives, and they were by a wide margin
-the largest thing on it: two running products, four hundred lines of
-composition, their own stylesheets, their own clip, a poster, a scroll-mount
-disclosure and a licence paragraph, all in the middle of an argument about an
-API. The maintainer's objection to the page was that too much was going on, and
-they were most of it.
+**Nothing holds space for the reason line.** There is no resting state, no
+"nothing asked yet", and no grey placeholder. `ReasonLine.tsx` returns `null`
+when there is nothing to report, which is the only way to make a placeholder
+unwritable rather than merely discouraged, and the reason line sits under the
+switches rather than in a row of its own so the composition panel beside it
+never moves when one arrives.
 
-So composition is argued the way the three features around it are, in the code
-that does it, and the running proof lives on `/archetypes` — the page whose
-subject those two files are, which prints each one's whole source beside the
-player it builds. `tracer-45s.mp4` and its poster left with them, because
-nothing else served either.
+**The page carries one block of code and it is generated, which retires the one
+exception `/` used to hold.** The fifth version wrote four snippets by hand in
+its own frontmatter, and this document defended them: they were three or four
+lines of a real API with the working component left out, so compiling them would
+have meant inventing one, and what held them honest was that every identifier in
+them existed. That exception is gone. `buildComposition` in
+`bench-composition.ts` is a pure function from the switches' positions to the
+source a reader would write, so the block cannot describe a composition the page
+is not running, and it rewrites itself on every press. The knobs are
+compositions and not options, and the panel is how that is shown rather than
+claimed.
 
-**The two figures it prints are measured at build time rather than written
-down.** They come from `scripts/bundle-budgets.mjs`, the module
-`pnpm test:budgets` gates with, so the page and the gate cannot state different
-numbers. The receipt and the provider comparison, which used to print more, are
-both gone from this page: the receipt entirely, and the comparison to
-`/providers`, where it is the page rather than an aside on one.
+**One live player, and it is the bench's.** Two full archetypes ran on this page
+for two of its lives and were by a wide margin the largest thing on it: two
+running products, four hundred lines of composition, their own stylesheets,
+their own clip, a poster, a scroll-mount disclosure and a licence paragraph, all
+in the middle of an argument about an API. The maintainer's objection was that
+too much was going on, and they were most of it. They live on `/archetypes` now,
+the page whose subject those two files are, which prints each one's whole source
+beside the player it builds. `tracer-45s.mp4` and its poster left with them,
+because nothing else served either, and putting them back behind a skin switch
+was proposed and refused on the ground that it is still putting them back.
 
-**Nothing on it is there for a reason other than those four features.** The
-`remote` section went in this pass: a heading, a row of provider names, a
-sentence and two numbers, spread over a screen's height to say one thing
-slowly. The five names are a row under the hero thesis now, where the scope is
-claimed, and the two measured figures sit in the close beside the command they
-qualify. The archetypes' licence paragraph went too, and that one is a
-correction rather than a cut: CC BY asks for attribution wherever the media is
-played, `/` plays a colour-bar fixture it serves itself, and a Blender credit on
-a page playing none of their work is not an attribution but a false claim about
-what is on screen. `site-landing.spec.ts` now asserts the name appears nowhere
-on `/` rather than in exactly one sentence.
+**The line under the frame is live, and it is replaced rather than removed.** At
+rest it reads "Nothing above has loaded. No request has left this page", which
+is the product's central claim stated as a fact about the page the reader is on.
+A static line stops being true the moment somebody presses play, so `QuietLine`
+prints one of four sentences and `bench-quiet.ts` decides which. The state
+behind it is a latch and not a reading of the player: a source change returns
+the root to `dormant`, so a line derived from the live state would deny a
+request the page had already made. History does not revert, and the sentence is
+about history.
 
-**The close is a rule, the command, the ways onward and the two figures.** It was an end-credits
-treatment for one page's life: its own dark panel, a three-line roll set in
-mono, and a heading over a second copy of the install command. On screen that
-was a large mostly empty box at the foot of the page, and the roll was a joke
-told in 12px type. A reader who leaves before the close has already had the
-whole argument, which is the test every section here has to pass, so the close
-does not need a treatment of its own.
+**One sentence on this page has been tightened once already and is worth
+watching.** The thesis of an earlier version read "zero requests until you press
+play", which was exact while the stages were black and stopped being exact the
+moment they were given a poster, since a poster is a same-origin image request
+before any press. It became "no video request until you press play". The bench's
+player now carries a poster of its own, `tracer-poster.webp`, cut from the clip
+it precedes, and the resting line reads "Nothing above has loaded. No request
+has left this page." The second clause is what
+`e2e/site-quiet.spec.ts` gates and it is exact, because it is about requests
+leaving this origin and the poster does not. The first clause is the one to read
+carefully next time somebody changes what the frame shows at rest.
 
-**One sentence was tightened rather than left to be nearly true.** The thesis
-read "zero requests until you press play", which was exact while both archetype
-stages were black. Giving them a poster makes it a same-origin image request
-before any press, so the claim is now "no video request until you press play",
-which is what the page can actually stand behind. The hero's own player still
-carries no poster and its caption still says nothing is fetched, because for
-that player nothing is.
+**The close is four figures, the command, the fine print and the ways onward.**
+The first figure is measured at build time from `scripts/bundle-budgets.mjs`,
+the module `pnpm test:budgets` gates with, so the page and the gate cannot state
+different numbers. The other three are facts about how the packages are
+published rather than measurements, so they are written. The close had an
+end-credits treatment for one page's life: its own dark panel, a three-line roll
+set in mono, and a heading over a second copy of the install command. On screen
+that was a large mostly empty box at the foot of the page, and the roll was a
+joke told in 12px type. A reader who leaves before the close has already had the
+whole argument, which is the test every part of this page has to pass, so the
+close takes no treatment of its own.
 
-**The install line is the call to action, and it is click-to-copy.** It is
-printed twice, in the hero and in the credits, from one string in the page's
-frontmatter, because a call to action that was two different strings is a defect
-a reader would find before a test would. The command is selectable text; the
+**The install line is the call to action, and it is click-to-copy.** It used to
+be printed twice, in the hero and in the credits, from one string in the page's
+frontmatter so that the two could not drift; the credits are gone and it is
+printed once, so the string is a `const` for tidiness rather than for safety.
+The command is selectable text; the
 copy button is `hidden` in the markup and revealed by a script. Writing to the
 clipboard is the whole of what the control does, so with no script there is
 nothing to press rather than a control that swallows a click, and nothing is
 lost, because the command was never behind the button. The feedback is a text
 swap on the button with the same words said once through a `role="status"` line.
 
-**Prose is held to `--measure` everywhere on the page**, and the page's own
-maximum is `72rem`. The width buys columns, not longer lines.
+**The page makes no claim about any other library.** No comparison, no named
+competitor, no implied one. A draft opened with "every video player ships a
+design", which is false: react-player ships no stylesheet and says so in its
+README. The maintainer ruled the whole category out, and it is recorded here so
+that a later session does not reintroduce it as a copy tweak.
+
+**The page does not ask to be pressed.** No prompt, no instruction, no "try it"
+line. The switches are visible controls under a video and a React engineer knows
+what a switch is. A page that explains its own interface is a page that does not
+trust it.
+
+**Prose is held to `--measure` on the page**, and the page's own
+maximum is `72rem`. The width buys the readout its two columns, not longer
+lines.
 
 One constraint on that page is `scripts/check-deploy-artifact.mjs`'s rather
 than this system's, and it is load-bearing: its `h1` is exactly `Playdeck`,
@@ -1461,7 +1798,7 @@ this site (#534), which is a separate decision and still in force.
 five providers behind one API is the kind of sentence that invites
 a reader to assume they are interchangeable, and they are not. It sits on
 `/providers` rather than on `/`. It was an aside on the landing page for three
-of that page's four lives, and it was one of the things that made the third too
+of that page's six lives, and it was one of the things that made the third too
 long to read: a comparison table is what somebody chooses a provider with, which
 is a thing they do after being convinced rather than while. So the table asks
 three questions of the four provider groups and prints `unknown` as an answer
@@ -1499,37 +1836,74 @@ against `--color-field`, so the thing being compared stays on screen while the
 comparison moves past it. Sticky needs an opaque ground, and the field is the
 ground because this section sits on the field rather than on a panel.
 
-## The hero player, and the site's islands
+## The bench's player, and the site's islands
 
-The hero mounts a real player. Two routes ship a renderer, and `/` now mounts
-three islands rather than one: the hero — the player and the capability ledger
-reading it, `client:only` — and the two archetype compositions, `client:visible`.
-`/archetypes` mounts the same two compositions beside the source of each. Every
+`/` mounts a real player. Two routes ship a renderer, and `/` mounts exactly one
+island: `BenchIsland`, `client:only`. `/archetypes` mounts the two archetype
+compositions beside the source of each, also `client:only`, and their two source
+wells `client:visible`. Every
 other page is HTML, CSS, the inline theme and rail scripts, and the search
 module. A prose section that shipped a framework would be the defect; a landing
 page for a video-player library that showed no player would be a different one.
 
-**Three live players on `/`, and no more.** Everything else on that page is a
-readout, a table or printed code. A landing page for a player library that ran
-six players would be arguing that it can run six players.
+**One live player on `/`, and no more.** Everything else on that page is a
+control, a line of text or printed code. A landing page for a player library
+that ran six players would be arguing that it can run six players. This
+paragraph said three for one version of the page, while two archetypes ran below
+the hero, and the count coming back down to one is what the rebuild was for
+rather than a side effect of it.
 
 The routes are the same decision applied twice, not a drift: a page whose
 argument is what a player does has to run one, and no page here mounts a
-framework for anything else. The two directives differ for a reason worth
-stating, because they look like a choice and are not. The hero is `client:only`
-so that no button exists in the document before the script that works it arrives
-— the resting-state rule, applied to an island. The archetypes are
-`client:visible` so that a reader who never scrolls past the hero pays for
-neither, which costs a request the page did not make on arrival, which is why the
-page discloses it in copy. See _The archetypes, and why they are outside rules 1
-and 5_ for what that directive's server render puts in the document.
+framework for anything else. Both use `client:only`, and the reason is the same
+on both: no button exists in the document before the script that works it
+arrives, which is the resting-state rule applied to an island, and nothing is
+rendered on the server that a browser holding a media element then has to be
+made to agree with. A hydration mismatch on the site's root document is a
+console error, and console errors on that document are one of the things
+`scripts/check-deploy-artifact.mjs` fails the deployed artifact on.
+
+**`/` used to portal a panel downward, and it now portals the player upward.**
+The old hero mounted its island at the top of the page and portaled its
+capability readout into a section further down, so that one player and one
+report could be rendered once and read where each belonged. The bench inverts
+it. `BenchIsland` is placed under the frame, and `StagePortal` renders the
+player into `#bench-stage` inside the frame `Bench.astro` draws above it. The
+reason is that the frame carries `--elevation-instrument` and the sweep along
+its bottom edge, and an Astro component cannot be a child of a React one, so the
+player has to travel to reach it. `createPortal` keeps the stage inside this
+component's React tree, and therefore inside `Player.Root`'s context, while
+rendering its DOM somewhere else. That is what lets the player leave without the
+reason line losing the controller it reports on: there is one root above
+everything, so the line is reading the same controller the picture is driven by
+rather than a second one of its own, which is what makes it a report rather than
+a caption.
+
+**The `client:only` directive has one cost and it is stated rather than
+discovered.** The line under the frame and the whole readout are absent until
+the island mounts, and nothing reserves their height. With no JavaScript the
+frame holds a `<noscript>` fallback instead: a plain `<video controls muted
+playsinline preload="none">` on the same file, with the same poster as a real
+`poster` attribute rather than a CSS background, so that path keeps the guarantee
+the rest of the page does. No quiet line is printed there, because the fallback
+is a different player with its own behaviour and the sentence would be describing
+one that is not running.
 
 **The clip is `public/tracer.mp4`, this app's own copy.** An Astro build serves
 only its own `public/`, so the file is copied in rather than reached for across
-an app boundary. It is a one-second colour-bar test pattern with no audio track,
-and the caption under the panel says what it is — the picture is a fixture, not
-footage, and a hero that implied otherwise would be the page's only dishonest
-frame.
+an app boundary. It is a one-second colour-bar test pattern with no audio track.
+
+**There is a poster now, `public/tracer-poster.webp`, and this document used to
+say there was not.** It is frame 15 of the clip, 320x180 and 3,396 bytes, and
+`Bench.astro` records the `ffmpeg` command that cut it and the four formats that
+were measured before WebP at q90 was chosen. The earlier version of this section
+argued that the hero carried no poster, and it was right about that page: a
+poster there was a same-origin request before any press, on a panel whose whole
+job was to have made none. The bench is the largest element on the page and sits
+above the fold, and a blank rectangle is a worse first impression than a still of
+the thing the control beside it is labelled to play. So the trade was taken
+deliberately, the poster is same-origin, and the claim the page actually defends
+is the one about requests leaving this origin.
 
 `public/archetype-captions.vtt` is the same rule a second time, and is stated
 here so the copy does not read as an accident. The archetypes mount in two
@@ -1539,91 +1913,110 @@ rather than drift is that neither copy is authored: it is a fixture whose text
 marks time in a clip, and a change to one that did not reach the other would
 show up as a caption that did not match what the other surface played.
 
-**There is a second fixture, `public/tracer-45s.mp4`, and two rather than one is
-the point.** It is the same colour-bar pattern looped to forty-five seconds —
-92,824 bytes, measured at exactly 45.000000s — and it is what the two archetypes
-play on `/`. The hero needs a frame: one second is enough for a picture to exist
-and be described, and the smaller file is the right one for the thing that
-decides whether the page has a player in it. The archetypes need a _timeline_.
-They mount with `resumeAt={18}` and `{14}`, their chapter fixture marks 18s and
-38s, the lesson's outline runs to 28s and the caption cues to 22s — none of which
-a one-second clip can carry, and all of which are the layout the section is
-claiming. A single fixture would mean either a hero paying for forty-five seconds
-it never plays, or archetypes whose scrubbers have nowhere to go.
+**There was a second fixture, `public/tracer-45s.mp4`, and it is gone.** It was
+the same colour-bar pattern looped to forty-five seconds, and it existed because
+the two archetypes ran on `/` and needed a timeline: they mount with
+`resumeAt={18}` and `{14}`, their chapter fixture marks 18s and 38s, the lesson's
+outline runs to 28s and the caption cues to 22s, none of which a one-second clip
+can carry. The length was chosen against the last mark rather than around it,
+because the streaming rail drops any chapter at or past the duration and a clip
+ending before 38s would silently draw one tick where the fixture asks for two.
+All of that reasoning is about a page that no longer mounts them. The fixture
+left with the archetypes, and `/archetypes` plays the Blender trailers the
+examples ship. The reasoning is kept because the constraint is not: a chapter
+mark at or past the duration is dropped silently by the streaming rail, so any
+future surface that overrides the media on either archetype inherits that
+arithmetic, and this paragraph is where it is written down.
 
-**The length is chosen against the last mark rather than around it.** The
-streaming rail drops any chapter at or past the duration — see
-`ChapterRail`'s filter in `examples/archetype-streaming-service.tsx` — so a clip
-that ends before 38s would draw one tick where the fixture asks for two, and
-would do it silently. Forty-five seconds clears the last mark with room, which is
-what makes "both ticks are drawn" an observable property of this page rather than
-a coincidence of the fixture.
-
-The rule stated for `archetype-captions.vtt` a paragraph above does not extend to
-this file, and the asymmetry is deliberate rather than an omission somebody
-should tidy. The captions fixture exists byte-identically in both `public/`
-directories because both surfaces mount it. This one has no counterpart in
-`apps/storybook/public` because only `/` overrides the media: the stories pass no
-`media` prop and keep the Blender trailers the examples ship, so a copy there
-would be an asset nothing loads.
-
-**And the honesty rule all of this serves.** The examples' default source is a
+**And the honesty rule all of this served.** The examples' default source is a
 Blender open-movie trailer on that foundation's own host, and it stays pointed
 there, because the default in a file somebody pastes into their own project
 should be a clip that plays rather than a path into this repository's `public/`.
-`/` overrides it because it is the page carrying #542's no-third-party-request
-criterion, and that criterion covers every request the page can cause, including
-the ones a press causes. `/archetypes` passes nothing and keeps the trailers,
-because that
-page makes no such claim and is where a reader reads the files as they ship — and
-CC BY's attribution is why the licence line under those players is the one piece
-of copy `/` still writes for itself.
+`/` overrode it while it mounted them, because it is the page carrying #542's
+no-third-party-request criterion, and that criterion covers every request the
+page can cause, including the ones a press causes. It mounts them no longer, so
+nothing on this site overrides the media any more: `/archetypes` passes only a
+captions URL and a resume position, keeps the trailers, and carries the CC BY
+attribution beside them, which is where that line belongs now that it describes
+what is actually on screen.
 
-**Nothing about the player contacts a third party, and that is the point.** The
-source is a file on this origin, driven through the native provider, and
-`loading="interaction"` holds the root dormant until the play affordance is
-pressed: no fetch, no provider attached. That claim is no longer argued in prose
-elsewhere on the page — `e2e/site-landing.spec.ts` records every request the
-page makes and fails if a media file is fetched before the press. The hero is
-where the claim is demonstrated rather than asserted, and the spec is where it
-is counted, now that the page prints no request log of its own.
+**Nothing about the player contacts a third party before a press, and that is
+the point.** The default source is a file on this origin, driven through the
+native provider, and `loading="interaction"` holds the root dormant until the
+play affordance is pressed: no fetch, no provider attached. What changed with the
+bench is that the claim is now about the order of events rather than about the
+absence of them, because the source switch can point the player at somebody
+else's host, and it does that only because a reader asked. `e2e/site-quiet.spec.ts`
+gates both halves: it records every request `/` makes at rest and fails if one
+leaves this origin, then presses a hosted provider and fails if none does, so an
+empty list is evidence rather than a listener attached to the wrong page. That
+second test skips itself while every hosted provider is `ready: false`, and the
+skip is computed rather than written down, so it starts running by itself the day
+one is turned on.
 
-**With no JavaScript the panel is a plain `<video controls preload="none">`** on
-the same file, inside `<noscript>`. The island is `client:only`, so it renders
-nothing on the server and there is never a button in the document that a script
-has to arrive to make work.
+**The player's theme is no longer imported, and that is the skin switch.**
+`@playdeck/react/theme.css` was a plain import while `/` had a hero, which meant
+every reader paid for it and no reader could be shown the library without it.
+The bench has to be able to apply it and take it away, so `BenchIsland.tsx`
+imports it as `?url` and appends or removes a `<link>`. Vite emits the
+stylesheet as its own hashed asset and the import is the address of it, so no
+byte of it is in the page's own CSS or JavaScript, and `none` really is no CSS
+rather than a position that claims to be. A dynamic `import()` was the obvious
+alternative and is the wrong one: Vite turns a dynamically imported stylesheet
+into a chunk that injects a `<style>` element on evaluation and hands back no
+handle to remove it, so pressing `theme` once would make `none` unreachable for
+the rest of the page's life.
 
-**The player's theme is imported, and it is a second system meeting this one.**
-`@playdeck/react/theme.css` is layered and matches only elements carrying a
-`data-playdeck-part` attribute, so it cannot reach anything else on the site and
-loses to every unlayered rule here. It declares no token of its own — every value
-is read as `var(--playdeck-…, fallback)` — so `HeroPlayer.astro` maps the whole
-of it onto this system's roles in one block, and the player re-tunes with the
-theme switch because it is reading the roles every other panel reads. Two of
-those choices are not free:
+**The two systems still cannot bleed into each other, and that is a property of
+that file rather than of this page's care.** Every selector in it sits inside
+`@layer playdeck` and is wrapped in `:where()`, so it matches only elements
+carrying a `data-playdeck-part` attribute and loses to any unlayered rule here
+whatever the specificities are. In the other direction it declares no token of
+its own: every value is read as `var(--playdeck-…, fallback)`, so the mapping
+block in `Bench.astro` is the whole of what this site says to it. That block is
+stated once and left alone rather than toggled with the switch, because nothing
+reads a custom property no stylesheet is asking for.
 
-- **The control bar is `--color-surface`, not the theme's scrim.** That default
-  is a gradient, and this system has exactly one gradient. A flat surface and a
-  hairline is the depth treatment the rest of the page uses.
-- **Layer geometry is the page's.** The library's stylesheet states appearance
-  and leaves position out, so the picture, the activation affordance and the
-  control bar are stacked in one grid cell by rules in `HeroPlayer.astro`.
+Two of the mapped choices are not free:
 
-**A click anywhere on the picture works the player, and neither half of that is
-a handler.** Before the clip is loaded the target is the activation button
-itself, restored to the full-bleed box the library ships it with — the bundled
-theme's 4rem is what had been shrinking it, and `HeroPlayer.astro` takes that
-size back and redraws the badge as a background so the picture is not painted
-over. Once the clip is running the target is a second `Player.PlayButton`, laid
-into the same cell with its control-bar chrome removed, so the click toggles
-playback the way every desktop player's does. The two never coexist: the
-activation button removes itself at the moment the surface toggle is rendered.
-The surface toggle is out of the tab order: once focus is in the bar the
-keyboard reaches the same command twice already — the bar's own play button, and
-Space or `k` anywhere inside `Player.Controls` — and a third stop named "Pause"
-in front of the bar would be an obstacle rather than an affordance. The bar
-keeps its own clicks by painting in front: both layers take `z-index: 1` and the
-bar comes later.
+- **The control bar is `--stage-surface`, not the theme's scrim.** That default
+  is a gradient, and this system has exactly one gradient. A flat surface is the
+  depth treatment the rest of the frame is built from.
+- **Layer geometry is the page's, in both skin positions.** The library's
+  stylesheet states appearance and leaves position out, so that a player works
+  with no stylesheet at all and so that a consumer can put the controls
+  somewhere other than over the picture. Where the layers sit is the consumer's
+  decision in every composition the library ships to, and on this page the
+  consumer is `Bench.astro`. That is not the page bending the rule that `none`
+  applies no CSS: it is the line the library itself draws.
+
+**`Bench.astro` writes one rule that changes how a part looks, and it is a
+browser defect rather than a skin.** Everything else it says to the player is
+layout, a `[hidden]` reset, or the mono tracking this site applies wherever Plex
+Mono appears. Under `none` the activation affordance keeps the
+full-bleed box the library ships it with, which is what makes a press anywhere
+on the picture start the clip, and it also keeps the user agent's own button
+paint: measured on this frame, an opaque `rgb(239, 239, 239)` fill and a
+`2px outset` black border at `z-index: 30`, over a poster at 10. The still was
+loaded, decoded and marked visible by the library's poster state machine, and
+painted over regardless. An element whose whole job is to overlay a picture and
+which occludes it instead is not styled, it is broken, so the rule sets
+`background-color: transparent` and `border: 0` and nothing else. No size, no
+radius, no badge, no hover: those are chrome and they stay the theme's, which is
+what keeps the two positions a contrast about chrome rather than about whether
+there is a picture at all.
+
+**That rule is scoped to `[data-bench-skin='none']`, and it was written unscoped
+first.** Unscoped, it falsified the paragraph above. It is unlayered CSS while
+`theme.css` lives entirely inside `@layer playdeck`, and an unlayered
+declaration beats a layered one for the same property whatever the specificities
+are, so the reset reached the themed player too: the part computed
+`rgba(0, 0, 0, 0)` under both skins and the theme's own fill never landed.
+Pressing `theme` gave a bare glyph with no badge. `data-bench-skin` rides on the
+viewport, which is React's element, so the attribute arrives in the same commit
+as the state it reports; writing it onto the Astro element would mean a
+`setAttribute` in an effect and a frame in which the document and the switch
+disagree.
 
 **The keyboard is put into the bar when the player appears, and only the
 keyboard.** The activation button unmounts while it holds focus, and a browser
@@ -1631,11 +2024,36 @@ drops focus to `<body>` when the focused element leaves the document — so a
 reader who pressed Enter would be left with nothing focused and no media
 shortcut, `shortcuts` being scoped to `Player.Controls` rather than global. The
 library restores focus for controls that unmount from inside that region, and
-this button is outside it. `HeroPlayerIsland.tsx` moves focus to the bar's play
+this button is outside it. `BenchIsland.tsx` moves focus to the bar's play
 button, which is the command that was just given. It does so only when the
 activation button matched `:focus-visible` at the moment it was pressed — the
 browser's own record of whether a ring was on screen — because a ring appearing
 after a mouse click or a touch tap is its own defect.
+
+**The bar is hidden rather than unmounted before a player exists**, with the
+`hidden` attribute, which takes it out of layout, out of the accessibility tree
+and out of the tab order at once without discarding a subtree that is about to
+come back. `Bench.astro` carries a `[hidden]` reset for it, which is needed
+rather than assumed: the attribute is honoured by a rule in the user agent
+stylesheet, and the theme gives that part a `display` of its own, which any
+author rule beats.
+
+**A control the provider cannot honour is absent rather than disabled**, and
+that is the library's doing rather than this page's. `Player.FullscreenButton`
+renders only while the fullscreen capability reads `available`. It is the same
+fact the reason line under the switches prints in words, said twice in two
+registers, which is the closest thing on this page to a demonstration of the
+capability system that is not the line itself.
+
+**This paragraph used to describe a second play button laid over the picture**,
+so that a click anywhere on a running clip toggled playback the way a desktop
+player's does, out of the tab order because the bar already reached the same
+command twice. The bench does not have it. A press on the picture starts the
+clip and after that the bar is where playback is worked. That is a reduction
+rather than a decision defended on its merits: the surface toggle was chrome the
+bench did not carry over, and a later session that wants it back should read
+this paragraph as a record of how it was built rather than as a ruling against
+it.
 
 **The seek input is `display: block`, and that is a library defect worked around
 rather than a choice.** A range input is inline-level, so the theme's
@@ -1650,31 +2068,40 @@ the line box makes the container the input's own
 separately rather than fixed here.
 
 Measured with `packages/react/test/contrast.ts`, in the same arithmetic as the
-table above. Text on the bar is the `--color-ink` on `--color-surface` row that
-table already carries; these are the pairs the player adds:
+tables above. These are the pairs the player adds, and they are the pairs the
+`theme` skin paints: under `none` the seek control is the user agent's own range
+input and none of this is drawn.
 
-| Pair                           | Light | Dark  | Needs |
-| ------------------------------ | ----- | ----- | ----- |
-| Loaded range on the track      | 3.24  | 3.62  | 3     |
-| Thumb ring on the track        | 16.38 | 16.92 | 3     |
-| Thumb ring on the loaded range | 5.06  | 4.68  | 3     |
-| Progress fill on the track     | 5.88  | 8.66  | 3     |
-| Focus ring on the bar          | 6.65  | 8.33  | 3     |
+**One column and not two, because the stage is theme-independent.** Every value
+below is mapped from a `--stage-*` role, and those never move with `data-theme`,
+so the player casts the same figures in a light page as in a dark one. This
+table carried a Light and a Dark column for as long as the stage roles have
+existed, and the Light column was arithmetic on tokens the player has never
+read. Text on the bar is `--stage-ink` on `--stage-surface`, which is the dark
+`--color-ink` on `--color-surface` row the table above already carries at 16.27.
+
+| Pair                           | Both themes | Needs |
+| ------------------------------ | ----------- | ----- |
+| Loaded range on the track      | 3.62        | 3     |
+| Thumb ring on the track        | 16.92       | 3     |
+| Thumb ring on the loaded range | 4.68        | 3     |
+| Progress fill on the track     | 8.66        | 3     |
+| Focus ring on the bar          | 8.33        | 3     |
 
 **The thumb carries a ring because its fill cannot carry the boundary.** The
-accent measures 1.82 light and 2.39 dark against the loaded range, and no accent
+accent measures 2.39 against the loaded range on this ground, and no accent
 value clears 3:1 against both that and the track — which is the library's own
 finding, and why its theme draws a ring at all. The ring is what the table above
 holds to 3:1, and the fill is decoration on top of it.
 
-**The track is `--color-sunken`.** That is the recessed-well role, which names a
-switch track outright, and it is also what the first row of the table needs: on
-`--color-line` the loaded range measures 2.85 light and 2.82 dark, below what
-non-text UI owes.
+**The track is `--stage-sunken`.** That is the recessed-well role on the stage's
+own ladder, which names a switch track outright, and it is also what the first
+row of the table needs: on the line role the loaded range measures 2.82, below
+what non-text UI owes.
 
 This system is separate from `@playdeck/react/theme.css`, which is the player's
 theme and ships to consumers. That file is layered and zero-specificity because a
 stranger's stylesheet has to be able to win against it; nothing here ships
 anywhere, so nothing here needs that. The two share no tokens and are not meant
-to match — the hero maps one onto the other at a single seam, and that mapping is
-the whole of the contact between them.
+to match — `Bench.astro` maps one onto the other at a single seam, and that
+mapping is the whole of the contact between them.
