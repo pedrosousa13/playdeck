@@ -1273,34 +1273,62 @@ templated appearance the rest of this document exists to prevent.
 
 ## The landing page
 
-`/` is the site's front door, and it is five sections: hero, truth, faces,
-remote, credits. Each is marked with a `data-section` attribute naming it, which
-is how `e2e/site-landing.spec.ts` pins the order rather than pinning a heading a
-later edit is free to reword.
+`/` is the site's front door, and it is six sections: the hero, then one for
+each feature the page sells — `capabilities`, `autoplay`, `compose`, `custom` —
+then the close. Each is
+marked with a `data-section` attribute naming it, which is how
+`e2e/site-landing.spec.ts` pins the order rather than pinning a heading a later
+edit is free to reword.
 
-**This passage has now described four pages, and the count is the point.** The
-first argued in sentences and asked to be believed. The second argued by running
-the thing and printing what running it cost, across eight sections and 8,679px,
-and was rejected as a documentation page wearing a landing page's spine. The
-third kept that instinct and lost the reader anyway: the maintainer's words were
-"this is a huge page that doesn't make sense" and "nobody knows wtf a capability
-ledger is". The fourth is this one, written after "I'm throwing the rules out",
-and what it threw out was the reference content, not the honesty.
+**This passage has now described five pages, and the count is the point.** The
+first argued in sentences and asked to be believed. The second argued by
+running the thing and printing what running it cost, across eight sections and
+8,679px, and was rejected as a documentation page wearing a landing page's
+spine. The third kept that instinct and lost the reader anyway: "this is a huge
+page that doesn't make sense", "nobody knows wtf a capability ledger is". The
+fourth said the right things in the wrong shape and was rejected for the shape.
 
-**The differentiator is now stated in plain language and demonstrated
-underneath, in that order.** The old page led with the instrument and expected
-the reader to infer the claim from it. This one says "No greyed-out buttons.
-Ever." and then shows the live per-capability report answering for the browser
-the reader is in. The phrase "capability ledger" appears nowhere, and
-`site-landing.spec.ts` asserts that it does not, because the temptation to reach
-for it sits right beside the panel it would name.
+**The fifth is written for the reader it actually has, which is the thing the
+first four never settled.** That reader is a React engineer choosing a video
+library, and what they buy on is the API. So the page names four features and
+shows each one as the code that uses it: querying what a player can do,
+autoplay that recovers from a policy block and reports that it did, composing
+two products out of one set of primitives, and owning all of the markup. The
+prose around each is short and the code is the evidence.
+
+**Code is the page's texture, and that is a deliberate reversal.** The previous
+four carried no code at all outside the install line, on the reasoning that a
+landing page argues and a document explains. That reasoning produced four pages
+that a React engineer could read to the end without learning what calling this
+library looks like. `base.css` already gives every `pre` on the site its
+recessed well, so the blocks cost this page one rule of its own.
+
+**The snippets are written in the page's frontmatter, and that is the one place
+`/` departs from a rule the rest of the site keeps.** Everywhere else a printed
+file is read as bytes from the file it claims to be, because a hand-typed
+example is a second copy of an API and the only copy that can be wrong while
+everything around it stays green. These four are not files: each is three or
+four lines of a real API with the rest of a working component left out, and
+compiling them would mean inventing the component. What holds them honest is
+narrower and worth stating rather than assuming — every identifier in them
+exists, and two were corrected against the source while this section was
+written, `Player.TimeDisplay` to `Player.Time` among them.
+
+**The four sections share a shape and deliberately not a layout.** Each is a
+head that states the claim, a body that shows the API, and a note under it. The
+head is a vertical stack rather than a headline with its explainer set beside
+it, because that split is the section header every generated marketing page
+reaches for. The bodies differ on purpose: two columns with the code leading,
+one full-width block over a four-state sequence, two stacked players, then two
+columns with the code trailing. Four identical two-column bodies in a row would
+read as a template however different the words in them were.
 
 **The hero is a split, and it fits one screen.** The thesis, the install line
 and one secondary link on one side; the real player, dormant, on the other.
 Measured at 1440x900 it runs from 117px to 539px, which leaves the fold well
 clear. It gets there by moving the live report out: `HeroPlayerIsland.tsx`
-mounts the panel at the hero and portals it into the `truth` section, so there
-is one player and one report, rendered once and read where each belongs. A
+mounts the panel at the hero and portals it into the `capabilities` section, so
+there is one player and one report, rendered once and read where each belongs. A
 second instance would have been a second thing to look at in the hero and a
 second set of answers to keep in step.
 
@@ -1315,6 +1343,18 @@ rather than the Blender trailers `/archetypes` plays. The copy says so in as
 many words, on both of them, rather than letting a reader who opens devtools
 discover a request the page never mentioned.
 
+**Both carry a poster, and it is one file for two players.** Neither
+composition drew one before, and the clip had none, so both stages were black
+rectangles until pressed and "same parts, any face" was an argument illustrated
+by two empty boxes. The still is a frame of the fixture, served from here like
+everything else. One file rather than two: it is one clip, and a second
+identical image would imply otherwise on a page whose whole subject is not
+implying things. Identical media under two completely different chromes is also
+the strongest form of the claim, because what differs is then visibly the
+stylesheet and nothing else. `poster` is an optional member of the archetypes'
+`media` prop, absent by default, because the trailers they default to are on
+somebody else's host and a poster for them would have to come from there too.
+
 **The two figures it prints are measured at build time rather than written
 down.** They come from `scripts/bundle-budgets.mjs`, the module
 `pnpm test:budgets` gates with, so the page and the gate cannot state different
@@ -1322,10 +1362,33 @@ numbers. The receipt and the provider comparison, which used to print more, are
 both gone from this page: the receipt entirely, and the comparison to
 `/providers`, where it is the page rather than an aside on one.
 
-**The closing section is an end-credits treatment**, and it is the one place the
-page permits itself a flourish: a short roll, one large install command, and the
-links out. It earns it by being last. A reader who leaves before it has already
-had the whole argument, which is the test every section here has to pass.
+**Nothing on it is there for a reason other than those four features.** The
+`remote` section went in this pass: a heading, a row of provider names, a
+sentence and two numbers, spread over a screen's height to say one thing
+slowly. The five names are a row under the hero thesis now, where the scope is
+claimed, and the two measured figures sit in the close beside the command they
+qualify. The archetypes' licence paragraph went too, and that one is a
+correction rather than a cut: CC BY asks for attribution wherever the media is
+played, `/` plays a colour-bar fixture it serves itself, and a Blender credit on
+a page playing none of their work is not an attribution but a false claim about
+what is on screen. `site-landing.spec.ts` now asserts the name appears nowhere
+on `/` rather than in exactly one sentence.
+
+**The close is a rule, the command, the ways onward and the two figures.** It was an end-credits
+treatment for one page's life: its own dark panel, a three-line roll set in
+mono, and a heading over a second copy of the install command. On screen that
+was a large mostly empty box at the foot of the page, and the roll was a joke
+told in 12px type. A reader who leaves before the close has already had the
+whole argument, which is the test every section here has to pass, so the close
+does not need a treatment of its own.
+
+**One sentence was tightened rather than left to be nearly true.** The thesis
+read "zero requests until you press play", which was exact while both archetype
+stages were black. Giving them a poster makes it a same-origin image request
+before any press, so the claim is now "no video request until you press play",
+which is what the page can actually stand behind. The hero's own player still
+carries no poster and its caption still says nothing is fetched, because for
+that player nothing is.
 
 **The install line is the call to action, and it is click-to-copy.** It is
 printed twice, in the hero and in the credits, from one string in the page's

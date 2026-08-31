@@ -38,10 +38,19 @@ const landing = 'http://127.0.0.1:4322/';
  * Written out rather than read from the page, because a list derived from the
  * page's source would agree with the page whatever either of them said.
  *
- * Five sections: the split hero, the differentiator in plain words, both
- * archetypes, the one-remote figures, and the credits.
+ * Six sections: the split hero, then one per feature the page sells to a React
+ * engineer — capability querying, autoplay recovery, composition and
+ * customisation — then the close, which carries the install line, the two
+ * measured figures and the ways onward.
  */
-const sections = ['hero', 'truth', 'faces', 'remote', 'credits'];
+const sections = [
+  'hero',
+  'capabilities',
+  'autoplay',
+  'compose',
+  'custom',
+  'close'
+];
 
 test('the sections are present, in order', async ({ page }) => {
   await page.goto(landing);
@@ -106,7 +115,7 @@ test.describe('with no JavaScript', () => {
 
     // The command was never behind the button: it is text in the document, so
     // a reader with no script selects and copies it exactly as before. Both
-    // copies of it — the hero's and the credits' — say the same thing,
+    // copies of it — the hero's and the closing section's — say the same thing,
     // because the page renders one string twice.
     const commands = page.locator('[data-install-command]');
     await expect.poll(() => commands.count()).toBeGreaterThan(0);
@@ -339,34 +348,28 @@ test('both archetypes describe the clip they actually play', async ({
 }) => {
   /*
    * The half of the criterion above that a request check cannot see: false
-   * copy costs no request. The two film names are the specific claim,
-   * `Blender` the general one, both checked against the whole of the faces
-   * section's visible text rather than against the elements that happened to
-   * carry them, the point is that the words are gone from the page.
+   * copy costs no request.
+   *
+   * This used to allow `Blender` in exactly one sentence, a licence paragraph
+   * pointing at `/archetypes`. It allows none. CC BY asks for attribution
+   * wherever the media is played, and the media played here is a colour-bar
+   * fixture this site serves itself — so the attribution belongs on the page
+   * that plays the trailers, and a credit on a page that plays none of their
+   * work is not an attribution but a claim about what is on screen.
    *
    * `/archetypes` names the films, correctly, and `site-archetypes.spec.ts`
-   * leaves that alone. The only place they may not appear is here.
+   * leaves that alone.
    */
   await page.goto(landing);
 
-  const section = page.locator('[data-section="faces"]');
+  const section = page.locator('[data-section="compose"]');
   await expect(section).toBeVisible();
 
   const spoken = (await section.innerText()).replace(/\s+/g, ' ');
   expect(spoken).not.toContain('Sintel');
   expect(spoken).not.toContain('Big Buck Bunny');
   expect(spoken).not.toContain('open movie, played here');
-
-  // `Blender` survives in exactly one sentence, the licence paragraph, about
-  // `/archetypes` rather than about this page, because the copies of these
-  // files there do play that foundation's trailers, and CC BY asks for the
-  // credit wherever the media is played.
-  const licence = section.locator('.faces__licence');
-  await expect(licence).toContainText('the archetypes page');
-  await expect(licence).toContainText('CC BY 3.0');
-  expect(spoken.split('Blender').length - 1).toBe(
-    (await licence.innerText()).split('Blender').length - 1
-  );
+  expect(spoken).not.toContain('Blender');
 
   // And the copy that replaced it says what is really behind the layout, on
   // both archetypes.

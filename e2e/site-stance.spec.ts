@@ -124,7 +124,14 @@ test('the motion runs on / and settles on the resting state', async ({
   // nothing reads.
   await expect(page.locator('.truths .truth-card[data-enter]')).toHaveCount(3);
 
-  await targets(page).first().scrollIntoViewIfNeeded();
+  // Each of them, rather than the first alone. They are a column inside the
+  // capability section's body rather than a row of three (#542 phase 4), so
+  // they no longer all cross the fold together on a 420px-tall viewport, and
+  // scrolling only the first in would leave the last still waiting for its own
+  // observer — which is the vocabulary working, not failing.
+  for (const target of await targets(page).all()) {
+    await target.scrollIntoViewIfNeeded();
+  }
 
   // And it is released when they enter. `data-enter` is removed rather than
   // rewritten, so the resting state is the one the CSS gives the element.

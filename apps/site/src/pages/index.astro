@@ -1,7 +1,9 @@
 ---
+import { Code } from 'astro:components';
 import Base from '../layouts/Base.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import HeroPlayer from '../components/HeroPlayer.astro';
+import { shikiConfig } from '../shiki';
 import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
 import { StreamingServicePlayer } from '../../../../examples/archetype-streaming-service';
 import { CoursePlatformPlayer } from '../../../../examples/archetype-course-platform';
@@ -17,12 +19,45 @@ import { CoursePlatformPlayer } from '../../../../examples/archetype-course-plat
  * ---- the shape -------------------------------------------------------------
  *
  * A split hero: the thesis and the install line on one side, the real player
- * (dormant) and its live self-report on the other. Below it, four short
- * sections in plain marketing language: what the truthful controls mean, two
- * real compositions built from the same primitives, the provider count and
- * the measured bundle size, then one line to install. No section number, no
- * scroll cue, no pinned chapter — a reader can leave after the hero and still
- * have the whole argument.
+ * (dormant) on the other. Below it, four short sections in plain marketing
+ * language: what the truthful controls mean, two real compositions built from
+ * the same primitives, the provider count and the measured bundle size, then
+ * one line to install. No section number, no scroll cue, no pinned chapter —
+ * a reader can leave after the hero and still have the whole argument.
+ *
+ * ---- the layout pass, after a fourth rejection ------------------------------
+ *
+ * The five sections survived it. How they were laid out did not, and the three
+ * faults were on screen rather than in the argument.
+ *
+ * Every section was a stack of blocks each capped at `--measure`, inside a
+ * 72rem page, so the right half of the page was empty from `truth` to the foot
+ * and the two bundle figures read as a footnote in the corner of a blank band.
+ * `remote` is one row read across now and the figures are the size of the
+ * claim they make.
+ *
+ * The two archetypes were a pair of columns, 528px each. Both compositions
+ * size themselves from their own container and both reflow above that width,
+ * so the section rendered two phone layouts: 703px of stage beside 1,054px of
+ * stage, a 430px hole under the shorter one, and the streaming card's own
+ * title overflowing its frame. Stacked at full width, each reaches the layout
+ * it was built for.
+ *
+ * The close was an end-credits panel, which on screen was a large empty
+ * rectangle holding a joke set in 12px mono. It is a rule, the command and the
+ * ways onward.
+ *
+ * ---- the posters ------------------------------------------------------------
+ *
+ * Both stages were black rectangles until pressed, because neither composition
+ * drew a poster and the clip had none, which made "same parts, any face" an
+ * argument illustrated by two black boxes. Both carry a still of the fixture
+ * now, served from this origin like everything else here.
+ *
+ * One image on both, which is the honest form rather than the lazy one: it is
+ * one clip, and two files would imply two. Identical media under two entirely
+ * different chromes is also the strongest version of the claim this section
+ * makes, because what differs between them is then visibly the stylesheet.
  *
  * ---- two live players, and no more -----------------------------------------
  *
@@ -56,8 +91,19 @@ const archetypeSource = {
   ]
 } as const;
 
+// One still, for both. It is a frame of the clip itself, so the dormant stage
+// shows what is actually behind the play affordance instead of the black the
+// element paints when nothing has been fetched. Same file on both players,
+// because it is the same clip on both players, and shipping a second identical
+// image to imply otherwise is the one thing this page cannot do.
+const archetypePoster = {
+  src: `${import.meta.env.BASE_URL}tracer-poster.png`,
+  alt: 'A colour-bar test pattern: vertical bars over a circle, with a chroma strip across the lower third.'
+} as const;
+
 const streamingMedia = {
   source: archetypeSource,
+  poster: archetypePoster,
   kicker: 'Test pattern',
   title: 'Forty-five seconds of colour bars',
   blurb:
@@ -68,6 +114,7 @@ const streamingMedia = {
 
 const courseMedia = {
   source: archetypeSource,
+  poster: archetypePoster,
   title: 'Forty-five seconds of colour bars',
   note:
     'A fixture served from this origin, not a recording. What is on show is the layout of a study surface: notes beside the picture, a visible speed row, an outline of real buttons rather than ticks on a bar.',
@@ -75,9 +122,24 @@ const courseMedia = {
     'The clip is a colour-bar test pattern this site serves itself, a fixture and not a lesson.'
 } as const;
 
-// The differentiator, in plain words, then the live report from this
-// browser rendered beside the hero player. Never "capability ledger": the
-// maintainer rejected that phrase outright.
+/*
+ * The four features this page is here to sell, in the order a React engineer
+ * meets them when they try the library, and each one shown as the code that
+ * uses it rather than described.
+ *
+ * The snippets are written here rather than read out of a file, which is the
+ * one place this page departs from the rule the archetypes below follow. They
+ * are not examples that compile: each is the three or four lines of a real API
+ * that make one point, with the rest of a working component left out. What
+ * keeps them honest is that every identifier in them exists —
+ * `state.capabilities`, `state.autoplayRecovered`, `usePlayerActions`,
+ * `autoplay="audible-then-muted"` — and `pnpm typecheck` covers the files that
+ * do compile, on `/archetypes` and in the package READMEs.
+ */
+
+// The three answers a capability gives, in plain words, beside the live report
+// from this browser. Never "capability ledger": the maintainer rejected that
+// phrase outright.
 const truths = [
   {
     status: 'available',
@@ -97,6 +159,45 @@ const truths = [
       'The reason names what refused: the browser, the provider, the policy, or the plan behind the video.'
   }
 ] as const;
+
+const capabilitiesSnippet = `const quality = Player.usePlayerState(
+  (state) => state.capabilities.selectQuality
+);
+
+// Not disabled. Absent, and the reason is on the object.
+if (quality.status !== 'available') return null;
+
+return <QualityMenu />;`;
+
+const autoplaySnippet = `<Player.Root source={source} autoplay="audible-then-muted">
+  <UnmuteNudge />
+</Player.Root>;
+
+const UnmuteNudge = () => {
+  // True only where the audible attempt was refused by policy and the
+  // muted retry is what played. Never true for a muted autoplay you asked
+  // for, so this offer appears exactly when the viewer lost sound.
+  const recovered = Player.usePlayerState((s) => s.autoplayRecovered);
+  const actions = Player.usePlayerActions();
+  if (!recovered) return null;
+
+  return <button onClick={() => void actions.unmute()}>Sound off. Turn on</button>;
+};`;
+
+const customSnippet = `<Player.Root source={source}>
+  <Player.Viewport className="yours">
+    <Player.Media />
+    <Player.Captions />
+  </Player.Viewport>
+
+  {/* Your markup, your classes, your layout. These carry
+      behaviour and ARIA, and no CSS at all. */}
+  <div className="also-yours">
+    <Player.PlayButton />
+    <Player.SeekSlider />
+    <Player.Time />
+  </div>
+</Player.Root>;`;
 
 // The two measured figures, from the same module the CI gate fails a build
 // with, never hardcoded, so the page and the gate cannot disagree.
@@ -140,7 +241,12 @@ const install = 'pnpm add @playdeck/react';
         <h1 class="wordmark">Playdeck</h1>
         <p class="thesis">
           The video player that tells the truth. Headless primitives, five
-          providers, and zero requests until you press play.
+          providers, and no video request until you press play.
+        </p>
+
+        <p class="hero__providers">
+          <span>MP4</span><span>HLS</span><span>YouTube</span><span>Vimeo</span
+          ><span>Wistia</span>
         </p>
 
         <div class="cta">
@@ -162,66 +268,145 @@ const install = 'pnpm add @playdeck/react';
     </section>
 
     {
-      /* ---- truth ------------------------------------------------------------
+      /* ---- capabilities: feature one ---------------------------------------
        *
-       * The differentiator, in plain words. Never "capability ledger": the
-       * maintainer rejected the phrase outright. */
+       * The differentiator, told as the feature it is. Never "capability
+       * ledger": the maintainer rejected the phrase outright, and
+       * `site-landing.spec.ts` asserts it appears nowhere. */
     }
-    <section class="chapter truth" id="truth" data-section="truth">
-      <h2 class="chapter__title">No greyed-out buttons. Ever.</h2>
-      <p class="truth__lede">
-        A control the player can't honour isn't disabled. It's gone, and you
-        get the reason. The player above answers for exactly the browser
-        you're reading this in.
+    <section
+      class="chapter feature"
+      id="capabilities"
+      data-section="capabilities"
+    >
+      <div class="feature__head">
+        <h2 class="chapter__title">Ask the player what it can do.</h2>
+        <p class="feature__lede">
+          Every command carries an availability. Read it, and render the
+          control only where it means something. No greyed-out buttons, ever,
+          because there is nothing to grey out.
+        </p>
+      </div>
+
+      <div class="feature__body">
+        <div class="code">
+          <Code code={capabilitiesSnippet} lang="tsx" {...shikiConfig} />
+        </div>
+
+        <ul class="truths">
+          {
+            truths.map(({ status, summary, detail }) => (
+              <li class="truth-card u-enter" data-status={status}>
+                <h3 class="truth-card__name">
+                  <span class="truth-card__dot" aria-hidden="true" />
+                  {status}
+                </h3>
+                <p class="truth-card__summary">{summary}</p>
+                <p class="truth-card__detail">{detail}</p>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+
+      <p class="feature__note">
+        Eleven of them, on <code>state.capabilities</code>: seeking, volume,
+        rate, quality, text tracks, chapters, fullscreen, picture in picture,
+        AirPlay and the rest. Below is the real answer for the browser you are
+        reading this in, from the player above.
       </p>
-      <ul class="truths">
-        {
-          truths.map(({ status, summary, detail }) => (
-            <li class="truth-card u-enter" data-status={status}>
-              <h3 class="truth-card__name">
-                <span class="truth-card__dot" aria-hidden="true" />
-                {status}
-              </h3>
-              <p class="truth-card__summary">{summary}</p>
-              <p class="truth-card__detail">{detail}</p>
-            </li>
-          ))
-        }
-      </ul>
 
       {
-        /* The live report, as supporting evidence under the plain-language
-         * claim above rather than as the hero's second thing to look at. The
-         * panel itself is `Ledger` in `HeroPlayerIsland.tsx`, mounted at the
-         * hero and portaled here — see that file for why a portal and not a
-         * second instance. This element is only ever the portal's target: it
-         * renders nothing of its own, and with JavaScript blocked it stays
-         * empty, exactly as `.demo`'s own player does. */
+        /* The live report. The panel is `Ledger` in `HeroPlayerIsland.tsx`,
+         * mounted at the hero and portaled here — see that file for why a
+         * portal and not a second instance. This element is only ever the
+         * portal's target: it renders nothing of its own, and with JavaScript
+         * blocked it stays empty, exactly as the hero's own player does. */
       }
-      <div class="truth__evidence" id="truth-ledger-mount" />
+      <div class="feature__evidence" id="truth-ledger-mount"></div>
     </section>
 
     {
-      /* ---- faces --------------------------------------------------------
+      /* ---- autoplay: feature two -------------------------------------------
        *
-       * Both archetypes, live, from the same primitives. `client:visible` on
-       * both, so a reader who never scrolls here never pays for either. */
+       * Not on the page before this pass, and the one feature here a reader
+       * cannot see by looking at a running player, so it is told entirely in
+       * the API and in what the browser does. */
     }
-    <section class="chapter faces" id="faces" data-section="faces">
-      <h2 class="chapter__title">Same parts. Any face.</h2>
-      <p class="faces__lede">
-        A streaming service and a course platform, visually unrelated, built
-        live on this page from one set of primitives. The stylesheet is the
-        only difference, and it's yours.
-      </p>
+    <section class="chapter feature" id="autoplay" data-section="autoplay">
+      <div class="feature__head">
+        <h2 class="chapter__title">Autoplay that recovers, and says so.</h2>
+        <p class="feature__lede">
+          Ask for sound. When the browser refuses, the player mutes and tries
+          once more, then tells you that is what happened so you can offer the
+          viewer their sound back.
+        </p>
+      </div>
+
+      <div class="code code--wide">
+        <Code code={autoplaySnippet} lang="tsx" {...shikiConfig} />
+      </div>
+
+      <ol class="steps">
+        <li class="step">
+          <p class="step__state"><code>attempting</code></p>
+          <p class="step__detail">
+            The audible attempt goes out, exactly as you asked for it.
+          </p>
+        </li>
+        <li class="step">
+          <p class="step__state"><code>blocked</code></p>
+          <p class="step__detail">
+            Policy refuses it. Only a refusal retries: any other failure is
+            reported as it is, unretried.
+          </p>
+        </li>
+        <li class="step">
+          <p class="step__state"><code>started</code></p>
+          <p class="step__detail">
+            The muted retry plays, and
+            {' '}<code>autoplayRecovered</code> turns true. It is false for a
+            muted autoplay you asked for, so the two never look alike.
+          </p>
+        </li>
+        <li class="step">
+          <p class="step__state"><code>suppressed</code></p>
+          <p class="step__detail">
+            A viewer on
+            {' '}<code>prefers-reduced-motion: reduce</code> is not autoplayed
+            at, and that is a state of its own rather than silence.
+          </p>
+        </li>
+      </ol>
+    </section>
+
+    {
+      /* ---- compose: feature three ------------------------------------------ */
+    }
+    <section class="chapter feature" id="compose" data-section="compose">
+      <div class="feature__head">
+        <h2 class="chapter__title">Two products. One set of primitives.</h2>
+        <p class="feature__lede">
+          Both players below are built on this page from the same components,
+          playing the same clip. Everything that differs between them is a
+          stylesheet and a decision about where things go.
+        </p>
+      </div>
+
       <p class="disclosure">
-        Both players below are mounted when you scroll to them, so their
-        JavaScript arrives at that moment. Neither fetches a clip nor attaches
-        a provider until you press it, and everything either can fetch is
-        served from this origin.
+        Both are mounted when you scroll to them, so their JavaScript arrives
+        at that moment. Neither fetches a clip nor attaches a provider until
+        you press it, and everything either can fetch is served from this
+        origin.
       </p>
 
-      <div class="faces__grid">
+      {
+        /* Stacked, each at the page's full width, rather than set as a pair of
+         * columns. Not a taste call: both compositions size themselves from
+         * their own container and both reflow above 528px, which is what two
+         * columns of a 72rem page gave them. See this file's header. */
+      }
+      <div class="compose__stack">
         <figure class="archetype">
           <div class="stage">
             <StreamingServicePlayer
@@ -232,9 +417,10 @@ const install = 'pnpm add @playdeck/react';
             />
           </div>
           <figcaption class="archetype__caption">
-            A streaming service: the picture owns the frame, chapters are
-            marks on the scrubber. No quality menu, the native provider
-            cannot switch renditions of a progressive file, so
+            <b>A streaming service.</b> The picture owns the frame and the
+            chrome sits on top of it. Chapters are marks on the scrubber, the
+            title card is an overlay, and there is no quality menu: the native
+            provider cannot switch renditions of a progressive file, so
             {' '}<code>selectQuality</code> answers <code>unavailable</code>{' '}
             and nothing draws a ladder that does not exist.
           </figcaption>
@@ -250,65 +436,64 @@ const install = 'pnpm add @playdeck/react';
             />
           </div>
           <figcaption class="archetype__caption">
-            A course platform: the video shares the page with the lesson
-            instead of owning it, speed is a visible row, and navigation is
-            an outline of real buttons rather than ticks on a bar.
+            <b>A course platform.</b> The picture shares the page instead of
+            owning it. Nothing overlays the video, because nothing should cover
+            what is being read: the transport is docked beneath it, speed is a
+            visible row rather than a menu entry, and navigation is an outline
+            of real buttons beside the picture rather than ticks on a bar.
           </figcaption>
         </figure>
       </div>
-      <p class="faces__licence">
-        Read both files &rarr;
-        {' '}
-        <a href={archetypesUrl}>the archetypes page</a> prints each source
-        beside the player it builds, and plays the Blender Foundation open
-        movie trailers they ship pointed at, &copy; Blender Foundation and
-        licensed
-        {' '}
-        <a href="https://creativecommons.org/licenses/by/3.0/" rel="license">
-          CC BY 3.0
-        </a>.
-      </p>
+
     </section>
 
     {
-      /* ---- remote --------------------------------------------------------- */
+      /* ---- custom: feature four --------------------------------------------- */
     }
-    <section class="chapter remote" id="remote" data-section="remote">
-      <h2 class="chapter__title">One remote. Five providers.</h2>
-      <p class="remote__strip">MP4 &middot; HLS &middot; YouTube &middot; Vimeo &middot; Wistia</p>
-      <p class="remote__lede">
-        Adapters load lazily, so a page playing MP4 ships none of the others.
-      </p>
-      <dl class="remote__figures">
-        <div class="remote__figure">
-          <dt>@playdeck/react</dt>
-          <dd>{reactKb.toFixed(0)}<span class="remote__unit"> KB</span></dd>
+    <section class="chapter feature" id="custom" data-section="custom">
+      <div class="feature__head">
+        <h2 class="chapter__title">No CSS ships. The markup is yours.</h2>
+        <p class="feature__lede">
+          The primitives carry behaviour, keyboard handling and ARIA. They
+          import no stylesheet and render no chrome of their own, so there is
+          no theme to fight and nothing to override.
+        </p>
+      </div>
+
+      <div class="feature__body feature__body--reverse">
+        <ul class="claims">
+          <li class="claim">
+            <b>Your classes.</b> Every primitive forwards
+            {' '}<code>className</code>, <code>style</code> and its ref.
+          </li>
+          <li class="claim">
+            <b>Your layout.</b> Nothing is positioned for you. The two players
+            above are the same components in two arrangements.
+          </li>
+          <li class="claim">
+            <b>Your elements.</b> Where a primitive would be in the way, take
+            the state from a hook and render your own.
+          </li>
+          <li class="claim">
+            <b>An opt-in theme.</b> One stylesheet, if you want somewhere to
+            start rather than nothing.
+          </li>
+        </ul>
+
+        <div class="code">
+          <Code code={customSnippet} lang="tsx" {...shikiConfig} />
         </div>
-        <div class="remote__figure">
-          <dt>@playdeck/core</dt>
-          <dd>{coreKb.toFixed(0)}<span class="remote__unit"> KB</span></dd>
-        </div>
-      </dl>
-      <p class="remote__note">
-        gzipped, both. Measured by the same script CI gates the build with,
-        {' '}<a href={providersUrl}>every provider is printed on its own page</a>.
-      </p>
+      </div>
     </section>
 
     {
-      /* ---- credits ------------------------------------------------------
+      /* ---- close ----------------------------------------------------------
        *
-       * End-credits treatment: dark stage, centred, one huge install command.
-       */
+       * The install line and the ways onward. */
     }
-    <section class="chapter credits" id="credits" data-section="credits">
-      <p class="credits__roll">
-        <span>directed by <strong>you</strong></span>
-        <span>starring <strong>your components</strong></span>
-        <span>no CSS was shipped in the making of this player</span>
-      </p>
-      <h2 class="chapter__title credits__title">Start with one line.</h2>
-      <div class="cta credits__cta">
+    <section class="chapter close" id="close" data-section="close">
+      <h2 class="chapter__title">Start with one line.</h2>
+      <div class="cta close__cta">
         <div class="install" data-install>
           <code class="install__command" data-install-command>{install}</code>
           <button class="install__copy" type="button" hidden data-install-copy>
@@ -318,16 +503,25 @@ const install = 'pnpm add @playdeck/react';
           ></span>
         </div>
       </div>
-      <p class="credits__links">
+      <p class="close__links">
         <a href={referenceUrl}>Reference &rarr;</a>
         <a href={providersUrl}>Providers &rarr;</a>
         <a href={archetypesUrl}>Archetypes &rarr;</a>
+        <a href={designUrl}>The visual system &rarr;</a>
       </p>
-      <p class="credits__fineprint">
-        React 19 as a peer dependency &middot; ESM only &middot; named exports
-        {' '}&middot;{' '}
-        <a href={designUrl}>the visual system</a> that lists every colour,
-        face and size this page spent.
+      <dl class="close__figures">
+        <div class="close__figure">
+          <dt>@playdeck/react</dt>
+          <dd>{reactKb.toFixed(0)}<span class="close__unit">KB</span></dd>
+        </div>
+        <div class="close__figure">
+          <dt>@playdeck/core</dt>
+          <dd>{coreKb.toFixed(0)}<span class="close__unit">KB</span></dd>
+        </div>
+      </dl>
+      <p class="close__fineprint">
+        Gzipped, both, and measured by the same script CI fails the build with.
+        React 19 as a peer dependency &middot; ESM only &middot; named exports.
       </p>
     </section>
   </main>
@@ -423,7 +617,9 @@ const install = 'pnpm add @playdeck/react';
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-5);
-    margin-block-start: var(--space-9);
+    /* `--space-8`, not `--space-9`. The page ran to 4,420px for five short
+       sections and a good part of that was the gap between them. */
+    margin-block-start: var(--space-8);
     max-inline-size: 100%;
   }
 
@@ -506,6 +702,22 @@ const install = 'pnpm add @playdeck/react';
     color: var(--color-ink-muted);
   }
 
+  /* The five providers, as a row of names under the thesis rather than a
+     section of their own further down. It is a fact about the library's scope
+     and it belongs where the scope is claimed; as a section it was a heading,
+     a strip, a sentence and two numbers spread over a screen's height, saying
+     one thing slowly. Spaced by the gap rather than punctuated by middots: a
+     separator between items is a mark a reader has to skip. */
+  .hero__providers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: var(--tracking-fn);
+    color: var(--color-ink-subtle);
+  }
+
   .cta {
     display: flex;
     flex-wrap: wrap;
@@ -573,37 +785,88 @@ const install = 'pnpm add @playdeck/react';
     block-size: auto;
   }
 
-  /* ---- truth ------------------------------------------------------------ */
-  .truth__lede {
+  /* ---- the feature sections ------------------------------------------------
+   *
+   * Four of them, one per feature, and they share a shape: a head that states
+   * the claim, a body that shows the API, and a note under it. The head is a
+   * vertical stack rather than a headline on the left with its explainer on the
+   * right, because that split is the section-header pattern every generated
+   * marketing page reaches for.
+   *
+   * What varies between them is the body, deliberately: two columns with the
+   * code leading, one full-width block, two stacked players, two columns with
+   * the code trailing. Four sections in a row with the same internal layout
+   * would read as a template even with different words in them. */
+  .feature__head {
+    display: grid;
+    gap: var(--space-4);
     max-inline-size: var(--measure);
+  }
+
+  .feature__lede {
     font-size: var(--text-lg);
     color: var(--color-ink-muted);
   }
 
+  .feature__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+    align-items: start;
+  }
+
+  @media (min-width: 64rem) {
+    .feature__body {
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      column-gap: var(--space-7);
+    }
+
+    /* The fourth feature reads the other way round, so the page does not run
+       four identical two-column bodies down its length. */
+    .feature__body--reverse {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    }
+  }
+
+  .feature__note {
+    max-inline-size: var(--measure);
+    font-size: var(--text-sm);
+    color: var(--color-ink-subtle);
+  }
+
+  /* The portal target for `Ledger`. Empty whenever the island has not portaled
+     into it yet, which with no JavaScript is always, so it costs no space of
+     its own until there is something to show. */
+  .feature__evidence {
+    max-inline-size: 40rem;
+  }
+
+  /* ---- code ----------------------------------------------------------------
+   *
+   * The page's own texture, and the reason it reads as a developer's page
+   * rather than a product's. `base.css` already gives every `pre` on this site
+   * its recessed well, its padding and its scroller, so this element sets the
+   * one thing that is local: how far the block may grow. */
+  .code {
+    min-inline-size: 0;
+    font-size: var(--text-sm);
+  }
+
+  .code--wide {
+    max-inline-size: 56rem;
+  }
+
+  .code :global(pre) {
+    margin: 0;
+  }
+
+  /* ---- the three capability answers ---------------------------------------- */
   .truths {
     display: grid;
     gap: var(--space-5);
     padding: 0;
     margin: 0;
     list-style: none;
-  }
-
-  @media (min-width: 48rem) {
-    .truths {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  /* The portal target for `Ledger`. Narrower than the three-card row above
-   * it and centred, so the live report reads as one piece of evidence
-   * offered under the claim rather than a fourth card competing with the
-   * three that state it. Empty whenever the island has not portaled into it
-   * yet, which with no JavaScript is always, so it costs no space of its own
-   * until there is something to show. */
-  .truth__evidence {
-    max-inline-size: 34rem;
-    margin-block-start: var(--space-6);
-    margin-inline: auto;
   }
 
   .truth-card {
@@ -635,175 +898,181 @@ const install = 'pnpm add @playdeck/react';
   }
 
   .truth-card__summary {
-    font-size: var(--text-lg);
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
   }
 
   .truth-card__detail {
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  /* ---- the autoplay sequence ------------------------------------------------
+   *
+   * Four states in the order they happen, as a numbered list because the order
+   * is the point: the recovery is a sequence and not a set of options. Read
+   * across at 64rem, where four short items in a row are one sequence rather
+   * than four things. */
+  .steps {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  @media (min-width: 64rem) {
+    .steps {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-5);
+    }
+  }
+
+  .step {
+    display: grid;
+    gap: var(--space-2);
+    align-content: start;
+    padding-block-start: var(--space-4);
+    border-block-start: var(--line-width) solid var(--color-line);
+  }
+
+  .step__state {
+    font-family: var(--font-mono);
+    font-size: var(--text-md);
+    color: var(--color-accent);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  .step__detail {
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  /* ---- the customisation claims -------------------------------------------- */
+  .claims {
+    display: grid;
+    gap: var(--space-4);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .claim {
+    padding-block-start: var(--space-3);
+    border-block-start: var(--line-width) solid var(--color-line);
     font-size: var(--text-md);
     color: var(--color-ink-muted);
   }
 
-  /* ---- faces -------------------------------------------------------------- */
-  .faces__lede {
-    max-inline-size: var(--measure);
-    font-size: var(--text-lg);
-    color: var(--color-ink-muted);
+  .claim b {
+    color: var(--color-ink);
+    font-weight: var(--weight-semibold);
   }
 
-  .faces__grid {
+  /* ---- compose --------------------------------------------------------------
+   *
+   * Stacked and full width. See this file's header for the measurements: in
+   * two columns each composition got 528px, below the container width both of
+   * them reflow at, so the section drew two phone layouts side by side and one
+   * of them overflowed its own frame. */
+  .compose__stack {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-7);
+    gap: var(--space-8);
     min-inline-size: 0;
-  }
-
-  @media (min-width: 64rem) {
-    .faces__grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
   }
 
   .archetype {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-3);
+    gap: var(--space-4);
     min-inline-size: 0;
     margin: 0;
   }
 
+  /* Held to a reading measure under a stage that is now the page's full width,
+     and it names the difference rather than describing the picture: both
+     players show the same frame of the same clip, so anything a caption said
+     about what is on screen would be equally true of the other one. */
   .archetype__caption {
-    max-inline-size: var(--measure);
-    font-size: var(--text-sm);
+    max-inline-size: 58ch;
+    font-size: var(--text-md);
     color: var(--color-ink-muted);
   }
 
-  .faces__licence {
-    max-inline-size: var(--measure);
-    font-size: var(--text-sm);
-    color: var(--color-ink-subtle);
-  }
-
-  /* ---- remote ------------------------------------------------------------ */
-  .remote__strip {
-    font-family: var(--font-mono);
-    font-size: clamp(1.25rem, 3vw, 2rem);
-    letter-spacing: var(--tracking-fn);
+  .archetype__caption b {
+    display: block;
+    margin-block-end: var(--space-1);
     color: var(--color-ink);
+    font-weight: var(--weight-semibold);
   }
 
-  .remote__lede {
-    max-inline-size: var(--measure);
-    font-size: var(--text-lg);
-    color: var(--color-ink-muted);
+  /* ---- close ---------------------------------------------------------------
+   *
+   * No panel, no roll, no second treatment. The page ends on the field it has
+   * been on the whole way down, with the command and the four ways onward. It
+   * was an end-credits box before: its own dark rectangle, a three-line roll
+   * set in 12px mono, and a heading over a second copy of the command. On
+   * screen it was a large empty box at the foot of the page. */
+  .close {
+    gap: var(--space-5);
+    margin-block-start: var(--space-8);
+    padding-block-start: var(--space-6);
+    border-block-start: var(--line-width) solid var(--color-line-strong);
+    justify-items: start;
   }
 
-  .remote__figures {
+  .close__links {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-7);
+    gap: var(--space-3) var(--space-5);
+    margin: 0;
+    font-size: var(--text-md);
+  }
+
+  .close__figures {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4) var(--space-7);
     margin: 0;
   }
 
-  .remote__figure dt {
+  .close__figure {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .close__figure dt {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     color: var(--color-ink-subtle);
     letter-spacing: var(--tracking-fn);
   }
 
-  .remote__figure dd {
+  .close__figure dd {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
     margin: 0;
     font-family: var(--font-display);
-    font-size: clamp(3rem, 8vw, 6rem);
+    font-size: clamp(2.5rem, 6vw, 4rem);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     line-height: 1;
   }
 
-  .remote__unit {
+  .close__unit {
     font-family: var(--font-mono);
-    font-size: var(--text-xl);
+    font-size: var(--text-lg);
     font-weight: var(--weight-regular);
     color: var(--color-ink-muted);
   }
 
-  .remote__note {
+  .close__fineprint {
     max-inline-size: var(--measure);
     font-size: var(--text-sm);
     color: var(--color-ink-subtle);
-  }
-
-  /* ---- credits -------------------------------------------------------------
-   *
-   * Always dark, like the player and its report. */
-  .credits {
-    display: grid;
-    justify-items: center;
-    gap: var(--space-6);
-    padding: var(--space-9) var(--space-5);
-    text-align: center;
-    background-color: var(--stage-field);
-    color: var(--stage-ink);
-    border-radius: var(--radius-lg);
-  }
-
-  .credits__roll {
-    display: grid;
-    gap: var(--space-1);
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    color: var(--stage-ink-subtle);
-    letter-spacing: var(--tracking-fn);
-  }
-
-  .credits__roll strong {
-    color: var(--stage-ink);
-    font-weight: var(--weight-semibold);
-  }
-
-  .credits__title {
-    color: var(--stage-ink);
-  }
-
-  .credits__cta .install {
-    background-color: var(--stage-sunken);
-  }
-
-  .credits__cta .install__command {
-    color: var(--stage-ink);
-  }
-
-  .credits__cta .install__copy {
-    color: var(--stage-ink-subtle);
-    border-color: var(--stage-line-strong);
-  }
-
-  .credits__cta .install__copy:hover {
-    color: var(--stage-ink);
-  }
-
-  .credits__links {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-5);
-    margin: 0;
-    font-size: var(--text-md);
-  }
-
-  .credits__links a {
-    color: var(--stage-accent);
-  }
-
-  .credits__fineprint {
-    max-inline-size: var(--measure);
-    font-size: var(--text-sm);
-    color: var(--stage-ink-subtle);
-  }
-
-  .credits__fineprint a {
-    color: var(--stage-accent);
   }
 </style>
