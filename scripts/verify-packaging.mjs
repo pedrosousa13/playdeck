@@ -539,9 +539,22 @@ const typecheckProblems = (fixtureDir, packageNames) => {
  */
 const tsc = (config) => {
   try {
-    execFileSync(join(repoRoot, 'node_modules/.bin/tsc'), ['-p', config], {
-      encoding: 'utf8'
-    });
+    // `--pretty false` because `resolutionProblems` reads the compiler's prose
+    // to establish that the unsupported mode failed for the right reason, and
+    // pretty output interleaves ANSI colour into the middle of the very words
+    // it matches on. Piping already turns pretty off by default, so this was
+    // invisible until a caller exported `FORCE_COLOR`, which turns it back on:
+    // every mode then behaves identically and the gate reports that node10's
+    // failure "establishes nothing about the artifact", which is a statement
+    // about the terminal rather than about the packages. Asked for explicitly
+    // rather than left to a default nothing here controls.
+    execFileSync(
+      join(repoRoot, 'node_modules/.bin/tsc'),
+      ['-p', config, '--pretty', 'false'],
+      {
+        encoding: 'utf8'
+      }
+    );
     return { status: 0, output: '' };
   } catch (error) {
     // tsc reports diagnostics on stdout and exits non-zero, so the output is
