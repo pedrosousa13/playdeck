@@ -38,6 +38,20 @@ Two traps from the previous session, both real:
 
 `webkit` cannot launch on this machine. Run chromium and firefox; CI has webkit.
 
+**Workspace wiring Task 2 had to add, so later tasks do not rediscover it.** None
+of this existed on this branch before, and the plan originally assumed all of it:
+
+- `vitest.config.ts`'s `test.include` did not cover `apps/site/test/**`, so a new
+  test file there was not "failing", it was invisible. The glob is in now.
+- `apps/site` had no dependency on `@playdeck/core`, only string mentions of it.
+  It is a `workspace:*` dependency now, matching the `@playdeck/react` entry.
+- `apps/site/tsconfig.json` referenced only `packages/react`. It references
+  `packages/core` too now.
+
+So from Task 3 on, a `apps/site/test/*.test.ts` file runs and a
+`import type { … } from '@playdeck/core'` typechecks. If either stops being true,
+something regressed rather than something is missing.
+
 ---
 
 ## File structure
