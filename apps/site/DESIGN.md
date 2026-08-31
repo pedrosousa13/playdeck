@@ -360,6 +360,21 @@ anywhere, the palette is regenerated from the source text on every build, and
 there is no way to express it in this system's own colours, because a scale of
 four accents cannot tell a keyword from a string from a comment.
 
+**`/`'s composition panel is not highlighted, and it is the one block on this
+site that is not.** The panel prints what the bench's three switches just
+composed, so it rewrites itself on every press, and Astro's `<Code>` runs on the
+server only: colouring it means shipping a highlighter to the reader. The
+smallest one that could do it — Shiki's `createHighlighterCore` with the
+JavaScript regex engine, the `tsx` grammar and the two themes named above, and
+nothing else — measures 72.5 kB gzipped (353.7 kB raw), of which the engine and
+core are 52.6 kB. The close of that page prints 17 kB as the gzipped size of
+every primitive this library publishes. A page that spent four times its own
+product to colour four keywords would be arguing against itself in the object it
+was arguing with, so the panel is a plain `<pre>` in `--color-ink` and the
+highlighter stays where it costs a reader nothing: the reference pages' fences
+and the two provider examples, rendered at build time. That figure is a
+measurement and re-measurable the same way, with esbuild over the same imports.
+
 **What the exception does not cover is the block itself.** The well is
 `--color-sunken`, which is one of the two things that token exists for. Shiki
 emits its theme's background as `--shiki-light-bg` and `--shiki-dark-bg`, and

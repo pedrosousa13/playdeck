@@ -5,6 +5,11 @@ export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   resolve: {
     alias: {
+      // `apps/site`'s own alias, the one `astro.config.ts`, its `tsconfig.json`
+      // and `components.json` all declare, repeated here so a unit test can
+      // import a component that uses it. Nothing outside that app writes
+      // `@/`, so a single entry covers it.
+      '@': fileURLToPath(new URL('./apps/site/src', import.meta.url)),
       '@playdeck/core': fileURLToPath(
         new URL('./packages/core/src/index.ts', import.meta.url)
       ),

@@ -296,6 +296,67 @@ a:active {
   }
 }
 
+/* ---- the refusal, arriving ----------------------------------------------
+ *
+ * The bench's reason line, arriving. It exists only once a provider has
+ * attached and answered no, so its arrival is the moment `/`'s capability
+ * argument is made, and an unmarked one is a moment most readers blink
+ * through.
+ *
+ * `DESIGN.md`'s count of the animations this app writes is deliberately not
+ * restated here. That document was amended to the bench's end state while the
+ * page it replaces is still in the tree, so the count is in flux until the
+ * ledger's own resolution is deleted with it; #542's Task 10 reconciles the
+ * document once, against what ships, rather than twice.
+ *
+ * `opacity` and a `--space-1` rise at `--duration-base`, which is rule 5
+ * exactly and needs no amendment to it. One line rather than a column of them,
+ * so there is no sequence and there are no delays.
+ *
+ * Here rather than in a component's scoped `<style>` for the same reason the
+ * `[data-status]` block below is: this element comes out of React, and an
+ * Astro component's styles are scoped by an attribute Astro stamps on the
+ * elements it compiled, which an island's markup never carries.
+ *
+ * Keyed off `[data-stance='argument']`, like the entry motion above and for
+ * the same reason: this rule is unscoped CSS on every page of the site, and a
+ * document page that grew an element with these two attributes would move.
+ * The stance makes that unreachable rather than forbidden, which is what that
+ * section asks for in as many words — the way to stop a page growing scattered
+ * reveals is to make them unreachable, not to write a rule asking a later
+ * author not to write one. `/` is the only route served in the argument
+ * stance, so this is one authored moment there and inert everywhere else.
+ *
+ * `data-live` is written in the same React commit as the words it marks, so
+ * the motion cannot run early and cannot dress a state change that did not
+ * happen. Removed outright under `prefers-reduced-motion` rather than left to
+ * the duration collapse above: the collapse is a rescue for a transition
+ * between two settled states, and the honest answer to a reader who asked for
+ * no motion is that none was started. The line's resting state is what the
+ * rest of the CSS gives it, so nothing is hidden by removing this.
+ */
+[data-stance='argument'] [data-bench-reason][data-live] {
+  animation: bench-refusal var(--duration-base) var(--ease) both;
+}
+
+@keyframes bench-refusal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-1));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-stance='argument'] [data-bench-reason][data-live] {
+    animation: none;
+  }
+}
+
 /* ---- capability status --------------------------------------------------
  *
  * A capability's status, mapped to the role token that draws it. Three
