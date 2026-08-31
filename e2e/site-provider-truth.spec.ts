@@ -1,8 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * The landing page's provider comparison, which reports what
- * `docs/provider-setup.md` can and cannot say about each provider (#542).
+ * The provider comparison on `/providers`, which reports what
+ * `docs/provider-setup.md` can and cannot say about each provider (#542). It
+ * was mounted on `/` when these were written and moved with the component when
+ * that page was reworked into a marketing page — every assertion here locates
+ * the component's own markup, so only this address had to move.
  *
  * The claim the section makes is *asymmetry*: the five providers behind one API
  * are not interchangeable, and the table reports the difference rather than
@@ -19,7 +22,7 @@ import { expect, test, type Page } from '@playwright/test';
  * The storybook one owns `baseURL`, so this address is written out rather than
  * navigated to as a path.
  */
-const landing = 'http://127.0.0.1:4322/';
+const landing = 'http://127.0.0.1:4322/providers/';
 
 // The four provider columns and the three questions, in the order the table
 // prints them. Written out rather than read from `provider-asymmetry.mjs`: a

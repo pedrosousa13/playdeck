@@ -80,19 +80,28 @@ import HeroPlayerIsland from './HeroPlayerIsland';
 // own — `public/tracer.mp4`, copied into this build rather than referenced
 // across an app boundary, because an Astro build serves only its own `public/`.
 const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
+// The same fixture the archetypes caption their clip with (#542 phase 2), so
+// CH 01's captions and settings-menu stages have a real track to build from.
+const captionsUrl = `${import.meta.env.BASE_URL}archetype-captions.vtt`;
 ---
 
 {
-  /* The island, which renders both of the hero's panels: the player and the
-   * ledger reading it. An `<astro-island>` is `display: contents`, so the two
-   * land as grid items of `.hero__stage` in `index.astro` rather than inside a
-   * box of this component's.
+  /* The island, which renders the hero's own panel (the player) and, by
+   * portal, the ledger that reads it further down the page in the `truth`
+   * section. An `<astro-island>` is `display: contents`, so the player lands
+   * as a grid item of `.hero__stage` in `index.astro` rather than inside a
+   * box of this component's; the ledger does not land here, see
+   * `LedgerPortal` in `HeroPlayerIsland.tsx`.
    *
-   * `HeroPlayerIsland.tsx` carries why one component renders both — in short,
+   * `HeroPlayerIsland.tsx` carries why one component renders both. In short,
    * `Player.Root` renders no DOM, so one controller can stand above two panels
    * and the ledger has no second one to be reading. */
 }
-<HeroPlayerIsland client:only="react" source={clipUrl} />
+<HeroPlayerIsland
+  client:only="react"
+  captionsSrc={captionsUrl}
+  source={clipUrl}
+/>
 {
   /* With JavaScript the island above is the whole hero and this is inert text
    * the parser never fetches from. Without it, this is the whole player: the
@@ -153,12 +162,18 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * exactly one of the two, and border-under-blur is the pairing that stays
    * banned. `--space-3` all round is what makes it read as a body holding a
    * screen rather than as a card with a picture in it. */
+  /* Always dark (#542 phase 2: "the stage is always dark" — a cinema is dark
+   * regardless of the room). `--stage-*` never moves with `data-theme`, so
+   * this panel and the ledger below it stop following the site's own theme
+   * switch and read the same in both — a deliberate exception the section
+   * comment above named as one thing this phase adds rather than something
+   * left over from rule 4. */
   :global(.demo__bezel) {
     display: grid;
     padding: var(--space-3);
-    background-color: var(--color-surface);
+    background-color: var(--stage-surface);
     border-radius: var(--radius-lg);
-    box-shadow: var(--elevation-panel);
+    box-shadow: 0 8px 16px var(--dark-shadow-deep);
   }
 
   /* The screen, and the reason a dormant panel is worth looking at.
@@ -182,8 +197,8 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     display: grid;
     aspect-ratio: 16 / 9;
     overflow: hidden;
-    background-color: var(--color-sunken);
-    border: var(--line-width) solid var(--color-line);
+    background-color: var(--stage-sunken);
+    border: var(--line-width) solid var(--stage-line);
     border-radius: var(--radius-md);
 
     /* ---- the player's tokens, spoken in this site's roles ----------------
@@ -197,28 +212,29 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     /* The well behind the media, which is what shows before a frame is
      * decoded. `--color-sunken` is the recessed-surface role — the same one
      * the code block on this page sits in. */
-    --playdeck-color-backdrop: var(--color-sunken);
+    --playdeck-color-backdrop: var(--stage-sunken);
     /* The control bar and the activation button share this pair. A raised
-     * panel in the page's own surface colour rather than the theme's
-     * translucent black: a bar that is part of this page reads as part of it,
-     * and `--color-ink` on `--color-surface` is a contrast pair `DESIGN.md`
-     * already records for both themes. */
-    --playdeck-color-surface: var(--color-surface);
-    --playdeck-color-on-surface: var(--color-ink);
+     * panel in the stage's own dark surface rather than the theme's
+     * translucent black — the stage is always dark now, so this token no
+     * longer follows `data-theme`; it is one of the two things #542 phase 2
+     * pins outright. `--stage-ink` on `--stage-surface` is the same contrast
+     * pair `DESIGN.md`'s dark table already records. */
+    --playdeck-color-surface: var(--stage-surface);
+    --playdeck-color-on-surface: var(--stage-ink);
     /* `--playdeck-overlay-scrim` is the control bar's background, and its
      * default is a gradient. This system has exactly one gradient and
      * `Sweep.astro` draws it, so the bar takes the flat surface the rest of
      * the panel is built from. */
-    --playdeck-overlay-scrim: var(--color-surface);
-    --playdeck-control-hover: var(--color-sunken);
-    --playdeck-color-accent: var(--color-accent);
+    --playdeck-overlay-scrim: var(--stage-surface);
+    --playdeck-control-hover: var(--stage-sunken);
+    --playdeck-color-accent: var(--stage-accent);
     /* One focus treatment for the whole site, and this is the belt to
      * `base.css`'s braces. That file rings every `:focus-visible` element in
      * the accent, unlayered, so it is what actually draws the ring on a control
      * in here. The theme carries a rule of its own that would draw a white one
      * if it ever did the drawing, and its default is the only `--playdeck-*`
      * value that could put a colour on this page from outside the system. */
-    --playdeck-color-focus: var(--color-accent);
+    --playdeck-color-focus: var(--stage-accent);
     /* The seek slider's three grounds, and the one place on this panel where
      * the choice is arithmetic rather than taste.
      *
@@ -233,9 +249,9 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
      * own — the accent does not clear 3:1 against both the track and the loaded
      * range, which is the library's own finding and the reason its theme draws
      * a ring at all. `--color-ink` is what clears both. */
-    --playdeck-color-track: var(--color-sunken);
-    --playdeck-color-buffered: var(--color-line-strong);
-    --playdeck-color-thumb-ring: var(--color-ink);
+    --playdeck-color-track: var(--stage-sunken);
+    --playdeck-color-buffered: var(--stage-line-strong);
+    --playdeck-color-thumb-ring: var(--stage-ink);
     /* The time readout is machine output, so it is mono like every other
      * value on this site, at the caption rung — above the 11px floor. */
     --playdeck-font-family: var(--font-mono);
@@ -347,8 +363,17 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     grid-area: face;
     inline-size: var(--space-8);
     block-size: var(--space-8);
-    background-color: var(--color-surface);
+    background-color: var(--stage-surface);
     border-radius: var(--radius-pill);
+    transition: transform var(--duration-fast) var(--ease);
+  }
+
+  /* The affordance answers the pointer: the badge grows a step under the
+   * cursor. `transform` only — the one property pair this system animates —
+   * and the site-wide reduced-motion collapse lands it instantly on either
+   * settled scale. */
+  :global(.demo__stage) :global([data-playdeck-part='activation']:hover)::before {
+    transform: scale(1.08);
   }
 
   /* The icon shares the badge's cell rather than following it in a second row,
@@ -407,7 +432,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     position: relative;
     z-index: 1;
     place-self: end stretch;
-    border-block-start: var(--line-width) solid var(--color-line);
+    border-block-start: var(--line-width) solid var(--stage-line);
   }
 
   /* The `[hidden]` reset, needed here rather than assumed: the attribute is
@@ -461,8 +486,8 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
   }
 
   :global(.demo__caption) {
-    font-size: var(--text-xs);
-    color: var(--color-ink-subtle);
+    font-size: var(--text-sm);
+    color: var(--stage-ink-subtle);
   }
 
   /* ---- the capability ledger ----------------------------------------------
@@ -502,9 +527,9 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     display: grid;
     gap: var(--space-3);
     padding: var(--space-4);
-    background-color: var(--color-surface);
+    background-color: var(--stage-surface);
     border-radius: var(--radius-lg);
-    box-shadow: var(--elevation-instrument);
+    box-shadow: 0 8px 16px var(--dark-shadow-deep);
   }
 
   @media (min-width: 48rem) {
@@ -521,10 +546,31 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * the prose face would be the one part of the readout written by the page. */
   :global(.ledger__title) {
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     font-weight: var(--weight-regular);
-    color: var(--color-ink-subtle);
+    color: var(--stage-ink-subtle);
     letter-spacing: var(--tracking-fn);
+  }
+
+  /* The panel's own state, said in the machine register the rest of the
+   * readout speaks. It is the line that makes the dormant panel read as a
+   * before rather than a failure — five ambers under a line that says
+   * "dormant · press play" are a report waiting to be asked for. At the
+   * bottom rung, like the reason lines: it qualifies the readout, it is not
+   * part of it. */
+  :global(.ledger__state) {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--stage-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  /* Once a provider has attached, the state line is a fact about a live
+   * player rather than an instruction, and it takes the full ink the rows'
+   * answers take. A colour and not a motion, so there is nothing here for
+   * reduced motion to have an opinion about. */
+  :global(.ledger__state[data-live]) {
+    color: var(--stage-ink);
   }
 
   /* The readout. A recessed well inside the raised body, which is the same
@@ -544,7 +590,7 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
     gap: var(--space-4);
     padding: var(--space-4);
     margin: 0;
-    background-color: var(--color-sunken);
+    background-color: var(--stage-sunken);
     border-radius: var(--radius-md);
     list-style: none;
   }
@@ -606,10 +652,17 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
   /* The capability is the subject of its row and takes the body rung in the
    * mono where the panel has the width for it — a readout whose largest text
    * is the same size as its captions is what made this panel read as faint. */
+  /* `color` stated explicitly rather than inherited: the panel is pinned dark
+   * regardless of the page's own theme (`--stage-*` never follows
+   * `data-theme`), and without this the capability name inherited
+   * `--color-ink` instead — dark ink on a dark well, invisible in the light
+   * theme. Caught by looking at a light-theme screenshot; every other line in
+   * this panel already states its own `--stage-*` colour. */
   :global(.row__capability) {
     min-inline-size: 0;
     font-family: var(--font-mono);
     font-size: var(--text-sm);
+    color: var(--stage-ink);
     letter-spacing: var(--tracking-fn);
   }
 
@@ -628,14 +681,15 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * lost its colour — the variable resolved to nothing, so the word went plain
    * and the dot painted transparent.
    *
-   * Nothing here transitions. A row changes the moment the controller does,
-   * which is the behaviour this panel exists to show, and a colour is not one
-   * of the two properties this system animates (`DESIGN.md` rule 5). So there
-   * is no motion for `prefers-reduced-motion` to suppress and no way for a
-   * suppressed transition to leave a row displaying an answer that is no longer
-   * true. */
+   * The colour does not transition. A row's answer changes the moment the
+   * controller's does, which is the behaviour this panel exists to show, and a
+   * colour is not one of the two properties this system animates (`DESIGN.md`
+   * rule 5) — it snaps. The settle the rows do take when the panel goes live
+   * is the resolution animation at the foot of this file, which moves
+   * `opacity` and `transform` over content that is already true and never
+   * delays an answer arriving in the document. */
   :global(.row__status) {
-    font-size: var(--text-sm);
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
     color: var(--status-color);
   }
@@ -651,13 +705,173 @@ const clipUrl = `${import.meta.env.BASE_URL}tracer.mp4`;
    * the page would be making them look like two facts. */
   :global(.row__reason) {
     font-family: var(--font-mono);
-    font-size: var(--text-fn);
-    color: var(--color-ink-subtle);
+    font-size: var(--text-sm);
+    color: var(--stage-ink-subtle);
     letter-spacing: var(--tracking-fn);
   }
 
   :global(.ledger__caption) {
-    font-size: var(--text-xs);
-    color: var(--color-ink-subtle);
+    font-size: var(--text-sm);
+    color: var(--stage-ink-subtle);
+  }
+
+  /* ---- the resolution, made visible ---------------------------------------
+   *
+   * The third of the three animations this app writes, and the one spent on
+   * the page's whole point: the moment a provider attaches, the five rows
+   * stop being "nothing has been asked" and become that provider's own
+   * report, and this is what marks the swap so a reader sees it happen
+   * rather than blinking and missing it.
+   *
+   * It is keyed off `data-live`, which `HeroPlayerIsland.tsx` writes only
+   * when `provider !== null` — a fact read from the controller, in the same
+   * React commit that writes the rows' new answers into the DOM. Nothing
+   * here is simulated: the animation moves `opacity` and `transform` over
+   * content that is already true, it never delays the truth arriving in the
+   * document, and it runs once, when the attribute appears.
+   *
+   * The rows land in sequence, top to bottom, which is what makes the panel
+   * read as an instrument printing its answers instead of five things
+   * flickering at once. The delays are steps of `--duration-fast` rather
+   * than literals, per rule 1.
+   *
+   * Under `prefers-reduced-motion` the animation is removed outright rather
+   * than left to the site-wide duration collapse: that collapse shortens
+   * durations but not delays, and a delayed `both`-filled row would sit
+   * invisible through its delay — a row hidden from a reader who asked for
+   * less motion, not less truth. `animation: none` lands every row on its
+   * settled state, which is the CSS's own resting state. */
+  :global(.ledger__rows[data-live] .row) {
+    animation: ledger-resolve var(--duration-base) var(--ease) both;
+  }
+
+  :global(.ledger__rows[data-live] .row:nth-child(2)) {
+    animation-delay: var(--duration-fast);
+  }
+
+  :global(.ledger__rows[data-live] .row:nth-child(3)) {
+    animation-delay: calc(var(--duration-fast) * 2);
+  }
+
+  :global(.ledger__rows[data-live] .row:nth-child(4)) {
+    animation-delay: calc(var(--duration-fast) * 3);
+  }
+
+  :global(.ledger__rows[data-live] .row:nth-child(5)) {
+    animation-delay: calc(var(--duration-fast) * 4);
+  }
+
+  @keyframes ledger-resolve {
+    from {
+      opacity: 0;
+      transform: translateY(var(--space-1));
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.ledger__rows[data-live] .row) {
+      animation: none;
+    }
+  }
+
+  /* ---- the stage's own status colour --------------------------------------
+   *
+   * `base.css`'s `[data-status]` rules point `--status-color` at
+   * `--color-available`/`--color-unknown`/`--color-unavailable`, which follow
+   * `data-theme`. The ledger now sits on the stage, which does not, so its
+   * rows are re-pointed here at the pinned dark-theme values — already
+   * measured >=6.8:1 on this ground. Higher specificity than `base.css`'s
+   * unscoped rules (two compounds against one) and unlayered like them, so it
+   * wins without an `!important` fight. */
+  :global(.ledger) :global([data-status='available']) {
+    --status-color: var(--stage-available);
+  }
+
+  :global(.ledger) :global([data-status='unknown']) {
+    --status-color: var(--stage-unknown);
+  }
+
+  :global(.ledger) :global([data-status='unavailable']) {
+    --status-color: var(--stage-unavailable);
+  }
+
+  /* ---- CH 01, the assembly ------------------------------------------------
+   *
+   * The signature moment: as the reader scrolls through the 300vh section
+   * `index.astro` builds around this pinned player, `index.astro`'s own
+   * script writes `data-assembly-stage="0".."5"` onto that section — one
+   * integer, advanced by five sentinels, never a continuous scroll-linked
+   * value (the plan's own "discrete states, not continuous scroll-linking").
+   *
+   * **The resting state — no attribute at all — is every part shown.** That is
+   * what a page with no script, or a reader who asked for reduced motion (in
+   * which case `index.astro` never constructs the observer), gets: the
+   * from-state is added here by attribute value and nothing is hidden by
+   * default, the same rule `base.css`'s `.u-enter` and this page's own
+   * `.tour-step` already hold to.
+   *
+   * The five stages gate the control bar's own parts — real ones, the same
+   * elements `ControlBar` in `HeroPlayerIsland.tsx` always rendered, never a
+   * second illustrative copy — plus the caption overlay, which lives in the
+   * viewport rather than the bar. They only have anything to reveal once the
+   * bar itself is showing, i.e. once the reader has pressed play — before
+   * that, `hidden={!ready}` already keeps the whole bar out of the document,
+   * and this page's own copy invites the press before the assembly starts. */
+  :global([data-assembly-stage='0'] [data-playdeck-part='play-button']),
+  :global([data-assembly-stage='0'] [data-playdeck-part='mute-button']) {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :global([data-assembly-stage='0'] [data-playdeck-part='seek-slider']),
+  :global([data-assembly-stage='0'] [data-playdeck-part='time']),
+  :global([data-assembly-stage='1'] [data-playdeck-part='seek-slider']),
+  :global([data-assembly-stage='1'] [data-playdeck-part='time']) {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :global([data-assembly-stage='0'] [data-playdeck-part='captions']),
+  :global([data-assembly-stage='1'] [data-playdeck-part='captions']),
+  :global([data-assembly-stage='2'] [data-playdeck-part='captions']) {
+    opacity: 0;
+  }
+
+  :global([data-assembly-stage='0'] [data-playdeck-part='captions-menu']),
+  :global([data-assembly-stage='1'] [data-playdeck-part='captions-menu']),
+  :global([data-assembly-stage='2'] [data-playdeck-part='captions-menu']),
+  :global([data-assembly-stage='3'] [data-playdeck-part='captions-menu']) {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :global([data-assembly-stage='0'] [data-playdeck-part='fullscreen-button']),
+  :global([data-assembly-stage='1'] [data-playdeck-part='fullscreen-button']),
+  :global([data-assembly-stage='2'] [data-playdeck-part='fullscreen-button']),
+  :global([data-assembly-stage='3'] [data-playdeck-part='fullscreen-button']),
+  :global([data-assembly-stage='4'] [data-playdeck-part='fullscreen-button']) {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :global([data-assembly-stage] [data-playdeck-part='play-button']),
+  :global([data-assembly-stage] [data-playdeck-part='mute-button']),
+  :global([data-assembly-stage] [data-playdeck-part='seek-slider']),
+  :global([data-assembly-stage] [data-playdeck-part='time']),
+  :global([data-assembly-stage] [data-playdeck-part='captions']),
+  :global([data-assembly-stage] [data-playdeck-part='captions-menu']),
+  :global([data-assembly-stage] [data-playdeck-part='fullscreen-button']) {
+    transition: opacity var(--duration-slow) var(--ease);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global([data-assembly-stage] [data-playdeck-part]) {
+      transition: none;
+    }
   }
 </style>

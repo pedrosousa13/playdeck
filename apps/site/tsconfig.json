@@ -8,6 +8,10 @@
     // workspace install happens to have hoisted, which would let a global
     // resolve here that no dependency of this package provides.
     "types": [],
+    // `@/*` -> `src/*`, matching the alias `astro.config.ts` registers for
+    // Vite and the alias `components.json` declares for shadcn's tooling. Only
+    // for `tsc`'s own resolution; the build's is the Vite alias above.
+    "paths": { "@/*": ["./src/*"] },
     // Outside the package, unlike `apps/storybook`, which writes its own to
     // `dist/`. Here `dist/` is Astro's *output* directory: `astro build` clears
     // it, so a buildinfo kept there is destroyed by every build, and one written

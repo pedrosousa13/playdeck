@@ -41,6 +41,11 @@
 @import '@fontsource/ibm-plex-sans/latin-400.css';
 @import '@fontsource/ibm-plex-sans/latin-600.css';
 @import '@fontsource/ibm-plex-mono/latin-400.css';
+/* Display only: the wordmark, chapter titles and the bundle-size figures on
+ * `/` (#542 phase 2). Self-hosted through the same devDependency-plus-lockfile
+ * route as the other two faces — see the paragraph above for why that matters
+ * on a page whose thesis is "no third party is asked for anything". */
+@import '@fontsource/ibm-plex-sans-condensed/latin-700.css';
 
 :root {
   /* ---- the raw scale ------------------------------------------------------
@@ -131,6 +136,19 @@
   --dark-shadow: #00000073;
   --dark-shadow-deep: #000000a6;
 
+  /* ---- the stage ------------------------------------------------------
+   * `/` only (#542 phase 2). The player, the meter and the credits chapter sit
+   * on a near-black stage in BOTH themes — a cinema is dark regardless of the
+   * room. Not a third theme: `--stage-*` never changes with `data-theme` or
+   * `prefers-color-scheme`, and the three capability colours on it are pinned
+   * to their dark-theme values (`--dark-available` etc.), already measured
+   * >=6.8:1 on this exact ground in `DESIGN.md`'s dark table (`on field`
+   * column, `--dark-field` is one step lighter than this and every figure
+   * there is a floor for this ground rather than a value that could fall
+   * under it). */
+  --stage-field: #0a0a0f;
+  --stage-ink: #f0f0f2;
+
   /* ---- roles: light -------------------------------------------------------
    * The default assignment. It is the light theme rather than a neutral base
    * because a document with no `data-theme` and no OS preference has to render
@@ -181,6 +199,20 @@
   --color-shadow: var(--light-shadow);
   --color-shadow-deep: var(--light-shadow-deep);
 
+  /* ---- roles: the stage -----------------------------------------------
+   * Theme-independent — see the raw values above for why. Declared once here
+   * rather than per theme block, because there is nothing to switch. */
+  --stage-surface: var(--dark-surface);
+  --stage-sunken: var(--dark-sunken);
+  --stage-ink-muted: var(--dark-ink-muted);
+  --stage-ink-subtle: var(--dark-ink-subtle);
+  --stage-line: var(--dark-line);
+  --stage-line-strong: var(--dark-line-strong);
+  --stage-accent: var(--dark-blue);
+  --stage-available: var(--dark-green);
+  --stage-unknown: var(--dark-amber);
+  --stage-unavailable: var(--dark-red);
+
   /* ---- type ---------------------------------------------------------------
    * Two families from one superfamily. Plex Sans carries prose; Plex Mono
    * carries functional text — anything that is a value, an identifier, a state
@@ -192,6 +224,10 @@
   --font-mono:
     'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', menlo, consolas,
     monospace;
+  /* `/` only (#542 phase 2): the wordmark, chapter titles, the KB figures.
+   * Falls back to the sans rather than a generic — the condensed cut is a
+   * weight and width choice, not a different voice. */
+  --font-display: 'IBM Plex Sans Condensed', var(--font-sans);
 
   /* The floor, and the reason the scale starts here. Every rung above it is a
    * ratio of about 1.2 up to `--text-lg` and then wider, so headings separate
@@ -218,6 +254,11 @@
    * rung under it, so this one is 2x the `h1` default and the spacing of the
    * scale stops at `--text-3xl`. */
   --text-4xl: 5.5rem; /* 88px */
+  /* `/` only (#542 phase 2, "an incredible landing page" — the 88px ceiling
+   * DESIGN.md put on every other page is lifted here by the maintainer's own
+   * word). The wordmark's actual size is a `clamp()` in `index.astro`, not
+   * this token alone — this is its upper bound. */
+  --text-5xl: 11rem; /* 176px */
 
   --leading-tight: 1.15;
   --leading-snug: 1.35;

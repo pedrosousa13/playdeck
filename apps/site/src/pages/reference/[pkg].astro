@@ -62,12 +62,14 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
 ---
 
 <Base title={`${current.name} — Playdeck reference`}>
-  <SiteHeader
-    crumbs={[
-      { label: 'Reference', href: referenceUrl },
-      { label: current.name }
-    ]}
-  />
+  {
+    /* No `Reference` ancestor here any more (#542 phase 2): the site nav in
+     * `SiteHeader.astro` already marks that section with `aria-current`, so a
+     * second `Reference` sitting in the trail immediately beside it read as
+     * the same word twice rather than as two landmarks. The trail's leaf is
+     * this package's own name, which the nav does not say. */
+  }
+  <SiteHeader crumbs={[{ label: current.name }]} />
 
   <div class="shell">
     <DocRail

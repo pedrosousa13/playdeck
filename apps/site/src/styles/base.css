@@ -10,6 +10,11 @@
 
 @import './tokens.css';
 
+/* Tailwind, layered so it can never win against the unlayered rules in this
+ * file — see `tailwind.css` for why that is true rather than merely intended,
+ * and #542 for what it is here for (the header, this phase; nothing else). */
+@import './tailwind.css';
+
 *,
 *::before,
 *::after {

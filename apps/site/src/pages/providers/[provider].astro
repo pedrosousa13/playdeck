@@ -99,12 +99,14 @@ const contents = headings.filter(
 ---
 
 <Base title={`${current.title} — Playdeck provider setup`}>
-  <SiteHeader
-    crumbs={[
-      { label: 'Provider setup', href: providersUrl },
-      { label: current.title }
-    ]}
-  />
+  {
+    /* No `Provider setup` ancestor here any more (#542 phase 2), for the
+     * reason `src/pages/reference/[pkg].astro` gives: the site nav already
+     * marks the `Providers` section with `aria-current`, so an ancestor
+     * repeating it in the trail read as the same landmark twice rather than
+     * two different ones. The leaf is this provider's own name. */
+  }
+  <SiteHeader crumbs={[{ label: current.title }]} />
 
   <div class="shell">
     <DocRail

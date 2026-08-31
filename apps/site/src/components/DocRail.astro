@@ -38,7 +38,21 @@
  * depth 3 is indented and everything else sits flush — so this component draws
  * two levels rather than any number of them. A caller passing depth 4 would get
  * it rendered at the depth-2 indent, which is a reason the callers filter.
+ *
+ * ---- shadcn's `Separator`, between the two lists (#542 phase 2) ------------
+ *
+ * The line between the sibling-document list and the table of contents was a
+ * bare `margin-block-start` before this phase — space, not a boundary. Two
+ * lists that answer different questions ("which document" and "where in it")
+ * read more clearly with a drawn line between them than with space alone, and
+ * `Separator` is the component this vocabulary already has for exactly that:
+ * a decorative rule, `role="none"` by default so it says nothing to a screen
+ * reader that the two `<h2>`s inside `.rail__group` do not already say better.
+ * `client:visible` rather than `client:load`: the rail is often below the
+ * fold on a narrow screen, behind its own closed disclosure, and a divider is
+ * not on the critical path the way search or the theme switch are.
  */
+import { Separator } from './ui/separator';
 
 interface RailItem {
   href: string;
@@ -137,6 +151,8 @@ const { label, group, contents } = Astro.props;
           }
         </ul>
       </section>
+
+      <Separator client:visible className="my-[var(--space-4)] bg-border" />
 
       <section class="rail__group">
         <h2 class="rail__label"><span>On this page</span></h2>
@@ -317,10 +333,6 @@ const { label, group, contents } = Astro.props;
        * ring is never clipped by the scroller's own edge. */
       padding-inline-end: var(--space-2);
     }
-  }
-
-  .rail__group + .rail__group {
-    margin-block-start: var(--space-5);
   }
 
   /* An `h2` by role, so the rail's two lists are labelled in the document

@@ -1,7 +1,10 @@
 ---
 /**
- * The landing page's provider comparison: what each provider can be asked, and
- * what it can actually answer.
+ * The provider comparison, mounted on `/providers`: what each provider can be
+ * asked, and what it can actually answer. It began life on `/` and moved when
+ * that page was reworked into a marketing page (#542) — a reader deciding
+ * between providers is the reader of the provider index, and this table is
+ * reference, not argument.
  *
  * The section's claim is asymmetry. Five providers behind one API is the kind
  * of sentence that invites a reader to assume they are interchangeable, and
@@ -77,7 +80,9 @@ const plain = (reason: string) => reason.replaceAll('`', '');
 ---
 
 <section class="truth" aria-labelledby="truth-heading">
-  <h2 class="truth__heading" id="truth-heading">And it tells you the truth</h2>
+  <h2 class="truth__heading" id="truth-heading">
+    What each provider can answer
+  </h2>
   <p class="truth__lede">
     Every cell below was read out of <code>{PROVIDER_SETUP_DOC}</code> while this
     page was built. Five providers in four columns — native files and HLS share
@@ -172,9 +177,11 @@ const plain = (reason: string) => reason.replaceAll('`', '');
     max-inline-size: 100%;
   }
 
+  /* `h2`'s own rung, not the display rung it spent on `/`. `DESIGN.md` gives
+   * the two display rungs to the argument stance, and this component sits on a
+   * document page now. */
   .truth__heading {
     margin: 0;
-    font-size: var(--text-2xl);
     letter-spacing: var(--tracking-tight);
     line-height: var(--leading-tight);
   }

@@ -66,9 +66,20 @@ interface Props {
    * player, and every adapter is listed as unrequested.
    */
   readonly used?: string;
+  /**
+   * The condensed form: the same two measurements — the live log and the
+   * shipped adapters — at a fraction of the height. The log becomes a
+   * scrollable well instead of a list that grows the page, the two halves
+   * share a row where there is room, and the shipped rows compress to a line
+   * each. Nothing is dropped and nothing is summarised away: every request is
+   * still printed, in the well, and the totals line is the same measurement.
+   *
+   * The full form was 13% of a landing page once, which is why this exists.
+   */
+  readonly compact?: boolean;
 }
 
-const { used } = Astro.props;
+const { used, compact = false } = Astro.props;
 
 // Measured at build time from the module the budget gate measures with, for the
 // reason `src/pages/index.astro` gives where it does the same: a page whose
@@ -100,7 +111,7 @@ if (used !== undefined && !adapters.some(({ needed }) => needed)) {
 }
 ---
 
-<figure class="receipt" data-receipt>
+<figure class="receipt" data-receipt data-compact={compact ? '' : undefined}>
   <div class="receipt__panel">
     <h2 class="receipt__title">Network receipt</h2>
 
@@ -122,14 +133,35 @@ if (used !== undefined && !adapters.some(({ needed }) => needed)) {
          * page cannot make it without one. The panel underneath needs no script
          * at all and prints the same figures either way. */
       }
-      <ol class="receipt__rows" data-receipt-log>
-        <li class="receipt__empty">
-          Measured in this browser from the Performance API, which needs a
-          script to read. Nothing is printed here until one runs. What ships in
-          the artifact, below, is measured at build time and is the same either
-          way.
-        </li>
-      </ol>
+      {
+        /* In the compact form the log is a well of fixed height that scrolls
+         * inside itself rather than a list that grows the page — the request
+         * count is open-ended and the compact form's whole promise is a
+         * bounded height. A scroll the reader operates needs to be reachable
+         * from the keyboard, so the compact wrapper is a named, focusable
+         * region — the same treatment `ProviderTruth.astro` gives its
+         * scrolling table, for the same reason. The full form scrolls
+         * nothing, so it gets neither a tab stop nor a role to announce. */
+      }
+      <div
+        class="receipt__scroll"
+        {...compact
+          ? {
+              role: 'region',
+              tabindex: '0',
+              'aria-label': 'Every request this page has made'
+            }
+          : {}}
+      >
+        <ol class="receipt__rows" data-receipt-log>
+          <li class="receipt__empty">
+            Measured in this browser from the Performance API, which needs a
+            script to read. Nothing is printed here until one runs. What ships
+            in the artifact, below, is measured at build time and is the same
+            either way.
+          </li>
+        </ol>
+      </div>
     </section>
 
     <section class="receipt__section">
@@ -140,10 +172,15 @@ if (used !== undefined && !adapters.some(({ needed }) => needed)) {
             <li class="receipt__row">
               <span class="receipt__path">{name}</span>
               <span class="receipt__size">{size.toFixed(2)} KB</span>
+              {
+                /* "gzipped" is said once, in the caption, rather than five
+                 * times in a column — the sizes are all the same kind of
+                 * figure and the row's note is for the verdict. */
+              }
               <span class="receipt__note">
                 {needed
-                  ? 'gzipped · fetched on demand, when the clip is loaded'
-                  : 'gzipped · nothing on this page can ask for it'}
+                  ? 'fetched on demand, when the clip loads'
+                  : 'nothing on this page can ask for it'}
               </span>
             </li>
           ))
@@ -422,7 +459,7 @@ if (used !== undefined && !adapters.some(({ needed }) => needed)) {
    *
    * Nothing here animates. A row appears the moment the browser records the
    * request, which is the behaviour this panel exists to show, and `DESIGN.md`
-   * puts this app's animation count at two — both on `/`, neither of them this.
+   * puts this app's animation count at three — all on `/`, none of them this.
    * So there is no motion for `prefers-reduced-motion` to suppress, and a
    * suppressed transition cannot leave a request unprinted. */
   :global(.receipt__row) {
@@ -486,5 +523,78 @@ if (used !== undefined && !adapters.some(({ needed }) => needed)) {
   .receipt__caption {
     font-size: var(--text-xs);
     color: var(--color-ink-subtle);
+  }
+
+  /* ---- the compact form ----------------------------------------------------
+   *
+   * The same instrument at a fraction of the height: nothing below changes
+   * what is measured or printed, only how much of the page it is allowed to
+   * spend. The full form's receipt was 13% of a landing page once; this one
+   * is budgeted under 300px, and the two decisions that get it there are the
+   * scrolling well and the two halves sharing a row.
+   *
+   * The wrapper exists in both forms and scrolls only here. `9rem` is this
+   * panel's own layout literal — enough for four or five rows, which is what
+   * says "there are more, and you may scroll" — and the thin scrollbar is the
+   * treatment `base.css` gives every inner scroller, where a platform-width
+   * bar reads as a second border. */
+  .receipt[data-compact] .receipt__panel {
+    gap: var(--space-3);
+  }
+
+  /* `start`, because a grid's auto rows stretch to fill their container and
+   * the two sections sit in columns equalised to the taller one — left to
+   * stretch, the shorter column opened a band of empty panel between its
+   * heading and its well. */
+  .receipt[data-compact] .receipt__section {
+    gap: var(--space-2);
+    align-content: start;
+  }
+
+  .receipt[data-compact] .receipt__scroll {
+    max-block-size: 9rem;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    border-radius: var(--radius-md);
+  }
+
+  .receipt[data-compact] .receipt__rows {
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+
+  /* Where there is room, the live half and the built half share a row: the
+   * comparison — what was asked for, against what shipped and was not — is
+   * the panel's whole point, and side by side it is read in one glance
+   * rather than remembered across a scroll. */
+  @media (min-width: 64rem) {
+    /* Unequal on purpose: the built half's rows are one line only while the
+     * verdict fits beside the name, so it takes the wider track; the log's
+     * addresses already break anywhere and lose nothing to the narrower
+     * one. */
+    .receipt[data-compact] .receipt__panel {
+      grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+      column-gap: var(--space-6);
+    }
+
+    .receipt[data-compact] .receipt__title {
+      grid-column: 1 / -1;
+    }
+
+    /* A shipped adapter compresses to a line: name, size, verdict. The
+     * measured rows in the well keep their two-line shape — an address has
+     * no fixed length and a note under it is what survives that — but a
+     * package name is bounded and the panel prints five of them, so here a
+     * row is a row. The name and the size keep their intrinsic width and
+     * the verdict takes what is left and wraps: a package name broken
+     * mid-token to make room for its own annotation would have the label
+     * less legible than the note on it. */
+    .receipt[data-compact] .receipt__section:last-of-type .receipt__row {
+      grid-template-columns: auto auto minmax(0, 1fr);
+    }
+
+    .receipt[data-compact] .receipt__section:last-of-type .receipt__note {
+      grid-column: auto;
+    }
   }
 </style>

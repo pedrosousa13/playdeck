@@ -3,444 +3,86 @@
  * Search over the documentation, served from a static index and answered in
  * the reader's own browser.
  *
- * ---- why Pagefind, and what that buys ---------------------------------------
+ * Rebuilt on shadcn's `Command` (cmdk) inside a `Dialog` for #542 phase 2 —
+ * see `SearchCommand.tsx` for the whole of the behaviour, including why
+ * Pagefind, what gets indexed, the two origins `e2e/site-search.spec.ts`
+ * exercises this against, and how the keyboard model and the no-off-origin
+ * guarantee both survived the rebuild. This file's job is mounting that
+ * island where the old component's markup used to sit.
  *
- * The index is built by `pagefind` after `astro build`, from the HTML that
- * build just emitted, and shipped as files beside it. Querying it is a `fetch`
- * of a few index shards from this origin and some WebAssembly, and nothing
- * else. There is no service to call, no key to hold, and no query to log —
- * which is the point rather than a saving. This site's argument is that
- * `loading="interaction"` contacts no provider before a click, and a page that
- * posted every keystroke of its search box to a third party would be arguing
- * against itself. `e2e/site-search.spec.ts` asserts that no request during a
- * search leaves this origin, so the claim is observed rather than assumed.
+ * `client:load` rather than `client:only`: unlike `ThemeToggleIsland.tsx`
+ * (which reads `document.documentElement.dataset.theme` while rendering, and
+ * therefore cannot run on the server at all), nothing in `SearchCommand.tsx`
+ * touches `document` or `window` outside an effect or an event handler — the
+ * dialog starts closed, so nothing Pagefind- or DOM-dependent runs before a
+ * reader interacts with it. It is therefore both safe to render on the server
+ * (a closed dialog and an inert trigger button, nothing a hydration pass would
+ * find to disagree with) and, unlike a lazier directive, hydrated as early as
+ * an island here can be.
  *
- * ---- what gets indexed ------------------------------------------------------
+ * ---- why the shortcut is not in the island ---------------------------------
  *
- * Not decided here, and deliberately not a list of files. Pagefind walks the
- * built `dist/` and indexes every page that does not carry
- * `data-pagefind-ignore` on its `<body>`, which `Base.astro` writes for a page
- * that says it is not documentation. So the default is "indexed", and a
- * documentation page added later is searchable without anyone editing this
- * component, a glob, or a manifest. That default is the whole design: the
- * provider pages are being written in parallel and would otherwise land
- * unsearchable, with nothing failing to say so.
+ * Early is still not immediate. `client:load` hydrates after the document has
+ * parsed and the island's own JavaScript has arrived, and a `/` pressed in
+ * that gap reaches a document with no listener on it: the keypress is not
+ * queued anywhere, it is simply gone, and the next one works. Measured here,
+ * a `/` sent as soon as `page.goto` resolved opened nothing, and the same
+ * press two seconds later opened the dialog — which is what
+ * `e2e/site-search.spec.ts` caught when this component moved from an inline
+ * script to a React island, and it is a real regression rather than a test
+ * that needed a wait added to it.
  *
- * The chrome is excluded separately and for a different reason: `data-
- * pagefind-ignore` sits on the site header and on `DocRail.astro`, which is
- * the rail both the reference and the provider pages render, so
- * a query does not match the package list that appears on every page. Without
- * that, every result's excerpt is the navigation.
+ * So the shortcut lives below, inline and unbundled, for the same reason
+ * `Base.astro`'s theme script does: it has to be listening before anything
+ * asks it to. It owns the whole predicate for what counts as a search-opening
+ * keypress, and says so by dispatching one event; the island only listens.
+ * That keeps the rule in one place rather than in two that can drift, and it
+ * is why `SearchCommand.tsx` has no `keydown` listener of its own.
  *
- * ---- the base path ----------------------------------------------------------
- *
- * Two URLs have to be right and both are derived from
- * `import.meta.env.BASE_URL` rather than written down: where the Pagefind
- * bundle is fetched from, and what a result's path is resolved against.
- * Pagefind records a result's URL as its path inside `dist/`, which is the
- * site root and is not the same string as the served prefix, so `baseUrl` is
- * what it has to be told. Getting either wrong fails silently — a search box
- * that finds nothing, or a result list of links that 404 — so
- * `e2e/site-search.spec.ts` runs the whole of this against a second build made
- * under a non-root prefix.
- *
- * ---- the keyboard -----------------------------------------------------------
- *
- * `/` opens and focuses, arrows move, Enter opens the highlighted result,
- * Escape dismisses. Only the first three of those are written here. A `<dialog>`
- * opened with `showModal()` brings Escape, the focus trap while it is open and
- * the return of focus to the button that opened it — three behaviours that are
- * not worth reimplementing and are easy to reimplement slightly wrong, and the
- * reason this is a `<dialog>` rather than a positioned `<div>`.
- *
- * The list is a combobox in the ARIA sense: focus stays in the input, and the
- * highlighted option is named by `aria-activedescendant`. That is what keeps
- * the results reachable by a screen reader while every keystroke still goes to
- * the field — moving real focus into the list on each arrow press would take
- * the caret out of the query the reader is still typing. Each option is a real
- * `<a>` underneath the role, so a result can also be middle-clicked or opened
- * in a new tab.
- *
- * With no JavaScript the button stays `hidden` and the dialog is never opened.
- * There is no static search to degrade to, so the honest degraded state is no
- * control at all rather than one that does nothing when pressed.
+ * Search is on documentation pages only, which is what `SiteHeader.astro`'s
+ * `documentation` prop decides — this component still takes no prop of its
+ * own for that, because the caller already knows.
  */
+import SearchCommand from './SearchCommand';
+
+const base = import.meta.env.BASE_URL;
 ---
 
-<div class="search">
-  {
-    /* `hidden` in the markup and revealed by the script below. The script is
-     * the whole of what this button does, so with no JavaScript there is nothing
-     * to press rather than a control that swallows a click. Search has no static
-     * form to degrade to — the index is queried by WebAssembly — so absence is
-     * the honest degraded state. */
-  }
-  <button
-    class="search__open"
-    type="button"
-    hidden
-    aria-haspopup="dialog"
-    data-search-open
-  >
-    <span>Search</span>
-    <kbd class="search__key">/</kbd>
-  </button>
+<SearchCommand client:load base={base} />
 
-  <dialog
-    class="search__dialog"
-    aria-label="Search the documentation"
-    data-search-dialog
-  >
-    <label class="u-visually-hidden" for="docs-search-input">
-      Search the documentation
-    </label>
-    {
-      /* `type="text"` and not `type="search"`, which is a behaviour rather than
-       * a preference: a search field consumes the first Escape to clear itself,
-       * so a reader pressing Escape to dismiss the dialog watched their query
-       * vanish and the dialog stay. Measured in Chromium, where the second
-       * press then closes it. What `type="search"` buys is a clear affordance
-       * for a pointer, and Escape dismissing the whole thing is the affordance
-       * this dialog actually has. */
-    }
-    <input
-      id="docs-search-input"
-      class="search__input"
-      type="text"
-      placeholder="Search the documentation"
-      autocomplete="off"
-      spellcheck="false"
-      role="combobox"
-      aria-expanded="false"
-      aria-controls="docs-search-results"
-      aria-autocomplete="list"
-      data-search-input
-    />
-
-    {
-      /* The result count, announced. A listbox that changes under a reader who
-       * cannot see it says nothing on its own, and this is the sentence that
-       * makes "four results" audible. It is also the only place an empty query,
-       * a failure to load the index and a genuine miss are told apart. */
-    }
-    <p class="search__status" role="status" data-search-status></p>
-
-    <ul
-      id="docs-search-results"
-      class="search__results"
-      role="listbox"
-      aria-label="Search results"
-      data-search-results
-    >
-    </ul>
-
-    {
-      /* One result, as markup rather than as `document.createElement` calls.
-       * That is not tidiness: this component's `<style>` is scoped, which Astro
-       * implements by stamping a `data-astro-cid-…` attribute onto the elements
-       * it compiled and adding it to every selector. An element built by the
-       * script carries no such attribute, so every rule below would match
-       * nothing and the list would render as the browser's own underlined blue
-       * links. Cloned from here, a row is one of this component's elements and
-       * is styled like one.
-       *
-       * An `<a>` wearing `role="option"`, and out of the tab order. The role is
-       * what a screen reader announces inside the listbox; the element
-       * underneath it is what lets a result be middle-clicked or opened in a new
-       * tab. Tab still leaves the field for the dialog's own stops rather than
-       * walking eight results. */
-    }
-    <template data-search-template>
-      <a class="search__result" role="option" aria-selected="false" tabindex="-1">
-        <span class="search__result-title"></span>
-        <span class="search__result-excerpt"></span>
-      </a>
-    </template>
-  </dialog>
-</div>
-
-<script>
+<script is:inline>
   /*
-   * `import.meta.env.BASE_URL` is substituted by the build, so both of these
-   * are constants in the shipped file rather than something the page works out
-   * at runtime. Written as a literal `/pagefind/` they would be identical
-   * today, which is exactly why they are not: the prefix is the one thing here
-   * that is wrong silently.
-   */
-  const base = import.meta.env.BASE_URL;
-  const bundle = `${base}pagefind/pagefind.js`;
-
-  /** How many results the list shows. */
-  const LIMIT = 8;
-
-  /**
-   * How many headings one document may contribute to that list. Four documents
-   * minimum at the `LIMIT` above, which is the point — see `flatten`.
-   */
-  const PER_PAGE = 2;
-
-  /*
-   * Pagefind's own debounce. It resolves to `null` for a search that a later
-   * keystroke has superseded, which is what keeps a slow query from painting
-   * over a fast one typed after it.
-   */
-  const DEBOUNCE_MS = 180;
-
-  const root = document.querySelector<HTMLElement>('.search');
-  const openButton = document.querySelector<HTMLButtonElement>(
-    '[data-search-open]'
-  );
-  const dialog = document.querySelector<HTMLDialogElement>(
-    '[data-search-dialog]'
-  );
-  const input = document.querySelector<HTMLInputElement>('[data-search-input]');
-  const status = document.querySelector<HTMLElement>('[data-search-status]');
-  const list = document.querySelector<HTMLUListElement>(
-    '[data-search-results]'
-  );
-  const template = document.querySelector<HTMLTemplateElement>(
-    '[data-search-template]'
-  );
-
-  /**
-   * One flattened entry in the list: a heading inside a document, or a document
-   * with no headings to offer.
-   */
-  interface Entry {
-    title: string;
-    url: string;
-    excerpt: string;
-  }
-
-  /*
-   * The Pagefind bundle is generated at build time and has no types to import,
-   * so this describes only the three members this file calls.
+   * `/` opens the search dialog, and this listener is attached while the
+   * document is still parsing so that a press before the island hydrates is
+   * not dropped. See this file's header for the measurement behind that.
    *
-   * It buys documentation and not safety, and the difference matters enough to
-   * state: nothing typechecks this inline script — `apps/site/tsconfig.json`
-   * covers `.ts` and `.tsx` and cannot parse `.astro` — and the shape below
-   * reaches the runtime value through an `as` cast on the dynamic import, which
-   * asserts rather than verifies. A Pagefind release that renamed `sub_results`
-   * would go on compiling and would show an empty list at runtime. What this
-   * block is for is telling the next reader what was assumed, and the exact
-   * version pin in `apps/site/package.json` is what keeps the assumption from
-   * changing under them.
+   * The island hears one event, `playdeck:search-open`, whenever it should
+   * open. A press made before it was listening is held here and dispatched
+   * again when it says it is ready, so the early case and the ordinary case
+   * arrive the same way rather than the island reading a flag at mount. The
+   * replay is queued rather than sent inside the ready handler, so it lands
+   * after the mount that asked for it has finished rather than during it.
+   *
+   * The predicate is deliberately only here. Ignored while the reader is
+   * already typing somewhere, or holding a modifier, so `/` in a text field
+   * stays a slash and Ctrl+/ stays whatever the browser makes of it. A press
+   * while the dialog is open needs no case of its own: focus is in the search
+   * field by then, so the typing test below has already returned.
    */
-  interface PagefindResultData {
-    url: string;
-    excerpt: string;
-    meta: { title?: string };
-    sub_results?: { title: string; url: string; excerpt: string }[];
-  }
+  (() => {
+    const open = () => document.dispatchEvent(new CustomEvent('playdeck:search-open'));
+    let pending = false;
+    let ready = false;
 
-  interface Pagefind {
-    options: (options: { baseUrl: string }) => Promise<void>;
-    init: () => Promise<void>;
-    debouncedSearch: (
-      query: string,
-      options: Record<string, never>,
-      debounce: number
-    ) => Promise<{ results: { data: () => Promise<PagefindResultData> }[] } | null>;
-  }
-
-  if (root && openButton && dialog && input && status && list && template) {
-    /*
-     * Loaded on the first query and not before. Measured on this site in
-     * chromium, a first query pulls 221 KB over eight requests — the module, a
-     * worker, the entry, the metadata, the WebAssembly, an index chunk and a
-     * fragment per matching document — and a reader who never searches should
-     * pay for none of it. Holding the promise here is what makes the second
-     * query reuse the first one's load rather than starting another.
-     */
-    let loading: Promise<Pagefind> | undefined;
-
-    const load = () => {
-      loading ??= (async () => {
-        /* The specifier is a runtime string because the prefix is not known
-         * until the build substitutes it, and the bundle does not exist until
-         * after the build has run — so there is nothing for the bundler to
-         * resolve at this point even in principle. */
-        const pagefind = (await import(/* @vite-ignore */ bundle)) as Pagefind;
-        /* What a result's path is resolved against. Pagefind records the path
-         * a page has inside `dist/`, which is the site root and not the prefix
-         * the site is served under. */
-        await pagefind.options({ baseUrl: base });
-        await pagefind.init();
-        return pagefind;
-      })();
-      return loading;
-    };
-
-    /** The entries currently rendered, in the order they appear. */
-    let entries: Entry[] = [];
-    /** Which of them is highlighted, or -1 when the list is empty. */
-    let active = -1;
-
-    const optionId = (index: number) => `docs-search-result-${index}`;
-
-    const highlight = (next: number) => {
-      const previous = list.children[active];
-      if (previous instanceof HTMLElement) {
-        previous.setAttribute('aria-selected', 'false');
-      }
-      active = next;
-      const current = list.children[active];
-      if (current instanceof HTMLElement) {
-        current.setAttribute('aria-selected', 'true');
-        input.setAttribute('aria-activedescendant', current.id);
-        /* `nearest` rather than `center`: the list scrolls only when the
-         * highlighted row is off the end of it, so travelling through a short
-         * list does not move the rows under the reader's eye. */
-        current.scrollIntoView({ block: 'nearest' });
-      } else {
-        input.removeAttribute('aria-activedescendant');
-      }
-    };
-
-    const render = (query: string, found: Entry[]) => {
-      entries = found;
-      list.replaceChildren(
-        ...found.map((entry, index) => {
-          const row = template.content.cloneNode(true) as DocumentFragment;
-          const option = row.querySelector('a');
-          const title = row.querySelector('.search__result-title');
-          const excerpt = row.querySelector('.search__result-excerpt');
-          if (option === null || title === null || excerpt === null) {
-            throw new Error('The result template has lost one of its parts.');
-          }
-
-          option.id = optionId(index);
-          option.href = entry.url;
-          title.textContent = entry.title;
-          /* Markup, because Pagefind wraps the matched words in `<mark>` and
-           * that is the whole value of an excerpt. What it wraps is this site's
-           * own built pages, escaped by Pagefind on the way in — there is no
-           * path by which a reader's query becomes markup here. */
-          excerpt.innerHTML = entry.excerpt;
-
-          return option;
-        })
-      );
-
-      input.setAttribute('aria-expanded', String(found.length > 0));
-      highlight(found.length > 0 ? 0 : -1);
-
-      if (query === '') {
-        status.textContent = '';
-      } else if (found.length === 0) {
-        status.textContent = `No results for “${query}”.`;
-      } else {
-        status.textContent = `${found.length} result${found.length === 1 ? '' : 's'} for “${query}”.`;
-      }
-    };
-
-    /*
-     * A document is one result and its headings are its sub-results, and it is
-     * the headings that are worth showing. A reference page is an entire
-     * README, so "@playdeck/core matched" is barely an answer — the reader
-     * wants the section, and the sub-result carries the fragment that lands
-     * them in it. A result with no sub-results at all falls back to the page:
-     * one entry that goes somewhere is worth more than a document that
-     * disappears from a list it matched.
-     *
-     * At most `PER_PAGE` of them, which is what stops one document answering
-     * the whole query. The list is capped at `LIMIT` entries after flattening,
-     * so without a per-document cap a long README that matches in eight places
-     * fills every slot and every other page that matched is never shown —
-     * measured on `provider`, which returned six headings from `provider-hls`
-     * and two from `provider-wistia` and nothing at all from the other five
-     * documents that match it. A reader searching one word across a package
-     * set is asking which packages, so breadth across documents beats depth
-     * within one.
-     */
-    const flatten = (data: PagefindResultData): Entry[] => {
-      const subs = (data.sub_results ?? []).slice(0, PER_PAGE);
-      if (subs.length === 0) {
-        return [
-          {
-            title: data.meta.title ?? data.url,
-            url: data.url,
-            excerpt: data.excerpt
-          }
-        ];
-      }
-      return subs.map((sub) => ({
-        title: sub.title,
-        url: sub.url,
-        excerpt: sub.excerpt
-      }));
-    };
-
-    const run = async (query: string) => {
-      if (query === '') {
-        render('', []);
-        return;
-      }
-
-      let pagefind: Pagefind;
-      try {
-        pagefind = await load();
-      } catch {
-        /* The bundle would not load or would not start. Whatever the cause —
-         * a deployment that shipped the pages without the index, a request that
-         * failed — saying so is better than an empty list, which a reader would
-         * read as "nothing matched". */
-        render(query, []);
-        status.textContent = 'Search is unavailable on this page.';
-        return;
-      }
-
-      const search = await pagefind.debouncedSearch(query, {}, DEBOUNCE_MS);
-      /* Superseded by a later keystroke while this one was in flight. */
-      if (search === null) return;
-      /* And superseded by one that arrived while the data was being read. */
-      if (input.value.trim() !== query) return;
-
-      const pages = await Promise.all(
-        search.results.slice(0, LIMIT).map((result) => result.data())
-      );
-      render(query, pages.flatMap(flatten).slice(0, LIMIT));
-    };
-
-    input.addEventListener('input', () => {
-      void run(input.value.trim());
+    document.addEventListener('playdeck:search-ready', () => {
+      ready = true;
+      if (!pending) return;
+      pending = false;
+      queueMicrotask(open);
     });
 
-    input.addEventListener('keydown', (event) => {
-      if (entries.length === 0) return;
-
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        highlight((active + 1) % entries.length);
-      } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        highlight((active - 1 + entries.length) % entries.length);
-      } else if (event.key === 'Enter') {
-        const entry = entries[active];
-        if (entry !== undefined) {
-          /* The field is inside a `<form>`-less dialog, so nothing would submit
-           * — but Enter with a result highlighted means "open that one", and
-           * the default would be to do nothing at all. */
-          event.preventDefault();
-          window.location.href = entry.url;
-        }
-      }
-    });
-
-    openButton.hidden = false;
-    openButton.addEventListener('click', () => {
-      dialog.showModal();
-      input.focus();
-      input.select();
-    });
-
-    /*
-     * The shortcut. Ignored while the reader is typing somewhere else, which on
-     * this site is only ever this same field, and ignored when a modifier is
-     * held so that browser and operating-system bindings keep working.
-     */
     document.addEventListener('keydown', (event) => {
-      if (event.key !== '/' || dialog.open) return;
+      if (event.key !== '/') return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target;
       if (
@@ -450,185 +92,9 @@
       ) {
         return;
       }
-      /* Otherwise the character the shortcut is spelt with lands in the field
-       * the shortcut just focused. */
       event.preventDefault();
-      dialog.showModal();
-      input.focus();
-      input.select();
+      if (ready) open();
+      else pending = true;
     });
-  }
+  })();
 </script>
-
-<style>
-  .search {
-    display: flex;
-  }
-
-  /* A button rather than a field in the bar. At 320px the header already holds
-   * a truncating breadcrumb and the theme switch, and a third flexible box
-   * between them leaves a field too narrow to read a query in. The button also
-   * carries the shortcut, which is the thing a reader has to be told once. */
-  .search__open {
-    display: flex;
-    gap: var(--space-2);
-    align-items: center;
-    min-block-size: var(--hit-target);
-    padding-inline: var(--space-3);
-    font-family: var(--font-sans);
-    font-size: var(--text-sm);
-    color: var(--color-ink-muted);
-    cursor: pointer;
-    background-color: var(--color-sunken);
-    border: var(--line-width) solid var(--color-line-strong);
-    border-radius: var(--radius-md);
-  }
-
-  .search__open:hover {
-    color: var(--color-ink);
-  }
-
-  /* Pressed, the fourth state every control on this site carries. */
-  .search__open:active {
-    border-color: var(--color-accent);
-  }
-
-  /* The shortcut, at the functional floor. At 40rem and up it is rendered and
-   * not hidden from assistive technology: the shortcut is real, and a reader who
-   * cannot see the key cap still wants to know it exists.
-   *
-   * Below 40rem it is not rendered at all, and `display: none` rather than a
-   * visual trick because there it should leave the accessible name too — the
-   * button reads "Search" on a phone, which is all it can do there. The header
-   * at 360px is a wordmark, a truncating trail, this button and the switch, and
-   * a key cap is the one thing in that row addressed to a device the reader
-   * probably does not have. The width it costs comes straight out of the
-   * breadcrumb: measured at 360px in chromium, the `Reference` crumb shows 18px
-   * of its 79 with the cap rendered and 43px without it. */
-  .search__key {
-    display: none;
-    padding-inline: var(--space-1);
-    font-size: var(--text-fn);
-    color: var(--color-ink-subtle);
-    border: var(--line-width) solid var(--color-line);
-    border-radius: var(--radius-sm);
-  }
-
-  @media (min-width: 40rem) {
-    .search__key {
-      display: revert;
-    }
-  }
-
-  /* An elevated surface, so it carries no border — see `DESIGN.md` rule 4,
-   * which names this dialog as one of the three things allowed to spend an
-   * elevation. `--elevation-panel` and not the instrument: the instrument is
-   * the panel a page is built around, and this one is a panel over a page. */
-  .search__dialog {
-    inline-size: min(38rem, calc(100vw - var(--space-6)));
-    max-block-size: min(32rem, calc(100vh - var(--space-8)));
-    padding: var(--space-4);
-    margin-block-start: var(--space-8);
-    margin-inline: auto;
-    overflow: hidden;
-    color: var(--color-ink);
-    background-color: var(--color-surface);
-    border: none;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--elevation-panel);
-  }
-
-  /* The document behind the dialog, dimmed. A token at reduced opacity rather
-   * than a colour of its own, so the scrim is the page's own field in both
-   * themes and the system gains no fourth grey. */
-  .search__dialog::backdrop {
-    background-color: var(--color-field);
-    opacity: 0.75;
-  }
-
-  /* A recessed well, which is what `--color-sunken` is for, with the control
-   * boundary that non-text UI owes 3:1. */
-  .search__input {
-    inline-size: 100%;
-    min-block-size: var(--hit-target);
-    padding-inline: var(--space-3);
-    font-family: var(--font-sans);
-    font-size: var(--text-md);
-    color: var(--color-ink);
-    background-color: var(--color-sunken);
-    border: var(--line-width) solid var(--color-line-strong);
-    border-radius: var(--radius-md);
-  }
-
-  .search__input::placeholder {
-    color: var(--color-ink-subtle);
-  }
-
-  .search__status {
-    padding-block-start: var(--space-2);
-    font-family: var(--font-mono);
-    font-size: var(--text-fn);
-    letter-spacing: var(--tracking-fn);
-    color: var(--color-ink-subtle);
-  }
-
-  /* The list scrolls inside the dialog rather than growing it, so the field
-   * stays where it was put. `thin` for the same reason the rail and a code
-   * block take it: a platform-width bar inside a panel this small reads as a
-   * second border. */
-  .search__results {
-    max-block-size: 20rem;
-    padding: 0;
-    margin: 0;
-    overflow-y: auto;
-    list-style: none;
-    scrollbar-width: thin;
-  }
-
-  .search__result {
-    display: grid;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3);
-    color: inherit;
-    text-decoration: none;
-    border-radius: var(--radius-md);
-  }
-
-  /* The highlighted row. Focus never leaves the field — the row is named by
-   * `aria-activedescendant` instead — so this is the only thing on screen
-   * saying which result Enter will open, and it is a filled row rather than the
-   * site's focus ring so that the two are not mistaken for each other. */
-  .search__result[aria-selected='true'] {
-    background-color: var(--color-sunken);
-  }
-
-  .search__result-title {
-    font-weight: var(--weight-semibold);
-  }
-
-  /* Held to three lines. Pagefind's excerpt is as long as the passage the match
-   * sits in, and these documents are mostly code, so an unclamped row ran to a
-   * dozen lines while the one under it ran to two — a list nobody can travel
-   * with arrow keys, because the next row is never where the eye expects it.
-   * Three lines is enough to see the match in its sentence. `line-clamp` and the
-   * `-webkit-` spelling together, because the unprefixed property is the newer
-   * of the two and the older one is what most engines still ship. */
-  .search__result-excerpt {
-    display: -webkit-box;
-    overflow: hidden;
-    font-size: var(--text-sm);
-    color: var(--color-ink-muted);
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-  }
-
-  /* Pagefind wraps the matched words in `<mark>`, whose default is a yellow
-   * belonging to no design system on a background this one never chose. Weight
-   * and the accent instead: two channels, so the match is not colour alone. */
-  .search__result-excerpt :global(mark) {
-    color: var(--color-accent);
-    background-color: transparent;
-    font-weight: var(--weight-semibold);
-  }
-</style>

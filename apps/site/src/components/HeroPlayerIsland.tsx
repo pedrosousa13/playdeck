@@ -19,22 +19,37 @@
  * makes the panel a report rather than an illustration — there is no other
  * controller for a row to be reading.
  *
- * Both panels are therefore produced here, including their markup, and both are
- * grid items of `.hero__stage` in `src/pages/index.astro`: an `<astro-island>`
- * is `display: contents`, so what this renders lands in that grid directly.
- * `HeroPlayer.astro` keeps every rule that decides how they look, and carries
- * why those rules are written the way they are.
+ * Both panels are therefore produced here, including their markup. The player
+ * is a grid item of `.hero__stage` in `src/pages/index.astro`: an
+ * `<astro-island>` is `display: contents`, so what this renders there lands in
+ * that grid directly. The ledger is not — it portals into the `truth` section
+ * further down the page instead (see `LedgerPortal`, below), because the hero
+ * is the player, the headline, the thesis and the CTA and nothing else; the
+ * panel is marketed as evidence for the `truth` section's claim, not shown as
+ * a second thing to parse on arrival. `HeroPlayer.astro` keeps every rule that
+ * decides how the player looks; the ledger's own look stays in this file's
+ * neighbour too, addressed by class name rather than by position, which is
+ * what makes the portal safe for its styling.
  *
  * `source` arrives as a prop rather than being written here, because the URL a
  * page serves the clip from is resolved against `import.meta.env.BASE_URL` in
  * the Astro component, the way every other address on this site is.
  */
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import * as Player from '@playdeck/react';
 
 interface Props {
   /** The clip's URL, already resolved against the site's base path. */
   readonly source: string;
+  /**
+   * The same VTT fixture the archetypes caption their clip with, resolved
+   * against the site's base path. Wired onto the hero's own media as a text
+   * track — added for #542 phase 2, so CH 01's `<Player.Captions />` and
+   * `<Player.CaptionsMenu />` stages have a real track to render rather than
+   * an empty overlay standing in for one.
+   */
+  readonly captionsSrc: string;
 }
 
 interface ControlBarProps {
@@ -133,6 +148,13 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
       <Player.SeekSlider />
       <Player.Time type="current" />
       <Player.Time type="duration" />
+      {/* CH 01's fifth arrival: a settings menu built from the preset over
+       * `SettingsMenu`/`MenuRadioGroup`, listing the hero's own text tracks.
+       * It renders nothing when there is nothing to list — the same "only
+       * what the provider honours" rule the fullscreen button already
+       * follows — which for a source with no captions attached would be
+       * every reader. The hero's media carries one below, so it is not. */}
+      <Player.CaptionsMenu />
       <Player.FullscreenButton>
         {state.fullscreen ? (
           <Player.FullscreenExitIcon />
@@ -272,13 +294,78 @@ const LedgerRow = ({ capability, provider }: LedgerRowProps) => {
  * An `h2` at the caption rung, kept because the panel is a named region of the
  * page a reader can navigate to — see `HeroPlayer.astro` for the size.
  */
+/**
+ * The one line that says which half of the demonstration the reader is in.
+ *
+ * Before the press the panel is five ambers, and without this line that state
+ * reads as a report that knows nothing rather than as a report not yet asked
+ * for. So the panel names its own state, read live from the controller the
+ * same way every row is: dormant, attaching, attached, or failed. The dormant
+ * line is also the instruction — press play — because the press is the whole
+ * demonstration and the panel is where a reader's eye is when they wonder what
+ * the ambers mean.
+ *
+ * Every branch prints a state the controller is actually in. There is no
+ * timed copy, no optimistic "loading" and no message this component decides
+ * on its own; `activation` and `provider` are the published state, and the
+ * words below are captions on real values.
+ */
+const LedgerState = () => {
+  const { activation, provider } = Player.usePlayerState((snapshot) => ({
+    activation: snapshot.activation,
+    provider: snapshot.provider
+  }));
+  if (provider !== null) {
+    return (
+      <p className="ledger__state" data-live="">
+        provider: {provider} · attached. The answers below are this
+        browser&rsquo;s own
+      </p>
+    );
+  }
+  if (activation === 'loading-provider') {
+    return <p className="ledger__state">attaching a provider&hellip;</p>;
+  }
+  if (activation === 'error') {
+    return (
+      <p className="ledger__state">
+        the provider failed to attach. The rows report what is known
+      </p>
+    );
+  }
+  return (
+    <p className="ledger__state">
+      dormant, nothing asked yet. Press play and watch these resolve
+    </p>
+  );
+};
+
 const Ledger = () => {
   const provider = Player.usePlayerState((snapshot) => snapshot.provider);
   return (
     <figure className="ledger">
       <div className="ledger__panel">
-        <h2 className="ledger__title">Capability ledger</h2>
-        <ul className="ledger__rows">
+        {/* Named in plain words — the maintainer ruled the old label
+         * ("capability ledger") out as jargon nobody recognises, and CH 02's
+         * plan text ("Asked of this browser, right now") is spent here
+         * rather than repeated in a heading of the page's own beside it.
+         * The classes keep the old names; `e2e/site-ledger.spec.ts` locates
+         * by them. */}
+        <h2 className="ledger__title">Asked of this browser, right now</h2>
+        <LedgerState />
+        {/*
+         * `data-live` appears at the moment a provider attaches, which is the
+         * moment every row's answer stops being "nothing has been asked" and
+         * becomes a provider's own report. `HeroPlayer.astro` keys the rows'
+         * one settle animation off it — the resolution made visible — and the
+         * attribute is a fact about the controller, not a cue this file
+         * invents: it is `provider !== null`, the same read the state line
+         * above prints.
+         */}
+        <ul
+          className="ledger__rows"
+          data-live={provider === null ? undefined : ''}
+        >
           {capabilityRows.map((capability) => (
             <LedgerRow
               capability={capability}
@@ -289,15 +376,42 @@ const Ledger = () => {
         </ul>
       </div>
       <figcaption className="ledger__caption">
-        Read from the player beside it, in this browser, as it answers. Every
-        row opens <code>unknown</code>: nothing has been asked of a provider
-        until the clip is loaded.
+        Read live from the player. Every answer opens <code>unknown</code>,
+        press play and watch them resolve.
       </figcaption>
     </figure>
   );
 };
 
-const HeroPlayerIsland = ({ source }: Props) => {
+/**
+ * Where the panel above actually lands: not beside the player, but in the
+ * `truth` section further down the page, in the empty
+ * `#truth-ledger-mount` element `index.astro` renders there for exactly this.
+ *
+ * A portal rather than a second `Player.Root`, because there is only one
+ * controller on this page and the panel's whole claim is that it reads that
+ * controller live — a second root would be a second, disconnected player
+ * reporting nothing real. `createPortal` keeps `Ledger` inside this
+ * component's React tree (and so inside `Player.Root`'s context) while
+ * rendering its DOM somewhere else entirely, which is the one primitive that
+ * lets the panel leave the hero without duplicating the player it reports on.
+ *
+ * The mount element is read once, lazily, the same way `ThemeToggleIsland`
+ * reads `data-theme`: this whole component is `client:only`, so the function
+ * body that runs here is already running in a browser holding the page's full
+ * static markup, mount element included, and there is nothing to wait on with
+ * an effect. A lookup that failed would mean `index.astro` stopped rendering
+ * the mount element, which is a defect this line is not the place to guard
+ * against; it returns `null` from `createPortal` rather than being written to
+ * assume success either way.
+ */
+const LedgerPortal = () => {
+  const [mount] = useState(() => document.getElementById('truth-ledger-mount'));
+  if (mount === null) return null;
+  return createPortal(<Ledger />, mount);
+};
+
+const HeroPlayerIsland = ({ captionsSrc, source }: Props) => {
   /*
    * How the activation was given, carried from the press to the render that
    * replaces the button — a ref rather than state, because nothing renders
@@ -349,7 +463,24 @@ const HeroPlayerIsland = ({ source }: Props) => {
         <div className="demo__bezel">
           <div className="demo__stage">
             <Player.Viewport>
-              <Player.Media />
+              <Player.Media
+                textTracks={[
+                  {
+                    src: captionsSrc,
+                    srcLang: 'en',
+                    label: 'English',
+                    kind: 'captions',
+                    default: true
+                  }
+                ]}
+              />
+              {/* CH 01's fourth arrival: the overlay that paints the active
+               * track's cues over the picture, the same component the
+               * streaming archetype mounts. Renders nothing while no cue is
+               * showing, which is most of a 45-second clip of colour bars —
+               * the fixture carries sparse cues rather than none, so the
+               * part is real even where the frame usually shows none of it. */}
+              <Player.Captions />
               {/*
                * Before the control bar and after the picture, which is the order the
                * stacking in `HeroPlayer.astro` reads: at equal `z-index` the later
@@ -390,14 +521,12 @@ const HeroPlayerIsland = ({ source }: Props) => {
           </div>
         </div>
         <figcaption className="demo__caption">
-          A real player, composed from the published primitives. The clip is a
-          one-second test pattern served from this origin, and{' '}
-          <code>loading="interaction"</code> holds the player dormant until the
-          button is pressed — so nothing is fetched, and no provider is
-          attached, before that press.
+          A real player, dormant. <code>loading="interaction"</code> holds it
+          asleep. Nothing is fetched, and no provider attached, until you press
+          play.
         </figcaption>
       </figure>
-      <Ledger />
+      <LedgerPortal />
     </Player.Root>
   );
 };

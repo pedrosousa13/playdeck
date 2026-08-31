@@ -701,18 +701,19 @@ raised in both themes rather than only in the one that has the room.
 unchanged: nothing on this site relies on it, and a later reader should not infer
 from its existence that anything does.
 
-**This app writes two animations, and both are on `/`.** The count used to be
-stated as "there are two animations on the site", which was the same fact while
-the two archetypes were mounted only on `/archetypes`. They are mounted on `/`
-now, they animate `background-color`, and they are outside rule 5 for the
-ownership reason above — so a reader watching that page sees motion this count
-does not include. The count is a count of what this app authors, and it is worth
-saying so rather than letting a reader find a moving element and conclude the
-rule had quietly lapsed. The count is the
-rule; the argument it was making is why the count is two and not seven.
-Scattered reveals down a page are the generated-landing-page tell in motion
-form, and one authored moment is worth more than six of them — a second one is
-spent here only because it is the same moment, on the page's central claim.
+**This app writes three animations, and all three are on `/`.** The count used
+to be stated as "there are two animations on the site", which was the same fact
+while the two archetypes were mounted only on `/archetypes`. They are mounted
+on `/` now, they animate `background-color`, and they are outside rule 5 for
+the ownership reason above — so a reader watching that page sees motion this
+count does not include. The count is a count of what this app authors, and it
+is worth saying so rather than letting a reader find a moving element and
+conclude the rule had quietly lapsed. The count is the rule; the argument it
+was making is why the count is three and not seven. Scattered reveals down a
+page are the generated-landing-page tell in motion form, and one authored
+moment is worth more than six of them — the second and the third are spent
+here only because each is the same moment: the page's central claim, arriving
+and then being answered.
 
 The first is the hero's sweep band, which travels in from the left once on
 arrival — a `translateX(-100%)` to `translateX(0)` on an inner box inside an
@@ -728,6 +729,21 @@ app writes moves on entry — not the receipt, whose rows appear the moment the
 browser records a request and are the behaviour that panel exists to show, and
 not the two mounted archetypes, which take no class of this vocabulary. The
 hero's band is untouched by any of it.
+
+The third is the capability ledger's resolution, in `HeroPlayer.astro`: the
+moment a provider attaches, the five rows settle in sequence — `opacity` and a
+`--space-1` rise, `--duration-base`, delays in steps of `--duration-fast`. It
+is keyed off a `data-live` attribute the island writes only when
+`snapshot.provider` is non-null, in the same React commit that writes the
+resolved answers into the DOM, so the motion marks a real state change and can
+neither run early nor dress a simulated one — the rows' content is already
+true before the first frame. It exists because the resolution is the page's
+whole demonstration and an unmarked swap is a moment most readers blink
+through. It runs once, on one panel, and is not a reveal vocabulary: nothing
+else may key off it. Under `prefers-reduced-motion` it is removed outright
+(`animation: none`) rather than left to the duration collapse, because the
+collapse shortens durations but not delays, and a delayed `both`-filled row
+would sit invisible through its delay.
 
 `prefers-reduced-motion: reduce` collapses durations, which lands each transition
 on its settled state immediately. That only works because every transition moves
@@ -1190,21 +1206,25 @@ the module that would otherwise hold it.
 
 ## The landing page
 
-`/` is the site's front door, and it is eight sections: hero, weight,
-archetypes, receipt, composition, truth, states, start. Each is marked with a
-`data-section` attribute naming it, which is how `e2e/site-landing.spec.ts` pins
-the order rather than pinning a heading a later edit is free to reword.
+`/` is the site's front door, and it is four sections: hero, states,
+archetypes, start. Each is marked with a `data-section` attribute naming it,
+which is how `e2e/site-landing.spec.ts` pins the order rather than pinning a
+heading a later edit is free to reword.
 
-**This passage used to describe a different page** — a spine of thesis, three
-states, headless, providers, budgets, start, with the figures at the bottom and
-the demonstrations replaced by prose about them. That page argued in sentences
-and asked to be believed. What replaced it argues by running the thing and then
-printing what running it cost, and the order changed to match: the budget figures
-moved four screens up, directly under the hero, because for a developer
-evaluating a player library the gzipped figure is the first thing that can be
-checked and the first thing that is usually wrong. The parts of the old
-description that were about the page's shape rather than its contents survive
-below, because they were never about which sections it had.
+**This passage has now described three pages.** The first argued in sentences
+and asked to be believed. The second — eight sections: hero, weight,
+archetypes, receipt, composition, truth, states, start — argued by running the
+thing and printing what running it cost, and was rejected for being a
+documentation page wearing a landing page's spine: 8,679px, most of it
+reference content a reader had to scroll past to reach the argument. The four
+sections are what survive of it — the thesis and its live proof, the rule the
+proof demonstrates, one composed product, the install line — and the reference
+content lives on the document pages the header links. The receipt is the one
+cut instrument that returned, in a compact form inside the Start section,
+because #542's third criterion (an unused adapter is never fetched, observably)
+has no other answer on the page. The parts of the old description that were
+about the page's shape rather than its contents survive below, because they
+were never about which sections it had.
 
 **Every section is a claim and then the machine answering it**, and the
 alternation is the page's structure. The claim is prose held to `--measure`, in
@@ -1266,7 +1286,7 @@ control that swallows a click, and nothing is lost, because the command was neve
 behind the button. The feedback is a text swap on the button with the same words
 said once through a `role="status"` line, and it is a text swap rather than a
 flash because this app animates `transform` and `opacity` only and spends
-exactly two animations, neither of them here — the count above, of what this app
+exactly three animations, none of them here — the count above, of what this app
 authors rather than of everything that moves on the page.
 
 **The archetypes are mounted `client:visible`, and the page says so out loud.**
@@ -1302,9 +1322,17 @@ ships React and `react-dom` in order to argue that the library is small. The log
 is printed in full, largest cost included, which is the only way the second claim
 can be made without the page choosing what to leave out.
 
-It sits after the archetypes on purpose. A receipt is what a reader reads after a
-transaction, and the section directly above it has just disclosed that two
-players loaded when the reader scrolled there.
+**It is mounted in its compact form, inside the Start section.** The full form
+was 1,091px — 13% of the page it was rejected with — and the compact form is
+the same two measurements budgeted under 300px: the live log becomes a
+scrolling well (a named, focusable region, the treatment
+`ProviderTruth.astro`'s scrolling table established), the live and built
+halves share a row where there is room, and a shipped adapter compresses to a
+line. Nothing is dropped or summarised: every request is still printed, and
+the totals line is the same measurement. It sits in Start because that
+section's lede is the lazy-loading claim, and the page's structure is a claim
+and then the machine answering it — a fifth section for the answer would have
+separated the two.
 
 **Be exact about which half is measured, because the component is.** The rows in
 the upper panel are measured, in the reader's browser, from a

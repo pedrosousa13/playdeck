@@ -29,7 +29,7 @@ const document_ = 'http://127.0.0.1:4322/reference/';
 // The entry-motion targets on `/`: the three columns of the three-state
 // comparison, which is the one moment below the hero that takes any motion at
 // all. Located by the classes the page already carries.
-const targets = (page: Page) => page.locator('.statuses .status');
+const targets = (page: Page) => page.locator('.truths .truth-card');
 
 // What a reader actually sees, rather than what a class list says. `opacity`
 // and `transform` are the only two properties this system animates, so a
@@ -107,6 +107,14 @@ test.describe('under prefers-reduced-motion: reduce', () => {
 test('the motion runs on / and settles on the resting state', async ({
   page
 }) => {
+  // A short viewport, set before navigation, so the truth cards are reliably
+  // below the fold on arrival regardless of how tall the hero happens to be
+  // at the default 1280x720: the split hero (#542 phase 3) is deliberately
+  // compact enough to fit close to one screen, which on a taller default
+  // viewport could otherwise leave the first target already in view before
+  // the observer ever runs. What is being proved is that the vocabulary
+  // fires on arrival and releases on scroll, not any particular hero height.
+  await page.setViewportSize({ width: 800, height: 420 });
   await page.goto(landing);
   await expect(targets(page)).toHaveCount(3);
 
@@ -114,7 +122,7 @@ test('the motion runs on / and settles on the resting state', async ({
   // arrival and still carry the from-state the observer gave them. That is the
   // evidence that the vocabulary is applied at all rather than being a class
   // nothing reads.
-  await expect(page.locator('.statuses .status[data-enter]')).toHaveCount(3);
+  await expect(page.locator('.truths .truth-card[data-enter]')).toHaveCount(3);
 
   await targets(page).first().scrollIntoViewIfNeeded();
 

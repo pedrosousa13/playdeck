@@ -2,6 +2,7 @@
 import Base from '../../layouts/Base.astro';
 import Sweep from '../../components/Sweep.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
+import ProviderTruth from '../../components/ProviderTruth.astro';
 import { providerPages } from '../../provider-pages.mjs';
 import { referencePackages } from '../../reference-packages.mjs';
 
@@ -82,6 +83,15 @@ const adapters = (dirs, title) =>
         ))
       }
     </ul>
+
+    {
+      /* The comparison, under the list of ways in. It moved here from `/`
+       * (#542's rework): a reader deciding between providers is the reader of
+       * this index, and the landing page's job is the thesis rather than the
+       * reference. The component brings its own heading, its own lede and its
+       * own scroll container, so this page adds nothing around it. */
+    }
+    <ProviderTruth />
   </main>
 </Base>
 
@@ -93,6 +103,12 @@ const adapters = (dirs, title) =>
    * maximum — one column width is not evidence about another. */
   .page {
     display: grid;
+    /* `minmax(0, 1fr)` rather than the implicit `auto` track, so the provider
+     * comparison's table — wider than a phone by design — scrolls inside its
+     * own container instead of setting the column's minimum and pushing the
+     * page sideways at 320px. The same track `/` gives its sections, for the
+     * same reason. */
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-4);
     max-inline-size: 52rem;
     margin-inline: auto;
