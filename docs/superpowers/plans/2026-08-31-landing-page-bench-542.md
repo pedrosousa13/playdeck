@@ -634,8 +634,13 @@ makes it a report rather than a caption. Do not give it a controller of its own.
 State the island holds, and nothing more:
 
 ```ts
+// `BenchPosition` carries `sourceUrl` as well as `source`, because
+// `buildComposition` prints the URL on its `const` line and stays pure by not
+// knowing where a URL came from. Derive it from `benchSources` when a switch
+// is pressed; do not let the two drift apart in state.
 const [position, setPosition] = useState<BenchPosition>({
   source: 'native',
+  sourceUrl: nativeSource(import.meta.env.BASE_URL),
   skin: 'none',
   autoplay: false
 });
@@ -644,8 +649,11 @@ const [position, setPosition] = useState<BenchPosition>({
 // remembered about a provider the reader has moved on from.
 ```
 
-Three things to get right:
+Four things to get right:
 
+- **`skin` is `none` and `theme`, and `theme` is a real import.** Selecting it
+  applies `@playdeck/react/theme.css` to the mounted player. It is not a class
+  name and not a prop. No archetype is mounted on this page, ever.
 - **`loading="interaction"` stays, and the island stays `client:only`.**
   `HeroPlayer.astro` carries the reasoning; move that comment to `Bench.astro`
   rather than dropping it. A `client:only` island means a reader whose script
