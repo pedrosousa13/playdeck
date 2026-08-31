@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { activationButton } from './locators';
 
 /**
@@ -223,19 +223,6 @@ test.describe('under prefers-reduced-motion: reduce', () => {
   });
 });
 
-test('the scroll-loading disclosure is visible copy', async ({ page }) => {
-  await page.goto(landing);
-
-  // A sceptic who opens devtools and finds requests the page never mentioned
-  // has caught the site doing the exact thing it claims not to do. Both
-  // archetypes are mounted on scroll, so the page says so, in the document,
-  // visible, not in a comment.
-  const disclosure = page.locator('.disclosure');
-  await expect(disclosure).toBeVisible();
-  await expect(disclosure).toContainText('when you scroll to them');
-  await expect(disclosure).toContainText('until you press it');
-});
-
 test('the page does not go sideways at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto(landing);
@@ -243,13 +230,13 @@ test('the page does not go sideways at 320px', async ({ page }) => {
     sections.length
   );
 
-  // Scrolled to the foot first, so both archetypes have mounted and are
-  // measured rather than skipped — the elements most likely to push the page
-  // out, and neither exists until a reader reaches them.
+  // Scrolled to the foot first, so nothing below the fold is skipped. The code
+  // blocks are the elements most likely to push the page out now that the two
+  // archetypes have gone: a `pre` of unwrappable source is exactly the shape
+  // that overflows a 320px viewport, and `base.css` gives each its own
+  // scroller so that it does not.
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await expect
-    .poll(() => page.locator('[data-playdeck-part="viewport"]').count())
-    .toBeGreaterThan(2);
+  await expect.poll(() => page.locator('pre').count()).toBeGreaterThan(2);
 
   await expect
     .poll(() =>
@@ -291,17 +278,23 @@ test('the hero is dormant: no media request before the press', async ({
   await expect.poll(() => media.length).toBeGreaterThan(0);
 });
 
-test('pressing an archetype fetches from this origin and nowhere else', async ({
+test('pressing the hero fetches from this origin and nowhere else', async ({
   page
 }) => {
   /*
-   * #542's acceptance criterion in the one state that can break it: every
-   * root on this page is `loading="interaction"` and fetches nothing until
-   * pressed, so the page is clean at rest by construction. What breaks it is
-   * a press, so this presses one archetype and then holds the WHOLE page to
-   * the criterion — every request the document has issued from navigation
-   * onwards, by origin rather than by a deny-list of hosts anybody could grow
-   * past.
+   * #542's acceptance criterion in the one state that can break it. Every root
+   * on this page is `loading="interaction"` and fetches nothing until pressed,
+   * so the page is clean at rest by construction; what breaks it is a press.
+   * So this presses, and then holds the WHOLE page to the criterion — every
+   * request the document has issued from navigation onwards, by origin rather
+   * than by a deny-list of hosts anybody could grow past.
+   *
+   * It presses the hero because the hero is the only player here now. Two
+   * archetypes used to run further down and this test pressed one of them;
+   * they were removed from `/` (#542 phase 5) and they still run on
+   * `/archetypes`, where `site-archetypes.spec.ts` holds them to their own
+   * criteria. What must not be lost with them is this one, which is about the
+   * page and not about which player is on it.
    */
   const origin = new URL(landing).origin;
   const requests: string[] = [];
@@ -309,22 +302,8 @@ test('pressing an archetype fetches from this origin and nowhere else', async ({
 
   await page.goto(landing);
 
-  /*
-   * Both archetypes are `client:visible`, so their markup is in the document
-   * from the server render and their JavaScript is not. Scrolled into view —
-   * the directive's observer fires on intersection, and a single jump to the
-   * foot of the page scrolls straight past without ever intersecting — and
-   * hydration is then waited for. Astro drops the `ssr` attribute off an
-   * island once it has hydrated it, which is the only signal for this on the
-   * page.
-   */
-  const figure = page.locator('.archetype').first();
-  await figure.scrollIntoViewIfNeeded();
-  await expect.poll(() => figure.locator('astro-island[ssr]').count()).toBe(0);
-
-  const start = figure.locator('[data-playdeck-part="activation"]');
-  await expect(start.first()).toBeVisible();
-  await start.first().click();
+  await expect(activationButton(page).first()).toBeVisible();
+  await activationButton(page).first().click();
 
   await expect
     .poll(() => requests.filter((url) => /\.(mp4|ogv|ogg|m4v)(\?|$)/.test(url)))
@@ -341,101 +320,4 @@ test('pressing an archetype fetches from this origin and nowhere else', async ({
       !url.startsWith('blob:')
   );
   expect(foreign).toEqual([]);
-});
-
-test('both archetypes describe the clip they actually play', async ({
-  page
-}) => {
-  /*
-   * The half of the criterion above that a request check cannot see: false
-   * copy costs no request.
-   *
-   * This used to allow `Blender` in exactly one sentence, a licence paragraph
-   * pointing at `/archetypes`. It allows none. CC BY asks for attribution
-   * wherever the media is played, and the media played here is a colour-bar
-   * fixture this site serves itself — so the attribution belongs on the page
-   * that plays the trailers, and a credit on a page that plays none of their
-   * work is not an attribution but a claim about what is on screen.
-   *
-   * `/archetypes` names the films, correctly, and `site-archetypes.spec.ts`
-   * leaves that alone.
-   */
-  await page.goto(landing);
-
-  const section = page.locator('[data-section="compose"]');
-  await expect(section).toBeVisible();
-
-  const spoken = (await section.innerText()).replace(/\s+/g, ' ');
-  expect(spoken).not.toContain('Sintel');
-  expect(spoken).not.toContain('Big Buck Bunny');
-  expect(spoken).not.toContain('open movie, played here');
-  expect(spoken).not.toContain('Blender');
-
-  // And the copy that replaced it says what is really behind the layout, on
-  // both archetypes.
-  await expect(section).toContainText('Test pattern');
-  await expect(section).toContainText('colour-bar test pattern');
-  await expect(section).toContainText('a fixture and not a film');
-  await expect(section).toContainText('a fixture and not a lesson');
-});
-
-test('no archetype control is squashed into the theme activation circle', async ({
-  page
-}) => {
-  /*
-   * The defect this pins shipped once on the single-archetype page. `/` is
-   * the first page in this site to mount `@playdeck/react/theme.css` — the
-   * hero imports it — beside an archetype composition, and the theme sizes
-   * the activation part `inline-size: 4rem; block-size: 4rem` with a 50%
-   * radius unless something takes it back. `.stage` in `index.astro` does.
-   *
-   * What is pinned is SHAPE, not size: a labelled control is wider than it is
-   * tall, which is false under the defect, in every engine, by construction —
-   * 64x64 is square.
-   */
-  await page.goto(landing);
-
-  const figures = page.locator('.archetype');
-  await expect.poll(() => figures.count()).toBe(2);
-  for (const figure of await figures.all()) {
-    await figure.scrollIntoViewIfNeeded();
-  }
-  await expect.poll(() => page.locator('astro-island[ssr]').count()).toBe(0);
-
-  const controls: Locator[] = await page
-    .locator('.stage [data-playdeck-part="activation"]')
-    .all();
-  expect(controls.length).toBeGreaterThanOrEqual(2);
-
-  for (const control of controls) {
-    await expect(control).toBeVisible();
-    const box = await control.boundingBox();
-    expect(box).not.toBeNull();
-    if (box === null) continue;
-
-    /*
-     * That the control is labelled at all, which is the precondition the shape
-     * assertions below only mean anything under. Read as an accessible name
-     * rather than as text content: the two archetypes label this part in the
-     * two different ways the library allows, and only one of them is text.
-     * `archetype-course-platform.tsx` gives its full-bleed start affordance an
-     * `aria-label` and draws a ring-and-triangle badge inside it, so it has a
-     * name and no text at all — a `toBeEmpty` check here reads that as
-     * unlabelled and fails on a control that is not the defect.
-     */
-    await expect(control).toHaveAccessibleName(/\S/);
-    expect
-      .soft(
-        box.width,
-        'a labelled activation control is no wider than it is tall'
-      )
-      .toBeGreaterThan(box.height);
-
-    expect
-      .soft(
-        { w: Math.round(box.width), h: Math.round(box.height) },
-        'an activation control is the theme 64x64 square'
-      )
-      .not.toEqual({ w: 64, h: 64 });
-  }
 });

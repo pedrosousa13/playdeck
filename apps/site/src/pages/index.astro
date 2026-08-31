@@ -5,8 +5,6 @@ import SiteHeader from '../components/SiteHeader.astro';
 import HeroPlayer from '../components/HeroPlayer.astro';
 import { shikiConfig } from '../shiki';
 import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
-import { StreamingServicePlayer } from '../../../../examples/archetype-streaming-service';
-import { CoursePlatformPlayer } from '../../../../examples/archetype-course-platform';
 
 /**
  * The landing page: the player is the protagonist, not an illustration of one.
@@ -18,52 +16,31 @@ import { CoursePlatformPlayer } from '../../../../examples/archetype-course-plat
  *
  * ---- the shape -------------------------------------------------------------
  *
- * A split hero: the thesis and the install line on one side, the real player
- * (dormant) on the other. Below it, four short sections in plain marketing
- * language: what the truthful controls mean, two real compositions built from
- * the same primitives, the provider count and the measured bundle size, then
- * one line to install. No section number, no scroll cue, no pinned chapter —
- * a reader can leave after the hero and still have the whole argument.
+ * A split hero, then one section per feature, then the close. The reader is a
+ * React engineer choosing a video library, and what they buy on is the API, so
+ * every feature is a claim and then the code that does it: querying what a
+ * player can do, autoplay that recovers from a policy block and reports it,
+ * composing two products from one set of primitives, and owning the markup.
  *
- * ---- the layout pass, after a fourth rejection ------------------------------
+ * ---- one player on this page ------------------------------------------------
  *
- * The five sections survived it. How they were laid out did not, and the three
- * faults were on screen rather than in the argument.
+ * The hero's, and nothing else. Two full archetypes ran here for two of this
+ * page's lives and they were by a wide margin the largest thing on it: two
+ * running products, four hundred lines of composition, their own stylesheets,
+ * their own clip, a poster, a scroll-mount disclosure and a licence paragraph,
+ * all in the middle of an argument about an API. The maintainer's objection was
+ * that too much was going on, and they were most of it.
  *
- * Every section was a stack of blocks each capped at `--measure`, inside a
- * 72rem page, so the right half of the page was empty from `truth` to the foot
- * and the two bundle figures read as a footnote in the corner of a blank band.
- * `remote` is one row read across now and the figures are the size of the
- * claim they make.
+ * So composition is now argued the way the three features around it are, in the
+ * code that does it, and the running proof lives on `/archetypes` — the page
+ * whose subject those two files are, which prints each one's whole source
+ * beside the player it builds. That is a better home for them than a section of
+ * a landing page, and it is where a reader who wants them will already look.
  *
- * The two archetypes were a pair of columns, 528px each. Both compositions
- * size themselves from their own container and both reflow above that width,
- * so the section rendered two phone layouts: 703px of stage beside 1,054px of
- * stage, a 430px hole under the shorter one, and the streaming card's own
- * title overflowing its frame. Stacked at full width, each reaches the layout
- * it was built for.
- *
- * The close was an end-credits panel, which on screen was a large empty
- * rectangle holding a joke set in 12px mono. It is a rule, the command and the
- * ways onward.
- *
- * ---- the posters ------------------------------------------------------------
- *
- * Both stages were black rectangles until pressed, because neither composition
- * drew a poster and the clip had none, which made "same parts, any face" an
- * argument illustrated by two black boxes. Both carry a still of the fixture
- * now, served from this origin like everything else here.
- *
- * One image on both, which is the honest form rather than the lazy one: it is
- * one clip, and two files would imply two. Identical media under two entirely
- * different chromes is also the strongest version of the claim this section
- * makes, because what differs between them is then visibly the stylesheet.
- *
- * ---- two live players, and no more -----------------------------------------
- *
- * The hero (one instance) and the two archetypes. A landing page for a player
- * library that ran more would be arguing that it can run more players, not
- * that its primitives compose.
+ * What left with them: `tracer-45s.mp4` and its poster (nothing else served
+ * either), the `client:visible` mounts, the scroll-loading disclosure, and the
+ * `.stage` override that existed only to undo the player theme's activation
+ * sizing on those two compositions.
  *
  * The hero stays `loading="interaction"` and dormant until pressed —
  * `HeroPlayer.astro` carries why the island is `client:only`.
@@ -77,50 +54,6 @@ const designUrl = `${import.meta.env.BASE_URL}design/`;
 // The workbench is deliberately absent, from this page and from the header.
 // #534 records the decision that it is not to be a public surface, and the
 // maintainer ruled the same on a Storybook link.
-
-const captionsSrc = `${import.meta.env.BASE_URL}archetype-captions.vtt`;
-
-// What both archetypes play HERE. #542's non-negotiables keep this the local
-// colour-bar fixture rather than the Blender trailers `/archetypes` plays —
-// every request this page can cause has to be same-origin, always, including
-// after a press.
-const archetypeSource = {
-  type: 'video',
-  sources: [
-    { src: `${import.meta.env.BASE_URL}tracer-45s.mp4`, mimeType: 'video/mp4' }
-  ]
-} as const;
-
-// One still, for both. It is a frame of the clip itself, so the dormant stage
-// shows what is actually behind the play affordance instead of the black the
-// element paints when nothing has been fetched. Same file on both players,
-// because it is the same clip on both players, and shipping a second identical
-// image to imply otherwise is the one thing this page cannot do.
-const archetypePoster = {
-  src: `${import.meta.env.BASE_URL}tracer-poster.png`,
-  alt: 'A colour-bar test pattern: vertical bars over a circle, with a chroma strip across the lower third.'
-} as const;
-
-const streamingMedia = {
-  source: archetypeSource,
-  poster: archetypePoster,
-  kicker: 'Test pattern',
-  title: 'Forty-five seconds of colour bars',
-  blurb:
-    'A fixture served from this origin, not footage. What is on show is the layout around it: this card, the bar over the picture, the marks on the scrubber.',
-  credit:
-    'The clip is a colour-bar test pattern this site serves itself, a fixture and not a film.'
-} as const;
-
-const courseMedia = {
-  source: archetypeSource,
-  poster: archetypePoster,
-  title: 'Forty-five seconds of colour bars',
-  note:
-    'A fixture served from this origin, not a recording. What is on show is the layout of a study surface: notes beside the picture, a visible speed row, an outline of real buttons rather than ticks on a bar.',
-  credit:
-    'The clip is a colour-bar test pattern this site serves itself, a fixture and not a lesson.'
-} as const;
 
 /*
  * The four features this page is here to sell, in the order a React engineer
@@ -183,6 +116,22 @@ const UnmuteNudge = () => {
 
   return <button onClick={() => void actions.unmute()}>Sound off. Turn on</button>;
 };`;
+
+const composeSnippet = `// A streaming service. The chrome sits over the picture.
+<Player.Viewport className="cinema">
+  <Player.Media />
+  <Player.Controls />
+</Player.Viewport>;
+
+// A course platform. The picture shares the page, and nothing
+// covers what is being read.
+<div className="study">
+  <Player.Viewport>
+    <Player.Media />
+  </Player.Viewport>
+  <Player.Controls />
+  <LessonOutline />
+</div>;`;
 
 const customSnippet = `<Player.Root source={source}>
   <Player.Viewport className="yours">
@@ -381,70 +330,34 @@ const install = 'pnpm add @playdeck/react';
     </section>
 
     {
-      /* ---- compose: feature three ------------------------------------------ */
+      /* ---- compose: feature three ------------------------------------------
+       *
+       * Told in code, like the three features around it, and not by mounting
+       * two whole products in the middle of the page. Both archetypes ran here
+       * for two of this page's lives; they were the largest thing on it by a
+       * wide margin and the maintainer's objection was that too much was going
+       * on. They still run, on `/archetypes`, which is the page whose subject
+       * they are. */
     }
     <section class="chapter feature" id="compose" data-section="compose">
       <div class="feature__head">
         <h2 class="chapter__title">Two products. One set of primitives.</h2>
         <p class="feature__lede">
-          Both players below are built on this page from the same components,
-          playing the same clip. Everything that differs between them is a
-          stylesheet and a decision about where things go.
+          The primitives do not decide what your player looks like or where its
+          parts go. Move them, and the same three components are a different
+          product.
         </p>
       </div>
 
-      <p class="disclosure">
-        Both are mounted when you scroll to them, so their JavaScript arrives
-        at that moment. Neither fetches a clip nor attaches a provider until
-        you press it, and everything either can fetch is served from this
-        origin.
-      </p>
-
-      {
-        /* Stacked, each at the page's full width, rather than set as a pair of
-         * columns. Not a taste call: both compositions size themselves from
-         * their own container and both reflow above 528px, which is what two
-         * columns of a 72rem page gave them. See this file's header. */
-      }
-      <div class="compose__stack">
-        <figure class="archetype">
-          <div class="stage">
-            <StreamingServicePlayer
-              captionsSrc={captionsSrc}
-              client:visible
-              media={streamingMedia}
-              resumeAt={18}
-            />
-          </div>
-          <figcaption class="archetype__caption">
-            <b>A streaming service.</b> The picture owns the frame and the
-            chrome sits on top of it. Chapters are marks on the scrubber, the
-            title card is an overlay, and there is no quality menu: the native
-            provider cannot switch renditions of a progressive file, so
-            {' '}<code>selectQuality</code> answers <code>unavailable</code>{' '}
-            and nothing draws a ladder that does not exist.
-          </figcaption>
-        </figure>
-
-        <figure class="archetype">
-          <div class="stage">
-            <CoursePlatformPlayer
-              captionsSrc={captionsSrc}
-              client:visible
-              media={courseMedia}
-              resumeAt={14}
-            />
-          </div>
-          <figcaption class="archetype__caption">
-            <b>A course platform.</b> The picture shares the page instead of
-            owning it. Nothing overlays the video, because nothing should cover
-            what is being read: the transport is docked beneath it, speed is a
-            visible row rather than a menu entry, and navigation is an outline
-            of real buttons beside the picture rather than ticks on a bar.
-          </figcaption>
-        </figure>
+      <div class="code code--wide">
+        <Code code={composeSnippet} lang="tsx" {...shikiConfig} />
       </div>
 
+      <p class="feature__note">
+        Both of those are real and both run, side by side and playing, on
+        {' '}<a href={archetypesUrl}>the archetypes page</a>, which prints each
+        one's whole source beside the player it builds.
+      </p>
     </section>
 
     {
@@ -467,8 +380,8 @@ const install = 'pnpm add @playdeck/react';
             {' '}<code>className</code>, <code>style</code> and its ref.
           </li>
           <li class="claim">
-            <b>Your layout.</b> Nothing is positioned for you. The two players
-            above are the same components in two arrangements.
+            <b>Your layout.</b> Nothing is positioned for you, and no
+            primitive assumes where another one went.
           </li>
           <li class="claim">
             <b>Your elements.</b> Where a primitive would be in the way, take
@@ -630,14 +543,6 @@ const install = 'pnpm add @playdeck/react';
     letter-spacing: var(--tracking-tight);
   }
 
-  .disclosure {
-    max-inline-size: var(--measure);
-    padding-inline-start: var(--space-4);
-    border-inline-start: var(--line-width) solid var(--color-line);
-    font-size: var(--text-sm);
-    color: var(--color-ink-muted);
-  }
-
   /* ---- hero, an asymmetric split: thesis on one side, the running player on
    * the other. Stacked below 64rem, thesis first — a reader on a phone reads
    * the claim before they reach the instrument.
@@ -773,16 +678,6 @@ const install = 'pnpm add @playdeck/react';
     .hero__stage :global(noscript) {
       display: contents;
     }
-  }
-
-  /* Restores the no-theme activation geometry: this page also mounts
-   * `@playdeck/react/theme.css` (`HeroPlayer.astro` imports it), whose
-   * activation part is sized 4rem square, and the two labelled pills on
-   * these title cards become squares with their labels spilling out
-   * without this. `e2e/site-landing.spec.ts` pinned the defect. */
-  .stage :global([data-playdeck-part='activation']) {
-    inline-size: auto;
-    block-size: auto;
   }
 
   /* ---- the feature sections ------------------------------------------------
@@ -967,44 +862,6 @@ const install = 'pnpm add @playdeck/react';
   }
 
   .claim b {
-    color: var(--color-ink);
-    font-weight: var(--weight-semibold);
-  }
-
-  /* ---- compose --------------------------------------------------------------
-   *
-   * Stacked and full width. See this file's header for the measurements: in
-   * two columns each composition got 528px, below the container width both of
-   * them reflow at, so the section drew two phone layouts side by side and one
-   * of them overflowed its own frame. */
-  .compose__stack {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-8);
-    min-inline-size: 0;
-  }
-
-  .archetype {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-4);
-    min-inline-size: 0;
-    margin: 0;
-  }
-
-  /* Held to a reading measure under a stage that is now the page's full width,
-     and it names the difference rather than describing the picture: both
-     players show the same frame of the same clip, so anything a caption said
-     about what is on screen would be equally true of the other one. */
-  .archetype__caption {
-    max-inline-size: 58ch;
-    font-size: var(--text-md);
-    color: var(--color-ink-muted);
-  }
-
-  .archetype__caption b {
-    display: block;
-    margin-block-end: var(--space-1);
     color: var(--color-ink);
     font-weight: var(--weight-semibold);
   }

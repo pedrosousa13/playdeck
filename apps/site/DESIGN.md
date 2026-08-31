@@ -28,9 +28,8 @@ its opposite is what a generated interface looks like.
 5. **Only `transform` and `opacity` are animated.**
 
 Rules 1 and 5 govern what this app writes. The two archetype stylesheets are
-outside both — on `/archetypes`, and now on `/` as well, which mounts the same
-two files — and that is named here rather than left to be found. See _The
-archetypes, and why they are outside rules 1 and 5_ below.
+outside both, on `/archetypes`, and that is named here rather than left to be
+found. See _The archetypes, and why they are outside rules 1 and 5_ below.
 
 ## Palette
 
@@ -366,8 +365,8 @@ about what the example is.
 ## The archetypes, and why they are outside rules 1 and 5
 
 `/archetypes` mounts `examples/archetype-streaming-service.tsx` and
-`examples/archetype-course-platform.tsx`, and `/` now mounts the same two files
-in its archetypes section. Each carries its own stylesheet as a `<style>`
+`examples/archetype-course-platform.tsx`. `/` mounted the same two files for
+two of its lives and no longer does. Each carries its own stylesheet as a `<style>`
 element inside the component, and each writes hex literals by the dozen and
 animates `background-color`. Read against rules 1 and 5 those are violations;
 they are allowed, and the reason is what the pages are for.
@@ -387,7 +386,7 @@ writes no colour and animates nothing but `transform` and `opacity`. A file
 under `examples/` is a consumer's code that this site happens to render, and it
 answers to `examples/`'s own constraints — one paste, no imports, no design
 system. Everything around the two players is inside the rules like every other
-page: `/archetypes` itself, and on `/` the container the compositions are
+page: `/archetypes` itself, and the container the compositions are
 mounted in, which is deliberately no container at all — no surface colour, no
 elevation, no hairline, because a bezel drawn by this site around a file that
 brings its own appearance would be this site's paint on a consumer's example.
@@ -700,12 +699,13 @@ raised in both themes rather than only in the one that has the room.
 unchanged: nothing on this site relies on it, and a later reader should not infer
 from its existence that anything does.
 
-**This app writes three animations, and all three are on `/`.** The count used
-to be stated as "there are two animations on the site", which was the same fact
-while the two archetypes were mounted only on `/archetypes`. They are mounted
-on `/` now, they animate `background-color`, and they are outside rule 5 for
-the ownership reason above — so a reader watching that page sees motion this
-count does not include. The count is a count of what this app authors, and it
+**This app writes three animations, and all three are on `/`.** The count was
+briefly hard to state: while the two archetypes were mounted on `/` they
+animated `background-color` from their own stylesheets, outside rule 5 for the
+ownership reason above, so a reader watching that page saw motion this count did
+not include. They are back to `/archetypes` only, and measured against the built
+page `/` now transitions `transform` and `opacity` and nothing else, which is
+rule 5 exactly. The count is a count of what this app authors, and it
 is worth saying so rather than letting a reader find a moving element and
 conclude the rule had quietly lapsed. The count is the rule; the argument it
 was making is why the count is three and not seven. Scattered reveals down a
@@ -724,8 +724,7 @@ across a fixed window at its final width.
 The second is the entry motion below, which reaches exactly three elements: the
 three `.truth-card` columns of the three-state comparison on `/`, which are one
 comparison rather than three things and move together as such. Nothing else this
-app writes moves on entry, and in particular not the two mounted archetypes,
-which take no class of this vocabulary. The hero's band is untouched by any of
+app writes moves on entry. The hero's band is untouched by any of
 it.
 
 The third is the capability ledger's resolution, in `HeroPlayer.astro`: the
@@ -1332,28 +1331,19 @@ there is one player and one report, rendered once and read where each belongs. A
 second instance would have been a second thing to look at in the hero and a
 second set of answers to keep in step.
 
-**Three live players, and no more.** The hero, and the two archetypes. A landing
-page for a player library that ran more would be arguing that it can run more
-players, rather than that its primitives compose. Both archetypes are mounted
-`client:visible`, so a reader who never scrolls to them never pays for either.
+**One live player, and it is the hero's.** Two full archetypes ran in this
+page's composition section for two of its lives, and they were by a wide margin
+the largest thing on it: two running products, four hundred lines of
+composition, their own stylesheets, their own clip, a poster, a scroll-mount
+disclosure and a licence paragraph, all in the middle of an argument about an
+API. The maintainer's objection to the page was that too much was going on, and
+they were most of it.
 
-**Everything the page can fetch comes from this origin, after a press.** Both
-archetypes play `tracer-45s.mp4`, a colour-bar fixture this site serves itself,
-rather than the Blender trailers `/archetypes` plays. The copy says so in as
-many words, on both of them, rather than letting a reader who opens devtools
-discover a request the page never mentioned.
-
-**Both carry a poster, and it is one file for two players.** Neither
-composition drew one before, and the clip had none, so both stages were black
-rectangles until pressed and "same parts, any face" was an argument illustrated
-by two empty boxes. The still is a frame of the fixture, served from here like
-everything else. One file rather than two: it is one clip, and a second
-identical image would imply otherwise on a page whose whole subject is not
-implying things. Identical media under two completely different chromes is also
-the strongest form of the claim, because what differs is then visibly the
-stylesheet and nothing else. `poster` is an optional member of the archetypes'
-`media` prop, absent by default, because the trailers they default to are on
-somebody else's host and a poster for them would have to come from there too.
+So composition is argued the way the three features around it are, in the code
+that does it, and the running proof lives on `/archetypes` — the page whose
+subject those two files are, which prints each one's whole source beside the
+player it builds. `tracer-45s.mp4` and its poster left with them, because
+nothing else served either.
 
 **The two figures it prints are measured at build time rather than written
 down.** They come from `scripts/bundle-budgets.mjs`, the module

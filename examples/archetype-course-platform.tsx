@@ -373,19 +373,6 @@ export type CoursePlatformPlayerProps = {
     readonly title: string;
     readonly note: string;
     readonly credit: string;
-    /**
-     * A still for the dormant player, if the surface mounting this has one to
-     * give. Optional, and absent by default: the trailers this file defaults to
-     * are on somebody else's host and a poster for them would have to come from
-     * there too, which is exactly the third-party request the default is
-     * careful not to make. A surface serving its own clip can serve its own
-     * still beside it, and `/` does.
-     *
-     * Without it the dormant stage is the element's own background, which is
-     * black — a correct picture of "nothing has been fetched", and a poor one
-     * to look at.
-     */
-    readonly poster?: { readonly src: string; readonly alt: string };
   };
 };
 
@@ -493,14 +480,6 @@ export const CoursePlatformSurface = ({
           )}
 
           <Player.Viewport className="study-stage">
-            {media.poster !== undefined && (
-              <Player.Poster>
-                <Player.PosterImage
-                  alt={media.poster.alt}
-                  src={media.poster.src}
-                />
-              </Player.Poster>
-            )}
             <Player.Media
               className="study-media"
               textTracks={[
