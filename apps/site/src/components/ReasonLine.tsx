@@ -93,6 +93,7 @@ export default function ReasonLine({
     // arrives in the same React commit as the words it marks, so the motion
     // can neither run early nor dress a state change that did not happen.
     <p
+      role="status"
       data-bench-reason=""
       data-live=""
       className="grid gap-[var(--space-1)] font-mono text-[length:var(--text-fn)] tracking-[var(--tracking-fn)] text-[var(--color-unavailable)]"
