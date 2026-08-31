@@ -225,10 +225,22 @@ Self-hosted, and the only weights and the only subset the site uses: sans 400,
 sans 600, mono 400, latin. They arrive as devDependencies (`@fontsource/*`) so
 the faces come through the lockfile with integrity hashes rather than as binaries
 committed here, and the build emits the `woff2` files beside its own assets. The
-served page makes **no third-party request of any kind**. That is not a
-performance preference: this is a library whose headline behaviour is contacting
-no provider before a click, and a site that phoned a font host to say so would be
-arguing against itself.
+served page makes **no third-party request of any kind** until a reader asks for
+one, and it never makes one for a font. That is not a performance preference:
+this is a library whose headline behaviour is contacting no provider before a
+click, and a site that phoned a font host to say so would be arguing against
+itself.
+
+**The bench on `/` is the one place this site reaches a third party, and it
+reaches one only because a reader asked.** Pressing `youtube`, `vimeo` or
+`wistia` on the source switch loads that provider, and nothing is contacted
+before that press. That is the claim worth defending, and it is the same claim
+the library itself makes about `loading="interaction"`. It is observed rather
+than asserted: `e2e/site-quiet.spec.ts` records every request the page makes at
+rest and fails if any of them leaves this origin, then presses a hosted provider
+and fails if none does, so an empty list is evidence rather than a listener
+attached to the wrong page. The fonts keep the absolute guarantee above, because
+nobody asks for a font.
 
 The `Applied to` column is what `base.css` actually sets, not a description of
 the rung's mood — a heading's size is whatever that file gives its element, and
@@ -264,13 +276,23 @@ these two rungs on a heading of its own. A document page's title names the
 document — a package, a provider, this sheet — and no stance in this system
 dresses a name as a thesis.
 
+**On `/` the display rung now sets a paragraph rather than the heading.**
+`scripts/check-deploy-artifact.mjs` finds this site's root document by an `h1`
+reading exactly `Playdeck`, so that heading is fixed by a build gate, and
+`Playdeck` is the document's name rather than its argument. The thesis is the
+sentence under it. So the `h1` takes `--text-lg` in `--color-ink-muted` and the
+thesis paragraph takes `--text-4xl` above `48rem`, stepping down to `--text-3xl`
+below it. The rung follows what the page is arguing, which is the reason the
+rung exists at all. Every other page still takes whatever `base.css` gives its
+heading elements, and nothing here changes what an element resolves to.
+
 A component mounted only on that page may set it in a class of its own for the
 same reason — `ProviderTruth.astro`'s heading does, at the same rung `/`'s own
 section titles take — and what the rule is against is moving what an element
 resolves to, not where the class is written.
 
-That page's `h1` steps up to `--text-4xl` at `48rem` and keeps `h1`'s own rung
-below that, where 88px would take three quarters of a phone's width and cost
+That page's thesis paragraph takes `--text-4xl` at `48rem` and the rung below
+it under that, where 88px would take three quarters of a phone's width and cost
 the lead its first screen. A step between two rungs of this scale rather than a
 `clamp()`, because a clamp is a font size written into a component and no
 component here writes one. `/design` renders a specimen at every rung, these two included, which is
@@ -653,9 +675,12 @@ imitating one large soft one. A shadow is cast by a surface above a surface. It
 is not a way to tint an edge.
 
 **What may spend an elevation, by name.** `--elevation-instrument` belongs to
-the capability ledger on `/` and to nothing else — it is the panel that page is
-built around, and a second instrument on one page means neither is the
-instrument. `--elevation-panel` belongs to three things: the bezel around the
+the player on `/` and to nothing else. It is the element that page is built
+around, and a second instrument on one page means neither is the instrument. The
+capability grid and the composition panel beside it are steps on the surface
+ladder with a hairline, like everything else here, because a readout of what the
+instrument answered is not a second instrument. `--elevation-panel` belongs to
+three things: the bezel around the
 hero's player — `.demo__bezel` in `HeroPlayer.astro`, and not the stage inside
 it, which is a recessed colour and a hairline — the search dialog in
 `SearchCommand.tsx`, which is a panel over a page rather than the panel a page
@@ -699,7 +724,10 @@ raised in both themes rather than only in the one that has the room.
 unchanged: nothing on this site relies on it, and a later reader should not infer
 from its existence that anything does.
 
-**This app writes three animations, and all three are on `/`.** The count was
+**This app writes two animations, and both are on `/`.** The count was three
+until `/` became a bench. The `.truth-card` entry motion and the capability
+ledger's resolution both belonged to elements that page no longer has, and an
+animation does not carry forward to what replaces it. Before that, it was
 briefly hard to state: while the two archetypes were mounted on `/` they
 animated `background-color` from their own stylesheets, outside rule 5 for the
 ownership reason above, so a reader watching that page saw motion this count did
@@ -708,39 +736,44 @@ page `/` now transitions `transform` and `opacity` and nothing else, which is
 rule 5 exactly. The count is a count of what this app authors, and it
 is worth saying so rather than letting a reader find a moving element and
 conclude the rule had quietly lapsed. The count is the rule; the argument it
-was making is why the count is three and not seven. Scattered reveals down a
-page are the generated-landing-page tell in motion form, and one authored
-moment is worth more than six of them — the second and the third are spent
-here only because each is the same moment: the page's central claim, arriving
-and then being answered.
+was making is why the count is two and not seven. Scattered reveals down a page
+are the generated-landing-page tell in motion form, and one authored moment is
+worth more than six of them. The second is spent here only because it is the
+same moment as the first, answered: the page's central claim, arriving and then
+being answered.
 
-The first is the hero's sweep band, which travels in from the left once on
-arrival — a `translateX(-100%)` to `translateX(0)` on an inner box inside an
+The first is the sweep band, which travels in from the left once on arrival, a
+`translateX(-100%)` to `translateX(0)` on an inner box inside an
 `overflow: hidden` window, at `--duration-slow`. A translate under a clip rather
 than a scale, because scaling the band would compress the gradient instead of
 revealing it and the warm end would arrive first; a translate moves the paint
-across a fixed window at its final width.
+across a fixed window at its final width. It is unchanged in kind from the
+version that sat above the heading, and it is now drawn along the bottom edge of
+the player's frame, on the one element the page is built around.
 
-The second is the entry motion below, which reaches exactly three elements: the
-three `.truth-card` columns of the three-state comparison on `/`, which are one
-comparison rather than three things and move together as such. Nothing else this
-app writes moves on entry. The hero's band is untouched by any of
-it.
+The second is a grid column resolving. The moment a provider attaches and
+answers, that column's cells settle in sequence: `opacity` and a `--space-1`
+rise, `--duration-base`, delays in steps of `--duration-fast`. It is keyed off a
+`data-live` attribute the island writes in the same React commit that writes the
+answers into the DOM, so the motion marks a real state change and can neither
+run early nor dress a simulated one. The cells' content is already true before
+the first frame. It exists because that resolution is the page's whole
+demonstration and an unmarked swap is a moment most readers blink through. It
+runs once per column and is not a reveal vocabulary: nothing else may key off
+it. Under `prefers-reduced-motion` it is removed outright (`animation: none`)
+rather than left to the duration collapse, because the collapse shortens
+durations and not delays, and a delayed `both`-filled cell would sit invisible
+through its delay.
 
-The third is the capability ledger's resolution, in `HeroPlayer.astro`: the
-moment a provider attaches, the five rows settle in sequence — `opacity` and a
-`--space-1` rise, `--duration-base`, delays in steps of `--duration-fast`. It
-is keyed off a `data-live` attribute the island writes only when
-`snapshot.provider` is non-null, in the same React commit that writes the
-resolved answers into the DOM, so the motion marks a real state change and can
-neither run early nor dress a simulated one — the rows' content is already
-true before the first frame. It exists because the resolution is the page's
-whole demonstration and an unmarked swap is a moment most readers blink
-through. It runs once, on one panel, and is not a reveal vocabulary: nothing
-else may key off it. Under `prefers-reduced-motion` it is removed outright
-(`animation: none`) rather than left to the duration collapse, because the
-collapse shortens durations but not delays, and a delayed `both`-filled row
-would sit invisible through its delay.
+Nothing else this app writes moves on entry. That is a standing prohibition
+rather than a description of what happens to sit on the page today, and it
+survived the deletion of the one element that used to spend it. The sweep band
+is untouched by it: the band runs once on arrival and is keyed off nothing.
+
+Both of these move `transform` and `opacity` only, so **rule 5 is untouched by
+any of this** and no amendment to it was made or is coming. A later reader
+looking for one is looking for something that does not exist. Colour changes in
+the grid snap, as every colour change on this site does.
 
 `prefers-reduced-motion: reduce` collapses durations, which lands each transition
 on its settled state immediately. That only works because every transition moves
@@ -801,7 +834,8 @@ happens to do today.
 - **Scroll-linked and parallax effects are rejected outright.** They have no
   expression in this vocabulary and are not to be given one. A page whose paint
   is a function of scroll offset is this section's tell drawn continuously
-  instead of once.
+  instead of once. The bench on `/` is driven by pointer and keyboard and never
+  by scroll offset, and an interactive page does not reopen this question.
 
 One implementation detail is worth a sentence, because it is not obvious and a
 later reader would undo it: an element already inside the viewport when the
