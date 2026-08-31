@@ -304,19 +304,16 @@ a:active {
  * through.
  *
  * `DESIGN.md`'s count of the animations this app writes is deliberately not
- * restated here. That document was amended to the bench's end state while the
- * page it replaces is still in the tree, so the count is in flux until the
- * ledger's own resolution is deleted with it; #542's Task 10 reconciles the
- * document once, against what ships, rather than twice.
+ * restated here. #542's Task 10 reconciles that document once, against what
+ * ships, rather than at every step that moves the count.
  *
  * `opacity` and a `--space-1` rise at `--duration-base`, which is rule 5
  * exactly and needs no amendment to it. One line rather than a column of them,
  * so there is no sequence and there are no delays.
  *
- * Here rather than in a component's scoped `<style>` for the same reason the
- * `[data-status]` block below is: this element comes out of React, and an
- * Astro component's styles are scoped by an attribute Astro stamps on the
- * elements it compiled, which an island's markup never carries.
+ * Here rather than in a component's scoped `<style>`: this element comes out of
+ * React, and an Astro component's styles are scoped by an attribute Astro
+ * stamps on the elements it compiled, which an island's markup never carries.
  *
  * Keyed off `[data-stance='argument']`, like the entry motion above and for
  * the same reason: this rule is unscoped CSS on every page of the site, and a
@@ -357,32 +354,14 @@ a:active {
   }
 }
 
-/* ---- capability status --------------------------------------------------
+/* The `[data-status]` block that used to close this file is gone, and is
+ * recorded as gone rather than deleted silently, because it was unscoped rules
+ * every page of this site carried.
  *
- * A capability's status, mapped to the role token that draws it. Three
- * declarations and nothing else: whatever carries `data-status` reads
- * `--status-color` for its dot, its word, or both.
- *
- * Here rather than in a component because two now render it and they are not
- * in the same file — the hero's live ledger, which the island produces, and the
- * three-state comparison on the landing page, which `index.astro` produces.
- * Astro scopes a component's `<style>` by stamping an attribute on the elements
- * it compiled, so a rule written in either file matches only that file's own
- * markup; the ledger's rows come out of React and would carry no such
- * attribute. Written there, the variable resolves to nothing, the dot paints
- * transparent and the word loses its colour — which is what happened, and is
- * why this is unlayered and unscoped.
- *
- * The dot is redundant with the word beside it on purpose: colour is an
- * accelerator for a reader who has learnt it, and never the only carrier. */
-[data-status='available'] {
-  --status-color: var(--color-available);
-}
-
-[data-status='unknown'] {
-  --status-color: var(--color-unknown);
-}
-
-[data-status='unavailable'] {
-  --status-color: var(--color-unavailable);
-}
+ * It mapped a capability's status onto the role token that drew it, and it had
+ * exactly two consumers: the five-row browser panel the hero island rendered,
+ * and the three-state comparison on the landing page. #542 deleted both, and
+ * nothing under `apps/site/src` writes `data-status` any more. What survives of
+ * that argument is the reason line above, which reads
+ * `--color-unavailable` directly, because it has one status to draw and no
+ * mapping to look it up in. */

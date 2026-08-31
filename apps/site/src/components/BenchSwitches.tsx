@@ -1,10 +1,17 @@
 /*
- * The three groups of switches under the bench's player: source, skin,
- * autoplay. One position is active in each, and pressing one is the only way a
- * reader changes what the page is running.
+ * The two groups of switches under the bench's player: source and skin. One
+ * position is active in each, and pressing one is the only way a reader changes
+ * what the page is running.
+ *
+ * There was a third, `autoplay`, and it is gone rather than disabled. `/`
+ * mounts its player with `loading="interaction"`, so the player can only start
+ * from a user gesture and the browser then permits the audible attempt -- the
+ * refusal and muted retry that switch existed to show could never happen here.
+ * What was left was a control whose only effect was to add a prop to the
+ * printed composition, which is a knob arguing by printing itself.
  *
  * Presentational, and deliberately so: it holds no player state, reads no
- * snapshot and mounts nothing. It is handed the three positions and three
+ * snapshot and mounts nothing. It is handed the two positions and two
  * callbacks, and `BenchIsland` is the one thing on this page that knows what a
  * controller is saying.
  *
@@ -48,7 +55,7 @@
  * `data-bench-switch` on each group root, `data-value` on each control. Both
  * are named in the plan for #542 and neither is to be renamed.
  */
-import type { AutoplayMode, PlayerProvider } from '@playdeck/core';
+import type { PlayerProvider } from '@playdeck/core';
 import { readySources } from '@/bench-sources';
 import type { SkinName } from '@/bench-composition';
 import { cn } from '@/lib/utils';
@@ -64,7 +71,7 @@ type Position<T> = {
 
 type GroupProps<T> = {
   /** `data-bench-switch`, and the radios' shared `name`. */
-  readonly group: 'source' | 'skin' | 'autoplay';
+  readonly group: 'source' | 'skin';
   /** Tracked caps in mono at the 11px floor. A label, under the page's h1. */
   readonly legend: string;
   readonly positions: readonly Position<T>[];
@@ -103,7 +110,14 @@ function Group<T>({
                 // already presses to, rather than a lift: no control on this
                 // site lifts. Rest, hover and focus are the other three, and
                 // focus is `base.css`'s one outline drawn on the input below.
-                'relative inline-flex min-h-[var(--hit-target)] cursor-pointer items-center rounded-[var(--radius-md)] border border-[var(--color-line-strong)] px-[var(--space-4)] font-mono text-[length:var(--text-xs)] tracking-[var(--tracking-fn)] active:border-[var(--color-accent)]',
+                //
+                // The hairline is `var(--line-width)` and not Tailwind's bare
+                // `border`, which is its own 1px. The two happen to be equal
+                // today, which is exactly why the token has to be written: a
+                // literal that agrees with a token by coincidence is the one
+                // that stops agreeing silently. `index.astro` spells it the
+                // same way for the install button and the close's rules.
+                'relative inline-flex min-h-[var(--hit-target)] cursor-pointer items-center rounded-[var(--radius-md)] border-[length:var(--line-width)] border-solid border-[var(--color-line-strong)] px-[var(--space-4)] font-mono text-[length:var(--text-xs)] tracking-[var(--tracking-fn)] active:border-[var(--color-accent)]',
                 chosen
                   ? 'bg-[var(--color-accent)] text-[var(--color-field)]'
                   : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-sunken)] hover:text-[var(--color-ink)]'
@@ -130,10 +144,8 @@ function Group<T>({
 export type BenchSwitchesProps = {
   readonly source: PlayerProvider;
   readonly skin: SkinName;
-  readonly autoplay: AutoplayMode;
   readonly onSource: (value: PlayerProvider) => void;
   readonly onSkin: (value: SkinName) => void;
-  readonly onAutoplay: (value: AutoplayMode) => void;
 };
 
 // `readySources` rather than `benchSources`: a provider with no clip this
@@ -153,25 +165,11 @@ const skinPositions: readonly Position<SkinName>[] = [
   { value: 'theme', token: 'theme', label: 'theme' }
 ];
 
-// `off` is the word the switch prints and the token a spec presses; `false` is
-// the `AutoplayMode` it means. The two differ because a control's label is
-// English and the mode is the library's own value.
-const autoplayPositions: readonly Position<AutoplayMode>[] = [
-  { value: false, token: 'off', label: 'off' },
-  {
-    value: 'audible-then-muted',
-    token: 'audible-then-muted',
-    label: 'audible-then-muted'
-  }
-];
-
 export default function BenchSwitches({
   source,
   skin,
-  autoplay,
   onSource,
-  onSkin,
-  onAutoplay
+  onSkin
 }: BenchSwitchesProps) {
   return (
     <div className="grid gap-[var(--space-5)]">
@@ -188,13 +186,6 @@ export default function BenchSwitches({
         positions={skinPositions}
         selected={skin}
         onSelect={onSkin}
-      />
-      <Group
-        group="autoplay"
-        legend="AUTOPLAY"
-        positions={autoplayPositions}
-        selected={autoplay}
-        onSelect={onAutoplay}
       />
     </div>
   );

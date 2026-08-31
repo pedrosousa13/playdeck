@@ -4,8 +4,31 @@ import { Slot } from 'radix-ui';
 
 import { cn } from '@/lib/utils';
 
+/*
+ * `transition-all` was `transition-opacity` here, and the change is this
+ * site's rather than shadcn's.
+ *
+ * `DESIGN.md` rule 5 is that only `transform` and `opacity` animate, and the
+ * generated class shipped `transition-property: all` at 150ms. That is not a
+ * dormant default: the theme toggle in `SiteHeader.astro` is this component
+ * with `hover:bg-accent hover:text-accent-foreground`, it sits on `/`, and
+ * hovering it therefore transitioned two colours. One live violation, on the
+ * one page the rule is asserted against, and it made `DESIGN.md`'s claim that
+ * the built `/` transitions `transform` and `opacity` and nothing else false as
+ * written.
+ *
+ * Narrowed rather than removed, because the property being animated was never
+ * the point of the declaration — the variants below want their hover and focus
+ * states to arrive rather than snap, and `opacity` is the one of the two rule 5
+ * allows that a colour change can be carried by. The colours themselves now
+ * snap, which is what every other control on this site already does.
+ *
+ * `src/components/ui/*.tsx` are ours to edit and have been edited before;
+ * `DESIGN.md`'s shadcn section says so. This is the fourth such edit and the
+ * first for rule 5.
+ */
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-opacity outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

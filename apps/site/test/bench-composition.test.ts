@@ -1,17 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildComposition, type BenchPosition } from '../src/bench-composition';
-import type { AutoplayMode } from '@playdeck/core';
 
 const NATIVE_URL = 'https://example.com/clip.mp4';
 const YOUTUBE_URL = 'https://www.youtube.com/watch?v=example';
 
 describe('buildComposition', () => {
-  it('prints the smallest composition when nothing is switched', () => {
+  it('prints the six lines the page claims drive all five providers', () => {
     expect(
       buildComposition({
         source: 'native',
         skin: 'none',
-        autoplay: false,
         sourceUrl: NATIVE_URL
       })
     ).toBe(
@@ -28,42 +26,32 @@ describe('buildComposition', () => {
     );
   });
 
-  it('puts each prop on its own line once autoplay is on', () => {
-    expect(
-      buildComposition({
+  // The thesis paragraph on `/` says "the same six lines drive all five", and
+  // this is the count it is counting. If the composition grows or loses a line,
+  // that sentence changes with it or it comes out.
+  it('is six lines of composition, whatever the switches are set to', () => {
+    for (const skin of ['none', 'theme'] as const) {
+      const code = buildComposition({
         source: 'native',
-        skin: 'none',
-        autoplay: 'audible-then-muted',
+        skin,
         sourceUrl: NATIVE_URL
-      })
-    ).toBe(
-      [
-        `const source = '${NATIVE_URL}';`,
-        '',
-        '<Player.Root',
-        '  source={source}',
-        '  autoplay="audible-then-muted"',
-        '>',
-        '  <Player.Viewport>',
-        '    <Player.Media />',
-        '    <Player.Controls />',
-        '  </Player.Viewport>',
-        '</Player.Root>'
-      ].join('\n')
-    );
+      });
+      const composition = code
+        .split('\n')
+        .filter((line) => line.startsWith('<') || line.startsWith(' '));
+      expect(composition).toHaveLength(6);
+    }
   });
 
   it('changes the source URL when the source switch changes, and nothing else', () => {
     const native = buildComposition({
       source: 'native',
       skin: 'none',
-      autoplay: false,
       sourceUrl: NATIVE_URL
     });
     const youtube = buildComposition({
       source: 'youtube',
       skin: 'none',
-      autoplay: false,
       sourceUrl: YOUTUBE_URL
     });
 
@@ -78,39 +66,26 @@ describe('buildComposition', () => {
     expect(compositionBlock(native)).toBe(compositionBlock(youtube));
   });
 
-  it('adds no autoplay prop when autoplay is off', () => {
-    const off = buildComposition({
-      source: 'native',
-      skin: 'none',
-      autoplay: false,
-      sourceUrl: NATIVE_URL
-    });
-    expect(off).not.toContain('autoplay');
-  });
-
-  // `AutoplayMode` has three non-`false` members, and the bench switch only
-  // ever exposes one of them today. Covering all three here proves the other
-  // two are reachable through this function even though nothing calls it with
-  // them yet.
-  it.each<Exclude<AutoplayMode, false>>([
-    'muted',
-    'audible',
-    'audible-then-muted'
-  ])('adds autoplay="%s" when the autoplay switch selects it', (autoplay) => {
-    const code = buildComposition({
-      source: 'native',
-      skin: 'none',
-      autoplay,
-      sourceUrl: NATIVE_URL
-    });
-    expect(code).toContain(`autoplay="${autoplay}"`);
+  // The autoplay switch is gone from the bench, and the prop is gone from this
+  // builder with it -- see the file header for why it demonstrated nothing.
+  // Pinned rather than assumed, so a later session does not reintroduce it as
+  // a "harmless" default.
+  it('names no prop on Player.Root but the source', () => {
+    for (const skin of ['none', 'theme'] as const) {
+      const code = buildComposition({
+        source: 'native',
+        skin,
+        sourceUrl: NATIVE_URL
+      });
+      expect(code).toContain('<Player.Root source={source}>');
+      expect(code).not.toContain('autoplay');
+    }
   });
 
   it('adds the theme import only when the theme skin is chosen', () => {
     const bare = buildComposition({
       source: 'native',
       skin: 'none',
-      autoplay: false,
       sourceUrl: NATIVE_URL
     });
     expect(bare).not.toContain('theme.css');
@@ -119,7 +94,6 @@ describe('buildComposition', () => {
     const themed = buildComposition({
       source: 'native',
       skin: 'theme',
-      autoplay: false,
       sourceUrl: NATIVE_URL
     });
     expect(themed.split('\n')[0]).toBe("import '@playdeck/react/theme.css';");
@@ -133,7 +107,6 @@ describe('buildComposition', () => {
     const code = buildComposition({
       source: 'native',
       skin: 'none',
-      autoplay: false,
       sourceUrl: longUrl
     });
     expect(code).toContain(`const source = '${longUrl}';`);
@@ -142,31 +115,21 @@ describe('buildComposition', () => {
   });
 
   it.each<BenchPosition>([
-    { source: 'native', skin: 'none', autoplay: false, sourceUrl: NATIVE_URL },
-    {
-      source: 'youtube',
-      skin: 'theme',
-      autoplay: 'muted',
-      sourceUrl: YOUTUBE_URL
-    },
+    { source: 'native', skin: 'none', sourceUrl: NATIVE_URL },
+    { source: 'youtube', skin: 'theme', sourceUrl: YOUTUBE_URL },
     {
       source: 'vimeo',
       skin: 'theme',
-      autoplay: 'audible-then-muted',
       sourceUrl: 'https://vimeo.com/000000000'
     },
     {
       source: 'wistia',
       skin: 'none',
-      autoplay: 'audible',
       sourceUrl: 'https://example.wistia.com/medias/abc123'
     }
-  ])(
-    'never leaves a trailing space on a line ($source/$skin/$autoplay)',
-    (position) => {
-      for (const line of buildComposition(position).split('\n')) {
-        expect(line).toBe(line.trimEnd());
-      }
+  ])('never leaves a trailing space on a line ($source/$skin)', (position) => {
+    for (const line of buildComposition(position).split('\n')) {
+      expect(line).toBe(line.trimEnd());
     }
-  );
+  });
 });

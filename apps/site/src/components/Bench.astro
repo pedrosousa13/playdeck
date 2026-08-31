@@ -1,0 +1,404 @@
+---
+/**
+ * The bench's frame: the box the player sits in, the band along its bottom
+ * edge, and the geometry the player's own parts are laid out with.
+ *
+ * The split with `BenchIsland.tsx` is deliberate and is the same split the
+ * library itself draws. That file composes primitives, points them at a source
+ * and reads what they report; this one decides what the result looks like.
+ * Nothing about the composition is expressible here and nothing about the
+ * appearance is expressible there, so neither file can quietly grow the
+ * other's job.
+ *
+ * ---- why every selector below is `:global()` --------------------------------
+ *
+ * Astro scopes a component's rules by stamping an attribute onto the elements
+ * in its own template, and the player's elements are not in it: they are
+ * rendered by React inside the island, which no scope attribute reaches. So the
+ * choice is not between scoped and global rules, it is between global rules and
+ * rules that match nothing.
+ *
+ * `:global()` per selector rather than `<style is:global>` for the whole block,
+ * so each rule states at its own head that it is addressing markup produced
+ * elsewhere. The class names are this page's and appear nowhere else on the
+ * site, which is what makes that safe.
+ *
+ * ---- why `client:only` and not a hydrating directive ------------------------
+ *
+ * `client:visible` and its siblings render the component on the server and then
+ * hydrate it. Both halves of that are wrong here. The server-rendered half
+ * would put a real `<button>` into the document that does nothing until a
+ * script arrives, which is the "present and disabled" shape this whole site
+ * argues against — and for a reader with JavaScript off it would never stop
+ * being that. The hydrating half then has to reproduce, in a browser holding a
+ * media element, markup that was produced where there was none to measure; any
+ * disagreement between the two is a console error on the site's root document,
+ * and console errors on that document are one of the things
+ * `scripts/check-deploy-artifact.mjs` fails the deployed artifact on. That is a
+ * risk this page has no reason to take.
+ *
+ * `client:only` renders nothing on the server, so neither problem exists, and a
+ * reader whose script fails gets a settled page rather than a blank one — the
+ * frame below and its fallback are static markup. What it costs is that the
+ * readout under the frame is absent until the island mounts, and nothing
+ * reserves its height. Stated rather than left to be discovered.
+ *
+ * ---- the two theme systems, and why they do not meet ------------------------
+ *
+ * `@playdeck/react/theme.css` is the library's own optional stylesheet, and
+ * `DESIGN.md` puts it out of this system's scope. It is not imported here at
+ * all: the skin switch loads and unloads it at a reader's request, and
+ * `BenchIsland.tsx` carries how and why. What this file owes it is the mapping
+ * below.
+ *
+ * They cannot bleed into each other, and that is a property of that file rather
+ * than of this page's care. Every selector in it is inside `@layer playdeck`
+ * and wrapped in `:where()`, so it matches only elements carrying a
+ * `data-playdeck-part` attribute and loses to any unlayered rule here
+ * regardless of specificity. In the other direction it declares no token of its
+ * own: every value is read as `var(--playdeck-…, fallback)`, so the block below
+ * is the whole of what this site says to it.
+ *
+ * The mapping is inert while the switch reads `none` — nothing reads a custom
+ * property no stylesheet is asking for — which is what lets it be stated once
+ * here rather than toggled. It spends this site's role tokens and writes no
+ * colour, so rule 1 of `DESIGN.md` holds across the seam.
+ *
+ * ---- geometry is the page's, in both skin positions -------------------------
+ *
+ * The rules under `.bench__stage` are layout and nothing else, and they apply
+ * whichever way the skin switch is set. That is not this page bending the rule
+ * that `none` applies no CSS: it is the line the library itself draws. Its
+ * stylesheet says "appearance only; layer geometry belongs to the components",
+ * so that a player works with no stylesheet at all and so that a consumer can
+ * put the controls somewhere other than over the picture. Where the layers sit
+ * is therefore the consumer's decision in every composition the library ships
+ * to, and on this page the consumer is this file.
+ */
+import Sweep from './Sweep.astro';
+import BenchIsland from './BenchIsland';
+
+// Resolved against the configured base the way every other address on this
+// site is, rather than written as a root-absolute literal. The file is this
+// app's own — `public/tracer.mp4` — because an Astro build serves only its own
+// `public/`.
+const base = import.meta.env.BASE_URL;
+const clipUrl = `${base}tracer.mp4`;
+
+/*
+ * The still the dormant player shows, and where it came from.
+ *
+ * `public/tracer-poster.webp` is frame 15 of `public/tracer.mp4` — the middle
+ * of a thirty-frame clip, chosen over frame 0 so the still cannot be a fade,
+ * though on this fixture every frame carries the same test pattern. Cut with:
+ *
+ *   ffmpeg -i apps/site/public/tracer.mp4 -vf "select=eq(n\,15)" -frames:v 1 \
+ *     -c:v libwebp -lossless 0 -q:v 90 -preset picture \
+ *     apps/site/public/tracer-poster.webp
+ *
+ * 320x180 and 3,396 bytes. The dimensions are the clip's own: a larger poster
+ * would show detail the media it stands in for does not have. The format and
+ * quality were measured rather than assumed — at this frame, PNG is 13,133
+ * bytes optimised, lossless WebP 9,944, JPEG at matching quality 8,006, and
+ * AVIF 2,262. WebP at q90 is the point where the saving stops being worth
+ * anything: AVIF's further kilobyte would cost a second `<source>` and a
+ * `<picture>`, and JPEG rings on the saturated hard edges this pattern is made
+ * of. The result is under half the 7,264-byte clip it precedes, on a page whose
+ * headline figure is its own payload.
+ */
+const posterUrl = `${base}tracer-poster.webp`;
+---
+
+<div class="bench">
+  {
+    /* The instrument. `--elevation-instrument` and no border: `DESIGN.md`
+     * rule 4 allows an elevated element exactly one of the two, and
+     * border-under-blur is the pairing that stays banned. The allowlist names
+     * this element, and only this element, as what may spend that token. */
+  }
+  <div class="bench__frame">
+    {
+      /* Where `StagePortal` in `BenchIsland.tsx` renders the player. It is
+       * only ever the portal's target: it renders nothing of its own, and
+       * with JavaScript blocked it holds the fallback below instead. */
+    }
+    <div class="bench__stage" id="bench-stage">
+      {
+        /* With JavaScript the island is the whole player and this is inert
+         * text the parser never fetches from. Without it, this is the whole
+         * player: the browser's own controls over the same file, and
+         * `preload="none"` so the page keeps the property it argues from.
+         * `muted` for the reason the island passes `defaultMuted`.
+         *
+         * `<noscript>` is `display: none` while scripts run, so this is never
+         * a second thing in the frame — it is the frame's only content
+         * exactly when the island is not there. */
+      }
+      <noscript>
+        {
+          /* The same still the island's player shows, here as the element's
+           * own `poster` attribute — a real image the browser paints, not a
+           * CSS background, so this path keeps the guarantee the rest of the
+           * page does. `preload="none"` still holds the media itself back. */
+        }
+        <video
+          class="bench__fallback"
+          controls
+          muted
+          playsinline
+          poster={posterUrl}
+          preload="none"
+          src={clipUrl}></video>
+      </noscript>
+    </div>
+    {
+      /* The one gradient, in its one permitted accent form, rendered once on
+       * this page. `DESIGN.md` records that six sweeps down one page is the
+       * exact creep the one-gradient rule exists to stop, so this is the only
+       * call to this component here. */
+    }
+    <Sweep form="accent" />
+  </div>
+
+  {
+    /* The island renders the line under the frame as well as the readout — see
+     * `QuietLine` in `BenchIsland.tsx`. It is not static markup here because it
+     * is a report on the player rather than a caption on the frame: it has to
+     * say something different once the clip has loaded, and something different
+     * again once the source is somebody else's host. A no-JavaScript reader
+     * gets no such line, because the fallback below is a different player with
+     * its own behaviour and the sentence would be describing one that is not
+     * running. `e2e` proves the resting claim: a spec records every request `/`
+     * makes at rest and fails if one leaves this origin. */
+  }
+  <BenchIsland base={base} client:only="react" poster={posterUrl} />
+</div>
+
+<style>
+  .bench {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  /* The raised body of the instrument, and the one element on this site that
+   * takes `--elevation-instrument`. Two rows: the picture, and the sweep along
+   * the bottom edge. `overflow: hidden` is what makes the band the frame's own
+   * edge rather than a strip lying under it. */
+  .bench__frame {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    overflow: hidden;
+    background-color: var(--stage-field);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--elevation-instrument);
+  }
+
+  /* The screen, and the reason a dormant instrument is worth looking at.
+   *
+   * Nothing is loaded until the affordance is pressed, so there is no frame to
+   * show and this component may not invent one — no poster, no still, no
+   * gradient standing in for a picture. The ratio is the library's own
+   * documented fallback and is also the ratio of `public/tracer.mp4`, so the
+   * box is the right shape before a frame is decoded and does not resize when
+   * one arrives.
+   *
+   * Always dark. `--stage-*` never moves with `data-theme`, so the picture
+   * reads the same in both themes — a cinema is dark regardless of the room. */
+  .bench__stage {
+    display: grid;
+    aspect-ratio: 16 / 9;
+    background-color: var(--stage-sunken);
+
+    /* ---- the player's tokens, spoken in this site's roles ----------------
+     *
+     * Set here rather than on the viewport because the theme reads each one
+     * with `var(--name, default)` and never declares it, so a value on any
+     * ancestor reaches every part. One element to read, and adding a control
+     * later needs nothing added here. Inert until the skin switch loads the
+     * stylesheet that reads them. */
+
+    /* The well behind the media, which is what shows before a frame is
+     * decoded. */
+    --playdeck-color-backdrop: var(--stage-sunken);
+    /* The control bar and the activation button share this pair: a raised
+     * panel in the stage's own dark surface rather than the theme's
+     * translucent black. `--stage-ink` on `--stage-surface` is the contrast
+     * pair `DESIGN.md`'s dark table already records. */
+    --playdeck-color-surface: var(--stage-surface);
+    --playdeck-color-on-surface: var(--stage-ink);
+    /* `--playdeck-overlay-scrim` is the control bar's background and its
+     * default is a gradient. This system has exactly one gradient and
+     * `Sweep.astro` draws it, so the bar takes the flat surface the rest of
+     * the frame is built from. */
+    --playdeck-overlay-scrim: var(--stage-surface);
+    --playdeck-control-hover: var(--stage-sunken);
+    --playdeck-color-accent: var(--stage-accent);
+    /* One focus treatment for the whole site, and this is the belt to
+     * `base.css`'s braces. The theme carries a rule that would draw a white
+     * ring if it ever did the drawing, and its default is the only
+     * `--playdeck-*` value that could put a colour on this page from outside
+     * the system. */
+    --playdeck-color-focus: var(--stage-accent);
+    /* The seek slider's three grounds, and the one place here where the choice
+     * is arithmetic rather than taste. On `--color-line`, the quieter
+     * separator role, the loaded range measures below the 3:1 that non-text UI
+     * owes; on the sunken well it clears it. The thumb takes a ring because
+     * the accent does not clear 3:1 against both the track and the loaded
+     * range. The ratios are in `DESIGN.md`. */
+    --playdeck-color-track: var(--stage-sunken);
+    --playdeck-color-buffered: var(--stage-line-strong);
+    --playdeck-color-thumb-ring: var(--stage-ink);
+    /* The time readout is machine output, so it is mono like every other value
+     * on this site, at the caption rung — above the 11px floor. */
+    --playdeck-font-family: var(--font-mono);
+    --playdeck-font-size: var(--text-sm);
+    --playdeck-font-size-small: var(--text-xs);
+    --playdeck-space-1: var(--space-1);
+    --playdeck-space-2: var(--space-2);
+    --playdeck-space-3: var(--space-3);
+    --playdeck-radius: var(--radius-sm);
+    --playdeck-radius-large: var(--radius-md);
+    --playdeck-control-size: var(--hit-target);
+    --playdeck-transition-duration: var(--duration-fast);
+    --playdeck-transition-easing: var(--ease);
+  }
+
+  /* One cell, and every layer in it.
+   *
+   * A single named area rather than absolute positioning, because that is what
+   * makes the picture the thing that sizes the cell: the overlays are laid into
+   * the same cell without taking it out of flow, so nothing here has to restate
+   * a height the media already determines.
+   *
+   * The ratio is read from the property the library writes onto this element
+   * once a provider has measured its media, with the same fallback as the
+   * stage above. So the box is right before anything has loaded and stays right
+   * if the media turns out not to be the shape the fallback assumed. */
+  :global(.bench__stage) :global([data-playdeck-part='viewport']) {
+    display: grid;
+    grid-template-areas: 'stack';
+    aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9);
+    inline-size: 100%;
+  }
+
+  :global(.bench__stage) :global([data-playdeck-part='media']) {
+    grid-area: stack;
+    /* A grid item's automatic minimum is its content, and a video's content is
+     * its intrinsic width. Without this the picture would refuse to shrink
+     * below that and push the frame wider than the page. */
+    min-inline-size: 0;
+  }
+
+  /* The activation affordance is an overlay, and this is what makes it behave
+   * like one under the `none` skin.
+   *
+   * The library ships this part `position: absolute; inset: 0; margin: auto`
+   * with no size, so with no stylesheet at all it is full-bleed — which is the
+   * behaviour this page wants, because a click anywhere on the picture should
+   * start the clip. What comes with it is the user agent's own button paint,
+   * and measured on this frame that is an opaque `rgb(239, 239, 239)` fill and
+   * a `2px outset` black border, at `z-index: 30`, over a poster at 10. The
+   * still was loaded, decoded and marked `visible` by the library's poster
+   * state machine, and painted over regardless.
+   *
+   * So this is not the page reaching into the skin. An element whose whole job
+   * is to overlay a picture, and which occludes it instead, is not styled — it
+   * is broken, and the browser rather than the library is what broke it. Both
+   * declarations say only that: no size, no radius, no badge, no hover. Those
+   * are chrome and they stay the theme's, which is what keeps the two skin
+   * positions a contrast about chrome rather than about whether there is a
+   * picture at all.
+   *
+   * ---- and this is why it is scoped rather than unconditional ---------------
+   *
+   * Written unscoped first, and that falsified the paragraph above. This rule
+   * is unlayered while `theme.css` lives entirely inside `@layer playdeck`, and
+   * an unlayered declaration beats a layered one for the same property whatever
+   * the specificities are — the `[hidden]` reset below relies on exactly that.
+   * So the reset reached the themed player too: the part computed
+   * `rgba(0, 0, 0, 0)` under both skins, and `theme.css`'s own
+   * `--playdeck-color-surface` fill never landed. Pressing `theme` gave a bare
+   * glyph with no badge.
+   *
+   * `data-bench-skin` rides on the viewport, written by `Stage` in
+   * `BenchIsland.tsx` in the same React commit as the state it reports, so the
+   * rule matches only while the position it is written for is the one selected.
+   * Under `theme` nothing here applies and the stylesheet does its own work. */
+  :global(.bench__stage)
+    :global([data-bench-skin='none'] [data-playdeck-part='activation']) {
+    background-color: transparent;
+    border: 0;
+  }
+
+  /* Pinned to the foot of the picture.
+   *
+   * `position` and `z-index` are what put the bar in front of the picture
+   * rather than behind it: the media declares a layer of its own, so a box left
+   * unpositioned in the same cell paints underneath it however late it comes in
+   * the markup. Stacking here is asked for, not inherited from source order. */
+  :global(.bench__stage) :global([data-playdeck-part='controls']) {
+    grid-area: stack;
+    position: relative;
+    z-index: 1;
+    place-self: end stretch;
+  }
+
+  /* The `[hidden]` reset, needed here rather than assumed: the attribute is
+   * honoured by a rule in the user-agent stylesheet, and the theme gives this
+   * part a `display` of its own, which any author rule beats. So with the theme
+   * loaded, the bar the island marks hidden before a player exists would stay
+   * on screen unless this says otherwise. Unlayered and unqualified, which is
+   * enough — the theme's declaration sits inside a cascade layer and loses to
+   * this one whatever the two specificities are. */
+  :global(.bench__stage) :global([data-playdeck-part='controls'][hidden]) {
+    display: none;
+  }
+
+  /* The seek input, taken out of the text line it was sitting in.
+   *
+   * A range input is inline-level, so in `seek-slider` it is laid into a line
+   * box and the container grows past it by the descender space under the
+   * baseline. The theme then centres the track on the CONTAINER while the input
+   * keeps the top of the line box, so the thumb and the bar it runs along do
+   * not share a centre. `display: block` removes the line box, so the container
+   * is the input's own 44px. The defect is `theme.css`'s and reaches every
+   * consumer of the bundled theme, where it is reported rather than patched
+   * here; `e2e/thumb-contrast.spec.ts` pins that geometry. */
+  :global(.bench__stage) :global([data-playdeck-part='seek-slider-input']) {
+    display: block;
+  }
+
+  /* Plex Mono is set tight relative to its own width, and this is the site's
+   * rule for opening it wherever it appears. The theme sets the family from the
+   * token above but has no tracking of its own to set. */
+  :global(.bench__stage) :global([data-playdeck-part='time']) {
+    letter-spacing: var(--tracking-fn);
+  }
+
+  /* The fallback fills its stage rather than sizing itself from the clip, so
+   * the no-JavaScript frame is the same box the player's is. */
+  :global(.bench__fallback) {
+    inline-size: 100%;
+    block-size: 100%;
+  }
+
+  @media (scripting: none) {
+    .bench__stage :global(noscript) {
+      display: contents;
+    }
+  }
+
+  /* Functional text, at the floor, in the mono every other machine statement on
+   * this site is set in. It qualifies the instrument above it rather than
+   * captioning it.
+   *
+   * `:global()` because the element comes out of the island, like the player's
+   * parts above — the look of the frame's own furniture belongs to the file
+   * that draws the frame, whichever tree happens to render it. */
+  :global(.bench__quiet) {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+</style>
