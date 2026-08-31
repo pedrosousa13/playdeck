@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "types": ["node", "vitest/globals"],
+    // Not inherited from `tsconfig.json`: this project extends the base
+    // config directly, so the `@/*` alias `tsconfig.json` and `astro.config.ts`
+    // both declare has to be repeated here for the same source tree to resolve.
+    "paths": { "@/*": ["./src/*"] },
+    // Outside the package for the same reason `tsconfig.json`'s own
+    // `tsBuildInfoFile` is: there is no persistent `dist/` here for a
+    // buildinfo to live in, since `astro build` clears its output directory
+    // on every run.
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/site.test.tsbuildinfo"
+  },
+  // Not `./tsconfig.json`, unlike the equivalent reference in every other
+  // package's `tsconfig.test.json`: that project has `noEmit: true` (it is
+  // the app, not a library another package imports declarations from), and
+  // a project reference to a `noEmit` project is TS6310, the same error
+  // `tsconfig.json`'s own comment names for why it cannot reference `../e2e`.
+  "references": [{ "path": "../../packages/core" }],
+  "include": ["src", "test"],
+  // Same exclusion as `tsconfig.json`, and for the same reason: this file
+  // imports `astro:content`, a virtual module this project deliberately
+  // does not generate ambient types for.
+  "exclude": ["src/content.config.ts"]
+}

@@ -17,6 +17,7 @@
     { "path": "./packages/react" },
     { "path": "./packages/react/tsconfig.test.json" },
     { "path": "./apps/site" },
+    { "path": "./apps/site/tsconfig.test.json" },
     { "path": "./apps/storybook" },
     { "path": "./e2e" },
     { "path": "./scripts" },

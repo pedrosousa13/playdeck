@@ -36,6 +36,7 @@ export default defineConfig({
     css: { include: [/theme\.css/] },
     include: [
       'packages/**/*.test.{ts,tsx}',
+      'apps/site/test/**/*.test.{ts,tsx}',
       'apps/storybook/stories/**/*.contract.test.ts',
       // Lives beside the module it tests (e2e/background-image-scan.ts): a
       // project that *imports* from another project needs that project to

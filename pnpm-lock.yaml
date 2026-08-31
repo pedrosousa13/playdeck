@@ -91,6 +91,9 @@ importers:
 
   apps/site:
     dependencies:
+      '@playdeck/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@playdeck/react':
         specifier: workspace:*
         version: link:../../packages/react
