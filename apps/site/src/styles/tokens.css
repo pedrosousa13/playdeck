@@ -28,9 +28,10 @@
  *      stops being readable, so the scale simply has no rung underneath.
  */
 
-/* The latin subset only, and only the three faces the type scale names: sans
+/* The latin subset only, and only the four faces the type scale names: sans
  * 400 for prose, sans 600 for headings and emphasis, mono 400 for functional
- * text. Fontsource is a devDependency rather than a CDN link and rather than
+ * text, and the condensed display face imported below. Fontsource is a
+ * devDependency rather than a CDN link and rather than
  * woff2 files committed here, so the faces arrive through the lockfile with
  * integrity hashes; the `url()`s inside these stylesheets are relative, so the
  * build emits the files beside its own assets and the served page asks no
@@ -41,10 +42,10 @@
 @import '@fontsource/ibm-plex-sans/latin-400.css';
 @import '@fontsource/ibm-plex-sans/latin-600.css';
 @import '@fontsource/ibm-plex-mono/latin-400.css';
-/* Display only: the wordmark, chapter titles and the bundle-size figures on
- * `/` (#542 phase 2). Self-hosted through the same devDependency-plus-lockfile
- * route as the other two faces — see the paragraph above for why that matters
- * on a page whose thesis is "no third party is asked for anything". */
+/* Display only: the thesis sentence and the four close figures on `/` (#542
+ * phase 2). Self-hosted through the same devDependency-plus-lockfile route as
+ * the other two faces — see the paragraph above for why that matters on a
+ * page whose thesis is "no third party is asked for anything". */
 @import '@fontsource/ibm-plex-sans-condensed/latin-700.css';
 
 :root {
@@ -137,15 +138,19 @@
   --dark-shadow-deep: #000000a6;
 
   /* ---- the stage ------------------------------------------------------
-   * `/` only (#542 phase 2). The player, the meter and the credits chapter sit
-   * on a near-black stage in BOTH themes — a cinema is dark regardless of the
+   * `/` only (#542 phase 2). The bench's player sits on a near-black stage
+   * in BOTH themes — a cinema is dark regardless of the
    * room. Not a third theme: `--stage-*` never changes with `data-theme` or
    * `prefers-color-scheme`, and the three capability colours on it are pinned
    * to their dark-theme values (`--dark-available` etc.), already measured
-   * >=6.8:1 on this exact ground in `DESIGN.md`'s dark table (`on field`
-   * column, `--dark-field` is one step lighter than this and every figure
-   * there is a floor for this ground rather than a value that could fall
-   * under it). */
+   * >=6.8:1 on `--dark-field` in `DESIGN.md`'s dark table (`on field`
+   * column). `--stage-field` (#0A0A0F) is very slightly LIGHTER than
+   * `--dark-field` (#08080B), not darker, so that table is not a floor for
+   * this ground — every figure on `--stage-field` comes out a shade lower:
+   * ink 17.35 (was 17.57), ink-muted 8.39 (8.49), ink-subtle 6.42 (6.50),
+   * line-strong 3.71 (3.76), accent 8.88 (8.99), available 10.58 (10.71),
+   * unknown 11.83 (11.98), unavailable 6.72 (6.81). The drop is in the
+   * hundredths and every one still clears its AA floor by a wide margin. */
   --stage-field: #0a0a0f;
   --stage-ink: #f0f0f2;
 
@@ -217,9 +222,9 @@
   --font-mono:
     'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', menlo, consolas,
     monospace;
-  /* `/` only (#542 phase 2): the wordmark, chapter titles, the KB figures.
-   * Falls back to the sans rather than a generic — the condensed cut is a
-   * weight and width choice, not a different voice. */
+  /* `/` only (#542 phase 2): the thesis sentence and the close's four
+   * figures. Falls back to the sans rather than a generic — the condensed cut
+   * is a weight and width choice, not a different voice. */
   --font-display: 'IBM Plex Sans Condensed', var(--font-sans);
 
   /* The floor, and the reason the scale starts here. Every rung above it is a

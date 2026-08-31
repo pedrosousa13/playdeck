@@ -85,7 +85,16 @@ function DialogContent({
           // entrance and exit motion is unaffected: `animate-in`/`animate-out`
           // below are `tw-animate-css` keyframe animations, a different CSS
           // property from `transition`.
-          'fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none transition-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg',
+          //
+          // `border` + `shadow-lg` is the generated class shadcn ships, and it
+          // is the pairing DESIGN.md rule 4 bans: an elevated surface never
+          // also carries a border. `SearchCommand.tsx`'s own `DialogContent`
+          // already overrides this with `border-0` and `--elevation-panel`,
+          // which is why the live dialog on this site has never carried the
+          // violation, but this base class is what `CommandDialog` below
+          // inherits unoverridden — fixed here the same way, so a future
+          // caller of either without its own override does not ship it too.
+          'fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border-0 bg-background p-6 shadow-[var(--elevation-panel)] duration-200 outline-none transition-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg',
           className
         )}
         {...props}
