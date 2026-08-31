@@ -1,23 +1,39 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { activationButton } from './locators';
 
 /**
- * The site's two page treatments, and the entry motion one of them permits.
+ * The site's two page treatments, and the motion one of them permits.
  *
- * A marketing page and a reference document have different jobs, so `Base.astro`
- * takes a `stance`: `argument` for `/`, `document` for every other route. The
- * stance is written to the `<body>` as `data-stance`, which is what the entry
- * motion's CSS is keyed off — so a document page cannot grow scattered reveals
- * by accident, and that is the property `a document-stance page animates
- * nothing` pins.
+ * A marketing page and a reference document have different jobs, so
+ * `Base.astro` takes a `stance`: `argument` for `/`, `document` for every other
+ * route. The stance is written to the `<body>` as `data-stance`, and it is what
+ * every motion rule in `base.css` is keyed off — so a document page cannot grow
+ * scattered reveals by accident, and that is the property
+ * `a document-stance page animates nothing` pins.
  *
- * The two tests that run with the motion suppressed — the one under
- * `with no JavaScript` and the one under `prefers-reduced-motion: reduce` — are
- * the ones a reviewer checks first, and they are about what happens when the
- * motion does *not* run. The animated elements rest visible: the observer
- * applies the from-state and then releases it, so a reader whose script never
- * arrives — or who asked for reduced motion — reads the page rather than a
- * blank column. Both failure modes are checked by measuring the elements
- * themselves rather than by trusting the absence of a class.
+ * ---- what changed, and why these tests moved subject ------------------------
+ *
+ * This file used to pin the entry-motion vocabulary — `.u-enter`, the
+ * `data-enter` from-state, and an IntersectionObserver — through the three
+ * `.truth-card` columns on `/`. #542 deleted that comparison, and with it the
+ * last consumer of the vocabulary: nothing in `apps/site/src` writes `.u-enter`
+ * or `data-enter` any more, and the observer that applied the from-state is
+ * gone too. The CSS block for it is still in `base.css` and `DESIGN.md` still
+ * describes it, but no page reaches either.
+ *
+ * So the three tests that targeted those columns were not given a new subject
+ * on `/`. Inventing one would mean marking an element `.u-enter` so a test had
+ * something to look at, which is a page bent to fit its spec. What `/` actually
+ * animates now is one element: the bench's reason line, arriving when a
+ * provider refuses something. That is the subject below, and the same three
+ * facts are still pinned — that `/` carries the argument stance, that a
+ * document route carries the other and animates nothing, and that the animated
+ * element rests visible when its motion does not run.
+ *
+ * The two tests where the motion is suppressed are the ones a reviewer checks
+ * first. Both measure the element rather than trusting the absence of a class:
+ * a reader who asked for reduced motion, or whose script never arrived, reads
+ * the page rather than a blank column.
  *
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so these addresses are written out rather
@@ -26,61 +42,83 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 const landing = 'http://127.0.0.1:4322/';
 const document_ = 'http://127.0.0.1:4322/reference/';
 
-// The entry-motion targets on `/`: the three columns of the three-state
-// comparison, which is the one moment below the hero that takes any motion at
-// all. Located by the classes the page already carries.
-const targets = (page: Page) => page.locator('.truths .truth-card');
+/** The one animated element on `/`: the line a provider's refusal arrives in. */
+const reason = (page: Page) => page.locator('[data-bench-reason]');
 
-// What a reader actually sees, rather than what a class list says. `opacity`
-// and `transform` are the only two properties this system animates, so a
-// target that is readable and settled is one whose opacity is 1 and whose
-// transform is the identity.
+/**
+ * What a reader actually sees, rather than what a class list says. `opacity`
+ * and `transform` are the only two properties this system moves, so an element
+ * that is readable and settled is one whose opacity is 1 and whose transform is
+ * the identity. `animationName` comes with them because the reason line's
+ * motion is a keyframe animation with `both`, which holds its from-state when
+ * it is applied and never started.
+ */
 const settled = async (locator: Locator) =>
   locator.evaluateAll((elements) =>
     elements.map((element) => {
       const styles = getComputedStyle(element);
-      return { opacity: styles.opacity, transform: styles.transform };
+      return {
+        opacity: styles.opacity,
+        // Reported as `none` where nothing has touched it and as the identity
+        // matrix where a settled animation has, which is the same resting
+        // state said two ways. Normalised so an assertion is about the state
+        // rather than about which of the two an engine printed.
+        transform: ['none', 'matrix(1, 0, 0, 1, 0, 0)'].includes(
+          styles.transform
+        )
+          ? 'identity'
+          : styles.transform,
+        animationName: styles.animationName
+      };
     })
   );
+
+/**
+ * Produce the refusal, which is the only way to get an animated element onto
+ * this page. `hls` is served from this origin and refuses something on both
+ * engines this suite runs, and a provider answers nothing until the activation
+ * press attaches it.
+ */
+const provokeRefusal = async (page: Page) => {
+  await expect(page.locator('[data-bench-composition]')).toBeVisible();
+  await page.locator('[data-bench-switch="source"] [data-value="hls"]').click();
+  await activationButton(page).click();
+  await expect(reason(page)).toHaveCount(1);
+};
 
 test('/ is served in the argument stance', async ({ page }) => {
   await page.goto(landing);
   await expect(page.locator('body')).toHaveAttribute('data-stance', 'argument');
 });
 
-test.describe('with no JavaScript', () => {
-  test.use({ javaScriptEnabled: false });
+test('the motion runs on /, and the stance is what buys it', async ({
+  page
+}) => {
+  await page.goto(landing);
+  await provokeRefusal(page);
 
-  test('the entry-motion targets on / are visible', async ({ page }) => {
-    await page.goto(landing);
-
-    // The stance is written by the template, so it survives a page with no
-    // script at all — and the targets are the markup's own, visible because
-    // nothing has hidden them. The observer is what applies the from-state,
-    // so a script that never runs leaves the resting state on screen.
-    await expect(page.locator('body')).toHaveAttribute(
-      'data-stance',
-      'argument'
-    );
-    await expect(targets(page)).toHaveCount(3);
-    await expect(page.locator('[data-enter]')).toHaveCount(0);
-    expect(await settled(targets(page))).toEqual([
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' }
+  // The rule is unscoped CSS every page of this site carries, keyed off the
+  // stance so that only `/` can reach it. Reading the animation's name off the
+  // element is the evidence that it is applied at all rather than being a
+  // keyframe nothing names — and polled to the resting state because it is a
+  // real animation: measured directly after the press, the line is genuinely
+  // caught part-way through, at opacity 0.46 and two pixels low.
+  await expect
+    .poll(() => settled(reason(page)))
+    .toEqual([
+      { opacity: '1', transform: 'identity', animationName: 'bench-refusal' }
     ]);
-  });
 });
 
 test.describe('under prefers-reduced-motion: reduce', () => {
-  test('the targets are visible, and nothing sits mid-transition', async ({
+  test('the animated element is present and readable, and nothing was started', async ({
     page
   }) => {
     // `page.emulateMedia` rather than the `reducedMotion` context option:
     // measured on Playwright 1.61, `test.use({ reducedMotion: 'reduce' })`
     // leaves `matchMedia('(prefers-reduced-motion: reduce)')` reporting false
     // in the page, which would make this test pass while proving nothing. This
-    // call is checked below by asserting the query the site's own script asks.
+    // call is checked below by asking the page the query itself.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto(landing);
     expect(
@@ -88,72 +126,53 @@ test.describe('under prefers-reduced-motion: reduce', () => {
         () => matchMedia('(prefers-reduced-motion: reduce)').matches
       )
     ).toBe(true);
-    await expect(targets(page)).toHaveCount(3);
 
-    // The observer is never constructed, so the from-state is never applied to
-    // anything. Nothing here relies on the site-wide duration collapse: an
-    // element that was never given the from-state cannot be caught part-way
-    // through leaving it.
-    await targets(page).first().scrollIntoViewIfNeeded();
-    await expect(page.locator('[data-enter]')).toHaveCount(0);
-    expect(await settled(targets(page))).toEqual([
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' }
+    await provokeRefusal(page);
+
+    // The animation is removed outright rather than left to the site-wide
+    // duration collapse, because the collapse is a rescue for a transition
+    // between two settled states and this is a keyframe animation with `both`:
+    // left applied with a collapsed duration it would still hold a from-state.
+    // The line's resting state is what the rest of the CSS gives it, so
+    // removing the animation hides nothing — which is what this measures.
+    expect(await settled(reason(page))).toEqual([
+      { opacity: '1', transform: 'identity', animationName: 'none' }
     ]);
   });
 });
 
-test('the motion runs on / and settles on the resting state', async ({
-  page
-}) => {
-  // A short viewport, set before navigation, so the truth cards are reliably
-  // below the fold on arrival regardless of how tall the hero happens to be
-  // at the default 1280x720: the split hero (#542 phase 3) is deliberately
-  // compact enough to fit close to one screen, which on a taller default
-  // viewport could otherwise leave the first target already in view before
-  // the observer ever runs. What is being proved is that the vocabulary
-  // fires on arrival and releases on scroll, not any particular hero height.
-  await page.setViewportSize({ width: 800, height: 420 });
-  await page.goto(landing);
-  await expect(targets(page)).toHaveCount(3);
+test.describe('with no JavaScript', () => {
+  test.use({ javaScriptEnabled: false });
 
-  // The targets sit below the hero, so they are outside the viewport on
-  // arrival and still carry the from-state the observer gave them. That is the
-  // evidence that the vocabulary is applied at all rather than being a class
-  // nothing reads.
-  await expect(page.locator('.truths .truth-card[data-enter]')).toHaveCount(3);
+  test('/ keeps the stance and nothing on it is mid-travel', async ({
+    page
+  }) => {
+    await page.goto(landing);
 
-  // Each of them, rather than the first alone. They are a column inside the
-  // capability section's body rather than a row of three (#542 phase 4), so
-  // they no longer all cross the fold together on a 420px-tall viewport, and
-  // scrolling only the first in would leave the last still waiting for its own
-  // observer — which is the vocabulary working, not failing.
-  for (const target of await targets(page).all()) {
-    await target.scrollIntoViewIfNeeded();
-  }
-
-  // And it is released when they enter. `data-enter` is removed rather than
-  // rewritten, so the resting state is the one the CSS gives the element.
-  await expect(page.locator('[data-enter]')).toHaveCount(0);
-  await expect
-    .poll(() => settled(targets(page)))
-    .toEqual([
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' }
-    ]);
+    // The stance is written by the template, so it survives a page with no
+    // script at all. What it buys is unreachable here — the island never
+    // mounts, so there is no refusal and no animated element — and the page
+    // has to be the settled one rather than a column waiting for a script to
+    // reveal it.
+    await expect(page.locator('body')).toHaveAttribute(
+      'data-stance',
+      'argument'
+    );
+    await expect(reason(page)).toHaveCount(0);
+    expect(await settled(page.locator('main *'))).not.toContainEqual(
+      expect.objectContaining({ opacity: '0' })
+    );
+  });
 });
 
 test('a document-stance page animates nothing', async ({ page }) => {
   await page.goto(document_);
 
   await expect(page.locator('body')).toHaveAttribute('data-stance', 'document');
-  // No target, no from-state, and nothing on the page mid-travel: the entry
-  // motion is keyed off the argument stance, so a document page could not
-  // reveal anything even if a class were pasted onto it.
-  await expect(page.locator('.u-enter')).toHaveCount(0);
-  await expect(page.locator('[data-enter]')).toHaveCount(0);
+  // No animated element, and nothing on the page mid-travel: every motion rule
+  // this site writes is keyed off the argument stance, so a document page could
+  // not move even if the markup that triggers one were pasted onto it.
+  await expect(reason(page)).toHaveCount(0);
   expect(await settled(page.locator('main *'))).not.toContainEqual(
     expect.objectContaining({ opacity: '0' })
   );

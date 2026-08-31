@@ -1,31 +1,36 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { activationButton } from './locators';
 
 /**
- * The landing page at `/`, rebuilt for #542 phase 3: the player is the
- * protagonist, not an illustration of one. The previous shape (a pinned,
- * 300vh "assembly" chapter and a fixed scrub bar with a timecode) was
- * rejected three times over as too large and too hard to read; this is five
- * short sections in plain marketing language instead of six timed ones.
+ * The landing page at `/`, rebuilt for #542 as one instrument rather than six
+ * sections. A thesis, the player as the largest element on the page, two groups
+ * of switches, what they built, and the close.
  *
  * What this file pins is the set of decisions the page cannot be allowed to
- * quietly lose: the spine and its order, the one heading a deploy check
- * identifies this site by, the absence of the workbench, the install line's
- * behaviour with and without a script, the sentence that discloses what
- * loads on scroll, the page not going sideways on a phone, the hero staying
- * dormant, and that every section is present and settled with no script and
- * under reduced motion.
+ * quietly lose: the one heading a deploy check identifies this site by, the
+ * thesis and the switches being on the page at all, the absence of the
+ * workbench, the install line's behaviour with and without a script, the page
+ * not going sideways on a phone, the player staying dormant, and the page being
+ * settled and readable with no script and under reduced motion.
  *
- * The look is deliberately not pinned. A landing page is meant to be
- * redesigned and a spec full of measurements would fail on every redesign
- * for reasons that are not defects, so what is asserted here is what the
- * page *says* and what it *does*, never how large or how far apart any of it
- * is. The exceptions are the 320px overflow check and the two degrade
- * checks, which are defects rather than taste, and the dormancy of the hero,
- * which is the page's central claim.
+ * The look is deliberately not pinned. A landing page is meant to be redesigned
+ * and a spec full of measurements would fail on every redesign for reasons that
+ * are not defects, so what is asserted here is what the page *says* and what it
+ * *does*, never how large or how far apart any of it is. The exceptions are the
+ * 320px overflow check and the two degrade checks, which are defects rather
+ * than taste, and the dormancy of the player, which is the page's central
+ * claim.
  *
- * `site-stance.spec.ts` covers the site-wide entry motion vocabulary and
- * `site-ledger.spec.ts` the hero's live report. Nothing here repeats either.
+ * The previous version of this file pinned six `data-section` blocks that no
+ * longer exist, and one of the two checks it is worth keeping — the overflow at
+ * 320px — was preceded by a count of them, so it never reached its own
+ * assertion. That is why the check below waits on an element the page actually
+ * has.
+ *
+ * `site-quiet.spec.ts` holds the page to contacting nobody at rest,
+ * `site-bench.spec.ts` covers the switches and what they build, and
+ * `site-stance.spec.ts` the site-wide page treatments. Nothing here repeats
+ * any of them.
  *
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so this address is written out rather than
@@ -34,37 +39,44 @@ import { activationButton } from './locators';
 const landing = 'http://127.0.0.1:4322/';
 
 /**
- * The spine, top to bottom, as the sections' own `data-section` attributes.
- * Written out rather than read from the page, because a list derived from the
- * page's source would agree with the page whatever either of them said.
- *
- * Six sections: the split hero, then one per feature the page sells to a React
- * engineer — capability querying, autoplay recovery, composition and
- * customisation — then the close, which carries the install line, the two
- * measured figures and the ways onward.
+ * The sentence the page argues from. Written out rather than read from the
+ * page, because a string derived from the page's own source would agree with it
+ * whatever either of them said — and this one is load-bearing: it counts the
+ * lines the composition panel prints, and `site-bench.spec.ts` holds the panel
+ * to the same number from the other side.
  */
-const sections = [
-  'hero',
-  'capabilities',
-  'autoplay',
-  'compose',
-  'custom',
-  'close'
-];
+const thesis = 'A video player you compose, not one you configure.';
 
-test('the sections are present, in order', async ({ page }) => {
-  await page.goto(landing);
+/**
+ * What a reader actually sees, rather than what a class list says. `opacity`
+ * and `transform` are the only two properties this system animates, so an
+ * element that is readable and settled is one whose opacity is 1 and whose
+ * transform is the identity.
+ */
+const unsettled = (scope: Locator) =>
+  scope.evaluateAll((elements) =>
+    elements
+      .map((element) => {
+        const styles = getComputedStyle(element);
+        return {
+          tag: element.tagName.toLowerCase(),
+          opacity: styles.opacity,
+          transform: styles.transform
+        };
+      })
+      .filter(
+        (seen) =>
+          Number(seen.opacity) !== 1 ||
+          !['none', 'matrix(1, 0, 0, 1, 0, 0)'].includes(seen.transform)
+      )
+  );
 
-  await expect
-    .poll(() =>
-      page
-        .locator('main [data-section]')
-        .evaluateAll((elements) =>
-          elements.map((element) => element.getAttribute('data-section'))
-        )
-    )
-    .toEqual(sections);
-});
+const readable = async (page: Page) => {
+  await expect(page.locator('main')).toBeVisible();
+  await expect(page.getByText(thesis, { exact: true })).toBeVisible();
+  await expect(page.locator('[data-install-command]').first()).toBeVisible();
+  expect(await unsettled(page.locator('main, main *'))).toEqual([]);
+};
 
 test('the h1 is exactly Playdeck, and nothing else answers to that name', async ({
   page
@@ -81,6 +93,25 @@ test('the h1 is exactly Playdeck, and nothing else answers to that name', async 
   ).toHaveCount(1);
 });
 
+test('the thesis and both groups of switches are on the page', async ({
+  page
+}) => {
+  await page.goto(landing);
+
+  // The h1 names the document; this is what argues. The display rung was moved
+  // onto it for that reason, which `DESIGN.md` records as a deliberate
+  // amendment — so a page that lost the sentence would have lost the argument
+  // while keeping the heading a build gate looks for.
+  await expect(page.getByText(thesis, { exact: true })).toBeVisible();
+
+  // The four features this page sells are delivered by operating the bench
+  // rather than by reading about them, so the switches are not decoration on
+  // the argument, they are how it is made. `data-bench-switch` is the contract
+  // `site-bench.spec.ts` presses through.
+  await expect(page.locator('[data-bench-switch="source"]')).toHaveCount(1);
+  await expect(page.locator('[data-bench-switch="skin"]')).toHaveCount(1);
+});
+
 test('nothing on the page links to the workbench', async ({ page }) => {
   await page.goto(landing);
   // #534 records the decision that the workbench is not to be a public
@@ -95,14 +126,15 @@ test('nothing on the page links to the workbench', async ({ page }) => {
   ).not.toMatch(/storybook|workbench/);
 });
 
-test('the phrase "capability ledger" appears nowhere', async ({ page }) => {
-  // The maintainer rejected it outright — asserted directly since the
-  // temptation to reach for it sits right beside the panel it would
-  // describe.
+test('the word "ledger" appears nowhere', async ({ page }) => {
+  // Rejected outright, along with the five-row panel and the ten-by-five grid
+  // that were designed to carry the capability argument here. Asserted
+  // directly because the temptation to reach for the word sits right beside
+  // the one line that survived them.
   await page.goto(landing);
   expect(
     await page.evaluate(() => document.body.innerText.toLowerCase())
-  ).not.toContain('capability ledger');
+  ).not.toContain('ledger');
 });
 
 test.describe('with no JavaScript', () => {
@@ -114,9 +146,7 @@ test.describe('with no JavaScript', () => {
     await page.goto(landing);
 
     // The command was never behind the button: it is text in the document, so
-    // a reader with no script selects and copies it exactly as before. Both
-    // copies of it — the hero's and the closing section's — say the same thing,
-    // because the page renders one string twice.
+    // a reader with no script selects and copies it exactly as before.
     const commands = page.locator('[data-install-command]');
     await expect.poll(() => commands.count()).toBeGreaterThan(0);
     for (const text of await commands.allTextContents()) {
@@ -134,28 +164,18 @@ test.describe('with no JavaScript', () => {
     }
   });
 
-  test('every section is present, visible and settled', async ({ page }) => {
+  test('the page is settled and readable', async ({ page }) => {
     /*
-     * With JavaScript blocked, no observer is ever constructed anywhere on
-     * this page, so nothing carries a from-state written by a script that
-     * never ran. What is measured is computed style, not class names: an
-     * element could carry every "hidden" class this page writes and still
-     * compute to `opacity: 1` if the rule that reads the class needed a
-     * script to apply, which is exactly the failure mode a class-name
-     * assertion cannot catch.
+     * With JavaScript blocked the island never mounts, so what is left is the
+     * static page: the thesis, the frame with the browser's own player in it,
+     * the close. What is measured is computed style, not class names — an
+     * element could carry every "hidden" class this site writes and still
+     * compute to `opacity: 1` if the rule that reads the class needed a script
+     * to apply, which is exactly the failure a class-name assertion cannot
+     * catch.
      */
     await page.goto(landing);
-
-    for (const id of sections) {
-      const section = page.locator(`[data-section="${id}"]`);
-      await expect(section).toBeVisible();
-      const style = await section.evaluate((element) => {
-        const computed = getComputedStyle(element);
-        return { opacity: computed.opacity, transform: computed.transform };
-      });
-      expect(Number(style.opacity)).toBe(1);
-      expect(['none', 'matrix(1, 0, 0, 1, 0, 0)']).toContain(style.transform);
-    }
+    await readable(page);
   });
 });
 
@@ -199,7 +219,7 @@ test.describe('under prefers-reduced-motion: reduce', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
   });
 
-  test('every section is present, visible and settled', async ({ page }) => {
+  test('the page is settled and readable', async ({ page }) => {
     await page.goto(landing);
 
     await expect
@@ -210,33 +230,26 @@ test.describe('under prefers-reduced-motion: reduce', () => {
       )
       .toBe(true);
 
-    for (const id of sections) {
-      const section = page.locator(`[data-section="${id}"]`);
-      await expect(section).toBeVisible();
-      const style = await section.evaluate((element) => {
-        const computed = getComputedStyle(element);
-        return { opacity: computed.opacity, transform: computed.transform };
-      });
-      expect(Number(style.opacity)).toBe(1);
-      expect(['none', 'matrix(1, 0, 0, 1, 0, 0)']).toContain(style.transform);
-    }
+    // The island mounts here, unlike the no-script case above, so this covers
+    // the player and the readout as well as the static page.
+    await expect(page.locator('[data-bench-composition]')).toBeVisible();
+    await readable(page);
   });
 });
 
 test('the page does not go sideways at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto(landing);
-  await expect(page.locator('main [data-section]')).toHaveCount(
-    sections.length
-  );
 
-  // Scrolled to the foot first, so nothing below the fold is skipped. The code
-  // blocks are the elements most likely to push the page out now that the two
-  // archetypes have gone: a `pre` of unwrappable source is exactly the shape
-  // that overflows a 320px viewport, and `base.css` gives each its own
-  // scroller so that it does not.
+  // Waited on rather than counted: the composition panel is a block of
+  // unwrappable source and the widest thing under the switches, so measuring
+  // before the island has put it there would be measuring the wrong page. The
+  // previous version of this test waited on a count of sections the page no
+  // longer has, which meant it never reached the measurement below at all.
+  await expect(page.locator('[data-bench-composition]')).toBeVisible();
+
+  // Scrolled to the foot first, so nothing below the fold is skipped.
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await expect.poll(() => page.locator('pre').count()).toBeGreaterThan(2);
 
   await expect
     .poll(() =>
@@ -248,7 +261,7 @@ test('the page does not go sideways at 320px', async ({ page }) => {
     .toBeLessThanOrEqual(0);
 });
 
-test('the hero is dormant: no media request before the press', async ({
+test('the player is dormant: no media request before the press', async ({
   page
 }) => {
   const media: string[] = [];
@@ -262,62 +275,18 @@ test('the hero is dormant: no media request before the press', async ({
   // The island is `client:only`, so its arrival is what makes the emptiness of
   // the list below evidence rather than a listener attached before anything
   // could have happened.
-  await expect(activationButton(page).first()).toBeVisible();
+  await expect(activationButton(page)).toBeVisible();
   await page.waitForLoadState('networkidle');
 
   // `loading="interaction"` holds the root dormant: no clip, no provider, no
-  // request. This is the page's most falsifiable claim and the reason the hero
-  // may not be given a poster or a preloading directive.
+  // request. This is the page's most falsifiable claim and the reason the
+  // player may not be given a preloading directive.
   expect(media).toEqual([]);
 
-  await activationButton(page).first().click();
+  await activationButton(page).click();
 
   // And the press is what fetches it, which is the other half of the same
   // claim — an empty list from a page that never loads anything would prove
   // nothing.
   await expect.poll(() => media.length).toBeGreaterThan(0);
-});
-
-test('pressing the hero fetches from this origin and nowhere else', async ({
-  page
-}) => {
-  /*
-   * #542's acceptance criterion in the one state that can break it. Every root
-   * on this page is `loading="interaction"` and fetches nothing until pressed,
-   * so the page is clean at rest by construction; what breaks it is a press.
-   * So this presses, and then holds the WHOLE page to the criterion — every
-   * request the document has issued from navigation onwards, by origin rather
-   * than by a deny-list of hosts anybody could grow past.
-   *
-   * It presses the hero because the hero is the only player here now. Two
-   * archetypes used to run further down and this test pressed one of them;
-   * they were removed from `/` (#542 phase 5) and they still run on
-   * `/archetypes`, where `site-archetypes.spec.ts` holds them to their own
-   * criteria. What must not be lost with them is this one, which is about the
-   * page and not about which player is on it.
-   */
-  const origin = new URL(landing).origin;
-  const requests: string[] = [];
-  page.on('request', (request) => requests.push(request.url()));
-
-  await page.goto(landing);
-
-  await expect(activationButton(page).first()).toBeVisible();
-  await activationButton(page).first().click();
-
-  await expect
-    .poll(() => requests.filter((url) => /\.(mp4|ogv|ogg|m4v)(\?|$)/.test(url)))
-    .not.toEqual([]);
-  await page.waitForLoadState('networkidle');
-
-  // `data:` and `blob:` are the page addressing itself and reach no host.
-  // Everything else must be this origin: the clip, the captions fixture, the
-  // island's own JavaScript, the fonts.
-  const foreign = requests.filter(
-    (url) =>
-      !url.startsWith(`${origin}/`) &&
-      !url.startsWith('data:') &&
-      !url.startsWith('blob:')
-  );
-  expect(foreign).toEqual([]);
 });
