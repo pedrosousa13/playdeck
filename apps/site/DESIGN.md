@@ -659,12 +659,11 @@ built around, and a second instrument on one page means neither is the
 instrument. `--elevation-panel` belongs to three things: the bezel around the
 hero's player — `.demo__bezel` in `HeroPlayer.astro`, and not the stage inside
 it, which is a recessed colour and a hairline — the search dialog in
-`DocsSearch.astro`, which is a panel over a page rather than the panel a page is
-built around, and which carries no border because rule 4 forbids an elevated
-surface one; and the receipt's body in `Receipt.astro`, mounted on `/`, which is
-the same shape of thing as the hero's bezel and takes the rung for the same
-reason — a panel at rest on the field, on a page whose one instrument is the
-ledger. Everything else on this site is a step on the surface ladder and a
+`SearchCommand.tsx`, which is a panel over a page rather than the panel a page
+is built around, and which carries no border because rule 4 forbids an elevated
+surface one. That is the whole list; it held a third entry, the receipt's body,
+until `/` stopped printing a request log. Everything else on this site is a step
+on the surface ladder and a
 hairline, as before. A new elevated element is an edit to this list, not a local
 decision.
 
@@ -723,12 +722,11 @@ revealing it and the warm end would arrive first; a translate moves the paint
 across a fixed window at its final width.
 
 The second is the entry motion below, which reaches exactly three elements: the
-three `.status` columns of the three-state comparison on `/`, which are one
+three `.truth-card` columns of the three-state comparison on `/`, which are one
 comparison rather than three things and move together as such. Nothing else this
-app writes moves on entry — not the receipt, whose rows appear the moment the
-browser records a request and are the behaviour that panel exists to show, and
-not the two mounted archetypes, which take no class of this vocabulary. The
-hero's band is untouched by any of it.
+app writes moves on entry, and in particular not the two mounted archetypes,
+which take no class of this vocabulary. The hero's band is untouched by any of
+it.
 
 The third is the capability ledger's resolution, in `HeroPlayer.astro`: the
 moment a provider attaches, the five rows settle in sequence — `opacity` and a
@@ -848,15 +846,38 @@ so indexed they would put the navigation into every excerpt. The rail's copy of
 it sits in `DocRail.astro` rather than on the routes that render one, so the
 provider pages inherited the exclusion without anyone wiring it a second time.
 
-**The keyboard model is the platform's wherever it can be.** `/` opens and
-focuses, arrows move, Enter opens the highlighted result, Escape dismisses —
-and the focus trap, the Escape handling and the return of focus to the button
-that opened it all arrive with `<dialog>` and `showModal()`. The field is
-`type="text"` and not `type="search"` because a search field eats the first
-Escape to clear itself. The results are an ARIA listbox named by
-`aria-activedescendant`, so focus stays in the field while a screen reader
-follows the highlighted row, and the count is announced through a `role="status"`
-line.
+**The keyboard model did not change when the chrome did.** `/` opens and
+focuses, arrows move, Enter opens the highlighted result, Escape dismisses. The
+results are an ARIA listbox named by `aria-activedescendant`, so focus stays in
+the field while a screen reader follows the highlighted row, and the count is
+announced through a `role="status"` line.
+
+**What changed is who provides it.** The dialog was a `<dialog>` opened with
+`showModal()` and a combobox written by hand; it is a shadcn `Dialog` around a
+`Command` now (`SearchCommand.tsx`), which is the same swap the header and the
+theme switch made. Three of those behaviours turned out not to survive the move
+on their own, and each is worth recording because each failed silently and the
+suite is what caught them:
+
+- **`/` was dropped when pressed before the island hydrated.** A press as soon
+  as navigation resolved opened nothing; the same press two seconds later
+  worked. The shortcut is back in an inline script in `DocsSearch.astro`, for
+  the same reason `Base.astro`'s theme script is inline: it has to be listening
+  while the document parses. It holds a press made before the island is ready
+  and dispatches it again once the island says it is.
+- **`aria-activedescendant` named nothing for the first result of a query.**
+  `Command` recomputes the selected item's id only on the store write its arrow
+  keys go through, so the first press of an arrow key fixed it, which is one
+  press too late: the result Enter would open is the one a reader following the
+  input was never told about. `SearchCommand.tsx` mirrors the attribute from
+  the DOM instead. This is not a consequence of driving the selection from
+  outside; it was measured the same with the selection left to `Command`.
+- **Escape left focus on `<body>`** rather than on the control that opened the
+  dialog. Both ends of the focus journey are set explicitly now.
+
+None of this is an argument against the component. It is an argument for
+checking that a swap kept what the thing it replaced was doing, since all three
+of these look perfect in a screenshot.
 
 **Both URLs it needs are derived from `import.meta.env.BASE_URL`** — where the
 bundle is fetched from, and what a result's recorded path resolves against.
@@ -918,14 +939,20 @@ system not owned by one component, and a new one has to earn that:
 | `src/styles/doc.css`                   | The shell and the prose of a rendered document           |
 | `src/layouts/Base.astro`               | The document, its stance, and the pre-paint theme script |
 | `src/components/SiteHeader.astro`      | The shell above every page, and the site's navigation    |
-| `src/components/ThemeToggle.astro`     | The control that stores a theme choice                   |
-| `src/components/DocsSearch.astro`      | Search over the documentation, and its dialog            |
+| `src/components/ThemeToggle.astro`     | Mounts the theme control                                 |
+| `src/components/DocsSearch.astro`      | Mounts search, and owns the `/` shortcut                 |
 | `src/components/Sweep.astro`           | The one gradient, and its two forms                      |
 | `src/components/DocRail.astro`         | The rail beside a document, both sets of them            |
 | `src/components/HeroPlayer.astro`      | The hero's two panels, and the player theme              |
 | `src/components/HeroPlayerIsland.tsx`  | The hero's composition: the player and ledger            |
-| `src/components/Receipt.astro`         | What `/` actually asked the network for                  |
-| `src/components/ProviderTruth.astro`   | The provider comparison on `/`, and its table            |
+| `src/components/ProviderTruth.astro`   | The provider comparison, and its table                   |
+| `src/components/SearchCommand.tsx`     | Search's dialog and combobox, on `Command`               |
+| `src/components/SiteNavSheet.tsx`      | The header's collapse below 40rem, on `Sheet`            |
+| `src/components/ThemeToggleIsland.tsx` | The theme choice, on `DropdownMenu`                      |
+| `src/components/RailDisclosure.tsx`    | The rail's "Contents", on `Collapsible`                  |
+| `src/components/SourceDisclosure.tsx`  | An archetype's source well, on `Collapsible`             |
+| `src/components/ui/*.tsx`              | shadcn components, owned here rather than depended on    |
+| `src/styles/shadcn-theme.css`          | shadcn's variable names, aliased onto this site's roles  |
 | `src/pages/index.astro`                | The landing page at `/`, and its links                   |
 | `src/pages/design.astro`               | The specimen sheet, served at `/design`                  |
 | `src/pages/archetypes.astro`           | Two composed players, and the files they are             |
@@ -1200,199 +1227,141 @@ reachable.
 
 `data-theme` has two writers and they are not interchangeable: the pre-paint
 script in `Base.astro` applies a stored choice before the browser paints, and
-`ThemeToggle.astro` writes the attribute and the stored value on a click. The
-storage key is a literal in both, because an `is:inline` script cannot import
-the module that would otherwise hold it.
+`ThemeToggleIsland.tsx`, mounted through `ThemeToggle.astro`, writes the
+attribute and the stored value on a choice. The storage key is a literal in
+both, because an `is:inline` script cannot import the module that would
+otherwise hold it.
+
+## shadcn, and what it is allowed to bring
+
+shadcn is the site's component system by the maintainer's call, taken after
+being told what it costs in payload. It arrived in #542 and it now covers every
+interactive part of the site: the header's collapse below 40rem, the theme
+switch, search, the rail's "Contents", and the source wells on `/archetypes`.
+
+**It brings components, not values.** This is the rule that keeps rule 1 intact.
+The `bg-*`, `text-*` and `border-*` classes those components carry read shadcn's
+variable names, and `src/styles/shadcn-theme.css` aliases every one of them onto
+a `--color-*` role this system already had. They resolve to this site's palette
+or they resolve to nothing; there is no second set of colours in the tree. Where
+a component needs spacing, a type size or a duration, it reaches for the token
+directly through Tailwind's arbitrary-value syntax (`[var(--space-3)]`) rather
+than for Tailwind's own scale, which is numerically close to this site's in
+places and would be a second literal sitting beside the first.
+
+**What it bought is behaviour, and that is the honest reason to have it.** A
+focus trap, an Escape handler, announced open and closed state, a combobox that
+implements the arrow keys. Every one of those existed here before, written by
+hand, and each hand-rolled copy was a place for a defect to live alone. The
+header, search and both disclosures used to be four separate answers to
+"disclose some content"; they are one now.
+
+**What it cost is written down rather than glossed.** Two of those four were
+native elements that worked with no JavaScript, and the shadcn versions do not.
+The maintainer was told and took the trade. The mitigation is that no _content_
+depends on the script: the rail's links and the archetypes' printed source are
+rendered by Astro and handed to the island as children, so they are in the
+served HTML either way, and both islands use `forceMount` so a closed disclosure
+hides its content rather than deleting it.
+
+**A shadcn component is source in this repository, not a dependency**, which is
+the model shadcn is built on. `src/components/ui/*.tsx` are ours to edit and
+they have been edited. Two things follow. A component that is wrong here is
+fixed here rather than worked around, and a component's default look is never
+what ships: the defaults are Tailwind's palette and radii, which is exactly the
+templated appearance the rest of this document exists to prevent.
 
 ## The landing page
 
-`/` is the site's front door, and it is four sections: hero, states,
-archetypes, start. Each is marked with a `data-section` attribute naming it,
-which is how `e2e/site-landing.spec.ts` pins the order rather than pinning a
-heading a later edit is free to reword.
+`/` is the site's front door, and it is five sections: hero, truth, faces,
+remote, credits. Each is marked with a `data-section` attribute naming it, which
+is how `e2e/site-landing.spec.ts` pins the order rather than pinning a heading a
+later edit is free to reword.
 
-**This passage has now described three pages.** The first argued in sentences
-and asked to be believed. The second — eight sections: hero, weight,
-archetypes, receipt, composition, truth, states, start — argued by running the
-thing and printing what running it cost, and was rejected for being a
-documentation page wearing a landing page's spine: 8,679px, most of it
-reference content a reader had to scroll past to reach the argument. The four
-sections are what survive of it — the thesis and its live proof, the rule the
-proof demonstrates, one composed product, the install line — and the reference
-content lives on the document pages the header links. The receipt is the one
-cut instrument that returned, in a compact form inside the Start section,
-because #542's third criterion (an unused adapter is never fetched, observably)
-has no other answer on the page. The parts of the old description that were
-about the page's shape rather than its contents survive below, because they
-were never about which sections it had.
+**This passage has now described four pages, and the count is the point.** The
+first argued in sentences and asked to be believed. The second argued by running
+the thing and printing what running it cost, across eight sections and 8,679px,
+and was rejected as a documentation page wearing a landing page's spine. The
+third kept that instinct and lost the reader anyway: the maintainer's words were
+"this is a huge page that doesn't make sense" and "nobody knows wtf a capability
+ledger is". The fourth is this one, written after "I'm throwing the rules out",
+and what it threw out was the reference content, not the honesty.
 
-**Every section is a claim and then the machine answering it**, and the
-alternation is the page's structure. The claim is prose held to `--measure`, in
-the sans; the answer is the page's full width, in the mono — a table, a running
-player, a request log, a printed file. Nothing is asserted that is not then
-shown, which is a rule about what may be added here and not only a description
-of what is here.
+**The differentiator is now stated in plain language and demonstrated
+underneath, in that order.** The old page led with the instrument and expected
+the reader to infer the claim from it. This one says "No greyed-out buttons.
+Ever." and then shows the live per-capability report answering for the browser
+the reader is in. The phrase "capability ledger" appears nowhere, and
+`site-landing.spec.ts` asserts that it does not, because the temptation to reach
+for it sits right beside the panel it would name.
 
-**Three things it prints are measured at build time rather than written down.**
-The bundle figures come from `scripts/bundle-budgets.mjs`, the module
+**The hero is a split, and it fits one screen.** The thesis, the install line
+and one secondary link on one side; the real player, dormant, on the other.
+Measured at 1440x900 it runs from 117px to 539px, which leaves the fold well
+clear. It gets there by moving the live report out: `HeroPlayerIsland.tsx`
+mounts the panel at the hero and portals it into the `truth` section, so there
+is one player and one report, rendered once and read where each belongs. A
+second instance would have been a second thing to look at in the hero and a
+second set of answers to keep in step.
+
+**Three live players, and no more.** The hero, and the two archetypes. A landing
+page for a player library that ran more would be arguing that it can run more
+players, rather than that its primitives compose. Both archetypes are mounted
+`client:visible`, so a reader who never scrolls to them never pays for either.
+
+**Everything the page can fetch comes from this origin, after a press.** Both
+archetypes play `tracer-45s.mp4`, a colour-bar fixture this site serves itself,
+rather than the Blender trailers `/archetypes` plays. The copy says so in as
+many words, on both of them, rather than letting a reader who opens devtools
+discover a request the page never mentioned.
+
+**The two figures it prints are measured at build time rather than written
+down.** They come from `scripts/bundle-budgets.mjs`, the module
 `pnpm test:budgets` gates with, so the page and the gate cannot state different
-numbers; the receipt reads adapter sizes from the same module; and the provider
-comparison is derived from `docs/provider-setup.md`. The composition example is
-`examples/react-composition.tsx`, read as bytes and highlighted with the same two
-Shiki themes the reference pages use — which is why those two names now live in
-`src/shiki.ts`: Astro's `<Code>` component reads nothing from
-`markdown.shikiConfig`, so a page that typed them out again would eventually
-colour one block differently from every fence beside it.
+numbers. The receipt and the provider comparison, which used to print more, are
+both gone from this page: the receipt entirely, and the comparison to
+`/providers`, where it is the page rather than an aside on one.
 
-**Its sections are shaped by what they hold, and deliberately not alike.** A
-page whose every section is a small heading, a paragraph and a block gives the
-thesis and the budget table the same weight, which is a way of saying nothing
-about either. So the three capability states are one comparison in three
-columns on a `subgrid`, aligned row for row so a reader travels across rather
-than round three boxes; the composition example is the file printed at the page's
-full width in the recessed well `base.css` gives every fence on the site; the
-budget figures are a table inside a `--color-raised` readout; the receipt brings
-a `--color-surface` panel of its own, lifted off the field by
-`--elevation-panel` rather than by a further step up the ladder; and the
-provider comparison brings no surface at all and sits directly on the field,
-because its sticky question column needs the field as an opaque ground. Prose
-inside any of them is still held to `--measure` — the width buys columns, not
-longer lines — and the page's own maximum is `72rem`, which is the literal that
-section names as a page's own decision.
-
-**Cards of identical size are the container this page does not reach for.** It
-is the same finding the package index records: three or five boxes the same size
-are what a layout defaults to when nothing has been decided about the contents,
-and they cost a reader the alignment that makes a set comparable. It is why the
-provider comparison is one grid read across rather than a card per provider, and
-why the two archetypes are stacked one above the other rather than set as a pair
-of equal columns — the claim there is that they are different, and equal columns
-would
-both deny that and halve the width each has to be itself in. The capability
-ledger takes the opposite treatment for the opposite reason — it is genuinely
-one panel of machine output, so it is one raised surface, and it carries no
-hairline at all. `--color-surface` on `--color-field` is built to raise a panel
-with no border; the player's stage beside it is `--color-sunken`, which sits
-close to the field, and that is what a hairline is for.
+**The closing section is an end-credits treatment**, and it is the one place the
+page permits itself a flourish: a short roll, one large install command, and the
+links out. It earns it by being last. A reader who leaves before it has already
+had the whole argument, which is the test every section here has to pass.
 
 **The install line is the call to action, and it is click-to-copy.** It is
-printed twice, in the hero and in the closing section, from one string in the
-page's frontmatter — a call to action that was two different strings is a defect
+printed twice, in the hero and in the credits, from one string in the page's
+frontmatter, because a call to action that was two different strings is a defect
 a reader would find before a test would. The command is selectable text; the
-copy button is `hidden` in the markup and revealed by a script, which is the
-pattern `DocsSearch.astro` established. Writing to the clipboard is the whole of
-what the control does, so with no script there is nothing to press rather than a
-control that swallows a click, and nothing is lost, because the command was never
-behind the button. The feedback is a text swap on the button with the same words
-said once through a `role="status"` line, and it is a text swap rather than a
-flash because this app animates `transform` and `opacity` only and spends
-exactly three animations, none of them here — the count above, of what this app
-authors rather than of everything that moves on the page.
+copy button is `hidden` in the markup and revealed by a script. Writing to the
+clipboard is the whole of what the control does, so with no script there is
+nothing to press rather than a control that swallows a click, and nothing is
+lost, because the command was never behind the button. The feedback is a text
+swap on the button with the same words said once through a `role="status"` line.
 
-**The archetypes are mounted `client:visible`, and the page says so out loud.**
-A sceptic who opens devtools and finds requests the page never mentioned has
-caught the site doing the exact thing it claims not to do, so the disclosure is
-visible copy rather than a comment — `e2e/site-landing.spec.ts` asserts that it
-is. It is set apart from the lede above it by a hairline on its leading edge
-rather than by a panel, because it is the page's own voice about the page's own
-behaviour and a box around it would read as a warning.
+**Prose is held to `--measure` everywhere on the page**, and the page's own
+maximum is `72rem`. The width buys columns, not longer lines.
 
 One constraint on that page is `scripts/check-deploy-artifact.mjs`'s rather
 than this system's, and it is load-bearing: its `h1` is exactly `Playdeck`,
 which is how that check identifies the site's root document in a browser.
 
-There used to be a second — the workbench link had to be the last internal link
+There used to be a second: the workbench link had to be the last internal link
 in the document, because the check followed every internal link in one page
 context and navigating away from the workbench abandoned requests it was still
 making. That check now visits each link in a page of its own (#528), so a link
 may be added anywhere in the list. The constraint is written down here as gone
 rather than deleted silently, because it governed the order of that list for
-long enough to look deliberate.
-
-### The receipt
-
-`Receipt.astro` is mounted on `/` and prints what the page actually asked the
-network for, read from the browser's own record of it, beside what ships in the
-same artifact and was never asked for. It answers two claims with one
-instrument, because both are answered by the same evidence. The first is that an
-adapter a page does not use is never fetched, which is the whole argument for
-lazy provider loading and a sentence a reader has no way to check. The second is
-the one the page would rather not raise: the hero is a React island, so this page
-ships React and `react-dom` in order to argue that the library is small. The log
-is printed in full, largest cost included, which is the only way the second claim
-can be made without the page choosing what to leave out.
-
-**It is mounted in its compact form, inside the Start section.** The full form
-was 1,091px — 13% of the page it was rejected with — and the compact form is
-the same two measurements budgeted under 300px: the live log becomes a
-scrolling well (a named, focusable region, the treatment
-`ProviderTruth.astro`'s scrolling table established), the live and built
-halves share a row where there is room, and a shipped adapter compresses to a
-line. Nothing is dropped or summarised: every request is still printed, and
-the totals line is the same measurement. It sits in Start because that
-section's lede is the lazy-loading claim, and the page's structure is a claim
-and then the machine answering it — a fifth section for the answer would have
-separated the two.
-
-**Be exact about which half is measured, because the component is.** The rows in
-the upper panel are measured, in the reader's browser, from a
-`PerformanceObserver` over `resource` entries: every request, its real transfer
-size, and whether it started after `loadEventEnd`, which is what the `after load`
-tag means. Nothing there is seeded, sampled or simulated — the same rule the
-capability ledger is held to, and for the same reason: a plausible list would look
-identical to a reader and to a screenshot, and would be the one untrue thing on
-the page. The adapter names and gzipped sizes in the lower panel are measured too,
-at build time, from `scripts/bundle-budgets.mjs`.
-
-**The `not requested` state in that lower panel is derived, not measured, and
-the component says so rather than blurring it.** An adapter reaches a browser as
-a bundler chunk under a hashed name decided after the component's frontmatter has
-run — a build cannot hand a component the URL of an artifact it has not emitted
-yet — so mapping `@playdeck/provider-hls` to `/_astro/dist.<hash>.js` is not
-available from inside the component at any price. What it does instead is refuse
-to guess: the log prints the real address of every request and never labels one
-with a package name it inferred, and the lower panel states which adapter the
-page's own media needs and which the page has no way to ask for. The live
-evidence is the log's own count. If the emitted chunk names ever become knowable
-at build time, that state should become measured.
-
-The limit is carried in the visible caption and not only here. A panel drawn in
-the register of a measurement, on a page whose thesis is that nothing is claimed
-that cannot be shown, has to say which half of it is measured where a reader can
-read it — so `receipt__caption` names the derivation and its reason in the same
-sentence that names what the sizes are.
-
-**A cached resource is printed as a cache hit, not as zero bytes.**
-`transferSize` is 0 for a resource served from the cache, and printing that 0 as
-a size would tell a reader on a warm reload that this page weighs nothing —
-which is the most convincing lie the panel could tell. So a row with no transfer
-and a recorded body prints that body size and says `from cache`; a row with
-neither prints `size not reported`, which is the genuinely different third case a
-cross-origin response without `Timing-Allow-Origin` produces.
-
-That last behaviour is why `scripts/serve-site.mjs` now serves `/_astro/` with
-`cache-control: public, max-age=600` while everything else it serves stays
-`no-store`. `e2e/site-receipt.spec.ts` has to observe a cache hit to check that
-the receipt prints one as a cache hit, and `no-store` on every response made that
-unobservable. It is safe for the reason a production CDN caches that directory
-forever: every file under it is content-addressed, so a rebuild that changes a
-file changes its address and a cached copy can only ever be a copy of the bytes
-that were asked for. Everything addressed by a stable path stays `no-store`,
-because the suite rebuilds the site between runs and a cached document would hide
-the change under test.
-
-With no script the upper panel is not empty: it holds a sentence saying the
-measurement is the browser's and cannot be made without one. That is the resting
-state the entry-motion section asks for, applied to a panel — what a reader gets
-when the script does not run has to be the settled, honest thing rather than a
-hole. The lower panel needs no script at all and prints the same figures either
-way.
+long enough to look deliberate. The workbench itself is linked from nowhere on
+this site (#534), which is a separate decision and still in force.
 
 ### The provider asymmetry readout
 
-`ProviderTruth.astro` is the provider comparison on `/`, and its section's claim
-is asymmetry: five providers behind one API is the kind of sentence that invites
-a reader to assume they are interchangeable, and they are not. So the table asks
+`ProviderTruth.astro` is the provider comparison, and its claim is asymmetry:
+five providers behind one API is the kind of sentence that invites
+a reader to assume they are interchangeable, and they are not. It sits on
+`/providers` rather than on `/`. It was an aside on the landing page for three
+of that page's four lives, and it was one of the things that made the third too
+long to read: a comparison table is what somebody chooses a provider with, which
+is a thing they do after being convinced rather than while. So the table asks
 three questions of the four provider groups and prints `unknown` as an answer
 with the document's own reason beside it, never as a blank or a dash — a table
 that flattened the difference would be the lie the section exists to refuse.
@@ -1500,11 +1469,10 @@ would be an asset nothing loads.
 Blender open-movie trailer on that foundation's own host, and it stays pointed
 there, because the default in a file somebody pastes into their own project
 should be a clip that plays rather than a path into this repository's `public/`.
-`/` overrides it for two reasons and not one: it is the only page carrying #542's
-no-third-party-request criterion, and `Receipt.astro` sits directly below the two
-players printing every request the page made. A press that pulled a clip off
-another origin would have the page's own instrument reporting the page breaking
-its own claim. `/archetypes` passes nothing and keeps the trailers, because that
+`/` overrides it because it is the page carrying #542's no-third-party-request
+criterion, and that criterion covers every request the page can cause, including
+the ones a press causes. `/archetypes` passes nothing and keeps the trailers,
+because that
 page makes no such claim and is where a reader reads the files as they ship — and
 CC BY's attribution is why the licence line under those players is the one piece
 of copy `/` still writes for itself.
@@ -1513,11 +1481,10 @@ of copy `/` still writes for itself.
 source is a file on this origin, driven through the native provider, and
 `loading="interaction"` holds the root dormant until the play affordance is
 pressed: no fetch, no provider attached. That claim is no longer argued in prose
-elsewhere on the page — the receipt section below the archetypes prints the
-request log a reader can check it against, and `e2e/site-landing.spec.ts`
-records every request the page makes and fails if a media file is fetched before
-the press. The hero is where the claim is either demonstrated or merely
-asserted, and the receipt is where it is counted.
+elsewhere on the page — `e2e/site-landing.spec.ts` records every request the
+page makes and fails if a media file is fetched before the press. The hero is
+where the claim is demonstrated rather than asserted, and the spec is where it
+is counted, now that the page prints no request log of its own.
 
 **With no JavaScript the panel is a plain `<video controls preload="none">`** on
 the same file, inside `<noscript>`. The island is `client:only`, so it renders

@@ -399,20 +399,8 @@ which is what the site's entry motion is keyed off. A separate axis from the
 says nothing about a player.
 _Avoid_: mode, register, treatment, archetype
 
-**Receipt**:
-The panel on the marketing site's landing page that prints what the page really
-asked the network for, read in the reader's browser from the Performance API,
-beside the adapters that ship in the same artifact and were never asked for.
-Site-only, and a receipt rather than a report because it is what a reader reads
-after a transaction: it is printed in full, including the cost of the page's own
-island. Its adapter sizes come from `scripts/bundle-budgets.mjs` and are
-measured; which adapters went unrequested is derived, because a chunk's hashed
-name is not knowable when the component runs. See
-[`apps/site/DESIGN.md`](apps/site/DESIGN.md) for that limit stated in full.
-_Avoid_: network panel, waterfall, audit
-
 **Provider asymmetry readout**:
-The table on the marketing site's landing page that asks the same three
+The table on the marketing site's provider index that asks the same three
 questions — which hosts, which source forms, which options — of each of its four
 columns, native files and HLS sharing one because a file extension is what
 chooses either, and prints where the answers differ in kind. Asymmetry rather than comparison,
