@@ -29,7 +29,7 @@ One page, roughly two screens, in five parts.
 | Thesis      | The h1, one display line, one paragraph                        |
 | The star    | The player, the largest thing on the page                      |
 | The bench   | Three groups of switches that belong to the reader             |
-| The readout | The capability grid, and the composition the switches built    |
+| The readout | The composition the switches built, and one line of what the provider refused |
 | The close   | Four measured figures, the install line, the ways onward       |
 
 There is no section per feature. The four features from the brief (capability
@@ -60,8 +60,8 @@ out.
 
 Two claims that were considered as the thesis survive lower down, where the page
 demonstrates each instead of asserting it. "Ask the player what it can do, and it
-answers" becomes the caption under the grid. "Every element of the player is
-yours" becomes the label on the `none` skin.
+answers" becomes the reason line under the switches. "Every element of the
+player is yours" becomes the label on the `none` skin.
 
 **The page makes no claim about any other library.** No comparison, no named
 competitor, no implied one. An earlier draft opened with "every video player
@@ -107,22 +107,31 @@ reach it because a reader asked. That is the claim, not a violation of it.
 
 ### Skin
 
-`none`, `cinema`, `course`.
+`none` and `theme`. Two positions, and they are the product fact rather than a
+demonstration built for the page.
 
 `none` is the default and is the honest one. It applies no CSS at all, so the
 player renders as unstyled elements. That is what actually ships, and showing it
 is a better argument than a paragraph saying no stylesheet is in the bundle.
 
-`cinema` and `course` mount the two compositions in
-`examples/archetype-streaming-service.tsx` and
-`examples/archetype-course-platform.tsx`. Those two files already exist, they
-already carry their own stylesheets, and `DESIGN.md` already exempts them from
-rules 1 and 5 by an ownership argument. Reusing them here costs nothing new and
-keeps the exemption exactly where it was.
+`theme` imports `@playdeck/react/theme.css`, the one opt-in stylesheet the
+library publishes, for a consumer who wants somewhere to start rather than
+nothing. The switch between the two is the whole customisability argument, made
+by moving a real import rather than by describing one.
 
-Both archetypes came off `/` in `b348879` for being too much on the page at once.
-This does not put them back. One composition is mounted at a time, as a state of
-the single player, not as two additional running products beside it.
+**No archetype is mounted on `/`.** An earlier draft of this spec gave the skin
+switch `cinema` and `course`, mounting
+`examples/archetype-streaming-service.tsx` and
+`examples/archetype-course-platform.tsx`. The maintainer ruled against it: those
+two belong on `/archetypes`, which is the page whose subject they are, and they
+came off `/` in `b348879` for being too much on a marketing page. Putting them
+back behind a switch is still putting them back.
+
+Two things follow, and both are improvements. The page keeps animating
+`transform` and `opacity` only, because the `background-color` those two
+stylesheets animate never reaches `/` again. And the skin switch stops being a
+demonstration of composability, which the composition panel already makes better,
+and becomes a demonstration of what does and does not ship.
 
 ### Autoplay
 
@@ -135,43 +144,63 @@ appears only when the viewer actually lost sound.
 
 ## The readout
 
-Two panels under the bench, side by side above `48rem` and stacked below it.
+The switches on the left, the composition on the right above `48rem`, stacked
+below it. Under the switches, one line, and only when there is something to put
+in it.
 
-### The capability grid
+### No table of any kind
 
-Ten rows, one per key of `PlayerCapabilities`, by five columns, one per provider.
-Every cell starts grey and every cell means `unknown`, because nothing has been
-asked of any provider yet. Under the grid, one line of functional text:
+**There is no capability grid and no capability ledger on `/`.** Both were
+designed and both were cut, and the ruling is recorded here because each was
+attractive enough to be reinvented by a later session.
 
-> every answer, unknown
-> `└ nothing has been asked of a provider`
+The page that exists today carries a five-row panel headed "Asked of this
+browser, right now" with the line "dormant, nothing asked yet. Press play and
+watch these resolve". An earlier draft of this spec replaced it with something
+larger: a ten-by-five grid of every capability against every provider, grey until
+a reader pressed one. The maintainer rejected both, in these words: "doesn't fit
+at all".
 
-A column gains colour only once that provider has actually been mounted and has
-actually answered. So the grid fills in as a reader explores, and a reader who
-touches nothing sees a page that admits it knows nothing. The colours are
-`--color-available`, `--color-unknown` and `--color-unavailable`, which is what
-those three tokens exist for, and each cell carries its word as well as its
-colour, because colour alone is not a status.
+They are right, and the reason is worth writing down. A matrix is a documentation
+object. It asks a reader to hold ten rows and five columns in their head while
+they are still deciding whether to keep reading, and it spends the largest block
+of space under the video on machinery rather than on the product. The word
+"ledger" is rejected outright and does not appear anywhere.
 
-Selecting a cell prints its reason in the line under the grid, in the terms
-`Availability` already publishes: `browser`, `provider`, `provider-plan`,
-`provider-build`, `source`, `policy` for unavailable, `not-ready` and
-`provider-check` for unknown.
+### One line of what the provider refused
 
-**The grid reports only what a live provider answered.** It never reads
-`src/provider-asymmetry.mjs` and never fills a cell from a document. A static
-table beside a live one would be a second copy no gate watches, and the page's
-argument is that these answers are observed.
+What survives of the capability argument is a single line of functional text
+under the switches, in mono at `--text-fn`:
 
-The word "ledger" does not appear. The maintainer rejected that phrase outright.
+> `youtube · no picture in picture`
+> `└ the provider's iframe cannot be promoted`
+
+Three rules govern it.
+
+**It appears only when there is something to report.** A provider that can do
+everything the page asks about produces no line at all. There is no resting
+state, no "nothing asked yet", and no grey placeholder holding space for a
+sentence that has not happened.
+
+**It reports what the reader just caused.** The line names the provider that is
+mounted right now, which is the one the reader pressed. It never speaks about a
+provider nobody asked about, so it can never be a table with the labels taken
+off.
+
+**Its words are the library's.** The capability's name and the `Availability`
+reason it published, in the terms the type already defines: `browser`,
+`provider`, `provider-plan`, `provider-build`, `source`, `policy`. It never reads
+`src/provider-asymmetry.mjs` and never states a fact taken from a document. A
+static claim beside a live one would be a second copy no gate watches, and the
+whole point of the line is that a provider said it.
 
 ### The composition
 
 The other panel prints the code the three switches just built, highlighted by
 Shiki, in a `--color-sunken` well. It is not a fixed snippet. Flip `source` to
-`youtube` and the `source` prop changes. Flip `skin` to `cinema` and a
-`className` appears with `Player.Controls` under it. Flip autoplay and the
-`autoplay` prop arrives.
+`youtube` and the `source` prop changes. Flip `skin` to `theme` and the
+theme's import appears above the composition. Flip autoplay and the `autoplay`
+prop arrives.
 
 This is the composability and customisability argument in one object: the knobs
 are compositions, not options, and the panel proves it by rewriting itself.
@@ -199,7 +228,8 @@ The page ends there.
 ## What gets deleted
 
 - All six `data-section` blocks in `src/pages/index.astro` and every string in them.
-- `ProviderTruth.astro`, if the grid replaces what it did. Confirm before removing.
+- The five-row browser panel, its heading and its "press play and watch these
+  resolve" line, and every style and test that reaches them.
 - The three-column `.truth-card` comparison and the entry motion that reaches it.
 - The four hand-written snippets, replaced by the composition panel's generated one.
 
@@ -238,9 +268,9 @@ The precise claim, and the one worth defending, is that the page contacts nobody
 paragraph's own guarantee unchanged, since fonts are never asked for.
 
 _Fallback if rejected:_ the `source` switch offers `native` and `hls` only, both
-served from this origin. The page loses the strongest half of the grid, because
-the four capabilities that differ most across providers are the ones only YouTube,
-Vimeo and Wistia can demonstrate.
+served from this origin. The source switch drops to two buttons, and the reason
+line goes quiet for good, because the refusals worth reporting are the ones only
+YouTube, Vimeo and Wistia produce.
 
 ### 3. `--elevation-instrument` moves to the player (approved)
 
@@ -259,13 +289,14 @@ three (the `.truth-card` entry motion, the ledger resolution) belong to elements
 this page deletes. The count becomes two:
 
 1. The sweep band arriving under the player, unchanged in kind, moved in place.
-2. A grid column resolving when a provider answers. This reuses the vocabulary
-   the ledger resolution already established: `opacity` and a `--space-1` rise,
-   in sequence, keyed off a `data-live` attribute the island writes in the same
-   React commit that writes the answers. `transform` and `opacity` only, so rule
-   5 is untouched and **no amendment to rule 5 is needed.**
-
-Colour changes in the grid snap, as every colour change on this site does.
+2. The reason line arriving when a provider refuses something. This reuses the
+   vocabulary the ledger resolution already established: `opacity` and a
+   `--space-1` rise, at `--duration-base`, keyed off a `data-live` attribute the
+   island writes in the same React commit that writes the reason. `transform`
+   and `opacity` only, so rule 5 is untouched and **no amendment to rule 5 is
+   needed.** One line rather than a column of them, so there is no sequence and
+   no delays, which also removes the `prefers-reduced-motion` hazard the ledger
+   resolution had to be written around.
 
 ### 5. Scroll-linked effects stay banned
 
@@ -280,7 +311,8 @@ reopened the question.
   shape as `e2e/site-search.spec.ts`, which already does exactly this for search.
   Then it presses `youtube` and asserts a request to that provider does happen,
   so an empty list is evidence rather than a listener attached to the wrong page.
-- **The grid starts unknown.** Assert all fifty cells read `unknown` on load.
+- **The reason line is absent at rest.** Assert no reason line exists on load,
+  and that no element holds space for one.
 - **A column resolves.** Press a provider, wait for `data-live`, assert that
   column carries at least one `available` and that no other column changed.
 - **The composition panel tracks the knobs.** Flip each switch and assert the
@@ -315,8 +347,8 @@ us. No amount of searching fixes this, because the content does not exist.
 **The ruling is to upload one clip to all three.** One Blender CC BY film, on our
 own YouTube, Vimeo and Wistia accounts. It settles the licensing on every
 provider at once, and it buys something the licensing question hides: all five
-providers then play the identical asset, so the grid compares five providers
-rather than five different videos answering five different questions.
+providers then play the identical asset, so a refusal the reason line reports is
+a fact about the provider rather than about that provider's clip.
 
 CC BY asks for attribution wherever the media plays, so the credit goes on the
 page beside the player, not in a footer.
@@ -327,25 +359,33 @@ uploads exist, and the real ids replace them in a one-line commit. Every other
 part of the bench is built and tested against `native` and `hls`, both of which
 this site already serves.
 
-## The grid stays silent
+## The page does not ask to be pressed
 
-Forty of the fifty cells only resolve once a reader has pressed every provider,
-and the page does not ask them to. No prompt, no instruction, and the `native`
-column is not resolved on load to give them a worked example.
+No prompt, no instruction, no "try it" line. The switches are visible controls
+under a video and a React engineer knows what a switch is. A page that explains
+its own interface is a page that does not trust it.
 
-The grey is the argument. A reader who touches nothing sees a page admitting it
-knows nothing, and the caption under the grid says why. That fully grey at-rest
-state is the strongest single moment in the design and buying a reader's
-convenience with it would be a bad trade.
+The same rule kills the resting placeholder. Nothing holds space for the reason
+line, so the layout does not reserve a gap that is empty until a reader is lucky
+enough to pick a provider that refuses something.
 
 ## Open questions
 
-1. **Whether `ProviderTruth.astro` survives.** The grid may make it redundant on
-   `/`, but it may still earn its place on `/providers`.
-2. **Mobile.** Three switch groups, a 16:9 video and a fifty-cell grid at 320px
-   needs a layout of its own. The grid probably becomes one column, the mounted
-   provider's.
+1. **Mobile.** Three switch groups and a 16:9 video at 320px needs a layout of
+   its own. With the grid gone this is much smaller than it was, but the source
+   switch is still five buttons on one line and will not stay there.
 
-Ten rows against four was asked and ruled on: **build all ten and decide against
-the rendered page.** Cutting rows later is cheap and deciding on paper is
-guessing.
+## What was asked and settled
+
+Recorded so none of it is reopened by a later session reading this fresh.
+
+| Question | Ruling |
+| --- | --- |
+| Where the display rung goes | The thesis paragraph, not the `h1` |
+| Third-party requests | Permitted once a reader asks, never before |
+| The clip each provider plays | One Blender CC BY film on our own accounts, all three platforms |
+| A capability grid | No. "Doesn't fit at all" |
+| The existing five-row browser panel | Removed |
+| The archetypes on `/` | No. They stay on `/archetypes` |
+| What carries the capability argument | One reason line, only when a provider refuses something |
+| Claims about other libraries | None, of any kind |

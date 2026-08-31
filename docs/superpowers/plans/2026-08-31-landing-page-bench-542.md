@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace `/` with a single instrument. One player as the largest thing on the page, three groups of switches under it, and a readout showing what the chosen provider actually answered beside the composition those switches just built.
+**Goal:** Replace `/` with a single instrument. One player as the largest thing on the page, three groups of switches under it, and the composition those switches build printed beside them.
 
-**Architecture:** One Astro page holds the layout and the copy. One React island holds everything that moves, because `Player.Root` renders no DOM of its own and one root can therefore stand above the player, the grid and the code panel at once, which is what makes the grid a report rather than an illustration. Pure logic (the generated snippet, the capability row order, the source table) lives in plain TypeScript modules next to the island so it can be unit tested without a browser.
+**Architecture:** One Astro page holds the layout and the copy. One React island holds everything that moves, because `Player.Root` renders no DOM of its own and one root can therefore stand above the player, the switches and the code panel at once, which is what lets the reason line report the same controller the player is driven by. Pure logic (the generated snippet, the capability wording, the source table) lives in plain TypeScript modules next to the island so it can be unit tested without a browser.
 
 **Tech Stack:** Astro 5, React 19, `@playdeck/react` primitives, Shiki for highlighting, Vitest for units, Playwright for e2e.
 
@@ -20,8 +20,9 @@ reviewer will check each one:
 1. **The page makes no claim about any other library.** No comparison, named or
    implied. This was ruled on explicitly.
 2. **The word "ledger" never appears.** The maintainer rejected the phrase.
-3. **The grid stays grey until a reader presses something.** Do not resolve
-   `native` on load to be helpful. The grey is the argument.
+3. **There is no capability table of any kind.** A grid was designed and cut, and
+   the five-row browser panel on the page today is being deleted. The maintainer's
+   words were "doesn't fit at all". Do not reinvent either, in any size.
 4. **`DESIGN.md` rules 1 to 5 still hold.** No component writes a colour, a font
    size or a duration. Only `transform` and `opacity` animate. Four audit
    constraints pass today and must still pass.
@@ -46,15 +47,15 @@ Two traps from the previous session, both real:
 | File | Responsibility |
 | --- | --- |
 | `apps/site/src/bench-sources.ts` | The five sources, and which are ready to demonstrate |
-| `apps/site/src/bench-capabilities.ts` | The ten capability keys, in display order, with their labels |
+| `apps/site/src/bench-capabilities.ts` | Capability keys mapped to the words the reason line prints |
 | `apps/site/src/bench-composition.ts` | Pure: three switch positions in, the JSX snippet out |
 | `apps/site/src/components/Bench.astro` | Mounts the island, owns the player theme and the frame |
 | `apps/site/src/components/BenchIsland.tsx` | `Player.Root`, the player, and the layout the three panels sit in |
 | `apps/site/src/components/BenchSwitches.tsx` | The three switch groups |
-| `apps/site/src/components/CapabilityGrid.tsx` | The grid, and the reason line under it |
+| `apps/site/src/components/ReasonLine.tsx` | One line of what the mounted provider refused, when it refused one |
 | `apps/site/src/components/CompositionPanel.tsx` | The generated snippet, highlighted |
 | `apps/site/public/hls/**` | A same-origin HLS fixture, copied from the workbench |
-| `e2e/site-bench.spec.ts` | The grid's behaviour, and the panel tracking the switches |
+| `e2e/site-bench.spec.ts` | The reason line's behaviour, and the panel tracking the switches |
 | `e2e/site-quiet.spec.ts` | Nothing leaves this origin before an interaction, and something does after |
 | `apps/site/test/bench-composition.test.ts` | Units for the snippet builder |
 
@@ -74,13 +75,21 @@ Two traps from the previous session, both real:
 | `apps/site/src/components/HeroPlayerIsland.tsx` | Replaced by `BenchIsland.tsx` and its neighbours |
 | `e2e/site-ledger.spec.ts` | Replaced by `site-bench.spec.ts` |
 
-`ProviderTruth.astro` and `e2e/site-provider-truth.spec.ts` are **not** deleted by
-this plan. Whether the grid makes them redundant is an open question in the spec,
-and it is answered against the rendered page in Task 12, not now.
+`ProviderTruth.astro` and `e2e/site-provider-truth.spec.ts` are **not** touched by
+this plan. With no grid on `/`, nothing this work builds overlaps them, and the
+question of whether they still earn their place is somebody else's.
 
 ---
 
-### Task 1: The DESIGN.md amendments
+### Task 1: The DESIGN.md amendments (DONE, commit `c1eb70e`)
+
+**One correction is owed and Task 10 carries it.** Step 4 below was written when
+the readout still had a grid, so the second animation it records is "a grid
+column resolving". The second animation is now the reason line arriving: same
+vocabulary, `opacity` and a `--space-1` rise at `--duration-base`, keyed off
+`data-live`, but one line rather than a column, so there is no sequence, no
+delays and no `prefers-reduced-motion` hazard to write around. Fix the wording in
+Task 10, not by amending `c1eb70e`.
 
 Docs only. Do this first, so the rules the rest of the work obeys are written
 down before any code leans on them.
@@ -192,6 +201,7 @@ describe('buildComposition', () => {
           '<Player.Root source={source}>',
           '  <Player.Viewport>',
           '    <Player.Media />',
+          '    <Player.Controls />',
           '  </Player.Viewport>',
           '</Player.Root>'
         ].join('\n')
@@ -211,14 +221,19 @@ describe('buildComposition', () => {
     expect(on).toContain('autoplay="audible-then-muted"');
   });
 
-  it('adds a class and controls when a skin is chosen', () => {
-    const code = buildComposition({ source: 'native', skin: 'cinema', autoplay: false });
-    expect(code).toContain('<Player.Viewport className="cinema">');
-    expect(code).toContain('<Player.Controls />');
+  it('adds the theme import only when the theme skin is chosen', () => {
+    const bare = buildComposition({ source: 'native', skin: 'none', autoplay: false });
+    expect(bare).not.toContain('theme.css');
+
+    const themed = buildComposition({ source: 'native', skin: 'theme', autoplay: false });
+    expect(themed.split('\n')[0]).toBe("import '@playdeck/react/theme.css';");
+    // The import is a line above the composition, with a blank line after it,
+    // because that is how a consumer's file would actually read.
+    expect(themed.split('\n')[1]).toBe('');
   });
 
   it('never leaves a trailing space on a line', () => {
-    const code = buildComposition({ source: 'vimeo', skin: 'course', autoplay: 'audible-then-muted' });
+    const code = buildComposition({ source: 'vimeo', skin: 'theme', autoplay: 'audible-then-muted' });
     for (const line of code.split('\n')) expect(line).toBe(line.trimEnd());
   });
 });
@@ -249,7 +264,7 @@ Expected: every test fails, `Cannot find module '../src/bench-composition'`.
  */
 import type { AutoplayMode, PlayerProvider } from '@playdeck/core';
 
-export type SkinName = 'none' | 'cinema' | 'course';
+export type SkinName = 'none' | 'theme';
 
 export type BenchPosition = {
   readonly source: PlayerProvider;
@@ -261,11 +276,9 @@ export const buildComposition = ({ source, skin, autoplay }: BenchPosition): str
   const rootProps = [`source={${source}}`];
   if (autoplay !== false) rootProps.push(`autoplay="${autoplay}"`);
 
-  const viewportOpen =
-    skin === 'none' ? '<Player.Viewport>' : `<Player.Viewport className="${skin}">`;
-
-  const inViewport = ['    <Player.Media />'];
-  if (skin !== 'none') inViewport.push('    <Player.Controls />');
+  // The theme is an import a consumer either writes or does not. It is not a
+  // prop, and dressing it as one would misrepresent how the library ships.
+  const preamble = skin === 'theme' ? ["import '@playdeck/react/theme.css';", ''] : [];
 
   // One prop stays on the opening line; two or more take a line each, which is
   // how a reader would have written it and how prettier would leave it.
@@ -274,9 +287,15 @@ export const buildComposition = ({ source, skin, autoplay }: BenchPosition): str
       ? `<Player.Root ${rootProps[0]}>`
       : ['<Player.Root', ...rootProps.map((prop) => `  ${prop}`), '>'].join('\n');
 
-  return [open, `  ${viewportOpen}`, ...inViewport, '  </Player.Viewport>', '</Player.Root>'].join(
-    '\n'
-  );
+  return [
+    ...preamble,
+    open,
+    '  <Player.Viewport>',
+    '    <Player.Media />',
+    '    <Player.Controls />',
+    '  </Player.Viewport>',
+    '</Player.Root>'
+  ].join('\n');
 };
 ```
 
@@ -287,6 +306,10 @@ pnpm vitest run apps/site/test/bench-composition.test.ts
 ```
 
 Expected: 5 passed.
+
+If you changed the shape of the output, change the thesis paragraph's "the same
+six lines drive all five" in the spec to match the real line count, or take the
+number out of the sentence. The spec says so explicitly.
 
 - [ ] **Step 5: Commit**
 
@@ -363,7 +386,8 @@ export const benchSources: readonly BenchSource[] = [
   // The three below wait on an upload. See the spec's "The media each provider
   // plays": one Blender CC BY film goes on this project's own YouTube, Vimeo
   // and Wistia accounts, so all five providers play the identical asset and the
-  // grid compares providers rather than clips. Replace the id and set `ready`.
+  // reason line reports a fact about the provider rather than about its clip.
+  // Replace the id and set `ready`.
   {
     provider: 'youtube',
     label: 'youtube',
@@ -404,131 +428,153 @@ git commit -m "Give the bench two same-origin providers, and a place for the thr
 
 ---
 
-### Task 4: The capability rows
+### Task 4: The words the reason line prints
 
 **Files:**
 - Create: `apps/site/src/bench-capabilities.ts`
+- Test: `apps/site/test/bench-capabilities.test.ts`
+
+The reason line says one thing: which capability the mounted provider refused,
+and why. Both halves need English. `PlayerCapabilities` gives keys like
+`pictureInPicture` and `Availability` gives reasons like `provider-build`, and
+neither is a phrase you put on a marketing page.
 
 - [ ] **Step 1: Write the module**
 
-Ten rows, one per key of `PlayerCapabilities`, in the order the grid prints them.
-Order them so the four that differ most between providers sit at the top, because
-those are the rows that make the grid worth looking at.
-
 ```ts
 /*
- * The rows of the capability grid on `/`, in the order it prints them.
+ * The English the reason line on `/` prints, for both halves of what it says.
  *
- * Every key of `PlayerCapabilities`, written out rather than derived from the
- * type, so that a capability added to the library fails a reviewer's eye here
- * rather than silently appearing on the landing page in whatever order an
- * object literal happened to be in. The four that differ most across providers
- * come first: they are the reason the grid is a grid.
+ * Every key of `PlayerCapabilities` and every `Availability` reason, written out
+ * rather than derived, so a capability or a reason added to the library fails
+ * the test below instead of reaching the landing page as a raw identifier.
+ *
+ * The wording is deliberately plain and deliberately not a euphemism. The point
+ * of the line is that the library admits a refusal, so "no picture in picture"
+ * is right and "picture in picture unavailable" is the same sentence wearing a
+ * tie.
  */
-export const benchCapabilities = [
-  { key: 'selectQuality', label: 'quality' },
-  { key: 'pictureInPicture', label: 'picture in picture' },
-  { key: 'selectTextTrack', label: 'text tracks' },
-  { key: 'setPlaybackRate', label: 'playback rate' },
-  { key: 'chapters', label: 'chapters' },
-  { key: 'airPlay', label: 'airplay' },
-  { key: 'fullscreen', label: 'fullscreen' },
-  { key: 'seek', label: 'seek' },
-  { key: 'setVolume', label: 'volume' },
-  { key: 'customControls', label: 'custom controls' }
-] as const;
+export const capabilityWords = {
+  seek: 'seeking',
+  setVolume: 'volume control',
+  setPlaybackRate: 'playback speed',
+  selectQuality: 'quality selection',
+  selectTextTrack: 'text track selection',
+  chapters: 'chapters',
+  fullscreen: 'fullscreen',
+  pictureInPicture: 'picture in picture',
+  airPlay: 'airplay',
+  customControls: 'custom controls'
+} as const;
 
-export type BenchCapabilityKey = (typeof benchCapabilities)[number]['key'];
+export const reasonWords = {
+  browser: 'this browser cannot do it',
+  provider: 'the provider cannot do it',
+  'provider-plan': "the plan behind the video does not include it",
+  'provider-build': 'the build of the third-party runtime does not carry it',
+  source: 'this video does not offer it',
+  policy: 'a browser policy refused it'
+} as const;
 ```
 
-- [ ] **Step 2: Prove the list is complete**
+Only the six `unavailable` reasons get words. The two `unknown` reasons,
+`not-ready` and `provider-check`, never reach the line: the line appears only
+when a provider has answered and the answer was no. An unknown is not a refusal
+and printing it would be the grey placeholder the spec rules out.
 
-Add to `apps/site/test/bench-composition.test.ts`, or a sibling file, a test that
-fails when the library grows a capability this page does not print:
+- [ ] **Step 2: Write the test that catches a library change**
 
 ```ts
-import type { PlayerCapabilities } from '@playdeck/core';
-import { benchCapabilities } from '../src/bench-capabilities';
+import type { Availability, PlayerCapabilities } from '@playdeck/core';
+import { capabilityWords, reasonWords } from '../src/bench-capabilities';
 
-it('prints every capability the library publishes', () => {
-  // Fails to compile if a key is missing or misspelled, and fails at runtime if
-  // one is added to the library and not to the grid.
-  const printed = new Set<keyof PlayerCapabilities>(
-    benchCapabilities.map((row) => row.key)
-  );
+it('has words for every capability the library publishes', () => {
   const expected: (keyof PlayerCapabilities)[] = [
     'seek', 'setVolume', 'setPlaybackRate', 'selectQuality', 'selectTextTrack',
     'chapters', 'fullscreen', 'pictureInPicture', 'airPlay', 'customControls'
   ];
-  expect([...printed].sort()).toEqual([...expected].sort());
+  expect(Object.keys(capabilityWords).sort()).toEqual([...expected].sort());
+});
+
+it('has words for every reason a refusal can carry', () => {
+  const expected = [
+    'browser', 'provider', 'provider-plan', 'provider-build', 'source', 'policy'
+  ];
+  expect(Object.keys(reasonWords).sort()).toEqual(expected.sort());
 });
 ```
 
-- [ ] **Step 3: Run it, then commit**
+Write both lists out by hand rather than deriving them from the module under
+test. A list derived from the thing it checks agrees with it whatever either of
+them says, which is the reasoning `e2e/site-ledger.spec.ts` already gives for
+writing its own row names out.
+
+- [ ] **Step 3: Run and commit**
 
 ```bash
 pnpm vitest run apps/site/test/
-git add apps/site/src/bench-capabilities.ts apps/site/test/
-git commit -m "Name the grid's ten rows, and fail when the library grows an eleventh"
+git add apps/site/src/bench-capabilities.ts apps/site/test/bench-capabilities.test.ts
+git commit -m "Give the reason line its English, and fail when the library adds a word it lacks"
 ```
 
 ---
 
-### Task 5: The grid, the switches, and the panel
+### Task 5: The switches, the reason line, and the panel
 
 Three presentational components. Each takes what it renders as props and holds no
-player state of its own, so the island below is the only thing that reads a
+player state of its own, so the island in Task 6 is the only thing that reads a
 snapshot.
 
 **Files:**
-- Create: `apps/site/src/components/CapabilityGrid.tsx`
 - Create: `apps/site/src/components/BenchSwitches.tsx`
+- Create: `apps/site/src/components/ReasonLine.tsx`
 - Create: `apps/site/src/components/CompositionPanel.tsx`
 
-- [ ] **Step 1: Write `CapabilityGrid.tsx`**
+- [ ] **Step 1: Write `BenchSwitches.tsx`**
+
+Three groups. Each is a `<fieldset>` with a `<legend>`, holding buttons with
+`aria-pressed`, one pressed per group.
 
 Contract the e2e specs depend on. Do not rename any of these:
 
-- The grid root carries `data-bench-grid`.
-- Each cell carries `data-status` with `unknown`, `available` or `unavailable`,
-  which is also what selects its colour. This is the attribute
-  `site-ledger.spec.ts` already used, kept deliberately.
-- Each cell carries `data-provider` and `data-capability`.
-- A column that has answered carries `data-live` on its cells. The resolution
-  animation keys off this and nothing else.
-- Every cell contains its status word as text, because colour alone is not a
-  status. Visually hidden is fine; absent is not.
-- The reason line under the grid carries `data-bench-reason`.
+- Group root carries `data-bench-switch="source" | "skin" | "autoplay"`.
+- Each button carries `data-value` with the position it selects.
 
-At rest, every cell is `unknown` and the reason line reads:
+Source renders `readySources` only, so a provider whose clip does not exist yet
+gets no button rather than a broken one. Skin is `none` and `theme`. Autoplay is
+`off` and `audible-then-muted`.
+
+The legends are `SOURCE`, `SKIN` and `AUTOPLAY`, set in mono at `--text-fn`,
+which is 11px and the floor. They are tracked caps and they sit below the `h1` on
+controls, so they are labels rather than the eyebrow chip the audit bans. Do not
+set them below the floor, and do not move one above the `h1`.
+
+- [ ] **Step 2: Write `ReasonLine.tsx`**
+
+One line of functional text under the switches, and the smallest component in
+this task. Read the spec's "One line of what the provider refused" before you
+write it; it has three rules and all three are easy to break by being helpful.
+
+- Root carries `data-bench-reason` and `data-live`.
+- **It renders `null` when there is nothing to report.** No wrapper, no empty
+  element, no reserved height. A layout that holds space for it is the grey
+  placeholder the spec rules out.
+- It reports only the mounted provider, and only capabilities whose status is
+  `unavailable`. An `unknown` is not a refusal.
+- Its words come from `capabilityWords` and `reasonWords` in
+  `bench-capabilities.ts`. It never writes English of its own and never reads
+  `src/provider-asymmetry.mjs`.
+
+Shape, with the provider name and the two phrases filled in:
 
 ```
-every answer, unknown
-└ nothing has been asked of a provider
+youtube · no picture in picture
+└ the provider's iframe cannot be promoted
 ```
 
-Selecting a cell prints that cell's own reason, using the terms `Availability`
-publishes and nothing invented: `browser`, `provider`, `provider-plan`,
-`provider-build`, `source`, `policy`, `not-ready`, `provider-check`.
-
-**The grid never reads `src/provider-asymmetry.mjs`.** A column is grey until that
-provider has attached and answered. If you find yourself filling a cell from a
-document, stop: that is the defect the spec is written to prevent.
-
-- [ ] **Step 2: Write `BenchSwitches.tsx`**
-
-Three groups. Each is a `<fieldset>` with a `<legend>` at `--text-fn`, holding
-buttons with `aria-pressed`, one pressed per group.
-
-- Group root: `data-bench-switch="source" | "skin" | "autoplay"`.
-- Each button: `data-value` with the position it selects.
-- Source renders `readySources` only. A provider whose clip does not exist yet
-  gets no button rather than a broken one.
-
-The legends are `SOURCE`, `SKIN` and `AUTOPLAY`, set in mono at `--text-fn`, which
-is 11px and the floor. They are tracked caps and they sit below the `h1` on
-controls, so they are labels and not the eyebrow chip the audit bans. Do not set
-them below the floor, and do not move one above the `h1`.
+If the mounted provider refuses more than one capability, print the first in
+`capabilityWords` order and no others. One line means one line. A list is the
+table this design deleted, growing back.
 
 - [ ] **Step 3: Write `CompositionPanel.tsx`**
 
@@ -542,16 +588,16 @@ leaves both themes as custom properties instead of writing one into a `color:`
 declaration a stylesheet could then only reach past with `!important`.
 
 If client-side Shiki costs more than the panel is worth, the fallback is a plain
-`<pre>` in `--color-ink` with no highlighting, and `DESIGN.md`'s code section gets
-a sentence saying `/` no longer highlights. Measure before choosing. Do not ship
-a second highlighter.
+`<pre>` in `--color-ink` with no highlighting, and `DESIGN.md`'s code section
+gets a sentence saying `/` no longer highlights. Measure before choosing. Do not
+ship a second highlighter.
 
 - [ ] **Step 4: Typecheck and commit**
 
 ```bash
 pnpm typecheck && pnpm lint
-git add apps/site/src/components/CapabilityGrid.tsx apps/site/src/components/BenchSwitches.tsx apps/site/src/components/CompositionPanel.tsx
-git commit -m "Draw the bench's three panels"
+git add apps/site/src/components/BenchSwitches.tsx apps/site/src/components/ReasonLine.tsx apps/site/src/components/CompositionPanel.tsx
+git commit -m "Draw the bench's switches, its reason line and its composition panel"
 ```
 
 ---
@@ -566,10 +612,10 @@ git commit -m "Draw the bench's three panels"
 
 - [ ] **Step 1: Write `BenchIsland.tsx`**
 
-One `Player.Root` above the player, the grid and the panel. `Player.Root` renders
-no DOM, so a single root can stand above all three and the grid reads the same
-controller the player is driven by. That is what makes it a report. Do not give
-the grid a controller of its own.
+One `Player.Root` above the player, the switches, the reason line and the panel.
+`Player.Root` renders no DOM, so a single root can stand above all of them and
+the reason line reads the same controller the player is driven by. That is what
+makes it a report rather than a caption. Do not give it a controller of its own.
 
 State the island holds, and nothing more:
 
@@ -579,10 +625,9 @@ const [position, setPosition] = useState<BenchPosition>({
   skin: 'none',
   autoplay: false
 });
-// What each provider has answered, accumulated. A column stays grey until its
-// provider has attached, and stays filled once it has, so the grid fills in as
-// a reader explores rather than resetting on every switch.
-const [answered, setAnswered] = useState<Partial<Record<PlayerProvider, PlayerCapabilities>>>({});
+// No accumulated state. The reason line speaks only about the provider that is
+// mounted right now, so it is derived from the live snapshot and nothing is
+// remembered about a provider the reader has moved on from.
 ```
 
 Three things to get right:
@@ -644,7 +689,8 @@ pgrep -af "astro.mjs dev" || pnpm --filter @playdeck/site dev
 A dev server leaks on this machine. Check before starting one. There may already
 be one on `:4321` with `--host`, running for the maintainer.
 
-Press each switch. The grid should be entirely grey until you do.
+Press each switch. At rest there should be no reason line in the DOM at all,
+and the layout should not move when one appears.
 
 - [ ] **Step 6: Commit**
 
@@ -717,53 +763,51 @@ git commit -m "Record that / contacts nobody until a reader presses a provider"
 
 ---
 
-### Task 8: Prove the grid reports rather than illustrates
+### Task 8: Prove the reason line reports rather than illustrates
 
 **Files:**
 - Create: `e2e/site-bench.spec.ts`
 - Delete: `e2e/site-ledger.spec.ts`
 
-The file you are deleting makes exactly the right argument and you should read it
-before writing this one. Its point: a panel of plausible rows looks identical to a
-reader and to a screenshot, so what a test pins is the one thing a static panel
-could not do, which is change.
+Read `e2e/site-ledger.spec.ts` before you write this, then delete it. It makes
+exactly the right argument and the argument outlives the panel it was written
+for: a readout of plausible-looking claims looks identical to a reader and to a
+screenshot, so what a test pins is the one thing a static readout could not do,
+which is change.
 
 - [ ] **Step 1: Write the tests**
 
 ```ts
-test('every cell opens unknown', async ({ page }) => {
+test('nothing holds space for a reason before one exists', async ({ page }) => {
   await page.goto('http://127.0.0.1:4322/');
-  const cells = page.locator('[data-bench-grid] [data-status]');
-  await expect(cells).toHaveCount(50);
-  await expect(page.locator('[data-bench-grid] [data-status="unknown"]')).toHaveCount(50);
-});
-
-test('one column resolves, and no other column moves', async ({ page }) => {
-  await page.goto('http://127.0.0.1:4322/');
-  await activate(page);
-  await expect(page.locator('[data-provider="native"][data-live]').first()).toBeVisible();
-  await expect(page.locator('[data-provider="native"][data-status="available"]').first()).toBeVisible();
-  // Nothing was asked of the other four.
-  await expect(page.locator('[data-live]:not([data-provider="native"])')).toHaveCount(0);
+  await expect(page.locator('[data-bench-reason]')).toHaveCount(0);
 });
 
 test('the composition tracks the switches', async ({ page }) => {
   await page.goto('http://127.0.0.1:4322/');
   const panel = page.locator('[data-bench-composition]');
   await expect(panel).not.toContainText('autoplay');
+  await expect(panel).not.toContainText('theme.css');
 
   await page.locator('[data-bench-switch="autoplay"] [data-value="audible-then-muted"]').click();
   await expect(panel).toContainText('autoplay="audible-then-muted"');
 
-  await page.locator('[data-bench-switch="skin"] [data-value="cinema"]').click();
-  await expect(panel).toContainText('className="cinema"');
-  await expect(panel).toContainText('<Player.Controls />');
+  await page.locator('[data-bench-switch="skin"] [data-value="theme"]').click();
+  await expect(panel).toContainText("import '@playdeck/react/theme.css';");
+});
+
+test('a refusal reaches the line in the library\'s own words', async ({ page }) => {
+  test.skip(hosted.length === 0, 'Needs a hosted provider with a clip. See bench-sources.ts.');
+  // Press a hosted provider, wait for data-live, assert the line names that
+  // provider and carries one of reasonWords' phrases. Never assert a specific
+  // capability: which one a provider refuses is the provider's business and
+  // pinning it here would make this test a second copy of the library's answer.
 });
 ```
 
-Count 50 rather than a computed number. A count derived from the page's own source
-would agree with the page whatever either of them said, which is the reasoning
-`site-ledger.spec.ts` already gives for writing its five row names out by hand.
+The third test is skipped while every hosted provider is `ready: false`, with a
+message naming the file to edit, so it starts running on its own the day the ids
+land rather than being remembered.
 
 - [ ] **Step 2: Run, then delete the file this replaces**
 
@@ -776,7 +820,7 @@ git rm e2e/site-ledger.spec.ts
 
 ```bash
 git add e2e/site-bench.spec.ts
-git commit -m "Pin the grid to what a static panel could not do"
+git commit -m "Pin the reason line to what a static readout could not do"
 ```
 
 ---
@@ -827,9 +871,17 @@ git commit -m "Rewrite the landing spec for the bench"
 - [ ] **Step 1: Update "Where things live"**
 
 Remove `HeroPlayer.astro` and `HeroPlayerIsland.tsx`. Add `Bench.astro`,
-`BenchIsland.tsx`, `BenchSwitches.tsx`, `CapabilityGrid.tsx`,
+`BenchIsland.tsx`, `BenchSwitches.tsx`, `ReasonLine.tsx`,
 `CompositionPanel.tsx`, `bench-sources.ts`, `bench-capabilities.ts` and
 `bench-composition.ts`, each with one line saying what it is.
+
+**Correct the second animation.** Task 1 recorded it as "a grid column
+resolving", which was true of a design that no longer exists. It is the reason
+line arriving: `opacity` and a `--space-1` rise at `--duration-base`, keyed off
+`data-live`, one line rather than a column. Say that there is no sequence and no
+delays, and that the `prefers-reduced-motion` hazard the old ledger resolution
+was written around does not arise, because a single transition between two
+settled states is exactly what the site-wide duration collapse already handles.
 
 - [ ] **Step 2: Fix every other stale sentence**
 
@@ -903,13 +955,11 @@ do not report the suite as broken because of it.
 
 Both were deliberately left for now, and now is when there is a page to look at.
 
-1. **Does `ProviderTruth.astro` still earn its place?** The grid may have made it
-   redundant on `/`. If it is dead, delete it and `e2e/site-provider-truth.spec.ts`
-   in a commit of its own. If it belongs on `/providers`, say so in `DESIGN.md`.
-2. **Is ten rows too many under the video?** The ruling was to build all ten and
-   decide against the rendered page. Cutting to four (`selectQuality`,
-   `pictureInPicture`, `selectTextTrack`, `setPlaybackRate`) is a one-line change
-   to `bench-capabilities.ts` plus the count in `site-bench.spec.ts`.
+1. **Mobile.** Three switch groups and a 16:9 video at 320px. The source switch
+   is five buttons on one line and will not stay there. `site-landing.spec.ts`
+   already fails the page for horizontal overflow at that width, so this is a
+   defect rather than a taste call, and the spec leaves the layout to whoever
+   sees it first.
 
 - [ ] **Step 4: Show the maintainer before pushing**
 
