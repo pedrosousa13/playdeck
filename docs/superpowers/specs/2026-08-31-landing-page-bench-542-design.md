@@ -209,10 +209,10 @@ They carry the `client:only` reasoning and the player theme, and both survive.
 ## Amendments to DESIGN.md
 
 Each of these is a deliberate edit with its reasoning, which is what that
-document asks for. **They need approval before implementation starts.** If any is
-rejected, the fallback is named.
+document asks for. **The maintainer approved all four on 2026-08-31.** The
+fallbacks stay recorded so a later reader can see what was weighed.
 
-### 1. The display rung moves off the h1
+### 1. The display rung moves off the h1 (approved)
 
 `DESIGN.md` says `--text-4xl` is "the display rung above `h1`, for a page whose
 title is a thesis rather than a document's name". On this page the h1 is
@@ -227,7 +227,7 @@ _Fallback if rejected:_ h1 keeps `--text-4xl` and the thesis sets at
 `--text-2xl` under it. This costs the page its largest type on a word that
 argues nothing, and I think it is the worse page, but it needs no amendment.
 
-### 2. The site may contact a third party after a reader asks
+### 2. The site may contact a third party after a reader asks (approved)
 
 `DESIGN.md` currently says "The served page makes no third-party request of any
 kind." That was written about fonts and it is true today. The `source` switch
@@ -242,7 +242,7 @@ served from this origin. The page loses the strongest half of the grid, because
 the four capabilities that differ most across providers are the ones only YouTube,
 Vimeo and Wistia can demonstrate.
 
-### 3. `--elevation-instrument` moves to the player
+### 3. `--elevation-instrument` moves to the player (approved)
 
 The allowlist in `DESIGN.md` gives the instrument elevation to "the capability
 ledger on `/` and to nothing else". That ledger is gone. The one panel this page
@@ -252,7 +252,7 @@ take a step on the surface ladder and a hairline like everything else.
 This is an edit to a named allowlist, which is how that document says the list is
 meant to change.
 
-### 4. The animation count is restated
+### 4. The animation count is restated (approved)
 
 `DESIGN.md` says this app writes three animations and names them. Two of the
 three (the `.truth-card` entry motion, the ledger resolution) belong to elements
@@ -293,19 +293,46 @@ reopened the question.
 - **Full suite, chromium and firefox.** `webkit` cannot launch on this machine
   and CI has it.
 
+## The media each provider plays
+
+`examples/` points YouTube at `dQw4w9WgXcQ`, which is a joke ID and not ours to
+put on a marketing page. Vimeo `76979871` and Wistia `oifkgmxnkb` are both other
+people's demo assets. All three need replacing.
+
+The maintainer asked for openly licensed candidates. Searching for them turned up
+a split, and it is worth recording because it decides the shape of the answer.
+
+**YouTube and Vimeo are easy.** The Blender Foundation publishes its open movies
+on its own YouTube channel and on Vimeo, and every one of them is CC BY. Sintel,
+Big Buck Bunny, Tears of Steel and the rest are all available, all attributable
+to a named rights holder, and all safe to embed with a credit.
+
+**Wistia has no equivalent.** It hosts business video for paying customers. There
+is no public catalogue of openly licensed media on it, and the demo ID currently
+in `examples/` is Wistia's own product footage, embedded with no licence grant to
+us. No amount of searching fixes this, because the content does not exist.
+
+So the honest options for Wistia are to upload a clip we control to a Wistia
+account of our own, or to leave Wistia off the source switch while it stays a
+supported provider everywhere else. **This is open and needs a ruling.**
+
+Uploading one Blender CC BY clip to all three platforms would settle YouTube and
+Vimeo too, and it has a second benefit the licensing question hides: every
+provider would be playing the identical asset, which makes the grid a fair
+comparison instead of five different videos answering five different questions.
+
+Whatever is chosen, CC BY asks for attribution wherever the media plays, so the
+credit belongs on the page beside the player rather than in a footer.
+
 ## Open questions
 
-1. **Which media each provider points at.** `examples/` uses `dQw4w9WgXcQ` for
-   YouTube, which is a joke ID and not ours to embed on a marketing page. Vimeo
-   `76979871` and Wistia `oifkgmxnkb` are both public demo assets. Each of the
-   three needs a clip we are entitled to embed, and whatever CC BY attribution
-   the licence asks for has to appear where the media plays.
-2. **Ten rows or fewer.** Ten by five is fifty cells and a striking figure, but
-   it may be too much under a video. Four rows (`selectQuality`,
-   `pictureInPicture`, `selectTextTrack`, `setPlaybackRate`) are the ones that
-   differ most across providers. Decide against the built page, not on paper.
-3. **Whether `ProviderTruth.astro` survives.** The grid may make it redundant on
+1. **Wistia's clip.** See above. Upload our own, or drop Wistia from the switch.
+2. **Whether `ProviderTruth.astro` survives.** The grid may make it redundant on
    `/`, but it may still earn its place on `/providers`.
-4. **Mobile.** Three switch groups, a 16:9 video and a fifty-cell grid at 320px
+3. **Mobile.** Three switch groups, a 16:9 video and a fifty-cell grid at 320px
    needs a layout of its own. The grid probably becomes one column, the mounted
    provider's.
+
+Ten rows against four was asked and ruled on: **build all ten and decide against
+the rendered page.** Cutting rows later is cheap and deciding on paper is
+guessing.
