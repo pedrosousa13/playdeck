@@ -159,8 +159,7 @@
   /* The two steps above a panel. `--color-raised` is the rung above
    * `--color-surface` — a panel raised off whatever it sits on, which is a
    * surface where it is a row or a card picked out of one, and the field where
-   * it is a readout laid straight on the page. `/`'s `.readout` is the second
-   * of those and is the rung's first consumer; `DESIGN.md`'s palette section
+   * it is a readout laid straight on the page. `DESIGN.md`'s palette section
    * has the measurement for both grounds. `--color-overlay` is a
    * surface over the page rather than in it: a dialog, a popover. Both are
    * surface COLOUR, which is the point: rule 4 already has two elevations and a
@@ -204,14 +203,8 @@
    * rather than per theme block, because there is nothing to switch. */
   --stage-surface: var(--dark-surface);
   --stage-sunken: var(--dark-sunken);
-  --stage-ink-muted: var(--dark-ink-muted);
-  --stage-ink-subtle: var(--dark-ink-subtle);
-  --stage-line: var(--dark-line);
   --stage-line-strong: var(--dark-line-strong);
   --stage-accent: var(--dark-blue);
-  --stage-available: var(--dark-green);
-  --stage-unknown: var(--dark-amber);
-  --stage-unavailable: var(--dark-red);
 
   /* ---- type ---------------------------------------------------------------
    * Two families from one superfamily. Plex Sans carries prose; Plex Mono
@@ -254,11 +247,6 @@
    * rung under it, so this one is 2x the `h1` default and the spacing of the
    * scale stops at `--text-3xl`. */
   --text-4xl: 5.5rem; /* 88px */
-  /* `/` only (#542 phase 2, "an incredible landing page" — the 88px ceiling
-   * DESIGN.md put on every other page is lifted here by the maintainer's own
-   * word). The wordmark's actual size is a `clamp()` in `index.astro`, not
-   * this token alone — this is its upper bound. */
-  --text-5xl: 11rem; /* 176px */
 
   --leading-tight: 1.15;
   --leading-snug: 1.35;
