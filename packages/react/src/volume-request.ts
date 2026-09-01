@@ -35,8 +35,7 @@ import {
 // Bounded on both sides. It is strictly below the 0.05 an arrow press moves
 // (`controls.tsx`), because a wider one would read the volume from *before* a
 // single press as an answer to it and revert the thumb as soon as the command
-// settled — the same reasoning `SEEK_ECHO_TOLERANCE_SECONDS` is written
-// against. And it is above the coarsest quantisation a provider imposes:
+// settled. And it is above the coarsest quantisation a provider imposes:
 // YouTube's IFrame API takes volume as an integer 0-100, so it rounds to 0.01,
 // and a tolerance below that would leave a rounded echo failing to answer the
 // request that caused it.
@@ -51,6 +50,14 @@ import {
 // reads as already-arrived and reverts the thumb once the command settles.
 // Deriving the tolerance from the effective step would cost more machinery than
 // a fine-grained volume step is worth.
+//
+// Seek used to make that same trade and stopped (#383): `seekEchoTolerance` in
+// `transport-controls.tsx` is now half the effective step, because seek's step
+// is itself derived from the window, and a constant stated against a step that
+// moves is a bound that stops holding. Volume's step does not move — the
+// default is 0.05 whatever the source — so a constant here still states a bound
+// that holds, and the residual above stays a declined trade rather than an
+// unfixed one. The two tolerances are deliberately not the same shape any more.
 const VOLUME_ECHO_TOLERANCE = 0.02;
 
 export type VolumeRequest = {
