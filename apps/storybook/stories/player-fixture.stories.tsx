@@ -473,10 +473,10 @@ export const NativeMp4: Story = {
   )
 };
 
-// The ten-second clip rather than the one-second tracer, because a start offset
-// needs a source longer than the offset to say anything at all: at one second
-// every offset worth asking for is past the end of the media, which is the
-// refusal case and not the applying case (#465).
+// The ten-second clip rather than the one-second tracer, because #465's five
+// second offset needs a source that reaches it. An offset can apply on the
+// tracer -- #466's spec applies 0.9 there -- but only in the last tenth of the
+// clip, which leaves the applying case no room to be interesting (#465).
 export const NativeMp4StartTime: Story = {
   args: { source: 'long', startTime: 5 }
 };
