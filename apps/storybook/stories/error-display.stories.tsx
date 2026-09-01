@@ -87,6 +87,12 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * A non-fatal `network` error with `recoverable: true`, so the default surface
+ * offers its retry button. The overlay is a `role="alert"`, which announces
+ * itself the moment it appears — the failure has already happened, so there is
+ * nothing to wait for.
+ */
 export const Retryable: Story = {
   parameters: { player: { state: errorState(network) } },
   play: async ({ canvas, userEvent }) => {
@@ -101,6 +107,13 @@ export const Retryable: Story = {
   }
 };
 
+/**
+ * A fatal `source` error. The retry action is absent from the DOM entirely,
+ * not rendered and disabled: a visible control that cannot work invites the
+ * press it will refuse, and a screen reader has no reason to announce a button
+ * nothing can do anything with. `data-state` carries the category, so a
+ * consumer can still style source failures differently from network ones.
+ */
 export const NotRecoverable: Story = {
   parameters: { player: { state: errorState(unavailable) } },
   play: async ({ canvas }) => {
@@ -112,6 +125,14 @@ export const NotRecoverable: Story = {
   }
 };
 
+/**
+ * The render-prop child from the **Custom rendering** snippet, over the same
+ * recoverable error as `Retryable`. The default surface is replaced entirely,
+ * but the wrapper — `role="alert"`, the part and state attributes — is still
+ * the primitive's, so the announcement and the styling hooks survive a full
+ * visual rewrite. `retry` arrives as `null` when the error is not recoverable,
+ * which is what makes the `retry && …` guard the whole of the capability rule.
+ */
 export const CustomRendering: Story = {
   parameters: { player: { state: errorState(network) } },
   render: () => (

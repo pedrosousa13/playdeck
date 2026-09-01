@@ -1,22 +1,8 @@
 import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
-import type { ReactNode } from 'react';
 import { assetUrl } from './asset-url';
-
-const Frame = ({ children }: { readonly children: ReactNode }) => (
-  <Player.Viewport style={{ width: 480, height: 270, background: '#0b0e13' }}>
-    {children}
-  </Player.Viewport>
-);
-
-const image = (root: HTMLElement): HTMLElement => {
-  const el = root.querySelector<HTMLElement>(
-    '[data-playdeck-part="poster-image"]'
-  );
-  if (!el) throw new Error('Expected a poster image in the story.');
-  return el;
-};
+import { Frame, posterImage } from './support';
 
 const meta = {
   title: 'Player/PosterImage',
@@ -50,7 +36,10 @@ export const Idle: Story = {
     </Frame>
   ),
   play: async ({ canvasElement }) => {
-    await expect(image(canvasElement)).toHaveAttribute('data-state', 'idle');
+    await expect(posterImage(canvasElement)).toHaveAttribute(
+      'data-state',
+      'idle'
+    );
   }
 };
 
@@ -68,7 +57,10 @@ export const Loading: Story = {
     </Frame>
   ),
   play: async ({ canvasElement }) => {
-    await expect(image(canvasElement)).toHaveAttribute('data-state', 'loading');
+    await expect(posterImage(canvasElement)).toHaveAttribute(
+      'data-state',
+      'loading'
+    );
   }
 };
 
@@ -88,7 +80,7 @@ export const Loaded: Story = {
   ),
   play: async ({ canvasElement }) => {
     await waitFor(() =>
-      expect(image(canvasElement)).toHaveAttribute('data-state', 'loaded')
+      expect(posterImage(canvasElement)).toHaveAttribute('data-state', 'loaded')
     );
   }
 };
@@ -110,7 +102,7 @@ export const ErrorState: Story = {
   ),
   play: async ({ canvasElement }) => {
     await waitFor(() =>
-      expect(image(canvasElement)).toHaveAttribute('data-state', 'error')
+      expect(posterImage(canvasElement)).toHaveAttribute('data-state', 'error')
     );
   }
 };

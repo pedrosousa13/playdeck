@@ -71,6 +71,11 @@ const viewportStyle: CSSProperties = {
   position: 'relative'
 };
 
+/**
+ * The default rendering, with one active cue. This is the shape everything
+ * below varies: a `captions` overlay in `data-state="custom"` holding one
+ * `caption-cue`, which holds one `caption-line`.
+ */
 export const OneLine: Story = {
   parameters: captionsReady([cue('Hello, this is a caption.')]),
   render: () => (
@@ -88,6 +93,13 @@ export const OneLine: Story = {
   }
 };
 
+/**
+ * One cue carrying an author-intended line break. The `\n` becomes two
+ * `caption-line` elements rather than a `<br>`, so the break is structural and
+ * a stylesheet can address a line. Both still sit inside the one `caption-cue`
+ * box that carries the background, so a two-line cue reads as one plate rather
+ * than two stacked ones.
+ */
 export const MultiLine: Story = {
   parameters: captionsReady([cue('Line one\nLine two')]),
   render: () => (
@@ -109,6 +121,13 @@ export const MultiLine: Story = {
 const longText =
   'This is a deliberately long caption line, long enough that it must wrap across several visual rows inside the fixed-width video viewport instead of overflowing it.';
 
+/**
+ * A cue with no author line break, long enough that the engine has to wrap it.
+ * The failure this guards is the cue box growing past the viewport instead of
+ * wrapping inside it, which is what happens to an overlay that forgets to bound
+ * its width — so the play function checks both that the text occupies more than
+ * one visual row and that the box still fits.
+ */
 export const LongText: Story = {
   parameters: captionsReady([cue(longText)]),
   render: () => (
@@ -146,6 +165,13 @@ export const LongText: Story = {
   }
 };
 
+/**
+ * The **Theming** custom properties in use — the accessibility preset a
+ * consumer builds a "high contrast captions" setting out of. Set as inline
+ * `style` on `Player.Captions` here, but they cascade, so an ancestor works
+ * too. Nothing about the cue structure changes: this is four values, not a
+ * variant.
+ */
 export const HighContrast: Story = {
   parameters: captionsReady([cue('High-contrast captions')]),
   render: () => (
@@ -174,6 +200,17 @@ export const HighContrast: Story = {
   }
 };
 
+/**
+ * The overlay's `env(safe-area-inset-*)` padding, which keeps cues clear of a
+ * home indicator or a notch.
+ *
+ * The canvas cannot show it working. `env()` resolves to its fallback unless
+ * the engine reports a real inset, and no desktop browser does, so the striped
+ * bar below the viewport is a picture of the device chrome rather than a
+ * stand-in for it. What is checked here is structural — that all three insets
+ * are reserved. That a real inset moves the cue box is asserted in
+ * `e2e/captions.spec.ts`, which sets one through Chromium's CDP.
+ */
 export const SafeArea: Story = {
   parameters: captionsReady([cue('Above the home indicator')]),
   render: () => (
@@ -217,6 +254,13 @@ export const SafeArea: Story = {
   }
 };
 
+/**
+ * Track selection rather than cue rendering: `Player.CaptionsButton` opening
+ * `Player.CaptionsMenu`. The menu lists an `Off` entry alongside the tracks in
+ * `state.textTracks` and marks the selected one `aria-checked`, so turning
+ * captions off is a menu choice and not a separate control. Staged with two
+ * tracks because a one-track menu cannot show the radio group doing its job.
+ */
 export const Menu: Story = {
   parameters: ready(
     { selectTextTrack: available },

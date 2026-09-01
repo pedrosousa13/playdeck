@@ -60,6 +60,11 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * The resting state, and the one a `loading="interaction"` player sits in until
+ * someone presses: nothing has been requested and no provider has been loaded.
+ * One of the two states a press acts on — `error` is the other.
+ */
 export const Dormant: Story = {
   parameters: overlayState({ activation: 'dormant', lifecycle: 'idle' }),
   play: async ({ canvas }) => {
@@ -70,6 +75,13 @@ export const Dormant: Story = {
   }
 };
 
+/**
+ * Activation is already committed and the provider load is about to begin. The
+ * button stays mounted and pressable, but a further press does nothing — which
+ * is why the bundled example recedes it rather than leaving it looking like the
+ * live affordance `dormant` is. Indistinguishable from `Dormant` on the canvas;
+ * the difference is the `data-state` your CSS selects on.
+ */
 export const Eligible: Story = {
   parameters: overlayState({ activation: 'eligible', lifecycle: 'idle' }),
   play: async ({ canvas }) => {
@@ -80,6 +92,12 @@ export const Eligible: Story = {
   }
 };
 
+/**
+ * The provider SDK is being fetched. This is the one non-error state where the
+ * button is `aria-disabled`: there is a request in flight and a second press
+ * would have nothing to do. The button stays in the DOM rather than swapping
+ * for a spinner, so focus is not dropped mid-load.
+ */
 export const LoadingProvider: Story = {
   parameters: overlayState({
     activation: 'loading-provider',
@@ -94,6 +112,12 @@ export const LoadingProvider: Story = {
   }
 };
 
+/**
+ * The recoverable half of the **Retryability** rule: a provider load failed for
+ * a reason a second attempt might survive, so `error.recoverable` is `true` and
+ * the button becomes the retry affordance — label and default text child both
+ * switch, and the press is accepted.
+ */
 export const ErrorState: Story = {
   name: 'Error',
   parameters: overlayState({
@@ -115,6 +139,13 @@ export const ErrorState: Story = {
   }
 };
 
+/**
+ * The same `error` state with `recoverable: false` — a misconfiguration no
+ * retry can fix. The button keeps the error state's `data-state`, so your CSS
+ * still paints it as failed, but it reverts to the `Play video` label and
+ * refuses the press. `recoverable` is the only flag that differs from the story
+ * above; the error's category has no say in it.
+ */
 export const ErrorNotRecoverable: Story = {
   name: 'Error (not recoverable)',
   parameters: overlayState({

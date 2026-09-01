@@ -57,6 +57,12 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * Paused, the state a ready player rests in before anyone presses. The play
+ * function also asserts the element is a real `<button>` — the accessibility
+ * claim on this page is that nothing here is a styled `<div>`, and this is
+ * where that is checked.
+ */
 export const Paused: Story = {
   parameters: ready({}, { playback: 'paused' }),
   play: async ({ canvas }) => {
@@ -66,6 +72,12 @@ export const Paused: Story = {
   }
 };
 
+/**
+ * Playing. One button rather than separate play and pause controls: the label
+ * flips to `Pause`, `aria-pressed` to `true`, and `data-state` to `playing`, so
+ * a press never moves focus and a screen reader follows the transport without
+ * the control being replaced under it.
+ */
 export const Playing: Story = {
   parameters: ready({}, { playback: 'playing' }),
   play: async ({ canvas }) => {

@@ -41,6 +41,10 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * Playing in the page rather than in a floating window — the state a page
+ * loads in. `data-state="inline"` is the toggle's off position.
+ */
 export const Inline: Story = {
   parameters: ready(
     { pictureInPicture: available },
@@ -54,6 +58,12 @@ export const Inline: Story = {
   }
 };
 
+/**
+ * The video is in the floating window. The button stays in the page and stays
+ * pressable — leaving picture-in-picture is a press of this same control — so
+ * the label flips to `Exit picture-in-picture` and `aria-pressed` to `true`
+ * rather than the control disappearing along with the video.
+ */
 export const Active: Story = {
   parameters: ready(
     { pictureInPicture: available },

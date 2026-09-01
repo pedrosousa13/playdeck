@@ -41,6 +41,11 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * Half volume, unmuted. The range runs `0`–`1` rather than `0`–`100`, matching
+ * the media element's own scale, and `aria-valuetext` translates it to `50%`
+ * so nothing announces `0.5`.
+ */
 export const HalfVolume: Story = {
   parameters: ready({ setVolume: available }, { volume: 0.5, muted: false }),
   play: async ({ canvas }) => {
@@ -51,6 +56,13 @@ export const HalfVolume: Story = {
   }
 };
 
+/**
+ * Muted while the published volume is still `0.7`. The slider shows and
+ * announces `0%`, because that is what the viewer is hearing — but the level
+ * behind it is untouched, which is what lets unmuting restore 0.7 rather than
+ * some default. The two are separate axes; this story is the one place the
+ * difference between them is visible.
+ */
 export const Muted: Story = {
   parameters: ready({ setVolume: available }, { volume: 0.7, muted: true }),
   play: async ({ canvas }) => {

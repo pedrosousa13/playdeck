@@ -62,6 +62,14 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * A `Player.Gestures` layer under a control row whose buttons carry icon
+ * children instead of their default text labels. The pairing is the point: the
+ * gesture layer is invisible and covers the viewport, so the thing worth
+ * showing is that the controls above it still work and still keep their
+ * accessible names — the play function finds the play button by its label
+ * `Play` while its only content is an `<svg>`.
+ */
 export const WithCustomIcons: Story = {
   parameters: ready({
     seek: available,

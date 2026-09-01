@@ -112,6 +112,17 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * The bundled stylesheet as it ships, over a full control row. This is what
+ * `@playdeck/react/theme.css` buys you with no tokens set and no overrides:
+ * sized, spaced, pointer-cursored controls that the headless primitives do not
+ * paint themselves.
+ *
+ * The icon children are the story's, not the theme's. A themed control is a
+ * fixed 44px box, and the primitives' default text labels ("Enter fullscreen")
+ * do not fit one — so a consumer adopting this stylesheet supplies icons, and
+ * the play function checks the row fits to keep that honest.
+ */
 export const Default: Story = {
   play: async ({ canvas }) => {
     const play = await canvas.findByRole('button', { name: 'Play' });
@@ -130,12 +141,6 @@ export const Default: Story = {
   }
 };
 
-// The override contract, which is the whole reason for the layer and :where().
-// If this ever fails, consumers are back to specificity fights.
-//
-// This story owns the layer half of that. The `:where()` half is asserted over
-// the stylesheet text in packages/react/test/theme.test.ts, not here.
-//
 // The consumer rule is rigged to lose on every cascade axis except the layer,
 // so that the layer is the only thing left that can explain the win. It is
 // `:where(.consumer-tint)`, 0-0-0, exactly tying the theme's
@@ -159,6 +164,17 @@ export const Default: Story = {
 // else here carries `.consumer-tint`, so it stays harmless. The play function
 // asserts the ordering rather than assuming it -- it is what silently inverted
 // and left this story proving nothing.
+
+/**
+ * The override contract, which is the whole reason for the layer and
+ * `:where()`: one unlayered rule of your own beats the theme without
+ * `!important`. The canvas shows a control row painted `rgb(1, 2, 3)` by a
+ * consumer class while the theme is fully mounted. If this ever fails,
+ * consumers are back to specificity fights.
+ *
+ * This story owns the layer half of that. The `:where()` half is asserted over
+ * the stylesheet text in `packages/react/test/theme.test.ts`, not here.
+ */
 export const ConsumerCssWins: Story = {
   decorators: [
     (Story: () => ReactElement) => (
@@ -223,8 +239,15 @@ export const ConsumerCssWins: Story = {
   }
 };
 
-// Per-story custom-property overrides, so themed variants are reviewable side
-// by side without touching the stylesheet.
+/**
+ * Retheming by custom property alone: a larger control size and a different
+ * accent, set on an ancestor of the player. No stylesheet edit, no build step,
+ * and no `!important` — the tokens are read where the theme reads them, so a
+ * variant is a few declarations on a wrapper.
+ *
+ * The `3.5rem` set here is the size `viewportStyle`'s width is chosen against;
+ * that choice is explained where the width is written.
+ */
 export const AccentAndSizeTokens: Story = {
   render: () => (
     <div
@@ -255,10 +278,17 @@ export const AccentAndSizeTokens: Story = {
   }
 };
 
-// The 44px minimum touch target is locked, and the primitives enforce it with
-// an inline `min-width`/`min-height` that no stylesheet can undercut. A theme
-// asking for smaller controls is therefore clamped rather than obeyed — the
-// accessibility floor is not themeable away, on purpose.
+/**
+ * The limit of the token above. The 44px minimum touch target is locked, and
+ * the primitives enforce it with an inline `min-width`/`min-height` that no
+ * stylesheet can undercut. A theme asking for 2.25rem controls is therefore
+ * clamped to 44px rather than obeyed — the accessibility floor is not themeable
+ * away, on purpose.
+ *
+ * The other two tokens set here do apply — the play function checks the
+ * squared-off `border-radius` arrives — which is the half that makes the story
+ * readable: tokens are not being ignored, one guarantee is being defended.
+ */
 export const ControlSizeFloorHolds: Story = {
   render: () => (
     <div
@@ -284,21 +314,23 @@ export const ControlSizeFloorHolds: Story = {
   }
 };
 
-// The activation overlay is the one part whose box the theme replaces rather
-// than decorates: the primitive pins `position: absolute; inset: 0` inline so
-// an unstyled overlay is a full-bleed click target, and the theme sizes it down
-// to a 4rem circle. A fixed size against four zero offsets is over-constrained,
-// and the circle landed in the corner (#160) until the primitive started
-// stating `margin: auto` alongside the offsets it over-constrains. The theme
-// itself says nothing about position -- this story is the bundled-theme case of
-// that inline default, and `activation.stories.tsx`'s `SizedByConsumerCss` is
-// the general one. `place-items: center` does not do it -- that centres the
-// icon inside the circle, not the circle inside the viewport.
-//
 // Themed through the meta-level `globals`, and with no example stylesheet in
 // the tree: `Player/ActivationButton`'s own `Styled` story mounts
 // `examples/css-activation.css` unlayered, which beats `@layer playdeck` and would
 // measure that file instead of the theme.
+
+/**
+ * The activation overlay is the one part whose box the theme replaces rather
+ * than decorates: the primitive pins `position: absolute; inset: 0` inline so
+ * an unstyled overlay is a full-bleed click target, and the theme sizes it down
+ * to a 4rem circle. A fixed size against four zero offsets is over-constrained,
+ * and the circle landed in the corner (#160) until the primitive started
+ * stating `margin: auto` alongside the offsets it over-constrains. The theme
+ * itself says nothing about position — this story is the bundled-theme case of
+ * that inline default, and `Player/ActivationButton`'s `SizedByConsumerCss` is
+ * the general one. `place-items: center` does not do it — that centres the icon
+ * inside the circle, not the circle inside the viewport.
+ */
 export const ActivationIsCentred: Story = {
   parameters: {
     player: { state: { activation: 'dormant', lifecycle: 'idle' } }
@@ -338,22 +370,25 @@ export const ActivationIsCentred: Story = {
   }
 };
 
-// The theme leaves with the story that mounted it. Every story above is themed
-// through the meta-level `globals`; this one opts back out, and runs last, so
-// it renders in a document five themed stories have already used. An unthemed
-// control here is the proof that the toolbar decorator's `<style>` was torn
-// down with each of them rather than left behind in the shared preview
-// document -- which is the reason the theme is mounted per story at all.
-//
 // Its strength is entirely that ordering: run alone (`-t`, or opened directly
 // in the UI), or with these exports reordered, it passes without proving
 // anything. It is the only test that exercises real DOM teardown, so it stays;
 // the unconditional cover for the decorator's two branches is
 // `stories/theme.contract.test.ts`, which asserts them structurally.
-//
-// On the generated autodocs page this story renders themed, because every
-// story in a file co-mounts in one document there and the themed ones bring
-// the stylesheet with them. That is a property of autodocs, not a leak.
+
+/**
+ * The theme leaves with the story that mounted it. Every story above is themed
+ * through the meta-level `globals`; this one opts back out, and runs last, so
+ * it renders in a document five themed stories have already used. An unthemed
+ * control here is the proof that the toolbar decorator's `<style>` was torn
+ * down with each of them rather than left behind in the shared preview
+ * document — which is the reason the theme is mounted per story at all.
+ *
+ * **On this docs page it renders themed**, so do not read the canvas as the
+ * headless look. Autodocs co-mounts every story in a file into one document,
+ * and the themed ones bring the stylesheet with them. That is a property of
+ * autodocs, not a leak — open the story on its own to see it unthemed.
+ */
 export const TearsDownWithTheStory: Story = {
   globals: { theme: 'headless' },
   play: async ({ canvas }) => {

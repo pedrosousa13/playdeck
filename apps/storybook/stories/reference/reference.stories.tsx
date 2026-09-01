@@ -21,7 +21,7 @@ const englishTrack: TextTrack = {
   readiness: 'loaded'
 };
 
-// `stories/support.ts`'s `ready()` lives outside this directory, so the same
+// `stories/support.tsx`'s `ready()` lives outside this directory, so the same
 // shape is rebuilt from the core contract here. The property that matters is
 // preserved: the capability base is spread from
 // `createInitialPlayerState().capabilities`, so a new core capability shows up
@@ -35,7 +35,7 @@ const stagedState: ProviderStatePatch = {
   volume: 0.8,
   playbackRate: 1,
   capabilities: {
-    // Spread from the real core contract, exactly as `stories/support.ts`'s
+    // Spread from the real core contract, exactly as `stories/support.tsx`'s
     // `ready()` does, so a new core capability surfaces here automatically
     // instead of silently missing.
     ...createInitialPlayerState().capabilities,

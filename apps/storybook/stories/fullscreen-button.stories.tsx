@@ -41,6 +41,11 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * Not in fullscreen — the state a page loads in. `aria-pressed="false"` and the
+ * `Enter fullscreen` label make the toggle's off position explicit rather than
+ * leaving it to be inferred from an icon.
+ */
 export const Inline: Story = {
   parameters: ready({ fullscreen: available }, { fullscreen: false }),
   play: async ({ canvas }) => {
@@ -52,6 +57,11 @@ export const Inline: Story = {
   }
 };
 
+/**
+ * In fullscreen. One button, not two: the label flips to `Exit fullscreen` and
+ * `aria-pressed` to `true`, so the accessible name always describes what the
+ * next press does while `aria-pressed` describes where you are.
+ */
 export const Active: Story = {
   parameters: ready({ fullscreen: available }, { fullscreen: true }),
   play: async ({ canvas }) => {
@@ -85,6 +95,13 @@ export const CapabilityUnknown: Story = {
   }
 };
 
+/**
+ * The settled negative, as distinct from the not-yet-resolved one above: the
+ * provider has answered and fullscreen is not available here — an iOS inline
+ * `<video>`, or an embed whose host forbids it. The rendered result is the
+ * same nothing, deliberately, so a consumer never has to distinguish "waiting"
+ * from "no" in layout.
+ */
 export const CapabilityUnavailable: Story = {
   parameters: ready({ fullscreen: unavailable }),
   play: async ({ canvas }) => {
