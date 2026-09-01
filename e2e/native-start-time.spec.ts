@@ -94,17 +94,24 @@ test('never drops a start offset in silence on an origin without byte ranges', a
   // WebKit produces the forbidden third state, and this records it rather than
   // hiding it. Measured on this test's first CI run: playhead 0, no notice
   // published, on the initial run and both retries — deterministic, while
-  // chromium and firefox pass. The read-back above is synchronous, and WebKit
-  // answers `currentTime` with the value it was just given and clamps later, so
-  // the check concludes a write landed that never did.
+  // chromium and firefox pass. The provider's read-back
+  // (`provider-native/src/playback.ts`, `playheadAfterMovingTo`) reads
+  // `currentTime` in the same tick as the write, and WebKit answers with the
+  // value it was just given and clamps later, so the check concludes a write
+  // landed that never did.
   //
-  // Fixing it means observing after the engine has had a turn to clamp rather
-  // than in the write's own tick, which is a design decision and cannot be
-  // iterated locally — WebKit does not launch on the development machine. That
-  // work is #567; this stays `fixme` until it lands, so the day WebKit starts
-  // passing, Playwright fails on the unexpected pass and this comment gets
-  // deleted rather than rotting.
-  test.fixme(
+  // Fixing it means re-reading the playhead on a turn the engine has had a
+  // chance to clamp in, which is a design decision and cannot be iterated
+  // locally — WebKit does not launch on the development machine. That work is
+  // #567.
+  //
+  // `fail` and not `fixme`, deliberately: `fixme` aborts the body, so the test
+  // is merely skipped and would stay skipped forever after #567 lands. `fail`
+  // runs it, requires it to fail, and errors with "Expected to fail, but
+  // passed" the day WebKit stops producing this — which is what makes this
+  // comment self-deleting rather than rotting. It costs one real WebKit page
+  // load per CI run, and note `retries` does not apply to an expected failure.
+  test.fail(
     browserName === 'webkit',
     'WebKit answers the written value before clamping, so the read-back misses the drop — #567'
   );

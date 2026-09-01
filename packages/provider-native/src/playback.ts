@@ -41,6 +41,12 @@ export type NativePlaybackOptions = {
    * position where none was. The notice reports the refusal; it does not make
    * the offset apply.
    *
+   * On WebKit that is best-effort rather than a guarantee, measured in CI and
+   * tracked as #567. The refusal is detected by reading the playhead back in
+   * the same tick as the write, and WebKit answers with the value it was just
+   * given and clamps afterwards, so an offset it silently declines publishes no
+   * notice. Chromium and firefox report it correctly.
+   *
    * DECLARED DIVERGENCE FROM THE EMBEDS, since #381. There the start is a
    * *floor* on every reported position: a playhead that arrives below it
    * without a Playdeck command -- an SDK-side seek, the platform's own scrub
@@ -198,11 +204,19 @@ export const createNativePlayback = (
   // range. #465's table, measured on a different rig, has firefox answering
   // `[[0, 5.84]]` on the same arm; the read-back was not measured there.
   //
-  // WebKit could not be run for any of this, and it degrades unsafely rather
-  // than safely. An engine whose setter answers the value written before its
-  // own clamp makes `reached === target`, so a start that did not apply
+  // WebKit could not be run locally for any of this, and it degrades unsafely
+  // rather than safely. An engine whose setter answers the value written before
+  // its own clamp makes `reached === target`, so a start that did not apply
   // publishes no notice -- the silent drop #418 exists to prevent, on the
-  // engine #418 was measured on. The exposure is narrower than all of WebKit:
+  // engine #418 was measured on.
+  //
+  // That is no longer a hypothesis. CI measured it on this branch's first run:
+  // `e2e/native-start-time.spec.ts`'s origin-without-byte-ranges case reported
+  // the playhead at 0 with no notice published, on the initial run and both
+  // retries, while chromium and firefox passed. Tracked as #567; the e2e case
+  // carries `test.fail` on WebKit so the day it starts passing, CI says so.
+  //
+  // The exposure is narrower than all of WebKit:
   // #418's own shape, a `duration` of 0 with an empty `seekable`, clamps the
   // target away from the requested offset and is reported by the
   // `target !== startTime` branch in `applyInitialPosition` without the
@@ -215,6 +229,13 @@ export const createNativePlayback = (
   // `seeked` at all, so the listener would wait for an event that is not coming
   // -- a deferred callback over an element the provider may already have been
   // destroyed underneath.
+  //
+  // That argument stands, and #567 is not a request to reopen it. What WebKit
+  // needs is a *later read of the same property*, not a listener on an event
+  // that may never fire -- re-reading the playhead on a turn the engine has had
+  // a chance to clamp in, which keeps the "abandoned seek still answers"
+  // property this paragraph is defending. The two are easy to conflate because
+  // `seeked` is one way to pick that turn; it is the one way ruled out here.
   const playheadAfterMovingTo = (target: number): number | undefined => {
     // A write asking for the position the element already holds is not a no-op
     // -- see `applyInitialPosition` -- and it is not a refusal either.
