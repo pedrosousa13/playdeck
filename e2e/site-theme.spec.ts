@@ -126,6 +126,34 @@ test('choosing System hands the decision back to the operating system', async ({
   expect(await field(page)).toBe(DARK);
 });
 
+test('a code block follows an explicit choice in both directions', async ({
+  page
+}) => {
+  // Code is the one thing on this site whose colours are not `--color-*` roles:
+  // Shiki writes both themes onto every token as `--shiki-light` and
+  // `--shiki-dark`, and `base.css` picks between them with the same three-state
+  // selector `tokens.css` uses. The prose of that rule is repeated in two files
+  // and was checked by nobody; a reader who forces light on a dark machine and
+  // gets a dark block in a light page is what it exists to prevent.
+  //
+  // The colour read is the block's own foreground — `github-light`'s `#24292e`
+  // and `github-dark`'s `#e1e4e8`, which Shiki puts on the `<pre>` — because it
+  // is the one syntax colour every block has whatever it contains.
+  const LIGHT_CODE = 'rgb(36, 41, 46)';
+  const DARK_CODE = 'rgb(225, 228, 232)';
+  const code = page.locator('.astro-code').first();
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto(`${SITE}/reference/react/`);
+  await expect(code).toHaveCSS('color', DARK_CODE);
+
+  await choose(page, 'Light');
+  await expect(code).toHaveCSS('color', LIGHT_CODE);
+
+  await choose(page, 'Dark');
+  await expect(code).toHaveCSS('color', DARK_CODE);
+});
+
 test('the choice holds on a document page as well as on the argument page', async ({
   page
 }) => {

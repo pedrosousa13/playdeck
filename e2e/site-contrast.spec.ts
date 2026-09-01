@@ -55,6 +55,14 @@ import {
  * them. A gate over them would be a different set of pairs, and is not this
  * ticket's.
  *
+ * The syntax palette is covered too, at the foot of this file, and it is a
+ * different shape: Shiki's colours are not `--color-*` roles and there is no
+ * matrix of them, only eight inks per theme on the one ground a code block ever
+ * has. It is measured here rather than recorded once in prose for the reason
+ * the paragraph at the top of this file gives about the role tokens: a figure
+ * written into a document is true on the day it is taken and gates nothing
+ * afterwards.
+ *
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so this address is written out rather than
  * navigated to as a path.
@@ -188,4 +196,158 @@ test('the tightest pair in each class is still the one DESIGN.md names', async (
   const [boundary, boundaryRatio] = tightest(3);
   expect(boundary).toBe('dark --color-line-strong on --color-overlay');
   expect(boundaryRatio.toFixed(2)).toBe('3.22');
+});
+
+/**
+ * The syntax palette, which is the other set of inks this site paints and the
+ * only one it does not own outright.
+ *
+ * `apps/site/src/shiki.ts` names `github-light` and `github-dark` and repaints
+ * five of their colours, because a code block's ground here is `--color-sunken`
+ * rather than either theme's own background and five entries did not clear 4.5
+ * against it. What is written out below is the result: the eight colours each
+ * theme paints on this site after that repaint. Restated rather than imported
+ * from `src/shiki.ts`, for the reason `e2e/site-theme.spec.ts` restates the two
+ * fields — a check that read its expectations from the module it is checking
+ * would agree with it whatever it said, including after an Astro upgrade moved
+ * a theme underneath the five overrides.
+ *
+ * Lower-case hex, because that is what `paintedHex` below produces and what
+ * `src/shiki.ts` and `DESIGN.md` both speak.
+ */
+const SYNTAX = {
+  light: [
+    '#005cc5',
+    '#032f62',
+    '#176f2c',
+    '#24292e',
+    '#586069',
+    '#6f42c1',
+    '#a04100',
+    '#cb2431'
+  ],
+  dark: [
+    '#79b8ff',
+    '#85e89d',
+    '#959da5',
+    '#9ecbff',
+    '#b392f0',
+    '#e1e4e8',
+    '#f97583',
+    '#ffab70'
+  ]
+} as const;
+
+/**
+ * The two pages measured, and they are two because the site highlights code
+ * through two readers of `src/shiki.ts` that share no code path: `/archetypes`
+ * passes it to Astro's `<Code>` component, and a reference page gets it from
+ * `markdown.shikiConfig` by way of the rendered README. A repaint that reached
+ * one and not the other would leave half the site failing.
+ *
+ * They are also the two pages that exercise the whole palette. Every page of
+ * the built site was checked for which colours its blocks paint, and these are
+ * the only two that reach all eight: `/reference/core/` paints seven, missing
+ * `entity.name.tag`, and the two provider pages and the six other reference
+ * pages paint six, missing `entity.name.tag` and `variable` as well. That is a
+ * fact about what those documents happen to contain rather than a property of
+ * the palette, so the check below asserts the set in both directions rather
+ * than only that what it found passes — a document edit that took the last tag
+ * out of a fence would otherwise leave this measuring seven colours and saying
+ * nothing at all about the eighth.
+ */
+const HIGHLIGHTED = ['/archetypes/', '/reference/react/'] as const;
+
+/** A used `rgb(...)` as the lower-case hex the palette above is written in. */
+const paintedHex = (value: string): string => {
+  const { red, green, blue } = parseUsedColor(value);
+  return `#${[red, green, blue]
+    .map((channel) =>
+      Math.round(channel * 255)
+        .toString(16)
+        .padStart(2, '0')
+    )
+    .join('')}`;
+};
+
+/**
+ * Every colour painted inside the code blocks of one page in one theme, and the
+ * ground they are painted on.
+ *
+ * The ground is read off the block rather than from `--color-sunken`, so what
+ * is measured is the panel a reader sees. `base.css` emits Shiki's own
+ * `--shiki-light-bg` and `--shiki-dark-bg` and deliberately reads neither; a
+ * block that started taking the theme's background would change every ratio
+ * here and this is what would notice.
+ *
+ * `<pre>` and `<code>` are read alongside the token spans because the plain
+ * text of a block takes its colour from the theme's foreground on the `<pre>`
+ * rather than from a token of its own.
+ */
+const paintCodeBlocks = async (
+  page: Page,
+  theme: 'light' | 'dark'
+): Promise<{ grounds: string[]; inks: string[] }> =>
+  page.evaluate((chosen: string) => {
+    document.documentElement.dataset.theme = chosen;
+    const blocks = [...document.querySelectorAll('.astro-code')];
+    const grounds = new Set<string>();
+    const inks = new Set<string>();
+    for (const block of blocks) {
+      grounds.add(getComputedStyle(block).backgroundColor);
+      for (const painted of [block, ...block.querySelectorAll('*')])
+        inks.add(getComputedStyle(painted).color);
+    }
+    return { grounds: [...grounds], inks: [...inks] };
+  }, theme);
+
+test('the syntax palette is the one it is meant to be, and every colour in it meets AA', async ({
+  page
+}) => {
+  // One test over both pages and both themes, collecting rather than asserting
+  // as it goes, for the reason the matrix above does the same: a theme swap or
+  // an Astro upgrade moves every colour at once, and a run that stopped at the
+  // first would report one of them.
+  const failures: string[] = [];
+  const ratios = new Map<string, number>();
+
+  for (const route of HIGHLIGHTED) {
+    await page.goto(`${SITE}${route}`);
+    for (const theme of ['light', 'dark'] as const) {
+      const { grounds, inks } = await paintCodeBlocks(page, theme);
+      const where = `${theme} ${route}`;
+
+      expect(grounds, `${where}: one ground for every block`).toHaveLength(1);
+      const ground = parseUsedColor(grounds[0]);
+
+      // Keyed by hex so the palette can be compared against the list above and
+      // a failure can be reported in the notation `src/shiki.ts` writes, while
+      // the arithmetic still runs on the channels an engine reported.
+      const painted = new Map(inks.map((ink) => [paintedHex(ink), ink]));
+      expect([...painted.keys()].sort(), `${where}: the palette`).toEqual([
+        ...SYNTAX[theme]
+      ]);
+
+      for (const [hex, ink] of painted) {
+        const ratio = contrast(parseUsedColor(ink), ground);
+        ratios.set(`${theme} ${hex}`, ratio);
+        if (ratio < 4.5)
+          failures.push(`${where} ${hex}: ${ratio.toFixed(2)} < 4.5`);
+      }
+    }
+  }
+
+  expect(failures).toEqual([]);
+
+  // The tightest colour, pinned by name and by figure for the reason the
+  // `--color-*` matrix pins its own two: the floor above passes while a colour
+  // has any headroom at all, and `src/shiki.ts` argues at length that this red
+  // is deliberately the one entry sitting closer to its floor than its
+  // neighbours. A change that moves it is a change that has to come with an
+  // edit to that argument and to `DESIGN.md`'s table.
+  const [tightest, ratio] = [...ratios].sort(
+    ([, one], [, other]) => one - other
+  )[0];
+  expect(tightest).toBe('light #cb2431');
+  expect(ratio.toFixed(2)).toBe('4.83');
 });
