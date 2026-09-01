@@ -90,9 +90,21 @@ test('applies a startTime the seekable window already covers', async ({
 // remedy lands; that is the point of having it.
 //
 // It is NOT silent, which corrects #466's body. The `startTime` is dropped, but
-// #418's `configuration` notice fires on exactly this shape, because
-// `withinMediaBounds` answers `undefined` and `applyInitialPosition` emits
-// before it returns.
+// #418's `configuration` notice fires on exactly this shape.
+//
+// The route it fires by changed under #465, and this test was written before
+// that landed. It used to be that `withinMediaBounds` answered `undefined` and
+// nothing was written. Now `applyInitialPosition` bounds on the declared length
+// (`withinDeclaredBounds`), so the target survives as the requested 0.9 -- the
+// clip really is 1.000s -- and the refusal comes one step later, from
+// `declinesSeekTo` inside `playheadAfterMovingTo`, which returns `undefined`
+// because the seekable window does not contain 0.9. The `reached === undefined`
+// arm of the notice condition is the live one here.
+//
+// The observable outcome is identical either way, which is why this test still
+// passes unchanged on top of #465. The mechanism is named because a test that
+// keeps passing for a changed reason is worth less than one that says which
+// reason it is pinning.
 test('drops a startTime above the seekable window end, with a notice (#466)', async ({
   page
 }) => {
