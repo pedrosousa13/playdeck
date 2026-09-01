@@ -347,11 +347,22 @@ const install = 'pnpm add @playdeck/react';
     color: var(--color-ink-muted);
   }
 
+  /* The one element in this section that is centred rather than set against
+   * the left edge. `.close` lays its children out with `justify-items: start`,
+   * so this pill is already shrink-to-fit and only its placement in the track
+   * has to move — `justify-self` on the item, not a change to the container,
+   * because every sibling here keeps the start edge the section reads down.
+   *
+   * `justify-content` inside it as well, for the case the box is wider than
+   * its contents: the command and its copy button stay together in the middle
+   * rather than the command sitting alone at the left of a centred box. */
   .install {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
+    justify-content: center;
+    justify-self: center;
     min-block-size: var(--hit-target);
     padding: var(--space-2) var(--space-3);
     background-color: var(--color-sunken);
