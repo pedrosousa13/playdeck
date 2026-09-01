@@ -41,6 +41,10 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * Audio on. The label says `Mute` — what the next press does — while
+ * `aria-pressed="false"` says where the toggle currently is.
+ */
 export const Unmuted: Story = {
   parameters: ready({ setVolume: available }, { muted: false }),
   play: async ({ canvas }) => {
@@ -50,6 +54,11 @@ export const Unmuted: Story = {
   }
 };
 
+/**
+ * Muted, with both signals flipped. Muting is a separate axis from the volume
+ * level — `Player/VolumeSlider`'s own `Muted` story holds a volume of 0.7 while
+ * reading 0% — so this button reflects `state.muted` and never the level.
+ */
 export const Muted: Story = {
   parameters: ready({ setVolume: available }, { muted: true }),
   play: async ({ canvas }) => {

@@ -40,6 +40,11 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * The pre-playback half: a provider SDK is being fetched. This one shows
+ * immediately — there is nothing on screen for it to flicker against — though
+ * it is still held for the 500ms floor so a fast load does not blink.
+ */
 export const LoadingProvider: Story = {
   parameters: {
     player: {
@@ -54,6 +59,13 @@ export const LoadingProvider: Story = {
   }
 };
 
+/**
+ * The mid-playback half: a stall while playing. Unlike a provider load this one
+ * is debounced in, because a spinner appearing over running video is far more
+ * disruptive than one appearing over a poster — `state.buffering` goes true
+ * here at once and the indicator only follows 500ms later. That delay is why
+ * the play function carries an explicit timeout.
+ */
 export const Buffering: Story = {
   parameters: {
     player: {

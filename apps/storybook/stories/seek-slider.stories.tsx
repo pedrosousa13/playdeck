@@ -56,6 +56,12 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * The ordinary case: a known duration, so `data-state` is `ready` and the
+ * window is scrubbable. The read-out worth noticing is `aria-valuetext` —
+ * `0:30 of 1:40` rather than the raw `30` a range input would otherwise
+ * announce, which is meaningless spoken aloud.
+ */
 export const Midway: Story = {
   parameters: ready({ seek: available }, { currentTime: 30, duration: 100 }),
   play: async ({ canvas }) => {
@@ -65,6 +71,17 @@ export const Midway: Story = {
   }
 };
 
+/**
+ * Two disjoint buffered ranges — what a player looks like after a viewer has
+ * seeked ahead and left a gap behind. The bars have no size until your CSS
+ * gives them one (see `Styled`), so the canvas here shows the same track as
+ * `Midway`.
+ *
+ * The accessibility half is the reason two ranges is the interesting fixture:
+ * the geometry is `aria-hidden`, and the whole of it reaches assistive
+ * technology as one `65% loaded` description — the total of both ranges over
+ * the window, not one announcement per bar.
+ */
 export const WithBufferedRanges: Story = {
   parameters: ready(
     { seek: available },

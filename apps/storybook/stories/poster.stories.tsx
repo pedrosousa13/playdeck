@@ -1,28 +1,14 @@
 import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
-import type { ReactNode } from 'react';
 import { withCss } from '../.storybook/theme';
 import { assetUrl } from './asset-url';
+import { Frame, posterImage } from './support';
 // The stylesheet the Styled story mounts, read as text so the same string is
 // both what renders and what the docs block below prints. `?raw` and not
 // `?inline` for the reason spelled out in play-button.stories.tsx: a production
 // build minifies `?inline` css, and the printed example has to stay readable.
 import partCss from '../../../examples/css-poster.css?raw';
-
-const Frame = ({ children }: { readonly children: ReactNode }) => (
-  <Player.Viewport style={{ width: 480, height: 270, background: '#0b0e13' }}>
-    {children}
-  </Player.Viewport>
-);
-
-const posterImage = (canvasElement: HTMLElement): HTMLElement => {
-  const image = canvasElement.querySelector<HTMLElement>(
-    '[data-playdeck-part="poster-image"]'
-  );
-  if (!image) throw new Error('Expected a poster image in the story.');
-  return image;
-};
 
 const meta = {
   title: 'Player/Poster',
@@ -33,11 +19,11 @@ const meta = {
         component: [
           '`Player.Poster` is the pre-playback surface; wrap a `Player.PosterImage` or arbitrary children.',
           '',
-          '**Contract** — `data-playdeck-part="poster"`, `data-state`.',
+          '**Contract** — `data-playdeck-part="poster"`, `data-state="visible" | "hidden"`. Two values, not the four `Player.PosterImage` carries: this part reports whether the pre-playback surface is showing, and `Player.Root` flips it to `hidden` once the media for the current source has data or playback starts. A new source brings it back to `visible`. The primitive also sets `visibility` inline from the same signal, so the surface disappears without a stylesheet.',
           '',
           '**Note** — children replace the default image.',
           '',
-          "**Poster image states** — the bitmap's own load lifecycle (`idle`, `loading`, `loaded`, `error`) belongs to `Player.PosterImage` and is staged under `Player/PosterImage`.",
+          "**Poster image states** — the bitmap's own load lifecycle (`idle`, `loading`, `loaded`, `error`) is a different attribute on a different part: `data-state` on `Player.PosterImage`, staged under `Player/PosterImage`. Neither story below stages `hidden` — nothing here plays, so the surface is `visible` throughout.",
           '',
           '**Styling** — plain CSS against the parts; the primitive keeps its own geometry and `visibility`. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer playdeck` the whole theme lives in:',
           '```css',

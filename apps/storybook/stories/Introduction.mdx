@@ -21,7 +21,7 @@ the target the accessibility work is pointed at.
 - Import primitives as `import * as Player from '@playdeck/react'`; title under
   `Player/<Component>`.
 - Dial state with the `ready(capabilityOverrides, statePatch)` helper from
-  `stories/support.ts`. Its capability base is derived from the real core
+  `stories/support.tsx`. Its capability base is derived from the real core
   contract (`createInitialPlayerState().capabilities`) and guarded by
   `support.contract.test.ts`, so stories can only stage states the real
   controller accepts.
@@ -29,3 +29,12 @@ the target the accessibility work is pointed at.
   (`a11y.test: 'error'`) and must issue **zero external requests** (enforced by
   `.storybook/vitest.setup.ts`).
 - Prove interactions with a `play` function (see `Player/ActivationButton`).
+- Give every story a JSDoc block above its export. Autodocs renders it as the
+  story's description, and without one the page shows a bare name over a canvas
+  — which is the reader's only cue for what a case is and why it exists. Say
+  what a reader cannot infer from the story name; one line that does is worth
+  more than three that restate it.
+- **The one exemption is `Fixtures/PlayerFixture`.** Its stories are Playwright
+  targets addressed by story ID from `e2e/`, not documentation, and each is
+  described by the spec that drives it. It is tagged `!test` and excluded from
+  the deterministic run. Nothing else is exempt.

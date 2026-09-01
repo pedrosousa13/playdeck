@@ -438,8 +438,13 @@ const meta: Meta<PlayerFixtureProps> = {
   parameters: {
     docs: {
       description: {
-        component:
-          'Reproduces the original `PlayerFixture` e2e contract as one named Storybook story per scenario: same testids, same `data-*` state attributes, same `window.playdeckHandle`, and the same source-selection branching, driven by static story args instead of URL query parameters. Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`).'
+        component: [
+          'Reproduces the original `PlayerFixture` e2e contract as one named Storybook story per scenario: same testids, same `data-*` state attributes, same `window.playdeckHandle`, and the same source-selection branching, driven by static story args instead of URL query parameters. Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`).',
+          '',
+          '**Exempt from the per-story docs convention.** Every story on this page is a Playwright target, addressed by story ID from `e2e/` (`platform.spec.ts`, `vimeo.spec.ts`, `captions.spec.ts` and friends) — the scenario each one stages is stated by the spec that drives it, and a description here would be a second copy free to disagree with the assertions. Read the specs, not this page. The convention this page is exempt from is stated under Overview/Introduction, and it holds everywhere else.',
+          '',
+          '**Do not rename or remove a story here.** A story ID is derived from its export name, and every one of these is hard-referenced by URL from a spec, so a rename is a CI break with no compile error in front of it.'
+        ].join('\n')
       }
     }
   },

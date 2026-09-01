@@ -88,8 +88,21 @@ const capable = ready({
   pictureInPicture: available
 });
 
+/**
+ * The resting state: only the trigger is in the DOM. The content is not
+ * rendered-and-hidden, so nothing in a closed menu is reachable by Tab or
+ * readable by a screen reader, and the player's keyboard shortcuts are live.
+ * No `play` function — there is nothing to drive, and this is the story the
+ * docs page opens on.
+ */
 export const Closed: Story = { parameters: capable };
 
+/**
+ * Opened by a click. Two things land at once: focus moves to the first item,
+ * and `data-playdeck-menu="open"` appears on the content — which is what
+ * suppresses the player's keyboard shortcuts, so an arrow key inside the menu
+ * moves through options instead of seeking the video underneath.
+ */
 export const Open: Story = {
   parameters: capable,
   play: async ({ canvas, userEvent }) => {
@@ -102,6 +115,15 @@ export const Open: Story = {
   }
 };
 
+/**
+ * Escape closes the menu and returns focus to the trigger. The return is the
+ * assertion that matters: the focused item is being removed from the DOM, and
+ * a browser left to itself drops focus to `<body>` — which strands a keyboard
+ * user at the top of the page with no way back to the control they just used.
+ *
+ * The end state is a closed menu, so this looks identical to `Closed` on the
+ * canvas; the story is the transition, not the frame.
+ */
 export const EscapeRestoresFocus: Story = {
   parameters: capable,
   play: async ({ canvas, userEvent }) => {
@@ -114,6 +136,16 @@ export const EscapeRestoresFocus: Story = {
   }
 };
 
+/**
+ * The other exit: choosing an option closes the menu and returns focus to the
+ * trigger, the same as Escape. Both paths matter because a menu that restores
+ * focus only on cancel strands the user on the common path.
+ *
+ * The `2×` click here does not stick — the radio group is uncontrolled in this
+ * story, with `onValueChange` a no-op — so what is asserted is the close and
+ * the focus return, not the selection. Ends in the same frame as `Closed` and
+ * `EscapeRestoresFocus`.
+ */
 export const SelectingOptionChecksIt: Story = {
   parameters: capable,
   play: async ({ canvas, userEvent }) => {

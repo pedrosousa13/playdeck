@@ -44,6 +44,11 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * `type="current"` — the playhead position, formatted `m:ss` and rendered as a
+ * `<time>` element. `data-time-type` distinguishes the three types when several
+ * sit in one control row, since they all share the `time` part.
+ */
 export const Current: Story = {
   args: { type: 'current' },
   parameters: ready({}, { currentTime: 75, duration: 100 }),
@@ -54,6 +59,12 @@ export const Current: Story = {
   }
 };
 
+/**
+ * `type="duration"`, over a source longer than an hour. The hours field is
+ * added only when it is needed — `1:02:05` here, but a two-minute clip stays
+ * `2:05` rather than padding to `0:02:05`, so a control row's width does not
+ * jump between sources.
+ */
 export const Duration: Story = {
   args: { type: 'duration' },
   parameters: ready({}, { currentTime: 10, duration: 3725 }),
@@ -62,6 +73,11 @@ export const Duration: Story = {
   }
 };
 
+/**
+ * `type="remaining"` — time left, rendered with a leading minus (`-1:10`) so it
+ * cannot be mistaken for the current position when both sit side by side. Like
+ * `duration`, it needs a known duration and displays nothing without one.
+ */
 export const Remaining: Story = {
   args: { type: 'remaining' },
   parameters: ready({}, { currentTime: 30, duration: 100 }),

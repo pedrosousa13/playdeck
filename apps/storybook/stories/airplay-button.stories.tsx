@@ -43,6 +43,11 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/**
+ * The only rendered state this button has. It carries no `data-state` and no
+ * `aria-pressed`, which the play function asserts: opening the route picker is
+ * a request, and there is no "AirPlay is on" for it to reflect.
+ */
 export const Available: Story = {
   parameters: ready({ airPlay: available }),
   play: async ({ canvas }) => {

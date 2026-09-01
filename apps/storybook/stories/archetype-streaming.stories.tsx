@@ -31,7 +31,7 @@ const available: Availability = { status: 'available' };
 /*
  * A player mid-title: activated, seekable, with the capabilities this
  * archetype's chrome is built around dialed on. Spread from the real core
- * contract, exactly as `stories/support.ts` does, so a capability added to core
+ * contract, exactly as `stories/support.tsx` does, so a capability added to core
  * shows up here rather than going silently missing.
  *
  * `selectQuality` is available and a ladder is staged, which is the one thing

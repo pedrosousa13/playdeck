@@ -1,9 +1,11 @@
+import * as Player from '@playdeck/react';
 import {
   createInitialPlayerState,
   type Availability,
   type PlayerCapabilities,
   type ProviderStatePatch
 } from '@playdeck/core';
+import type { ReactNode } from 'react';
 import type { MockPlayerParameters } from '../.storybook/mock-player';
 
 export const available: Availability = { status: 'available' };
@@ -42,3 +44,27 @@ export const ready = (
     }
   }
 });
+
+/**
+ * A fixed-size dark viewport to stage a story in. The poster stories share it
+ * because they sit adjacent in the docs and a difference in frame size would
+ * read as a difference in the primitive.
+ */
+export const Frame = ({ children }: { readonly children: ReactNode }) => (
+  <Player.Viewport style={{ width: 480, height: 270, background: '#0b0e13' }}>
+    {children}
+  </Player.Viewport>
+);
+
+/**
+ * The poster bitmap in a rendered story, or a throw. A `querySelector` returns
+ * `null` for a part that never rendered, and a `null` dereferenced inside an
+ * assertion reports a missing property rather than a missing part.
+ */
+export const posterImage = (root: HTMLElement): HTMLElement => {
+  const element = root.querySelector<HTMLElement>(
+    '[data-playdeck-part="poster-image"]'
+  );
+  if (!element) throw new Error('Expected a poster image in the story.');
+  return element;
+};
