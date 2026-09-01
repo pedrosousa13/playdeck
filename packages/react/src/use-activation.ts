@@ -609,7 +609,20 @@ export const useActivation = (
     ) {
       return;
     }
+    // Recorded on the session either way, because the observer's own
+    // self-disconnect reads it: skip it and nothing ever stops observing.
     active.playGateOpen = true;
+    // The state is only what defers the gate needs. Where the two thresholds
+    // are equal, `playGateOpen` is derived `true` without ever reading this
+    // identity, so setting it would buy a re-render per activation that the
+    // single-threshold player never paid before. Deferred-ness is recomputed
+    // from `optionsRef.current` rather than closed over, since this callback is
+    // built once and the render that computes `playGateDeferred` is not this
+    // one.
+    const deferred =
+      current.loading === 'viewport' &&
+      current.playThreshold > current.loadThreshold;
+    if (!deferred) return;
     setPlayGateIdentity(
       activationIdentityKey(key, current.loading, configuration)
     );
@@ -822,11 +835,12 @@ export const useActivation = (
     // the first of those bumps, which is the media mount the activation it just
     // reported causes: the load crossing would land, the play crossing never
     // would. What the generation stood in for is covered exactly by the two
-    // identity checks that open this: every path that ends a session --
-    // the layout effect's reset, `registerViewport`, this effect's own cleanup
-    // -- disconnects the observer and clears `observerRef` before anything else
-    // happens, so a registration still installed under the same viewport is by
-    // construction the current one.
+    // identity checks that open this, and the invariant behind them: an
+    // observer is only ever installed under `loading: 'viewport'`, and no path
+    // that ends a viewport session leaves one behind -- disconnecting it and
+    // clearing `observerRef` is what ending such a session means. So a
+    // registration still held in `observerRef` under the same viewport is by
+    // construction the current one, whatever the generation has counted since.
     const isCurrentObservation = (): boolean => {
       const inputs = latestInputsRef.current;
       return (

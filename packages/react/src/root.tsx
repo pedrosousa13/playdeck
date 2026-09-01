@@ -28,6 +28,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -706,11 +707,15 @@ export const Root = ({
   });
 
   const armedAutoplayMode = activation.playGateOpen ? autoplay : false;
-  // Assigned here rather than in the block above, because it is the one value
-  // on this component that is not knowable until `useActivation` has run.
-  // `prepareMedia` reads it at attach time, which is always after this render.
-  /* eslint-disable-next-line react-hooks/refs -- The provider attach callback needs the current arming before passive effects run. */
-  armedAutoplay.current = armedAutoplayMode;
+  // A layout effect, and one placed immediately after `useActivation`, because
+  // `prepareMedia` reads this ref from `useActivation`'s own passive effect --
+  // the one that loads the provider. Every layout effect in the tree runs
+  // before any passive effect, so the arming is current by the time that read
+  // happens, while a render-phase write would also land in renders React
+  // discards.
+  useLayoutEffect(() => {
+    armedAutoplay.current = armedAutoplayMode;
+  }, [armedAutoplayMode]);
 
   // The handle is a fresh object carrying exactly what `PlayerHandle`
   // declares, never the controller instance. `Object.assign(controller, ...)`

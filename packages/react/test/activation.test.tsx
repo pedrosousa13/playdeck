@@ -569,6 +569,30 @@ test('a corrected playThreshold activates the player the error left dormant', as
   ]);
 });
 
+// The observer is reused only while every input it was constructed with still
+// holds, and `playThreshold` is one of them: the browser watches for crossings
+// of the threshold array it was given, so a raised play threshold reported by
+// the old observer would be a crossing nothing asked for. The test above moves
+// from an error to a valid value, where there was no observer to reuse; this
+// one moves between two valid values, where there is.
+test('a changed playThreshold rebuilds the observer', async () => {
+  const { rerender } = render(
+    fixture({ loadThreshold: 0, playThreshold: 0.5 })
+  );
+  const firstObserver = ControlledIntersectionObserver.instances[0]!;
+  expect(firstObserver.thresholds).toEqual([0, 0.5]);
+
+  rerender(fixture({ loadThreshold: 0, playThreshold: 0.8 }));
+
+  await vi.waitFor(() =>
+    expect(ControlledIntersectionObserver.instances).toHaveLength(2)
+  );
+  expect(firstObserver.disconnect).toHaveBeenCalled();
+  expect(ControlledIntersectionObserver.instances[1]?.thresholds).toEqual([
+    0, 0.8
+  ]);
+});
+
 test('dormant viewport activation uses native options changed before intersection', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
