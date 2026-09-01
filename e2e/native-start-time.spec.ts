@@ -5,8 +5,12 @@ import { media } from './locators';
 
 // #465, driven on real engines because the defect is one engines disagree
 // about. The story is the only one in the workbench on a clip longer than a
-// second: at one second every offset worth configuring is past the end of the
-// media, so the one-second tracer can express the refusal and nothing else.
+// second, which is what this file's timings and offsets are built around: a
+// five-second start needs a source that reaches it.
+//
+// The one-second tracer is not useless for start offsets -- #466's spec applies
+// 0.9 on it -- but it leaves no room between a plausible offset and the end of
+// the media, so the numbers here would have nowhere to move.
 const story =
   '/iframe.html?id=fixtures-playerfixture--native-mp-4-start-time&viewMode=story';
 
