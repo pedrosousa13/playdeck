@@ -90,10 +90,10 @@ jobs:
       # `fetch-depth: 0` is not needed and not set: `ls-remote` asks the remote
       # rather than reading local history, so a shallow clone answers the tag
       # question exactly as a full one does.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
 
       - run: corepack enable
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -150,9 +150,9 @@ jobs:
       # `ensureProvenanceGeneration` in libnpmpublish/lib/publish.js.
       id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
       - run: corepack enable
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@v7
         with:
           # >= 22.14.0 is a trusted-publishing requirement, not just a floor
           # this repo picked. `22` resolves to the latest 22.x on the runner
@@ -186,12 +186,13 @@ jobs:
       #
       # Pinned, not `@latest`, and the pin is the point rather than the version.
       # This was the one npm-registry resolution in this job carrying no pin, no
-      # lockfile and no cooldown, in a repository that pins the actions by SHA,
-      # pnpm by the `packageManager` hash and the dependency closure by
-      # `minimumReleaseAge` -- and it is the step that mints the publish
-      # credential, in the only job granted `id-token: write`. An unreviewed
-      # major arriving here arrives on the credential path. `@latest` left npm
-      # 11 on 2026-07-08, after the step was written against 11.x.
+      # lockfile and no cooldown, in a repository that pins the actions by
+      # version tag, pnpm by the `packageManager` hash and the dependency
+      # closure by `minimumReleaseAge` -- and it is the step that mints the
+      # publish credential, in the only job granted `id-token: write`. An
+      # unreviewed major arriving here arrives on the credential path.
+      # `@latest` left npm 11 on 2026-07-08, after the step was written against
+      # 11.x.
       #
       # 11.19.0 clears the 11.5.1 floor above. Moving to 12.x is a change of its
       # own and wants its own dry run, not a resolution nobody chose.

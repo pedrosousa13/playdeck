@@ -38,3 +38,17 @@ test-results/
 # Brainstorming mockups pushed to the visual companion's local server. Working
 # material for one session, never part of the site or its build.
 .superpowers/
+
+# Local environment files, anywhere in the tree. Nothing in this repository
+# reads one at build time -- the deploy's two Cloudflare credentials are
+# GitHub Actions secrets, named in .github/workflows/deploy-site.yml and held
+# nowhere else -- so a `.env` here is a maintainer's own scratch copy of
+# something secret and must never be committable. Ignored by name rather than
+# by path because Astro loads `apps/<app>/.env` as readily as a root one, and
+# the rule that stops the mistake has to cover both.
+#
+# `.env.example` stays committable: a file of key names with no values is
+# documentation, and is the thing a `.env` should be derived from.
+.env
+.env.*
+!.env.example

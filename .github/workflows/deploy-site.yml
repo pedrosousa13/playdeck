@@ -62,9 +62,9 @@ jobs:
     # there. Revisit it if the site grows a build that is not.
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
       - run: corepack enable
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -119,13 +119,21 @@ jobs:
       # is the correct outcome: a publish that quietly did not happen looks
       # exactly like a publish that did.
       #
-      # `wranglerVersion` is pinned because the action's SHA pin does not reach
-      # it: the action installs the CLI at run time, so without a version here a
-      # new Wrangler could change how this repository publishes with no diff to
-      # review. Everything else this repository depends on is pinned exactly,
-      # and the tool that does the publishing is the last thing that should
-      # float.
-      - uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+      # `wranglerVersion` is pinned because the action's own version tag does
+      # not reach it: the action installs the CLI at run time, so without a
+      # version here a new Wrangler could change how this repository publishes
+      # with no diff to review. The tool that does the publishing is the last
+      # thing that should float.
+      #
+      # It has to agree with the `wrangler` devDependency in the root
+      # `package.json`, and that is what makes this step work at all. The action
+      # probes for the CLI with `pnpm exec wrangler --version` and installs it
+      # with a bare `pnpm add` when the probe fails -- which pnpm refuses in a
+      # workspace root without `-w`, a flag the action does not pass
+      # (`ERR_PNPM_ADDING_TO_ROOT`). Declaring the dependency makes the probe
+      # succeed, so the install never runs. If the two versions drift, the probe
+      # fails again and the deploy goes back to failing on that refusal.
+      - uses: cloudflare/wrangler-action@v4.0.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
