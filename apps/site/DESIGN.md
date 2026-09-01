@@ -144,9 +144,26 @@ Every text-and-ground pair both themes can produce, measured with
 theme is checked with. Body text needs 4.5:1; the control boundary is non-text
 UI and needs 3:1.
 
-There is deliberately **no standing check script** for this. The table is a
-record of a measurement, and a value that changes is expected to be re-measured
-by whoever changes it, with a throwaway script over these same helpers.
+**There is a standing check, and this is the second thing that rule has said.**
+It used to read that there was deliberately no check script: the tables were a
+record of a measurement, and whoever changed a value was expected to re-measure
+it with a throwaway script over these same helpers. That held for as long as the
+palette was the only thing moving. It stopped holding when #540 made "every
+text/background pair still meets WCAG AA, measured" a condition on the site as a
+whole — a measurement taken once and deleted satisfies that word once, and the
+next token edit takes a pair under its floor with nothing to say so and this
+document still reporting the figure the pair used to have.
+
+So `e2e/site-contrast.spec.ts` computes every pair below from a served page in a
+real browser, on every run of the e2e suite, and fails under 4.5 for text and
+under 3 for `--color-line-strong`. It reads the used colour an engine resolved
+rather than re-parsing `tokens.css`, because the value a pair actually gets is
+the one the cascade picks out of three assignments of the same role, and a
+re-parse would be checking its own reimplementation of that as much as the
+stylesheet. The floors alone would let the palette drift towards them in
+silence, so the spec also pins the two tightest pairs named below, by pair and
+by figure — which is what makes the two sentences at the foot of this section
+fail rather than rot when a token moves.
 
 Light theme:
 
@@ -710,7 +727,6 @@ twice and being inconsistent about how, which is worse than either treatment on
 its own.
 
 **`/design` is public and unlisted, and that is ruled rather than pending.** The
-maintainer settled it while the site was being read as one surface (#540): the
 sheet stays served at `/design/`, and the header's navigation does not name it.
 Nothing else on the site links to it either. It keeps the `document` stance it
 was given, so a reader who types the address meets a page shaped like every
@@ -727,6 +743,26 @@ build-only, because it has to be rendered by the same build, in the same themes,
 from the same tokens, or it stops being evidence about the shipped site; and a
 served address a reader can type costs nothing a build-only artefact would not
 also cost.
+
+**The sheet survives 320px by breaking a word, which is the opposite trade from
+the provider table's.** Its type specimen sets one line of prose at every rung,
+and at `--text-4xl` a single word of that line is wider than a 320px viewport.
+A grid item's automatic minimum size is its min-content width, so that one word
+set the minimum width of the list, the section and the page, and the whole sheet
+went sideways under a reader who never asked it to. `.specimen__sample` now
+carries `overflow-wrap: anywhere` — `anywhere` and not `break-word`, because
+only the first of the two counts the break opportunities it creates towards
+min-content, which is the measurement that was doing the damage. A specimen that
+breaks a word still sets its glyphs at the size its token says, which is the
+only thing the list is there to show. The provider table further down takes the
+other route, a real minimum width inside a container the reader scrolls, and
+that is right there for the reason it is wrong here: four columns of machine
+output cannot be narrowed, and one line of prose can.
+
+This was found by widening a check rather than by looking: `e2e/site-nav.spec.ts`
+now measures every route the site serves at 320px, where it used to measure the
+two page shapes the header is drawn on. The sheet is neither of those, so the
+widest page on the site was the one page nothing had ever narrowed.
 
 **`stance` and `documentation` are two axes and only correlated.**
 `documentation` answers whether a page belongs in the search index; `stance`
@@ -988,6 +1024,13 @@ the theme's own transitions, which is where its coverage now actually lands.
 Focus is one treatment for the whole site: a 2px `--color-accent` outline on
 `:focus-visible`, offset by 2px. An outline rather than a shadow, so it follows
 the element's own shape and survives forced-colors mode.
+
+That it is still the treatment a reader gets is checked rather than assumed, on
+every route, by `e2e/site-nav.spec.ts`. The check tabs into each page and
+compares the outline an engine painted against the accent that page resolved,
+because since #542 five of the site's controls are shadcn's, whose own classes
+set `outline-style: none` at the same specificity as the rule above — which of
+the two wins is a question about a cascade, and only a browser answers it.
 
 Every control carries a rest, a hover, a focus and a pressed state, and none of
 them is a lift. The theme switch darkens to `--color-sunken` on hover, and the

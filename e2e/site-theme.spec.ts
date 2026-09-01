@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 /**
  * The site's three theme states, and the one of them a media query alone gets
- * wrong (#540).
+ * wrong.
  *
  * `DESIGN.md`'s _Themes_ section states the rule: tokens are assigned on
  * `:root`, reassigned under `@media (prefers-color-scheme: dark)` scoped away
@@ -11,9 +11,8 @@ import { expect, test, type Page } from '@playwright/test';
  * including the case a lone media query cannot express, a reader who picks
  * light on a dark machine. Nothing in the repository checked that. The rule was
  * the kind that is true when it is written, silently falsifiable by any edit to
- * the cascade in `tokens.css`, and read only by people; #540's acceptance
- * criterion says to verify it rather than assume it, so it is verified here and
- * stays verified.
+ * the cascade in `tokens.css`, and read only by people. It is verified here
+ * rather than assumed, and stays verified.
  *
  * What is asserted is the painted colour rather than the attribute, because the
  * attribute is what the switch writes and the colour is what the rule is about.
@@ -47,9 +46,10 @@ const field = (page: Page) =>
  * Both waits are load-bearing rather than defensive. Radix keeps the menu
  * mounted through its close animation and takes pointer events off the page
  * while it runs, so a second call that pressed the trigger as soon as the first
- * returned pressed a trigger nothing could reach — observed as a 30s timeout
- * waiting for a menu that never opened, in the one test here that chooses
- * twice. Waiting for the menu to appear and then for it to leave means each
+ * returned pressed a trigger nothing could reach — the press is swallowed, the
+ * menu never opens, and the test that chooses twice waits on an item that will
+ * not appear until it runs out of time. Waiting for the menu to appear and then
+ * for it to leave means each
  * choice starts from the settled state the reader would be pressing from.
  */
 const choose = async (page: Page, label: 'Light' | 'Dark' | 'System') => {

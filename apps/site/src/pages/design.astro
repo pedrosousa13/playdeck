@@ -75,9 +75,8 @@ const inks = [
 }
 <Base title="Playdeck visual system — design reference" documentation={false}>
   {
-    /* The sheet is public and unlisted, which #540 ruled after #545 explicitly
-     * left the question to it: served at its own address, absent from the
-     * header's three destinations, and linked from nowhere — the `/` link
+    /* The sheet is public and unlisted: served at its own address, absent from
+     * the header's three destinations, and linked from nowhere — the `/` link
      * this comment used to name went out with the landing page that carried
      * it. It still takes the shared header, because unlisted is not walled off:
      * a reader who typed the address, or followed one out of an issue, needs
@@ -318,8 +317,24 @@ const inks = [
     border-block-end: var(--line-width) solid var(--color-line);
   }
 
+  /* `anywhere` rather than `break-word`, and that is the whole point of the
+   * declaration: only `anywhere` counts the break opportunities it creates
+   * towards the element's min-content size. Without it the sample at
+   * `--text-4xl` — 88px, where the word "capability" alone measures about
+   * 400px — sets the minimum width of its grid track, and through it of the
+   * list, the section and the page, so a 320px reader gets the whole sheet
+   * shifted sideways rather than one wide line. `break-word` would wrap the
+   * same word and leave that minimum exactly where it was.
+   *
+   * A specimen breaking a word is not a specimen misreporting the rung: the
+   * glyphs are still set at the size the token says, which is what this list
+   * exists to show. The alternative the provider table takes — a real minimum
+   * width inside a container the reader scrolls — is right for four columns of
+   * machine output that cannot be narrowed, and wrong for one line of prose
+   * that can. */
   .specimen__sample {
     line-height: var(--leading-snug);
+    overflow-wrap: anywhere;
   }
 
   .specimen__meta {

@@ -75,10 +75,10 @@ test('/ is served in the argument stance', async ({ page }) => {
 });
 
 /**
- * Every route, against the stance `DESIGN.md` assigns it. Added for #540, whose
- * criterion is that every page is recognisably one of a named set rather than
- * that two sampled pages are — and a route added later with a stance nobody
- * thought about is exactly the drift that criterion exists against.
+ * Every route, against the stance `DESIGN.md` assigns it. Every page has to be
+ * recognisably one of a named set rather than two sampled pages being — and a
+ * route added later with a stance nobody thought about is exactly the drift
+ * this exists against.
  *
  * The table is written out rather than read from the pages, so it is the
  * document's claim being checked and not the site agreeing with itself.
