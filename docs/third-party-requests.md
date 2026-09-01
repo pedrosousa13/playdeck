@@ -535,6 +535,10 @@ is what emits the requests: `loading` chooses the gate, and `loadMargin` and
   visible pixel instead (`packages/react/src/use-activation.ts:183-220`).
   Neither prop applies under `interaction` or `eager`: the observer is only
   ever built for `viewport` (`packages/react/src/use-activation.ts:524-525`).
+  `playThreshold` is watched by the same observer but emits nothing: it decides
+  when autoplay may run, never when the provider attaches, so raising it above
+  `loadThreshold` leaves every request in this document exactly where
+  `loadThreshold` put it.
 - **`interaction`**: nothing attaches until the viewer activates the
   play/retry affordance `Player.ActivationButton` renders
   (`packages/react/src/loading-error.tsx:56`, `activateFromInteraction()`).

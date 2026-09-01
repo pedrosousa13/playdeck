@@ -34,6 +34,12 @@ export type PlayerPreload = 'none' | 'metadata' | 'auto';
 export type ActivationBindings = {
   readonly activateFromInteraction: () => void;
   readonly loading: PlayerLoadingStrategy;
+  // Whether playback this hook does not itself issue -- the autoplay `Root`
+  // arms on the controller -- is allowed to run yet. False only while a
+  // `playThreshold` set above `loadThreshold` is still unmet, so a caller that
+  // never separates the two is handed `true` from the first render and behaves
+  // exactly as it did before this existed.
+  readonly playGateOpen: boolean;
   readonly preload: PlayerPreload;
   readonly registerMedia: (media: PlayerMediaMount | null) => void;
   readonly registerViewport: (viewport: HTMLDivElement | null) => void;
@@ -47,6 +53,7 @@ export type UseActivationOptions = {
   readonly loadThreshold: number;
   readonly loading: PlayerLoadingStrategy;
   readonly nativeOptions: NativePlaybackOptions;
+  readonly playThreshold: number;
   readonly prepareMedia: (media: PlayerMediaMount) => void;
   readonly preload: PlayerPreload;
   readonly providerOptions?: ResolvedProviderOptions;
@@ -61,20 +68,23 @@ type Session = {
   providerOptions: ResolvedProviderOptions | undefined;
   sourceKey: string;
   started: boolean;
+  playGateOpen: boolean;
   queuedPlay: boolean;
 };
 
-type ActivationConfiguration = 'valid' | 'invalid-interaction-autoplay';
+type ActivationConfiguration =
+  'valid' | 'invalid-interaction-autoplay' | 'invalid-play-threshold';
 
 type ObserverRegistration = {
   readonly configuration: ActivationConfiguration;
   readonly generation: number;
+  readonly loadThreshold: number;
   readonly loading: PlayerLoadingStrategy;
   readonly margin: string;
   readonly observer: IntersectionObserver;
+  readonly playThreshold: number;
   readonly sourceKey: string;
   readonly target: HTMLDivElement;
-  readonly threshold: number;
 };
 
 type ActivationInputs = {
@@ -90,16 +100,33 @@ const sourceKey = (source: SourceDetectionResult): string =>
     ? JSON.stringify(source.source)
     : 'unsupported-source';
 
+// The combinations of activation props that cannot be honoured, each named so
+// the consumer is told which one they wrote rather than left with a player that
+// quietly never does what they asked.
+//
+// `playThreshold` below `loadThreshold` asks the player to start playing at a
+// point it passes *before* it is allowed to load, which is not an ordering that
+// exists. Clamping it to `loadThreshold` would run, but it would run a
+// configuration the consumer did not write and cannot see, and the whole reason
+// to separate the two thresholds is that the consumer has an opinion about the
+// gap between them. Only under `viewport`: neither threshold is read by the
+// other two strategies, so no observer is ever built and there is nothing there
+// for the combination to break.
 const activationConfiguration = ({
   autoplay,
-  loading
+  loadThreshold,
+  loading,
+  playThreshold
 }: Pick<
   UseActivationOptions,
-  'autoplay' | 'loading'
->): ActivationConfiguration =>
-  loading === 'interaction' && autoplay !== false
-    ? 'invalid-interaction-autoplay'
-    : 'valid';
+  'autoplay' | 'loadThreshold' | 'loading' | 'playThreshold'
+>): ActivationConfiguration => {
+  if (loading === 'interaction' && autoplay !== false)
+    return 'invalid-interaction-autoplay';
+  if (loading === 'viewport' && playThreshold < loadThreshold)
+    return 'invalid-play-threshold';
+  return 'valid';
+};
 
 const activationIdentityKey = (
   source: string,
@@ -168,25 +195,36 @@ const THRESHOLD_EPSILON = 0.0001;
 // mean "the same size" rather than "bigger".
 const SIZE_EPSILON_PX = 0.5;
 
-// The observer is always given `0` alongside `loadThreshold`, so its callback
-// fires the moment the target starts intersecting at all -- not only when it
-// crosses `loadThreshold` itself. That first crossing is what
+// The observer is always given `0` alongside the configured thresholds, so its
+// callback fires the moment the target starts intersecting at all -- not only
+// when it crosses one of them. That first crossing is what
 // `targetExceedsObserverRoot` needs to see the target's and the root's rects
-// before `loadThreshold` is anywhere close, and it is the *only* further
-// callback a target that can never reach `loadThreshold` will ever get: with a
-// single configured threshold above the ratio a target can reach, nothing after
-// the initial callback would ever cross it, and the observer would fall silent
-// for good. Deduplicated rather than always `[0, loadThreshold]`, so the default
-// `loadThreshold: 0` -- every consumer's activation today -- keeps asking the
-// browser for exactly what it asked for before this prop existed.
-const observerThresholds = (loadThreshold: number): number[] =>
-  loadThreshold === 0 ? [0] : [0, loadThreshold];
+// before either threshold is anywhere close, and it is the *only* further
+// callback a target that can never reach them will ever get: with every
+// configured threshold above the ratio a target can reach, nothing after the
+// initial callback would ever cross one, and the observer would fall silent for
+// good. Deduplicated rather than always `[0, loadThreshold, playThreshold]`, so
+// the default `loadThreshold: 0` with a `playThreshold` following it -- every
+// consumer's activation today -- keeps asking the browser for exactly what it
+// asked for before either prop existed.
+//
+// One observer carries both. `IntersectionObserver` takes an array of
+// thresholds and reports the same entries against all of them, so a second
+// observer on the same target would buy nothing but a second set of callbacks
+// to reconcile.
+const observerThresholds = (
+  loadThreshold: number,
+  playThreshold: number
+): number[] =>
+  [...new Set([0, loadThreshold, playThreshold])].sort(
+    (left, right) => left - right
+  );
 
 // Whether `entry`'s target is larger than the observer root it is measured
 // against -- the scroll container, never `Player.Root` -- in either dimension:
 // the shape behind the brief's own example, a `9/16` Shorts player on a window
 // shorter than it is tall. A target that size can never cover 100% of that
-// container no matter how it scrolls, so a `loadThreshold` near `1` would
+// container no matter how it scrolls, so a threshold near `1` would
 // otherwise stay unsatisfied forever: not a misconfiguration worth an error,
 // since every other threshold works fine on every other target, just a box
 // that happened to overflow the one it loaded into. `null`
@@ -207,18 +245,21 @@ const targetExceedsObserverRoot = (
   );
 };
 
-// The activation criterion for one delivered entry. A target that fits within
-// its root is held to `loadThreshold` itself; one that cannot -- see
-// `targetExceedsObserverRoot` -- gets the same first-pixel activation the default
+// Whether one delivered entry satisfies one of the two thresholds. A target
+// that fits within its root is held to the threshold itself; one that cannot --
+// see `targetExceedsObserverRoot` -- gets the same first-pixel pass the default
 // `loadThreshold: 0` already gives every other player, rather than an
 // unreachable threshold leaving it dormant with no playback and no error, the
-// worse failure the brief warns against.
-const meetsLoadThreshold = (
+// worse failure the brief warns against. Both thresholds go through here, so
+// that protection covers `playThreshold` too: a play threshold that can never
+// be met would strand the same oversized player at the same dead end, one
+// decision further along.
+const meetsThreshold = (
   entry: IntersectionObserverEntry,
-  loadThreshold: number
+  threshold: number
 ): boolean =>
   entry.isIntersecting &&
-  (entry.intersectionRatio >= loadThreshold - THRESHOLD_EPSILON ||
+  (entry.intersectionRatio >= threshold - THRESHOLD_EPSILON ||
     targetExceedsObserverRoot(entry));
 
 const configurationError = (message: string) => ({
@@ -432,6 +473,7 @@ export const useActivation = (
     providerOptions: currentProviderOptions,
     sourceKey: currentKey,
     started: false,
+    playGateOpen: false,
     queuedPlay: false
   });
   const latestInputsRef = useRef<ActivationInputs>({
@@ -450,7 +492,25 @@ export const useActivation = (
   const [committedIdentity, setCommittedIdentity] = useState<
     string | undefined
   >(undefined);
+  const [playGateIdentity, setPlayGateIdentity] = useState<string | undefined>(
+    undefined
+  );
   const sourceCommitted = committedIdentity === currentActivationIdentity;
+  // Whether there is a gate at all. `playThreshold` defaults to `loadThreshold`,
+  // and two equal thresholds are met by the same entry -- `meetsThreshold` is a
+  // pure function of the entry and the number -- so the crossing that loads is
+  // also the crossing that plays, and holding playback behind a second piece of
+  // state would only mean announcing autoplay to the controller one render
+  // later than it is announced today. That would be observable: `Root` reports
+  // the muted-autoplay-against-`muted={false}` conflict through the same
+  // `configureAutoplay` call, and it must still be reported at mount for the
+  // consumer who separated nothing. So the gate exists only where the consumer
+  // asked for the two decisions to come apart.
+  const playGateDeferred =
+    options.loading === 'viewport' &&
+    options.playThreshold > options.loadThreshold;
+  const playGateOpen =
+    !playGateDeferred || playGateIdentity === currentActivationIdentity;
 
   useLayoutEffect(() => {
     optionsRef.current = options;
@@ -475,6 +535,7 @@ export const useActivation = (
       active.nativeOptions = currentNativeOptions;
       active.providerOptions = currentProviderOptions;
       active.started = false;
+      active.playGateOpen = false;
       active.queuedPlay = false;
       loadingGeneration.current = undefined;
       disconnectObserver(observerRef.current);
@@ -482,6 +543,7 @@ export const useActivation = (
       options.controller.setProvider(undefined);
       options.controller.setActivation({ activation: 'dormant' });
       setCommittedIdentity(undefined);
+      setPlayGateIdentity(undefined);
       return;
     }
 
@@ -523,6 +585,32 @@ export const useActivation = (
     active.queuedPlay = queuePlay;
     current.controller.setActivation({ activation: 'eligible' });
     setCommittedIdentity(
+      activationIdentityKey(key, current.loading, configuration)
+    );
+  }, []);
+
+  // The play threshold's counterpart to `activate`, guarded on the same session
+  // fields for the same reason: the crossing is reported from an observer
+  // callback, which can arrive after the source, the strategy or the
+  // configuration it was built for has been replaced, and opening the gate for a
+  // session that no longer exists would let the next one play at whatever ratio
+  // the last one happened to reach.
+  const openPlayGate = useCallback(() => {
+    const active = session.current;
+    const current = optionsRef.current;
+    const key = sourceKey(current.source);
+    const configuration = activationConfiguration(current);
+    if (
+      active.playGateOpen ||
+      active.sourceKey !== key ||
+      active.loading !== current.loading ||
+      active.configuration !== configuration ||
+      configuration !== 'valid'
+    ) {
+      return;
+    }
+    active.playGateOpen = true;
+    setPlayGateIdentity(
       activationIdentityKey(key, current.loading, configuration)
     );
   }, []);
@@ -659,11 +747,33 @@ export const useActivation = (
   ]);
 
   useEffect(() => {
-    if (options.loading !== 'viewport' || session.current.started) return;
+    if (options.loading !== 'viewport') return;
+    // The observer is kept until *both* gates have been crossed, not until the
+    // provider has been activated: under a deferred `playThreshold` the same
+    // observer still owes a play crossing after it has reported the load one.
+    // So the settled test is both, and while only one has landed this effect
+    // stays willing to rebuild -- otherwise a re-run for any other reason would
+    // run its cleanup, disconnect the observer and leave the play threshold
+    // with nothing watching for it.
+    if (session.current.started && session.current.playGateOpen) return;
     if (refusedMessage !== undefined) {
       options.controller.setActivation({
         activation: 'error',
         error: refusedSourceError(refusedMessage)
+      });
+      return;
+    }
+    // Reported here rather than from an effect of its own, on the same terms as
+    // the interaction/autoplay conflict: after the source refusal, so a
+    // configuration complaint is never what a consumer is told instead of a URL
+    // this library will not carry, and before the observer is built, because a
+    // configuration `activate` refuses is one no crossing could act on.
+    if (currentConfiguration === 'invalid-play-threshold') {
+      options.controller.setActivation({
+        activation: 'error',
+        error: configurationError(
+          'playThreshold cannot be below loadThreshold.'
+        )
       });
       return;
     }
@@ -692,7 +802,8 @@ export const useActivation = (
     if (
       currentObserver?.target === viewport &&
       currentObserver.margin === options.loadMargin &&
-      currentObserver.threshold === options.loadThreshold
+      currentObserver.loadThreshold === options.loadThreshold &&
+      currentObserver.playThreshold === options.playThreshold
     )
       return;
     disconnectObserver(currentObserver);
@@ -702,13 +813,26 @@ export const useActivation = (
     const loading = active.loading;
     const configuration = active.configuration;
     let registration: ObserverRegistration | undefined;
+    // Deliberately not compared against the generation this registration was
+    // built at, unlike every other staleness check here. `generation` counts
+    // every provider reload as well as every session -- registering the media
+    // element bumps it, and so does a changed `nativeOptions` bag -- and an
+    // observer now outlives the activation it reported, waiting on the play
+    // threshold. Holding it to its build-time generation would silence it at
+    // the first of those bumps, which is the media mount the activation it just
+    // reported causes: the load crossing would land, the play crossing never
+    // would. What the generation stood in for is covered exactly by the two
+    // identity checks that open this: every path that ends a session --
+    // the layout effect's reset, `registerViewport`, this effect's own cleanup
+    // -- disconnects the observer and clears `observerRef` before anything else
+    // happens, so a registration still installed under the same viewport is by
+    // construction the current one.
     const isCurrentObservation = (): boolean => {
       const inputs = latestInputsRef.current;
       return (
         registration !== undefined &&
         observerRef.current === registration &&
         viewportRef.current === viewport &&
-        session.current.generation === generation &&
         session.current.sourceKey === key &&
         session.current.loading === loading &&
         session.current.configuration === configuration &&
@@ -720,32 +844,50 @@ export const useActivation = (
     try {
       const observer = new Observer(
         (entries) => {
+          if (!isCurrentObservation()) return;
+          const active = session.current;
           if (
-            !entries.some((entry) =>
-              meetsLoadThreshold(entry, options.loadThreshold)
-            ) ||
-            !isCurrentObservation()
+            !active.started &&
+            entries.some((entry) =>
+              meetsThreshold(entry, options.loadThreshold)
+            )
           ) {
-            return;
+            activate(false);
           }
+          if (
+            entries.some((entry) =>
+              meetsThreshold(entry, options.playThreshold)
+            )
+          ) {
+            openPlayGate();
+          }
+          // Both gates, so a deferred `playThreshold` keeps the observer that
+          // reported the load crossing. Where the two thresholds are equal --
+          // every consumer who set at most one of them -- the same entry meets
+          // both, so this disconnects in the callback that activated, exactly
+          // as it did before there were two gates to cross.
+          if (!active.started || !active.playGateOpen) return;
           disconnectObserver(registration);
           observerRef.current = undefined;
-          activate(false);
         },
         {
           rootMargin: options.loadMargin,
-          threshold: observerThresholds(options.loadThreshold)
+          threshold: observerThresholds(
+            options.loadThreshold,
+            options.playThreshold
+          )
         }
       );
       registration = {
         configuration,
         generation,
+        loadThreshold: options.loadThreshold,
         loading,
         margin: options.loadMargin,
         observer,
+        playThreshold: options.playThreshold,
         sourceKey: key,
-        target: viewport,
-        threshold: options.loadThreshold
+        target: viewport
       };
       observerRef.current = registration;
       observer.observe(viewport);
@@ -764,7 +906,7 @@ export const useActivation = (
         options.controller.setActivation({
           activation: 'error',
           error: configurationError(
-            'The viewport loadMargin or loadThreshold configuration is invalid.'
+            'The viewport loadMargin, loadThreshold or playThreshold configuration is invalid.'
           )
         });
       }
@@ -778,11 +920,14 @@ export const useActivation = (
     };
   }, [
     activate,
+    currentConfiguration,
     currentKey,
+    openPlayGate,
     options.controller,
     options.loadMargin,
     options.loadThreshold,
     options.loading,
+    options.playThreshold,
     refusedMessage,
     viewportVersion
   ]);
@@ -934,6 +1079,7 @@ export const useActivation = (
     () => ({
       activateFromInteraction,
       loading: options.loading,
+      playGateOpen,
       preload: options.preload,
       registerMedia,
       registerViewport,
@@ -942,6 +1088,7 @@ export const useActivation = (
     [
       activateFromInteraction,
       options.loading,
+      playGateOpen,
       options.preload,
       registerMedia,
       registerViewport,
