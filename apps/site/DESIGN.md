@@ -19,7 +19,8 @@ its opposite is what a generated interface looks like.
    colour, a font stack, a font size or a duration literal. A missing value is a
    missing token, not a local exception. Syntax highlighting is the one thing
    outside this rule, and it is named as an exception rather than left to be
-   discovered — see below.
+   discovered — two theme names and the five colours in them this site repaints
+   for contrast, all in `src/shiki.ts`. See below.
 2. **There is exactly one gradient.** See below.
 3. **Functional text never goes below 11px.**
 4. **Depth is a step on the surface ladder, a hairline, or one of two
@@ -253,6 +254,71 @@ grounds it happens to be scrolling. That is the row the tables already carry at
 3.51 / 3.76 against the field, and a thumb is non-text UI, so 3:1 is what it
 owes.
 
+### The syntax palette, which is measured here and repainted in five places
+
+The colours inside a code block are the one set of inks on this site that a
+`--color-*` role does not name — see _Code, and the one exception to rule 1_ —
+and they were the one set nobody had measured. Every one of them is body text at
+body size on `--color-sunken`, so every one owes 4.5.
+
+Five did not have it. Measured on the built site before the fix: keywords
+`#d73a49` at **4.04** in light, comments `#6a737d` at **4.25** in light and
+**4.00** in dark, `variable` `#e36209` at **3.08** in light and
+`entity.name.tag` `#22863a` at **4.09** in light. The comment colour is the one
+that matters most in kind rather than in number, because the prose inside an
+example is what a reader reads most closely.
+
+The cause is not the themes' carelessness. `github-light` and `github-dark` are
+tuned against their own backgrounds, and this site paints a code block on
+`--color-sunken` instead — which is the whole of the paragraph _What the
+exception does not cover is the block itself_. So no off-the-shelf pair fixes
+it: `github-light-default`'s comment colour measures 4.55 against the white it
+was tuned for and 4.02 against this ground, and `github-light-high-contrast`'s
+reaches only 4.45. `src/shiki.ts` repaints those five and nothing else, each
+holding its hue and moving only in lightness, which is what
+_Three values changed from the design comp_ above already did to three role
+tokens for the same reason.
+
+Light theme, on `--color-sunken`:
+
+| Colour                    | Scope                | Ratio | Needs |
+| ------------------------- | -------------------- | ----- | ----- |
+| `#24292e`                 | plain text           | 12.95 | 4.5   |
+| `#032f62`                 | strings              | 11.69 | 4.5   |
+| `#6f42c1`                 | entities             | 5.75  | 4.5   |
+| `#a04100` _was_ `#e36209` | `variable`           | 5.70  | 4.5   |
+| `#586069` _was_ `#6a737d` | comments             | 5.63  | 4.5   |
+| `#005cc5`                 | constants, `support` | 5.56  | 4.5   |
+| `#176f2c` _was_ `#22863a` | `entity.name.tag`    | 5.54  | 4.5   |
+| `#cb2431` _was_ `#d73a49` | keywords, `storage`  | 4.83  | 4.5   |
+
+Dark theme, on `--color-sunken`:
+
+| Colour                    | Scope                | Ratio | Needs |
+| ------------------------- | -------------------- | ----- | ----- |
+| `#e1e4e8`                 | plain text           | 15.10 | 4.5   |
+| `#85e89d`                 | `entity.name.tag`    | 12.87 | 4.5   |
+| `#9ecbff`                 | strings              | 11.41 | 4.5   |
+| `#ffab70`                 | `variable`           | 10.38 | 4.5   |
+| `#79b8ff`                 | constants, `support` | 9.28  | 4.5   |
+| `#b392f0`                 | entities             | 7.60  | 4.5   |
+| `#f97583`                 | keywords, `storage`  | 7.25  | 4.5   |
+| `#959da5` _was_ `#6a737d` | comments             | 7.01  | 4.5   |
+
+The tightest of them is light `#cb2431` at 4.83, and it is the one entry that
+clears its floor by less than its neighbours on purpose: the next step down that
+hue is `#b31d28`, which `github-light` already spends on `invalid` and
+`message.error`, and a keyword that looks like an error would be a worse defect
+than a red with less headroom. `e2e/site-contrast.spec.ts` pins that figure
+along with the whole set, so this table fails rather than rots.
+
+It measures the palette from two served pages — `/archetypes/`, which highlights
+through Astro's `<Code>` component, and `/reference/react/`, which highlights
+through `markdown.shikiConfig` — because those are the site's two independent
+highlighting paths and, as it happens, the only two pages whose blocks paint all
+eight colours. The set is asserted in both directions, so a page that stopped
+rendering the last JSX tag fails the check rather than quietly measuring seven.
+
 ## Type
 
 **IBM Plex Sans, IBM Plex Mono and IBM Plex Sans Condensed**, three cuts of one
@@ -449,11 +515,36 @@ set to the `github-light` and `github-dark` themes. The two names live in
 Astro's `<Code>` component, which reads nothing from that configuration, for the
 two source wells it prints beside its players. That second reader used to be the
 landing page, which printed four hand-written snippets and one real file; it
-prints no highlighted code at all now. The two
-names are the exception in full: no hex is written by hand
-anywhere, the palette is regenerated from the source text on every build, and
-there is no way to express it in this system's own colours, because a scale of
-four accents cannot tell a keyword from a string from a comment.
+prints no highlighted code at all now.
+
+**The exception used to be two theme names and is now two theme names and five
+hex literals**, and that is the part of it worth reading carefully, because the
+argument for the exception used to lean on a fact that is no longer true. It ran:
+no hex is written by hand anywhere, the palette is regenerated from the source
+text on every build, and there is no way to express it in this system's own
+colours. The middle clause still holds and the first does not. `src/shiki.ts`
+writes five colours of its own and hands Shiki a transformer that repaints them,
+because five of the sixteen the two themes paint did not meet AA on the ground
+this site puts a code block on — the figures are in _The syntax palette_ under
+_Measured contrast_.
+
+**The exception is kept, and on the clause that survived.** What made syntax an
+exception was never that the colours arrived from outside; it was that they
+cannot be roles. A role token is a promise about meaning that any component on
+this site may spend — `--color-ink-muted` means the same thing in a table, a
+rail and a caption. "Keyword", "string" and "comment" are not that. They are one
+highlighter's vocabulary, spent only inside a `<pre>` by markup this app does
+not author, and a scale of four accents cannot tell one from another in any
+case. Moving them into `tokens.css` would put sixteen names into the palette
+that no component may read, and would not even reach the code: Shiki writes both
+themes onto every token inline as `--shiki-light` and `--shiki-dark`, so a token
+in the stylesheet could only be applied by rewriting the highlighter's output —
+which is exactly what the five overrides already do, at build time, in the one
+file that names the themes.
+
+So the exception is now stated with its cost: this app writes five colours, they
+are in `src/shiki.ts` and nowhere else, and `e2e/site-contrast.spec.ts` measures
+every colour a code block paints on every e2e run.
 
 **`/`'s composition panel is not highlighted, and it is the one block on this
 site that is not.** The panel prints what the bench's two switches just
@@ -1271,7 +1362,7 @@ that already existed, and both still have two.
 
 | File                                   | What it is                                                |
 | -------------------------------------- | --------------------------------------------------------- |
-| `src/styles/tokens.css`                | Every value. The only file with hex literals              |
+| `src/styles/tokens.css`                | Every value. The only stylesheet with hex literals        |
 | `src/styles/base.css`                  | Element defaults, spoken in tokens                        |
 | `src/styles/doc.css`                   | The shell and the prose of a rendered document            |
 | `src/styles/tailwind.css`              | Tailwind without preflight, layered so it cannot win      |
@@ -1309,7 +1400,7 @@ that already existed, and both still have two.
 | `src/reference-packages.mjs`           | Which packages get a page, and from where                 |
 | `src/provider-pages.mjs`               | Which providers get a page, and which sections            |
 | `src/provider-asymmetry.mjs`           | What that same document says each provider can answer     |
-| `src/shiki.ts`                         | The two theme names, for both readers of them             |
+| `src/shiki.ts`                         | The two theme names and the five colours they repaint     |
 | `src/asset-url.d.ts`                   | The type for a `?url` import, which is how the skin loads |
 
 Two of the rows this table used to carry, `HeroPlayer.astro` and

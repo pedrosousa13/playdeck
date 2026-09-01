@@ -143,9 +143,10 @@ export default defineConfig({
      * theme CSS reaches for cannot do on its own.
      *
      * The values themselves live in `src/shiki.ts` because Astro's `<Code>`
-     * component reads nothing from here, and the landing page uses it to render
-     * a real file from `examples/`. That file explains why the two readers
-     * cannot be allowed to drift.
+     * component reads nothing from here, and `/archetypes` uses it to render
+     * two real files from `examples/`. That file explains why the two readers
+     * cannot be allowed to drift, and carries the colour overrides that are the
+     * other reason neither may type its own values.
      */
     shikiConfig
   }
