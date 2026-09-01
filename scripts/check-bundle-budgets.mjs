@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url';
-import { measureBundles } from './bundle-budgets.mjs';
+import { measureBundles, overBudget } from './bundle-budgets.mjs';
 
 // Matches scripts/verify-packaging.mjs: the lint config gives this directory
 // node globals, but `console` still has to be reached through globalThis.
@@ -21,28 +21,54 @@ const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 
 const measured = await measureBundles(repoRoot);
 
-const column = Math.max(...measured.map(({ name }) => name.length));
-for (const { name, size, budget } of measured) {
+// A target whose ceiling is on a subset prints two rows, and the enforced one
+// is the indented child rather than the headline. That order is the point: the
+// headline stays the number a consumer downloads, so nobody has to know which
+// of two figures is the real cost, and the row carrying `/ N KB` is the only
+// one that can ever say OVER. Naming the subset on its own row is also what
+// keeps `1.77 KB` from reading as a claim about the file.
+const column = Math.max(
+  ...measured.map(({ name, budgeted }) =>
+    budgeted === null
+      ? name.length
+      : Math.max(name.length, budgeted.label.length + 4)
+  )
+);
+
+/**
+ * @param {string} label
+ * @param {number} size
+ * @param {number | null} budget
+ */
+const row = (label, size, budget) => {
   const actual = `${size.toFixed(2)} KB`.padStart(9);
-  if (budget === null) {
-    console.log(`${name.padEnd(column)}  ${actual}  (lazy, not budgeted)`);
-    continue;
-  }
+  if (budget === null) return `${label.padEnd(column)}  ${actual}`;
   const headroom = budget - size;
   const note =
     headroom >= 0
       ? `${headroom.toFixed(2)} KB headroom`
       : `${(-headroom).toFixed(2)} KB OVER`;
-  console.log(
-    `${name.padEnd(column)}  ${actual}  / ${String(budget).padStart(2)} KB   ${note}`
-  );
+  return `${label.padEnd(column)}  ${actual}  / ${String(budget).padStart(3)} KB   ${note}`;
+};
+
+for (const { name, size, budget, budgeted } of measured) {
+  if (budgeted !== null) {
+    console.log(`${row(name, size, null)}  (shipped as authored, not gated)`);
+    console.log(row(`  └ ${budgeted.label}`, budgeted.size, budget));
+    continue;
+  }
+  if (budget === null) {
+    console.log(`${row(name, size, null)}  (lazy, not budgeted)`);
+    continue;
+  }
+  console.log(row(name, size, budget));
 }
 
-// flatMap rather than filter+map: the filter already guarantees a budget, but
-// only a narrowing form proves it to the reader and the typechecker alike.
-const over = measured.flatMap(({ name, size, budget }) =>
-  budget !== null && size > budget ? [{ name, size, budget }] : []
-);
+// Which targets are over is `bundle-budgets.mjs`'s to decide, for the same
+// reason the measurement is: the landing page has to be able to say the figures
+// it prints are the ones this rule is applied to. This file only formats the
+// answer and throws on it.
+const over = overBudget(measured);
 if (over.length > 0) {
   const detail = over
     .map(
