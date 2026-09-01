@@ -1,0 +1,345 @@
+---
+/**
+ * The provider comparison, mounted on `/providers`: what each provider can be
+ * asked, and what it can actually answer. It began life on `/` and moved when
+ * that page was reworked into a marketing page (#542) — a reader deciding
+ * between providers is the reader of the provider index, and this table is
+ * reference, not argument.
+ *
+ * The section's claim is asymmetry. Five providers behind one API is the kind
+ * of sentence that invites a reader to assume they are interchangeable, and
+ * they are not: YouTube answers to eight hosts and Vimeo to three, Wistia's
+ * host set cannot be enumerated at all because the account subdomain is
+ * per-customer, and two of them have no host list because a file extension is
+ * what chooses them. A table that flattened that would be the lie this whole
+ * section exists to refuse — so `unknown` is printed as an answer with the
+ * document's own reason beside it, never as a blank or a dash.
+ *
+ * Nothing here is written down. `src/provider-asymmetry.mjs` derives every
+ * host, form, option key and reason from `docs/provider-setup.md` at build
+ * time, through the slicing `src/provider-pages.mjs` already does for the
+ * provider pages; that file is gated by `pnpm docs:check` and its prose was
+ * written against a detector that was run rather than read. A section of it
+ * neither module can place stops the build. See both files for the discipline;
+ * this one only draws.
+ *
+ * ---- what it is not --------------------------------------------------------
+ *
+ * It is not a row of cards, one per column. `DESIGN.md` records that cards of
+ * identical
+ * size are what a layout defaults to when nothing has been decided about the
+ * contents, and they cost a reader exactly the alignment a comparison is for.
+ * The argument here is cross-provider, so the shape is one grid a reader reads
+ * across: question down the side, provider along the top, and the same cell
+ * construction in every column so the difference between two of them is the
+ * only thing that varies.
+ *
+ * It also carries no autoplay readout. That decision and its reasoning are on
+ * the ticket rather than here, because it is a decision about the page rather
+ * than about this component: an autoplay attempt costs a media fetch, on a page
+ * whose headline claim is that it fetches nothing before a click.
+ *
+ * ---- the three colours -----------------------------------------------------
+ *
+ * `--color-available`, `--color-unknown` and `--color-unavailable` carry domain
+ * meaning on this site and are never spent on decoration. This section is
+ * literally about those three states, so it is one of the few places they are
+ * correctly spent — and every one of them is drawn as its own word, set in the
+ * mono face, because `DESIGN.md` forbids a bare dot. Remove the colour and the
+ * table still reads.
+ *
+ * ---- 320px -----------------------------------------------------------------
+ *
+ * Four provider columns of machine output cannot be made narrow enough for a
+ * 320px viewport, and squeezing them would be the wrong trade anyway: a URL
+ * form broken over four lines is not more readable than one a reader scrolls
+ * to. So the table keeps a real minimum width and the *container* scrolls,
+ * which is a scroll a reader chose rather than the page going sideways
+ * underneath them. The container is focusable and named, so the scroll is
+ * reachable from the keyboard as well as from a trackpad, and the question
+ * column is sticky, so the thing being compared stays on screen while the
+ * comparison moves past it.
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { providerAsymmetry } from '../provider-asymmetry.mjs';
+import { PROVIDER_SETUP_DOC } from '../provider-pages.mjs';
+
+const repoRoot = import.meta.env.PLAYDECK_REPO_ROOT;
+const { questions, providers } = providerAsymmetry(
+  readFileSync(join(repoRoot, PROVIDER_SETUP_DOC), 'utf8'),
+  repoRoot
+);
+
+/**
+ * A reason as prose. The sentence arrives as Markdown and its inline code spans
+ * still carry their backticks; a reason is read as a sentence rather than as
+ * source, and the identifiers in it are legible without the ticks.
+ */
+const plain = (reason: string) => reason.replaceAll('`', '');
+---
+
+<section class="truth" aria-labelledby="truth-heading">
+  <h2 class="truth__heading" id="truth-heading">
+    What each provider can answer
+  </h2>
+  <p class="truth__lede">
+    Every cell below was read out of <code>{PROVIDER_SETUP_DOC}</code> while this
+    page was built. Five providers in four columns — native files and HLS share
+    one, because that document covers them in one passage. They do not answer the
+    same question equally well, so the table does not pretend that they do: where
+    a fact cannot be known, the cell says so and carries the document's own reason
+    for it.
+  </p>
+
+  {
+    /* `role="region"` with a name is what makes a focusable scroll container a
+     * landmark a screen reader can find rather than an unlabelled tab stop.
+     * `tabindex="0"` is what makes it scrollable without a pointer. */
+  }
+  <div
+    class="truth__scroll"
+    role="region"
+    aria-label="What each provider can be asked"
+    tabindex="0"
+  >
+    <table class="truth__table">
+      <thead>
+        <tr>
+          <td class="truth__corner"></td>
+          {
+            providers.map((provider) => (
+              <th class="truth__provider" scope="col">
+                <a
+                  class="truth__provider-link"
+                  href={`${import.meta.env.BASE_URL}providers/${provider.slug}/`}
+                >
+                  {provider.title}
+                </a>
+                <span class="truth__packages">
+                  {provider.packages.map((name) => (
+                    <code>@playdeck/{name}</code>
+                  ))}
+                </span>
+              </th>
+            ))
+          }
+        </tr>
+      </thead>
+      <tbody>
+        {
+          questions.map((question, row) => (
+            <tr>
+              <th class="truth__question" scope="row">
+                {question}
+              </th>
+              {providers.map((provider) => {
+                const reading = provider.readings[row];
+                return (
+                  <td class="truth__cell" data-state={reading.state}>
+                    <p class="truth__answer">
+                      <span class="truth__state">{reading.state}</span>
+                      {reading.items.length > 0 && (
+                        <span class="truth__count">{reading.items.length}</span>
+                      )}
+                    </p>
+                    {reading.items.length > 0 && (
+                      <ul class="truth__items">
+                        {reading.items.map((item) => (
+                          <li>
+                            <code>{item}</code>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {reading.reason !== undefined && (
+                      <p class="truth__reason">{plain(reading.reason)}</p>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<style>
+  /* The section is full width rather than held to the measure, because the
+   * width buys columns. Its prose is still held to the measure — that is the
+   * half of the rule that keeps the lede readable. */
+  .truth {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    max-inline-size: 100%;
+  }
+
+  /* `h2`'s own rung, not the display rung it spent on `/`. `DESIGN.md` gives
+   * the two display rungs to the argument stance, and this component sits on a
+   * document page now. */
+  .truth__heading {
+    margin: 0;
+    letter-spacing: var(--tracking-tight);
+    line-height: var(--leading-tight);
+  }
+
+  .truth__lede {
+    max-inline-size: var(--measure);
+    margin: 0;
+    font-size: var(--text-md);
+    line-height: var(--leading-body);
+    color: var(--color-ink-muted);
+  }
+
+  .truth__lede code {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: var(--tracking-fn);
+    color: var(--color-ink);
+  }
+
+  /* The one element that may scroll sideways on this page. `overscroll-behavior`
+   * keeps a flick that reaches the end of the table from turning into a
+   * navigation gesture on the page behind it. */
+  .truth__scroll {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  /* Wide enough for four columns of machine output to stay on their own lines,
+   * which is what the container is allowed to scroll for. A page width is a
+   * layout decision and stays a literal, and so is this. */
+  .truth__table {
+    inline-size: 100%;
+    min-inline-size: 46rem;
+    border-collapse: collapse;
+    text-align: start;
+  }
+
+  .truth__provider,
+  .truth__question,
+  .truth__cell {
+    inline-size: 22%;
+    padding: var(--space-4) var(--space-4) var(--space-4) 0;
+    /* `th` is centred by the user-agent stylesheet in every engine, and a
+     * comparison read down a column starts at the same edge in every row. */
+    text-align: start;
+    vertical-align: top;
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  .truth__provider {
+    display: table-cell;
+    padding-block-start: 0;
+  }
+
+  .truth__provider-link {
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
+    color: var(--color-ink);
+  }
+
+  .truth__packages {
+    display: block;
+    margin-block-start: var(--space-1);
+  }
+
+  .truth__packages code {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    font-weight: var(--weight-regular);
+    letter-spacing: var(--tracking-fn);
+    color: var(--color-ink-subtle);
+    overflow-wrap: anywhere;
+  }
+
+  /* Sticky, so the question a reader is comparing across stays on screen while
+   * the answers move past it. It needs an opaque ground of its own for that,
+   * and the ground is the field this section sits on. */
+  .truth__question,
+  .truth__corner {
+    position: sticky;
+    inset-inline-start: 0;
+    inline-size: 12%;
+    background-color: var(--color-field);
+  }
+
+  .truth__question {
+    padding-inline-end: var(--space-5);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    color: var(--color-ink);
+  }
+
+  .truth__corner {
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  .truth__answer {
+    display: flex;
+    gap: var(--space-3);
+    align-items: baseline;
+    margin: 0;
+  }
+
+  /* The word, never a dot on its own: colour carries the domain meaning here
+   * and colour alone is not a status. The three grounds it is measured against
+   * are the theme's fields, and the tokens are the AA-checked pair. */
+  .truth__state {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: var(--tracking-fn);
+    color: var(--color-ink-muted);
+  }
+
+  .truth__cell[data-state='available'] .truth__state {
+    color: var(--color-available);
+  }
+
+  .truth__cell[data-state='unknown'] .truth__state {
+    color: var(--color-unknown);
+  }
+
+  .truth__cell[data-state='unavailable'] .truth__state {
+    color: var(--color-unavailable);
+  }
+
+  /* How many, which is the number a reader travels across the row to compare.
+   * Machine output, so the mono face. */
+  .truth__count {
+    font-family: var(--font-mono);
+    font-size: var(--text-xl);
+    line-height: var(--leading-tight);
+    color: var(--color-ink);
+  }
+
+  .truth__items {
+    margin: var(--space-2) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .truth__items code {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    line-height: var(--leading-snug);
+    letter-spacing: var(--tracking-fn);
+    color: var(--color-ink-muted);
+    overflow-wrap: anywhere;
+  }
+
+  /* Only ever present where the state is not `available`, which is the point:
+   * an answer of `unknown` that gave no reason would be indistinguishable from
+   * a page that had not looked. */
+  .truth__reason {
+    max-inline-size: var(--measure);
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-xs);
+    line-height: var(--leading-snug);
+    color: var(--color-ink-subtle);
+  }
+</style>

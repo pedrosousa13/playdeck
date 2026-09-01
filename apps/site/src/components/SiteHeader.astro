@@ -1,37 +1,72 @@
 ---
 /**
  * The shell every page of this site is served under: the wordmark, where the
- * reader currently is, search, and the theme switch.
+ * reader currently is, the site's own navigation, search, and the theme switch.
  *
- * It replaces a lone underlined link sitting in the site-navigation slot, which
- * read as a stray link rather than as a header and said different things on
- * different pages. This is a documentation shell and not a marketing bar, so
- * there is still no call to action and no product navigation — but search is
- * neither of those, and the rule it used to be excluded by ("three jobs and no
- * fourth") was aimed at things a reader did not come for. A docs reader who
- * arrived to read one document is exactly the reader who then needs to find the
- * next one, and the only element on the page that is present while they are
- * reading is this strip.
+ * Rebuilt a second time for #542 phase 2, this time on real shadcn
+ * components rather than only their variable vocabulary: the mobile
+ * collapse is `Sheet` (`SiteNavSheet.tsx`), search is `Command` inside a
+ * `Dialog` (`SearchCommand.tsx`, mounted through `DocsSearch.astro`), and the
+ * theme switch is a `DropdownMenu` (`ThemeToggleIsland.tsx`, mounted through
+ * `ThemeToggle.astro`). This file's own job stays what it was: the wordmark,
+ * the breadcrumb, and the three-link site nav, laid out in one row.
  *
- * Search is on documentation pages only, which is what the `documentation` prop
- * says. It defaults to true — a page added later is documentation unless it
- * says otherwise — and `Base.astro` takes a prop of the same name for the same
- * decision on the indexing side. The two are separate props because the layout
- * cannot pass anything to a component a page renders into its slot, and they
- * are named alike so that a page turning one off and not the other reads as the
- * mistake it is.
+ * `bg-*`, `text-*`, `border-*` and similar classes below read shadcn's
+ * variable names, which are aliased onto this site's own `--color-*` roles in
+ * `src/styles/shadcn-theme.css` — not to values of their own. See that file
+ * for the mapping. Spacing, type size and duration are not part of that seam,
+ * so they stay literal token references via Tailwind's arbitrary-value syntax
+ * (`[var(--space-3)]` and so on) rather than Tailwind's own scale, which is
+ * numerically close to this site's in places and would still be a second
+ * literal sitting next to the first — exactly what `DESIGN.md` rule 1 rules
+ * out.
  *
- * The whole header is `data-pagefind-ignore`. Its words are the same on every
- * page, so indexed they would be indexed once per document — a query for
- * "reference" or "search" would match the whole site, and the words nearest the
- * top of each page, which is where an excerpt is drawn from, would be this
- * strip rather than the document.
+ * ---- the site navigation ----------------------------------------------------
  *
- * Deliberately not sticky. A reference page is a whole README, long enough that
- * a bar following the reader down would be defensible — but it would also have
- * to fight the rail's own sticky offset for the top of the viewport, and the
- * rail is the thing a reader actually navigates a long document with. One
- * sticky element per page.
+ * Three destinations, the same three on every page: Reference, Providers,
+ * Archetypes. The workbench is not among them and will not be: #534 records
+ * the decision that it is not to be a public surface, and the maintainer
+ * ruled the same on a Storybook link. This list is the site's own pages.
+ *
+ * `aria-current="page"` marks the section the reader is inside, on a link
+ * among sibling links. A reference document therefore carries two current
+ * markers — this nav's `Reference`, and the rail's entry for the package
+ * being read — in differently labelled landmarks, which is not the ambiguity
+ * the breadcrumb note below warns about (two markers for the *same* trail).
+ *
+ * The section is derived from `Astro.url.pathname` rather than passed in, so a
+ * page added later is marked without being told to mark itself, and a page
+ * cannot claim a section it is not served from. The `BASE_URL` prefix is
+ * stripped first: the site ships from the apex, where the prefix is `/` and a
+ * comparison against a literal would look identical, and `astro build --base`
+ * is what makes the difference observable (#435).
+ *
+ * At 40rem (640px) and above the three links sit inline beside the wordmark,
+ * in normal flow. Below that they are drawn only inside `SiteNavSheet`'s
+ * sheet, reached through the trigger button beside it — CSS visibility, keyed
+ * to the same breakpoint from both directions, is what keeps exactly one copy
+ * of the list interactive at a time (see that component's own doc comment for
+ * why `e2e/site-nav.spec.ts` still finds exactly one set of links). The
+ * platform's own `<details>` this used to be built from bought a focus trap,
+ * an Escape handler and the announced open/closed state for free; `Sheet`
+ * buys the same three from a Radix dialog instead, which is what the
+ * maintainer asked this phase to spend on rather than a second hand-rolled
+ * disclosure.
+ *
+ * Search is on documentation pages only, which is what the `documentation`
+ * prop says. It defaults to true — a page added later is documentation unless
+ * it says otherwise — and `Base.astro` takes a prop of the same name for the
+ * other half of the same decision. The two are separate props for the same
+ * reason as before: the layout cannot pass anything to a component a page
+ * renders into its slot.
+ *
+ * The whole header is `data-pagefind-ignore`, for the reason it always was:
+ * its words are the same on every page, so indexed they would swamp every
+ * result's excerpt with the chrome rather than the document.
+ *
+ * Deliberately not sticky — the rail is the element a reader actually
+ * navigates a long document with, and one sticky element per page is the
+ * budget `DESIGN.md` allows.
  *
  * ---- the wordmark and the crumb --------------------------------------------
  *
@@ -40,32 +75,40 @@
  * an `href` is a link; the last one has none, which is what marks it as the
  * page rather than a destination.
  *
+ * As of this phase, a crumb no longer repeats a site-nav destination's own
+ * label as an ancestor: `src/pages/reference/[pkg].astro` and
+ * `src/pages/providers/[provider].astro` used to pass `Reference` and
+ * `Provider setup` as a linked ancestor ahead of the page's own name, which
+ * put that word twice in the header — once there, bold and adjacent to it,
+ * once in the nav below with `aria-current`. The nav already says which
+ * section the reader is in, so that ancestor was dead weight rather than
+ * information, and both callers now pass only the leaf. A section's own index
+ * page (`/reference/`, `/providers/`) still shows its name once, as the
+ * trail's leaf — that is the page's own title rather than a repeated
+ * ancestor, and removing it would leave the page with no way back to `/` at
+ * all (see below).
+ *
  * The wordmark is the root of that path, so it is the trail's first item and
  * sits inside the breadcrumb landmark rather than beside it. A trail whose
  * first named ancestor is `Reference` claims the site has no root.
  *
- * `aria-current="page"` is deliberately absent here. The rail on a reference
- * page marks the current package with it, on a link among sibling links, which
- * is where the attribute does work; a second one on a non-interactive `span` in
- * the header would put two current-page markers in one document and leave a
- * reader to work out which is meant. The leaf is identified structurally
- * instead — last in the trail and not a link — and styled from `:last-child`.
+ * `aria-current="page"` is deliberately absent here, for the same reason
+ * given above: the rail's current-package marker is the one that does that
+ * job on a reference page, and a second one on a non-interactive `span` would
+ * put two current-page markers in one document. The leaf is identified
+ * structurally instead — last in the trail and not a link.
  *
- * On `/` the list is empty and the trail is not rendered at all. There is
- * nowhere for it to return to, the page's own `h1` is already the wordmark at
- * the title rung — `scripts/check-deploy-artifact.mjs` identifies the site's
- * root document by a heading named exactly `Playdeck`, so that `h1` cannot move
- * — and a strip repeating it directly above would be the same word twice in
- * eighty pixels.
- *
- * That check used to carry a second constraint this decision protected: it
- * followed every internal link on `/` in one page context, so the workbench had
- * to be the last one and a header that quietly added a link would have changed
- * what the check meant. It visits each link in a page of its own now (#528), so
- * only the reason above is still doing any work here.
+ * On `/` the list is empty and the trail is not rendered at all, wordmark
+ * included: there is nowhere for it to return to, the page's own `h1` is
+ * already the wordmark at the title rung — `scripts/check-deploy-artifact.mjs`
+ * identifies the site's root document by a heading named exactly `Playdeck`,
+ * so that `h1` cannot move — and a strip repeating it directly above would be
+ * the same word twice in eighty pixels.
  */
 import DocsSearch from './DocsSearch.astro';
 import ThemeToggle from './ThemeToggle.astro';
+import SiteNavSheet from './SiteNavSheet';
+import { cn } from '../lib/utils';
 
 interface Crumb {
   label: string;
@@ -85,22 +128,63 @@ const { crumbs = [], documentation = true } = Astro.props;
 // (#435).
 const homeUrl = import.meta.env.BASE_URL;
 const atHome = crumbs.length === 0;
+
+// The section the reader is in: the first segment of this page's path with the
+// deployment prefix taken off. `/` and `/design/` are in none of the sections
+// listed below, so they simply match nothing.
+const path = Astro.url.pathname;
+const section = (
+  path.startsWith(homeUrl) ? path.slice(homeUrl.length) : path.replace(/^\//, '')
+).split('/')[0];
+
+const destinations = [
+  { label: 'Reference', segment: 'reference' },
+  { label: 'Providers', segment: 'providers' },
+  { label: 'Archetypes', segment: 'archetypes' }
+].map(({ label, segment }) => ({
+  label,
+  href: `${homeUrl}${segment}/`,
+  current: segment === section
+}));
 ---
 
-<header class="bar" data-pagefind-ignore>
-  <div class="bar__place">
+<header
+  class="flex items-center gap-[var(--space-3)] [border-block-end:var(--line-width)_solid_var(--color-border)] [padding-block:var(--space-2)] [padding-inline:var(--space-5)]"
+  data-pagefind-ignore
+>
+  {
+    /* The shrinkable group. `min-w-0` is what lets it clip instead of forcing
+     * the row wider — a flex item's default minimum width is its content
+     * size, not zero, so without this the trail would push everything after
+     * it off the row rather than truncate. Kept even on `/`, where nothing
+     * renders inside it, so the nav and the tools group keep the same
+     * position whether or not a trail is present. */
+  }
+  <div class="flex min-w-0 items-baseline overflow-hidden">
     {
       !atHome && (
-        <nav class="bar__crumbs" aria-label="Breadcrumb">
-          <ol class="bar__trail">
-            <li class="bar__crumb">
-              <a class="bar__mark" href={homeUrl}>
+        <nav class="min-w-0 [font-size:var(--text-sm)]" aria-label="Breadcrumb">
+          <ol class="m-0 flex min-w-0 list-none [gap:var(--space-2)] p-0">
+            <li class="flex-none">
+              <a
+                class="[font-size:var(--text-md)] font-semibold text-foreground no-underline [letter-spacing:var(--tracking-tight)] hover:text-primary active:text-muted-foreground"
+                href={homeUrl}
+              >
                 Playdeck
               </a>
             </li>
             {crumbs.map(({ label, href }) => (
-              <li class="bar__crumb">
-                {href === undefined ? <span>{label}</span> : <a href={href}>{label}</a>}
+              <li class="crumb min-w-0 flex-none overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground last:flex-auto last:font-semibold last:text-foreground">
+                {href === undefined ? (
+                  <span>{label}</span>
+                ) : (
+                  <a
+                    class="text-muted-foreground no-underline hover:text-primary active:text-muted-foreground"
+                    href={href}
+                  >
+                    {label}
+                  </a>
+                )}
               </li>
             ))}
           </ol>
@@ -110,151 +194,85 @@ const atHome = crumbs.length === 0;
   </div>
 
   {
-    /* Search and the switch travel together at the far end of the row, and
-     * neither shrinks: the trail above is the flexible box. */
+    /* Beside the wordmark, not spread across the row: `shrink-0` and no grow,
+     * so it sits directly after the trail's box with only the header's own
+     * `gap` between them.
+     *
+     * On `/` there is no wordmark and no trail to sit beside (see the
+     * doc comment at the top of this file for why) — an empty box, this nav,
+     * then a wide gap to the tools at the far end read as an unfinished row
+     * rather than a composed one. `atHome` gives this nav the same `ms-auto`
+     * the tools group below carries, so the two travel together as one
+     * cluster at the row's end instead of standing at opposite corners of it;
+     * the wordmark and thesis directly under the hero carry the brand this
+     * row would otherwise be asked to.
+     *
+     * Two renderings of the same list rather than one disclosure: an inline
+     * `<ul>`, shown from 40rem up, and `SiteNavSheet`'s trigger plus sheet,
+     * shown below it. Only one is ever visible — `min-[40rem]:hidden` and
+     * `hidden min-[40rem]:flex` are complementary — and the sheet's own
+     * content does not exist in the DOM until opened, so at rest exactly one
+     * set of links is present for `e2e/site-nav.spec.ts` to find, the same
+     * guarantee the old single `<details>` gave for a different reason. */
   }
-  <div class="bar__tools">
+  <nav
+    class={cn('shrink-0 [font-size:var(--text-sm)]', atHome && 'ms-auto')}
+    aria-label="Site"
+  >
+    <ul class="m-0 hidden list-none [gap:var(--space-4)] p-0 min-[40rem]:flex">
+      {destinations.map(({ label, href, current }) => (
+        <li>
+          <a
+            class={cn(
+              'inline-block py-[var(--space-1)] text-muted-foreground no-underline hover:text-primary hover:underline active:text-muted-foreground',
+              current && 'font-semibold text-primary'
+            )}
+            href={href}
+            aria-current={current ? 'page' : undefined}
+          >
+            {label}
+          </a>
+        </li>
+      ))}
+    </ul>
+    <SiteNavSheet client:only="react" destinations={destinations} />
+  </nav>
+
+  {
+    /* Search and the switch travel together at the far end of the row, and
+     * neither shrinks. `ms-auto` pushes the group to the end of the flex
+     * container by consuming the remaining free space as margin, which is
+     * what keeps the trail and the nav hugging the left edge instead of being
+     * spread apart by a growing flex item between them.
+     *
+     * Only carried here when the nav above is not already carrying it: two
+     * flex items each claiming `margin-inline-start: auto` do not let the
+     * first absorb all the free space and leave the second with none, they
+     * split it, which on `/` reopened the exact gap `atHome` on the nav
+     * above was written to close. So this group takes the auto margin only
+     * when the nav does not. */
+  }
+  <div
+    class={cn(
+      'flex shrink-0 items-center gap-[var(--space-3)]',
+      !atHome && 'ms-auto'
+    )}
+  >
     {documentation && <DocsSearch />}
     <ThemeToggle />
   </div>
 </header>
 
 <style>
-  .bar {
-    display: flex;
-    gap: var(--space-3);
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-2) var(--space-5);
-    border-block-end: var(--line-width) solid var(--color-line);
-  }
-
-  /* The trail is the shrinkable group and the switch is not: at 320px the trail
-   * is what gives way, and a switch that had wrapped its label under its track
-   * would be the more obvious break. The element is kept even on `/`, where the
-   * trail is not rendered, because it is what holds the switch at the far end
-   * of a `space-between` row. */
-  .bar__place {
-    display: flex;
-    min-inline-size: 0;
-    align-items: baseline;
-    /* The trail gives way by being clipped here, not by sliding under the
-     * controls beside it. A crumb that cannot shrink does not disappear when
-     * the room runs out, and once search joined the strip (#525) `Reference`
-     * was overflowing this box and painting under the search button at 360px.
-     * Clipping is the give the rule on `.bar__crumb` below already assumes. */
-    overflow: hidden;
-  }
-
-  .bar__tools {
-    display: flex;
-    flex: none;
-    gap: var(--space-3);
-    align-items: center;
-  }
-
-  /* The wordmark is not a heading. `scripts/check-deploy-artifact.mjs`
-   * identifies the site's root document in a browser by a heading named exactly
-   * `Playdeck`, so a second element answering to that role and name on every
-   * page of the site would make the identification ambiguous. It is set in the
-   * body rung rather than larger: the loudest thing on a documentation page is
-   * the document's own title. That rung has to be asked for, because the trail
-   * it now sits inside is set one rung down.
-   *
-   * Every declaration here is a link's, so the selector carries the element as
-   * well as the class: `.bar__crumb a` below would otherwise outrank a bare
-   * `.bar__mark` and paint the root of the trail in the ancestors' ink. */
-  a.bar__mark {
-    font-size: var(--text-md);
-    font-weight: var(--weight-semibold);
-    color: var(--color-ink);
-    text-decoration: none;
-    letter-spacing: var(--tracking-tight);
-  }
-
-  a.bar__mark:hover {
-    color: var(--color-accent);
-  }
-
-  a.bar__mark:active {
-    color: var(--color-ink-subtle);
-  }
-
-  /* The trail truncates rather than wraps or pushes. A package name is one
-   * unbroken token — `@playdeck/provider-youtube` is wider than the room a
-   * 320px header has left after the wordmark and the switch — and the reader
-   * has the whole name in the `h1` immediately underneath, so an ellipsis here
-   * costs nothing. */
-  .bar__crumbs {
-    min-inline-size: 0;
-    font-size: var(--text-sm);
-  }
-
-  .bar__trail {
-    display: flex;
-    min-inline-size: 0;
-    gap: var(--space-2);
-    padding: 0;
-    margin: 0;
-    list-style: none;
-  }
-
-  /* Every crumb but the last keeps its full width, and the last one is the only
-   * one allowed to shrink. The ancestors are short words chosen by this site;
-   * the leaf is a package name chosen by npm, so it is both the longest and the
-   * one the reader can read in full from the `h1` a line below. Letting them all
-   * shrink in proportion truncated `Reference` to `Refer…` at 390px to save room
-   * a crumb that was already legible did not need — and, measured again when
-   * search arrived, to `P…` and `R…` at 360px, which is a trail that has stopped
-   * saying anything at all. The clip on `.bar__place` above is what keeps the
-   * consequence inside the trail's own box. */
-  .bar__crumb {
-    flex: none;
-    min-inline-size: 0;
-    overflow: hidden;
-    color: var(--color-ink-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /* The leaf, which is the page the reader is on: last in the trail, and the
-   * only entry rendered without an `href`. Weight and ink rather than colour
-   * alone, and no `aria-current` — see the note at the top of this file. */
-  .bar__crumb:last-child {
-    flex: 0 1 auto;
-    font-weight: var(--weight-semibold);
-    color: var(--color-ink);
-  }
-
-  /* The separator is generated rather than typed into the markup, so the crumb
-   * labels stay the names themselves and a later trail cannot arrive with the
-   * slashes baked into its strings. It is NOT hidden from assistive
-   * technology: VoiceOver and NVDA both announce generated content, so the
-   * trail is heard as the path it draws — root, separator, ancestor, separator,
-   * leaf — which is what a breadcrumb is meant to say. Between crumbs only; the
-   * root of the path is the first of them and has nothing to be separated
+  /* The generated `/` between crumbs, NOT hidden from assistive technology:
+   * generated content is announced, so the trail is heard as the path it
+   * draws — root, separator, ancestor, separator, leaf. Between crumbs only;
+   * the wordmark, the trail's root, has nothing before it to be separated
    * from. */
-  .bar__crumb + .bar__crumb::before {
+  .crumb + .crumb::before {
     margin-inline-end: var(--space-2);
     content: '/';
     font-weight: var(--weight-regular);
-    color: var(--color-ink-subtle);
-  }
-
-  .bar__crumb a {
-    color: var(--color-ink-muted);
-    text-decoration: none;
-  }
-
-  .bar__crumb a:hover {
-    color: var(--color-accent);
-    text-decoration: underline;
-  }
-
-  /* Pressed, the fourth state every control on this site carries. A step down
-   * the ink scale rather than a lift: this system has no shadow, and the state
-   * has to read the same way from any of the rest colours a link here takes. */
-  .bar__crumb a:active {
     color: var(--color-ink-subtle);
   }
 </style>

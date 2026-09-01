@@ -28,9 +28,10 @@
  *      stops being readable, so the scale simply has no rung underneath.
  */
 
-/* The latin subset only, and only the three faces the type scale names: sans
+/* The latin subset only, and only the four faces the type scale names: sans
  * 400 for prose, sans 600 for headings and emphasis, mono 400 for functional
- * text. Fontsource is a devDependency rather than a CDN link and rather than
+ * text, and the condensed display face imported below. Fontsource is a
+ * devDependency rather than a CDN link and rather than
  * woff2 files committed here, so the faces arrive through the lockfile with
  * integrity hashes; the `url()`s inside these stylesheets are relative, so the
  * build emits the files beside its own assets and the served page asks no
@@ -41,6 +42,11 @@
 @import '@fontsource/ibm-plex-sans/latin-400.css';
 @import '@fontsource/ibm-plex-sans/latin-600.css';
 @import '@fontsource/ibm-plex-mono/latin-400.css';
+/* Display only: the thesis sentence and the four close figures on `/` (#542
+ * phase 2). Self-hosted through the same devDependency-plus-lockfile route as
+ * the other two faces — see the paragraph above for why that matters on a
+ * page whose thesis is "no third party is asked for anything". */
+@import '@fontsource/ibm-plex-sans-condensed/latin-700.css';
 
 :root {
   /* ---- the raw scale ------------------------------------------------------
@@ -131,6 +137,23 @@
   --dark-shadow: #00000073;
   --dark-shadow-deep: #000000a6;
 
+  /* ---- the stage ------------------------------------------------------
+   * `/` only (#542 phase 2). The bench's player sits on a near-black stage
+   * in BOTH themes — a cinema is dark regardless of the
+   * room. Not a third theme: `--stage-*` never changes with `data-theme` or
+   * `prefers-color-scheme`, and the three capability colours on it are pinned
+   * to their dark-theme values (`--dark-available` etc.), already measured
+   * >=6.8:1 on `--dark-field` in `DESIGN.md`'s dark table (`on field`
+   * column). `--stage-field` (#0A0A0F) is very slightly LIGHTER than
+   * `--dark-field` (#08080B), not darker, so that table is not a floor for
+   * this ground — every figure on `--stage-field` comes out a shade lower:
+   * ink 17.35 (was 17.57), ink-muted 8.39 (8.49), ink-subtle 6.42 (6.50),
+   * line-strong 3.71 (3.76), accent 8.88 (8.99), available 10.58 (10.71),
+   * unknown 11.83 (11.98), unavailable 6.72 (6.81). The drop is in the
+   * hundredths and every one still clears its AA floor by a wide margin. */
+  --stage-field: #0a0a0f;
+  --stage-ink: #f0f0f2;
+
   /* ---- roles: light -------------------------------------------------------
    * The default assignment. It is the light theme rather than a neutral base
    * because a document with no `data-theme` and no OS preference has to render
@@ -138,8 +161,11 @@
    */
   --color-field: var(--light-field);
   --color-surface: var(--light-surface);
-  /* The two steps above a panel. `--color-raised` is a surface on a surface —
-   * a row picked out of a panel, a card inside one. `--color-overlay` is a
+  /* The two steps above a panel. `--color-raised` is the rung above
+   * `--color-surface` — a panel raised off whatever it sits on, which is a
+   * surface where it is a row or a card picked out of one, and the field where
+   * it is a readout laid straight on the page. `DESIGN.md`'s palette section
+   * has the measurement for both grounds. `--color-overlay` is a
    * surface over the page rather than in it: a dialog, a popover. Both are
    * surface COLOUR, which is the point: rule 4 already has two elevations and a
    * hairline, and more depth here must not mean a wider blur, because a border
@@ -177,6 +203,14 @@
   --color-shadow: var(--light-shadow);
   --color-shadow-deep: var(--light-shadow-deep);
 
+  /* ---- roles: the stage -----------------------------------------------
+   * Theme-independent — see the raw values above for why. Declared once here
+   * rather than per theme block, because there is nothing to switch. */
+  --stage-surface: var(--dark-surface);
+  --stage-sunken: var(--dark-sunken);
+  --stage-line-strong: var(--dark-line-strong);
+  --stage-accent: var(--dark-blue);
+
   /* ---- type ---------------------------------------------------------------
    * Two families from one superfamily. Plex Sans carries prose; Plex Mono
    * carries functional text — anything that is a value, an identifier, a state
@@ -188,6 +222,10 @@
   --font-mono:
     'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', menlo, consolas,
     monospace;
+  /* `/` only (#542 phase 2): the thesis sentence and the close's four
+   * figures. Falls back to the sans rather than a generic — the condensed cut
+   * is a weight and width choice, not a different voice. */
+  --font-display: 'IBM Plex Sans Condensed', var(--font-sans);
 
   /* The floor, and the reason the scale starts here. Every rung above it is a
    * ratio of about 1.2 up to `--text-lg` and then wider, so headings separate

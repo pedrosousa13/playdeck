@@ -1,45 +1,71 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 /**
- * The site's two page treatments, and the entry motion one of them permits.
+ * The site's two page treatments, and the motion one of them was built to
+ * gate.
  *
- * A marketing page and a reference document have different jobs, so `Base.astro`
- * takes a `stance`: `argument` for `/`, `document` for every other route. The
- * stance is written to the `<body>` as `data-stance`, which is what the entry
- * motion's CSS is keyed off — so a document page cannot grow scattered reveals
- * by accident, and that is the property `a document-stance page animates
- * nothing` pins.
+ * A marketing page and a reference document have different jobs, so
+ * `Base.astro` takes a `stance`: `argument` for `/`, `document` for every other
+ * route. The stance is written to the `<body>` as `data-stance`, and every
+ * motion rule this site has ever written was keyed off it — so a document page
+ * could not grow a scattered reveal by accident, and the stance rather than a
+ * comment is what enforced that.
  *
- * The two tests that run with the motion suppressed — the one under
- * `with no JavaScript` and the one under `prefers-reduced-motion: reduce` — are
- * the ones a reviewer checks first, and they are about what happens when the
- * motion does *not* run. The animated elements rest visible: the observer
- * applies the from-state and then releases it, so a reader whose script never
- * arrives — or who asked for reduced motion — reads the page rather than a
- * blank column. Both failure modes are checked by measuring the elements
- * themselves rather than by trusting the absence of a class.
+ * ---- this file has moved subject twice, and now has none -------------------
  *
- * The site is served by the second `webServer` entry in `playwright.config.ts`.
- * The storybook one owns `baseURL`, so these addresses are written out rather
- * than navigated to as paths.
+ * It first pinned the entry-motion vocabulary — `.u-enter`, the `data-enter`
+ * from-state, and an IntersectionObserver — through the three `.truth-card`
+ * columns on `/`. #542 deleted that comparison, and the vocabulary with it.
+ * What replaced it as the page's one animated element was the bench's reason
+ * line, arriving under `[data-bench-reason][data-live]` when a provider
+ * refused something, and this file's motion tests targeted that instead.
+ *
+ * The reason line is gone too. It printed one capability out of however many
+ * a provider actually refused, chosen by the iteration order of a lookup
+ * table a reader had no way to see, so which refusal appeared read as
+ * arbitrary — the maintainer's own assessment. Given the choice between
+ * naming every refusal and naming one picked by object-key order, the
+ * capability argument left `/` outright rather than keep doing the second.
+ * `bench-refusal`, the keyframe this file used to poll for, is deleted from
+ * `base.css` along with it.
+ *
+ * So `/` now authors no animation at all, and neither does any other route —
+ * `DESIGN.md`'s animation section says this outright rather than counting
+ * down from three to one to zero across three rounds of edits. The stance
+ * itself is not deleted: `data-stance` still distinguishes `/` from a
+ * document page, and `DESIGN.md` records, as a judgement rather than a fact,
+ * that it currently drives no CSS rule and that a later reader should decide
+ * whether it still earns its place. This file is what is left to pin: that
+ * the attribute is still written correctly, on every page, in every reachable
+ * state — which remains true and worth checking even with nothing keyed off
+ * it today, because the day something is keyed off it again is the day this
+ * file's coverage matters most and it should not need to be reinvented then.
  */
 const landing = 'http://127.0.0.1:4322/';
 const document_ = 'http://127.0.0.1:4322/reference/';
 
-// The entry-motion targets on `/`: the three columns of the three-state
-// comparison, which is the one moment below the hero that takes any motion at
-// all. Located by the classes the page already carries.
-const targets = (page: Page) => page.locator('.statuses .status');
-
-// What a reader actually sees, rather than what a class list says. `opacity`
-// and `transform` are the only two properties this system animates, so a
-// target that is readable and settled is one whose opacity is 1 and whose
-// transform is the identity.
+/**
+ * What a reader actually sees, rather than what a class list says. `opacity`
+ * and `transform` are the only two properties this system has ever moved, so
+ * an element that is readable and settled is one whose opacity is 1 and whose
+ * transform is the identity. Kept rather than deleted with the tests that used
+ * to poll it for a from-state: with no animation left to reach, the assertions
+ * below use it only to prove elements are settled, not mid-travel — a plainer
+ * check, but one that still catches a future rule that forgets to gate itself
+ * on the stance.
+ */
 const settled = async (locator: Locator) =>
   locator.evaluateAll((elements) =>
     elements.map((element) => {
       const styles = getComputedStyle(element);
-      return { opacity: styles.opacity, transform: styles.transform };
+      return {
+        opacity: styles.opacity,
+        transform: ['none', 'matrix(1, 0, 0, 1, 0, 0)'].includes(
+          styles.transform
+        )
+          ? 'identity'
+          : styles.transform
+      };
     })
   );
 
@@ -48,97 +74,39 @@ test('/ is served in the argument stance', async ({ page }) => {
   await expect(page.locator('body')).toHaveAttribute('data-stance', 'argument');
 });
 
+test('nothing on / is mid-travel, with or without JavaScript', async ({
+  page
+}) => {
+  await page.goto(landing);
+  expect(await settled(page.locator('main *'))).not.toContainEqual(
+    expect.objectContaining({ opacity: '0' })
+  );
+});
+
 test.describe('with no JavaScript', () => {
   test.use({ javaScriptEnabled: false });
 
-  test('the entry-motion targets on / are visible', async ({ page }) => {
+  test('/ keeps the stance and stays settled', async ({ page }) => {
     await page.goto(landing);
 
     // The stance is written by the template, so it survives a page with no
-    // script at all — and the targets are the markup's own, visible because
-    // nothing has hidden them. The observer is what applies the from-state,
-    // so a script that never runs leaves the resting state on screen.
+    // script at all.
     await expect(page.locator('body')).toHaveAttribute(
       'data-stance',
       'argument'
     );
-    await expect(targets(page)).toHaveCount(3);
-    await expect(page.locator('[data-enter]')).toHaveCount(0);
-    expect(await settled(targets(page))).toEqual([
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' }
-    ]);
+    expect(await settled(page.locator('main *'))).not.toContainEqual(
+      expect.objectContaining({ opacity: '0' })
+    );
   });
 });
 
-test.describe('under prefers-reduced-motion: reduce', () => {
-  test('the targets are visible, and nothing sits mid-transition', async ({
-    page
-  }) => {
-    // `page.emulateMedia` rather than the `reducedMotion` context option:
-    // measured on Playwright 1.61, `test.use({ reducedMotion: 'reduce' })`
-    // leaves `matchMedia('(prefers-reduced-motion: reduce)')` reporting false
-    // in the page, which would make this test pass while proving nothing. This
-    // call is checked below by asserting the query the site's own script asks.
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto(landing);
-    expect(
-      await page.evaluate(
-        () => matchMedia('(prefers-reduced-motion: reduce)').matches
-      )
-    ).toBe(true);
-    await expect(targets(page)).toHaveCount(3);
-
-    // The observer is never constructed, so the from-state is never applied to
-    // anything. Nothing here relies on the site-wide duration collapse: an
-    // element that was never given the from-state cannot be caught part-way
-    // through leaving it.
-    await targets(page).first().scrollIntoViewIfNeeded();
-    await expect(page.locator('[data-enter]')).toHaveCount(0);
-    expect(await settled(targets(page))).toEqual([
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' }
-    ]);
-  });
-});
-
-test('the motion runs on / and settles on the resting state', async ({
+test('a document-stance page carries the other attribute and stays settled', async ({
   page
 }) => {
-  await page.goto(landing);
-  await expect(targets(page)).toHaveCount(3);
-
-  // The targets sit below the hero, so they are outside the viewport on
-  // arrival and still carry the from-state the observer gave them. That is the
-  // evidence that the vocabulary is applied at all rather than being a class
-  // nothing reads.
-  await expect(page.locator('.statuses .status[data-enter]')).toHaveCount(3);
-
-  await targets(page).first().scrollIntoViewIfNeeded();
-
-  // And it is released when they enter. `data-enter` is removed rather than
-  // rewritten, so the resting state is the one the CSS gives the element.
-  await expect(page.locator('[data-enter]')).toHaveCount(0);
-  await expect
-    .poll(() => settled(targets(page)))
-    .toEqual([
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' },
-      { opacity: '1', transform: 'none' }
-    ]);
-});
-
-test('a document-stance page animates nothing', async ({ page }) => {
   await page.goto(document_);
 
   await expect(page.locator('body')).toHaveAttribute('data-stance', 'document');
-  // No target, no from-state, and nothing on the page mid-travel: the entry
-  // motion is keyed off the argument stance, so a document page could not
-  // reveal anything even if a class were pasted onto it.
-  await expect(page.locator('.u-enter')).toHaveCount(0);
-  await expect(page.locator('[data-enter]')).toHaveCount(0);
   expect(await settled(page.locator('main *'))).not.toContainEqual(
     expect.objectContaining({ opacity: '0' })
   );

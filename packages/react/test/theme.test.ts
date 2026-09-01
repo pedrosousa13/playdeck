@@ -287,6 +287,61 @@ describe('theme contract', () => {
     expect(manifest.exports['./theme.css']).toBe('./theme.css');
     expect(manifest.files).toContain('theme.css');
   });
+
+  // `sideEffects` is an array here, which means "these files and nothing else".
+  // A stylesheet left out of it is declared side-effect-free, and a bundler is
+  // then entitled to drop a consumer's bare `import
+  // '@playdeck/react/theme.css'` -- it imports no binding, so with no side
+  // effects to preserve there is nothing left to keep. The failure is an
+  // unstyled player in a production build, with no error at build time and none
+  // at runtime, while the dev server (which does not tree-shake) looks right.
+  //
+  // Asserted over every stylesheet the package exports rather than over
+  // `theme.css` by name, because the point is the rule and not the one file:
+  // the next theme to be exported has to be covered too, and nothing else
+  // would notice if it were not.
+  test('declares every exported stylesheet to have side effects', async () => {
+    const manifest = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8')
+    ) as { exports: unknown; sideEffects: unknown };
+
+    const stylesheets = (function collect(node: unknown): string[] {
+      if (typeof node === 'string') return node.endsWith('.css') ? [node] : [];
+      if (typeof node !== 'object' || node === null) return [];
+      return Object.values(node).flatMap(collect);
+    })(manifest.exports);
+    // Guards the guard: an `exports` map that stopped naming any stylesheet
+    // would otherwise satisfy this vacuously.
+    expect(stylesheets).toContain('./theme.css');
+
+    // Only the array form is restrictive. `true` and an absent field both mean
+    // every file has side effects, and `false` means none do, which no CSS-
+    // shipping package can say.
+    expect(Array.isArray(manifest.sideEffects)).toBe(true);
+    const patterns = manifest.sideEffects as string[];
+
+    // The subset of glob syntax webpack resolves these with: `*` stops at a
+    // path separator, `**` crosses them, and a pattern naming no directory is
+    // matched against the basename rather than the whole path.
+    const matches = (pattern: string, path: string): boolean => {
+      const subject = pattern.includes('/')
+        ? path.replace(/^\.\//, '')
+        : path.slice(path.lastIndexOf('/') + 1);
+      const source = pattern
+        .replace(/^\.\//, '')
+        .split('**')
+        .map((part) =>
+          part.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')
+        )
+        .join('.*');
+      return new RegExp(`^${source}$`).test(subject);
+    };
+
+    const uncovered = stylesheets.filter(
+      (stylesheet) => !patterns.some((pattern) => matches(pattern, stylesheet))
+    );
+    expect(uncovered).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

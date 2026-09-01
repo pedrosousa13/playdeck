@@ -34,3 +34,7 @@ test-results/
 # committed, for the same reason: a copy in the tree would be the pull
 # request's declaration of what main publishes.
 .gate-baseline/
+
+# Brainstorming mockups pushed to the visual companion's local server. Working
+# material for one session, never part of the site or its build.
+.superpowers/

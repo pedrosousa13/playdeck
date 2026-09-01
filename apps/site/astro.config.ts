@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
+import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import { shikiConfig } from './src/shiki';
 
@@ -62,6 +63,13 @@ export default defineConfig({
   // configuration at the point of use, alongside `BASE_URL`, which is the other
   // thing a page there gets from this file.
   vite: {
+    // Build-time only: Tailwind's Vite plugin scans source files and emits
+    // CSS during `astro build`/`astro dev`, and nothing it produces makes a
+    // network request of its own. `src/styles/tailwind.css` is the file that
+    // actually decides what ships — see its own comment for why Preflight is
+    // excluded and why what remains is layered under this site's existing
+    // stylesheets rather than fighting them.
+    plugins: [tailwindcss()],
     define: {
       'import.meta.env.PLAYDECK_REPO_ROOT': JSON.stringify(repoRoot)
     },
@@ -94,6 +102,15 @@ export default defineConfig({
           replacement: fileURLToPath(
             new URL('../../packages/react/dist/index.js', import.meta.url)
           )
+        },
+        // `@/*` -> `src/*`, the alias shadcn's own tooling assumes and
+        // `components.json` declares. Nothing under `src/` needed one before
+        // this; it exists now so a component added by that tooling in phase 2
+        // resolves its sibling imports the way the tool that generated it
+        // expects, rather than everyone hand-rewriting them to relative paths.
+        {
+          find: /^@\//,
+          replacement: fileURLToPath(new URL('./src/', import.meta.url))
         }
       ]
     }

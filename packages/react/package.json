@@ -25,7 +25,8 @@
   },
   "type": "module",
   "sideEffects": [
-    "./esm-only.cjs"
+    "./esm-only.cjs",
+    "*.css"
   ],
   "browserslist": [
     "chrome >= 99",

@@ -1,0 +1,614 @@
+---
+/**
+ * The bench's frame: the box the player sits in, the band along its bottom
+ * edge, and the geometry the player's own parts are laid out with.
+ *
+ * The split with `BenchIsland.tsx` is deliberate and is the same split the
+ * library itself draws. That file composes primitives, points them at a source
+ * and reads what they report; this one decides what the result looks like.
+ * Nothing about the composition is expressible here and nothing about the
+ * appearance is expressible there, so neither file can quietly grow the
+ * other's job.
+ *
+ * ---- why every selector below is `:global()` --------------------------------
+ *
+ * Astro scopes a component's rules by stamping an attribute onto the elements
+ * in its own template, and the player's elements are not in it: they are
+ * rendered by React inside the island, which no scope attribute reaches. So the
+ * choice is not between scoped and global rules, it is between global rules and
+ * rules that match nothing.
+ *
+ * `:global()` per selector rather than `<style is:global>` for the whole block,
+ * so each rule states at its own head that it is addressing markup produced
+ * elsewhere. The class names are this page's and appear nowhere else on the
+ * site, which is what makes that safe.
+ *
+ * ---- why `client:only` and not a hydrating directive ------------------------
+ *
+ * `client:visible` and its siblings render the component on the server and then
+ * hydrate it. Both halves of that are wrong here. The server-rendered half
+ * would put a real `<button>` into the document that does nothing until a
+ * script arrives, which is the "present and disabled" shape this whole site
+ * argues against — and for a reader with JavaScript off it would never stop
+ * being that. The hydrating half then has to reproduce, in a browser holding a
+ * media element, markup that was produced where there was none to measure; any
+ * disagreement between the two is a console error on the site's root document,
+ * and console errors on that document are one of the things
+ * `scripts/check-deploy-artifact.mjs` fails the deployed artifact on. That is a
+ * risk this page has no reason to take.
+ *
+ * `client:only` renders nothing on the server, so neither problem exists, and a
+ * reader whose script fails gets a settled page rather than a blank one — the
+ * frame below and its fallback are static markup. What it costs is that the
+ * readout under the frame is absent until the island mounts, and nothing
+ * reserves its height. Stated rather than left to be discovered.
+ *
+ * ---- the two theme systems, and why they do not meet ------------------------
+ *
+ * `@playdeck/react/theme.css` is the library's own optional stylesheet, and
+ * `DESIGN.md` puts it out of this system's scope. It is not imported here at
+ * all: the skin switch loads and unloads it at a reader's request, and
+ * `BenchIsland.tsx` carries how and why. What this file owes it is the mapping
+ * below.
+ *
+ * They cannot bleed into each other, and that is a property of that file rather
+ * than of this page's care. Every selector in it is inside `@layer playdeck`
+ * and wrapped in `:where()`, so it matches only elements carrying a
+ * `data-playdeck-part` attribute and loses to any unlayered rule here
+ * regardless of specificity. In the other direction it declares no token of its
+ * own: every value is read as `var(--playdeck-…, fallback)`, so the block below
+ * is the whole of what this site says to it.
+ *
+ * The mapping is inert while the switch reads `none` — nothing reads a custom
+ * property no stylesheet is asking for — which is what lets it be stated once
+ * here rather than toggled. It spends this site's role tokens and writes no
+ * colour, so rule 1 of `DESIGN.md` holds across the seam.
+ *
+ * ---- geometry is the page's, in both skin positions -------------------------
+ *
+ * The rules under `.bench__stage` are layout and nothing else, and they apply
+ * whichever way the skin switch is set. That is not this page bending the rule
+ * that `none` applies no CSS: it is the line the library itself draws. Its
+ * stylesheet says "appearance only; layer geometry belongs to the components",
+ * so that a player works with no stylesheet at all and so that a consumer can
+ * put the controls somewhere other than over the picture. Where the layers sit
+ * is therefore the consumer's decision in every composition the library ships
+ * to, and on this page the consumer is this file.
+ */
+import Sweep from './Sweep.astro';
+import BenchIsland from './BenchIsland';
+import { benchSources } from '../bench-sources';
+
+// Resolved against the configured base the way every other address on this
+// site is, rather than written as a root-absolute literal.
+const base = import.meta.env.BASE_URL;
+
+/*
+ * The still the dormant player shows for the no-JavaScript fallback, and the
+ * credit that goes with it — both read off `bench-sources.ts` rather than
+ * written here, because that file bundles a provider's URL, poster, start
+ * time and credit into one object precisely so a page reading any one of them
+ * cannot pick up a different provider's value for another. This file used to
+ * hold its own `posterUrl` constant and its own hardcoded credit paragraph,
+ * back when both providers played the same film; with `youtube` and `vimeo`
+ * now playing different films, a constant here would be exactly the "override
+ * the source alone" mistake the module comment in `bench-sources.ts`
+ * describes.
+ *
+ * The fallback link's target and the still it uses are both whichever
+ * position is the switch's default. Resolved from `bench-sources.ts` rather
+ * than written as a literal, so a change to the default position is one
+ * file's edit rather than several.
+ */
+const fallback = benchSources.find((entry) => entry.ready);
+if (fallback === undefined) {
+  throw new Error('Bench.astro: no ready source for the no-JavaScript fallback.');
+}
+const fallbackUrl = fallback.source(base);
+const poster = fallback.poster(base);
+const credit = fallback.credit;
+// `'width / height'`, not a rounded decimal: CSS computes the ratio those two
+// integers describe exactly, so nothing here approximates a number a browser
+// can compute itself. Written onto `#bench-stage` below as
+// `--bench-aspect-ratio`, the same custom property `BenchIsland.tsx`'s
+// `StagePortal` updates once a reader presses a different position -- so the
+// box is the right shape before any script runs and stays the right shape
+// after one does.
+const aspectRatio = `${fallback.width} / ${fallback.height}`;
+---
+
+<div class="bench">
+  {
+    /* The instrument. `--elevation-instrument` and no border: `DESIGN.md`
+     * rule 4 allows an elevated element exactly one of the two, and
+     * border-under-blur is the pairing that stays banned. The allowlist names
+     * this element, and only this element, as what may spend that token. */
+  }
+  <div class="bench__frame">
+    {
+      /* Where `StagePortal` in `BenchIsland.tsx` renders the player. It is
+       * only ever the portal's target: it renders nothing of its own, and
+       * with JavaScript blocked it holds the fallback below instead. */
+    }
+    <div
+      class="bench__stage"
+      id="bench-stage"
+      style={`--bench-aspect-ratio: ${aspectRatio}`}
+    >
+      {
+        /* With JavaScript the island is the whole player and this is inert
+         * text the parser never fetches from. Without it, this is the whole
+         * frame: the still, and a link to where the switch's default position
+         * plays.
+         *
+         * There is no same-origin clip to hand a plain `<video>` any more, and
+         * a hosted provider is an iframe embed rather than a file, so there is
+         * nothing here for a browser with scripting off to attach to on its
+         * own — that embed's own player is itself a script. A link is the
+         * honest fallback: it costs one request, it costs it only on a click,
+         * and it never claims to be running a player it cannot run.
+         *
+         * `<noscript>` is `display: none` while scripts run, so this is never
+         * a second thing in the frame — it is the frame's only content exactly
+         * when the island is not there. */
+      }
+      <noscript>
+        <a class="bench__fallback" href={fallbackUrl}>
+          {
+            /* The same still the island's player shows, here as a real `<img>`
+             * — not a CSS background, so this path keeps the guarantee the
+             * rest of the page does. `srcset`/`sizes` for the same reason
+             * `BenchIsland.tsx`'s `Player.PosterImage` carries them: this is
+             * the largest image on the page, and a no-JavaScript reader on a
+             * narrow or a high-density screen is owed the same match between
+             * screen and file a scripted reader gets. */
+          }
+          <img
+            class="bench__fallback-image"
+            src={poster.src}
+            srcset={poster.srcSet}
+            sizes="100vw"
+            alt=""
+          />
+          <span class="bench__fallback-label">Watch on {fallback.label} &rarr;</span>
+        </a>
+      </noscript>
+    </div>
+    {
+      /* The one gradient, in its one permitted accent form, rendered once on
+       * this page. `DESIGN.md` records that six sweeps down one page is the
+       * exact creep the one-gradient rule exists to stop, so this is the only
+       * call to this component here. */
+    }
+    <Sweep form="accent" />
+  </div>
+
+  {
+    /* The credit CC BY asks for wherever this media plays, including the
+     * no-JavaScript path above — which is why this is `<noscript>` rather
+     * than a line the island prints unconditionally. It is not unwrapped
+     * static markup: with a script running, `BenchIsland`'s own `Credit`
+     * mounts in its place and this paragraph is `display: none`, because it
+     * names only the switch's *default* film and a reader who has pressed the
+     * source switch is looking at a different one. Naming the wrong film
+     * would itself be the omission CC BY exists to prevent, only pointed the
+     * other way — so this is the no-script case, not a fallback that also
+     * happens to render first.
+     *
+     * Set at `--text-fn` in `--color-ink-subtle`, the same treatment
+     * `.bench__quiet` gets: it qualifies the instrument rather than
+     * captioning it, and it is not a footer, because CC BY asks for the
+     * credit to be findable near the work rather than at the end of the
+     * page. */
+  }
+  <noscript>
+    <p class="bench__credit">
+      <em>{credit.title}</em> &copy; {credit.holder}, licensed{' '}
+      <a href={credit.licenceUrl} rel="license">
+        {credit.licenceLabel}
+      </a>.
+    </p>
+  </noscript>
+
+  {
+    /* The island renders the credit for whichever film is actually selected
+     * (`Credit` in `BenchIsland.tsx`) as well as the line under the frame —
+     * see `QuietLine` there. Neither is static markup here: the credit has to
+     * say a different film's name the moment the source switch moves, and the
+     * quiet line has to say something different once the clip has loaded, and
+     * something different again once the source is somebody else's host. A
+     * no-JavaScript reader gets neither — the credit above stands in for the
+     * first, and the fallback link is a different player with its own
+     * behaviour that the quiet line would be describing incorrectly. `e2e`
+     * proves the resting claim: a spec records every request `/` makes at
+     * rest and fails if one leaves this origin. */
+  }
+  <BenchIsland base={base} client:only="react" />
+</div>
+
+<style>
+  .bench {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  /* The raised body of the instrument, and the one element on this site that
+   * takes `--elevation-instrument`. Two rows: the picture, and the sweep along
+   * the bottom edge. `overflow: hidden` is what makes the band the frame's own
+   * edge rather than a strip lying under it. */
+  .bench__frame {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    overflow: hidden;
+    background-color: var(--stage-field);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--elevation-instrument);
+  }
+
+  /* The screen, and the reason a dormant instrument is worth looking at.
+   *
+   * Nothing is loaded until the affordance is pressed, so there is no frame to
+   * show and this component may not invent one — no poster, no still, no
+   * gradient standing in for a picture.
+   *
+   * The ratio is `--bench-aspect-ratio`, not a literal: the inline `style`
+   * above sets it from `bench-sources.ts`'s own `width`/`height` for whichever
+   * position the page rests on, and `StagePortal` in `BenchIsland.tsx` moves
+   * it to match whenever a reader presses a different one. A literal 16:9 here
+   * once left a 2.39:1 film letterboxed inside a box shaped for a different
+   * ratio — the same class of defect as a poster from one film over a video
+   * of another, measured in bars down the sides rather than in a wrong title.
+   * The fallback, `2048 / 858`, is every current entry's own shape rather than
+   * the library's generic 16:9 one, so there is no frame — scripted or not,
+   * before or after a press — in which the box and the picture disagree. It
+   * stops being right the day a film of a different shape joins this file,
+   * which is the same day it would need to become source-derived rather than
+   * written here; nothing today makes that necessary.
+   *
+   * Always dark. `--stage-*` never moves with `data-theme`, so the picture
+   * reads the same in both themes — a cinema is dark regardless of the room. */
+  .bench__stage {
+    display: grid;
+    aspect-ratio: var(--bench-aspect-ratio, 2048 / 858);
+    background-color: var(--stage-sunken);
+
+    /* ---- the player's tokens, spoken in this site's roles ----------------
+     *
+     * Set here rather than on the viewport because the theme reads each one
+     * with `var(--name, default)` and never declares it, so a value on any
+     * ancestor reaches every part. One element to read, and adding a control
+     * later needs nothing added here. Inert until the skin switch loads the
+     * stylesheet that reads them. */
+
+    /* The well behind the media, which is what shows before a frame is
+     * decoded. */
+    --playdeck-color-backdrop: var(--stage-sunken);
+    /* The control bar and the activation button share this pair: a raised
+     * panel in the stage's own dark surface rather than the theme's
+     * translucent black. `--stage-ink` on `--stage-surface` is the contrast
+     * pair `DESIGN.md`'s dark table already records. */
+    --playdeck-color-surface: var(--stage-surface);
+    --playdeck-color-on-surface: var(--stage-ink);
+    /* `--playdeck-overlay-scrim` is the control bar's background and its
+     * default is a gradient. This system has exactly one gradient and
+     * `Sweep.astro` draws it, so the bar takes the flat surface the rest of
+     * the frame is built from. */
+    --playdeck-overlay-scrim: var(--stage-surface);
+    --playdeck-control-hover: var(--stage-sunken);
+    --playdeck-color-accent: var(--stage-accent);
+    /* One focus treatment for the whole site, and this is the belt to
+     * `base.css`'s braces. The theme carries a rule that would draw a white
+     * ring if it ever did the drawing, and its default is the only
+     * `--playdeck-*` value that could put a colour on this page from outside
+     * the system. */
+    --playdeck-color-focus: var(--stage-accent);
+    /* The seek slider's three grounds, and the one place here where the choice
+     * is arithmetic rather than taste. On `--color-line`, the quieter
+     * separator role, the loaded range measures below the 3:1 that non-text UI
+     * owes; on the sunken well it clears it. The thumb takes a ring because
+     * the accent does not clear 3:1 against both the track and the loaded
+     * range. The ratios are in `DESIGN.md`. */
+    --playdeck-color-track: var(--stage-sunken);
+    --playdeck-color-buffered: var(--stage-line-strong);
+    --playdeck-color-thumb-ring: var(--stage-ink);
+    /* The time readout is machine output, so it is mono like every other value
+     * on this site, at the caption rung — above the 11px floor. */
+    --playdeck-font-family: var(--font-mono);
+    --playdeck-font-size: var(--text-sm);
+    --playdeck-font-size-small: var(--text-xs);
+    --playdeck-space-1: var(--space-1);
+    --playdeck-space-2: var(--space-2);
+    --playdeck-space-3: var(--space-3);
+    --playdeck-radius: var(--radius-sm);
+    --playdeck-radius-large: var(--radius-md);
+    --playdeck-control-size: var(--hit-target);
+    --playdeck-transition-duration: var(--duration-fast);
+    --playdeck-transition-easing: var(--ease);
+  }
+
+  /* One cell, and every layer in it.
+   *
+   * A single named area rather than absolute positioning, because that is what
+   * makes the picture the thing that sizes the cell: the overlays are laid into
+   * the same cell without taking it out of flow, so nothing here has to restate
+   * a height the media already determines.
+   *
+   * The ratio is read from the property the library writes onto this element
+   * once a provider has measured its media -- right to keep reading, because
+   * the library knows the truth for a real `<video>` element where one exists.
+   * What changed is the fallback. `16 / 9` was a guess about a film nobody had
+   * measured; `var(--bench-aspect-ratio, 2048 / 858)` is the same property
+   * `.bench__stage` reads above, so before a provider has measured anything --
+   * and for `youtube`, which never does, see `MEDIA_ASPECT_RATIO_PROPERTY` in
+   * `viewport-media.tsx` -- this cell is already the film's own shape rather
+   * than the library's generic one. A stale fallback here is how a 2.39:1
+   * poster ended up stretched to 16:9 inside this exact cell: the poster lives
+   * in the `stack` area this element defines, so its box was this element's
+   * box. */
+  :global(.bench__stage) :global([data-playdeck-part='viewport']) {
+    display: grid;
+    grid-template-areas: 'stack';
+    aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 2048 / 858));
+    inline-size: 100%;
+  }
+
+  :global(.bench__stage) :global([data-playdeck-part='media']) {
+    grid-area: stack;
+    /* A grid item's automatic minimum is its content, and a video's content is
+     * its intrinsic width. Without this the picture would refuse to shrink
+     * below that and push the frame wider than the page. */
+    min-inline-size: 0;
+  }
+
+  /* The activation affordance is an overlay, and this is what makes it behave
+   * like one under the `none` skin.
+   *
+   * The library ships this part `position: absolute; inset: 0; margin: auto`
+   * with no size, so with no stylesheet at all it is full-bleed — which is the
+   * behaviour this page wants, because a click anywhere on the picture should
+   * start the clip. What comes with it is the user agent's own button paint,
+   * and measured on this frame that is an opaque `rgb(239, 239, 239)` fill and
+   * a `2px outset` black border, at `z-index: 30`, over a poster at 10. The
+   * still was loaded, decoded and marked `visible` by the library's poster
+   * state machine, and painted over regardless.
+   *
+   * So this is not the page reaching into the skin. An element whose whole job
+   * is to overlay a picture, and which occludes it instead, is not styled — it
+   * is broken, and the browser rather than the library is what broke it. Both
+   * declarations say only that: no size, no radius, no badge, no hover. Those
+   * are chrome and they stay the theme's, which is what keeps the two skin
+   * positions a contrast about chrome rather than about whether there is a
+   * picture at all.
+   *
+   * ---- and this is why it is scoped rather than unconditional ---------------
+   *
+   * Written unscoped first, and that falsified the paragraph above. This rule
+   * is unlayered while `theme.css` lives entirely inside `@layer playdeck`, and
+   * an unlayered declaration beats a layered one for the same property whatever
+   * the specificities are — the `[hidden]` reset below relies on exactly that.
+   * So the reset reached the themed player too: the part computed
+   * `rgba(0, 0, 0, 0)` under both skins, and `theme.css`'s own
+   * `--playdeck-color-surface` fill never landed. Pressing `theme` gave a bare
+   * glyph with no badge.
+   *
+   * `data-bench-skin` rides on the viewport, written by `Stage` in
+   * `BenchIsland.tsx` in the same React commit as the state it reports, so the
+   * rule matches only while the position it is written for is the one selected.
+   * Under `theme` nothing here applies and the stylesheet does its own work. */
+  :global(.bench__stage)
+    :global([data-bench-skin='none'] [data-playdeck-part='activation']) {
+    background-color: transparent;
+    border: 0;
+  }
+
+  /* The other half of the same defect, on the other skin -- issue #552,
+   * filed against the library rather than fixed there: under `theme`, this
+   * part is sized into a roughly 4rem badge, so only the badge was pressable
+   * and the rest of the picture did nothing. Measured directly: a click two
+   * inches from the badge, well inside the frame, reached no control at all.
+   *
+   * The fix redraws the badge as a background rather than as the button's own
+   * box, the technique `HeroPlayer.astro` used for the same part before this
+   * page was rebuilt as a bench (`git show 61599a4855:apps/site/src/components/HeroPlayer.astro`):
+   * the element itself goes full-bleed and transparent, and a `::before`
+   * paints the badge in its place. `--space-8` is 4rem, so the face is the
+   * size the theme drew it and the only thing that moved is the target. The
+   * icon shares the badge's grid area and paints over it because it comes
+   * later in the tree.
+   *
+   * `border-radius: 0` on the button's own box for the reason `HeroPlayer.astro`
+   * records: the theme rounds this part to 50%, which on a 4rem square is the
+   * badge's circle and on a full-bleed box is an ellipse inscribed in the
+   * stage — and a rounded corner clips hit testing, not just paint. Squared
+   * off here; the badge below carries its own roundness instead.
+   *
+   * Unlayered and scoped to `[data-bench-skin='theme']` for the same two
+   * reasons the `none` block above is scoped rather than unconditional: this
+   * beats `theme.css`'s own layered rule for the same property regardless of
+   * specificity, and scoping it keeps `none` untouched -- that position is
+   * already full-bleed with no badge at all, and drawing one there would be
+   * this page adding chrome the `none` position exists to not have. */
+  :global(.bench__stage)
+    :global([data-bench-skin='theme'] [data-playdeck-part='activation']) {
+    grid-area: stack;
+    grid-template-areas: 'face';
+    place-content: center;
+    inline-size: 100%;
+    block-size: 100%;
+    background-color: transparent;
+    border-radius: 0;
+    outline-offset: calc(-1 * var(--space-1));
+  }
+
+  :global(.bench__stage)
+    :global(
+      [data-bench-skin='theme'] [data-playdeck-part='activation']
+    )::before {
+    content: '';
+    grid-area: face;
+    inline-size: var(--space-8);
+    block-size: var(--space-8);
+    background-color: var(--color-surface);
+    border-radius: var(--radius-pill);
+  }
+
+  :global(.bench__stage)
+    :global(
+      [data-bench-skin='theme'] [data-playdeck-part='activation'] > svg
+    ) {
+    grid-area: face;
+  }
+
+  /* The other direction: once the clip is running, the same gesture toggles
+   * it. `SurfaceToggle` in `BenchIsland.tsx` is `Player.PlayButton` with its
+   * box opened out, and everything below undoes the theme's control-bar
+   * treatment of that part for this one instance -- the bar's own buttons are
+   * 44px chips with a hover tint, and a hover tint at this size would wash
+   * the picture. `border: 0` and a transparent background hold under `none`
+   * too, where without them a bare `<button>` would paint the browser's own
+   * opaque fill full-bleed over the picture -- the same defect the `none`
+   * activation reset above exists to prevent, on a part that reset does not
+   * reach.
+   *
+   * `position` and `z-index` for the reason the control bar carries them —
+   * the media declares a layer of its own and an unpositioned box in the same
+   * cell paints underneath it. The bar takes the same `z-index` and comes
+   * later in the markup, so it wins the overlap and its own buttons keep
+   * their clicks.
+   *
+   * No focus rule: it is not in the tab order (`SurfaceToggle` sets
+   * `tabIndex={-1}`), and a pointer press on a `:focus-visible` site leaves no
+   * ring. */
+  :global(.bench__stage) :global([data-surface-toggle]) {
+    grid-area: stack;
+    position: relative;
+    z-index: 1;
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: 0;
+    background-color: transparent;
+    border: 0;
+  }
+
+  :global(.bench__stage) :global([data-surface-toggle]:hover) {
+    background-color: transparent;
+  }
+
+  /* Pinned to the foot of the picture.
+   *
+   * `position` and `z-index` are what put the bar in front of the picture
+   * rather than behind it: the media declares a layer of its own, so a box left
+   * unpositioned in the same cell paints underneath it however late it comes in
+   * the markup. Stacking here is asked for, not inherited from source order. */
+  :global(.bench__stage) :global([data-playdeck-part='controls']) {
+    grid-area: stack;
+    position: relative;
+    z-index: 1;
+    place-self: end stretch;
+  }
+
+  /* The `[hidden]` reset, needed here rather than assumed: the attribute is
+   * honoured by a rule in the user-agent stylesheet, and the theme gives this
+   * part a `display` of its own, which any author rule beats. So with the theme
+   * loaded, the bar the island marks hidden before a player exists would stay
+   * on screen unless this says otherwise. Unlayered and unqualified, which is
+   * enough — the theme's declaration sits inside a cascade layer and loses to
+   * this one whatever the two specificities are. */
+  :global(.bench__stage) :global([data-playdeck-part='controls'][hidden]) {
+    display: none;
+  }
+
+  /* The seek input, taken out of the text line it was sitting in.
+   *
+   * A range input is inline-level, so in `seek-slider` it is laid into a line
+   * box and the container grows past it by the descender space under the
+   * baseline. The theme then centres the track on the CONTAINER while the input
+   * keeps the top of the line box, so the thumb and the bar it runs along do
+   * not share a centre. `display: block` removes the line box, so the container
+   * is the input's own 44px. The defect is `theme.css`'s and reaches every
+   * consumer of the bundled theme, where it is reported rather than patched
+   * here; `e2e/thumb-contrast.spec.ts` pins that geometry. */
+  :global(.bench__stage) :global([data-playdeck-part='seek-slider-input']) {
+    display: block;
+  }
+
+  /* Plex Mono is set tight relative to its own width, and this is the site's
+   * rule for opening it wherever it appears. The theme sets the family from the
+   * token above but has no tracking of its own to set. */
+  :global(.bench__stage) :global([data-playdeck-part='time']) {
+    letter-spacing: var(--tracking-fn);
+  }
+
+  /* The fallback fills its stage rather than sizing itself from the still, so
+   * the no-JavaScript frame is the same box the player's is. A link, not a
+   * button: it is one, and it says so in its label. */
+  :global(.bench__fallback) {
+    position: relative;
+    display: grid;
+    inline-size: 100%;
+    block-size: 100%;
+  }
+
+  :global(.bench__fallback-image) {
+    grid-area: 1 / 1;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  /* Set over the still rather than beside it, the way the activation button it
+   * stands in for is: this frame has no room under the picture for it while
+   * scripting is off, because nothing here reserves height for the rest of the
+   * readout either. */
+  :global(.bench__fallback-label) {
+    grid-area: 1 / 1;
+    align-self: end;
+    justify-self: start;
+    margin: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--stage-ink);
+    background-color: var(--stage-surface);
+    border-radius: var(--radius-sm);
+  }
+
+  @media (scripting: none) {
+    .bench__stage :global(noscript) {
+      display: contents;
+    }
+  }
+
+  /* Functional text, at the floor, in the mono every other machine statement on
+   * this site is set in. It qualifies the instrument above it rather than
+   * captioning it.
+   *
+   * `:global()` because the element comes out of the island, like the player's
+   * parts above — the look of the frame's own furniture belongs to the file
+   * that draws the frame, whichever tree happens to render it. */
+  :global(.bench__quiet) {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  /* The CC BY credit, at the same floor and the same ink as the line under the
+   * frame — but not mono: it is a sentence, not a value, an identifier, a
+   * state or machine output, and `DESIGN.md`'s type rule gives sentences to
+   * Sans regardless of size.
+   *
+   * `:global()`, like `.bench__quiet` above it: this element now renders from
+   * two places rather than one — this file's own `<noscript>` paragraph for
+   * the no-JavaScript case, and `Credit` in `BenchIsland.tsx` for every
+   * reachable state a script produces, both naming the film that is actually
+   * selected. Only one is ever on screen at once, but the rule has to reach
+   * whichever tree rendered it. */
+  :global(.bench__credit) {
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+  }
+
+  :global(.bench__credit) a {
+    color: inherit;
+  }
+</style>

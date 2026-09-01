@@ -399,6 +399,19 @@ which is what the site's entry motion is keyed off. A separate axis from the
 says nothing about a player.
 _Avoid_: mode, register, treatment, archetype
 
+**Provider asymmetry readout**:
+The table on the marketing site's provider index that asks the same three
+questions — which hosts, which source forms, which options — of each of its four
+columns, native files and HLS sharing one because a file extension is what
+chooses either, and prints where the answers differ in kind. Asymmetry rather than comparison,
+because what it exists to show is that a cell can answer `unknown` with a reason
+and that flattening the five into one shape would be the lie. Site-only, and it
+writes down no facts: `apps/site/src/provider-asymmetry.mjs` derives every host,
+form, key and reason from `docs/provider-setup.md`, and a section that document
+grows in a shape the module cannot place stops the build rather than rendering
+an empty cell.
+_Avoid_: provider matrix, feature table, comparison grid
+
 **Structural geometry**:
 The positioning a primitive needs in order to function — stacking, insets, the
 media element filling its viewport. Set inline by the primitive, ahead of the

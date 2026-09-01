@@ -1,0 +1,99 @@
+/*
+ * Tailwind, wired in for the header and nothing else this phase touches — see
+ * `apps/site/DESIGN.md` and #542 for the rest of the site's system.
+ *
+ * ---- Preflight is deliberately excluded ---------------------------------
+ *
+ * `@import 'tailwindcss'` pulls in three layers: `theme`, `preflight` and
+ * `utilities`. Preflight resets bare-element styles globally (`h1`, `p`,
+ * `code`, `pre`, `a`, tables, …), and this site has substantial hand-written
+ * CSS in `base.css` and `doc.css` doing exactly that job already, for the
+ * whole of `/reference/*`, `/providers/*`, `/archetypes` and `/design`.
+ * Preflight loaded on top would silently win the cascade on every one of
+ * those elements and wreck every documentation page — so it is never
+ * imported. Only the two layers this file actually needs are:
+ */
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/*
+ * shadcn's dialog, sheet and dropdown-menu components spell their open/close
+ * transitions as `data-[state=open]:animate-in`, `fade-in-0`, `zoom-out-95`
+ * and so on — utility classes this package defines as real `@keyframes`
+ * animations, in the `utilities` layer alongside Tailwind's own. Without it
+ * those classes match nothing, which does not fail silently: the sibling
+ * `duration-200` utility still sets `transition-duration`, and CSS's own
+ * default for `transition-property` is `all`, so *every* property left
+ * changing — including `background-color` when a reader flips the theme
+ * while a dialog is open — picks up a 200ms transition nothing asked for.
+ * `e2e/site-search.spec.ts`'s theme-token assertion is exactly that: reading
+ * the dialog's painted colour immediately after switching `data-theme`,
+ * which only holds if the switch is instant.
+ */
+@import 'tw-animate-css';
+
+/*
+ * ---- and both stay inside a layer, on purpose ----------------------------
+ *
+ * `base.css` and `doc.css` are unlayered CSS. Per the Cascade Layers spec, an
+ * unlayered normal-priority declaration always outranks a layered one for the
+ * same property on the same element, regardless of selector specificity or
+ * source order. So a Tailwind utility class on, say, a `<pre>` inside a
+ * rendered README can never override what `base.css` already gives `pre` —
+ * the two stylesheets cannot collide, by construction, without an
+ * `!important` battle either side has to remember to fight. That is the
+ * layering choice #542 asked to be made and proved rather than assumed: load
+ * order stops mattering, and the existing stylesheets win without being told
+ * to.
+ *
+ * Utilities are therefore safe to reach for anywhere Tailwind is imported —
+ * `SiteHeader.astro` today — as long as nothing here is written unlayered.
+ */
+
+/* The seam onto Gamut's palette: shadcn's variable names, each aliased to a
+ * Gamut role rather than to a value of shadcn's own. See the file for the
+ * mapping and the reasoning. */
+@import './shadcn-theme.css';
+
+/*
+ * Tailwind v4 generates utilities (`bg-background`, `text-foreground`,
+ * `border-border`, …) from `--color-*` entries under `@theme`. `inline` reads
+ * each entry as a live reference rather than resolving it at build time, which
+ * is what lets a class like `bg-background` still repaint when `data-theme`
+ * changes on the client — a build-time resolution would freeze it at
+ * whichever theme was active during the build.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}

@@ -3,17 +3,12 @@ import Base from '../layouts/Base.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import Sweep from '../components/Sweep.astro';
 
-// The workbench, which `scripts/assemble-deploy.mjs` places under `storybook/`
-// beside the site: this sheet names the tokens, and the components built on
-// them are over there.
-//
-// Written through `import.meta.env.BASE_URL`, which is what Astro fills the
-// configured `base` into, rather than as a literal. That prefix is the root
-// today and the literal would be identical, which is precisely why the habit is
-// worth keeping here: the day the site moves under a prefix, a hand-written
-// `/storybook/` is the bug a base path exists to prevent (#435) and nothing
-// would flag it.
-const storybookUrl = `${import.meta.env.BASE_URL}storybook/`;
+// The workbench is deliberately absent from this sheet, as it is from the
+// landing page and the site header. #534 records the decision that it is not to
+// be a public surface, and the maintainer ruled the same on a Storybook link.
+// The decision is carried out as an absence of links rather than of the build:
+// `scripts/check-deploy-artifact.mjs` still visits it, from its own address
+// rather than by following a link from here.
 
 // The three capability states, with the shape of reason line the site will
 // actually carry. They are here as a specimen of the system rather than as
@@ -57,7 +52,7 @@ const surfaces = [
   // identical chips in light and three distinct ones in dark is the asymmetry
   // shown rather than asserted, and the chip's `--color-line-strong` boundary is
   // what keeps a swatch whose fill equals its ground legible at all.
-  { token: '--color-raised', use: 'A surface on a surface' },
+  { token: '--color-raised', use: 'A step up from its ground' },
   { token: '--color-overlay', use: 'A surface over the page' },
   { token: '--color-sunken', use: 'A recessed well' },
   { token: '--color-line', use: 'Hairline' },
@@ -194,12 +189,6 @@ const inks = [
         </div>
       </div>
     </section>
-
-    <footer class="footer">
-      <p class="muted">
-        The components are in the <a href={storybookUrl}>Storybook workbench</a>.
-      </p>
-    </footer>
   </main>
 </Base>
 
@@ -385,10 +374,5 @@ const inks = [
     margin-inline-start: auto;
     color: var(--color-ink-subtle);
     text-align: end;
-  }
-
-  .footer {
-    margin-block-start: var(--space-7);
-    font-size: var(--text-sm);
   }
 </style>

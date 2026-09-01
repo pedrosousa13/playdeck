@@ -1,0 +1,83 @@
+/*
+ * shadcn/ui's variable names, aliased onto Gamut's own roles from
+ * `tokens.css`. This is the seam between the two systems phase 1 of #542
+ * introduced, and its whole job is to make sure there is exactly one palette
+ * rather than two.
+ *
+ * Every declaration below is a `var()` reference to a role token already
+ * defined in `tokens.css`. Nothing here writes a hex literal, so rule 1 in
+ * `DESIGN.md` — a hex literal appears once, in the raw scale — holds exactly
+ * as it did before this file existed: shadcn's names resolve to Gamut's
+ * values, never the other way round, and never to a value of their own.
+ *
+ * That is also why this file carries no dark variant and no `.dark` class.
+ * Each Gamut role already flips between light and dark in `tokens.css`, in the
+ * three-state mechanism `DESIGN.md`'s _Themes_ section describes — `:root`,
+ * the `prefers-color-scheme` block scoped away from `[data-theme='light']`,
+ * and `[data-theme='dark']`. A shadcn variable that points at `--color-ink`
+ * inherits that switching for free the moment it is declared once, so
+ * duplicating this block under `.dark` would be a second mechanism doing the
+ * same job the site already has one of — exactly the drift the maintainer
+ * asked this phase to resolve rather than inherit.
+ *
+ * Not every shadcn role has a Gamut equivalent, so three of these are a
+ * judgement call rather than a lookup, and each is explained where it is
+ * declared: `--accent` (a hover surface in shadcn's vocabulary, not a brand
+ * colour — Gamut's own `--color-accent` means the latter, which is the
+ * naming collision worth flagging), `--input`, and `--destructive-foreground`.
+ */
+
+:root {
+  --background: var(--color-field);
+  --foreground: var(--color-ink);
+
+  --card: var(--color-surface);
+  --card-foreground: var(--color-ink);
+
+  --popover: var(--color-overlay);
+  --popover-foreground: var(--color-ink);
+
+  --primary: var(--color-accent);
+  /* Gamut's own answer to "what sits on the accent colour": DESIGN.md's
+   * palette section states selected text is `--color-field` on
+   * `--color-accent`, measured at the same contrast the accent row already
+   * carries because the pair is symmetric. */
+  --primary-foreground: var(--color-field);
+
+  --secondary: var(--color-sunken);
+  --secondary-foreground: var(--color-ink);
+
+  --muted: var(--color-sunken);
+  --muted-foreground: var(--color-ink-muted);
+
+  /* shadcn's `--accent` is a subtle hover/active surface, not a brand colour —
+   * the name collides with Gamut's `--color-accent` (the blue primary) but the
+   * two mean different things. Mapped to the sunken well, which is what every
+   * hover surface on this site already is (`ThemeToggle.astro`'s own hover
+   * rule, for one). */
+  --accent: var(--color-sunken);
+  --accent-foreground: var(--color-ink);
+
+  --destructive: var(--color-unavailable);
+  /* Gamut has no dedicated "ink that sits on a destructive fill" role, because
+   * nothing on this site fills a surface with `--color-unavailable` — it is
+   * always text or a status dot on an ordinary ground. `--color-field` is the
+   * nearest reasoning available: the same "light ink on a saturated fill"
+   * shadcn's own defaults use, and the pairing this site already spends on
+   * `--primary-foreground` above. */
+  --destructive-foreground: var(--color-field);
+
+  --border: var(--color-line);
+  /* shadcn's `--input` is a form control's own boundary, which is exactly what
+   * Gamut's `--color-line-strong` is for: DESIGN.md calls it "the boundary of
+   * a control" and holds it to the 3:1 non-text UI owes, everywhere
+   * `--color-line` (a decorative separator, AA asks nothing of) would be the
+   * wrong token to reach for. */
+  --input: var(--color-line-strong);
+  --ring: var(--color-accent);
+
+  /* shadcn's default radius scale runs sm/md/lg/xl off one base value via
+   * `calc()`; `--radius-md` is the nearest rung already in `tokens.css` to
+   * shadcn's own 0.5rem default. */
+  --radius: var(--radius-md);
+}

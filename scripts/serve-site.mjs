@@ -145,8 +145,21 @@ const server = createServer((request, response) => {
       'content-type':
         CONTENT_TYPES.get(extname(file)) ?? 'application/octet-stream',
       // The suite rebuilds the site between runs and a cached document would
-      // hide the change under test.
-      'cache-control': 'no-store'
+      // hide the change under test, so nothing addressed by a stable path is
+      // storable.
+      //
+      // `/_astro/` is the exception, and it is safe for the reason a
+      // production CDN caches it forever: every file under it is
+      // content-addressed — Astro puts a hash of the contents in the name — so
+      // a rebuild that changes a file changes its address, and a cached copy
+      // can only ever be a copy of the bytes that were asked for. It is served
+      // cacheable because `e2e/site-receipt.spec.ts` has to observe a cache hit
+      // to check that the receipt prints one as a cache hit rather than as a
+      // page that weighs nothing, and `no-store` on every response made that
+      // unobservable.
+      'cache-control': pathname.includes('/_astro/')
+        ? 'public, max-age=600'
+        : 'no-store'
     });
     createReadStream(file).pipe(response);
   });
