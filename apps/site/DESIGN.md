@@ -623,6 +623,17 @@ the light theme and then replace it.
 Neither block writes a colour. Both assign `var(--dark-*)` references, so the
 values still exist in one place and the two blocks cannot drift apart.
 
+**All of that is now observed rather than asserted.** It was read by people for
+as long as it has existed, and it is the kind of rule any edit to the cascade in
+`tokens.css` can falsify without failing anything — the scoping that makes an
+explicit `light` beat a dark machine is one selector, and losing it leaves a
+site that still switches on a click and still looks right on the machine
+whoever changed it was using. `e2e/site-theme.spec.ts` drives the switch the
+way a reader does and reads back the colour the browser actually painted, in
+both directions, across a reload, and on a document page as well as on `/`. The
+colour rather than the attribute, because a `data-theme` the cascade has stopped
+reading would satisfy an attribute check and fail every reader.
+
 ## Stances
 
 A marketing page and a reference document have different jobs, and pretending
@@ -698,9 +709,24 @@ players. A second marketing register there would be the site making its argument
 twice and being inconsistent about how, which is worse than either treatment on
 its own.
 
-**`/design`'s public status is not decided here.** Whether this sheet is listed,
-unlisted or moved is another issue's to rule on. It is given a stance so that it
-has a shape whatever that ruling is, and nothing more should be read into it.
+**`/design` is public and unlisted, and that is ruled rather than pending.** The
+maintainer settled it while the site was being read as one surface (#540): the
+sheet stays served at `/design/`, and the header's navigation does not name it.
+Nothing else on the site links to it either. It keeps the `document` stance it
+was given, so a reader who types the address meets a page shaped like every
+other page rather than a developer artefact with a layout of its own, and it
+keeps the shared header, so that reader is one press from the rest of the site
+instead of stranded on it.
+
+Unlisted rather than listed, because of what the sheet is for. It is a wall of
+token names that exists so a later ticket can check its work against the
+rendered system, and a reader who came to find out what this library does is not
+its audience — a fourth name in a strip of three would spend the site's
+navigation on the site's own scaffolding. Public rather than moved or made
+build-only, because it has to be rendered by the same build, in the same themes,
+from the same tokens, or it stops being evidence about the shipped site; and a
+served address a reader can type costs nothing a build-only artefact would not
+also cost.
 
 **`stance` and `documentation` are two axes and only correlated.**
 `documentation` answers whether a page belongs in the search index; `stance`
@@ -1289,17 +1315,35 @@ address rather than by following a link from any page.
 the link most likely to be added back by someone reading this strip as a list of
 everything the repository builds.
 
-**The row is a second line, not a disclosure, and it needs no script.** Three
-names cannot share the first line with the trail, search and the switch at
-320px, so the choice was a second line or something that hides them. The rail is
-a disclosure because it is a list per package plus a list per heading, several
-phone screens of it; three short words are not that, and a row that is always
-visible costs one line of header and has no state to announce. It takes
-`flex-basis: 100%` rather than a media query, so it is the same line at 320px
-and at 1600px and there is one layout to reason about instead of two, and it is
-last in the source as well as last in the strip, so reading order and visual
-order agree at every width — which is what placing it with `order` would have
-cost.
+**This paragraph read "the row is a second line, not a disclosure, and it needs
+no script", and every clause of it is false.** It described a row taking
+`flex-basis: 100%` under the trail, visible at every width, with no state to
+announce, and it argued that three short words did not need the disclosure the
+rail gets. That was true of the row as first built and stopped being true when
+this header was rebuilt on shadcn: there is no second line, no `flex-basis`
+anywhere in the file, and below `40rem` the three names live inside a `Sheet`
+that does not exist until a script mounts it. Nothing in the repository failed
+while the layout moved out from under the sentence, which is why it is corrected
+here as a false claim rather than quietly edited into agreement.
+
+**What the header does is render one list twice, and exactly one copy is
+interactive at a time.** At `40rem` and above the three names sit inline beside
+the trail, in normal flow and in source order. Below it they are drawn only
+inside `SiteNavSheet`'s sheet, reached through a trigger button beside the
+trail. `hidden min-[40rem]:flex` on the inline list and `min-[40rem]:hidden` on
+the trigger are complementary, keyed to the same breakpoint from both
+directions, and the sheet's content is portalled to `document.body` and not
+mounted until it is opened — so at rest there is exactly one set of links inside
+the `Site` landmark at every width, which is what lets `e2e/site-nav.spec.ts`
+count them without knowing the viewport.
+
+**What that costs is a navigation below `40rem` that needs a script, and it is
+the same trade the rail records below**: a native element that worked closed
+with no JavaScript, replaced by a component that does not. The cost is smaller
+here than there. A reader with no script below that width still has the wordmark at
+the head of the trail on every document page, and `/`'s close still prints the
+same three destinations, so what is lost is this route to a section rather than
+the section.
 
 **Which destination is marked is derived from the path, not passed in.** The
 first segment of `Astro.url.pathname` with the deployment prefix taken off, so a
@@ -1347,16 +1391,29 @@ inside one of those landmarks, or a marker on something a reader cannot follow �
 so the nav emits the attribute on at most one link, and `e2e/site-nav.spec.ts`
 pins that it is the section the reader is actually in and only that one.
 
-On `/` the header renders the switch and the navigation row, and nothing else.
-The trail is not rendered at all: there is nowhere for a wordmark to return to,
-the page's own `h1` is already the wordmark at the title rung, and a strip
-repeating it eighty pixels above would be the same word twice. That `h1` cannot
-move, because `scripts/check-deploy-artifact.mjs` identifies the site's root
-document in a browser by a heading named exactly `Playdeck` — which is also why
-nothing in this header may be promoted to a heading with that name. The three
-destinations are the reason a reader on `/` is not stranded there without the
-foot of the page, and they are internal links on `/`, which that check requires
-at least one of.
+On `/` the header renders the navigation and the switch, and nothing else. The
+trail is not rendered at all: there is nowhere for a wordmark to return to, and a
+strip naming the page directly above the page's own `h1` of the same name would
+be that word twice in eighty pixels. That `h1` cannot move, because
+`scripts/check-deploy-artifact.mjs` identifies the site's root document in a
+browser by a heading named exactly `Playdeck` — which is also why nothing in
+this header may be promoted to a heading with that name. The three destinations
+are the reason a reader on `/` is not stranded there without the foot of the
+page, and they are internal links on `/`, which that check requires at least one
+of.
+
+**This used to give a second reason — that the `h1` was "the wordmark at the
+title rung" — and that half is no longer true.** `/`'s `h1` still reads
+`Playdeck` and still must, but it sets at `--text-lg` in `--color-ink-muted`
+now: it names the document, and the display rung goes to the thesis under it.
+_Type_ above carries that amendment and its reasoning. So the case for leaving
+the trail off `/` rests on the repetition alone, and it survives the change
+whole. What does not survive is the reading a later session could take from the
+retired clause — that the header may grow a wordmark on `/` now the `h1` has
+stopped being one. The `h1` stopped being large, not stopped being that word, so
+the repetition argument is untouched; and anything added there would have to
+stay a link rather than become a heading, because two elements answering to that
+role and name is precisely the ambiguity the deploy check cannot survive.
 
 The reference pages and the provider setup pages are the site's long-form
 reading, and the only pages here whose words are not written in this app. A
@@ -1513,13 +1570,21 @@ a role that changed shows the change. It is the living reference a later ticket
 checks its work against, and the place to add a specimen when a token is added.
 
 It is not part of the site's own navigation, and **nothing on the site links to
-it at all any more.** `/` carried the one link, in the ways-onward row at the
-foot of the page, and the rebuilt close carries Reference, Providers and
-Archetypes and nothing else. That was not ruled on: the link went out with the
-page it was on. The sheet is still built and still served at its own address,
-so it is reachable by typing it, and whether it should be listed is the open
-question the paragraph on its stance above says it is. Written down here so that
-a later reader finds a decision to make rather than a link they assume exists.
+it at all.** `/` carried the one link, in the ways-onward row at the foot of the
+page, and the rebuilt close carries Reference, Providers and Archetypes and
+nothing else. That was not ruled on at the time: the link went out with the page
+it was on, and this passage recorded the absence as something waiting for a
+decision.
+
+**The decision has since been taken and it matches the accident.** `/design` is
+public and unlisted — served at its own address, carrying the shared header, and
+absent from the header's three destinations. _Stances_ above holds the
+reasoning. What changes here is that the absence is deliberate now: a later
+session finding this sheet unreachable from the navigation is looking at a
+ruling rather than at an oversight, and a fourth name in the strip is a decision
+to reopen rather than a tidy-up. `e2e/site-nav.spec.ts` pins both halves — that
+the sheet is served and gives a reader the same way back as every other page,
+and that the navigation does not name it.
 
 `data-theme` has two writers and they are not interchangeable: the pre-paint
 script in `Base.astro` applies a stored choice before the browser paints, and

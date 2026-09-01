@@ -50,10 +50,14 @@ interface Props {
    * half: every route here except `/` is a document — the reference pages, the
    * provider pages, the archetypes and this system's own specimen sheet — so a
    * page added later gets the quiet treatment with nothing to remember, and the
-   * one page that argues has to say so. `argument` buys larger type, more
-   * space, and the entry motion `base.css` keys off this attribute; keying it
-   * here rather than on a class is what stops a document page growing scattered
-   * reveals by accident.
+   * one page that argues has to say so. `argument` buys larger type and more
+   * space, and both of those are `index.astro`'s own rules: no stylesheet in
+   * this app reads `data-stance` today. One did — the site's entry motion was
+   * selected off it, so a document page could not grow a scattered reveal by
+   * accident — and that vocabulary is deleted. `DESIGN.md`'s _Stances_ section
+   * records why the attribute is kept with nothing reading it, and leaves
+   * whether it still earns its place here as an open judgement rather than
+   * answering it.
    *
    * `/archetypes` is a `document` deliberately rather than by omission: the
    * persuading happens on `/`, and that page exists so a reader can read the

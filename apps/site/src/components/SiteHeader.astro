@@ -99,11 +99,17 @@
  * structurally instead — last in the trail and not a link.
  *
  * On `/` the list is empty and the trail is not rendered at all, wordmark
- * included: there is nowhere for it to return to, the page's own `h1` is
- * already the wordmark at the title rung — `scripts/check-deploy-artifact.mjs`
- * identifies the site's root document by a heading named exactly `Playdeck`,
- * so that `h1` cannot move — and a strip repeating it directly above would be
- * the same word twice in eighty pixels.
+ * included: there is nowhere for it to return to, and a strip naming the page
+ * directly above the page's own `h1` of the same name would be that word twice
+ * in eighty pixels.
+ *
+ * This used to give a second reason — that the `h1` was already the wordmark
+ * "at the title rung" — and it is not one any more. `index.astro` sets that
+ * heading at `--text-lg` in the muted ink and spends the display rung on the
+ * thesis under it, so the repetition is the whole of the argument now. What is
+ * unchanged is the constraint underneath: the heading reads exactly `Playdeck`,
+ * `scripts/check-deploy-artifact.mjs` identifies the site's root document by
+ * it, and so nothing in this header may be promoted to a heading of that name.
  */
 import DocsSearch from './DocsSearch.astro';
 import ThemeToggle from './ThemeToggle.astro';

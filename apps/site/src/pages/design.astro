@@ -75,9 +75,13 @@ const inks = [
 }
 <Base title="Playdeck visual system — design reference" documentation={false}>
   {
-    /* The sheet is not part of the site's navigation — `/` links to it only so
-     * it is reachable — but it is served from the site's origin and a reader who
-     * lands on it needs the same way back that every other page gives them. */
+    /* The sheet is public and unlisted, which #540 ruled after #545 explicitly
+     * left the question to it: served at its own address, absent from the
+     * header's three destinations, and linked from nowhere — the `/` link
+     * this comment used to name went out with the landing page that carried
+     * it. It still takes the shared header, because unlisted is not walled off:
+     * a reader who typed the address, or followed one out of an issue, needs
+     * the same way back into the site that every other page gives them. */
   }
   <SiteHeader crumbs={[{ label: 'Visual system' }]} documentation={false} />
 

@@ -13,6 +13,12 @@ import { expect, test, type Page } from '@playwright/test';
  * only one marked, and that three more names in a strip that already holds a
  * trail, search and a switch do not push a 320px page sideways.
  *
+ * #540 added the two tests that read the site as one surface rather than as two
+ * page shapes: that every route the site serves carries the strip and a way
+ * back to the root, and that `/design` is served, shares the shell, and is
+ * named by no navigation on any page — the public-but-unlisted ruling that
+ * issue owed.
+ *
  * The workbench is deliberately absent and asserted absent: #534 records the
  * decision that it is not to be a public surface, and it is the link most
  * likely to be added back by
@@ -143,6 +149,94 @@ test('aria-current marks the section the reader is in, and only that one', async
   // the page the reader is on.
   await page.goto(landing);
   await expect(nav(page).locator('a[aria-current="page"]')).toHaveCount(0);
+});
+
+/**
+ * Every route the site serves, in the shapes `DESIGN.md`'s stance table lists
+ * them: the argument page, both section indexes, a page a level down inside
+ * each of the two sections that have one, the archetypes, and the specimen
+ * sheet. Written out rather than crawled, for the same reason `destinations`
+ * above is: a list derived from the site would agree with the site whatever
+ * either of them said.
+ */
+const routes = [
+  '/',
+  '/reference/',
+  '/reference/core/',
+  '/providers/',
+  '/providers/youtube/',
+  '/archetypes/',
+  '/design/'
+];
+
+test('every route reaches every section, and every route but / reaches /', async ({
+  page
+}) => {
+  // #540's first acceptance criterion, which is the one a screenshot of any
+  // single page cannot show: a reader can get from any part of the site to any
+  // other without going home first. The header is the mechanism, so the check
+  // is that the header is on every route rather than that the links exist
+  // somewhere on each page — a link in the close of `/` would satisfy the
+  // second and not the first.
+  for (const route of routes) {
+    const response = await page.goto(`${SITE}${route}`);
+    expect(response?.status(), route).toBe(200);
+
+    await expect(nav(page).getByRole('link'), route).toHaveText(
+      destinations.map(({ label }) => label)
+    );
+
+    // And back to the root, through the wordmark at the head of the trail. `/`
+    // is the exception and renders no trail at all, because a page has nowhere
+    // to return to from itself.
+    const wordmark = page
+      .getByRole('navigation', { name: 'Breadcrumb', exact: true })
+      .getByRole('link', { name: 'Playdeck', exact: true });
+    if (route === '/') {
+      await expect(wordmark, route).toHaveCount(0);
+    } else {
+      await expect(wordmark, route).toHaveAttribute('href', '/');
+    }
+  }
+});
+
+test('/design is served and shares the shell, and the navigation does not name it', async ({
+  page
+}) => {
+  // The ruling #540 owed: public, and unlisted. Both halves are pinned,
+  // because each fails in a way the other cannot catch — a sheet dropped from
+  // the build is still absent from the navigation, and a sheet added to the
+  // navigation is still served.
+  const response = await page.goto(`${SITE}/design/`);
+  expect(response?.status()).toBe(200);
+  await expect(
+    page.getByRole('heading', { name: 'The visual system', exact: true })
+  ).toBeVisible();
+
+  // Unlisted is not walled off: the same header, so a reader who typed the
+  // address is one press from the rest of the site.
+  await expect(nav(page).getByRole('link')).toHaveText(
+    destinations.map(({ label }) => label)
+  );
+
+  // Unlisted, from every page that carries the strip rather than only from
+  // this one.
+  for (const route of routes) {
+    await page.goto(`${SITE}${route}`);
+    await expect(nav(page).locator('a[href*="design" i]'), route).toHaveCount(
+      0
+    );
+    // And by what a link says, not only by where it points — the same pair of
+    // checks the workbench absence gets above, for the same reason: a
+    // destination reading "Visual system" that resolved through some other
+    // path is the same addition.
+    await expect(
+      nav(page)
+        .locator('a')
+        .filter({ hasText: /design|visual system/i }),
+      route
+    ).toHaveCount(0);
+  }
 });
 
 test("/'s heading is still exactly Playdeck, and there is one of it", async ({
