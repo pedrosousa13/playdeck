@@ -564,9 +564,11 @@ test('reports a start position the element clamped short', async () => {
 // The other half of #465: `seekable` decides whether the element will seek,
 // and is no longer the thing the offset is clamped onto. A window that starts
 // above the requested offset used to pull the playhead to its leading edge —
-// a position nobody asked for, and the write #407 measured as the trigger for
-// a partly-parsed element wedging. A live source is where that shape occurs:
-// the DVR window opens at 100, the element sits on the live edge, and a
+// a position nobody asked for. This is not #407's shape, which is a window
+// that reaches the offset's own side of the clip and grows with the duration
+// — `reports a start position clamped into a partly-parsed window` above is
+// that one, and it still writes the edge. A live source is where this shape
+// occurs: the DVR window opens at 100, the element sits on the live edge, and a
 // `startTime` below the window is now refused rather than answered with the
 // back of the window. `startTime: 0` already declined to do this for its own
 // reasons — see `NativePlaybackOptions.startTime`.

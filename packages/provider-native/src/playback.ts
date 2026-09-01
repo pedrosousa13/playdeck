@@ -103,13 +103,14 @@ const startTimeConfigurationNotice: PlayerError = {
 // the position the consumer asked for.
 //
 // Not a measured value, and deliberately not one. Every outcome #465 observed
-// was either exact -- both engines landed on 5.000 and 9.000 where they honoured
-// the write -- or wrong by seconds: 5 became 0 on chromium, and 9 became 5.84 on
-// firefox. Nothing measured lands in between, so the number's only job is to
-// keep an engine that answers the nearest frame rather than the requested
-// instant from being reported as a refusal. A quarter of a second is well below
-// anything a viewer would call the wrong place and far below every refusal there
-// is evidence of.
+// was either exact -- both engines landed on 5.000 where they honoured the
+// write -- or wrong by seconds: 5 became 0 on a chromium element reporting
+// `seekable [[0, 0]]`, and 9 was clamped by firefox to 5.84 on the WebM and
+// 6.28 on the MP4, 3 of 3 each, never advancing after. Nothing measured lands
+// in between, so the number's only job is to keep an engine that answers the
+// nearest frame rather than the requested instant from being reported as a
+// refusal. A quarter of a second is well below anything a viewer would call the
+// wrong place and far below every refusal there is evidence of.
 const SETTLED_POSITION_TOLERANCE_SECONDS = 0.25;
 
 export type NativePlaybackDeps = {
@@ -184,12 +185,29 @@ export const createNativePlayback = (
   // reading of the specification. HTML has the seek algorithm continue "in
   // parallel" after the setter returns, which would leave `currentTime`
   // answering the value just written; both engines that could be run instead
-  // apply their own clamp before the setter returns. Measured on 2026-09-01
-  // against a 10s MP4 on an origin serving no byte ranges: chromium reported
-  // `seekable [[0, 0]]`, took `currentTime = 5` and read back 0.000 in the same
-  // statement, and firefox took the same write against `[[0, 10]]` and read back
-  // 5.000 -- 3 runs each, matching what those elements still held half a second
-  // and one `seeked` event later.
+  // apply their own clamp before the setter returns. Measured on 2026-09-01,
+  // 3 runs per engine, Playwright's Linux chromium and firefox against this
+  // repo's `apps/storybook/public/tracer-10s.mp4` (20,078 bytes) with the
+  // response rewritten to `Accept-Ranges: none`: chromium reported `seekable
+  // [[0, 0]]`, took `currentTime = 5` and read back 0.000 in the same
+  // statement, and firefox reported `[[0, 10]]`, took the same write and read
+  // back 5.000. Both elements still held those values a `seeked` event later.
+  //
+  // Firefox's full window there is a property of the clip and not of the
+  // header: 20 KB arrives in one response, so nothing is left to fetch by
+  // range. #465's table, measured on a different rig, has firefox answering
+  // `[[0, 5.84]]` on the same arm; the read-back was not measured there.
+  //
+  // WebKit could not be run for any of this, and it degrades unsafely rather
+  // than safely. An engine whose setter answers the value written before its
+  // own clamp makes `reached === target`, so a start that did not apply
+  // publishes no notice -- the silent drop #418 exists to prevent, on the
+  // engine #418 was measured on. The exposure is narrower than all of WebKit:
+  // #418's own shape, a `duration` of 0 with an empty `seekable`, clamps the
+  // target away from the requested offset and is reported by the
+  // `target !== startTime` branch in `applyInitialPosition` without the
+  // read-back being consulted at all. What is left uncovered is a WebKit load
+  // that publishes a duration reaching the offset and then does not move.
   //
   // So the check costs one property read and nothing else. Waiting for `seeked`
   // would be the wrong instrument even if it were cheaper: the seek this exists
@@ -483,9 +501,22 @@ export const createNativePlayback = (
       // for `readyState 4`, `networkState 1` and `buffered [[0, 10]]` and the
       // write still landed at 0, 6 of 6 runs. What it no longer does is supply
       // the position: a window that does not cover the offset is a refusal
-      // rather than an instruction to land on its nearest edge, so nothing
-      // writes the leading edge of a window still being parsed, which is the
-      // write #407 measured as the trigger for a wedged element.
+      // rather than an instruction to land on its nearest edge. That removes
+      // the write onto a seekable edge the declared window does not reach --
+      // a live source answering `startTime: 5` against `seekable [[100, 200]]`
+      // used to pull the playhead back to 100 and report success, and now
+      // writes nothing and reports the refusal.
+      //
+      // It does not remove #407's write, and the block above this function
+      // describes a hazard that is still live. Where `duration` and the
+      // seekable extent grow together -- the partly-parsed shape #407 measured
+      // -- the duration bound answers the same number the seekable clamp used
+      // to, and `declinesSeekTo` accepts it, because a target sitting exactly
+      // on a range's end is inside that range. So the leading edge is still
+      // written there. This package's `reports a start position clamped into a
+      // partly-parsed window` is that case and still records the write; what
+      // changed for it is only that the consumer is told, through #418's
+      // notice.
       const target = withinDeclaredBounds(media, startTime, startTime, endTime);
       const reached = playheadAfterMovingTo(target);
       // Keyed on where the playhead ended up, not on whether a write happened

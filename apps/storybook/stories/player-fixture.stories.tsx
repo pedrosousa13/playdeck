@@ -399,7 +399,7 @@ const meta: Meta<PlayerFixtureProps> = {
     source: {
       control: 'text',
       description:
-        "'hls' | 'live' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
+        "'hls' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
     },
     engine: {
       control: 'radio',
@@ -499,6 +499,12 @@ export const HlsNative: Story = {
 
 export const LiveHlsJs: Story = {
   args: { source: 'live', engine: 'hls.js' }
+};
+
+// A start offset on a live source, which is the one shape where the offset and
+// the sliding window can disagree (#465).
+export const LiveHlsJsStartTime: Story = {
+  args: { source: 'live', engine: 'hls.js', startTime: 5 }
 };
 
 export const LiveNative: Story = {

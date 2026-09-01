@@ -62,9 +62,10 @@ honoured rather than merely configured.
 
 ## Fixture media
 
-`public/` holds the clips the `Real playback/*` stories play. All but one are
-one second, 30fps and video-only, so they behave identically offline and in CI;
-the MP4s are H.264 with `+faststart`.
+`public/` holds the clips the real-playback stories play — those tagged
+`real-playback`, whether they sit under `Real playback/*` or `Fixtures/*`. All
+but one are one second, 30fps and video-only, so they behave identically offline
+and in CI; the MP4s are H.264 with `+faststart`.
 
 - `tracer.mp4` — 320×180 (16:9). It arrived whole in the commit that added it
   and how it was produced is recorded nowhere, which is why the next entry

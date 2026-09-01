@@ -76,10 +76,12 @@ test('applies a start offset a range-serving origin can satisfy', async ({
 });
 
 // The defect's own shape: an origin that refuses byte ranges. What each engine
-// then does is engine-specific and #466's subject — measured on 2026-09-01,
-// chromium reports `seekable [[0, 0]]` and will not move the playhead at all
-// while firefox takes the write and lands on it — so this asserts the property
-// that has to hold whichever of those happens, and nothing narrower.
+// then does differs, so this asserts the property that has to hold whichever it
+// is, and nothing narrower. Measured on 2026-09-01, 3 runs each: chromium
+// reports `seekable [[0, 0]]`, takes the write and stays at 0, while firefox
+// reports a full `[[0, 10]]` and lands on the offset — this clip is 20 KB and
+// arrives in one response, so firefox has the whole of it whatever the header
+// says.
 //
 // The playhead is at the offset, or the consumer was told it is not. The state
 // this forbids is the third one: sitting at 0 with nothing published, which is

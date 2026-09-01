@@ -14,9 +14,8 @@ the clamp answered with a position from a window that had not filled in yet.
 Now the duration supplies the bound, which is what still refuses an offset past
 the end of the media, and `seekable` decides only whether the element will move
 at all. A window that does not reach the offset is a refusal rather than an
-instruction to land on its nearest edge, so nothing writes the leading edge of a
-window still being parsed, and a live source no longer answers a `startTime`
-below its DVR window with the back of that window.
+instruction to land on its nearest edge, so a live source no longer answers a
+`startTime` below its DVR window with the back of that window.
 
 The playhead is then read back to confirm it arrived. That closes the case this
 change would otherwise have opened: a chromium element reporting `seekable

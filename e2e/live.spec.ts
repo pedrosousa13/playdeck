@@ -82,6 +82,60 @@ test('surfaces a behind-edge seek within the live window on the hls.js engine', 
   await expect(panel).toHaveAttribute('data-live-edge', 'at-edge');
 });
 
+// #465: a `startTime` on a live source. The offset is bounded by the media's
+// duration and then only written where the seekable window covers it, so on a
+// live stream it either lands on the offset or is reported as refused — the
+// outcome it can no longer have is the playhead pulled onto the edge of the
+// window with success reported.
+//
+// This fixture reaches the first half of that and not the second. Its window
+// starts at 0 and grows from there rather than sliding its front edge forward
+// — sampled on 2026-09-01 on chromium and firefox, `seekable` went
+// `[[0, 20]]` to `[[0, 26]]` over six samples with the start never leaving 0 —
+// so an offset below the window is not expressible against it, and the case
+// where it is below one (`startTime: 5` against `[[100, 200]]`) is pinned by
+// the unit test 'writes no initial position onto the nearest seekable edge' in
+// `packages/provider-native/test/index.test.ts`.
+test('applies a start offset inside the live window on the hls.js engine', async ({
+  browserName,
+  page
+}) => {
+  test.skip(browserName !== 'chromium', 'The hls.js flow runs on Chromium.');
+
+  await page.goto(
+    '/iframe.html?id=fixtures-playerfixture--live-hls-js-start-time&viewMode=story'
+  );
+  await expect(page.getByTestId('hls-engine')).toHaveText('hls.js');
+
+  const panel = page.getByTestId('live-panel');
+  await expect(panel).toHaveAttribute('data-live-status', 'live');
+
+  // Polled rather than read once, and the outcome is a moment rather than a
+  // resting state: the offset is applied on the first `loadedmetadata`, and
+  // hls.js then does its own live-edge sync over the top of it — sampled on
+  // 2026-09-01, the playhead sat at 5 and was at the live edge (19.0) less
+  // than 1.5s later, where it stayed. So this asks whether the offset was ever
+  // reached, not where the playhead came to rest, and the polling interval has
+  // to stay well inside that second. The element is paused throughout, so it
+  // cannot pass through the offset by playing to it.
+  //
+  // A silent drop fails this by timing out with neither half true, which is
+  // the intended failure and the slow one.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const state = window.playdeckHandle?.getState();
+          return (
+            Math.abs((state?.currentTime ?? -1) - 5) <= 0.25 ||
+            state?.error?.category === 'configuration'
+          );
+        }),
+      { intervals: [100], timeout: 15_000 }
+    )
+    .toBe(true);
+});
+
 test('detects a live stream and never shows a fixed duration on native HLS', async ({
   browserName,
   page
