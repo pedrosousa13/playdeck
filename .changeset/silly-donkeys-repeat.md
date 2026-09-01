@@ -18,8 +18,14 @@ every value this adapter takes off that bridge — `seconds`, `percent`,
 what varies is the transport, not the field: these cross a `postMessage`
 boundary as untyped JSON and nothing on the way types them.
 
-Nothing that is not a number becomes one. An empty string, a whitespace-only
-string, a non-numeric string, `null` and `NaN` are all still refused, which a
-bare `Number(value)` would not have done — `Number('')` is 0, so coercing
+Only one string shape is read, and it is the shape the SDK forwards: an ordinary
+decimal number, with optional ASCII whitespace around it and an optional sign.
+Everything else is refused — an empty or whitespace-only string, a non-numeric
+one, `null`, `NaN`, and the exotic numeric literals `Number` would otherwise
+have accepted (`'0x10'` as 16, `'0b11'` as 3, `'0o17'` as 15, `'1e3'` as 1000),
+along with a non-breaking space that `trim` would have stripped. That narrowness
+is deliberate: the string on this path is a slice of the embedding page's url,
+so the grammar accepted here is a grammar somebody else writes. A bare
+`Number(value)` would have given none of it — `Number('')` is 0, so coercing
 straight through would have turned a report carrying nothing into a valid
 playhead position of zero and published it.

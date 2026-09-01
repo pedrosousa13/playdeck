@@ -1973,6 +1973,21 @@ test('suppresses the synthetic pause that precedes ended', async () => {
   expect(patches.at(-1)).toMatchObject({ playback: 'ended' });
 });
 
+// The same suppression when the embed reports its `percent` as a string, which
+// is a consequence of #463 and pinned here as a decision rather than left as
+// one. Before the coercion read strings, `percent: '1'` failed the `=== 1` test
+// and this pause was published as a viewer pausing — a viewer event the viewer
+// never caused. The bookkeeping pause is bookkeeping whichever way the embed
+// spells the number, so it is suppressed either way.
+test('suppresses the pre-ended pause when percent arrived as a string', async () => {
+  const { patches, sdk } = await setup();
+  const player = sdk.instances[0]!;
+  player.emit('play', { duration: 60, percent: 0, seconds: 0 });
+  const beforePause = patches.length;
+  player.emit('pause', { duration: 60, percent: '1', seconds: '60' });
+  expect(patches).toHaveLength(beforePause);
+});
+
 test('confirms volume changes together with the muted state', async () => {
   const { events, patches, sdk } = await setup();
   const player = sdk.instances[0]!;
@@ -3244,8 +3259,11 @@ test('corrects a below-start position that arrived as a string', async () => {
 // The other half, and the half with teeth. `Number('')` is 0 — so a coercion
 // written the obvious way answers a *valid* position of zero for a report that
 // carried nothing, and the library publishes a playhead the embed is not at.
-// `NaN` is worse still: a `NaN` report was once "corrected" by a seek to `NaN`,
-// because every comparison against `NaN` is false, so it must stay refused.
+// `NaN` is worse still: it is unordered, so every comparison against it is
+// false and no boundary check can catch it — a window reads it as inside itself
+// and the answer would be a seek to `NaN`, whose report is another `NaN`.
+// `packages/core/src/time-boundary.ts` guards that at the other end; refusing it
+// here keeps it from arriving.
 test.each([
   ['an empty string', ''],
   ['a non-numeric string', 'abc'],

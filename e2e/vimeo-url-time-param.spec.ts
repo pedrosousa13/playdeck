@@ -217,7 +217,15 @@ test('a page that opts out is left at the crafted position by a repeat ready', a
   await embedFrame(page).evaluate(() => window.playdeckEmbedRepublishReady?.());
 
   await expect.poll(() => embedPlayhead(page)).toBe(String(CRAFTED_TIME));
+
+  // The published position settles a round trip after the embed's, so the poll
+  // is what waits for it — but a poll passes on one lucky sample. Sampling
+  // afterwards is what says it stayed there, the same way the first-load test
+  // above proves the start boundary survived rather than merely appeared.
   await expect.poll(() => publishedPlayhead(page)).toBe(CRAFTED_TIME);
+  expect(new Set(await samplePlayhead(page, 2_000))).toEqual(
+    new Set([CRAFTED_TIME])
+  );
 });
 
 // The gate for #329: read-confirmation is not confirmation, and neither is a

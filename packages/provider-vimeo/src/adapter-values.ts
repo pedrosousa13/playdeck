@@ -152,18 +152,37 @@ export const asRecord = (data: unknown): Record<string, unknown> =>
 // handler. Widening changes `percent`, `duration`, `volume`, `playbackRate`,
 // `videoWidth` and `videoHeight` too, and it changes them in one direction
 // only: a value that is a number is read as that number however it arrived.
-// Nothing that is not a number becomes one.
+//
+// What a string is allowed to look like is narrow on purpose, because this one
+// is attacker-influenced: `checkUrlTimeParam` forwards a `decodeURI`'d `[^&#]*`
+// slice of the embedding page's url, so whatever grammar is accepted here is a
+// grammar somebody else writes. `Number` on its own reads the entire JavaScript
+// numeric-literal grammar — `Number('0x10')` is 16, `Number('0b11')` is 3,
+// `Number('0o17')` is 15, `Number('1e3')` is 1000 — and `String.trim` strips
+// U+00A0, so a non-breaking space in front of the digits would have passed a
+// trim-based gate too. The SDK forwards none of those shapes for a real seek;
+// what it forwards is an ordinary decimal number. So that is all
+// `DECIMAL_STRING` accepts — ASCII whitespace, an optional sign, digits with an
+// optional fractional part — and every form above is refused. A leading `+` is
+// accepted alongside `-`, because both spell the value they read as; the exotic
+// notations do not, which is the whole objection to them.
 //
 // The rejections are the load-bearing half, and `Number` alone will not give
 // them: `Number('')` is 0, and so are `Number(' ')`, `Number([])` and
 // `Number(false)`. Coercing straight through would turn a report carrying
 // nothing into a valid playhead position of zero and publish it — a worse
 // failure than the one being fixed, because the library would be asserting a
-// position rather than missing one. Hence the string gate before the coercion,
-// and `Number.isFinite` after it, which is also what keeps `NaN` out: a `NaN`
-// position has already produced a feedback loop here once, a `NaN` report
-// "corrected" by a seek to `NaN`, because every comparison against `NaN` is
-// false and so no boundary check can catch it.
+// position rather than missing one. Hence the grammar gate before the coercion,
+// and `Number.isFinite` after it: the grammar still admits a digit string long
+// enough to overflow to `Infinity`, and the same check is what keeps `NaN` out.
+// A `NaN` position is the one report no boundary check can catch — `NaN` is
+// unordered, so every comparison against it is false, a window reads it as
+// inside itself, and the answer would be a seek to `NaN` whose report is
+// another `NaN`. `packages/core/src/time-boundary.ts` guards that at the other
+// end; this keeps it from arriving at all.
+const DECIMAL_STRING =
+  /^[ \t\n\r\f\v]*[+-]?(?:\d+(?:\.\d*)?|\.\d+)[ \t\n\r\f\v]*$/;
+
 export const numberField = (
   data: unknown,
   field: string
@@ -172,7 +191,9 @@ export const numberField = (
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : undefined;
   }
-  if (typeof value !== 'string' || value.trim() === '') return undefined;
+  if (typeof value !== 'string' || !DECIMAL_STRING.test(value)) {
+    return undefined;
+  }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 };
