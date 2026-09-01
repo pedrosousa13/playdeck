@@ -1,9 +1,11 @@
 import type { CommandResult, PlayerError } from '@playdeck/core';
 import {
   commandError,
+  declinesSeekTo,
   mediaError,
   providerEvent,
   runCommand,
+  withinDeclaredBounds,
   withinMediaBounds,
   type EmitProviderState
 } from './adapter-values.js';
@@ -94,8 +96,21 @@ const startTimeConfigurationNotice: PlayerError = {
   recoverable: false,
   severity: 'presentational',
   message:
-    'The configured startTime could not be applied: the seekable window did not reach it, so playback begins at a different position.'
+    'The configured startTime could not be applied: the media could not be positioned there, so playback begins at a different position.'
 };
+
+// How far from the requested offset the playhead may settle and still count as
+// the position the consumer asked for.
+//
+// Not a measured value, and deliberately not one. Every outcome #465 observed
+// was either exact -- both engines landed on 5.000 and 9.000 where they honoured
+// the write -- or wrong by seconds: 5 became 0 on chromium, and 9 became 5.84 on
+// firefox. Nothing measured lands in between, so the number's only job is to
+// keep an engine that answers the nearest frame rather than the requested
+// instant from being reported as a refusal. A quarter of a second is well below
+// anything a viewer would call the wrong place and far below every refusal there
+// is evidence of.
+const SETTLED_POSITION_TOLERANCE_SECONDS = 0.25;
 
 export type NativePlaybackDeps = {
   readonly emit: EmitProviderState;
@@ -161,6 +176,35 @@ export const createNativePlayback = (
 
   const boundaryStart = (): number =>
     withinMediaBounds(media, startTime, startTime, endTime) ?? startTime;
+
+  // Moves the playhead to `target` and answers where the element put it, or
+  // `undefined` where nothing was written.
+  //
+  // The read-back is synchronous, and that is a measurement rather than a
+  // reading of the specification. HTML has the seek algorithm continue "in
+  // parallel" after the setter returns, which would leave `currentTime`
+  // answering the value just written; both engines that could be run instead
+  // apply their own clamp before the setter returns. Measured on 2026-09-01
+  // against a 10s MP4 on an origin serving no byte ranges: chromium reported
+  // `seekable [[0, 0]]`, took `currentTime = 5` and read back 0.000 in the same
+  // statement, and firefox took the same write against `[[0, 10]]` and read back
+  // 5.000 -- 3 runs each, matching what those elements still held half a second
+  // and one `seeked` event later.
+  //
+  // So the check costs one property read and nothing else. Waiting for `seeked`
+  // would be the wrong instrument even if it were cheaper: the seek this exists
+  // to catch is the one the element abandons, and an abandoned seek fires no
+  // `seeked` at all, so the listener would wait for an event that is not coming
+  // -- a deferred callback over an element the provider may already have been
+  // destroyed underneath.
+  const playheadAfterMovingTo = (target: number): number | undefined => {
+    // A write asking for the position the element already holds is not a no-op
+    // -- see `applyInitialPosition` -- and it is not a refusal either.
+    if (target === media.currentTime) return target;
+    if (declinesSeekTo(media, target)) return undefined;
+    media.currentTime = target;
+    return media.currentTime;
+  };
 
   const beforeEffectiveEnd = (time: number): boolean => {
     const duration = Number.isFinite(media.duration)
@@ -405,6 +449,17 @@ export const createNativePlayback = (
     // 0:00, with `playback: 'ended'` published for a clip that never showed a
     // frame.
     applyInitialPosition: () => {
+      // The latch, set before any of the work and never reset except by
+      // `retry`, which reloads the source. Deliberate, and #465 looked at
+      // whether a later `loadedmetadata` should get another go: it should not.
+      // Every refusal below is a settled property of this load rather than a
+      // window that has yet to fill in — the media is shorter than the offset,
+      // or the element declines to seek and goes on declining after
+      // `readyState 4` — so a second attempt would re-reach the same answer and
+      // republish the same notice. A retry that arrived later would also be a
+      // start applied to a viewer who had already moved the playhead, which is
+      // the floor behaviour this seam declines to have (see
+      // `NativePlaybackOptions.startTime`).
       if (positioned) return;
       positioned = true;
       // Nothing to apply without a start offset. The media load algorithm has
@@ -412,32 +467,39 @@ export const createNativePlayback = (
       // has begun, writing 0 is not applying a start position — it is
       // rewinding playback that already happened.
       if (startTime === 0) return;
-      const initialPosition = withinMediaBounds(
-        media,
-        startTime,
-        startTime,
-        endTime
-      );
-      // Anything other than the offset the caller asked for is a refusal, and
-      // since #418 it is reported rather than dropped in silence. Three shapes
-      // reach here: no seekable range intersects the configured window at all,
-      // so there is nowhere legal to land; the clamp landed on the empty
-      // `seekable` and zero `duration` a WebKit element reports before it has
-      // played, which answers 0; and the clamp landed inside a window still
-      // being parsed, a fraction of the clip. The consumer is told in all
-      // three, because from outside they are one thing: the offset they
-      // configured is not where the playhead is.
+      // `duration` is the bound, and `seekable` is not it — #465, which
+      // replaced the hypothesis the issue was filed on. The element publishes a
+      // correct duration at the first `loadedmetadata`, 96 of 96 runs across
+      // chromium and firefox on a 10s clip, while `readyState` is 1 and the
+      // seekable window is zero-length or a fraction; there is no separate
+      // declared duration anywhere to go and fetch. So the offset is measured
+      // against how long the media is, which is what stops a start beyond the
+      // end of the media from being applied blindly.
       //
-      // Keyed on the position rather than on whether a write happened. A start
-      // the element already holds writes nothing and is not a refusal — the
-      // caller got the position they asked for — and the write/skip rules
-      // below are unchanged by the notice.
-      if (initialPosition !== startTime)
+      // `seekable` still decides one thing, and it is not where to land: it
+      // decides whether the element will move at all. Bounding on `duration`
+      // alone would write 5 into a chromium element reporting `[[0, 0]]` and
+      // report success, which is the worse defect — the same measurement waited
+      // for `readyState 4`, `networkState 1` and `buffered [[0, 10]]` and the
+      // write still landed at 0, 6 of 6 runs. What it no longer does is supply
+      // the position: a window that does not cover the offset is a refusal
+      // rather than an instruction to land on its nearest edge, so nothing
+      // writes the leading edge of a window still being parsed, which is the
+      // write #407 measured as the trigger for a wedged element.
+      const target = withinDeclaredBounds(media, startTime, startTime, endTime);
+      const reached = playheadAfterMovingTo(target);
+      // Keyed on where the playhead ended up, not on whether a write happened
+      // and not on what the write was predicted to do. A start the element
+      // already holds writes nothing and is not a refusal — the caller got the
+      // position they asked for. A start the element took and then did not move
+      // to is a refusal, and before #465 it was the one shape that reported
+      // success while doing nothing.
+      if (
+        target !== startTime ||
+        reached === undefined ||
+        Math.abs(reached - target) > SETTLED_POSITION_TOLERANCE_SECONDS
+      )
         emit({ error: startTimeConfigurationNotice });
-      if (initialPosition === undefined) return;
-      // The same rule for a real start the element is already sitting on.
-      if (initialPosition === media.currentTime) return;
-      media.currentTime = initialPosition;
     },
     cancelPendingReplay: () => {
       ++replayGeneration;
