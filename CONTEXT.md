@@ -393,7 +393,9 @@ shares no tokens with it, and the two are deliberately separate.
 Which of the marketing site's two page treatments a route is served in:
 `argument` for `/`, `document` for every other route. `Base.astro` takes it as a
 prop, defaults it to `document`, and writes it to the `<body>` as `data-stance`,
-which is what the site's entry motion is keyed off. A separate axis from the
+which the site's entry motion was keyed off until that vocabulary was deleted.
+No rule in the app reads the attribute today; `e2e/site-stance.spec.ts` does,
+holding every route to the stance `DESIGN.md` assigns it. A separate axis from the
 `documentation` prop, which decides only whether a page is in the search index:
 `/design` is `documentation={false}` and `stance="document"`. Site-only — it
 says nothing about a player.

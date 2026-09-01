@@ -74,6 +74,37 @@ test('/ is served in the argument stance', async ({ page }) => {
   await expect(page.locator('body')).toHaveAttribute('data-stance', 'argument');
 });
 
+/**
+ * Every route, against the stance `DESIGN.md` assigns it. Every page has to be
+ * recognisably one of a named set rather than two sampled pages being — and a
+ * route added later with a stance nobody thought about is exactly the drift
+ * this exists against.
+ *
+ * The table is written out rather than read from the pages, so it is the
+ * document's claim being checked and not the site agreeing with itself.
+ */
+const stances = [
+  ['/', 'argument'],
+  ['/reference/', 'document'],
+  ['/reference/core/', 'document'],
+  ['/providers/', 'document'],
+  ['/providers/youtube/', 'document'],
+  ['/archetypes/', 'document'],
+  ['/design/', 'document']
+] as const;
+
+test('every route carries the stance DESIGN.md assigns it', async ({
+  page
+}) => {
+  for (const [route, stance] of stances) {
+    await page.goto(`http://127.0.0.1:4322${route}`);
+    await expect(page.locator('body'), route).toHaveAttribute(
+      'data-stance',
+      stance
+    );
+  }
+});
+
 test('nothing on / is mid-travel, with or without JavaScript', async ({
   page
 }) => {
