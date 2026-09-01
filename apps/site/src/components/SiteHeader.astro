@@ -23,10 +23,17 @@
  *
  * ---- the site navigation ----------------------------------------------------
  *
- * Three destinations, the same three on every page: Reference, Providers,
- * Archetypes. The workbench is not among them and will not be: #534 records
- * the decision that it is not to be a public surface, and the maintainer
- * ruled the same on a Storybook link. This list is the site's own pages.
+ * Four destinations, the same four on every page: Guides, Reference,
+ * Providers, Archetypes. The workbench is not among them and will not be: the
+ * maintainer ruled that it is not to be a public surface, and ruled the same
+ * on a Storybook link. This list is the site's own pages.
+ *
+ * Guides leads, because it is the section a reader arriving with no context
+ * reads first — what a part is and how to style one, before which package
+ * ships which part. It is also the newest, and the one whose absence from this
+ * strip would matter most: its four documents were reachable only through a
+ * published workbench before #533, which is the whole reason they are now
+ * routes of this site.
  *
  * `aria-current="page"` marks the section the reader is inside, on a link
  * among sibling links. A reference document therefore carries two current

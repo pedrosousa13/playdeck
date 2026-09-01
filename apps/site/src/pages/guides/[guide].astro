@@ -1,0 +1,93 @@
+---
+import { render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import Sweep from '../../components/Sweep.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import DocRail from '../../components/DocRail.astro';
+import { guidePages } from '../../guide-pages.mjs';
+import '../../styles/doc.css';
+
+/*
+ * One page per guide, each rendering one of the workbench's `Overview/*`
+ * documents whole. Which documents those are, why the other two are not here,
+ * and what is taken off a Storybook MDX file on the way through are all in
+ * `src/guide-pages.mjs`.
+ *
+ * Whole, and not split at its `##` headings, for the reason
+ * `src/pages/reference/[pkg].astro` gives: the fences in three of these four
+ * are generated from real files in `examples/` and the prose around them refers
+ * backwards and forwards freely, so cutting between two headings cuts sentences
+ * written to sit together. The sticky rail is what a reader gets instead of a
+ * page break.
+ *
+ * The route parameter is `guide` rather than `slug`, so the address reads as
+ * what it is at the one place the parameter is named.
+ */
+export const getStaticPaths = async () => {
+  const guides = await guidePages();
+  return guides.map((current) => ({
+    params: { guide: current.slug },
+    props: { current, guides }
+  }));
+};
+
+const { current, guides } = Astro.props;
+
+// Through `import.meta.env.BASE_URL`, which is what Astro fills the configured
+// `base` into, and never as a literal `/guides/`. The prefix is the root today
+// and the literal would be identical, which is exactly why the habit is kept: a
+// hand-written path is the bug a base path exists to prevent (#435).
+const guidesUrl = `${import.meta.env.BASE_URL}guides/`;
+const guideUrl = (slug) => `${guidesUrl}${slug}/`;
+
+const { Content, headings } = await render(current.entry);
+
+// Derived from the same parse that produced the document, never written down —
+// the reason `src/pages/reference/[pkg].astro` gives at length. Depth 1 is the
+// document's own title, which is this page's `h1` and is already at the top of
+// what the link would scroll to.
+const contents = headings.filter(
+  (heading) => heading.depth === 2 || heading.depth === 3
+);
+---
+
+<Base title={`${current.title} — Playdeck guides`}>
+  {
+    /* The leaf only, no `Guides` ancestor: the site nav marks that section with
+     * `aria-current` already, so an ancestor repeating it would read as the
+     * same word twice rather than as two landmarks (#542 phase 2). The two
+     * other document routes pass their crumbs the same way. */
+  }
+  <SiteHeader crumbs={[{ label: current.title }]} />
+
+  <div class="shell">
+    <DocRail
+      label="Guides navigation"
+      group={{
+        label: 'Guides',
+        items: guides.map((entry) => ({
+          href: guideUrl(entry.slug),
+          label: entry.title,
+          current: entry.slug === current.slug
+        }))
+      }}
+      contents={contents}
+    />
+
+    {
+      /* `Content` is the workbench document, compiled. Everything the reader
+       * sees below is that file: this page contributes a measure, a heading
+       * rhythm and the code-block styling in `base.css`, and not one word. */
+    }
+    <main class="doc">
+      <Content />
+    </main>
+  </div>
+
+  <footer class="foot">
+    <div class="foot__rule"><Sweep form="hairline" /></div>
+    <p>
+      <a href={guidesUrl}>All guides</a>
+    </p>
+  </footer>
+</Base>

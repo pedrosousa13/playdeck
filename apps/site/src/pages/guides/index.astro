@@ -1,0 +1,151 @@
+---
+import { render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import Sweep from '../../components/Sweep.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { guidePages } from '../../guide-pages.mjs';
+
+/*
+ * The way into the guides, and deliberately thin, for the reason
+ * `src/pages/providers/index.astro` is: everything a reader came for is on the
+ * page they are about to open, and every word of that is the workbench
+ * document's. A summary written here would be the second copy this whole
+ * arrangement exists to avoid, and it would be the first thing to fall out of
+ * date — a guide is edited in `apps/storybook/stories/`, where nobody would
+ * think to look for a paragraph on this site describing it.
+ *
+ * So a row is the document's own title and the list of its own `##` sections,
+ * both read off the same parse that produced the page it links to. Nothing here
+ * is written down and nothing here can drift: rename a section and this index
+ * says the new name.
+ */
+const guides = await guidePages();
+
+// Through `import.meta.env.BASE_URL` rather than as a literal, for the reason
+// `src/pages/index.astro` gives at length: the prefix is the root today, so a
+// hand-written path would be identical and would stop being identical silently
+// (#435).
+const guideUrl = (slug) => `${import.meta.env.BASE_URL}guides/${slug}/`;
+
+// Depth 2 only. Depth 3 is where a document's outline starts restating itself,
+// and this is an index of documents rather than an outline of one; the rail on
+// the page itself is what indexes further.
+const rows = await Promise.all(
+  guides.map(async (guide) => {
+    const { headings } = await render(guide.entry);
+    return {
+      ...guide,
+      sections: headings
+        .filter((heading) => heading.depth === 2)
+        .map((heading) => heading.text)
+    };
+  })
+);
+---
+
+<Base title="Guides — Playdeck">
+  <SiteHeader crumbs={[{ label: 'Guides' }]} />
+
+  <main class="page">
+    <h1>Guides</h1>
+    <p class="lead">
+      What the parts are, what each provider can answer, how captions are drawn,
+      and what the optional stylesheet does — rendered from the documents in{' '}
+      <code>apps/storybook/stories/</code>, which is where the workbench stages
+      them too. There is no second copy: the page and the file in the repository
+      are the same prose.
+    </p>
+    <Sweep form="accent" />
+
+    {
+      /* A list and not a grid of cards, for the reason
+       * `src/pages/reference/index.astro` gives: cards of identical size are
+       * the shape a container reaches for when nothing has been decided about
+       * the contents, and they cost a reader the one thing an index is for. */
+    }
+    <ul class="guides">
+      {
+        rows.map((guide) => (
+          <li class="guide">
+            <h2 class="guide__name">
+              <a href={guideUrl(guide.slug)}>{guide.title}</a>
+            </h2>
+            <p class="guide__sections">{guide.sections.join(' · ')}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </main>
+</Base>
+
+<style>
+  /* The same shell the other two indexes use: wider than a prose page, because
+   * this one is a table of names rather than a document. */
+  .page {
+    display: grid;
+    gap: var(--space-4);
+    max-inline-size: 52rem;
+    margin-inline: auto;
+    padding: var(--space-7) var(--space-5) var(--space-8);
+  }
+
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-ink-muted);
+    max-inline-size: var(--measure);
+  }
+
+  .lead code {
+    font-size: var(--text-md);
+  }
+
+  .guides {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    border-block-start: var(--line-width) solid var(--color-line);
+  }
+
+  /* Stacked below the breakpoint and two columns above it, the same shape the
+   * package index takes. The name column is wider than that one's, because a
+   * guide's title is prose rather than a scoped package name. */
+  .guide {
+    display: grid;
+    gap: var(--space-1);
+    padding-block: var(--space-3);
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  @media (min-width: 40rem) {
+    .guide {
+      grid-template-columns: 16rem minmax(0, 1fr);
+      gap: var(--space-2) var(--space-5);
+      align-items: baseline;
+    }
+  }
+
+  /* At the body rung rather than the section rung, for the reason the package
+   * index gives: a column of names at `h2`'s own rung would out-shout the
+   * page's title, and the row's job is to be compared with the rows around it
+   * rather than to be a heading first. Not the mono face — a guide's title is
+   * prose and not an identifier. */
+  .guide__name {
+    font-size: var(--text-md);
+  }
+
+  .guide__name a {
+    text-decoration: none;
+  }
+
+  /* Rest, hover and focus are the site's own; the row adds and removes an
+   * underline, and the pressed state is `base.css`'s, which nothing here
+   * outranks — the rules above name no colour. */
+  .guide__name a:hover {
+    text-decoration: underline;
+  }
+
+  .guide__sections {
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+  }
+</style>
