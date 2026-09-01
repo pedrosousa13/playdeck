@@ -1973,6 +1973,21 @@ test('suppresses the synthetic pause that precedes ended', async () => {
   expect(patches.at(-1)).toMatchObject({ playback: 'ended' });
 });
 
+// The same suppression when the embed reports its `percent` as a string, which
+// is a consequence of #463 and pinned here as a decision rather than left as
+// one. Before the coercion read strings, `percent: '1'` failed the `=== 1` test
+// and this pause was published as a viewer pausing — a viewer event the viewer
+// never caused. The bookkeeping pause is bookkeeping whichever way the embed
+// spells the number, so it is suppressed either way.
+test('suppresses the pre-ended pause when percent arrived as a string', async () => {
+  const { patches, sdk } = await setup();
+  const player = sdk.instances[0]!;
+  player.emit('play', { duration: 60, percent: 0, seconds: 0 });
+  const beforePause = patches.length;
+  player.emit('pause', { duration: 60, percent: '1', seconds: '60' });
+  expect(patches).toHaveLength(beforePause);
+});
+
 test('confirms volume changes together with the muted state', async () => {
   const { events, patches, sdk } = await setup();
   const player = sdk.instances[0]!;
@@ -3187,6 +3202,96 @@ test('clamps a seek to the window instead of crossing the end boundary', async (
 
   expect(patches.some((patch) => patch.playback === 'ended')).toBe(false);
 });
+
+// --- a position that arrives as a string is still a position (#463) ---
+// Split out of #381. The SDK's `checkUrlTimeParam` calls `setCurrentTime` with
+// the raw substring it matched out of the page url
+// (`@vimeo/player@2.30.4/dist/player.js:1052`), and the embed echoes that value
+// back in the `seconds` of the events it publishes. The adapter used to drop
+// anything that was not already a number, so it never learned the playhead had
+// moved: the embed sat at one position while the published state reported
+// another, silently. The published position is a value the library reports
+// about itself, so the two disagreeing is a correctness defect, not a nicety.
+
+// The shape `e2e/vimeo-url-time-param.spec.ts` exercises against the shipped
+// SDK: a start of 20, and a crafted seek to 45 that nothing here asked for. 45
+// is inside the window, so no correction is due — only the report of it.
+test('publishes a seeked position that arrived as a string', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('seeked', { duration: 60, percent: 0.75, seconds: '45' });
+
+  expect(patches.at(-1)).toMatchObject({ seeking: false, currentTime: 45 });
+  expect(player.setCurrentTime).not.toHaveBeenCalled();
+});
+
+test('publishes a time report that arrived as a string', async () => {
+  const { patches, sdk } = await setup({ fake: { duration: 60 } });
+  const player = sdk.instances[0]!;
+
+  player.emit('timeupdate', { duration: '60', percent: 0.75, seconds: '45' });
+
+  expect(patches.at(-1)).toEqual({ currentTime: 45, duration: 60 });
+});
+
+// The window still applies to it, which is the point of reading it at all: a
+// string position the adapter cannot read is a position it cannot correct
+// either.
+test('corrects a below-start position that arrived as a string', async () => {
+  const { patches, sdk } = await setup({
+    fake: { duration: 60 },
+    options: { startTime: 20 }
+  });
+  const player = sdk.instances[0]!;
+  player.setCurrentTime.mockClear();
+
+  player.emit('seeked', { duration: 60, percent: 0.05, seconds: '3' });
+
+  expect(player.setCurrentTime).toHaveBeenCalledWith(20);
+  expect(patches.at(-1)).toMatchObject({ seeking: false, currentTime: 20 });
+});
+
+// The other half, and the half with teeth. `Number('')` is 0 — so a coercion
+// written the obvious way answers a *valid* position of zero for a report that
+// carried nothing, and the library publishes a playhead the embed is not at.
+// `NaN` is worse still: it is unordered, so every comparison against it is
+// false and no boundary check can catch it — a window reads it as inside itself
+// and the answer would be a seek to `NaN`, whose report is another `NaN`.
+// `packages/core/src/time-boundary.ts` guards that at the other end; refusing it
+// here keeps it from arriving.
+test.each([
+  ['an empty string', ''],
+  ['a non-numeric string', 'abc'],
+  ['null', null],
+  ['NaN', Number.NaN]
+])(
+  'leaves the published position alone for a report carrying %s',
+  async (_label, seconds) => {
+    const { patches, sdk } = await setup({
+      fake: { duration: 60 },
+      options: { startTime: 20 }
+    });
+    const player = sdk.instances[0]!;
+    player.emit('timeupdate', { duration: 60, percent: 0.5, seconds: 30 });
+    player.setCurrentTime.mockClear();
+    const settled = patches.length;
+
+    player.emit('timeupdate', { duration: 60, percent: 0.5, seconds });
+    player.emit('seeked', { duration: 60, percent: 0.5, seconds });
+
+    // The `timeupdate` publishes nothing at all; the `seeked` falls back to the
+    // position the adapter last knew, which is 30 and not 0.
+    expect(patches.slice(settled)).toEqual([
+      { seeking: false, currentTime: 30 }
+    ]);
+    expect(player.setCurrentTime).not.toHaveBeenCalled();
+  }
+);
 
 // --- liveness is a documented gap (#187) ---
 //

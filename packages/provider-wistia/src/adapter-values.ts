@@ -126,6 +126,15 @@ export const asRecord = (data: unknown): Record<string, unknown> =>
     ? (data as Record<string, unknown>)
     : {};
 
+// Numbers only, unlike the byte-identical helper in `provider-vimeo`, which
+// #463 widened to read a number that arrived as a string. The difference is the
+// transport and not the field: Vimeo's values are untyped JSON crossing a
+// `postMessage` boundary from another origin, where the SDK's own url-parameter
+// listener puts a raw string on the wire. Both call sites here read the
+// `detail` of a `<wistia-player>` custom-element event (`playback.ts`'s
+// `onVolumeChange` and `onRateChange`) — an in-page JS object from the same
+// realm, whose numbers were never serialised — so the arrival that made the
+// widening necessary there cannot happen here.
 export const numberField = (
   data: unknown,
   field: string
