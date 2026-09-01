@@ -62,6 +62,15 @@ export const play = (): Promise<unknown> => controller.play();
   it arrived, so an element that takes the write and stays put is reported too.
   The notice is how you tell any of that apart from a setting you mis-wired. It
   does not make the offset apply.
+
+  **The read-back is not yet reliable on WebKit.** It reads `currentTime` in the
+  same tick as the write, and WebKit answers with the value it was given and
+  clamps afterwards — so an offset that WebKit silently declines is not reported
+  there, and you get the playhead at its load position with no notice. Measured
+  in CI; chromium and firefox report it correctly. Tracked as #567. Treat the
+  refusal notice as a guarantee on chromium and firefox, and as best-effort on
+  WebKit, until that lands.
+
 - **`selectQuality`** is `unavailable` with reason `source`: the browser picks
   its own rendition for native HLS and there is nothing to enumerate. It is not
   `unknown`, because that would promise an answer that never comes.

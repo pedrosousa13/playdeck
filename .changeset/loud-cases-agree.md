@@ -27,3 +27,9 @@ as it already did for the offsets that never got written.
 
 The notice's message no longer names the seekable window, since that is no
 longer the only thing that can refuse an offset.
+
+The read-back is a same-tick read, and that is not enough on WebKit, which
+answers `currentTime` with the value it was just given and clamps afterwards. An
+offset WebKit silently declines is therefore still unreported there. Treat the
+refusal notice as a guarantee on chromium and firefox and as best-effort on
+WebKit until #567 lands.
