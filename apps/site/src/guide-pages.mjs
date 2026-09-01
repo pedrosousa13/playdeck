@@ -57,7 +57,7 @@ import { getCollection } from 'astro:content';
  * The `Overview/*` documents that are **not** here are absent by decision
  * rather than by oversight, and the decision is the same for both: their
  * subject is the workbench and not the library. `Introduction.mdx` documents
- * how to write a story — the mock decorator, `stories/support.ts`, the axe
+ * how to write a story — the mock decorator, `stories/support.tsx`, the axe
  * setting in `.storybook/preview.tsx`; `reference/Reference.mdx` documents a
  * story mounting, the ESLint rule scoped to `stories/reference/**`, and which
  * spec file runs which check. Both are read by somebody working in this

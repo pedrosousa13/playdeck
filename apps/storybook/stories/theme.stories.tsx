@@ -245,10 +245,8 @@ export const ConsumerCssWins: Story = {
  * and no `!important` — the tokens are read where the theme reads them, so a
  * variant is a few declarations on a wrapper.
  *
- * `--playdeck-control-size: 3.5rem` is the largest size these stories
- * demonstrate, which is why the viewport here is 640 wide: the controls are
- * `flex: 0 0 auto` and push out of a box too narrow for them rather than
- * shrinking.
+ * The `3.5rem` set here is the size `viewportStyle`'s width is chosen against;
+ * that choice is explained where the width is written.
  */
 export const AccentAndSizeTokens: Story = {
   render: () => (

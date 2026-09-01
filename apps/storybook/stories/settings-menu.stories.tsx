@@ -141,9 +141,9 @@ export const EscapeRestoresFocus: Story = {
  * trigger, the same as Escape. Both paths matter because a menu that restores
  * focus only on cancel strands the user on the common path.
  *
- * The `2×` click here does not stick — the radio group is uncontrolled in this
- * story, with `onValueChange` a no-op — so what is asserted is the close and
- * the focus return, not the selection. Ends in the same frame as `Closed` and
+ * The `2×` click here does not stick — the radio group is controlled, pinned at
+ * `value="1"` with a no-op `onValueChange` — so what is asserted is the close
+ * and the focus return, not the selection. Ends in the same frame as `Closed` and
  * `EscapeRestoresFocus`.
  */
 export const SelectingOptionChecksIt: Story = {
@@ -154,9 +154,9 @@ export const SelectingOptionChecksIt: Story = {
     await userEvent.click(
       await canvas.findByRole('menuitemradio', { name: '2×' })
     );
-    // The menu is uncontrolled here, so asserting the selection persisted
-    // across a reopen is out of scope; just assert it closed and focus
-    // returned to the trigger.
+    // The group is pinned at `1` by a no-op `onValueChange`, so asserting the
+    // selection persisted across a reopen is out of scope; just assert it
+    // closed and focus returned to the trigger.
     await expect(canvas.queryByRole('menu')).toBeNull();
     await expect(trigger).toHaveFocus();
   }
