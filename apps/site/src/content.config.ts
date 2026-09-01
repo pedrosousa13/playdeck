@@ -51,6 +51,7 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { referencePackageDirs } from './reference-packages.mjs';
 import { PROVIDER_SETUP_DOC, providerDocuments } from './provider-pages.mjs';
+import { GUIDES, guideDocument } from './guide-pages.mjs';
 
 const repoRoot = import.meta.env.PLAYDECK_REPO_ROOT;
 const packagesDir = join(repoRoot, 'packages');
@@ -109,6 +110,17 @@ const blobUrl = (dir) => {
  * A README is one document read in two places, and two kinds of link in it are
  * correct in the tarball and wrong here:
  *
+ * A link to a page of this very site, which a README has to write as an
+ * absolute `https://playdeck.video/…` url because that is the only address that
+ * works from inside a tarball. Followed as written it would take a reader of
+ * `/reference/react/` out to production and back in — which is merely wasteful
+ * at the apex and wrong everywhere else: from a build made with
+ * `--base /playdeck/`, or from a preview, it leaves the build the reader is
+ * actually in. So the origin is stripped and the path re-addressed through
+ * `import.meta.env.BASE_URL`, which is the same treatment every hand-written
+ * link on this site gets (#435). The origin is `site` from `astro.config.ts`
+ * rather than a literal here, so there is no second place for it to be wrong.
+ *
  * A target relative to the package directory resolves beside the README on npm
  * and on GitHub, where the file it names really does sit. On this site it would
  * resolve under
@@ -129,10 +141,13 @@ const blobUrl = (dir) => {
  * fragments, and links to files on GitHub that are not another package's README.
  *
  * @param {string} target
- * @param {{ dir: string; pages: ReadonlySet<string>; blob: string }} context
+ * @param {{ dir: string; pages: ReadonlySet<string>; blob: string; site: string }} context
  * @returns {string}
  */
-const rewriteTarget = (target, { dir, pages, blob }) => {
+const rewriteTarget = (target, { dir, pages, blob, site }) => {
+  if (target.startsWith(site)) {
+    return `${import.meta.env.BASE_URL}${target.slice(site.length)}`;
+  }
   if (target.startsWith(blob)) {
     const crossPackage = /^packages\/([^/]+)\/README\.md(#.+)?$/.exec(
       target.slice(blob.length)
@@ -188,7 +203,7 @@ const rewriteTarget = (target, { dir, pages, blob }) => {
  * that no longer matches its source.
  *
  * @param {string} markdown
- * @param {{ dir: string; pages: ReadonlySet<string>; blob: string }} context
+ * @param {{ dir: string; pages: ReadonlySet<string>; blob: string; site: string }} context
  * @returns {string}
  */
 const rewriteLinks = (markdown, context) => {
@@ -223,6 +238,18 @@ const reference = defineCollection({
     }) => {
       const pages = new Set(referencePackageDirs(repoRoot));
       const root = fileURLToPath(config.root);
+      // The origin this site is published at, as a prefix a link can be tested
+      // against. `astro.config.ts` sets `site` and Astro's own canonical urls
+      // are built from it, so a README naming a different origin is naming a
+      // different site and is left alone. Named as a failure rather than
+      // defaulted, because the fallback would be silent: every README link to
+      // this site would keep pointing at production from every build.
+      if (config.site === undefined) {
+        throw new Error(
+          'astro.config.ts sets no `site`, so a README link to a page of this site cannot be told from a link off it. Restore `site` there, or drop the rewriting in src/content.config.ts.'
+        );
+      }
+      const site = `${new URL(config.site).origin}/`;
 
       /**
        * One package's README, stored under its directory name. That name is what
@@ -263,7 +290,7 @@ const reference = defineCollection({
           rendered: await renderMarkdown(
             blob === undefined
               ? source
-              : rewriteLinks(source, { dir, pages, blob }),
+              : rewriteLinks(source, { dir, pages, blob, site }),
             { fileURL: pathToFileURL(file) }
           )
         });
@@ -396,4 +423,99 @@ const providers = defineCollection({
   }
 });
 
-export const collections = { providers, reference };
+/*
+ * The library-wide guides, loaded from the workbench's `Overview/*` MDX.
+ *
+ * A third collection rather than a third entry in either of the two above, for
+ * the reason there are two rather than one: these are loaded from a different
+ * place under different rules, and share only the principle — the site renders
+ * a document this repository already keeps true and writes none of its own.
+ * Which documents get a page, why the `Overview/*` files that are absent
+ * are absent, and what has to be taken off a Storybook MDX before Markdown can
+ * render it are all in `src/guide-pages.mjs`, beside the code that decides
+ * them.
+ *
+ * The stripping and the link rewriting happen there too, before
+ * `renderMarkdown` sees the text, for the reason both collections above do
+ * their own: the content layer's `glob()` hands a file straight to the Markdown
+ * entry type and offers no point in between at which the text can be
+ * transformed.
+ *
+ * `data` carries what the route needs and the body does not say: the page's
+ * title, lifted out of the document's own `# ` heading, and the position the
+ * table in that module puts it at. Still no schema, for the reason the two
+ * above have none — nothing here is frontmatter.
+ */
+const guides = defineCollection({
+  loader: {
+    name: 'workbench-guides',
+    load: async ({
+      store,
+      config,
+      renderMarkdown,
+      generateDigest,
+      logger,
+      watcher
+    }) => {
+      const pages = new Set(referencePackageDirs(repoRoot));
+      const root = fileURLToPath(config.root);
+
+      /**
+       * One guide, stored under the slug its route is spelt with.
+       *
+       * `body` is the stripped document rather than the file, because that is
+       * what this entry is: the `<Meta>` tag and the example markers are
+       * Storybook's scaffolding around the document and not part of it. The
+       * file itself is one `git show` away.
+       *
+       * @param {{ file: string; slug: string }} guide
+       * @param {number} order
+       */
+      const sync = async ({ file, slug }, order) => {
+        const path = join(repoRoot, file);
+        const source = await readFile(path, 'utf8');
+        const { title, markdown } = guideDocument(source, file, pages);
+        store.set({
+          id: slug,
+          data: { title, order },
+          body: markdown,
+          // Relative to the Astro project rather than to the repository, which
+          // is what `filePath` means and what the two collections above store.
+          filePath: relative(root, path),
+          digest: generateDigest(markdown),
+          rendered: await renderMarkdown(markdown, {
+            fileURL: pathToFileURL(path)
+          })
+        });
+      };
+
+      store.clear();
+      await Promise.all(GUIDES.map((guide, order) => sync(guide, order)));
+
+      // Dev only: `watcher` is absent in a build. `apps/storybook/` is outside
+      // everything this dev server watches, so without this an edit to one of
+      // those documents would leave the open guide page showing the previous
+      // text until the server was restarted — the same stale-copy failure these
+      // pages exist to prevent, arriving by another route.
+      if (watcher === undefined) {
+        return;
+      }
+      for (const { file } of GUIDES) {
+        watcher.add(join(repoRoot, file));
+      }
+      const reload = async (changed: string) => {
+        const path = relative(repoRoot, changed).split(sep).join('/');
+        const order = GUIDES.findIndex((entry) => entry.file === path);
+        if (order === -1) {
+          return;
+        }
+        await sync(GUIDES[order], order);
+        logger.info(`Reloaded ${path}`);
+      };
+      watcher.on('add', reload);
+      watcher.on('change', reload);
+    }
+  }
+});
+
+export const collections = { guides, providers, reference };

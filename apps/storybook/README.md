@@ -10,10 +10,12 @@ the test origin.
 
 - `pnpm dev` — workbench at `http://localhost:6006`.
 - `pnpm build` — static build (also part of the root `pnpm build`). This is
-  what `.github/workflows/deploy-site.yml` publishes from `main` to
-  [playdeck.video/storybook](https://playdeck.video/storybook/). `apps/site`
-  takes the root of that domain, so the workbench is assembled one segment
-  inside it (#519).
+  what `.github/workflows/deploy-site.yml` assembles into the published artifact
+  one segment inside the site, which takes the root of the domain (#519). The
+  documents a consumer is sent to are rendered by the site itself, from these
+  sources — `apps/site/src/guide-pages.mjs` says which — so the workbench is a
+  development tool for this repository rather than the documentation it used to
+  be.
 - `pnpm test` — run every story as a browser test (root: `pnpm test:storybook`).
 
 The workbench is served from `/storybook/` and never from `/`, so the deploy

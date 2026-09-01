@@ -7,11 +7,11 @@ import { expect, test, type Page } from '@playwright/test';
  * nowhere else, which is the one place a reader who has just finished a README
  * will not look. They are in `SiteHeader.astro` now, so they are on every page.
  *
- * What is pinned here is the part of that a screenshot cannot see: that the
- * three destinations exist on both kinds of page, that following one lands on a
- * real document rather than on a 404, that the section the reader is in is the
- * only one marked, and that three more names in a strip that already holds a
- * trail, search and a switch do not push a 320px page sideways.
+ * What is pinned here is the part of that a screenshot cannot see: that every
+ * destination exists on both kinds of page, that following one lands on a real
+ * document rather than on a 404, that the section the reader is in is the only
+ * one marked, and that a strip carrying those names as well as a trail, search
+ * and a switch does not push a 320px page sideways.
  *
  * The tests over `routes` below read the site as one surface rather than as two
  * page shapes: that every route the site serves carries the strip and a way
@@ -59,6 +59,7 @@ const document_ = `${SITE}/reference/`;
  * made for instead of being a literal that only holds at the apex.
  */
 const destinations = [
+  { label: 'Guides', path: 'guides/' },
   { label: 'Reference', path: 'reference/' },
   { label: 'Providers', path: 'providers/' },
   { label: 'Archetypes', path: 'archetypes/' }
@@ -82,7 +83,7 @@ for (const [where, url] of [
   ['/', landing],
   ['a document page', document_]
 ] as const) {
-  test(`the navigation carries the three destinations on ${where}`, async ({
+  test(`the navigation carries every destination on ${where}`, async ({
     page
   }) => {
     await page.goto(url);
@@ -187,6 +188,8 @@ test('aria-current marks the section the reader is in, and only that one', async
  */
 const routes = [
   '',
+  'guides/',
+  'guides/contract/',
   'reference/',
   'reference/core/',
   'providers/',
