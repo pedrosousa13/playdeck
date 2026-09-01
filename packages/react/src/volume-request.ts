@@ -54,10 +54,10 @@ import {
 // Seek used to make that same trade and stopped (#383): `seekEchoTolerance` in
 // `transport-controls.tsx` is now half the effective step, because seek's step
 // is itself derived from the window, and a constant stated against a step that
-// moves is a bound that stops holding. Volume's step does not move — the
-// default is 0.05 whatever the source — so a constant here still states a bound
-// that holds, and the residual above stays a declined trade rather than an
-// unfixed one. The two tolerances are deliberately not the same shape any more.
+// moves is a bound that stops holding. Volume's default step does not move — it
+// is 0.05 whatever the source — so a constant here still states a bound that
+// holds, and the residual above stays a declined trade rather than an unfixed
+// one.
 const VOLUME_ECHO_TOLERANCE = 0.02;
 
 export type VolumeRequest = {
