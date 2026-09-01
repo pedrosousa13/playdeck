@@ -54,10 +54,11 @@ interface Props {
    * space, and both of those are `index.astro`'s own rules: no stylesheet in
    * this app reads `data-stance` today. One did — the site's entry motion was
    * selected off it, so a document page could not grow a scattered reveal by
-   * accident — and that vocabulary is deleted. `DESIGN.md`'s _Stances_ section
-   * records why the attribute is kept with nothing reading it, and leaves
-   * whether it still earns its place here as an open judgement rather than
-   * answering it.
+   * accident — and that vocabulary is deleted. What reads it now is a check
+   * rather than a stylesheet: `e2e/site-stance.spec.ts` holds every route the
+   * site serves to the stance `DESIGN.md` assigns it, so this attribute is the
+   * one machine-readable statement of that rule. `DESIGN.md`'s _Stances_
+   * section carries the rest.
    *
    * `/archetypes` is a `document` deliberately rather than by omission: the
    * persuading happens on `/`, and that page exists so a reader can read the

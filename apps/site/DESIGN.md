@@ -697,11 +697,15 @@ a reveal written locally is a reveal every later page can write locally too,
 and a rule in a site-wide stylesheet that only one stance can reach is
 unreachable elsewhere in a way a component's own rule is merely unclaimed. That
 argument is what originally justified the attribute and is why it survives
-having nothing to key off twice now. Whether an attribute that drives no CSS
-still earns a place in `Base.astro`'s props and on the `<body>` of every page is
-a real question and this document does not answer it — that is a judgement for
-whoever next has a reason to touch this file, made with the fact above in hand
-rather than by rediscovering it.
+having nothing to key off twice now. **It does earn its place, and what it earns
+it as has changed**: the attribute's consumer is no longer a stylesheet but a
+check. `e2e/site-stance.spec.ts` reads it on every route the site serves and
+holds each one to the stance this document assigns it, which is what makes "every
+page is one of a named set" a thing that fails a run rather than a claim nobody
+can falsify. An attribute driving no CSS would be dead weight; one that is the
+only machine-readable statement of a rule in this document is the opposite. If a
+rule is ever keyed off the stance again it inherits a marker already proven
+correct on every page, which is the cheaper order to do those two things in.
 
 **The word is `stance`, and it was chosen the same way `rail` was.** A stance is
 the posture a page takes toward its reader, which is what the two treatments
