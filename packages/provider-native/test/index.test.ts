@@ -190,7 +190,15 @@ test('clamps an initial start boundary to finite media duration', async () => {
 // cannot make.
 const trackPosition = (
   media: HTMLVideoElement,
-  position: number
+  position: number,
+  // Where the element ends up for a requested position, which is not always
+  // where it was asked to go. A real element applies its own seek rules on the
+  // setter — measured on 2026-09-01 against a 10s MP4 served without byte-range
+  // support, chromium reported `seekable [[0,0]]`, took `currentTime = 5` and
+  // read back 0 in the same statement, 3 of 3 runs. No DOM test environment
+  // models that, so a test that needs it says so; the default honours the
+  // request, which is what every test written before #465 assumed.
+  settle: (requested: number) => number = (requested) => requested
 ): { rewind: () => void; writes: number[] } => {
   const writes: number[] = [];
   Object.defineProperty(media, 'currentTime', {
@@ -198,7 +206,7 @@ const trackPosition = (
     get: () => position,
     set: (value: number) => {
       writes.push(value);
-      position = value;
+      position = settle(value);
     }
   });
   return {
@@ -496,6 +504,187 @@ test('reports the refusal once per load rather than on every metadata event', as
   media.dispatchEvent(new Event('loadedmetadata'));
 
   expect(errors).toHaveLength(2);
+});
+
+// #465. The three tests above decided the refusal by predicting where the
+// write would land, from the seekable window alone. These decide it from where
+// the playhead actually is afterwards, and the difference is a whole class of
+// silent failure: an element that reports a window covering the offset, takes
+// the write, and does not move.
+//
+// The element with no seekable ranges at all is the grounded case. HTML's seek
+// algorithm abandons the seek outright when `seekable` is empty ("If there are
+// no ranges given in the seekable attribute then set the seeking IDL attribute
+// to false and abort these steps"), so the write is legitimate to attempt —
+// nothing has said the element will not seek — and the playhead not having
+// moved is the only thing that can report it.
+test('reports a start position the element did not move to', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 10 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  const { writes } = trackPosition(media, 0, () => 0);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([5]);
+  expect(errors).toEqual([
+    expect.objectContaining({ category: 'configuration', fatal: false })
+  ]);
+});
+
+// The same check catching a clamp rather than a refusal: the element takes the
+// write and settles somewhere short of it. This is the shape #465 measured on
+// firefox — `startTime: 9` against a window ending at 5.84 came to rest at
+// 5.84 and stayed — and the position the viewer gets is not the one they
+// configured, whoever did the clamping.
+test('reports a start position the element clamped short', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 10 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 10]])
+  });
+  const { writes } = trackPosition(media, 0, () => 5.84);
+  const provider = createNativeProvider(media, { startTime: 9 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([9]);
+  expect(errors).toHaveLength(1);
+});
+
+// The other half of #465: `seekable` decides whether the element will seek,
+// and is no longer the thing the offset is clamped onto. A window that starts
+// above the requested offset used to pull the playhead to its leading edge —
+// a position nobody asked for. This is not #407's shape, which is a window
+// that reaches the offset's own side of the clip and grows with the duration
+// — `reports a start position clamped into a partly-parsed window` above is
+// that one, and it still writes the edge. A live source is where this shape
+// occurs: the DVR window opens at 100, the element sits on the live edge, and a
+// `startTime` below the window is now refused rather than answered with the
+// back of the window. `startTime: 0` already declined to do this for its own
+// reasons — see `NativePlaybackOptions.startTime`.
+test('writes no initial position onto the nearest seekable edge', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[100, 200]])
+  });
+  const { writes } = trackPosition(media, 200);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+  expect(media.currentTime).toBe(200);
+  expect(errors).toHaveLength(1);
+});
+
+// The measured chromium refusal, and the reason `duration` cannot be the only
+// bound. `seekable [[0,0]]` alongside a correct `duration` of 10 is not a
+// window that has yet to populate: #465 waited for `readyState 4`,
+// `networkState 1` and `buffered [[0,10]]` and the write still landed at 0,
+// 6 of 6 runs. Bounding on `duration` alone would write 5 into an element that
+// will not take it and report success.
+test('writes nothing into an element whose seekable window is empty of span', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 10 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 0]])
+  });
+  const { writes } = trackPosition(media, 0, () => 0);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([]);
+  expect(errors).toHaveLength(1);
+});
+
+// A start inside the media's real length on a source still being parsed: the
+// declared duration reaches 10 while the window has only reached 5.84 — the
+// firefox shape #465 measured on an origin without byte-range support. The
+// offset is inside both, so it applies and says nothing.
+test('applies a start position inside a partly-parsed seekable window', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 10 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 5.84]])
+  });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([5]);
+  expect(media.currentTime).toBe(5);
+  expect(errors).toEqual([]);
+});
+
+// The common case, and the one most at risk from this change: any origin that
+// serves byte ranges reports a fully populated window at the first
+// `loadedmetadata` — `seekable [[0,10]]` on a 10s clip, 24 of 24 runs across
+// chromium and firefox on 2026-09-01. Nothing about it is new, and nothing
+// about it may change: one write, of the offset asked for, and no notice.
+test('applies a start position into a fully populated seekable window', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 10 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 10]])
+  });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([5]);
+  expect(media.currentTime).toBe(5);
+  expect(errors).toEqual([]);
+});
+
+// A start beyond the media's real length keeps its bound, which is the property
+// the issue insists on: `duration` is what refuses it, and it is refused
+// observably. The playhead is left at the end of the media, unchanged from
+// #418 — the notice reports the refusal, it does not undo the load.
+test('refuses a start position beyond the media duration', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 10 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 10]])
+  });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 30 });
+  const errors = trackErrors(provider);
+  await provider.attach();
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([10]);
+  expect(errors).toHaveLength(1);
 });
 
 test('ends playback at the configured end boundary without looping', async () => {

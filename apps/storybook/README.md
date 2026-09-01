@@ -62,9 +62,10 @@ honoured rather than merely configured.
 
 ## Fixture media
 
-`public/` holds the clips the `Real playback/*` stories play. All are one
-second, 30fps and video-only, so they behave identically offline and in CI; the
-two MP4s are H.264 with `+faststart`.
+`public/` holds the clips the real-playback stories play — those tagged
+`real-playback`, whether they sit under `Real playback/*` or `Fixtures/*`. All
+but one are one second, 30fps and video-only, so they behave identically offline
+and in CI; the MP4s are H.264 with `+faststart`.
 
 - `tracer.mp4` — 320×180 (16:9). It arrived whole in the commit that added it
   and how it was produced is recorded nowhere, which is why the next entry
@@ -89,6 +90,27 @@ two MP4s are H.264 with `+faststart`.
   ffmpeg -y -i public/tracer.mp4 \
     -c:v libvpx -b:v 48k -deadline best -cpu-used 0 -an \
     public/tracer.webm
+  ```
+
+- `tracer-10s.mp4` — 320×180 (16:9), 20,078 bytes, 15fps. The exception to the
+  one-second rule above, and the reason it exists: a start offset needs a clip
+  longer than the offset to say anything, so at one second every offset worth
+  configuring is past the end of the media and only the refusal case can be
+  driven (#465). 15fps and CRF 32 rather than the 30fps of the others because
+  nothing here reads the picture and ten seconds at the others' settings is
+  three times the size. Reproduce it with:
+
+  ```sh
+  ffmpeg -y \
+    -f lavfi -i "color=c=0x0b0e13:s=320x180:r=15:d=10" \
+    -f lavfi -i "color=c=0x3ea6ff:s=24x164:r=15:d=10" \
+    -filter_complex "[0:v]drawbox=x=8:y=8:w=304:h=164:color=0x3ea6ff:t=2[bg];\
+  [bg][1:v]overlay=x='8+(280)*t/10':y=8[v0];\
+  [v0]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:\
+  text='10s':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2[out]" \
+    -map "[out]" -c:v libx264 -profile:v high -preset veryslow -crf 32 -g 15 \
+    -pix_fmt yuv420p -an -movflags +faststart \
+    public/tracer-10s.mp4
   ```
 
 - `tracer-portrait.mp4` — 360×640 (9:16), 8,373 bytes. Added for

@@ -99,7 +99,7 @@ const bufferedRendered = (page: Page) =>
 // reach it, and on WebKit it often cannot yet. This engine parses `tracer.webm`
 // incrementally and reports a duration that grows as it goes, `el.seekable`
 // with it. A `currentTime` write is clamped into `seekable` — the same
-// arithmetic `withinMediaBounds` does (provider-native/adapter-values.ts:132)
+// arithmetic `withinMediaBounds` does (provider-native/adapter-values.ts:198)
 // — so writing 1 into a partly-parsed element lands at whatever the window
 // extends to at that instant. That clamp then puts the playhead exactly at the
 // leading edge, WebKit fires `seeking`/`seeked`/`ended`, the network state goes

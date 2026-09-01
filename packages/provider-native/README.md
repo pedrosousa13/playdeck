@@ -54,10 +54,24 @@ export const play = (): Promise<unknown> => controller.play();
   bounds.
 - **A `startTime` the source cannot be positioned at** publishes a non-fatal
   `configuration` notice on `PlayerState.error` rather than disappearing. The
-  offset is applied once, when metadata arrives, and a source whose seekable
-  window does not reach it yet leaves the playhead elsewhere; the notice is how
-  you tell that apart from a setting you mis-wired. It does not make the offset
-  apply.
+  offset is applied once, when metadata arrives; it is bounded by the media's
+  own duration, so an offset past the end of the clip is still refused, and the
+  element's `seekable` ranges decide whether the element will move at all rather
+  than where it lands — a window that does not reach the offset is a refusal,
+  never a nudge onto its nearest edge. The playhead is then read back to confirm
+  it arrived, so an element that takes the write and stays put is reported too.
+  The notice is how you tell any of that apart from a setting you mis-wired. It
+  does not make the offset apply.
+
+  **The read-back is not yet reliable on WebKit.** It reads `currentTime` in the
+  same tick as the write, and WebKit sometimes clamps before that read and
+  sometimes answers with the value it was just given — so an offset it declines
+  is reported on some loads and dropped in silence on others, leaving the
+  playhead at its load position with no notice. It is a race, measured across
+  two CI runs; chromium and firefox report it correctly on every attempt.
+  Tracked as #567. Treat the refusal notice as a guarantee on chromium and
+  firefox, and as a race on WebKit, until that lands.
+
 - **`selectQuality`** is `unavailable` with reason `source`: the browser picks
   its own rendition for native HLS and there is nothing to enumerate. It is not
   `unknown`, because that would promise an answer that never comes.

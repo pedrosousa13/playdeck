@@ -274,14 +274,16 @@ const PlayerFixture = ({
       ? { type: 'hls', src: assetUrl('hls/master.m3u8'), engine: hlsEngine }
       : sourceKey === 'live'
         ? { type: 'hls', src: assetUrl('live/index.m3u8'), engine: hlsEngine }
-        : (vimeoSource ??
-          (sourceChange
-            ? 'https://provider.invalid/source-a.mp4'
-            : activationSource === 'external'
-              ? 'https://provider.invalid/tracer.mp4'
-              : activationSource === 'youtube'
-                ? youtubeExampleUrl
-                : assetUrl('tracer.mp4')));
+        : sourceKey === 'long'
+          ? assetUrl('tracer-10s.mp4')
+          : (vimeoSource ??
+            (sourceChange
+              ? 'https://provider.invalid/source-a.mp4'
+              : activationSource === 'external'
+                ? 'https://provider.invalid/tracer.mp4'
+                : activationSource === 'youtube'
+                  ? youtubeExampleUrl
+                  : assetUrl('tracer.mp4')));
 
   const replacementSource = sourceChange
     ? 'https://provider.invalid/source-b.mp4'
@@ -397,7 +399,7 @@ const meta: Meta<PlayerFixtureProps> = {
     source: {
       control: 'text',
       description:
-        "'hls' | 'live' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
+        "'hls' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
     },
     engine: {
       control: 'radio',
@@ -471,6 +473,14 @@ export const NativeMp4: Story = {
   )
 };
 
+// The ten-second clip rather than the one-second tracer, because a start offset
+// needs a source longer than the offset to say anything at all: at one second
+// every offset worth asking for is past the end of the media, which is the
+// refusal case and not the applying case (#465).
+export const NativeMp4StartTime: Story = {
+  args: { source: 'long', startTime: 5 }
+};
+
 export const CaptionsCustom: Story = {
   args: { captionRenderer: 'custom' }
 };
@@ -489,6 +499,12 @@ export const HlsNative: Story = {
 
 export const LiveHlsJs: Story = {
   args: { source: 'live', engine: 'hls.js' }
+};
+
+// A start offset on a live source, which is the one shape where the offset and
+// the sliding window can disagree (#465).
+export const LiveHlsJsStartTime: Story = {
+  args: { source: 'live', engine: 'hls.js', startTime: 5 }
 };
 
 export const LiveNative: Story = {
