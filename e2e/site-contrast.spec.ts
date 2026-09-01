@@ -245,16 +245,18 @@ const SYNTAX = {
  * `markdown.shikiConfig` by way of the rendered README. A repaint that reached
  * one and not the other would leave half the site failing.
  *
- * They are also the two pages that exercise the whole palette. Every page of
- * the built site was checked for which colours its blocks paint, and these are
- * the only two that reach all eight: `/reference/core/` paints seven, missing
- * `entity.name.tag`, and the two provider pages and the six other reference
- * pages paint six, missing `entity.name.tag` and `variable` as well. That is a
- * fact about what those documents happen to contain rather than a property of
- * the palette, so the check below asserts the set in both directions rather
- * than only that what it found passes — a document edit that took the last tag
- * out of a fence would otherwise leave this measuring seven colours and saying
- * nothing at all about the eighth.
+ * They are also the two pages that exercised the whole palette when they were
+ * chosen. Which colours a page paints is a fact about what its document happens
+ * to contain rather than a property of the palette, and no other page is held
+ * to painting fewer — so that half is not asserted here, and this comment does
+ * not enumerate what each page reached, because both would rot the first time a
+ * fence gained a tag.
+ *
+ * What is asserted instead is the set, in both directions, on the two routes
+ * below: everything painted is declared, and everything declared is painted. A
+ * document edit that took the last tag out of a fence therefore fails here
+ * loudly, rather than leaving this measuring seven colours and saying nothing
+ * at all about the eighth.
  */
 const HIGHLIGHTED = ['/archetypes/', '/reference/react/'] as const;
 

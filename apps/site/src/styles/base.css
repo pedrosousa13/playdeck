@@ -98,12 +98,12 @@ pre {
  * surface is a role token.
  *
  * The token colours are the one place on this site where a colour arrives from
- * outside `tokens.css`. They are a named Shiki theme, applied to the source
- * text on every build, minus the five entries `src/shiki.ts` repaints because
+ * outside `tokens.css`. They come from a named Shiki theme, applied to the
+ * source text on every build, minus the entries `src/shiki.ts` repaints because
  * they did not meet AA on the well below; and there is no palette of ours any
  * of them could be expressed in, because a scale of four accents cannot
  * distinguish a keyword from a string from a comment. `DESIGN.md` records the
- * exception, the two themes it names and the five figures.
+ * exception, the themes it names and every measured figure.
  */
 .astro-code {
   padding: var(--space-4);

@@ -21,8 +21,11 @@
  */
 
 /**
- * The five token colours the two GitHub themes paint that do not meet WCAG AA
- * on this site's code-block ground, and what this site paints instead.
+ * Every token colour the two GitHub themes paint that does not meet WCAG AA on
+ * this site's code-block ground, and what this site paints instead. The table
+ * below is the count as well as the values; no prose here restates its length,
+ * because a number written beside a list is a claim that goes stale the first
+ * time the list moves.
  *
  * A code block here is a `--color-sunken` well and not the theme's own
  * background — `base.css` emits `--shiki-light-bg` and `--shiki-dark-bg` and
@@ -43,10 +46,10 @@
  * `#66707b` only reaches 4.45. Swapping wholesale would repaint every block on
  * the site and still leave the comment colour failing, so the smaller change is
  * also the only one of the two that works. What the site keeps is the palette a
- * reader of GitHub already knows; what it changes is the five entries in it
- * that this ground cannot carry.
+ * reader of GitHub already knows; what it changes is the entries in it that
+ * this ground cannot carry.
  *
- * ---- why these five values --------------------------------------------------
+ * ---- why these values -------------------------------------------------------
  *
  * Each holds its hue and moves only in lightness, which is what `DESIGN.md`'s
  * "Three values changed from the design comp" already does to three role
@@ -63,8 +66,8 @@
  * error is a worse defect than a red sitting closer to its floor. Orange has to
  * travel furthest, `#e36209` to `#a04100`, because orange is the lightest of
  * these hues at any given lightness — which is also why it was the worst
- * failure of the five, at 3.08. Every one of the five holds its hue to within
- * two degrees; nothing here is a recolouring.
+ * failure in the table, at 3.08. Every entry holds its hue to within two
+ * degrees; nothing here is a recolouring.
  *
  * The tables are in `DESIGN.md`'s "Measured contrast", beside the role tokens',
  * and `e2e/site-contrast.spec.ts` measures them from a served page on every
@@ -103,8 +106,10 @@ const CONTRAST_FIXES: Record<string, Record<string, string>> = {
  * `htmlStyle` is what `defaultColor: false` produces: with neither theme baked
  * into a `color:` declaration, each token carries `--shiki-light` and
  * `--shiki-dark` and nothing else, and the values are the two themes' hexes
- * verbatim. Shiki emits a token's two colours upper-case while the theme files
- * hold them lower-case, so the lookup below normalises.
+ * verbatim. The lookup below normalises case rather than assuming one, because
+ * which case Shiki emits is its business and not a fact this file should have
+ * to be right about — the table is written lower-case and the key is lowered to
+ * match it, so either answer works and neither has to be checked.
  */
 type PaintedToken = { htmlStyle?: Record<string, string> };
 

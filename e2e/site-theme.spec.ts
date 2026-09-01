@@ -132,7 +132,8 @@ test('a code block follows an explicit choice in both directions', async ({
   // Code is the one thing on this site whose colours are not `--color-*` roles:
   // Shiki writes both themes onto every token as `--shiki-light` and
   // `--shiki-dark`, and `base.css` picks between them with the same three-state
-  // selector `tokens.css` uses. The prose of that rule is repeated in two files
+  // selector `tokens.css` uses. That rule is stated in the config that sets it,
+  // the transformer that repaints through it and the stylesheet that spends it,
   // and was checked by nobody; a reader who forces light on a dark machine and
   // gets a dark block in a light page is what it exists to prevent.
   //
