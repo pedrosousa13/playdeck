@@ -752,6 +752,8 @@ served in. `Base.astro` takes `stance?: 'argument' | 'document'`, defaulting to
 | Route                   | Stance     |
 | ----------------------- | ---------- |
 | `/`                     | `argument` |
+| `/guides`               | `document` |
+| `/guides/<guide>`       | `document` |
 | `/reference`            | `document` |
 | `/reference/<package>`  | `document` |
 | `/providers`            | `document` |
@@ -1392,13 +1394,16 @@ that already existed, and both still have two.
 | `src/pages/index.astro`                | The landing page at `/`, and its links                    |
 | `src/pages/design.astro`               | The specimen sheet, served at `/design`                   |
 | `src/pages/archetypes.astro`           | Two composed players, and the files they are              |
+| `src/pages/guides/index.astro`         | The guide index, served at `/guides`                      |
+| `src/pages/guides/[guide].astro`       | One guide per migrated workbench document                 |
 | `src/pages/reference/index.astro`      | The package index, served at `/reference`                 |
 | `src/pages/reference/[pkg].astro`      | One reference page per publishable package                |
 | `src/pages/providers/index.astro`      | The provider index, served at `/providers`                |
 | `src/pages/providers/[provider].astro` | A setup page per provider group                           |
-| `src/content.config.ts`                | The two document collections, and their loaders           |
+| `src/content.config.ts`                | The document collections, and their loaders               |
 | `src/reference-packages.mjs`           | Which packages get a page, and from where                 |
 | `src/provider-pages.mjs`               | Which providers get a page, and which sections            |
+| `src/guide-pages.mjs`                  | Which workbench documents get a page, and how they render |
 | `src/provider-asymmetry.mjs`           | What that same document says each provider can answer     |
 | `src/shiki.ts`                         | The two theme names and the five colours they repaint     |
 | `src/asset-url.d.ts`                   | The type for a `?url` import, which is how the skin loads |
@@ -1427,8 +1432,10 @@ and search is the one thing in that strip a reader of a long document does come
 for — see _Search_ below.
 
 **It then read "no call to action and no product navigation", and the second
-half of that is gone.** The header now carries three destinations — Reference,
-Providers, Archetypes — on every page. That is a maintainer's decision rather
+half of that is gone.** The header now carries the site's sections — Guides,
+Reference, Providers, Archetypes — on every page, named here rather than
+counted, because the list has already grown once since this paragraph was
+written. That is a maintainer's decision rather
 than drift, and it was asked for in those words: links at the foot of `/` and
 nowhere else, when the reader who most needs the next document is the one who
 has just finished reading one. The rule the amendment was written against is the

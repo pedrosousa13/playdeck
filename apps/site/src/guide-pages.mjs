@@ -11,7 +11,7 @@
  * them. So these pages render those files rather than retelling them: editing
  * one edits the page, and there is no second copy for an edit to forget.
  *
- * That matters twice over here, because three of these four are in
+ * That matters twice over here, because most of them are in
  * `scripts/docs-examples.mjs`'s checked list — their `ts`, `tsx` and `css`
  * fences are generated from real files in `examples/` and `pnpm docs:check`
  * compares them byte for byte. A site-native retelling would have put the
@@ -22,16 +22,16 @@
  *
  * None of these files contains live JSX. Every capitalised tag in them —
  * `<Player.Time>`, `<PlayIcon />` — is inside backticks or inside a fence,
- * where it is text. The only real MDX constructs are three, and all three are
+ * where it is text. The real MDX constructs are few, and every one of them is
  * Storybook's rather than the document's: the `import` of `Meta`, the `<Meta>`
  * tag that files the page under a sidebar title, and the `{/* … *\/}` comments
  * `scripts/docs-examples.mjs` marks its generated fences with. Take those away
  * and what is left is Markdown, so this site needs no MDX integration and no
  * new dependency to publish them — `stripStorybook` below is the whole of it.
  *
- * The three are removed rather than tolerated because each would otherwise be
+ * They are removed rather than tolerated because each would otherwise be
  * rendered as prose: an `import` line becomes a paragraph, and so does a
- * marker comment. Two of them throw when they are missing, and that is
+ * marker comment. The `import` and the tag throw when they are missing, and that is
  * deliberate — a Storybook MDX file always has both, so their absence means the
  * file's shape changed under this module, and a build that failed is better
  * than a page that opens with the word `import`.
@@ -52,7 +52,7 @@ import { getCollection } from 'astro:content';
  * Contract first because it is the one every other page assumes: a headless
  * library's parts are its whole styling surface. Then what each provider can
  * actually do, then captions, then the optional stylesheet — which is the last
- * of the four because it is the only one a consumer can decline entirely.
+ * in the list because it is the only one a consumer can decline entirely.
  *
  * The `Overview/*` documents that are **not** here are absent by decision
  * rather than by oversight, and the decision is the same for both: their
@@ -131,11 +131,17 @@ const PACKAGE_ON_GITHUB =
  * kept: a hand-written path is the bug a base path exists to prevent (#435).
  *
  * There is no rewriting of relative targets here, unlike the two collections
- * beside this one, and that is because there is nothing to rewrite: a target
- * relative to a Storybook MDX file resolves to nothing in the workbench either,
- * so these documents have never contained one. A relative link added to one
- * later ships as written and 404s here — write it as a full GitHub URL, which
- * is the form that works in both places.
+ * beside this one. A target relative to a Storybook MDX file resolves against
+ * the workbench's own routing rather than against a directory, so there is no
+ * path this could rewrite it to.
+ *
+ * `Contract.mdx` did carry one — `?path=/docs/reference-player--docs`, which
+ * the workbench resolves and this site shipped verbatim, reloading the guide
+ * with a query string on it. It was fixed in the document rather than special
+ * cased here, because the same sentence is read on both surfaces and only one
+ * of them ever made sense of the link. A relative or `?path=` target added to
+ * one of these documents later ships as written and goes nowhere here; write
+ * the reference as prose, or as a full GitHub URL where a URL is wanted.
  *
  * @param {string} target
  * @param {ReadonlySet<string>} pages

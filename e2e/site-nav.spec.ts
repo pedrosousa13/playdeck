@@ -7,11 +7,11 @@ import { expect, test, type Page } from '@playwright/test';
  * nowhere else, which is the one place a reader who has just finished a README
  * will not look. They are in `SiteHeader.astro` now, so they are on every page.
  *
- * What is pinned here is the part of that a screenshot cannot see: that the
- * every destination exists on both kinds of page, that following one lands on a
- * real document rather than on a 404, that the section the reader is in is the
- * only one marked, and that the names in a strip that already holds a
- * trail, search and a switch do not push a 320px page sideways.
+ * What is pinned here is the part of that a screenshot cannot see: that every
+ * destination exists on both kinds of page, that following one lands on a real
+ * document rather than on a 404, that the section the reader is in is the only
+ * one marked, and that a strip carrying those names as well as a trail, search
+ * and a switch does not push a 320px page sideways.
  *
  * The tests over `routes` below read the site as one surface rather than as two
  * page shapes: that every route the site serves carries the strip and a way

@@ -430,7 +430,7 @@ const providers = defineCollection({
  * the reason there are two rather than one: these are loaded from a different
  * place under different rules, and share only the principle — the site renders
  * a document this repository already keeps true and writes none of its own.
- * Which documents get a page, why the two `Overview/*` files that are absent
+ * Which documents get a page, why the `Overview/*` files that are absent
  * are absent, and what has to be taken off a Storybook MDX before Markdown can
  * render it are all in `src/guide-pages.mjs`, beside the code that decides
  * them.

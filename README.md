@@ -313,9 +313,9 @@ React is a separate peer requirement rather than a browser one; its range is
 given with the [install command](#playdeck) at the top of this file.
 
 The reference example in the workbench uses `@container`, which is newer than
-this floor. It is a Storybook composition, not published code — it is documented
-in `apps/storybook/stories/reference/Reference.mdx`, beside the story it
-describes, and is read with the workbench running.
+this floor. It is a Storybook composition and not published code, so nothing a
+consumer installs depends on it — the floor above is what `@playdeck/react`
+itself holds to.
 
 ## License
 
