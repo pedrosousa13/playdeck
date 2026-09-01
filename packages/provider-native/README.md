@@ -64,12 +64,13 @@ export const play = (): Promise<unknown> => controller.play();
   does not make the offset apply.
 
   **The read-back is not yet reliable on WebKit.** It reads `currentTime` in the
-  same tick as the write, and WebKit answers with the value it was given and
-  clamps afterwards — so an offset that WebKit silently declines is not reported
-  there, and you get the playhead at its load position with no notice. Measured
-  in CI; chromium and firefox report it correctly. Tracked as #567. Treat the
-  refusal notice as a guarantee on chromium and firefox, and as best-effort on
-  WebKit, until that lands.
+  same tick as the write, and WebKit sometimes clamps before that read and
+  sometimes answers with the value it was just given — so an offset it declines
+  is reported on some loads and dropped in silence on others, leaving the
+  playhead at its load position with no notice. It is a race, measured across
+  two CI runs; chromium and firefox report it correctly on every attempt.
+  Tracked as #567. Treat the refusal notice as a guarantee on chromium and
+  firefox, and as a race on WebKit, until that lands.
 
 - **`selectQuality`** is `unavailable` with reason `source`: the browser picks
   its own rendition for native HLS and there is nothing to enumerate. It is not

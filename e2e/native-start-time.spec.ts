@@ -91,29 +91,37 @@ test('never drops a start offset in silence on an origin without byte ranges', a
   browserName,
   page
 }) => {
-  // WebKit produces the forbidden third state, and this records it rather than
-  // hiding it. Measured on this test's first CI run: playhead 0, no notice
-  // published, on the initial run and both retries — deterministic, while
-  // chromium and firefox pass. The provider's read-back
+  // WebKit produces the forbidden third state — playhead at 0, nothing
+  // published — but only sometimes, and the "sometimes" is the point.
+  //
+  // Two CI runs on this branch, both on WebKit, both with chromium and firefox
+  // passing:
+  //   run 1: failed on the initial attempt and both retries.
+  //   run 2: PASSED on the initial attempt, failed on retry 1.
+  // So this is a race, not a flat engine limitation. The provider's read-back
   // (`provider-native/src/playback.ts`, `playheadAfterMovingTo`) reads
-  // `currentTime` in the same tick as the write, and WebKit answers with the
-  // value it was just given and clamps later, so the check concludes a write
-  // landed that never did.
+  // `currentTime` in the same tick as the write; WebKit sometimes clamps before
+  // that read and sometimes answers with the value it was just given, and only
+  // the second case concludes a write landed that never did. Which side of the
+  // race a load falls on is what varies.
   //
-  // Fixing it means re-reading the playhead on a turn the engine has had a
-  // chance to clamp in, which is a design decision and cannot be iterated
-  // locally — WebKit does not launch on the development machine. That work is
-  // #567.
+  // That is #567's to fix, by re-reading on a turn the engine has had a chance
+  // to clamp in — a design decision, and one that cannot be iterated locally
+  // because WebKit does not launch on the development machine.
   //
-  // `fail` and not `fixme`, deliberately: `fixme` aborts the body, so the test
-  // is merely skipped and would stay skipped forever after #567 lands. `fail`
-  // runs it, requires it to fail, and errors with "Expected to fail, but
-  // passed" the day WebKit stops producing this — which is what makes this
-  // comment self-deleting rather than rotting. It costs one real WebKit page
-  // load per CI run, and note `retries` does not apply to an expected failure.
-  test.fail(
+  // `fixme` and not `fail`, and the reason is the race. `fail` requires the
+  // body to fail, so on a run that lands the passing side it reports "Expected
+  // to fail, but passed" and Playwright books the test flaky — which does not
+  // fail the job, so the suite goes green while a real intermittent defect sits
+  // underneath it. That is the exact false-comfort this branch exists to
+  // remove. A skip is at least honest about telling you nothing.
+  //
+  // The cost is that this no longer expires on its own. #567 is the expiry
+  // instead, and it is cited from here, the `startTime` JSDoc, the provider
+  // README and the changeset.
+  test.fixme(
     browserName === 'webkit',
-    'WebKit answers the written value before clamping, so the read-back misses the drop — #567'
+    'WebKit sometimes answers the written value before clamping, so the read-back intermittently misses the drop — #567'
   );
 
   const body = await readFile(clip);
