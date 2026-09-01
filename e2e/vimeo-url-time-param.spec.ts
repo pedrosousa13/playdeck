@@ -188,15 +188,23 @@ test('the guard closes the repeat-ready path', async ({ page }) => {
 });
 
 // The same repeat `ready` on a page that opted out — the failure being closed,
-// spelled out. Nothing pulls the playhead back: the embed sits at 45 while
-// Playdeck goes on publishing 20, and the guard is what keeps that out of
-// reach.
+// spelled out. Nothing pulls the playhead back: the embed leaves the position
+// Playdeck put it at and sits at the crafted one, and the guard is what keeps
+// that out of reach.
 //
 // This stays a #329 test now that #381 has landed. The floor #381 added answers
 // a position *below* `startTime`, and this path does not produce one: 45 is
 // inside the window the story configures (`startTime: 20`, no `endTime`), so
-// `correction` answers nothing for it. What diverges here is the published
-// mirror rather than the window, and that is #463.
+// `correction` answers nothing for it.
+//
+// The published position is asserted here as the second half of the finding.
+// It used to read 20 while the embed showed 45, because the SDK hands
+// `setCurrentTime` the url substring unchanged and the embed echoes that string
+// back in its reports — which the adapter dropped, so it never learned the
+// playhead had moved. #463 made the adapter read it, so the two now agree on
+// the crafted position rather than disagreeing silently about it. The exposure
+// is unchanged and is still the guard's to close; what changed is that Playdeck
+// no longer misreports where the viewer is while it happens.
 test('a page that opts out is left at the crafted position by a repeat ready', async ({
   page
 }) => {
@@ -209,7 +217,7 @@ test('a page that opts out is left at the crafted position by a repeat ready', a
   await embedFrame(page).evaluate(() => window.playdeckEmbedRepublishReady?.());
 
   await expect.poll(() => embedPlayhead(page)).toBe(String(CRAFTED_TIME));
-  expect(await publishedPlayhead(page)).toBe(START_TIME);
+  await expect.poll(() => publishedPlayhead(page)).toBe(CRAFTED_TIME);
 });
 
 // The gate for #329: read-confirmation is not confirmation, and neither is a

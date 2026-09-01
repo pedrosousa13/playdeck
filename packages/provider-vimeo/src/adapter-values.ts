@@ -132,12 +132,47 @@ export const asRecord = (data: unknown): Record<string, unknown> =>
     ? (data as Record<string, unknown>)
     : {};
 
+// Reads one finite number out of an SDK payload, accepting a number that
+// arrived in string form.
+//
+// The string case is not a curiosity. The SDK's own `checkUrlTimeParam` calls
+// `setCurrentTime` with the substring it matched out of the embedding page's
+// url (`@vimeo/player@2.30.4/dist/player.js:1052`), never coercing it, and the
+// embed echoes that value back in the `seconds` of everything it publishes
+// afterwards. Refusing it meant the adapter never learned the playhead had
+// moved: the embed sat at one position and the published state reported
+// another, with nothing to say the two disagreed (#463).
+//
+// **This is deliberately every field on this bridge, not just the time.** What
+// varies is not the field, it is the transport — these values cross a
+// `postMessage` boundary as untyped JSON from another origin, and nothing on
+// the way types them. A second helper reading strings for `seconds` alone would
+// leave the next field to be reported as a string carrying exactly this bug,
+// and would leave the choice of which helper to call to whoever writes the next
+// handler. Widening changes `percent`, `duration`, `volume`, `playbackRate`,
+// `videoWidth` and `videoHeight` too, and it changes them in one direction
+// only: a value that is a number is read as that number however it arrived.
+// Nothing that is not a number becomes one.
+//
+// The rejections are the load-bearing half, and `Number` alone will not give
+// them: `Number('')` is 0, and so are `Number(' ')`, `Number([])` and
+// `Number(false)`. Coercing straight through would turn a report carrying
+// nothing into a valid playhead position of zero and publish it — a worse
+// failure than the one being fixed, because the library would be asserting a
+// position rather than missing one. Hence the string gate before the coercion,
+// and `Number.isFinite` after it, which is also what keeps `NaN` out: a `NaN`
+// position has already produced a feedback loop here once, a `NaN` report
+// "corrected" by a seek to `NaN`, because every comparison against `NaN` is
+// false and so no boundary check can catch it.
 export const numberField = (
   data: unknown,
   field: string
 ): number | undefined => {
   const value = asRecord(data)[field];
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value !== 'string' || value.trim() === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 };
