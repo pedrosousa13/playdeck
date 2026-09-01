@@ -58,7 +58,7 @@ const KB = 1024;
  * Everything else follows the CSS syntax spec: comments do not nest, a comment
  * ends at the first closing delimiter whatever quoting appears inside it, an
  * unterminated comment runs to end of file, and a string ends at an unescaped
- * matching quote or a newline.
+ * matching quote or at a newline, carriage return or form feed.
  *
  * @param {string} source
  * @returns {string}
@@ -83,7 +83,12 @@ export const stripCssComments = (source) => {
           end += 2;
           continue;
         }
-        if (source[end] === '\n') break;
+        if (
+          source[end] === '\n' ||
+          source[end] === '\r' ||
+          source[end] === '\f'
+        )
+          break;
         end += 1;
         if (source[end - 1] === char) break;
       }
@@ -126,25 +131,6 @@ export const stripCssComments = (source) => {
 /** @param {string | Buffer} source */
 const gzipKilobytes = (source) => gzipSync(source).length / KB;
 
-/**
- * The two figures a stylesheet target reports: what a consumer downloads, and
- * the part of that a ceiling is worth setting on.
- *
- * Exported so the decision the gate makes can be tested on synthetic CSS
- * without editing the real stylesheet, which is the one file this change is
- * meant to stop being edited for byte-count reasons.
- *
- * @param {string} source
- * @returns {{ shipped: number; rules: number }}
- */
-export const measureStylesheet = (source) => ({
-  shipped: gzipKilobytes(source),
-  rules: gzipKilobytes(stripCssComments(source))
-});
-
-// Exported for the tests, which assert what the ceilings are and which target
-// carries a subset without needing a built tree to measure against.
-//
 // `budget: null` means report-only. `budgetedSubset` moves the ceiling off the
 // whole file and onto a part of it, leaving the file's own size measured and
 // reported: the only target that needs it is the stylesheet, and it needs it
@@ -176,11 +162,12 @@ export const targets = [
     // Shipped as-is rather than built: it is plain CSS, and the primitives
     // never import it, which is what keeps the headless chain CSS-free. That
     // decision is also why the ceiling below is on a subset. Because the file
-    // ships as authored, its comments are bytes a consumer downloads, and about
-    // seventy percent of its gzipped size is prose -- so a ceiling on the whole
-    // file is in practice a comment budget, and #453 records it failing a
-    // change that added 0.07 KB of rules and roughly 2 KB of explanation. The
-    // repo asks for that explanation elsewhere; it should not be priced here.
+    // ships as authored, its comments are bytes a consumer downloads, and
+    // 69.47% of its gzipped size is prose as of this change -- so a ceiling on
+    // the whole file is in practice a comment budget, and #453 records it
+    // failing a change that added 0.07 KB of rules and roughly 2 KB of
+    // explanation. The repo asks for that explanation elsewhere; it should not
+    // be priced here.
     //
     // 2.5 KB, not the 6 KB this target carried before. 6 KB was set against a
     // number that included the prose and cannot be carried across. The rules
@@ -224,49 +211,92 @@ export const targets = [
 ];
 
 /**
- * Every budgeted and reported bundle, with the gzipped size it is at now.
+ * One target, measured against a source rather than against a path.
  *
- * `size` is always the file as it ships. `budgeted` is the subset the ceiling
+ * `size` is always the source as it ships. `budgeted` is the subset the ceiling
  * is really on, or `null` where the ceiling is on the whole file -- which is
  * every target but the stylesheet. A reader that only wants the figure a
  * consumer downloads can keep reading `size` and ignore the rest.
+ *
+ * @typedef {{ label: string; size: number }} BudgetedSubset
+ * @typedef {{ name: string; budget: number | null; size: number; budgeted: BudgetedSubset | null }} MeasuredBundle
+ * @param {(typeof targets)[number]} target
+ * @param {string | Buffer} source
+ * @returns {MeasuredBundle}
+ */
+export const measureTarget = ({ name, budget, budgetedSubset }, source) => ({
+  name,
+  budget,
+  size: gzipKilobytes(source),
+  budgeted:
+    budgetedSubset === undefined
+      ? null
+      : {
+          label: budgetedSubset.label,
+          size: gzipKilobytes(budgetedSubset.extract(source.toString('utf8')))
+        }
+});
+
+/**
+ * The measured bundles that have outgrown their ceiling, with the name, size
+ * and budget an error message needs.
+ *
+ * This is the gate's decision, and it lives here rather than in
+ * `check-bundle-budgets.mjs` so that it is executed by the same tests that
+ * measure the figures. Measurement and policy may be shared with the landing
+ * page, which imports this module; console rendering may not follow them in,
+ * because the page has no console. Which entries are over budget is policy, and
+ * the page's whole argument is that the numbers it prints are the ones this
+ * rule is applied to.
+ *
+ * `budgeted?.size ?? size` is where the gate stops counting comments: for the
+ * stylesheet the ceiling is on the rules, and its shipped size is reported so
+ * it cannot grow unobserved rather than to fail the build. See the theme target
+ * above for why, and issue #453.
+ *
+ * flatMap rather than filter+map: the filter already guarantees a budget, but
+ * only a narrowing form proves it to the reader and the typechecker alike.
+ *
+ * @param {readonly MeasuredBundle[]} measured
+ * @returns {{ name: string; size: number; budget: number }[]}
+ */
+export const overBudget = (measured) =>
+  measured.flatMap(({ name, size, budget, budgeted }) =>
+    budget !== null && (budgeted?.size ?? size) > budget
+      ? [
+          {
+            name: budgeted === null ? name : `${name} (${budgeted.label})`,
+            size: budgeted?.size ?? size,
+            budget
+          }
+        ]
+      : []
+  );
+
+/**
+ * Every budgeted and reported bundle, with the gzipped size it is at now.
  *
  * Throws rather than reporting a missing file as a zero: both readers need a
  * built tree, and a page that rendered `0.00 KB` for a package nobody had
  * built would be the most convincing wrong number on it.
  *
- * @typedef {{ label: string; size: number }} BudgetedSubset
- * @typedef {{ name: string; budget: number | null; size: number; budgeted: BudgetedSubset | null }} MeasuredBundle
  * @param {string} repoRoot An absolute path to the repository root.
  * @returns {Promise<MeasuredBundle[]>}
  */
 export const measureBundles = async (repoRoot) => {
   const measured = [];
-  for (const { name, path, budget, budgetedSubset } of targets) {
-    const resolved = join(repoRoot, path);
+  for (const target of targets) {
+    const resolved = join(repoRoot, target.path);
     let source;
     try {
       source = await readFile(resolved);
     } catch (cause) {
       throw new Error(
-        `Cannot measure ${name}: ${resolved} is missing. Run \`pnpm build\` first.`,
+        `Cannot measure ${target.name}: ${resolved} is missing. Run \`pnpm build\` first.`,
         { cause }
       );
     }
-    measured.push({
-      name,
-      budget,
-      size: gzipKilobytes(source),
-      budgeted:
-        budgetedSubset === undefined
-          ? null
-          : {
-              label: budgetedSubset.label,
-              size: gzipKilobytes(
-                budgetedSubset.extract(source.toString('utf8'))
-              )
-            }
-    });
+    measured.push(measureTarget(target, source));
   }
   return measured;
 };

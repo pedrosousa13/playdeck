@@ -113,7 +113,10 @@ names every origin involved.
 
 Every Playdeck package in this table is measured by `pnpm test:budgets` on each
 CI run, and three of them fail the build if they grow past a budget: core at
-10 KB, the primitives at 18 KB and `theme.css` at 6 KB. The provider adapters are
+10 KB, the primitives at 18 KB and `theme.css` at 2.5 KB — measured on its CSS
+rules with the comments stripped, because it ships as authored and a ceiling on
+the whole file is a budget on its prose. The size it ships at is reported every
+run, and not gated. The provider adapters are
 measured and reported without a budget, because a lazy chunk does not compete
 for the initial graph. Run that command for the current figures — nothing checks
 this table against it, so it is a snapshot and the budgets are the gate.

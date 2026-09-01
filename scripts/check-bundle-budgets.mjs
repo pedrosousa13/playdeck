@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url';
-import { measureBundles } from './bundle-budgets.mjs';
+import { measureBundles, overBudget } from './bundle-budgets.mjs';
 
 // Matches scripts/verify-packaging.mjs: the lint config gives this directory
 // node globals, but `console` still has to be reached through globalThis.
@@ -64,24 +64,11 @@ for (const { name, size, budget, budgeted } of measured) {
   console.log(row(name, size, budget));
 }
 
-// flatMap rather than filter+map: the filter already guarantees a budget, but
-// only a narrowing form proves it to the reader and the typechecker alike.
-//
-// `budgeted?.size ?? size` is where the gate stops counting comments: for the
-// stylesheet the ceiling is on the rules, and its shipped size above is
-// reported so it cannot grow unobserved rather than to fail the build. See
-// bundle-budgets.mjs's theme target for why, and issue #453.
-const over = measured.flatMap(({ name, size, budget, budgeted }) =>
-  budget !== null && (budgeted?.size ?? size) > budget
-    ? [
-        {
-          name: budgeted === null ? name : `${name} (${budgeted.label})`,
-          size: budgeted?.size ?? size,
-          budget
-        }
-      ]
-    : []
-);
+// Which targets are over is `bundle-budgets.mjs`'s to decide, for the same
+// reason the measurement is: the landing page has to be able to say the figures
+// it prints are the ones this rule is applied to. This file only formats the
+// answer and throws on it.
+const over = overBudget(measured);
 if (over.length > 0) {
   const detail = over
     .map(

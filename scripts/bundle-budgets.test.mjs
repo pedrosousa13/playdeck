@@ -5,7 +5,8 @@ import test from 'node:test';
 import { fileURLToPath, URL } from 'node:url';
 
 import {
-  measureStylesheet,
+  measureTarget,
+  overBudget,
   stripCssComments,
   targets
 } from './bundle-budgets.mjs';
@@ -95,6 +96,20 @@ test('treats url only as its own token, not as the tail of an identifier', () =>
   );
 });
 
+test('ends an unterminated string at a carriage return, not only a newline', () => {
+  // CSS ends a string at a newline, a carriage return or a form feed. Were the
+  // scanner to run past one, the `/*` on the next line would open a comment
+  // that swallowed the rules after it and lowered the enforced number.
+  assert.equal(
+    stripCssComments('a::before { content: "oops\r/* c */\nb { top: 0 }'),
+    'a::before { content: "oops\r\nb { top: 0 }'
+  );
+  assert.equal(
+    stripCssComments('a::before { content: "oops\f/* c */\nb { top: 0 }'),
+    'a::before { content: "oops\f\nb { top: 0 }'
+  );
+});
+
 // ---- the two figures and which one is the ceiling --------------------------
 
 test('the theme is the only target whose ceiling is on a subset', async () => {
@@ -113,39 +128,96 @@ test('the theme is the only target whose ceiling is on a subset', async () => {
 test('reports the shipped size alongside the rules-only size it gates on', async () => {
   // Both figures, or the shipped one stops being observable -- which is the
   // whole reason the maintainer chose this shape over measuring rules alone.
-  const { shipped, rules } = measureStylesheet(await themeSource());
+  assert.ok(themeTarget);
+  const { size, budgeted } = measureTarget(themeTarget, await themeSource());
+  assert.equal(budgeted?.label, 'CSS rules');
   assert.ok(
-    rules < shipped,
-    `rules-only ${rules} should be under shipped ${shipped}`
+    budgeted !== null && budgeted.size < size,
+    `rules-only ${budgeted?.size} should be under shipped ${size}`
   );
 });
 
-/** The ceiling the theme target is really declared with. */
-const themeBudget = () => {
-  assert.ok(themeTarget?.budget !== null && themeTarget !== undefined);
-  return themeTarget.budget;
-};
+// ---- the decision the gate makes -------------------------------------------
+//
+// `overBudget` is the line CI fails on, so these run it rather than a
+// re-statement of it: `check-bundle-budgets.mjs` calls it and only formats what
+// comes back.
+
+test('reports a target whose budgeted subset is over, whatever it ships', () => {
+  assert.deepEqual(
+    overBudget([
+      {
+        name: '@playdeck/react/theme.css',
+        budget: 2.5,
+        size: 2.0,
+        budgeted: { label: 'CSS rules', size: 3.0 }
+      }
+    ]),
+    [
+      {
+        name: '@playdeck/react/theme.css (CSS rules)',
+        size: 3.0,
+        budget: 2.5
+      }
+    ]
+  );
+});
+
+test('does not report a target whose shipped size is over but whose subset is not', () => {
+  // The regression that matters: measure the whole file here and the theme
+  // fails on prose again, which is the failure #453 exists to end.
+  assert.deepEqual(
+    overBudget([
+      {
+        name: '@playdeck/react/theme.css',
+        budget: 2.5,
+        size: 5.79,
+        budgeted: { label: 'CSS rules', size: 1.77 }
+      }
+    ]),
+    []
+  );
+});
+
+test('gates a target without a subset on the whole file, and ignores a null budget', () => {
+  assert.deepEqual(
+    overBudget([
+      { name: '@playdeck/core', budget: 10, size: 10.5, budgeted: null },
+      { name: '@playdeck/react', budget: 18, size: 16.9, budgeted: null },
+      {
+        name: '@playdeck/provider-hls',
+        budget: null,
+        size: 999,
+        budgeted: null
+      }
+    ]),
+    [{ name: '@playdeck/core', size: 10.5, budget: 10 }]
+  );
+});
 
 test('a substantial comment block does not push the theme over its budget', async () => {
   // The defect this whole change exists for: #415 added about 2 KB of prose and
   // 0.07 KB of rules, and the gate failed it. Synthetic rather than a real edit
   // to the stylesheet, because the point is the decision, not the file.
+  assert.ok(themeTarget);
   const prose = `/*\n${'A sentence of durable rationale that a reviewer asked for.\n'.repeat(200)}*/\n`;
-  const { shipped, rules } = measureStylesheet((await themeSource()) + prose);
-  const budget = themeBudget();
-  assert.ok(rules <= budget, `rules-only ${rules} should stay under ${budget}`);
-  assert.ok(shipped > budget, 'the added prose is large enough to matter');
+  const measured = measureTarget(themeTarget, (await themeSource()) + prose);
+  assert.ok(
+    themeTarget.budget !== null && measured.size > themeTarget.budget,
+    'the added prose is large enough to matter'
+  );
+  assert.deepEqual(overBudget([measured]), []);
 });
 
 test('a substantial rule block does push the theme over its budget', async () => {
   // The other direction, and the reason the gate is worth keeping at all: the
   // ceiling still has to fail on CSS the theme did not have before.
+  assert.ok(themeTarget);
   const added = Array.from(
     { length: 400 },
     (_, index) =>
       `.playdeck-synthetic-${index} { padding-inline: ${index}px; border-radius: ${index % 7}px; }`
   ).join('\n');
-  const { rules } = measureStylesheet((await themeSource()) + added);
-  const budget = themeBudget();
-  assert.ok(rules > budget, `rules-only ${rules} should exceed ${budget}`);
+  const measured = measureTarget(themeTarget, (await themeSource()) + added);
+  assert.equal(overBudget([measured]).length, 1);
 });
