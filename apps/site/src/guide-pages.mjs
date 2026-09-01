@@ -85,7 +85,8 @@ export const GUIDES = [
 ];
 
 /** Storybook's `import` of the docs blocks, which is always the first line. */
-const META_IMPORT = /^import \{ Meta \} from '@storybook\/addon-docs\/blocks';$/;
+const META_IMPORT =
+  /^import \{ Meta \} from '@storybook\/addon-docs\/blocks';$/;
 
 /** The tag that files the document under a sidebar title. */
 const META_TAG = /^<Meta title="(.+)" \/>$/;

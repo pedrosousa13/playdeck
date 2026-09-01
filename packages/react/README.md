@@ -24,12 +24,11 @@ itself.
 directive; server code can call `detectSource` and the rest of that surface
 without a boundary at all.
 
-Every primitive below is staged, running, in the Storybook workbench at
-[playdeck.video/storybook](https://playdeck.video/storybook/).
-That is where the full styling
-contract ([**Overview/Contract**](https://playdeck.video/storybook/?path=/docs/overview-contract--docs))
-and the caption guidance ([**Overview/Captions**](https://playdeck.video/storybook/?path=/docs/overview-captions--docs))
-live.
+The guides at [playdeck.video/guides](https://playdeck.video/guides/) carry the
+full styling contract ([**Contract**](https://playdeck.video/guides/contract/))
+and the caption guidance ([**Captions**](https://playdeck.video/guides/captions/)).
+Every primitive below is also staged, running, in this repository's Storybook
+workbench, which is a development tool rather than a published surface.
 
 ## Usage
 
@@ -81,7 +80,7 @@ array of `{ src, srcLang, label, kind?, default? }`, where `kind` is
 you supply this way reach native playback and the HLS provider's native engine;
 everywhere else only the captions a provider discovers for itself are
 available. Selection, discovery and what `Player.Captions` renders are covered
-in [**Overview/Captions**](https://playdeck.video/storybook/?path=/docs/overview-captions--docs).
+in [**Captions**](https://playdeck.video/guides/captions/).
 
 `Player.Captions` draws the active cues only where the provider hands caption
 rendering over, and renders nothing otherwise — where the provider paints its
@@ -647,8 +646,8 @@ Every primitive exposes `data-playdeck-part` (its stable name), `data-state` (it
 derived state) and, on provider-bound controls, `data-provider`. Style and query
 against those rather than internal class names. Geometry a primitive sets on
 itself is a default your `style` prop overrides; state-derived properties are
-the primitive's own. The full contract is in the workbench docs under
-[**Overview/Contract**](https://playdeck.video/storybook/?path=/docs/overview-contract--docs).
+the primitive's own. The full contract is at
+[**Contract**](https://playdeck.video/guides/contract/).
 
 ## Browser support
 

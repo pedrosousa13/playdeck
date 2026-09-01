@@ -139,25 +139,27 @@ provider reaches and what a page's Content-Security-Policy has to allow for it.
 
 ## Docs
 
-The Storybook workbench is the documentation, with every primitive staged
-against a mock provider plus real-playback stories. It is published from `main`
-at
-[playdeck.video/storybook](https://playdeck.video/storybook/),
-so reading it needs no clone. The same pages run against your own working tree
-with:
+The guides are the documentation, published from `main` at
+[playdeck.video/guides](https://playdeck.video/guides/), so reading them needs
+no clone:
+[**Contract**](https://playdeck.video/guides/contract/)
+(the data-attribute and `style` contract),
+[**Capabilities matrix**](https://playdeck.video/guides/capabilities-matrix/)
+(what each provider reports),
+[**Captions**](https://playdeck.video/guides/captions/)
+and
+[**Theme**](https://playdeck.video/guides/theme/).
+
+The site renders those documents from their source files rather than from a
+copy, so the workbench and the site cannot disagree about what they say.
+
+The Storybook workbench stages every primitive against a mock provider, plus
+real-playback stories. It is a development tool for this repository rather than
+a published surface, and it runs against your own working tree with:
 
 ```sh
 pnpm --filter @playdeck/storybook dev
 ```
-
-[**Overview/Introduction**](https://playdeck.video/storybook/?path=/docs/overview-introduction--docs),
-[**Overview/Contract**](https://playdeck.video/storybook/?path=/docs/overview-contract--docs)
-(the data-attribute and `style` contract),
-[**Overview/Capabilities matrix**](https://playdeck.video/storybook/?path=/docs/overview-capabilities-matrix--docs)
-(what each provider reports),
-[**Overview/Captions**](https://playdeck.video/storybook/?path=/docs/overview-captions--docs)
-and
-[**Overview/Theme**](https://playdeck.video/storybook/?path=/docs/overview-theme--docs).
 
 [Provider setup](docs/provider-setup.md) lists the source values each provider
 accepts and the ones it refuses, plus each provider's own options.
@@ -311,9 +313,9 @@ React is a separate peer requirement rather than a browser one; its range is
 given with the [install command](#playdeck) at the top of this file.
 
 The reference example in the workbench uses `@container`, which is newer than
-this floor. It is a Storybook composition, not published code — see
-[**Overview/Reference example**](https://playdeck.video/storybook/?path=/docs/overview-reference-example--docs)
-in the workbench docs.
+this floor. It is a Storybook composition, not published code — it is documented
+in `apps/storybook/stories/reference/Reference.mdx`, beside the story it
+describes, and is read with the workbench running.
 
 ## License
 

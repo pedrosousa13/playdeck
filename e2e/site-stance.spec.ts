@@ -85,6 +85,8 @@ test('/ is served in the argument stance', async ({ page }) => {
  */
 const stances = [
   ['/', 'argument'],
+  ['/guides/', 'document'],
+  ['/guides/contract/', 'document'],
   ['/reference/', 'document'],
   ['/reference/core/', 'document'],
   ['/providers/', 'document'],
