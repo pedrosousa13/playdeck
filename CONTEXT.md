@@ -201,6 +201,14 @@ The source whose media element may mount, because its activation identity
 matches the one activation committed to.
 _Avoid_: eligible media
 
+**Play gate**:
+Whether autoplay is allowed to run yet, held apart from activation so a
+`playThreshold` above `loadThreshold` can prefetch early and play late. Open
+from the first render wherever the two thresholds are equal, so a player that
+separates nothing has no gate at all. It holds back autoplay only — a viewer
+who presses play is never made to wait.
+_Avoid_: play threshold gate, autoplay lock
+
 **Buffered window**:
 What `PlayerState.buffered` reports — the ranges a provider has said are
 loaded, and deliberately not an instantaneous mirror of what its media element

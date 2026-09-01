@@ -28,6 +28,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -130,6 +131,30 @@ export type RootProps = {
   readonly onPlaybackRateChange?: (playbackRate: number) => void;
   readonly onVolumeChange?: (volume: number) => void;
   readonly playbackRate?: number;
+  /**
+   * Under `loading: 'viewport'`, the fraction of the player's box that must be
+   * on screen before playback may begin -- the same `IntersectionObserver`
+   * ratio `loadThreshold` is, `0` to `1`, applied to the other decision.
+   * Defaults to `loadThreshold`, so a player that sets neither, or only
+   * `loadThreshold`, loads and plays on the one crossing exactly as it did
+   * before this prop existed.
+   *
+   * Raise it above `loadThreshold` to prefetch early and play late: the
+   * provider attaches at `loadThreshold`, so playback is instant when the
+   * viewer reaches the player, while a box one pixel into the viewport is not
+   * started for a viewer who is not watching it. Only autoplay is held back --
+   * a viewer who presses play is never made to wait.
+   *
+   * A value below `loadThreshold` is a configuration error, not a clamp: it
+   * asks the player to start before it is allowed to load, and no scroll
+   * position can satisfy it.
+   *
+   * A box taller or wider than the scroll container it moves through gets the
+   * same first-pixel escape `loadThreshold` documents, for the same reason -- a
+   * threshold near `1` it can never reach would otherwise leave it silent
+   * forever.
+   */
+  readonly playThreshold?: number;
   readonly preload?: import('./use-activation.js').PlayerPreload;
   // Compared by value, not by reference, so an inline literal is safe to
   // pass: see `providerOptionsEqual` in `use-activation.ts`.
@@ -159,7 +184,7 @@ export type RootProps = {
 // declared beside it so there is no second copy to drift.
 export type PlayerActivationProps = Pick<
   RootProps,
-  'loadMargin' | 'loadThreshold' | 'loading' | 'preload'
+  'loadMargin' | 'loadThreshold' | 'loading' | 'playThreshold' | 'preload'
 >;
 
 type Reconciliation<Value> = { value: Value };
@@ -197,6 +222,10 @@ export const Root = ({
   onPlaybackRateChange,
   onVolumeChange,
   playbackRate,
+  // Declared after `loadThreshold` because it defaults to it: a destructuring
+  // default may read a binding the same pattern has already introduced, and
+  // that is the whole contract of this prop.
+  playThreshold = loadThreshold,
   providerOptions,
   ref,
   source,
@@ -234,6 +263,15 @@ export const Root = ({
     ignoreReducedMotion,
     muted
   });
+  // The mode actually handed to the controller, which is `autoplay` itself
+  // except while a `playThreshold` above `loadThreshold` is unmet. Held apart
+  // from `autoplayConfiguration` rather than folded into it because the two
+  // answer different questions and only one of them may be gated: the poster
+  // gate below reads `autoplayConfiguration.current.autoplay`, the *prop*, to
+  // decide whether an attempt is still to come, and a `false` written there
+  // while the player waits for its play threshold would uncover a paused first
+  // frame nobody asked to see -- #242 arriving by a new route.
+  const armedAutoplay = useRef(autoplay);
   const pendingMuted = useRef<Reconciliation<boolean> | undefined>(undefined);
   const pendingVolume = useRef<Reconciliation<number> | undefined>(undefined);
   const pendingPlaybackRate = useRef<Reconciliation<number> | undefined>(
@@ -447,7 +485,7 @@ export const Root = ({
         }
       }
       ensurePreferenceSubscription();
-      controller.configureAutoplay(autoplayConfiguration.current.autoplay, {
+      controller.configureAutoplay(armedAutoplay.current, {
         controlledMuted: autoplayConfiguration.current.muted,
         ignoreReducedMotion: autoplayConfiguration.current.ignoreReducedMotion
       });
@@ -661,11 +699,23 @@ export const Root = ({
     loadThreshold,
     loading,
     nativeOptions: { endTime, loop, startTime },
+    playThreshold,
     prepareMedia,
     preload,
     providerOptions: resolvedProviderOptions,
     source: detectedSource
   });
+
+  const armedAutoplayMode = activation.playGateOpen ? autoplay : false;
+  // A layout effect, and one placed immediately after `useActivation`, because
+  // `prepareMedia` reads this ref from `useActivation`'s own passive effect --
+  // the one that loads the provider. Every layout effect in the tree runs
+  // before any passive effect, so the arming is current by the time that read
+  // happens, while a render-phase write would also land in renders React
+  // discards.
+  useLayoutEffect(() => {
+    armedAutoplay.current = armedAutoplayMode;
+  }, [armedAutoplayMode]);
 
   // The handle is a fresh object carrying exactly what `PlayerHandle`
   // declares, never the controller instance. `Object.assign(controller, ...)`
@@ -739,11 +789,11 @@ export const Root = ({
   }, [controller, detachPreparedMedia]);
 
   useEffect(() => {
-    controller.configureAutoplay(autoplay, {
+    controller.configureAutoplay(armedAutoplayMode, {
       controlledMuted: muted,
       ignoreReducedMotion
     });
-  }, [autoplay, controller, ignoreReducedMotion, muted]);
+  }, [armedAutoplayMode, controller, ignoreReducedMotion, muted]);
 
   useEffect(() => {
     controller.setCaptionRenderer(captionRenderer ?? 'custom');

@@ -103,6 +103,7 @@ type ActivationProbeProps = {
   readonly nativeOptions?: NativePlaybackOptions;
   readonly onActivate?: (activate: () => void) => void;
   readonly onLayout?: () => void;
+  readonly playThreshold?: number;
   readonly preload?: Player.PlayerPreload;
   readonly providerOptions?: Player.PlayerProviderOptions;
   readonly showMedia?: boolean;
@@ -121,6 +122,7 @@ const ActivationProbe = ({
   nativeOptions = {},
   onActivate,
   onLayout,
+  playThreshold = loadThreshold,
   preload = 'metadata',
   providerOptions,
   showMedia = true,
@@ -140,6 +142,7 @@ const ActivationProbe = ({
     loadThreshold,
     loading,
     nativeOptions,
+    playThreshold,
     prepareMedia: () => undefined,
     preload,
     providerOptions,
@@ -382,6 +385,211 @@ test('viewport observer rebuilds when loadThreshold changes', async () => {
   ).toHaveBeenCalledWith(screen.getByTestId('activation-viewport'));
   expect(ControlledIntersectionObserver.instances[1]?.thresholds).toEqual([
     0, 1
+  ]);
+});
+
+// The rect pair every `playThreshold` test below reports, so a partial ratio
+// is the only thing that varies between them: a target half the height of its
+// root, which `targetExceedsObserverRoot` therefore leaves held to the
+// threshold it was actually given rather than waving through at the first
+// pixel.
+const FITTING_TARGET = new DOMRectReadOnly(0, 0, 400, 400);
+const OBSERVER_ROOT = new DOMRectReadOnly(0, 0, 400, 800);
+
+// `playThreshold` defaulting to `loadThreshold` is the whole reason the prop
+// could be added without changing what any existing consumer sees, so the
+// unconfigured case is pinned rather than assumed (#310). One observer asking
+// for exactly the `[0]` it asked for before this prop existed, and the same
+// first-pixel crossing that attaches the provider is also the one that lets
+// autoplay run.
+test('with neither threshold set, the first visible pixel both loads and plays', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture({ autoplay: 'audible' }));
+  const observer = ControlledIntersectionObserver.instances[0]!;
+  expect(observer.thresholds).toEqual([0]);
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: FITTING_TARGET,
+      intersectionRatio: 0.01,
+      rootBounds: OBSERVER_ROOT
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+  expect(observer.disconnect).toHaveBeenCalledOnce();
+});
+
+// The same claim for the consumer who set `loadThreshold` alone: raising it
+// still moves both decisions together, because the default keeps the two
+// thresholds equal, and equal thresholds are met by the same entry.
+test('with only loadThreshold set, the load crossing is still the play crossing', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture({ autoplay: 'audible', loadThreshold: 0.75 }));
+  const observer = ControlledIntersectionObserver.instances[0]!;
+  expect(observer.thresholds).toEqual([0, 0.75]);
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: FITTING_TARGET,
+      intersectionRatio: 0.5,
+      rootBounds: OBSERVER_ROOT
+    })
+  );
+  await Promise.resolve();
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: FITTING_TARGET,
+      intersectionRatio: 0.8,
+      rootBounds: OBSERVER_ROOT
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+  expect(observer.disconnect).toHaveBeenCalledOnce();
+});
+
+// The configuration the issue was opened for: prefetch at the first pixel so
+// playback is instant when the player is reached, but do not start it for a
+// viewer who has one pixel of it on screen.
+test('loads at the first pixel and plays once playThreshold is reached', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(
+    fixture({ autoplay: 'audible', loadThreshold: 0, playThreshold: 0.5 })
+  );
+  // One observer, both thresholds -- not one observer each.
+  expect(ControlledIntersectionObserver.instances).toHaveLength(1);
+  const observer = ControlledIntersectionObserver.instances[0]!;
+  expect(observer.thresholds).toEqual([0, 0.5]);
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: FITTING_TARGET,
+      intersectionRatio: 0.1,
+      rootBounds: OBSERVER_ROOT
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+  await Promise.resolve();
+  expect(fake.counts()).toMatchObject({ loadCount: 1, playCount: 0 });
+  // The observer that reported the load crossing is the one that still has to
+  // report the play crossing, so it cannot have disconnected itself yet.
+  expect(observer.disconnect).not.toHaveBeenCalled();
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: FITTING_TARGET,
+      intersectionRatio: 0.6,
+      rootBounds: OBSERVER_ROOT
+    })
+  );
+
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+  expect(mockedLoadProvider).toHaveBeenCalledOnce();
+  expect(observer.disconnect).toHaveBeenCalled();
+});
+
+// `targetExceedsObserverRoot` in the new place. A `playThreshold` a target can
+// never reach is the same dormant player an unreachable `loadThreshold` would
+// be, so the oversized target is waved through both gates at the first pixel.
+test('an oversized target reaches an unreachable play threshold', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture({ autoplay: 'audible', loadThreshold: 0, playThreshold: 1 }));
+  const observer = ControlledIntersectionObserver.instances[0]!;
+
+  act(() =>
+    observer.intersect({
+      boundingClientRect: new DOMRectReadOnly(0, 0, 400, 2000),
+      intersectionRatio: 0.4,
+      rootBounds: OBSERVER_ROOT
+    })
+  );
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+});
+
+// Named rather than clamped, and reported the way the interaction/autoplay
+// conflict is: the combination cannot be honoured -- the player would have to
+// play before it had loaded -- and absorbing it quietly would leave the
+// consumer with a threshold that never did what they set it to do.
+test('a playThreshold below loadThreshold is a configuration error', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loadThreshold: 0.5, playThreshold: 0.25, ref: handle }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false,
+        message: 'playThreshold cannot be below loadThreshold.'
+      }
+    })
+  );
+  expect(ControlledIntersectionObserver.instances).toHaveLength(0);
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+test('a corrected playThreshold activates the player the error left dormant', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const { rerender } = render(
+    fixture({ loadThreshold: 0.5, playThreshold: 0.25 })
+  );
+  await vi.waitFor(() =>
+    expect(ControlledIntersectionObserver.instances).toHaveLength(0)
+  );
+
+  rerender(fixture({ loadThreshold: 0.5, playThreshold: 0.75 }));
+
+  await vi.waitFor(() =>
+    expect(ControlledIntersectionObserver.instances).toHaveLength(1)
+  );
+  expect(ControlledIntersectionObserver.instances[0]?.thresholds).toEqual([
+    0, 0.5, 0.75
+  ]);
+});
+
+// The observer is reused only while every input it was constructed with still
+// holds, and `playThreshold` is one of them: the browser watches for crossings
+// of the threshold array it was given, so a raised play threshold reported by
+// the old observer would be a crossing nothing asked for. The test above moves
+// from an error to a valid value, where there was no observer to reuse; this
+// one moves between two valid values, where there is.
+test('a changed playThreshold rebuilds the observer', async () => {
+  const { rerender } = render(
+    fixture({ loadThreshold: 0, playThreshold: 0.5 })
+  );
+  const firstObserver = ControlledIntersectionObserver.instances[0]!;
+  expect(firstObserver.thresholds).toEqual([0, 0.5]);
+
+  rerender(fixture({ loadThreshold: 0, playThreshold: 0.8 }));
+
+  await vi.waitFor(() =>
+    expect(ControlledIntersectionObserver.instances).toHaveLength(2)
+  );
+  expect(firstObserver.disconnect).toHaveBeenCalled();
+  expect(ControlledIntersectionObserver.instances[1]?.thresholds).toEqual([
+    0, 0.8
   ]);
 });
 
