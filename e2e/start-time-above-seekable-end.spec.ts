@@ -1,4 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+// The gate these tests wait on before reading the playhead. A published
+// duration is not one, which is what they waited on until #581;
+// `initial-position.ts` carries the ordering and the measurement.
+import { countProviderLoads, initialPositionApplied } from './initial-position';
 
 // #466: a `startTime` inside the media's real length but above the end of the
 // seekable window at the moment metadata first arrives.
@@ -74,14 +78,6 @@ const widenSeekable = async (page: Page): Promise<void> => {
   });
 };
 
-// `loadedmetadata` is when `applyInitialPosition` runs, and a published
-// duration is the consumer-visible signal that it has been and gone.
-const metadataArrived = async (page: Page): Promise<void> => {
-  await expect
-    .poll(() => page.evaluate(() => window.playdeckHandle?.getState().duration))
-    .toBeGreaterThan(0);
-};
-
 const currentTime = (page: Page): Promise<number | undefined> =>
   page.evaluate(() => window.playdeckHandle?.getState().currentTime);
 
@@ -92,8 +88,9 @@ const currentTime = (page: Page): Promise<number | undefined> =>
 test('applies a startTime the seekable window already covers', async ({
   page
 }) => {
+  await countProviderLoads(page);
   await page.goto(STORY);
-  await metadataArrived(page);
+  await initialPositionApplied(page);
 
   expect(await currentTime(page)).toBeCloseTo(START_TIME, 2);
 });
@@ -117,9 +114,10 @@ test('applies a startTime the seekable window already covers', async ({
 test('drops a startTime above the seekable window end, with a notice (#466)', async ({
   page
 }) => {
+  await countProviderLoads(page);
   await narrowSeekableWindow(page, SEEKABLE_END);
   await page.goto(STORY);
-  await metadataArrived(page);
+  await initialPositionApplied(page);
 
   expect(await currentTime(page)).toBe(0);
   expect(
@@ -137,9 +135,10 @@ test('drops a startTime above the seekable window end, with a notice (#466)', as
 test('never reconsiders the startTime once the window widens (#466)', async ({
   page
 }) => {
+  await countProviderLoads(page);
   await narrowSeekableWindow(page, SEEKABLE_END);
   await page.goto(STORY);
-  await metadataArrived(page);
+  await initialPositionApplied(page);
   expect(await currentTime(page)).toBe(0);
 
   await widenSeekable(page);

@@ -1,6 +1,23 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+// The offset is applied at the `loadedmetadata` of an explicit `media.load()`,
+// and never again, so the outcome is settled once the provider has handled that
+// event (`provider-native/src/attachment.ts`, `onLoadedMetadata`).
+// `initialPositionApplied` waits for exactly that; `initial-position.ts`
+// carries the ordering and the measurement.
+//
+// Both of the readings that look like it are races this test has lost, one per
+// engine. The element's own `readyState`: chromium reaches `readyState 1`
+// before the handler has run, so the outcome was read while the offset was
+// still to be applied and the test failed with the playhead at 0 and no notice
+// published — the exact state it exists to forbid, reported against a provider
+// that published the notice a moment later. And a published duration, which is
+// #581: on 2026-09-02 the firefox job of CI run 33616735320, on #582's branch
+// and so on the duration gate, booked `applies a start offset a range-serving
+// origin can satisfy` flaky with `|playhead - 5|` received as 5 — a playhead
+// still at 0.
+import { countProviderLoads, initialPositionApplied } from './initial-position';
 import { media } from './locators';
 
 // #465, driven on real engines because the defect is one engines disagree
@@ -41,26 +58,6 @@ const outcome = async (page: Page): Promise<Outcome> => ({
   )
 });
 
-// The offset is applied at the first `loadedmetadata` and never again, so the
-// outcome is settled once the provider has handled that event — and the
-// published duration is the signal for it, because the provider's handler
-// applies the position and then publishes the media snapshot the duration comes
-// from (`provider-native/src/attachment.ts`, `onLoadedMetadata`).
-//
-// The element's own `readyState` is NOT that signal, and reading it here is a
-// race this test lost: chromium reaches `readyState 1` before the handler has
-// run, so the outcome was read while the offset was still to be applied and the
-// test failed with the playhead at 0 and no notice published — the exact state
-// it exists to forbid, reported against a provider that then published the
-// notice a moment later.
-const metadataApplied = (page: Page) =>
-  expect
-    .poll(
-      () => page.evaluate(() => window.playdeckHandle?.getState().duration),
-      { timeout: 15_000 }
-    )
-    .toBeGreaterThan(0);
-
 // The common case, and the one this change most had to leave alone: an origin
 // that serves byte ranges reports a fully populated seekable window at the
 // first `loadedmetadata`, and the offset applies. Measured on 2026-09-01 with a
@@ -70,8 +67,9 @@ const metadataApplied = (page: Page) =>
 test('applies a start offset a range-serving origin can satisfy', async ({
   page
 }) => {
+  await countProviderLoads(page);
   await page.goto(story);
-  await metadataApplied(page);
+  await initialPositionApplied(page);
 
   const { playhead, refused } = await outcome(page);
 
@@ -142,8 +140,9 @@ test('never drops a start offset in silence on an origin without byte ranges', a
     })
   );
 
+  await countProviderLoads(page);
   await page.goto(story);
-  await metadataApplied(page);
+  await initialPositionApplied(page);
 
   const { playhead, refused } = await outcome(page);
 
