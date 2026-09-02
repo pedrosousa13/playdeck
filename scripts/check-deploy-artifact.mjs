@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// Proves both deployed surfaces work where they are served from, against the
-// built artifact rather than against the configuration that produced it (#519).
+// Proves the deployed surface works where it is served from, against the built
+// artifact rather than against the configuration that produced it (#519).
 //
 // The bug this exists to catch is #435: a root-absolute URL emitted by a build
 // that was told nothing about the prefix it sits under. The site holds the root
-// of `playdeck.video` and the workbench sits at `/storybook/`, so a workbench
-// asset written as `/assets/...` asks the site for a file the site does not
-// have, and the only symptom is a 404 at request time — which is why neither a
-// unit test over `.storybook/main.ts` nor a grep of the emitted HTML would do.
-// Storybook resolves most of its own navigation in the browser, so a static
-// reading of the artifact cannot see the half that breaks.
+// of `playdeck.video` and is the only thing in the artifact since #534, so
+// there is no prefix left for a build to get wrong — but the class of failure
+// the site can still produce is the same one, an address that resolves to a
+// file the artifact does not hold, whose only symptom is a 404 at request time.
+// A grep of the emitted HTML would not see it: what is being checked is what a
+// browser asks for after the document arrives, not what the document says.
 //
 // So the artifact is assembled the way the deploy assembles it, served the way
 // the Worker serves it — one directory at the origin root, a miss answered with
@@ -19,11 +19,11 @@
 // that is wrong.
 //
 // Run on demand as `pnpm test:deploy` rather than from a pull-request gate: it
-// builds both surfaces from scratch and drives a browser through them, which is
-// several times the work `ci.yml` does per pull request. It builds by default,
-// because a run against whatever happens to be on disk proves nothing about the
-// tree under test; `--no-build` is for a local re-run against an artifact this
-// script already assembled.
+// builds the site from scratch, and the packages it measures with it, and
+// drives a browser through the result, which is several times the work `ci.yml`
+// does per pull request. It builds by default, because a run against whatever
+// happens to be on disk proves nothing about the tree under test; `--no-build`
+// is for a local re-run against an artifact this script already assembled.
 
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
@@ -41,24 +41,10 @@ const process = globalThis.process;
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
-// Where each surface is served from, and the values the builds under test are
-// handed. The site is at the root, so nothing about it can get a prefix wrong;
-// the workbench is the surface with a prefix to honour, and one segment is as
-// much of a prefix as ten. These are what the deploy uses, so the artifact
-// under test is the artifact that ships.
+// Where the surface is served from. The site is at the root, which is what the
+// deploy serves it at, so the artifact under test is the artifact that ships.
 const sitePath = '/';
-const storybookPath = '/storybook/';
 const artifactDir = join(repoRoot, 'deploy-dist');
-
-// The story the Storybook visit navigates to. It renders against the mock
-// player, so nothing here depends on media loading — what is being proven is
-// that the workbench's own navigation resolves under the prefix, not that a
-// provider works.
-const story = {
-  component: 'player-playbutton',
-  id: 'player-playbutton--paused',
-  part: 'play-button'
-};
 
 /** @type {Record<string, string>} */
 const mimeTypes = {
@@ -92,9 +78,9 @@ const serveArtifact = async (directory) => {
     const relative = pathname.slice(1);
     try {
       const target = join(directory, relative);
-      // A directory request is what an internal link to `storybook/` produces,
-      // and `html_handling: "auto-trailing-slash"` — the default the deploy
-      // leaves in place — answers one with the index inside it.
+      // A directory request is what a link to a route such as `/reference/`
+      // produces, and `html_handling: "auto-trailing-slash"` — the default the
+      // deploy leaves in place — answers one with the index inside it.
       const entry = await stat(target).catch(() => null);
       const file = entry?.isDirectory() ? join(target, 'index.html') : target;
       const body = await readFile(file);
@@ -127,37 +113,15 @@ const serveArtifact = async (directory) => {
   };
 };
 
-// Noise the workbench makes about itself, tolerated because neither event can
-// carry the evidence this check is looking for. Storybook navigates its preview
-// iframe while the previous navigation of that iframe is still in flight, and
-// the browser reports the request it drops as aborted rather than with a
-// status. And the manager logs the diagnostic below when a channel event
-// arrives from a window it cannot match: it names an internal event and no URL
-// at all. Anything else is a failure.
-//
-// The aborted request is tolerated by the URL it happens to and not by the
-// surface it happens on, because the surfaces do not separate it: the site
-// visit follows its link into the workbench and sees the same abort. A
-// tolerance for every aborted request would drop, rather than report, a
-// wrong-prefix asset abandoned by a navigation — which is the failure this
-// whole script is for. Only the preview iframe's own URL, under the prefix
-// being proven, is allowed to abort; the same document requested from a wrong
-// prefix is not that URL and is still reported.
-//
-// To satisfy yourself that either tolerance is really the workbench and not the
-// prefix under test: build the workbench with `PLAYDECK_BASE_PATH` unset, serve
-// `apps/storybook/storybook-static` from a domain root — the arrangement where
-// no base path exists to get wrong — and visit it with the same listeners
-// attached.
-const abortedRequest = 'net::ERR_ABORTED';
-const previewIframePath = `${storybookPath}iframe.html`;
-const managerChannelDiagnostic =
-  /^%c manager %c received .* but was unable to determine the source of the event/;
-
 /**
  * Records everything a visit is allowed to fail on, for as long as the page
  * lives. Attached before the first navigation so a failure during load counts,
  * and read at the end so one run reports every failure rather than the first.
+ *
+ * Nothing is tolerated. An aborted request is a real finding here — it is what
+ * a page closed with requests still in flight produces, and every visit below
+ * waits for the network to go quiet before it closes precisely so that an abort
+ * can only mean the artifact.
  *
  * @param {import('@playwright/test').Page} page
  * @param {string[]} failures
@@ -172,8 +136,6 @@ const recordFailures = (page, failures, surface) => {
   });
   page.on('requestfailed', (request) => {
     const reason = request.failure()?.errorText ?? 'no reason given';
-    const { pathname } = new URL(request.url());
-    if (reason === abortedRequest && pathname === previewIframePath) return;
     failures.push(
       `${surface}: request failed for ${request.url()} (${reason})`
     );
@@ -181,7 +143,6 @@ const recordFailures = (page, failures, surface) => {
   page.on('console', (message) => {
     const text = message.text();
     if (message.type() !== 'error') return;
-    if (managerChannelDiagnostic.test(text)) return;
     failures.push(`${surface}: console error — ${text}`);
   });
   page.on('pageerror', (error) => {
@@ -200,10 +161,10 @@ const checkSite = async (browser, origin, failures) => {
   await page.goto(`${origin}${sitePath}`);
   await page.getByRole('heading', { name: 'Playdeck', exact: true }).waitFor();
 
-  // Every internal link, rather than the one the placeholder page happens to
-  // carry today: whatever links the site grows, an internal one is exactly the
-  // kind that gets written root-absolute, and this check should already cover
-  // it without being extended.
+  // Every internal link, rather than the ones the landing page happens to carry
+  // today: whatever links the site grows, an internal one is exactly the kind
+  // that gets written root-absolute, and this check should already cover it
+  // without being extended.
   //
   // Selected by the prefix they are served from, and not merely by being an
   // absolute URL: `HTMLAnchorElement.href` resolves every link against the
@@ -237,18 +198,13 @@ const checkSite = async (browser, origin, failures) => {
   //
   // This used to be one `page.goto` after another in the context that found
   // them, and that made the *order* of the links on the landing page
-  // load-bearing (#528). The workbench goes on fetching its own scripts well
-  // after its document has arrived, so navigating away from it abandoned those
-  // requests, and the browser reports an abandoned request as
-  // `net::ERR_ABORTED` — which `recordFailures` reports, because the tolerance
-  // for that error is deliberately narrow and stays narrow: widening it to
-  // every aborted request would drop a wrong-prefix asset abandoned by a
-  // navigation, which is the failure this whole script exists to catch.
-  //
-  // A fresh context has nothing to abandon. Nothing is in flight in it when the
-  // navigation starts, and closing it is not a navigation, so no surface's
-  // requests can be dropped by another surface's visit and the landing page is
-  // free to list its links in whatever order reads best.
+  // load-bearing (#528): navigating away from a page still fetching abandons
+  // those requests, and an abandoned request is reported as `net::ERR_ABORTED`,
+  // which is a failure here. A fresh context has nothing to abandon. Nothing is
+  // in flight in it when the navigation starts, and closing it is not a
+  // navigation, so no page's requests can be dropped by another page's visit
+  // and the landing page is free to list its links in whatever order reads
+  // best.
   for (const link of links) {
     const visit = await browser.newPage();
     recordFailures(visit, failures, 'site');
@@ -256,16 +212,17 @@ const checkSite = async (browser, origin, failures) => {
       // A response event already reports the status, so what is left to
       // establish is that a document arrived rather than an error page.
       await visit.goto(link);
-      // `load` fires when the document and its subresources are in, and the
-      // workbench is still fetching after it — so closing the page there would
-      // abandon those requests exactly as navigating away used to, and put the
-      // same `net::ERR_ABORTED` into the report. Waiting for the network to go
-      // quiet is what makes the close above a close of an idle page.
+      // `load` fires when the document and its subresources are in, and a route
+      // that mounts a player island goes on fetching after it — so closing the
+      // page there would abandon those requests exactly as navigating away used
+      // to, and put the same `net::ERR_ABORTED` into the report. Waiting for
+      // the network to go quiet is what makes the close above a close of an
+      // idle page.
       //
-      // A surface that never goes quiet would time out here, and that is the
-      // right verdict rather than a limitation: neither surface in this
-      // artifact polls or holds a socket open, so a page still talking half a
-      // minute after `load` is a finding.
+      // A page that never goes quiet would time out here, and that is the right
+      // verdict rather than a limitation: nothing in this artifact polls or
+      // holds a socket open, so a page still talking half a minute after `load`
+      // is a finding.
       await visit.waitForLoadState('networkidle');
       const title = await visit.title();
       if (title === '') {
@@ -277,42 +234,12 @@ const checkSite = async (browser, origin, failures) => {
   }
 };
 
-/**
- * @param {import('@playwright/test').Browser} browser
- * @param {string} origin
- * @param {string[]} failures
- */
-const checkStorybook = async (browser, origin, failures) => {
-  const page = await browser.newPage();
-  recordFailures(page, failures, 'storybook');
-  await page.goto(`${origin}${storybookPath}`);
-
-  // The sidebar rendering is the signal that the workbench booted: `load`
-  // fires as soon as the shell's HTML is in, which a build whose scripts all
-  // 404 also manages.
-  await page.locator('#storybook-explorer-tree').waitFor({ timeout: 60_000 });
-
-  // Its own navigation, driven the way a reader drives it. A story reached by
-  // typing its URL would prove the artifact holds the story; only a click
-  // proves the sidebar's links resolve under the prefix.
-  await page.locator(`[data-item-id="${story.component}"]`).click();
-  await page.locator(`[data-item-id="${story.id}"]`).click();
-
-  const preview = page.frameLocator('#storybook-preview-iframe');
-  await preview
-    .locator(`[data-playdeck-part="${story.part}"]`)
-    .waitFor({ timeout: 60_000 });
-
-  await page.close();
-};
-
 const shouldBuild = !process.argv.includes('--no-build');
 if (shouldBuild) {
-  // Each surface is built the way `.github/workflows/deploy-site.yml` builds
-  // it, including the site being handed nothing: `PLAYDECK_BASE_PATH` is
-  // explicitly removed rather than left to whatever the shell running this
-  // happens to export, so a stray value cannot make the harness build something
-  // the deploy never would.
+  // The site is built the way `.github/workflows/deploy-site.yml` builds it,
+  // including being handed nothing: `PLAYDECK_BASE_PATH` is explicitly removed
+  // rather than left to whatever the shell running this happens to export, so a
+  // stray value cannot make the harness build something the deploy never would.
   //
   // The packages come first, and they are a prerequisite rather than a surface:
   // the site's landing page renders the gzipped size of every bundle
@@ -328,23 +255,16 @@ if (shouldBuild) {
     stdio: 'inherit'
   });
 
-  /** @type {[string, string | undefined][]} */
-  const builds = [
-    ['@playdeck/site', undefined],
-    ['@playdeck/storybook', storybookPath]
-  ];
-  for (const [filter, prefix] of builds) {
-    console.log(`--- Building ${filter} for ${prefix ?? sitePath} ---`);
-    const env = { ...process.env };
-    if (prefix === undefined) delete env.PLAYDECK_BASE_PATH;
-    else env.PLAYDECK_BASE_PATH = prefix;
-    execFileSync('pnpm', ['--filter', filter, 'build'], {
-      cwd: repoRoot,
-      stdio: 'inherit',
-      env
-    });
-  }
-  // The deploy's own layout, imported rather than restated: two copies would
+  console.log(`--- Building @playdeck/site for ${sitePath} ---`);
+  const env = { ...process.env };
+  delete env.PLAYDECK_BASE_PATH;
+  execFileSync('pnpm', ['--filter', '@playdeck/site', 'build'], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+    env
+  });
+
+  // The deploy's own assembly, imported rather than restated: two copies would
   // drift, and a harness that went green against a shape the deploy no longer
   // produces is worse than no harness.
   await assembleDeploy(artifactDir);
@@ -362,8 +282,6 @@ try {
   browser = await chromium.launch({ headless: true });
   console.log(`--- Visiting ${origin}${sitePath} ---`);
   await checkSite(browser, origin, failures);
-  console.log(`--- Visiting ${origin}${storybookPath} ---`);
-  await checkStorybook(browser, origin, failures);
 } catch (error) {
   // A thrown navigation or a locator that timed out is itself a failure, and
   // reporting it beside the recorded ones keeps the run to one report.
@@ -385,6 +303,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(
-  `\nBoth surfaces load correctly: the site at ${sitePath}, the workbench at ${storybookPath}.`
-);
+console.log(`\nThe site loads correctly at ${sitePath}.`);

@@ -9,28 +9,33 @@ the test origin.
 ## Commands
 
 - `pnpm dev` — workbench at `http://localhost:6006`.
-- `pnpm build` — static build (also part of the root `pnpm build`). This is
-  what `.github/workflows/deploy-site.yml` assembles into the published artifact
-  one segment inside the site, which takes the root of the domain (#519). The
+- `pnpm build` — static build (also part of the root `pnpm build`). Nothing
+  publishes it: `playdeck.video` serves `apps/site` and nothing else (#534). The
   documents a consumer is sent to are rendered by the site itself, from these
   sources — `apps/site/src/guide-pages.mjs` says which — so the workbench is a
   development tool for this repository rather than the documentation it used to
   be.
 - `pnpm test` — run every story as a browser test (root: `pnpm test:storybook`).
 
-The workbench is served from `/storybook/` and never from `/`, so the deploy
-sets `PLAYDECK_BASE_PATH` to that prefix and the fixtures under `public/` are
-addressed through `stories/asset-url.ts` rather than by a root-absolute
-literal. To reproduce the deployed build locally, pass the value the deploy
-passes:
+## Base path
+
+`.storybook/main.ts` reads `PLAYDECK_BASE_PATH` into its bundler's `base`, and
+the fixtures under `public/` are addressed through `stories/asset-url.ts`
+against that value rather than by a root-absolute literal. Unset, it is `/`,
+which is where `storybook dev` and the Vitest browser run serve the workbench —
+so the default path is the one every command above takes.
+
+The mechanism stays although nothing is served under a prefix any more. It is
+how a build is checked against a prefix at all, which is the only way to see
+that a root-absolute literal has crept back into a story:
 
 ```sh
-PLAYDECK_BASE_PATH=/storybook/ pnpm build
+PLAYDECK_BASE_PATH=/whatever/ pnpm build
 ```
 
-`scripts/check-deploy-artifact.mjs` builds both surfaces this way, assembles the
-artifact and drives a browser through it, which is what proves the prefix is
-honoured rather than merely configured.
+It is also the repository's one answer to the question of what prefix a build is
+served from — #519 settled that deliberately, against inventing a second — so a
+surface that ever does need one finds it here rather than adding its own.
 
 ## Story conventions
 

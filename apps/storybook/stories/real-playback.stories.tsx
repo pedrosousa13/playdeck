@@ -20,7 +20,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`). Click the activation overlay to load. HLS/live/native are local fixtures; YouTube, Vimeo and Wistia hit the network. **Live HLS is the exception on the published workbench:** its playlist is synthesized by a dev-server plugin rather than served as a file, so that story loads only when you run the workbench yourself.'
+          'Real providers, real media, real network — excluded from the deterministic story test suite (tagged `!test`). Click the activation overlay to load. HLS/live/native are local fixtures; YouTube, Vimeo and Wistia hit the network. **Live HLS is the exception in a static build:** its playlist is synthesized by a dev-server plugin rather than served as a file, so that story loads under `storybook dev` and `storybook preview` and not from `storybook-static`.'
       }
     }
   }
@@ -101,10 +101,10 @@ export const HlsVodHlsJs: Story = {
  * `.storybook/live-playlist-plugin.ts` answers `/live/index.m3u8` from
  * `configureServer` and `configurePreviewServer`, so it exists on the dev
  * server and under `storybook preview` and is absent from a static build. This
- * story therefore cannot load on the published workbench, which is a static
- * build (#435). It is left pointing at the same path rather than given a
- * stand-in, because a recorded playlist would not be live and the story exists
- * to exercise a moving window.
+ * story therefore cannot load from `storybook-static`, only from a running
+ * workbench. It is left pointing at the same path rather than given a stand-in,
+ * because a recorded playlist would not be live and the story exists to
+ * exercise a moving window.
  */
 export const LiveHls: Story = {
   render: () => (

@@ -1,16 +1,12 @@
 name: Deploy site
 
-# The Storybook workbench is the documentation — `README.md` says so — and
-# without a published copy the only way to read it is to clone the monorepo and
-# run a full workspace install, which somebody who ran `pnpm add @playdeck/react`
-# has no reason and no instruction to do (#435). Publishing it makes that claim
-# true for a consumer who has only ever seen npm.
-#
-# One deployment carries two surfaces: `apps/site` at the root of
-# `playdeck.video`, the workbench at `/storybook/` (#519). They are built
-# separately and assembled into one directory here, because neither build knows
-# the other exists — each is handed the prefix it is served from and nothing
-# else.
+# What `playdeck.video` publishes: `apps/site`, at the root of the domain and
+# alone there. The documents a consumer is sent to are the site's own rendering
+# of them, from the sources under `apps/storybook/stories/` — #533 moved them —
+# so the claim #435 filed against, that the documentation is reachable only by
+# cloning the monorepo, is answered by the site rather than by publishing the
+# workbench. The workbench stays a local development tool and nothing here
+# builds it (#534).
 #
 # Wrangler is driven from this file, against a `wrangler.jsonc` committed at the
 # repository root, rather than through Cloudflare's dashboard Git integration.
@@ -20,11 +16,11 @@ name: Deploy site
 # what the deployment itself is; this one records when it runs.
 #
 # `main` only. Deploying a branch would overwrite the published documentation
-# with unreviewed content; `ci.yml` already builds both surfaces on every pull
+# with unreviewed content; `ci.yml` already builds the site on every pull
 # request, which is the part a pull request needs. What no pull-request gate
 # does is assemble the artifact and serve it, so a failure that only appears
-# once the two builds share one origin appears here first. `workflow_dispatch`
-# is here to re-publish without an empty commit.
+# once the build is served from an origin root appears here first.
+# `workflow_dispatch` is here to re-publish without an empty commit.
 on:
   push:
     branches: [main]
@@ -52,14 +48,14 @@ jobs:
     # of being a fork.
     if: github.repository == 'pedrosousa13/playdeck'
     runs-on: ubuntu-latest
-    # Install, the library builds the site measures, two static builds, an
-    # assembly and an asset upload — no browsers, no packaging harness.
+    # Install, the library builds the site measures, one static build, a
+    # directory copy and an asset upload — no browsers, no packaging harness.
     # `ci.yml` records its `storybook` job at 37s whole-job, install included
-    # (2026-08-20, run 32337178101); the seven library builds this one adds are
-    # `vite build && tsc -b` apiece, the Astro build and a directory copy are
-    # small beside them, and the upload is bounded by the same artifact. 15
-    # minutes is still several times the work, in the same spirit as the bounds
-    # there. Revisit it if the site grows a build that is not.
+    # (2026-08-20, run 32337178101); the seven library builds this one runs are
+    # `vite build && tsc -b` apiece, the Astro build and the copy are small
+    # beside them, and the upload is bounded by the same artifact. 15 minutes is
+    # still several times the work, in the same spirit as the bounds there.
+    # Revisit it if the site grows a build that is not.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -86,20 +82,10 @@ jobs:
       # defaults to and there is nothing to say (#519).
       - run: pnpm --filter @playdeck/site build
 
-      # `PLAYDECK_BASE_PATH` is the one mechanism for telling a build what
-      # prefix it is served from: `apps/storybook/.storybook/main.ts` reads it
-      # into its bundler's `base`. The workbench is served one segment inside
-      # the deployment, which is precisely the value below, and it has to be
-      # passed here because where the workbench lands in the artifact is this
-      # file's decision and the assemble script's, not the workbench's.
-      - run: pnpm --filter @playdeck/storybook build
-        env:
-          PLAYDECK_BASE_PATH: /storybook/
-
-      # Where each build output lands in the artifact is the script's to say,
-      # not this file's — the verification harness assembles the same layout,
-      # and one definition is what keeps the two from drifting. The directory
-      # named here is the one `wrangler.jsonc` publishes as its assets.
+      # What the artifact holds is the script's to say, not this file's — the
+      # verification harness assembles the same artifact, and one definition is
+      # what keeps the two from drifting. The directory named here is the one
+      # `wrangler.jsonc` publishes as its assets.
       - run: node scripts/assemble-deploy.mjs deploy-dist
 
       # Cloudflare's documented choice for the token is the "Edit Cloudflare

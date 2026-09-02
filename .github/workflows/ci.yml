@@ -837,8 +837,8 @@ jobs:
   # imports `@playdeck/react` through its published entry and measures every
   # built bundle for the figures it prints, so a site build against an unbuilt
   # tree fails on the measurement. `deploy-site.yml` builds the same two halves
-  # in the same order, spelled as two commands because the deploy hands the
-  # workbench a base path between them.
+  # in the same order, spelled as two commands rather than as one filter so
+  # that each half carries its own reasoning there.
   #
   # Nor does anything here drive a browser over the site, and that is not a gap
   # either: the `site-*` specs do, in the `e2e` matrix above, whose

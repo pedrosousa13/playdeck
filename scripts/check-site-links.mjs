@@ -36,7 +36,6 @@ import { join, posix, relative, sep } from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, URL } from 'node:url';
-import { layout } from './assemble-deploy.mjs';
 
 // As in scripts/serve-site.mjs and scripts/check-deploy-artifact.mjs: the lint
 // config grants Node globals to `**/*.{js,ts}` only, so a `.mjs` file reaching
@@ -58,29 +57,6 @@ const distDir = join(repoRoot, 'apps', 'site', 'dist');
 // is being held to. The day `base` moves, this moves with it and every
 // root-absolute link that did not move fails here.
 const basePath = '/';
-
-// The surfaces that are not in this build. `scripts/assemble-deploy.mjs` copies
-// each one in beside the site, and the landing page links across that seam — so
-// resolving `/storybook/` against `apps/site/dist` finds nothing and would
-// report a link that is correct.
-//
-// Derived from that script's own `layout` rather than written here as a string.
-// The exemption then says what it means — "a link into a surface this build
-// does not contain" — and it moves when the thing it describes moves: rename a
-// destination there and the link into the old one stops matching any mount and
-// fails here, which is the failure a hard-coded `/storybook/` would have
-// skipped forever.
-//
-// What this does NOT prove is that the workbench is actually reachable once
-// assembled. `pnpm test:deploy` proves that, by assembling both surfaces,
-// serving them and following this link in a browser — and it runs on demand
-// rather than per pull request, deliberately: its own header records that it is
-// several times the work `ci.yml` does. So the honest statement of the gap is
-// that this check proves the link points into a surface the deploy places, and
-// the deploy check proves the surface answers.
-const externalSurfacePrefixes = layout
-  .filter(({ to }) => to !== '.')
-  .map(({ to }) => `${basePath}${to}/`);
 
 // Schemes that address nothing this check can resolve. `data:` and `blob:`
 // carry their own payload, and the rest hand the URL to something that is not a
@@ -312,9 +288,6 @@ for (const page of pages) {
       );
       continue;
     }
-    if (externalSurfacePrefixes.some((prefix) => pathname.startsWith(prefix)))
-      continue;
-
     // What a static host answers this path with: the file at it, or the
     // `index.html` inside the directory at it. `scripts/serve-site.mjs` and the
     // Cloudflare Worker behind `playdeck.video` both resolve it that way.

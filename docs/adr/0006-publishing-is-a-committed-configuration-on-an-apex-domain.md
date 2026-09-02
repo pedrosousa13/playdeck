@@ -1,5 +1,12 @@
 # Publishing runs from a configuration this repository commits, onto an apex domain
 
+_Superseded in part by
+[ADR-0007](0007-the-deployed-artifact-is-the-site-alone.md), which removed the
+Storybook workbench from the deployment. Everything below about where and how
+publishing runs still holds; wherever it says the artifact carries two surfaces,
+it carries one. Left otherwise unedited — the two-surface deployment is what was
+decided here, and it ran._
+
 Until #519 the published documentation was a GitHub Pages project site:
 `.github/workflows/pages.yml` built the Storybook workbench with
 `PLAYDECK_BASE_PATH` set to `/playdeck/` and uploaded

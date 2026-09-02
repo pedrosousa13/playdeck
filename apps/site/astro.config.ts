@@ -23,10 +23,10 @@ export default defineConfig({
    * there is no question for a build to be handed an answer to (#519).
    *
    * `apps/storybook/.storybook/main.ts` still reads `PLAYDECK_BASE_PATH`, and
-   * the asymmetry is the deployment's rather than an inconsistency: the
-   * workbench is assembled one segment inside the same artifact, at
-   * `/storybook/`, so its build does have to be told where it lands. This one
-   * lands where it already defaults to.
+   * that is not an inconsistency with this: the workbench is not deployed at
+   * all (#534), and the variable is how a build of it is checked against a
+   * prefix locally. This site is deployed, and lands where it already defaults
+   * to.
    */
   base: '/',
   /**

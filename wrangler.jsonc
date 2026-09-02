@@ -1,13 +1,14 @@
 // What `playdeck.video` is: a Cloudflare Worker that serves static assets and
-// nothing else. `.github/workflows/deploy-site.yml` builds the two surfaces,
-// assembles them into the directory named below and hands this file to
-// Wrangler (#519).
+// nothing else. `.github/workflows/deploy-site.yml` builds `apps/site`,
+// assembles it into the directory named below and hands this file to Wrangler
+// (#519). That build is the whole of what is served — the Storybook workbench
+// was published under `storybook/` until #534 and is a local development tool
+// now.
 //
-// At the repository root rather than in `apps/site`, because the directory it
-// publishes is not either app's. `scripts/assemble-deploy.mjs` composes it out of
-// both builds — the site at the root, the workbench under `storybook/` — and a
-// configuration file living inside one of the two surfaces would claim the
-// other one's output as its own.
+// At the repository root rather than in `apps/site`, because what it publishes
+// is an assembled directory rather than a build output: `deploy-dist/` is
+// written by `scripts/assemble-deploy.mjs` and belongs to the deployment, not
+// to the app whose `dist/` currently fills it.
 {
   "name": "playdeck",
   "compatibility_date": "2026-08-29",
@@ -22,23 +23,36 @@
 
     // `"none"` — Cloudflare's default, restated because the alternatives are
     // both wrong here rather than merely unchosen. `"404-page"` would make this
-    // file depend on a document neither build is under any obligation to emit,
+    // file depend on a document the site is under no obligation to emit,
     // and the dependency would break silently: with no such document the
     // request falls back to Cloudflare's own 404, which is what `"none"` gives
     // already, so nothing ever reports that the setting found nothing to serve.
     // `"single-page-application"` would be worse than absent: it rewrites every
-    // miss to the root `index.html` and answers it 200, so a mistyped workbench
-    // URL would render the site's root document and report success. Neither
-    // surface is a single-page application in the sense that setting means —
-    // the workbench is a static build with real documents at real paths.
+    // miss to the root `index.html` and answers it 200, so a mistyped URL would
+    // render the landing page and report success. The site is not a
+    // single-page application in the sense that setting means — it is a static
+    // build with a real document at every route it has.
     "not_found_handling": "none"
 
     // `html_handling` is left at its default, `auto-trailing-slash`, and the
-    // default is load-bearing: it is what makes `/storybook/` serve
-    // `storybook/index.html` with no configuration, and what redirects
-    // `/storybook` onto it. Astro's default build format writes directories
-    // with an `index.html` inside them, so the two agree already; pinning the
-    // site to extensionless URLs instead would put them at odds.
+    // default is still load-bearing now that the site is the only thing served.
+    // Astro's default build format writes a route as a directory with an
+    // `index.html` inside it — `reference/index.html`,
+    // `guides/contract/index.html` — and `apps/site/astro.config.ts` sets
+    // neither `build.format` nor `trailingSlash`, so every route in the
+    // artifact has that shape. The default serves `/reference/` from the index
+    // inside it and redirects `/reference` onto it, which is the pair of
+    // behaviours a directory-format build needs and the only pair it needs.
+    //
+    // Each alternative gives up part of that. `"none"` rewrites nothing, so a
+    // request for a directory finds no file and every route but the root 404s
+    // unless the build is switched to extensionless documents. Both explicit
+    // trailing-slash settings redirect before they look, and `"drop"` redirects
+    // away from the form the site itself emits — its internal links, its
+    // sitemap and its canonical URLs all carry the slash. `"force"` redirects
+    // towards it, which agrees with the build, and is still the narrower of the
+    // two: it decides on the shape of the URL where the default decides on what
+    // the artifact holds.
   },
 
   // Cloudflare creates the DNS record and the certificate for a custom domain
