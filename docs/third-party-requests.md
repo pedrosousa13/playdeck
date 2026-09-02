@@ -127,9 +127,9 @@ Notes, per row:
   sandbox bargain below. Neither the missing `encrypted-media` nor the absent
   `sandbox` changes which origin is reached; they are here because this
   document is where a reader decides what to permit this frame, and a DRM
-  source that does not play as attached — and a frame that reloads itself with
-  the grant added — is what an origins-only reading would leave them to find
-  in production.
+  source that does not play as attached — and a frame that can reload itself
+  with the grant added — is what an origins-only reading would leave them to
+  find in production.
 
   Two more things leave the page here that the table above does not explain on
   its face, and both are the SDK's own work at module scope rather than
@@ -300,13 +300,14 @@ Notes, per row:
   installs a `window` `message` listener (`:1105`). On a message whose parsed
   payload carries `event: 'drminitfailed'` (`:1083`) the listener resolves the
   sending frame from `event.source` (`:1086`, via `findIframeBySourceWindow`,
-  defined at `:172`); if that frame's current `allow` does not already contain
-  `encrypted-media` (`:1090-1092`) it appends the grant to whatever is there —
-  the attribute becomes `${currentAllow}; encrypted-media` (`:1096`) — then sets
+  defined at `:172`, which matches on `contentWindow` at `:177-181`); if that
+  frame's current `allow` does not already contain `encrypted-media`
+  (`:1090-1092`) it appends the grant to whatever is there — the attribute
+  becomes `${currentAllow}; encrypted-media` (`:1096`) — then sets
   `forcereload=drm` on the frame's `src` (`:1100`) and writes the url back
-  (`:1101`), which reloads it. Playdeck's iframe is a frame that resolution finds,
-  and the `allow` value Playdeck writes is what gets appended to. **No origin
-  moves**: the reloaded frame is the same `player.vimeo.com` url with one
+  (`:1101`), which reloads it. Playdeck's iframe is a frame that resolution
+  finds, and the `allow` value Playdeck writes is what gets appended to. **No
+  origin moves**: the reloaded frame is the same `player.vimeo.com` url with one
   parameter added, so nothing here changes what a CSP has to permit — what
   changes is what the frame is permitted to do once it reloads.
 
@@ -824,12 +825,11 @@ the first place. That chain was confirmed by reading and not by running: the
 SDK lines are cited so they can be checked and can still drift, and the
 opaque-origin step is taken on the platform's terms rather than watched in a
 browser, because no sandboxed frame was ever loaded here — which is this
-section's own thesis
-rather than an exception to it, as the paragraphs below set out. So the only
-sandbox this provider can carry is one that includes both, and a frame holding
-both can run arbitrary script and reach its own origin's storage, which is most
-of what the attribute exists to prevent. A sandbox including `allow-scripts
-allow-same-origin` is close to no sandbox.
+section's own thesis rather than an exception to it, as the paragraphs below
+set out. So the only sandbox this provider can carry is one that includes both,
+and a frame holding both can run arbitrary script and reach its own origin's
+storage, which is most of what the attribute exists to prevent. A sandbox
+including `allow-scripts allow-same-origin` is close to no sandbox.
 
 What such a sandbox could still withdraw is top-level navigation and form
 submission, and the embed appears to need neither. The gain is real and should
@@ -863,14 +863,14 @@ playback is withheld from this frame by the deliberately absent
 `encrypted-media` grant on the `allow` list — see the Vimeo row above — so at
 the moment the frame attaches it is not a capability a sandbox could regress.
 It is off already, by a different mechanism and for a different reason. That
-holds only until the SDK's DRM rewrite fires, which appends the grant back and
-reloads the frame — see the DRM rewrite above — but the rewrite does not add a
-casualty either, for the reason the YouTube section gives below: any sandbox
-value this provider could carry already includes `allow-same-origin`, because
-the postMessage bridge cannot work without it, and a frame permissive enough
-for the bridge is permissive enough for a restored `encrypted-media` grant.
-Advertising and mobile fullscreen are the paths that are both live and
-uncovered.
+holds until the SDK's DRM rewrite fires, if it ever does: the rewrite appends
+the grant back and reloads the frame — see the DRM rewrite above. But the
+rewrite would not add a casualty either, for the reason the YouTube section
+gives below: any sandbox value this provider could carry already includes
+`allow-same-origin`, because the postMessage bridge cannot work without it, and
+a frame permissive enough for the bridge is permissive enough for a restored
+`encrypted-media` grant. Advertising and mobile fullscreen are the paths that
+are both live and uncovered.
 
 This was measured rather than defaulted into. The alternative had a concrete
 shape: the value #237 proposed, `allow-scripts allow-same-origin
@@ -1004,18 +1004,18 @@ depends on it. The bridge reading is what decides this.
 Two parts of the Vimeo section do not transfer, so they are restated rather than
 assumed:
 
-- **DRM is live on this frame, not already off.** The Vimeo frame's `allow`
-  list deliberately omits `encrypted-media`, which is why that section can set
-  DRM aside as a capability no sandbox could regress. This frame's list carries
-  it. The whole of it, at `attachment.ts:263-266`, is `accelerometer`,
-  `autoplay`, `clipboard-write`, `encrypted-media`, `gyroscope`,
-  `picture-in-picture` and `web-share` — restated verbatim from what the API
-  writes onto the frame it builds on the `<div>` path (`:147:373`), which is
-  what the comment at `attachment.ts:259-262` claims and this reading confirms.
-  So a DRM-protected source does play here. Because `allow-same-origin` is
-  required for the bridge regardless, DRM imposes no constraint the bridge has
-  not already imposed — but it is one more live capability riding on that token
-  rather than one already withheld.
+- **DRM is live on this frame from the moment it attaches.** This frame's
+  `allow` list carries `encrypted-media` as written, where the Vimeo frame's
+  withholds it at attach and leaves any restoring to the SDK. The whole of it,
+  at `attachment.ts:263-266`, is `accelerometer`, `autoplay`,
+  `clipboard-write`, `encrypted-media`, `gyroscope`, `picture-in-picture` and
+  `web-share` — restated verbatim from what the API writes onto the frame it
+  builds on the `<div>` path (`:147:373`), which is what the comment at
+  `attachment.ts:259-262` claims and this reading confirms. So a DRM-protected
+  source does play here, from the first load and unconditionally. Because
+  `allow-same-origin` is required for the bridge regardless, DRM imposes no
+  constraint the bridge has not already imposed — but it is one more live
+  capability riding on that token from the start.
 - **The `allow` attribute and `allowfullscreen` are a separate mechanism.**
   Permissions policy and sandbox are independent, so a sandbox does not revoke
   `allow` grants. Fullscreen on this frame is governed by the `allowfullscreen`
