@@ -176,6 +176,27 @@ test('names the row and the prose figure that drifted, not just "something"', ()
   ]);
 });
 
+test('a figure that widened a column reports its row and not the delimiter', () => {
+  const table = renderTable(composeRows(figures));
+  const wider = renderTable(composeRows({ ...figures, hlsJs: 15990 }));
+  const reasons = driftReasons(
+    readme.replace('stale table', wider),
+    table,
+    anchors()
+  );
+
+  assert.deepEqual(
+    reasons.filter((reason) => reason.includes('The row for')),
+    [
+      '  The row for HLS on Chrome, Edge, Firefox measures the above + **hls.js 159.9** = **195.5 KB**, and README.md prints the above + **hls.js 1599.0** = **1634.6 KB**.'
+    ]
+  );
+  assert.deepEqual(
+    reasons.filter((reason) => reason.includes('---')),
+    []
+  );
+});
+
 test('reports nothing once the section already carries the measurements', () => {
   const table = renderTable(composeRows(figures));
   assert.deepEqual(

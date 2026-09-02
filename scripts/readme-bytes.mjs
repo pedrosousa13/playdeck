@@ -303,15 +303,27 @@ export const renderReadme = (text, table, anchors) => {
  * @returns {string[]}
  */
 export const driftReasons = (text, table, anchors) => {
-  /** @param {string} block @returns {Map<string, string>} */
+  /**
+   * The body rows of a rendered table, keyed by what they say is playing.
+   *
+   * The first two lines are dropped rather than parsed: `renderTable` emits a
+   * header and a `|---|` delimiter above the body, and both parse as rows made
+   * of their own text. The delimiter's cells are as wide as the column, so one
+   * figure widening a column made it drift against itself and the report
+   * carried a row of dashes beside the finding it was supposed to name.
+   * @param {string} block @returns {Map<string, string>}
+   */
   const rowsOf = (block) =>
     new Map(
-      block.split('\n').map((line) => {
-        const [, playing = '', downloads = '', total = ''] = line
-          .split('|')
-          .map((cell) => cell.trim());
-        return [playing, `${downloads} = ${total}`];
-      })
+      block
+        .split('\n')
+        .slice(2)
+        .map((line) => {
+          const [, playing = '', downloads = '', total = ''] = line
+            .split('|')
+            .map((cell) => cell.trim());
+          return [playing, `${downloads} = ${total}`];
+        })
     );
 
   const open = text.indexOf(`${OPEN}\n`);
@@ -438,7 +450,17 @@ export const pinnedVersion = (target, installed, manifests) => {
  * over both sides. So this calls `vite build` too, at the same defaults, rather
  * than reaching for a standalone minifier that would put the two halves of a
  * row in different units. `write: false` keeps it in memory; `sourcemap: false`
- * because the map is not downloaded and no figure should carry it.
+ * emits no map and no `//# sourceMappingURL=` line pointing at one, which is
+ * what a build with nowhere to write the map should do.
+ *
+ * The first-party halves are not built here and are not free of it: every
+ * package's `vite.config.ts` sets `sourcemap: true`, so each `dist/index.js`
+ * that `bundle-budgets.mjs` weighs ends in that line, and its figure includes
+ * the line's weight. To re-measure the cost, gzip a built `dist/index.js` and
+ * gzip it again with that trailing line cut off: for the three bundles a row
+ * adds a third-party figure to, it is 0.021 KB each (core 7.783 against 7.762,
+ * react 17.212 against 17.190, the HLS adapter 4.792 against 4.771). A fifth of
+ * the tenth of a KB the table prints at, so it moves no figure in it.
  *
  * The entries measured here are self-contained -- neither imports anything at
  * run time -- so bundling adds nothing to them and this is minification in
