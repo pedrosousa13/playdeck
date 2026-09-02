@@ -839,11 +839,11 @@ Unlisted rather than listed, because of what the sheet is for. It is a wall of
 token names that exists so a later ticket can check its work against the
 rendered system, and a reader who came to find out what this library does is not
 its audience — another name in the strip would spend the site's navigation on
-the site's own scaffolding. Public rather than moved or made
-build-only, because it has to be rendered by the same build, in the same themes,
-from the same tokens, or it stops being evidence about the shipped site; and a
-served address a reader can type costs nothing a build-only artefact would not
-also cost.
+the site's own scaffolding. Public rather than moved or made build-only,
+because it has to be rendered by the same build, in the same themes, from the
+same tokens, or it stops being evidence about the shipped site; and a served
+address a reader can type costs nothing a build-only artefact would not also
+cost.
 
 **The sheet survives 320px by breaking a word, which is the opposite trade from
 the provider table's.** Its type specimen sets one line of prose at every rung,
@@ -1551,8 +1551,8 @@ be that word twice in eighty pixels. That `h1` cannot move, because
 `scripts/check-deploy-artifact.mjs` identifies the site's root document in a
 browser by a heading named exactly `Playdeck` — which is also why nothing in
 this header may be promoted to a heading with that name. The destinations are
-the reason a reader on `/` is not stranded there without the foot of the page, and they are internal links on `/`, which that check requires at least one
-of.
+the reason a reader on `/` is not stranded there without the foot of the page,
+and they are internal links on `/`, which that check requires at least one of.
 
 **This used to give a second reason — that the `h1` was "the wordmark at the
 title rung" — and that half is no longer true.** `/`'s `h1` still reads
@@ -1734,9 +1734,9 @@ absent from the header's destinations. _Stances_ above holds the reasoning.
 What changes here is that the absence is deliberate now: a later session finding
 this sheet unreachable from the navigation is looking at a ruling rather than at
 an oversight, and another name in the strip is a decision to reopen rather than
-a tidy-up. `e2e/site-nav.spec.ts` pins both halves — that
-the sheet is served and gives a reader the same way back as every other page,
-and that the navigation does not name it.
+a tidy-up. `e2e/site-nav.spec.ts` pins both halves — that the sheet is served
+and gives a reader the same way back as every other page, and that the
+navigation does not name it.
 
 `data-theme` has two writers and they are not interchangeable: the pre-paint
 script in `Base.astro` applies a stored choice before the browser paints, and

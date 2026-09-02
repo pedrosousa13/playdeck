@@ -105,8 +105,8 @@ for (const [where, url] of [
     // Scoped to the header rather than to the page: whether `/` itself keeps a
     // link to the workbench is that page's decision and its own tests', and
     // `scripts/check-deploy-artifact.mjs` follows the one it has. What is
-    // settled here is the strip that appears on every page — three site
-    // destinations, and not a fourth pointing at a surface #534 rules out as a
+    // settled here is the strip that appears on every page — it names the
+    // site's sections, and not the workbench, a surface #534 rules out as a
     // public one.
     const header = page.locator('header');
     await expect(header.locator('a[href*="storybook" i]')).toHaveCount(0);
@@ -168,8 +168,8 @@ test('aria-current marks the section the reader is in, and only that one', async
     'Archetypes'
   ]);
 
-  // `/` is in none of the sections the strip names, so nothing in it claims to be
-  // the page the reader is on.
+  // `/` is in none of the sections the strip names, so nothing in it claims
+  // to be the page the reader is on.
   await page.goto(landing);
   await expect(nav(page).locator('a[aria-current="page"]')).toHaveCount(0);
 });
