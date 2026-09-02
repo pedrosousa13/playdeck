@@ -3,11 +3,8 @@
 import { expect, test } from 'vitest';
 import { PlayerController } from '@playdeck/core';
 import { captureRethrows } from './fixtures/capture-rethrows';
-import {
-  createFakeTrack,
-  latest,
-  mountNative
-} from './fixtures/fake-text-tracks';
+import { createFakeTrack } from '@playdeck/test-support/fake-text-tracks';
+import { latest, mountNative } from './fixtures/fake-text-tracks';
 
 test('discovers external tracks and normalizes them', async () => {
   const { provider, patches } = mountNative([

@@ -28,6 +28,9 @@ importers:
       '@eslint/js':
         specifier: 10.0.1
         version: 10.0.1(eslint@10.7.0(jiti@2.7.0))
+      '@playdeck/test-support':
+        specifier: workspace:*
+        version: link:tests/support
       '@playwright/test':
         specifier: 1.61.1
         version: 1.61.1
@@ -320,6 +323,8 @@ importers:
       '@playwright/test':
         specifier: 1.61.1
         version: 1.61.1
+
+  tests/support: {}
 
 packages:
 

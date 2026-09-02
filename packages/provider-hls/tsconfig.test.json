@@ -9,6 +9,7 @@
   "references": [
     { "path": "../core" },
     { "path": "../provider-native" },
+    { "path": "../../tests/support" },
     { "path": "./tsconfig.json" }
   ],
   "include": ["src", "test"]

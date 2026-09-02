@@ -22,6 +22,7 @@
     { "path": "./e2e" },
     { "path": "./scripts" },
     { "path": "./tests" },
+    { "path": "./tests/support" },
     { "path": "./examples" }
   ]
 }
