@@ -2,10 +2,13 @@
 
 _Superseded in part by
 [ADR-0007](0007-the-deployed-artifact-is-the-site-alone.md), which removed the
-Storybook workbench from the deployment. Everything below about where and how
-publishing runs still holds; wherever it says the artifact carries two surfaces,
-it carries one. Left otherwise unedited — the two-surface deployment is what was
-decided here, and it ran._
+Storybook workbench from the deployment. What still holds is where and how
+publishing runs: the committed Worker configuration, the apex domain, and the
+retirement of Pages. What 0007 retires is everything below about the workbench
+as a published surface — the prefix it was served under, the assembly of two
+build outputs into one directory, and the harness that drove a browser through
+both. Left otherwise unedited: the two-surface deployment is what was decided
+here, and it ran._
 
 Until #519 the published documentation was a GitHub Pages project site:
 `.github/workflows/pages.yml` built the Storybook workbench with

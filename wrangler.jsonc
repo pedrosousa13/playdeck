@@ -46,13 +46,13 @@
     //
     // Each alternative gives up part of that. `"none"` rewrites nothing, so a
     // request for a directory finds no file and every route but the root 404s
-    // unless the build is switched to extensionless documents. Both explicit
-    // trailing-slash settings redirect before they look, and `"drop"` redirects
-    // away from the form the site itself emits — its internal links, its
-    // sitemap and its canonical URLs all carry the slash. `"force"` redirects
-    // towards it, which agrees with the build, and is still the narrower of the
-    // two: it decides on the shape of the URL where the default decides on what
-    // the artifact holds.
+    // unless the build is switched to extensionless documents. `"drop"`
+    // redirects away from the form the site itself emits — every internal link
+    // in the built pages carries the slash, because Astro writes them from the
+    // same directory-format routes. `"force"` redirects towards it, which
+    // agrees with the build, and is still the narrower of the two: it decides
+    // on the shape of the URL where the default decides on what the artifact
+    // holds.
   },
 
   // Cloudflare creates the DNS record and the certificate for a custom domain

@@ -25,17 +25,22 @@ against that value rather than by a root-absolute literal. Unset, it is `/`,
 which is where `storybook dev` and the Vitest browser run serve the workbench —
 so the default path is the one every command above takes.
 
-The mechanism stays although nothing is served under a prefix any more. It is
-how a build is checked against a prefix at all, which is the only way to see
-that a root-absolute literal has crept back into a story:
+The mechanism stays although nothing is served under a prefix any more, because
+it is how a build is checked against a prefix at all — the only way to see that
+a root-absolute literal has crept back into a story. Building alone is not
+enough to see it; the build has to be served from the prefix it was given, and
+the broken reference then 404s:
 
 ```sh
 PLAYDECK_BASE_PATH=/whatever/ pnpm build
+npx http-server storybook-static --push-state -o /whatever/
 ```
 
-It is also the repository's one answer to the question of what prefix a build is
-served from — #519 settled that deliberately, against inventing a second — so a
-surface that ever does need one finds it here rather than adding its own.
+**Nothing automated does this any more.** The deploy check used to build the
+workbench under a prefix and drive a browser through it, and that is what caught
+a story bypassing `asset-url.ts`; the workbench is no longer deployed, so that
+harness no longer builds it. Until something replaces it, the two commands above
+are the whole of the check, and they run when a person remembers to run them.
 
 ## Story conventions
 

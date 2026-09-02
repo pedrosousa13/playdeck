@@ -14,7 +14,7 @@ storybook-static/
 # Build output, so never committed -- `apps/site/tsconfig.json` records why it
 # is also outside what `tsc -b` reads.
 .astro/
-# The assembled deployment, composed from the two build outputs above by
+# The assembled deployment, composed from the site build above by
 # scripts/assemble-deploy.mjs and published as the Worker's assets (#519).
 deploy-dist/
 *storybook.log

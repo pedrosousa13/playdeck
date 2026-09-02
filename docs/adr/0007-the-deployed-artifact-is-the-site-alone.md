@@ -57,13 +57,23 @@ repository, and its stories remain browser tests. Nothing publishes it.
   terminal. `apps/storybook/.storybook/main.ts` still reads it into the
   bundler's `base`, and `stories/asset-url.ts` still resolves fixtures against
   that value, because building the workbench under a prefix is the only way to
-  see that a root-absolute literal has crept back into a story. It is also this
-  repository's single answer to "what prefix is this build served from" — #519
-  decided that against inventing a second mechanism — so a surface that ever
-  needs a prefix finds it rather than adding its own. What the workflow no
-  longer does is pass a value: nothing serves the workbench, so there is no
+  see that a root-absolute literal has crept back into a story. It is the
+  workbench's mechanism and only the workbench's: the site reaches its own
+  prefix through Astro's `base`, which `apps/site`'s `build:based` and
+  `e2e/site-search.spec.ts` already drive under `/playdeck/`. What the workflow
+  no longer does is pass a value: nothing serves the workbench, so there is no
   prefix for the deploy to state. `apps/storybook/README.md` carries the
   reasoning, which is where a reader meets the mechanism.
+- **The prefix check is now a manual one, and nothing in CI replaces it.**
+  Building the workbench under a prefix and driving a browser through it is what
+  caught a story addressing a fixture with a root-absolute literal instead of
+  going through `stories/asset-url.ts`. That harness built the workbench because
+  the deploy published it; it no longer builds it, so the check is gone. The
+  discipline it defended is still worth keeping, and a reader who wants it back
+  should reach for something cheaper than the browser check — a static scan for
+  root-absolute literals in the stories would catch the authoring mistake
+  directly rather than its symptom. Until then the gap is real and is recorded
+  here rather than left to be discovered.
 - `wrangler.jsonc`'s `html_handling` default is unchanged and its justification
   is not. It used to be the setting that made `/storybook/` serve
   `storybook/index.html`; it is now the setting that makes every Astro route

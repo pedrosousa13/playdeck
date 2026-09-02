@@ -236,10 +236,10 @@ const checkSite = async (browser, origin, failures) => {
 
 const shouldBuild = !process.argv.includes('--no-build');
 if (shouldBuild) {
-  // The site is built the way `.github/workflows/deploy-site.yml` builds it,
-  // including being handed nothing: `PLAYDECK_BASE_PATH` is explicitly removed
-  // rather than left to whatever the shell running this happens to export, so a
-  // stray value cannot make the harness build something the deploy never would.
+  // The site is built the way `.github/workflows/deploy-site.yml` builds it.
+  // Nothing has to be stripped from the environment to make that true: the
+  // site's prefix is the literal `base: '/'` in `apps/site/astro.config.ts`,
+  // and no part of the site build reads an environment variable to find it.
   //
   // The packages come first, and they are a prerequisite rather than a surface:
   // the site's landing page renders the gzipped size of every bundle
@@ -256,12 +256,9 @@ if (shouldBuild) {
   });
 
   console.log(`--- Building @playdeck/site for ${sitePath} ---`);
-  const env = { ...process.env };
-  delete env.PLAYDECK_BASE_PATH;
   execFileSync('pnpm', ['--filter', '@playdeck/site', 'build'], {
     cwd: repoRoot,
-    stdio: 'inherit',
-    env
+    stdio: 'inherit'
   });
 
   // The deploy's own assembly, imported rather than restated: two copies would
