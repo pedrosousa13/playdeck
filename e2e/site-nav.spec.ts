@@ -168,7 +168,7 @@ test('aria-current marks the section the reader is in, and only that one', async
     'Archetypes'
   ]);
 
-  // `/` is in none of the three sections, so nothing in the strip claims to be
+  // `/` is in none of the sections the strip names, so nothing in it claims to be
   // the page the reader is on.
   await page.goto(landing);
   await expect(nav(page).locator('a[aria-current="page"]')).toHaveCount(0);

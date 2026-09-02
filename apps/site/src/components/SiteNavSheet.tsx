@@ -1,5 +1,5 @@
 /**
- * The mobile collapse for the site's three destinations, rebuilt on shadcn's
+ * The mobile collapse for the site's destinations, rebuilt on shadcn's
  * `Sheet` for #542 phase 2. It replaces the `<details>` disclosure
  * `SiteHeader.astro` used to reach for at the same breakpoint (40rem) — see
  * that file's own history for why a disclosure was the right shape before
@@ -8,7 +8,7 @@
  * what a `Sheet` buys too, built on a Radix dialog rather than the platform's
  * own element.
  *
- * The three links are Astro-rendered in `SiteHeader.astro` and passed here as
+ * The links are Astro-rendered in `SiteHeader.astro` and passed here as
  * plain data, not re-derived: `aria-current` is decided once, server-side,
  * from `Astro.url.pathname`, and this island only has to draw what it is
  * told. That is also why this component does not itself decide which

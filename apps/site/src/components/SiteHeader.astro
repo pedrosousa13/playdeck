@@ -9,7 +9,7 @@
  * `Dialog` (`SearchCommand.tsx`, mounted through `DocsSearch.astro`), and the
  * theme switch is a `DropdownMenu` (`ThemeToggleIsland.tsx`, mounted through
  * `ThemeToggle.astro`). This file's own job stays what it was: the wordmark,
- * the breadcrumb, and the three-link site nav, laid out in one row.
+ * the breadcrumb, and the site nav, laid out in one row.
  *
  * `bg-*`, `text-*`, `border-*` and similar classes below read shadcn's
  * variable names, which are aliased onto this site's own `--color-*` roles in
@@ -50,7 +50,7 @@
  * comparison against a literal would look identical, and `astro build --base`
  * is what makes the difference observable (#435).
  *
- * At 40rem (640px) and above the three links sit inline beside the wordmark,
+ * At 40rem (640px) and above the links sit inline beside the wordmark,
  * in normal flow. Below that they are drawn only inside `SiteNavSheet`'s
  * sheet, reached through the trigger button beside it — CSS visibility, keyed
  * to the same breakpoint from both directions, is what keeps exactly one copy
