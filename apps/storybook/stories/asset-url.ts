@@ -4,11 +4,12 @@
  * from.
  *
  * That path is `/` on `storybook dev` and under the Vitest browser run, so
- * every caller below produces exactly the root-absolute URL it used to carry.
- * On the deployed build it is `/storybook/`, because `apps/site` takes the root
- * of `playdeck.video` and the workbench is assembled one segment inside it —
- * and there a literal `/tracer.mp4` resolves to the site's root, where no
- * fixture is served, and 404s (#435).
+ * every caller below produces exactly the root-absolute URL it would have
+ * carried as a literal. Under any other prefix a literal `/tracer.mp4` resolves
+ * outside the workbench, where no fixture is served, and 404s — which is why
+ * the resolver is here rather than the literal (#435). `README.md`'s "Base
+ * path" section carries the build-and-serve pair that shows the 404, and the
+ * note that nothing automated runs it any more.
  *
  * `import.meta.env.BASE_URL` is Vite's name for that prefix, and it always ends
  * in a slash. `.storybook/main.ts` is where it is set.

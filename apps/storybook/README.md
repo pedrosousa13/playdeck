@@ -9,28 +9,38 @@ the test origin.
 ## Commands
 
 - `pnpm dev` — workbench at `http://localhost:6006`.
-- `pnpm build` — static build (also part of the root `pnpm build`). This is
-  what `.github/workflows/deploy-site.yml` assembles into the published artifact
-  one segment inside the site, which takes the root of the domain (#519). The
+- `pnpm build` — static build (also part of the root `pnpm build`). Nothing
+  publishes it: `playdeck.video` serves `apps/site` and nothing else (#534). The
   documents a consumer is sent to are rendered by the site itself, from these
   sources — `apps/site/src/guide-pages.mjs` says which — so the workbench is a
   development tool for this repository rather than the documentation it used to
   be.
 - `pnpm test` — run every story as a browser test (root: `pnpm test:storybook`).
 
-The workbench is served from `/storybook/` and never from `/`, so the deploy
-sets `PLAYDECK_BASE_PATH` to that prefix and the fixtures under `public/` are
-addressed through `stories/asset-url.ts` rather than by a root-absolute
-literal. To reproduce the deployed build locally, pass the value the deploy
-passes:
+## Base path
+
+`.storybook/main.ts` reads `PLAYDECK_BASE_PATH` into its bundler's `base`, and
+the fixtures under `public/` are addressed through `stories/asset-url.ts`
+against that value rather than by a root-absolute literal. Unset, it is `/`,
+which is where `storybook dev` and the Vitest browser run serve the workbench —
+so the default path is the one every command above takes.
+
+The mechanism stays although nothing is served under a prefix any more, because
+it is how a build is checked against a prefix at all — the only way to see that
+a root-absolute literal has crept back into a story. Building alone is not
+enough to see it; the build has to be served from the prefix it was given, and
+the broken reference then 404s:
 
 ```sh
-PLAYDECK_BASE_PATH=/storybook/ pnpm build
+PLAYDECK_BASE_PATH=/whatever/ pnpm build
+npx http-server storybook-static --push-state -o /whatever/
 ```
 
-`scripts/check-deploy-artifact.mjs` builds both surfaces this way, assembles the
-artifact and drives a browser through it, which is what proves the prefix is
-honoured rather than merely configured.
+**Nothing automated does this any more.** The deploy check used to build the
+workbench under a prefix and drive a browser through it, and that is what caught
+a story bypassing `asset-url.ts`; the workbench is no longer deployed, so that
+harness no longer builds it. Until something replaces it, the two commands above
+are the whole of the check, and they run when a person remembers to run them.
 
 ## Story conventions
 

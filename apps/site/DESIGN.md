@@ -1453,9 +1453,9 @@ about a Storybook link on `/`. What the site carries out is the absence of
 links, which is the half of that decision that is a design question at all. No
 link to it survives anywhere on the site: `/design`
 carried the last one and no longer does, and `design.astro`'s own header records
-the absence rather than leaving it to be rediscovered.
-`scripts/check-deploy-artifact.mjs` still visits the workbench, from its own
-address rather than by following a link from any page.
+the absence rather than leaving it to be rediscovered. The other half followed:
+the deployed artifact is this site alone, so there is nothing at
+`playdeck.video` for a link to reach.
 `e2e/site-nav.spec.ts` asserts the absence on both page shapes, because it is
 the link most likely to be added back by someone reading this strip as a list of
 everything the repository builds.

@@ -15,11 +15,11 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 // The same resolver as `stories/asset-url.ts`, restated here because the lint
 // rule scoping this directory denies relative imports that leave it. The
-// fixtures below are served
-// from the workbench's own base path, which is `/` on the dev server and under
-// Vitest and `/storybook/` on the deployed build — a root-absolute literal 404s
-// there (#435). `import.meta.env.BASE_URL` is Vite's name for that prefix and
-// always ends in a slash; it is not part of the primitives' API, and a consumer
+// fixtures below are served from the workbench's own base path, which is `/` on
+// the dev server and under Vitest and whatever `PLAYDECK_BASE_PATH` says
+// otherwise — a root-absolute literal 404s under any prefix but the root
+// (#435). `import.meta.env.BASE_URL` is Vite's name for that prefix and always
+// ends in a slash; it is not part of the primitives' API, and a consumer
 // copying this file writes their own URLs here.
 const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
 
