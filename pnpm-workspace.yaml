@@ -3,6 +3,9 @@ packages:
   - apps/*
   - tests/bundle/*
   - tests/integrations/*
+  # Private test support, shared between packages. Private, so it never
+  # enters the publishable set (#314).
+  - tests/support
 # Advisories pinned forward here rather than left for `pnpm audit` to keep
 # reporting -- the alternative is re-triaging the same findings on every run.
 # Every floor names the advisory behind it, so a later reader can tell when an

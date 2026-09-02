@@ -8,7 +8,7 @@ import {
   createFakeTrack,
   createFakeTrackList,
   type FakeTrackInit
-} from './fixtures/fake-text-tracks';
+} from '@playdeck/test-support/fake-text-tracks';
 
 const source = { type: 'hls', src: '/hls/master.m3u8' } as const;
 

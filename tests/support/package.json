@@ -1,0 +1,12 @@
+{
+  "name": "@playdeck/test-support",
+  "private": true,
+  "description": "Private test fixtures shared between workspace packages. Never published.",
+  "type": "module",
+  "exports": {
+    "./fake-text-tracks": {
+      "types": "./dist/fake-text-tracks.d.ts",
+      "default": "./src/fake-text-tracks.ts"
+    }
+  }
+}

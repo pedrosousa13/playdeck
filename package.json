@@ -37,6 +37,7 @@
     "@axe-core/playwright": "4.12.1",
     "@changesets/cli": "2.31.1",
     "@eslint/js": "10.0.1",
+    "@playdeck/test-support": "workspace:*",
     "@playwright/test": "1.61.1",
     "@testing-library/react": "16.3.2",
     "@types/node": "26.1.1",
