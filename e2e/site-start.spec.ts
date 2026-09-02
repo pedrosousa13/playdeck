@@ -7,22 +7,32 @@ import { expect, test, type Page } from '@playwright/test';
  * The quickstart at `/start` (#547), and the part of it a screenshot cannot
  * see.
  *
- * That page makes four claims about itself, and every one of them is the kind
- * that can be false while the page still looks right: that the command is the
- * package this workspace publishes, that the two code wells are files on disk
- * rather than examples written for the page, that the byte figures are
- * measurements of built artifacts, and that a reader following it top to bottom
- * is never sent to a route that does not exist. Each is checked here against the
- * repository rather than against the page's own source — a check that read the
- * numbers out of `bundle-budgets.mjs` the way the page does would agree with the
- * page whatever either of them said, so this file gzips the artifacts itself.
+ * Every claim that page makes about itself is the kind that can be false while
+ * the page still looks right: that the command is the package this workspace
+ * publishes, that the two code wells are files on disk rather than examples
+ * written for the page, that each byte figure is a measurement, and that a
+ * reader following it top to bottom is never sent to a route that does not
+ * exist. Each is checked here against the repository rather than against the
+ * page's own source — a check that read the numbers out of `bundle-budgets.mjs`
+ * the way the page does would agree with the page whatever either of them said,
+ * so this file gzips the artifacts itself.
+ *
+ * The one figure it cannot gzip is what an adapter brings with it. hls.js and
+ * `@vimeo/player` ship as unbundled source, so their published bytes are not
+ * what a page downloads and gzipping them where they sit would measure the
+ * wrong thing. `README.md`'s byte table already carries both, put through a
+ * build first, and `pnpm docs:bytes:check` fails whenever that table stops
+ * matching what is installed — so the second opinion those two figures are held
+ * against is that document rather than a measurement repeated here.
  *
  * The rest is the acceptance criteria a document page is held to: both themes,
  * no horizontal overflow at 320px, visible keyboard focus inside the document,
- * and no third-party request. `e2e/site-nav.spec.ts` checks the last three
- * across every route including this one; what is added here is the part those
- * cannot reach, which is focus inside the page's own content rather than in the
- * header strip every route shares.
+ * and no third-party request. `e2e/site-nav.spec.ts` covers two of those across
+ * every route including this one — the 320px width, and keyboard focus from the
+ * top of the page — and it opens no request listener at all, so nothing else on
+ * this site watches what this route fetches. What is added here is the rest:
+ * the requests, both themes, and focus inside the page's own content rather
+ * than in the header strip every route shares.
  *
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so this address is written out rather than
@@ -53,6 +63,40 @@ const source = (path: string): string =>
 const KB = 1024;
 const gzippedKilobytes = (path: string): string =>
   (gzipSync(readFileSync(repoFile(path))).length / KB).toFixed(1);
+
+/**
+ * The marked region of `README.md` that `scripts/readme-bytes.mjs` owns, which
+ * is where the figures for what an adapter brings with it are checked against a
+ * measurement. Sliced to the markers rather than searched whole: the prose
+ * outside them names the pinned version of each package, and `hls.js 1.6.16`
+ * would answer a search for what hls.js weighs.
+ */
+const BYTES_OPEN = '<!-- bytes:table -->';
+const BYTES_CLOSE = '<!-- /bytes -->';
+const bytesTable = (): string => {
+  const readme = source('README.md');
+  const open = readme.indexOf(BYTES_OPEN);
+  const close = readme.indexOf(BYTES_CLOSE, open);
+  if (open === -1 || close === -1) {
+    throw new Error(
+      `README.md no longer marks its byte table with ${BYTES_OPEN}, so this spec has nothing to check the dependency figures against.`
+    );
+  }
+  return readme.slice(open + BYTES_OPEN.length, close);
+};
+
+/**
+ * Requests that left this origin. `data:` and `blob:` are the page addressing
+ * itself and reach no host; everything else has to be this origin — the
+ * document, the fonts, and the island the header mounts.
+ */
+const foreign = (urls: readonly string[]): string[] =>
+  urls.filter(
+    (url) =>
+      !url.startsWith(`${origin}/`) &&
+      !url.startsWith('data:') &&
+      !url.startsWith('blob:')
+  );
 
 /** The rows of the adapter cost table, as printed. */
 const costRows = (page: Page) => page.locator('.costs tbody tr');
@@ -89,8 +133,8 @@ test('the install command names the package this workspace publishes', async ({
 test('both code wells are the files in examples/, byte for byte', async ({
   page
 }) => {
-  // The page's central claim, and the one #547 is about: the composition is
-  // rendered from `examples/react-composition.tsx` rather than restated. A
+  // The page's central claim: the composition is rendered from
+  // `examples/react-composition.tsx` rather than restated. A
   // restatement is exactly what this catches — it would still highlight, still
   // compile in a reader's head, and still be a second copy nothing gates.
   await page.goto(start);
@@ -129,15 +173,34 @@ test('every byte figure is the gzipped size of the artifact it names', async ({
   expect(rows.length).toBeGreaterThan(0);
 
   for (const row of rows) {
+    const cells = row.locator('td');
     // The package name is what the row says the figure is about, so the
     // artifact is chosen by reading the page rather than by a list here: a row
     // for a provider added later is measured without this file being touched.
-    const name = (await row.locator('code').innerText()).trim();
+    const name = (await cells.nth(0).locator('code').innerText()).trim();
     const dir = name.replace(/^@playdeck\//, '');
     expect(dir, name).not.toBe(name);
-    const printed = (await row.locator('.costs__size').innerText()).trim();
+    const printed = (await cells.nth(1).innerText()).trim();
     expect(printed, name).toBe(
       `${gzippedKilobytes(`packages/${dir}/dist/index.js`)} kB`
+    );
+
+    // And what that adapter brings with it, which for HLS dwarfs the adapter
+    // beside it and is the figure a reader is most misled by when it is missing.
+    // An em dash is the row saying there is nothing, and a row that said so
+    // while the package had a dependency would have failed the page's own build
+    // — `start.astro` reconciles the column against every manifest.
+    const brought = (await cells.nth(2).innerText()).trim();
+    if (brought === '—') continue;
+    const [dependency = '', weight = ''] = brought.split(/\s(?=[\d.]+\skB$)/);
+    expect(weight, `${name} brings ${dependency}`).toMatch(/^\d+\.\d kB$/);
+    expect(
+      bytesTable(),
+      `${name} brings ${dependency}, printed as ${weight}`
+    ).toMatch(
+      new RegExp(
+        `\`?${dependency.replace(/[.*+?^$()|[\]\\]/g, '\\$&')}\`?\\s${weight.replace(' kB', '')}(?![\\d.])`
+      )
     );
   }
 
@@ -174,22 +237,21 @@ test('every link on the page resolves to a real document', async ({ page }) => {
 });
 
 test('the page fetches from nobody', async ({ page }) => {
-  // `data:` and `blob:` are the page addressing itself and reach no host.
-  // Everything else has to be this origin: the document, the fonts, and the
-  // island the header mounts.
   const requested: string[] = [];
   page.on('request', (request) => requested.push(request.url()));
 
   await page.goto(start, { waitUntil: 'networkidle' });
 
-  expect(
-    requested.filter(
-      (url) =>
-        !url.startsWith(`${origin}/`) &&
-        !url.startsWith('data:') &&
-        !url.startsWith('blob:')
-    )
-  ).toEqual([]);
+  // The recording is proved before it is filtered. An assertion on the filtered
+  // list alone passes just as happily when nothing was ever recorded — a
+  // listener attached to the wrong page, a navigation that never happened — and
+  // it is the same test either way, so nothing tells the two apart. The
+  // document itself is what the listener must have seen, and
+  // `e2e/site-quiet.spec.ts` pairs its own at-rest check the same way, for the
+  // reason `DESIGN.md` gives: an empty list has to be evidence rather than a
+  // recorder that was never listening.
+  expect(requested).toContain(start);
+  expect(foreign(requested)).toEqual([]);
 });
 
 test('the page does not go sideways at 320px, in either theme', async ({

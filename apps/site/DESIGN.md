@@ -1721,8 +1721,8 @@ checks its work against, and the place to add a specimen when a token is added.
 
 It is not part of the site's own navigation, and **nothing on the site links to
 it at all.** `/` carried the one link, in the ways-onward row at the foot of the
-page, and the rebuilt close carries Reference, Providers and Archetypes and
-nothing else. That was not ruled on at the time: the link went out with the page
+page, and the rebuilt close carries Start, Reference, Providers and Archetypes
+and nothing else. That was not ruled on at the time: the link went out with the page
 it was on, and this passage recorded the absence as something waiting for a
 decision.
 

@@ -9,7 +9,7 @@
  * `Dialog` (`SearchCommand.tsx`, mounted through `DocsSearch.astro`), and the
  * theme switch is a `DropdownMenu` (`ThemeToggleIsland.tsx`, mounted through
  * `ThemeToggle.astro`). This file's own job stays what it was: the wordmark,
- * the breadcrumb, and the site nav, laid out in one row.
+ * the breadcrumb, and the three-link site nav, laid out in one row.
  *
  * `bg-*`, `text-*`, `border-*` and similar classes below read shadcn's
  * variable names, which are aliased onto this site's own `--color-*` roles in
@@ -30,18 +30,12 @@
  * maintainer ruled that it is not to be a public surface, and ruled the same
  * on a Storybook link. This list is the site's own pages.
  *
- * Start leads, because it is the one destination a reader with no context can
- * follow to a running player without deciding anything first — install, the
- * composition, and what a provider costs, in that order (#547). It is in this
- * strip rather than only in the close of `/` for the reason the strip exists at
- * all: a reader who arrived on a reference page from npm never sees that close,
- * and the quickstart is the page they most need to be one press from.
- *
- * Guides follows it, because it is what a reader reads next — what a part is
- * and how to style one, before which package ships which part. Its documents
- * were reachable only by cloning the monorepo and running the workbench until
- * they became routes of this site, and that is the whole reason they are routes
- * at all.
+ * Guides leads, because it is the section a reader arriving with no context
+ * reads first — what a part is and how to style one, before which package
+ * ships which part. It is also the one whose absence from this strip would
+ * matter most: its documents were reachable only by cloning the monorepo and
+ * running the workbench until they became routes of this site, and that is the
+ * whole reason they are routes at all.
  *
  * `aria-current="page"` marks the section the reader is inside, on a link
  * among sibling links. A reference document therefore carries two current
@@ -56,7 +50,7 @@
  * comparison against a literal would look identical, and `astro build --base`
  * is what makes the difference observable (#435).
  *
- * At 40rem (640px) and above the links sit inline beside the wordmark,
+ * At 40rem (640px) and above the three links sit inline beside the wordmark,
  * in normal flow. Below that they are drawn only inside `SiteNavSheet`'s
  * sheet, reached through the trigger button beside it — CSS visibility, keyed
  * to the same breakpoint from both directions, is what keeps exactly one copy
@@ -159,7 +153,6 @@ const section = (
 ).split('/')[0];
 
 const destinations = [
-  { label: 'Start', segment: 'start' },
   { label: 'Guides', segment: 'guides' },
   { label: 'Reference', segment: 'reference' },
   { label: 'Providers', segment: 'providers' },

@@ -10,6 +10,7 @@ import { providerPages } from '../provider-pages.mjs';
 import { referencePackages } from '../reference-packages.mjs';
 import { publishablePackages } from '../../../../scripts/workspace-packages.mjs';
 import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
+import { bundledDependencies } from '../../../../scripts/readme-bytes.mjs';
 
 /**
  * The quickstart: nothing to a working player, in one page (#547).
@@ -23,9 +24,8 @@ import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
  *
  * The rule this page is built under is the one the reference, provider and
  * guide pages are built under: the site renders documents and figures this
- * repository already keeps true, and writes none of its own. Applied here that
- * is four separate derivations, and not one of them is a value typed into this
- * file:
+ * repository already keeps true, and writes none of its own. Applied here it is
+ * these, and not one of them is a value typed into this file:
  *
  * - The command is `pnpm add` and the package's own manifest name. A reader who
  *   types what this page prints installs the package this repository publishes,
@@ -42,11 +42,18 @@ import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
  *   for: that script matches fences in Markdown and never looks at `.astro`, so
  *   what reaches an Astro page is the file itself rather than a fence generated
  *   from it.
- * - Every byte figure is `scripts/bundle-budgets.mjs`'s measurement of a built
- *   artifact, which is the module `pnpm test:budgets` fails a build with. A page
- *   telling a reader what a dependency costs cannot afford a remembered number,
- *   and `src/pages/index.astro` prints its figures from the same module for the
- *   same reason.
+ * - Every adapter figure is `scripts/bundle-budgets.mjs`'s measurement of a
+ *   built artifact, which is the module `pnpm test:budgets` fails a build with.
+ *   A page telling a reader what a dependency costs cannot afford a remembered
+ *   number, and `src/pages/index.astro` prints its figures from the same module
+ *   for the same reason.
+ * - Every figure for what an adapter brings with it is
+ *   `scripts/readme-bytes.mjs`'s measurement of the entry a bundler resolves,
+ *   which is the module that keeps `README.md`'s byte table honest. That gate
+ *   cannot come from the budget module: hls.js and `@vimeo/player` are outside
+ *   every bundle it weighs, so it never sees them, and an adapter row quoting
+ *   only the budgeted half would put 4.8 kB against the largest download in the
+ *   library.
  *
  * The prose is held to the same rule from the other side. What a source string
  * may look like, which forms each provider refuses, what a part is called and
@@ -96,6 +103,22 @@ if (peers.length === 0) {
 const install = `pnpm add ${entryPoint.name}`;
 
 /*
+ * The one optional import a reader still needs after pasting a composition, and
+ * the reason the players below are unstyled. Composed out of the manifest's own
+ * export map rather than typed, for the reason the command above is: a subpath
+ * that stopped being exported fails this build instead of leaving a reader
+ * importing a path npm does not serve. What it costs and what it paints belong
+ * to `packages/react/README.md`, so this page names the line and links there.
+ */
+const themeSubpath = './theme.css';
+if (entryManifest.exports?.[themeSubpath] === undefined) {
+  throw new Error(
+    `${entryPointName} no longer exports ${themeSubpath}, so the import this page prints would not resolve. Point it at whatever replaced the default stylesheet, or take the sentence out.`
+  );
+}
+const themeImport = `import '${entryPointName}${themeSubpath.slice(1)}';`;
+
+/*
  * The two compositions, read as bytes from the files themselves. Not a string
  * typed into this template: a hand-written example is a second copy of an API,
  * and the only copy that matters is the kind that can be wrong while everything
@@ -129,7 +152,7 @@ const measured = new Map(bundles.map((bundle) => [bundle.name, bundle]));
 const primitives = measured.get('@playdeck/react (primitives, excl. React)');
 if (primitives === undefined || primitives.budget === null) {
   throw new Error(
-    'start.astro: the primitives bundle is not a budgeted bundle-budgets.mjs target.'
+    'start.astro: the primitives bundle is not a budgeted bundle-budgets.mjs target. Give it a budget there again, or take the sentence that quotes a ceiling out of this page.'
   );
 }
 
@@ -149,6 +172,44 @@ const providers = await providerPages();
 const packages = await referencePackages();
 const byDir = new Map(packages.map((entry) => [entry.dir, entry]));
 
+/*
+ * The reference page for the package a reader installs, found among the pages
+ * this site already builds rather than composed from a directory name written
+ * here.
+ */
+const entryPage = packages.find((entry) => entry.name === entryPointName);
+if (entryPage === undefined) {
+  throw new Error(
+    `${entryPointName} has no reference page, so the stylesheet line below has nowhere to send a reader. Check that the package is still publishable.`
+  );
+}
+
+/*
+ * What each adapter brings with it, measured by `scripts/readme-bytes.mjs` —
+ * the module that keeps `README.md`'s byte table honest — rather than by the
+ * budget module above. The two halves of a row cannot come from one source:
+ * hls.js and `@vimeo/player` are outside every bundle `bundle-budgets.mjs`
+ * weighs, so an adapter figure alone says 4.8 kB about the largest thing a
+ * reader of this library ever downloads.
+ */
+const dependencies = await bundledDependencies(repoRoot);
+
+/*
+ * The dependencies a package ships that are not other packages of this
+ * workspace, which is the set a reader's bundler has to fetch from npm. Read
+ * off the manifest and identified by the range rather than by the scope: a
+ * workspace link is what `workspace:` means, and matching on `@playdeck/`
+ * instead would be a second definition of which packages are ours.
+ */
+const externalDependencies = (dir: string): string[] =>
+  Object.entries(
+    JSON.parse(
+      readFileSync(join(repoRoot, 'packages', dir, 'package.json'), 'utf8')
+    ).dependencies ?? {}
+  )
+    .filter(([, range]) => !String(range).startsWith('workspace:'))
+    .map(([name]) => name);
+
 const adapters = providers.flatMap((provider) =>
   provider.packages.map((dir) => {
     const pkg = byDir.get(dir);
@@ -167,12 +228,32 @@ const adapters = providers.flatMap((provider) =>
         `${pkg.name} is not a target in scripts/bundle-budgets.mjs, so this page has no measured size for it. Add it there rather than writing a figure here.`
       );
     }
+    /*
+     * The reconciliation that makes the column trustworthy in both directions.
+     * A dependency this page has no measurement for would print an empty cell,
+     * which reads as "nothing to download" — the exact understatement the
+     * column was added to remove — so it is a build failure instead.
+     */
+    const external = externalDependencies(dir);
+    const dependency = dependencies.get(dir) ?? null;
+    if (external.length > 1) {
+      throw new Error(
+        `${pkg.name} depends on ${external.join(' and ')}, and this page has room for one measured dependency per adapter. Widen the row, or measure them together in scripts/readme-bytes.mjs.`
+      );
+    }
+    if (dependency?.package !== (external[0] ?? undefined)) {
+      throw new Error(
+        `${pkg.name} depends on ${external[0] ?? 'nothing outside the workspace'}, and scripts/readme-bytes.mjs measures ${dependency?.package ?? 'nothing'} for it. Add the dependency to that module's third-party list, or drop the entry it no longer has.`
+      );
+    }
+
     return {
       provider: provider.title,
       slug: provider.slug,
       name: pkg.name,
       dir,
-      size: bundle.size
+      size: bundle.size,
+      dependency
     };
   })
 );
@@ -248,15 +329,16 @@ const onward = [
             </>
           ))
         }. Nothing else — the provider adapters are this package's own
-        dependencies, and no step below asks you to install one.
+        dependencies.
       </p>
     </section>
 
     <section class="step">
       <h2 id="the-smallest-player">The smallest player that works</h2>
       <p>
-        A root, a viewport, the media element, and four controls. Paste it,
-        change the URL, and there is a player on the page.
+        A root, a viewport, the media element, and the controls a player needs
+        to be usable. Paste it, change the URL, and there is a player on the
+        page.
       </p>
       <figure class="well">
         <Code code={smallestSource} lang="tsx" {...shikiConfig} />
@@ -273,7 +355,11 @@ const onward = [
         the package ships. Nothing here is styled — the primitives render no CSS
         of their own, and what each part puts in the DOM for you to style is in
         {' '}
-        <a href={`${base}guides/contract/`}>the contract guide</a>.
+        <a href={`${base}guides/contract/`}>the contract guide</a>. For a player
+        that looks like something without writing any, add the optional default
+        theme, <code>{themeImport}</code>, which
+        {' '}
+        <a href={packageUrl(entryPage.dir)}>the package reference</a> covers.
       </p>
       <figure class="well">
         <Code code={fullSource} lang="tsx" {...shikiConfig} />
@@ -295,10 +381,12 @@ const onward = [
         The <code>source</code> value is what chooses an adapter, and it is the
         only thing that changes between them. An adapter is imported
         dynamically, so the one your source selects is the only one a reader of
-        your site downloads. The figures below are what that costs, gzipped,
-        measured off the built artifacts by the module
+        your site downloads — together with whatever that adapter brings with
+        it, which for HLS is almost all of the cost. Both columns are gzipped:
+        the adapter measured off the built artifact by the module
         {' '}
-        <code>pnpm test:budgets</code> enforces.
+        <code>pnpm test:budgets</code> enforces, and its dependency measured
+        from the entry a bundler resolves.
       </p>
 
       {
@@ -309,13 +397,15 @@ const onward = [
       <div class="scroller">
         <table class="costs">
           <caption class="u-visually-hidden">
-            The adapter each provider is served by, and its gzipped size
+            The adapter each provider is served by, its gzipped size, and the
+            gzipped size of the dependency it brings with it
           </caption>
           <thead>
             <tr>
               <th scope="col">Provider</th>
               <th scope="col">Adapter</th>
               <th scope="col" class="costs__size">Gzipped</th>
+              <th scope="col">Brings with it</th>
             </tr>
           </thead>
           <tbody>
@@ -333,6 +423,18 @@ const onward = [
                   <td class="costs__size u-tabular">
                     {adapter.size.toFixed(1)} kB
                   </td>
+                  <td>
+                    {adapter.dependency === null ? (
+                      <span aria-hidden="true">&mdash;</span>
+                    ) : (
+                      <>
+                        <code>{adapter.dependency.package}</code>{' '}
+                        <span class="u-tabular">
+                          {adapter.dependency.kilobytes.toFixed(1)} kB
+                        </span>
+                      </>
+                    )}
+                  </td>
                 </tr>
               ))
             }
@@ -341,10 +443,16 @@ const onward = [
       </div>
 
       <p class="note">
-        The primitives themselves are {primitives.size.toFixed(1)} kB gzipped,
-        excluding React, against a ceiling of {primitives.budget} kB the same gate
-        enforces. A provider name above links to the source values it accepts;
-        the adapter beside it links to what that package reports about itself.
+        A dependency is downloaded only when the adapter that imports it is, and
+        hls.js not even then where the browser plays HLS itself — Safari and iOS
+        never fetch it. YouTube and Wistia bring nothing because they load their
+        player from their own origin at run time, which is a request rather than
+        a package in your bundle. The primitives themselves are
+        {' '}
+        {primitives.size.toFixed(1)} kB gzipped, excluding React, against a
+        ceiling of {primitives.budget} kB the same gate enforces. A provider name
+        above links to the source values it accepts; the adapter beside it links
+        to what that package reports about itself.
       </p>
     </section>
 

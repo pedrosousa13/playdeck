@@ -369,12 +369,17 @@ export const driftReasons = (text, table, anchors) => {
 // `packages/provider-hls/node_modules` and not the root, because that is the
 // copy the adapter's `import('hls.js')` resolves to.
 /**
+ * `variant` marks an entry that is a build a reader may opt into rather than
+ * the one a bare `import` resolves to. `bundledDependencies` below drops those:
+ * what an adapter costs by default is one figure per dependency, and the
+ * tradeoff a second build offers is prose that belongs where it is explained.
  * @type {readonly {
  *   key: string;
  *   package: string;
  *   installedAt: string;
  *   pinnedIn: { manifest: string; field: string };
  *   file: string;
+ *   variant?: string;
  * }[]}
  */
 const thirdParty = [
@@ -396,7 +401,8 @@ const thirdParty = [
       manifest: 'packages/provider-hls/package.json',
       field: 'dependencies'
     },
-    file: 'dist/hls.light.mjs'
+    file: 'dist/hls.light.mjs',
+    variant: 'light'
   },
   {
     key: 'vimeoSdk',
@@ -466,19 +472,24 @@ export const pinnedVersion = (target, installed, manifests) => {
  * run time -- so bundling adds nothing to them and this is minification in
  * practice. Chunks are summed anyway rather than assuming one, because that is
  * what a consumer whose graph did split would download.
+ * `root` is a parameter and not this module's own `repoRoot` for the reason
+ * `bundle-budgets.mjs` takes one: `apps/site` bundles this module into its
+ * prerender output, where `import.meta.url` addresses a chunk under `dist/` and
+ * every path resolved from it points at nothing.
  * @param {string} path Relative to the repository root.
+ * @param {string} [root] The repository root.
  * @returns {Promise<number>}
  */
-const minifiedGzipKilobytes = async (path) => {
+const minifiedGzipKilobytes = async (path, root = repoRoot) => {
   const built = await build({
     configFile: false,
     logLevel: 'silent',
-    root: repoRoot,
+    root,
     build: {
       write: false,
       sourcemap: false,
       emptyOutDir: false,
-      lib: { entry: join(repoRoot, path), formats: ['es'], fileName: 'entry' }
+      lib: { entry: join(root, path), formats: ['es'], fileName: 'entry' }
     }
   });
 
@@ -494,9 +505,67 @@ const minifiedGzipKilobytes = async (path) => {
   return gzipSync(code).length / 1024;
 };
 
-/** @param {string} path @returns {Promise<Record<string, unknown>>} */
-const readJson = async (path) =>
-  JSON.parse(await readFile(join(repoRoot, path), 'utf8'));
+/** @param {string} path @param {string} [root] @returns {Promise<Record<string, unknown>>} */
+const readJson = async (path, root = repoRoot) =>
+  JSON.parse(await readFile(join(root, path), 'utf8'));
+
+/**
+ * What a provider package's own runtime dependency weighs, gzipped, keyed by
+ * the package directory whose manifest pins it.
+ *
+ * Exported because the README is not the only document that owes a reader this
+ * figure. `apps/site/src/pages/start.astro` prints one row per adapter, and a
+ * row showing only what `@playdeck/provider-hls` itself builds to understates
+ * what a reader downloads to play HLS in Chrome, Edge or Firefox by two orders
+ * of magnitude: hls.js is that package's dependency, imported dynamically when
+ * the hls.js engine is the one selected, and no bundle `bundle-budgets.mjs`
+ * weighs contains a byte of it. Measuring it a second time in the site would be
+ * a second definition of the same number, so the site reads this one.
+ *
+ * Entries carrying a `variant` are left out: this answers what an adapter costs
+ * by default, and `hls.js/light` is an opt-in whose tradeoff needs the prose
+ * around it that `README.md` gives it.
+ *
+ * The key is derived from the manifest that pins the dependency rather than
+ * written down, so there is no second place for a package directory to be
+ * renamed.
+ * @param {string} [root] The repository root, which the site has to pass: it
+ * bundles this module, and `import.meta.url` then addresses a chunk in `dist/`.
+ * @returns {Promise<Map<string, { package: string; version: string; kilobytes: number }>>}
+ */
+export const bundledDependencies = async (root = repoRoot) => {
+  /** @type {Map<string, { package: string; version: string; kilobytes: number }>} */
+  const measured = new Map();
+  for (const target of thirdParty) {
+    if (target.variant !== undefined) continue;
+    const dir = /^packages\/([^/]+)\/package\.json$/.exec(
+      target.pinnedIn.manifest
+    )?.[1];
+    if (dir === undefined) {
+      throw new Error(
+        `${target.package} is pinned in ${target.pinnedIn.manifest}, which is not a package manifest under packages/. This map is keyed by package directory, so give it one or drop the entry.`
+      );
+    }
+    const manifest = await readJson(target.pinnedIn.manifest, root);
+    const installed = String(
+      (await readJson(`${target.installedAt}/package.json`, root)).version
+    );
+    measured.set(dir, {
+      package: target.package,
+      version: pinnedVersion(target, installed, {
+        [target.pinnedIn.manifest]:
+          /** @type {Record<string, string> | undefined} */ (
+            manifest[target.pinnedIn.field]
+          )
+      }),
+      kilobytes: await minifiedGzipKilobytes(
+        join(target.installedAt, target.file),
+        root
+      )
+    });
+  }
+  return measured;
+};
 
 /**
  * @returns {Promise<{

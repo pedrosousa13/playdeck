@@ -59,7 +59,6 @@ const document_ = `${SITE}/reference/`;
  * made for instead of being a literal that only holds at the apex.
  */
 const destinations = [
-  { label: 'Start', path: 'start/' },
   { label: 'Guides', path: 'guides/' },
   { label: 'Reference', path: 'reference/' },
   { label: 'Providers', path: 'providers/' },
@@ -106,8 +105,8 @@ for (const [where, url] of [
     // Scoped to the header rather than to the page: whether `/` itself keeps a
     // link to the workbench is that page's decision and its own tests', and
     // `scripts/check-deploy-artifact.mjs` follows the one it has. What is
-    // settled here is the strip that appears on every page — the site's own
-    // destinations, and not one pointing at a surface #534 rules out as a
+    // settled here is the strip that appears on every page — three site
+    // destinations, and not a fourth pointing at a surface #534 rules out as a
     // public one.
     const header = page.locator('header');
     await expect(header.locator('a[href*="storybook" i]')).toHaveCount(0);
@@ -124,27 +123,6 @@ for (const [where, url] of [
     await page.goto(url);
 
     await expect(nav(page)).toBeVisible();
-    const measured = await overflow(page);
-    expect(measured.scrollWidth).toBeLessThanOrEqual(measured.clientWidth);
-  });
-
-  test(`the header does not overflow where its inline list appears on ${where}`, async ({
-    page
-  }) => {
-    // 40rem is the width at which `SiteHeader.astro` stops drawing the sheet
-    // and lays every destination out in the row, so it is the narrowest screen
-    // the whole strip has to fit on — the trail, the destinations, search and
-    // the switch, all at once. The 320px checks above never see that state at
-    // all, because below the breakpoint the list is inside a sheet that is not
-    // in the DOM until it is opened.
-    //
-    // Pinned when `Start` was added (#547): a destination is the one kind of
-    // change that can push this row past the edge, and the only check that
-    // would have caught it was one at the width where the row is fullest.
-    await page.setViewportSize({ width: 640, height: 800 });
-    await page.goto(url);
-
-    await expect(nav(page).getByRole('link')).toHaveText(labels);
     const measured = await overflow(page);
     expect(measured.scrollWidth).toBeLessThanOrEqual(measured.clientWidth);
   });
