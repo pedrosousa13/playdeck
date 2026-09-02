@@ -475,8 +475,8 @@ the package index. It was chosen to put a line at the body rung inside the 65–
 character band, so a page that sets prose at another rung is choosing a
 different character count and says so where it does it. A page's own maximum
 width is a separate decision and stays a literal where that decision is made:
-`72rem` at `/`, `64rem` on `/archetypes`, `46rem` on `/design`, `52rem` on each
-of the two indexes — written twice, once in `src/pages/reference/index.astro`
+`72rem` at `/`, `64rem` on `/archetypes`, `56rem` on `/start`, `46rem` on
+`/design`, `52rem` on each of the two indexes — written twice, once in `src/pages/reference/index.astro`
 and once in `src/pages/providers/index.astro`, because two pages agreeing on a
 number is not the same fact as one number. The `74rem` rail-and-document shell
 is the exception and lives in `src/styles/doc.css`: the reference pages and the
@@ -499,7 +499,9 @@ The reference pages at `/reference/<package>/` are the package READMEs rendered,
 and those documents are mostly code; two of the provider setup pages at
 `/providers/<provider>/` carry a highlighted code example, because
 `docs/provider-setup.md` writes one for YouTube and one for Vimeo and none for
-the other three. No provider page mounts a player; the routes that do are `/`
+the other three; and `/start` is mostly two of them, because a quickstart that
+described the composition instead of printing it would be the second copy this
+site is built to avoid. No provider page mounts a player; the routes that do are `/`
 and `/archetypes`, and that has held through every rebuild of the landing page,
 including the one that took `/` back down to a single island. The landing page
 carries one block of code too, the composition the bench's switches build, and
@@ -510,12 +512,13 @@ from somewhere other than `tokens.css`.
 
 The highlighter is **Shiki**, which Astro already ships — no new dependency —
 set to the `github-light` and `github-dark` themes. The two names live in
-`src/shiki.ts` and are read twice: `astro.config.ts` hands them to
-`markdown.shikiConfig` for the READMEs' fences, and `/archetypes` hands them to
-Astro's `<Code>` component, which reads nothing from that configuration, for the
-two source wells it prints beside its players. That second reader used to be the
-landing page, which printed four hand-written snippets and one real file; it
-prints no highlighted code at all now.
+`src/shiki.ts` and are read by two paths: `astro.config.ts` hands them to
+`markdown.shikiConfig` for the READMEs' fences, and a page that prints a file
+from `examples/` hands them to Astro's `<Code>` component, which reads nothing
+from that configuration. `/archetypes` does that for the source wells beside its
+players, and `/start` for the two compositions it prints. The landing page was
+once the `<Code>` reader, printing four hand-written snippets and one real file;
+it prints no highlighted code at all now.
 
 **The exception used to be two theme names and is now two theme names and five
 hex literals**, and that is the part of it worth reading carefully, because the
@@ -752,6 +755,7 @@ served in. `Base.astro` takes `stance?: 'argument' | 'document'`, defaulting to
 | Route                   | Stance     |
 | ----------------------- | ---------- |
 | `/`                     | `argument` |
+| `/start`                | `document` |
 | `/guides`               | `document` |
 | `/guides/<guide>`       | `document` |
 | `/reference`            | `document` |
@@ -1392,6 +1396,7 @@ that already existed, and both still have two.
 | `src/lib/utils.ts`                     | `cn`, the class merge every shadcn component calls        |
 | `src/styles/shadcn-theme.css`          | shadcn's variable names, aliased onto this site's roles   |
 | `src/pages/index.astro`                | The landing page at `/`, and its links                    |
+| `src/pages/start.astro`                | The quickstart at `/start`, printed from `examples/`      |
 | `src/pages/design.astro`               | The specimen sheet, served at `/design`                   |
 | `src/pages/archetypes.astro`           | Two composed players, and the files they are              |
 | `src/pages/guides/index.astro`         | The guide index, served at `/guides`                      |
