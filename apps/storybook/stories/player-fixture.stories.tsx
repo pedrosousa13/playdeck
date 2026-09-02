@@ -272,18 +272,23 @@ const PlayerFixture = ({
   const initialSource: Player.RootProps['source'] =
     sourceKey === 'hls'
       ? { type: 'hls', src: assetUrl('hls/master.m3u8'), engine: hlsEngine }
-      : sourceKey === 'live'
-        ? { type: 'hls', src: assetUrl('live/index.m3u8'), engine: hlsEngine }
-        : sourceKey === 'long'
-          ? assetUrl('tracer-10s.mp4')
-          : (vimeoSource ??
-            (sourceChange
-              ? 'https://provider.invalid/source-a.mp4'
-              : activationSource === 'external'
-                ? 'https://provider.invalid/tracer.mp4'
-                : activationSource === 'youtube'
-                  ? youtubeExampleUrl
-                  : assetUrl('tracer.mp4')));
+      : // The same fixture tree, reached through a master playlist that
+        // declares no subtitle renditions (#510) — the only shape in which
+        // `selectTextTrack` can settle to `source`.
+        sourceKey === 'hls-nosubs'
+        ? { type: 'hls', src: assetUrl('hls/nosubs.m3u8'), engine: hlsEngine }
+        : sourceKey === 'live'
+          ? { type: 'hls', src: assetUrl('live/index.m3u8'), engine: hlsEngine }
+          : sourceKey === 'long'
+            ? assetUrl('tracer-10s.mp4')
+            : (vimeoSource ??
+              (sourceChange
+                ? 'https://provider.invalid/source-a.mp4'
+                : activationSource === 'external'
+                  ? 'https://provider.invalid/tracer.mp4'
+                  : activationSource === 'youtube'
+                    ? youtubeExampleUrl
+                    : assetUrl('tracer.mp4')));
 
   const replacementSource = sourceChange
     ? 'https://provider.invalid/source-b.mp4'
@@ -399,7 +404,7 @@ const meta: Meta<PlayerFixtureProps> = {
     source: {
       control: 'text',
       description:
-        "'hls' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
+        "'hls' | 'hls-nosubs' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
     },
     engine: {
       control: 'radio',
@@ -491,6 +496,13 @@ export const CaptionsNative: Story = {
 
 export const HlsHlsJs: Story = {
   args: { source: 'hls', engine: 'hls.js' }
+};
+
+// The subtitle-less master playlist (#510). `e2e/hls-subtitle-capability.spec.ts`
+// drives it for the one reading the subtitled fixture can never produce:
+// `selectTextTrack` settling to `unavailable` / `source`.
+export const HlsNoSubtitles: Story = {
+  args: { source: 'hls-nosubs', engine: 'hls.js' }
 };
 
 export const HlsNative: Story = {
