@@ -1,14 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// #510. `selectTextTrack` settles from `MANIFEST_PARSED`
-// (`packages/provider-hls/src/text-tracks.ts`), and two of the three answers it
-// can give had never been driven in a browser: the probes in #508 measured what
-// hls.js reports, and the unit tests measured what the adapter does with those
-// payloads, but nothing joined the two ends on a real manifest.
+// `selectTextTrack` settles from `MANIFEST_PARSED`
+// (`packages/provider-hls/src/text-tracks.ts`), and these join the two ends
+// measured apart elsewhere: what hls.js reports on a real manifest (#508's
+// probes) and what the adapter makes of that payload (the unit tests).
 //
-// The gap was the fixture tree, not the wiring: `hls/master.m3u8` declares a
-// subtitle rendition, so every e2e that loaded it took the `available` branch.
-// `hls/nosubs.m3u8` is the same tree with the rendition removed.
+// `hls/nosubs.m3u8` (#510) is the fixture tree's master playlist with the
+// subtitle rendition removed, and the assertion below is what it exists for:
+// `hls/master.m3u8` declares one, so it can only ever take the `available`
+// branch.
 
 // The capability is settled by the manifest, well before any frame decodes, so
 // these read it rather than playing anything.
@@ -40,12 +40,11 @@ test('reports a subtitle-less manifest as an absence in the source', async ({
   });
 });
 
-// The other half of #510, and the awkward one. `hls.js/light` compiles out the
-// subtitle controllers, so it parses a manifest's renditions, reports them once
-// on `MANIFEST_PARSED`, and then never emits `SUBTITLE_TRACKS_UPDATED` — tracks
-// that can be counted and never selected. The adapter answers `provider-build`
-// rather than `provider` (the provider is willing) or `source` (the media has
-// subtitles).
+// The awkward branch. `hls.js/light` compiles out the subtitle controllers, so
+// it parses a manifest's renditions, reports them once on `MANIFEST_PARSED`,
+// and then never emits `SUBTITLE_TRACKS_UPDATED` — tracks that can be counted
+// and never selected. The adapter answers `provider-build` rather than
+// `provider` (the provider is willing) or `source` (the media has subtitles).
 //
 // It runs against the SUBTITLED fixture on purpose: `provider-build` is only
 // reachable when the manifest declares renditions, so `nosubs.m3u8` would send
