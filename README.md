@@ -82,19 +82,23 @@ number a reader cares about is the one for the source they are playing, and for
 one of these sources it is large. Gzip, excluding React itself and the optional
 `theme.css` (5.8 KB):
 
+<!-- bytes:table -->
+
 | Playing                                           | Downloads                                                          | Total        |
 | ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
-| MP4 or WebM                                       | core 7.8 + primitives 16.9 + native 5.7                            | **30.4 KB**  |
-| HLS on Safari and iOS                             | the above + HLS adapter 4.8                                        | **35.2 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 159.5**                                       | **194.7 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 35.2 + hls.js light 106.0 | **141.2 KB** |
-| YouTube                                           | core 7.8 + primitives 16.9 + adapter 6.1                           | **30.8 KB**  |
-| Vimeo                                             | core 7.8 + primitives 16.9 + adapter 7.7 + `@vimeo/player` 8.2     | **40.6 KB**  |
-| Wistia                                            | core 7.8 + primitives 16.9 + adapter 5.4                           | **30.1 KB**  |
+| MP4 or WebM                                       | core 7.8 + primitives 17.2 + native 5.8                            | **30.8 KB**  |
+| HLS on Safari and iOS                             | the above + HLS adapter 4.8                                        | **35.6 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 159.9**                                       | **195.5 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 35.6 + hls.js light 106.4 | **142.0 KB** |
+| YouTube                                           | core 7.8 + primitives 17.2 + adapter 6.1                           | **31.1 KB**  |
+| Vimeo                                             | core 7.8 + primitives 17.2 + adapter 7.8 + `@vimeo/player` 7.7     | **40.5 KB**  |
+| Wistia                                            | core 7.8 + primitives 17.2 + adapter 5.3                           | **30.3 KB**  |
+
+<!-- /bytes -->
 
 **hls.js is the whole story here, and it is not ours.** Adaptive streaming needs
 manifest parsing, MSE buffer management, ABR heuristics, MPEG-TS to fMP4
-transmuxing and CEA-608/708 extraction; hls.js's own smallest build is 106 KB,
+transmuxing and CEA-608/708 extraction; hls.js's own smallest build is 106.4 KB,
 and Playdeck's HLS adapter over it is 4.8. What lazy loading buys is not a
 smaller hls.js. It is that the other four rows never download one, and that
 Safari and iOS do not either, because they play HLS natively and hls.js is never
@@ -111,6 +115,10 @@ their SDK is a network request rather than a package in your bundle, and it is
 not counted above. [Third-party requests and CSP](docs/third-party-requests.md)
 names every origin involved.
 
+Nothing above is typed by hand. `pnpm docs:bytes` writes this section from the
+measurements, and `pnpm docs:bytes:check` fails CI when the two disagree, so a
+change that moves a bundle cannot leave a stale number here.
+
 Every Playdeck package in this table is measured by `pnpm test:budgets` on each
 CI run, and three of them fail the build if they grow past a budget: core at
 10 KB, the primitives at 18 KB and `theme.css` at 2.5 KB — measured on its CSS
@@ -118,13 +126,14 @@ rules with the comments stripped, because it ships as authored and a ceiling on
 the whole file is a budget on its prose. The size it ships at is reported every
 run, and not gated. The provider adapters are
 measured and reported without a budget, because a lazy chunk does not compete
-for the initial graph. Run that command for the current figures — nothing checks
-this table against it, so it is a snapshot and the budgets are the gate.
+for the initial graph.
 
 The third-party bytes are the exception, and deliberately so: hls.js and
 `@vimeo/player` are external to those bundles, so that script never sees them.
-The two figures here were read off the installed packages on 2026-08-28 —
-hls.js 1.6.16 and `@vimeo/player` 2.30.4 — and they move when you upgrade.
+They are measured from the installed packages instead — the published minified
+builds of hls.js 1.6.16 and `@vimeo/player` 2.30.4 — and the check fails if what
+is installed is not the version each package's manifest pins. No budget gates
+them: they move when you upgrade, and that is your decision rather than ours.
 
 ## Honesty about providers
 
