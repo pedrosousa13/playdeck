@@ -1,22 +1,22 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-// The offset is applied at the `loadedmetadata` of the load the provider starts
-// itself, and never again, so the outcome is settled once the provider has
-// handled that event (`provider-native/src/attachment.ts`, `onLoadedMetadata`).
-// `initialPositionApplied` waits for exactly that, and both of the readings
-// that look like it are races this test has lost.
+// The offset is applied at the `loadedmetadata` of an explicit `media.load()`,
+// and never again, so the outcome is settled once the provider has handled that
+// event (`provider-native/src/attachment.ts`, `onLoadedMetadata`).
+// `initialPositionApplied` waits for exactly that; `initial-position.ts`
+// carries the ordering and the measurement.
 //
-// The element's own `readyState` is not it: chromium reaches `readyState 1`
+// Both of the readings that look like it are races this test has lost, one per
+// engine. The element's own `readyState`: chromium reaches `readyState 1`
 // before the handler has run, so the outcome was read while the offset was
 // still to be applied and the test failed with the playhead at 0 and no notice
 // published — the exact state it exists to forbid, reported against a provider
-// that published the notice a moment later.
-//
-// A published duration is not it either, which is #581: the element starts its
-// own load at mount and the provider's attach snapshot publishes whatever that
-// load reached, before `media.load()` restarts the element. Firefox reaches
-// metadata on that first load often enough for the read to land in the gap.
+// that published the notice a moment later. And a published duration, which is
+// #581: on 2026-09-02 the firefox job of CI run 33616735320, on #582's branch
+// and so on the duration gate, booked `applies a start offset a range-serving
+// origin can satisfy` flaky with `|playhead - 5|` received as 5 — a playhead
+// still at 0.
 import { countProviderLoads, initialPositionApplied } from './initial-position';
 import { media } from './locators';
 

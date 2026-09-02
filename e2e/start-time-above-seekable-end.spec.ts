@@ -1,9 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-// The gate these tests wait on before reading the playhead. It is not a
-// published duration, which is what they waited on until #581: the attach
-// snapshot publishes the duration of the element's own pre-provider load,
-// before `media.load()` has restarted it and long before `applyInitialPosition`
-// has run, so a read there catches the playhead before the offset reached it.
+// The gate these tests wait on before reading the playhead. A published
+// duration is not one, which is what they waited on until #581;
 // `initial-position.ts` carries the ordering and the measurement.
 import { countProviderLoads, initialPositionApplied } from './initial-position';
 

@@ -11,30 +11,46 @@ import { expect, type Page } from '@playwright/test';
 // 'ready'` and the real duration, when that first load already reached metadata
 // -- and only afterwards does `load()` call `media.load()`, which puts the
 // element back to `HAVE_NOTHING` and starts a second load.
-// `applyInitialPosition` runs on the `loadedmetadata` of that second load and
-// of no other, so between the attach snapshot and it there is a window in which
-// the duration is published, the position has provably not been applied, and
-// the playhead still reads 0. `packages/core/src/player-controller.ts` states
-// the same ordering from the other side, on `#loadedGeneration`: a provider may
-// report ready from inside `attach()`, while `load()` is only queued once
-// `attach()` returns.
+// `attachment.ts`'s `onLoadedMetadata` calls `applyInitialPosition` on every
+// `loadedmetadata`; the `positioned` latch inside it (`playback.ts`) is what
+// makes the offset apply on the first one only, which in a workbench story is
+// the one from that second load. So between the attach snapshot and it there is
+// a window in which the duration is published, the position has provably not
+// been applied, and the playhead still reads 0.
+// `packages/core/src/player-controller.ts` states the same ordering from the
+// other side, on `#loadedGeneration`: a provider may report ready from inside
+// `attach()`, while `load()` is only queued once `attach()` returns.
 //
 // Firefox is the engine that opens that window widest here: it reaches
 // `HAVE_METADATA` on the pre-provider load of a 7KB clip before the provider's
-// dynamic import resolves, so the attach snapshot carries a duration. Measured
-// on 2026-09-02 on the maintainer's machine, the four firefox tests across the
-// two start-offset specs run 20 times each: 4 of those 100 runs read the state
-// inside the window and failed -- twice at
-// `start-time-above-seekable-end.spec.ts:92`, once at `:117` with no notice
-// published yet, once at `:137`.
+// dynamic import resolves, so the attach snapshot carries a duration.
 //
-// So the gate counts the loads the provider starts itself, and waits for one of
-// them to have been handled to completion.
+// Measured on 2026-09-02 on the maintainer's machine: the firefox project over
+// both start-offset specs -- five tests -- run 20 times each with
+// `--retries=0 --workers=1`, 100 runs per gate. On the duration gate 7 of 100
+// failed: four in `applies a startTime the seekable window already covers`,
+// two in `never reconsiders the startTime once the window widens`, one in
+// `drops a startTime above the seekable window end`, while
+// `native-start-time.spec.ts`'s two tests passed 40 of 40. On this gate, 100 of
+// 100 passed.
+//
+// Serialise to re-measure that: at Playwright's default worker count the same
+// pre-fix specs are far quieter, and two independent 50-run samples the same
+// day failed 0 and 3 -- the 3 all in `applies a startTime the seekable window
+// already covers`. So the rate above is the rate on an unloaded machine, which
+// is where the pre-provider load wins the race most often.
+//
+// So the gate counts explicit loads, and waits for one of them to have been
+// handled to completion.
 
 type LoadCounts = {
-  // Raised by `media.load()`, which in a workbench story is the provider's own
-  // load and nothing else. It runs synchronously, so a read that sees this go
-  // up is a read after the element went back to `HAVE_NOTHING`: the previous
+  // How many explicit `media.load()` calls the page has made. It does not
+  // attribute them and does not need to: the load an element starts by itself
+  // at mount does not go through `load()`, so the pre-provider load above --
+  // the one whose metadata the attach snapshot publishes -- is never counted,
+  // and the `loadedmetadata` of any load that is counted reaches the provider's
+  // handler. It is raised synchronously with the call, so a read that sees this
+  // go up is a read after the element went back to `HAVE_NOTHING`: the previous
   // load's metadata cannot be mistaken for this load's.
   playdeckProviderLoads?: number;
   // The load whose `loadedmetadata` has been dispatched to every listener.
@@ -76,8 +92,8 @@ export const countProviderLoads = async (page: Page): Promise<void> => {
   });
 };
 
-// Resolves once the provider has handled the `loadedmetadata` of a load it
-// started itself, which is the dispatch `applyInitialPosition` runs in. After
+// Resolves once the provider has handled the `loadedmetadata` of an explicit
+// load, which is the dispatch `applyInitialPosition` runs in. After
 // it, the playhead is where this load is going to leave it and any refusal
 // notice has been published.
 export const initialPositionApplied = (page: Page): Promise<void> =>
