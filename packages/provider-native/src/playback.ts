@@ -180,6 +180,9 @@ export const createNativePlayback = (
   let positioned = false;
   let boundaryEnded = false;
   let seekingFromEnded = false;
+  // Where the last end-boundary correction actually left the playhead, which is
+  // not always the value it wrote. See `onTimeUpdate`.
+  let correctionLandedAt: number | undefined;
   let replayGeneration = 0;
 
   const boundaryStart = (): number =>
@@ -347,7 +350,40 @@ export const createNativePlayback = (
         restartFromBoundary();
         return;
       }
-      media.currentTime = endTime;
+      // Only where the correction has somewhere to move. A write runs the seek
+      // algorithm, whose `timeupdate` re-enters here with the playhead now
+      // wherever that seek landed -- still at or past `endTime`, which still
+      // satisfies the test above. So an unguarded correction seeks again, and
+      // again, for as long as the player is attached.
+      //
+      // Two positions have nowhere to move, and they are not the same test.
+      // `endTime` itself is where the correction would put the playhead, and a
+      // same-value write is not a no-op -- it starts a seek, which is what
+      // `playheadAfterMovingTo` above refuses for the same reason.
+      //
+      // `correctionLandedAt` is the other, and it is what keeps the loop cut on
+      // a real element. The element does not have to land on the value written:
+      // the seek algorithm clamps the target into `seekable` and engines snap
+      // to a frame, so the playhead can settle a hair PAST `endTime` -- against
+      // which `!== endTime` is true forever and the whole cycle resumes. Where
+      // it settles is read straight back off the setter, because the seek
+      // algorithm sets the official playback position synchronously and defers
+      // only the notification. While the playhead is still sitting on what the
+      // last correction produced, correcting again would ask the element to
+      // redo a seek it has already answered; anything that actually moves it --
+      // further overshoot from decoding, a seek command, a replay -- makes the
+      // position differ and re-arms the correction. The target is the constant
+      // `endTime`, so where a correction lands is a property of the element and
+      // the media, not of when it was issued.
+      //
+      // Both are keyed on the position rather than on `boundaryEnded` because a
+      // playhead can arrive past the boundary after the latch is set, and that
+      // overshoot still has to come back.
+      const playhead = media.currentTime;
+      if (playhead !== endTime && playhead !== correctionLandedAt) {
+        media.currentTime = endTime;
+        correctionLandedAt = media.currentTime;
+      }
       if (!boundaryEnded) {
         boundaryEnded = true;
         media.pause();

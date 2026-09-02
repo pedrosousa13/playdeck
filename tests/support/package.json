@@ -10,6 +10,10 @@
     "./fake-text-tracks": {
       "types": "./dist/fake-text-tracks.d.ts",
       "default": "./src/fake-text-tracks.ts"
+    },
+    "./seeking-video": {
+      "types": "./dist/seeking-video.d.ts",
+      "default": "./src/seeking-video.ts"
     }
   }
 }
