@@ -53,14 +53,16 @@ here even before the cost is counted.
 **DASH's distinguishing strength is DRM, and Playdeck has no DRM story of its
 own.** Playdeck never calls EME. Where DRM works at all it works inside an
 embed's own frame and is that embed's business — YouTube's `allow` list carries
-`encrypted-media`, so a protected source plays there, while Vimeo's deliberately
-omits it, so one does not, and `docs/third-party-requests.md` records both as
-facts about those frames rather than as anything Playdeck decides per media. On
-the paths Playdeck actually drives, EME is absent: there is no
-`requestMediaKeySystemAccess` in this repository, no key-system capability, and
-no vocabulary for reporting one. The HLS package documents EME as one of the
-things `hls.js/light` compiles out and treats losing it as unremarkable, because
-subtitles are the only half of that trade this adapter notices.
+`encrypted-media`, so a protected source plays there, while Vimeo's omits it as
+Playdeck writes it, so one does not play as attached, and the Vimeo SDK may
+restore the grant and reload the frame on a DRM-init failure;
+`docs/third-party-requests.md` records both as facts about those frames rather
+than as anything Playdeck decides per media. On the paths Playdeck actually
+drives, EME is absent: there is no `requestMediaKeySystemAccess` in this
+repository, no key-system capability, and no vocabulary for reporting one. The
+HLS package documents EME as one of the things `hls.js/light` compiles out and
+treats losing it as unremarkable, because subtitles are the only half of that
+trade this adapter notices.
 
 So the argument "DASH, because DRM" asks this library to carry a second
 streaming stack for the sake of a feature it does not have and is not building.
