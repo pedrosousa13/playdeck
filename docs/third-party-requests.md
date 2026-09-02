@@ -61,7 +61,7 @@ Notes, per row:
   API script itself always comes from `www.youtube.com` — that one `host` does
   not move.
 
-  Playdeck builds that embed iframe itself, as of #303
+  Playdeck builds that embed iframe itself, as of #221
   (`packages/provider-youtube/src/attachment.ts:230-277`), and hands the
   finished element to the iframe API, which adopts a frame that already exists
   instead of building one (`:305`, `new api.Player(…)`). So the `src`, the
@@ -325,7 +325,7 @@ Notes, per row:
   Playdeck's adapter never treats that path as a successful attach either way.
   Playdeck cannot harden that frame: the element writes it into its own shadow
   root, where nothing this adapter can call reaches it. YouTube's embed was out
-  of reach for a comparable reason until #303 moved the frame into this repo;
+  of reach for a comparable reason until #221 moved the frame into this repo;
   no such move exists here, because the element is the vendor's. Playdeck only ever
   sets attributes on the `<wistia-player>` element itself
   (`packages/provider-wistia/src/attachment.ts:346-432`), and most of them are
@@ -454,7 +454,7 @@ does, so it belongs here beside them.
   way Wistia's frame does. The page-level `Referrer-Policy` header in the
   Wistia note below is the only remedy for that one too.
 
-- **YouTube** — the same policy, on the same terms, as of #303
+- **YouTube** — the same policy, on the same terms, as of #221
   (`packages/provider-youtube/src/attachment.ts:258`, before the append at
   `:277`). Playdeck builds this frame precisely so that the attribute can be on it
   in time; the iframe API adopts the frame it is handed rather than building one
@@ -659,8 +659,8 @@ the README tables it as such ("for tests that need a clean load",
 `packages/provider-youtube/README.md:82`), and the changeset that introduced
 it said the same in as many words — released now, so that wording lives in the
 changelog ("for tests that need a clean load, not for app code",
-`packages/provider-youtube/CHANGELOG.md:786-788`). No runtime
-path in Playdeck calls it, and no `Player.Root` option reaches it either — so a
+`packages/provider-youtube/CHANGELOG.md:786-788`). No runtime path in Playdeck
+calls it, and no `Player.Root` option reaches it either — so a
 successful adoption holds for the document's lifetime unless the page's own
 code calls that reset itself.
 
