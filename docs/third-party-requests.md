@@ -122,13 +122,14 @@ Notes, per row:
   routine that appends the grant to this frame and reloads it when the frame
   reports a DRM-initialisation failure, so what Playdeck writes is the
   attribute's starting state and not necessarily its final one; see the DRM
-  rewrite below. There is no `sandbox`
-  attribute on this iframe at all, and that absence is a weighed decision
-  rather than an oversight — see the Vimeo sandbox bargain below. Neither the
-  missing `encrypted-media` nor the absent `sandbox` changes which origin is
-  reached; they are here because this document is where a reader decides what
-  to permit this frame, and a DRM source that silently will not play is what an
-  origins-only reading would leave them to find in production.
+  rewrite below. There is no `sandbox` attribute on this iframe at all, and
+  that absence is a weighed decision rather than an oversight — see the Vimeo
+  sandbox bargain below. Neither the missing `encrypted-media` nor the absent
+  `sandbox` changes which origin is reached; they are here because this
+  document is where a reader decides what to permit this frame, and a DRM
+  source that does not play as attached — and a frame that reloads itself with
+  the grant added — is what an origins-only reading would leave them to find
+  in production.
 
   Two more things leave the page here that the table above does not explain on
   its face, and both are the SDK's own work at module scope rather than
@@ -630,6 +631,13 @@ Mapped onto the origins above:
   document carrying `data-vimeo-id` or `data-vimeo-url` anywhere gets one
   oEmbed request per matching element, and a document carrying neither gets
   none. No `loading` setting suppresses it — see the per-provider note above.
+- **The Vimeo SDK's DRM reload** is a second request to `player.vimeo.com`, and
+  no `loading` setting decides whether it happens. It is the same origin the
+  embed already reached, fetched again with `forcereload=drm` added, and what
+  triggers it is not a prop but a `drminitfailed` message from the frame
+  itself — so it follows an attach rather than waiting on one, and a source that
+  never reports that failure never makes it at all. The consumer's lever is the
+  `window.VimeoDRMEmbedsUpdated` guard — see the per-provider note above.
 - **The Vimeo SDK's `appendVideoMetadata` message** is not on this timeline
   because it is not a request: it is a `postMessage` to the embed frame Playdeck
   already created, sent once that frame reports ready. It therefore happens
@@ -807,15 +815,16 @@ issues reaches the player. Drop `allow-same-origin` and the frame gets an
 opaque origin, so the messages it posts out arrive with an `event.origin` of
 `"null"` — and the SDK discards every inbound message whose origin is not a
 Vimeo host (`isVimeoUrl(event.origin)`, `@vimeo/player@2.30.4`'s
-`dist/player.js:1494`, against the host pattern at `:89-90`). The ready
-handshake never completes, `player.origin` is never narrowed off the `'*'` it
-starts at (`:1491`, `:1497-1498`), and every command posted through
-`postMessage` (`:775`) is addressed to a player that never answered. Drop
-`allow-scripts` and there is no player in the frame to answer in the first
-place. That chain was confirmed by reading and not by running: the SDK lines
-are cited so they can be checked and can still drift, and the opaque-origin
-step is taken on the platform's terms rather than watched in a browser, because
-no sandboxed frame was ever loaded here — which is this section's own thesis
+`dist/player.js:1494`, against the host pattern inside `isVimeoUrl`,
+`:89-91`). The ready handshake never completes, `player.origin` is never
+narrowed off the `'*'` it starts at (`:1491`, `:1497-1498`), and every command
+posted through `postMessage` (`:775`) is addressed to a player that never
+answered. Drop `allow-scripts` and there is no player in the frame to answer in
+the first place. That chain was confirmed by reading and not by running: the
+SDK lines are cited so they can be checked and can still drift, and the
+opaque-origin step is taken on the platform's terms rather than watched in a
+browser, because no sandboxed frame was ever loaded here — which is this
+section's own thesis
 rather than an exception to it, as the paragraphs below set out. So the only
 sandbox this provider can carry is one that includes both, and a frame holding
 both can run arbitrary script and reach its own origin's storage, which is most
@@ -850,11 +859,18 @@ is an expensive failure mode to buy a narrow gain with.
 
 DRM is the one item on the usual list of untested sandbox casualties that does
 not apply here, and folding it in would overstate the risk. DRM-protected
-playback is already withheld from this frame by the deliberately absent
-`encrypted-media` grant on the `allow` list — see the Vimeo row above — so it
-is not a capability a sandbox could regress. It is off already, by a different
-mechanism and for a different reason. Advertising and mobile fullscreen are the
-paths that are both live and uncovered.
+playback is withheld from this frame by the deliberately absent
+`encrypted-media` grant on the `allow` list — see the Vimeo row above — so at
+the moment the frame attaches it is not a capability a sandbox could regress.
+It is off already, by a different mechanism and for a different reason. That
+holds only until the SDK's DRM rewrite fires, which appends the grant back and
+reloads the frame — see the DRM rewrite above — but the rewrite does not add a
+casualty either, for the reason the YouTube section gives below: any sandbox
+value this provider could carry already includes `allow-same-origin`, because
+the postMessage bridge cannot work without it, and a frame permissive enough
+for the bridge is permissive enough for a restored `encrypted-media` grant.
+Advertising and mobile fullscreen are the paths that are both live and
+uncovered.
 
 This was measured rather than defaulted into. The alternative had a concrete
 shape: the value #237 proposed, `allow-scripts allow-same-origin
