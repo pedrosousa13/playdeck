@@ -31,7 +31,7 @@ const BASES = ['/', '/playdeck/'] as const;
 
 const SITE = 'http://127.0.0.1:4322';
 
-/** A word that appears in the package READMEs and nowhere else on the site. */
+/** A word the documentation uses throughout, so a query for it has answers. */
 const QUERY = 'provider';
 
 /**
@@ -64,7 +64,7 @@ for (const base of BASES) {
   const at = base === '/' ? 'at the root' : `under ${base}`;
 
   test.describe(`docs search ${at}`, () => {
-    test(`finds content on the reference pages and opens a result`, async ({
+    test(`finds documentation and opens the highlighted result`, async ({
       page
     }) => {
       await page.goto(`${SITE}${base}reference/`);
@@ -84,10 +84,26 @@ for (const base of BASES) {
         expect(href).toMatch(new RegExp(`^${base}`));
       }
 
-      // Enter opens the highlighted result. The destination is a real document
-      // and not a 404 page, which is the other half of the prefix being right.
+      // Enter opens the highlighted result, and the destination is a real
+      // document rather than a 404 page — the other half of the prefix being
+      // right. Against the highlighted option's *own* href, read off the DOM,
+      // rather than against a path written here: which page Pagefind ranks
+      // first for a word is a property of the corpus, so any literal
+      // destination is an assertion about today's index that a page added
+      // later can invalidate. `aria-selected` is the element `Command`
+      // dispatches Enter at, so this is the same result the reader sees
+      // highlighted.
+      const highlighted = options.and(page.locator('[aria-selected="true"]'));
+      const destination = `${SITE}${await highlighted.getAttribute('href')}`;
+      // The destination has to differ from the page the search was run from,
+      // or the wait below is satisfied by standing still: `waitForURL` is
+      // checked against the current URL first, and Enter's navigation has not
+      // committed by then, so a destination the page is already on would hold
+      // whatever Enter opened.
+      expect(destination).not.toBe(page.url());
+
       await page.keyboard.press('Enter');
-      await page.waitForURL(new RegExp(`^${SITE}${base}reference/`));
+      await page.waitForURL((url) => url.href === destination);
       await expect(page.locator('h1')).toBeVisible();
     });
 

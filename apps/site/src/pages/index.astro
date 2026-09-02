@@ -50,6 +50,7 @@ import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
  * back.
  */
 
+const startUrl = `${import.meta.env.BASE_URL}start/`;
 const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
 const providersUrl = `${import.meta.env.BASE_URL}providers/`;
 const archetypesUrl = `${import.meta.env.BASE_URL}archetypes/`;
@@ -192,7 +193,14 @@ const install = 'pnpm add @playdeck/react';
 
       <p class="close__fineprint">React 19 peer, ESM only, named exports</p>
 
+      {
+        /* Start leads, and it is the only one of these that is a route rather
+         * than a section: the command above tells a reader what to install and
+         * nothing about what to write next, and this is the link that does.
+         * What follows it is unchanged. */
+      }
       <p class="close__links">
+        <a href={startUrl}>Start &rarr;</a>
         <a href={referenceUrl}>Reference &rarr;</a>
         <a href={providersUrl}>Providers &rarr;</a>
         <a href={archetypesUrl}>Archetypes &rarr;</a>

@@ -1,0 +1,635 @@
+---
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Code } from 'astro:components';
+import Base from '../layouts/Base.astro';
+import Sweep from '../components/Sweep.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { shikiConfig } from '../shiki';
+import { providerPages } from '../provider-pages.mjs';
+import { referencePackages } from '../reference-packages.mjs';
+import { publishablePackages } from '../../../../scripts/workspace-packages.mjs';
+import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
+import { bundledDependencies } from '../../../../scripts/readme-bytes.mjs';
+
+/**
+ * The quickstart: nothing to a working player, in one page (#547).
+ *
+ * The gap it closes is the click after the pitch. `/` argues, and the reader it
+ * convinces used to land on `/reference`, which is a list of eight packages and
+ * an invitation to work out which README to open. This page is the answer to
+ * "what do I type" and stops there.
+ *
+ * ---- nothing here is written twice -----------------------------------------
+ *
+ * The rule this page is built under is the one the reference, provider and
+ * guide pages are built under: the site renders documents and figures this
+ * repository already keeps true, and writes none of its own. Applied here it is
+ * these, and not one of them is a value typed into this file:
+ *
+ * - The command is `pnpm add` and the package's own manifest name. A reader who
+ *   types what this page prints installs the package this repository publishes,
+ *   because the name came off the manifest npm reads.
+ * - The peers a reader supplies are that manifest's `peerDependencies`, read
+ *   whole. A range this package stops accepting, or a peer added or dropped,
+ *   changes the sentence rather than leaving it quietly wrong.
+ * - The two compositions are the bytes of two files in `examples/`, printed.
+ *   The `examples` TypeScript project compiles both on every `pnpm typecheck`,
+ *   and `scripts/docs-examples.mjs` already generates the fences that show them
+ *   in `README.md` and `packages/react/README.md` — so a reader comparing this
+ *   page with either document is comparing two renderings of one file. This is
+ *   the same arrangement `src/pages/archetypes.astro` uses and gives its reasons
+ *   for: that script matches fences in Markdown and never looks at `.astro`, so
+ *   what reaches an Astro page is the file itself rather than a fence generated
+ *   from it.
+ * - Every adapter figure is `scripts/bundle-budgets.mjs`'s measurement of a
+ *   built artifact, which is the module `pnpm test:budgets` fails a build with.
+ *   A page telling a reader what a dependency costs cannot afford a remembered
+ *   number, and `src/pages/index.astro` prints its figures from the same module
+ *   for the same reason.
+ * - Every figure for what an adapter brings with it is
+ *   `scripts/readme-bytes.mjs`'s measurement of the entry a bundler resolves,
+ *   which is the module that keeps `README.md`'s byte table honest. That gate
+ *   cannot come from the budget module: hls.js and `@vimeo/player` are outside
+ *   every bundle it weighs, so it never sees them, and an adapter row quoting
+ *   only the budgeted half would put 4.8 kB against the largest download in the
+ *   library.
+ *
+ * The prose is held to the same rule from the other side. What a source string
+ * may look like, which forms each provider refuses, what a part is called and
+ * how one is styled are all written down elsewhere and rendered by this site —
+ * so this page names the destination and links to it rather than summarising
+ * it. A summary of "which URL forms resolve" is the one kind of sentence that is
+ * either the table itself or wrong, which is the finding `/providers` already
+ * records.
+ */
+
+const repoRoot = import.meta.env.PLAYDECK_REPO_ROOT;
+
+/*
+ * The package a reader installs, found by name among the publishable ones
+ * rather than by a path written here. `scripts/workspace-packages.mjs` is this
+ * repository's one definition of publishable, and going through it means a
+ * quickstart for a package that had stopped shipping fails the build instead of
+ * telling a reader to install something npm does not have.
+ */
+const entryPointName = '@playdeck/react';
+const entryPoint = publishablePackages(repoRoot).find(
+  (pkg) => pkg.name === entryPointName
+);
+if (entryPoint === undefined) {
+  throw new Error(
+    `start.astro tells a reader to install ${entryPointName}, which is not a publishable package in this workspace. Update the name here, or check that the package still ships.`
+  );
+}
+
+const entryManifest = JSON.parse(
+  readFileSync(join(entryPoint.path, 'package.json'), 'utf8')
+);
+/*
+ * Every peer, in the manifest's own words, rather than the React range alone.
+ * The list is what a reader has to satisfy before `pnpm add` leaves them with a
+ * working install, and reading it whole is what keeps this sentence true when a
+ * peer is added or dropped — a page naming one of two would be right today and
+ * silently incomplete the next time the field moves.
+ */
+const peers = Object.entries(entryManifest.peerDependencies ?? {});
+if (peers.length === 0) {
+  throw new Error(
+    `${entryPointName} declares no peer dependencies, so this page has nothing to tell a reader to install alongside it. Check what replaced that field before deleting the sentence that prints it.`
+  );
+}
+
+const install = `pnpm add ${entryPoint.name}`;
+
+/*
+ * The one optional import a reader still needs after pasting a composition, and
+ * the reason the players below are unstyled. Composed out of the manifest's own
+ * export map rather than typed, for the reason the command above is: a subpath
+ * that stopped being exported fails this build instead of leaving a reader
+ * importing a path npm does not serve. What it costs and what it paints belong
+ * to `packages/react/README.md`, so this page names the line and links there.
+ */
+const themeSubpath = './theme.css';
+if (entryManifest.exports?.[themeSubpath] === undefined) {
+  throw new Error(
+    `${entryPointName} no longer exports ${themeSubpath}, so the import this page prints would not resolve. Point it at whatever replaced the default stylesheet, or take the sentence out.`
+  );
+}
+const themeImport = `import '${entryPointName}${themeSubpath.slice(1)}';`;
+
+/*
+ * The two compositions, read as bytes from the files themselves. Not a string
+ * typed into this template: a hand-written example is a second copy of an API,
+ * and the only copy that matters is the kind that can be wrong while everything
+ * around it stays green.
+ *
+ * Addressed from `PLAYDECK_REPO_ROOT` — the repository root `astro.config.ts`
+ * resolves from its own URL and substitutes in here — because `process.cwd()` is
+ * whatever directory the command was typed in, and this file has to find one
+ * fixed path from any of them. The trailing newline is a property of the file
+ * rather than of the example, and Shiki would render it as an empty final line
+ * inside the well; nothing else about the text is touched.
+ */
+const read = (path: string): string =>
+  readFileSync(join(repoRoot, path), 'utf8').trimEnd();
+
+const smallestPath = 'examples/quickstart.tsx';
+const fullPath = 'examples/react-composition.tsx';
+const smallestSource = read(smallestPath);
+const fullSource = read(fullPath);
+
+/*
+ * What the primitives weigh and what one adapter adds, both measured off built
+ * artifacts by the module the budget gate runs. Neither figure is typed here:
+ * a second copy would let this page and that gate disagree about a number while
+ * both stayed green, which is the one failure a page quoting a cost cannot
+ * survive.
+ */
+const bundles = await measureBundles(repoRoot);
+const measured = new Map(bundles.map((bundle) => [bundle.name, bundle]));
+
+const primitives = measured.get('@playdeck/react (primitives, excl. React)');
+if (primitives === undefined || primitives.budget === null) {
+  throw new Error(
+    'start.astro: the primitives bundle is not a budgeted bundle-budgets.mjs target. Give it a budget there again, or take the sentence that quotes a ceiling out of this page.'
+  );
+}
+
+/*
+ * One row per adapter, composed out of the two lists that already exist rather
+ * than written down: which providers there are and which packages each is
+ * served by comes from `src/provider-pages.mjs`, and each package's name comes
+ * from its own manifest. A provider added to `docs/provider-setup.md` therefore
+ * gains a row here without anybody editing this file.
+ *
+ * Native files and HLS are two adapters under one setup page, so that page is
+ * named twice — once per row, because the cost is per package and a reader
+ * choosing between a progressive file and a manifest is choosing between the
+ * two figures.
+ */
+const providers = await providerPages();
+const packages = await referencePackages();
+const byDir = new Map(packages.map((entry) => [entry.dir, entry]));
+
+/*
+ * The reference page for the package a reader installs, found among the pages
+ * this site already builds rather than composed from a directory name written
+ * here.
+ */
+const entryPage = packages.find((entry) => entry.name === entryPointName);
+if (entryPage === undefined) {
+  throw new Error(
+    `${entryPointName} has no reference page, so the stylesheet line below has nowhere to send a reader. Check that the package is still publishable.`
+  );
+}
+
+/*
+ * What each adapter brings with it, measured by `scripts/readme-bytes.mjs` —
+ * the module that keeps `README.md`'s byte table honest — rather than by the
+ * budget module above. The two halves of a row cannot come from one source:
+ * hls.js and `@vimeo/player` are outside every bundle `bundle-budgets.mjs`
+ * weighs, so an adapter figure alone says 4.8 kB about the largest thing a
+ * reader of this library ever downloads.
+ */
+const dependencies = await bundledDependencies(repoRoot);
+
+/*
+ * The dependencies a package ships that are not other packages of this
+ * workspace, which is the set a reader's bundler has to fetch from npm. Read
+ * off the manifest and identified by the range rather than by the scope: a
+ * workspace link is what `workspace:` means, and matching on `@playdeck/`
+ * instead would be a second definition of which packages are ours.
+ */
+const externalDependencies = (dir: string): string[] =>
+  Object.entries(
+    JSON.parse(
+      readFileSync(join(repoRoot, 'packages', dir, 'package.json'), 'utf8')
+    ).dependencies ?? {}
+  )
+    .filter(([, range]) => !String(range).startsWith('workspace:'))
+    .map(([name]) => name);
+
+const adapters = providers.flatMap((provider) =>
+  provider.packages.map((dir) => {
+    const pkg = byDir.get(dir);
+    if (pkg === undefined) {
+      // The same throw `src/pages/providers/index.astro` makes, for the same
+      // reason: a package named by the provider table that has no reference
+      // page is a renamed directory or a package that stopped being
+      // publishable, and a row with a blank column would say neither.
+      throw new Error(
+        `The ${provider.title} setup page names packages/${dir}, which has no reference page. Update PROVIDERS in src/provider-pages.mjs, or check that the package is still publishable.`
+      );
+    }
+    const bundle = measured.get(pkg.name);
+    if (bundle === undefined) {
+      throw new Error(
+        `${pkg.name} is not a target in scripts/bundle-budgets.mjs, so this page has no measured size for it. Add it there rather than writing a figure here.`
+      );
+    }
+    /*
+     * The reconciliation that makes the column trustworthy in both directions.
+     * A dependency this page has no measurement for would print an empty cell,
+     * which reads as "nothing to download" — the exact understatement the
+     * column was added to remove — so it is a build failure instead.
+     */
+    const external = externalDependencies(dir);
+    const dependency = dependencies.get(dir) ?? null;
+    if (external.length > 1) {
+      throw new Error(
+        `${pkg.name} depends on ${external.join(' and ')}, and this page has room for one measured dependency per adapter. Widen the row, or measure them together in scripts/readme-bytes.mjs.`
+      );
+    }
+    if (dependency?.package !== (external[0] ?? undefined)) {
+      throw new Error(
+        `${pkg.name} depends on ${external[0] ?? 'nothing outside the workspace'}, and scripts/readme-bytes.mjs measures ${dependency?.package ?? 'nothing'} for it. Add the dependency to that module's third-party list, or drop the entry it no longer has.`
+      );
+    }
+
+    return {
+      provider: provider.title,
+      slug: provider.slug,
+      name: pkg.name,
+      dir,
+      size: bundle.size,
+      dependency
+    };
+  })
+);
+
+// Through `import.meta.env.BASE_URL` rather than as literals, for the reason
+// `src/pages/index.astro` gives at length: the prefix is the root today, so a
+// hand-written path would be identical and would stop being identical silently
+// (#435).
+const base = import.meta.env.BASE_URL;
+const providerUrl = (slug: string): string => `${base}providers/${slug}/`;
+const packageUrl = (dir: string): string => `${base}reference/${dir}/`;
+
+const onward = [
+  {
+    href: `${base}guides/`,
+    label: 'Guides',
+    line: 'What a part is, what it puts in the DOM, and how to style one.'
+  },
+  {
+    href: `${base}reference/`,
+    label: 'Reference',
+    line: 'Every published package, rendered from the README in its own tarball.'
+  },
+  {
+    href: `${base}providers/`,
+    label: 'Provider setup',
+    line: 'Which source values each provider accepts, and which it refuses.'
+  },
+  {
+    href: `${base}archetypes/`,
+    label: 'Archetypes',
+    line: 'Two finished players, running, printed beside the files they are.'
+  }
+];
+---
+
+{
+  /* Deliberately not "Playdeck". `scripts/check-deploy-artifact.mjs` identifies
+   * the site's root document in a browser by a heading named exactly that, and
+   * a second document answering to the name would make that identification
+   * ambiguous. The two indexes carry the same constraint. */
+}
+<Base title="Start — Playdeck">
+  <SiteHeader crumbs={[{ label: 'Start' }]} />
+
+  <main class="page">
+    <h1>Start</h1>
+    <p class="lead">
+      Install one package, paste one composition, point it at a URL. Every block
+      below is a file this repository compiles, printed as it is on disk.
+    </p>
+    <Sweep form="accent" />
+
+    <section class="step">
+      <h2 id="install">Install</h2>
+      {
+        /* The command is selectable text and nothing more. `/` gives the same
+         * line a copy button, which is a convenience its close was designed
+         * around; a reader who arrived here came to read a page rather than to
+         * be handed one string, and a second script doing the same job on a
+         * document page is a second thing to keep working. */
+      }
+      <p class="command"><code>{install}</code></p>
+      <p class="note">
+        Peers you supply:
+        {
+          peers.map(([name, range], index) => (
+            <>
+              {index === 0 ? ' ' : ', '}
+              <code>
+                {name} {range}
+              </code>
+            </>
+          ))
+        }. Nothing else — the provider adapters are this package's own
+        dependencies.
+      </p>
+    </section>
+
+    <section class="step">
+      <h2 id="the-smallest-player">The smallest player that works</h2>
+      <p>
+        A root, a viewport, the media element, and the controls a player needs
+        to be usable. Paste it, change the URL, and there is a player on the
+        page.
+      </p>
+      <figure class="well">
+        <Code code={smallestSource} lang="tsx" {...shikiConfig} />
+        <figcaption><code>{smallestPath}</code></figcaption>
+      </figure>
+    </section>
+
+    <section class="step">
+      <h2 id="everything-the-primitives-give-you">
+        Everything the primitives give you
+      </h2>
+      <p>
+        The same shape with the rest of it: captions, a poster, and every control
+        the package ships. Nothing here is styled — the primitives render no CSS
+        of their own, and what each part puts in the DOM for you to style is in
+        {' '}
+        <a href={`${base}guides/contract/`}>the contract guide</a>. For a player
+        that looks like something without writing any, add the optional default
+        theme, <code>{themeImport}</code>, which
+        {' '}
+        <a href={packageUrl(entryPage.dir)}>the package reference</a> covers.
+      </p>
+      <figure class="well">
+        <Code code={fullSource} lang="tsx" {...shikiConfig} />
+        <figcaption><code>{fullPath}</code></figcaption>
+      </figure>
+      <p class="note">
+        Controls draw themselves only where the provider behind them reports it
+        can honour the command, so this composition is a different set of buttons
+        against a YouTube video than against an MP4. Which capabilities each
+        adapter reports is in
+        {' '}
+        <a href={`${base}guides/capabilities-matrix/`}>the capability matrix</a>.
+      </p>
+    </section>
+
+    <section class="step">
+      <h2 id="providers">Every provider, one prop</h2>
+      <p>
+        The <code>source</code> value is what chooses an adapter, and it is the
+        only thing that changes between them. An adapter is imported
+        dynamically, so the one your source selects is the only one a reader of
+        your site downloads — together with whatever that adapter brings with
+        it, which for HLS is almost all of the cost. Both columns are gzipped:
+        the adapter measured off the built artifact by the module
+        {' '}
+        <code>pnpm test:budgets</code> enforces, and its dependency measured
+        from the entry a bundler resolves.
+      </p>
+
+      {
+        /* Its own scroll container, so a table wider than a phone scrolls inside
+         * the column rather than pushing the page sideways at 320px. The same
+         * treatment `/providers`' comparison gets, for the same reason. */
+      }
+      <div class="scroller">
+        <table class="costs">
+          <caption class="u-visually-hidden">
+            The adapter each provider is served by, its gzipped size, and the
+            gzipped size of the dependency it brings with it
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Provider</th>
+              <th scope="col">Adapter</th>
+              <th scope="col" class="costs__size">Gzipped</th>
+              <th scope="col">Brings with it</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              adapters.map((adapter) => (
+                <tr>
+                  <th scope="row">
+                    <a href={providerUrl(adapter.slug)}>{adapter.provider}</a>
+                  </th>
+                  <td>
+                    <a href={packageUrl(adapter.dir)}>
+                      <code>{adapter.name}</code>
+                    </a>
+                  </td>
+                  <td class="costs__size u-tabular">
+                    {adapter.size.toFixed(1)} kB
+                  </td>
+                  <td>
+                    {adapter.dependency === null ? (
+                      <span aria-hidden="true">&mdash;</span>
+                    ) : (
+                      <>
+                        <code>{adapter.dependency.package}</code>{' '}
+                        <span class="u-tabular">
+                          {adapter.dependency.kilobytes.toFixed(1)} kB
+                        </span>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <p class="note">
+        A dependency is downloaded only when the adapter that imports it is, and
+        hls.js not even then where the browser plays HLS itself — Safari and iOS
+        never fetch it. YouTube and Wistia bring nothing because they load their
+        player from their own origin at run time, which is a request rather than
+        a package in your bundle. The primitives themselves are
+        {' '}
+        {primitives.size.toFixed(1)} kB gzipped, excluding React, against a
+        ceiling of {primitives.budget} kB the same gate enforces. A provider name
+        above links to the source values it accepts; the adapter beside it links
+        to what that package reports about itself.
+      </p>
+    </section>
+
+    <section class="step">
+      <h2 id="next">Where to go next</h2>
+      <ul class="onward">
+        {
+          onward.map(({ href, label, line }) => (
+            <li>
+              <a href={href}>{label}</a>
+              <span>{line}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+  </main>
+</Base>
+
+<style>
+  /* Wider than the measure because two of the sections hold a full-width code
+     well and one holds a table, and narrower than `/archetypes` because nothing
+     here mounts a player. A literal where the decision is made, as `DESIGN.md`
+     requires of a page's own maximum — one column width is not evidence about
+     another — and prose inside is still held to the measure.
+
+     `minmax(0, 1fr)` rather than the implicit `auto` track, so the code wells
+     and the cost table set their own overflow instead of setting the column's
+     minimum and pushing the page sideways at 320px. */
+  .page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+    max-inline-size: 56rem;
+    margin-inline: auto;
+    padding: var(--space-7) var(--space-5) var(--space-8);
+  }
+
+  /* Held to the same measure as prose anywhere else on the site. It is set one
+     rung up, so the same inline size is fewer characters than the token was
+     measured at — the right direction for a lead. */
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-ink-muted);
+    max-inline-size: var(--measure);
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+    margin-block-start: var(--space-6);
+  }
+
+  .step p {
+    max-inline-size: var(--measure);
+  }
+
+  .note {
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  .note code {
+    font-size: var(--text-xs);
+    color: var(--color-ink);
+  }
+
+  /* The one line a reader types. A recessed well like a code block, which is
+     what it is, at a size that reads as an instruction rather than as prose.
+     `overflow-wrap: anywhere` so it wraps instead of widening the page on a
+     narrow screen — there is no scroll container here to hand the overflow to,
+     because the line is short enough that one would be chrome around nothing. */
+  .command {
+    justify-self: start;
+    max-inline-size: 100%;
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--color-sunken);
+    border-radius: var(--radius-md);
+    overflow-wrap: anywhere;
+  }
+
+  .command code {
+    font-size: var(--text-md);
+  }
+
+  /* A code block and the path it was printed from. The caption is the whole
+     point of the figure: it is what lets a reader check that the block above is
+     a file rather than something written for the page, and it is where they go
+     to read the rest of it. */
+  .well {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+    margin: 0;
+  }
+
+  .well figcaption {
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
+  .well figcaption code {
+    font-size: var(--text-xs);
+  }
+
+  .scroller {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .costs {
+    inline-size: 100%;
+    border-collapse: collapse;
+    text-align: start;
+  }
+
+  .costs th,
+  .costs td {
+    padding: var(--space-2) var(--space-4) var(--space-2) 0;
+    text-align: start;
+    white-space: nowrap;
+    border-block-end: var(--line-width) solid var(--color-line);
+  }
+
+  .costs thead th {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-regular);
+    color: var(--color-ink-subtle);
+    border-block-end-color: var(--color-line-strong);
+  }
+
+  .costs tbody th {
+    font-size: var(--text-md);
+    font-weight: var(--weight-regular);
+  }
+
+  .costs td {
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  /* The figures read down one edge, which is the only reason to move a column
+     off the start edge on this page. */
+  .costs .costs__size {
+    padding-inline-end: 0;
+    text-align: end;
+  }
+
+  /* A list of ways on, each a destination and one line about it. Rows separated
+     by nothing at all: the section above already carries a ruled table, and a
+     second set of hairlines directly under it would read as one long grid. */
+  .onward {
+    display: grid;
+    gap: var(--space-3);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .onward li {
+    display: grid;
+    gap: var(--space-1);
+    max-inline-size: var(--measure);
+  }
+
+  @media (min-width: 40rem) {
+    .onward li {
+      grid-template-columns: 10rem minmax(0, 1fr);
+      gap: var(--space-2) var(--space-5);
+      align-items: baseline;
+      max-inline-size: none;
+    }
+  }
+
+  .onward span {
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+</style>

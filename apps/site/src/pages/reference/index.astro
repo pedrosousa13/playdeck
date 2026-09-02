@@ -11,6 +11,7 @@ const packages = await referencePackages();
 // hand-written path would be identical and would stop being identical silently
 // (#435).
 const packageUrl = (dir) => `${import.meta.env.BASE_URL}reference/${dir}/`;
+const startUrl = `${import.meta.env.BASE_URL}start/`;
 
 // The scope every package on this index shares, taken from the names rather
 // than written down, so a package published under a different scope one day
@@ -47,6 +48,18 @@ const common = versions.size === 1 ? packages[0].version : undefined;
       from npm are the same text.
     </p>
     <Sweep form="accent" />
+
+    {
+      /* The way out of this page for the reader it is worst for (#547). This
+       * index answers "which package is which" and cannot answer "which one do
+       * I install", and a reader who arrives here from the landing page's pitch
+       * has the second question. Above the list rather than under it, because a
+       * reader who has already read eight names has answered it themselves. */
+    }
+    <p class="detour">
+      New to the library? <a href={startUrl}>Start</a> is one package, one
+      composition, and what each provider costs.
+    </p>
 
     {
       /* The two facts that were repeated down the column, said once each above
@@ -128,6 +141,15 @@ const common = versions.size === 1 ? packages[0].version : undefined;
     font-size: var(--text-lg);
     color: var(--color-ink-muted);
     max-inline-size: var(--measure);
+  }
+
+  /* The detour to the quickstart. Held to the measure like every other
+     paragraph on this site, and set at the body rung rather than the lead's:
+     it is an aside for one kind of reader, and a second element at the lead's
+     size would read as a second lead. */
+  .detour {
+    max-inline-size: var(--measure);
+    color: var(--color-ink-muted);
   }
 
   /* The two facts that used to be repeated down the column, said once each. At

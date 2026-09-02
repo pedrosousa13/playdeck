@@ -188,6 +188,7 @@ test('aria-current marks the section the reader is in, and only that one', async
  */
 const routes = [
   '',
+  'start/',
   'guides/',
   'guides/contract/',
   'reference/',
