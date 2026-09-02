@@ -6,8 +6,10 @@ import type {
   MediaDimensions,
   PlayerError,
   ProviderAdapter,
-  ProviderStateListener
+  ProviderStateListener,
+  ProviderStatePatch
 } from '@playdeck/core';
+import { createSeekingVideo } from '@playdeck/test-support/seeking-video';
 import { createNativeProvider } from '../src/index';
 import { captureRethrows } from './fixtures/capture-rethrows';
 
@@ -1789,4 +1791,94 @@ test('gives a provider built after a swap a fresh buffered record', async () => 
   await second.attach();
 
   expect(publishedBuffered(secondPatches)).toEqual([[]]);
+});
+
+// The boundary correction is a write to `currentTime`, and a write is a seek
+// that reports itself back through the `timeupdate` handler that issued it,
+// still at or past the boundary. Correcting again from there asks the playhead
+// to move where it already is, so the element seeks for as long as the player
+// is attached. The re-entry is what these tests are about, so they need an
+// element that answers a write with the events a browser sends — a plain
+// happy-dom element takes the write silently, and every such run looks like a
+// single correction.
+test('corrects an overshot playhead onto the end boundary once', async () => {
+  const { media, place, settle, writes } = createSeekingVideo();
+  const provider = createNativeProvider(media, { endTime: 5 });
+  await provider.attach();
+  place(5.5);
+
+  media.dispatchEvent(new Event('timeupdate'));
+  settle();
+
+  expect(writes).toEqual([5]);
+});
+
+// The consumer-visible half of the same defect. Every corrective write raises
+// `seeking`, and the write that replaces an outstanding seek leaves the
+// replaced one with no `seeked` to lower it again, so a player that keeps
+// correcting publishes `seeking: true` on a player that has stopped.
+test('leaves seeking false at rest after the end boundary', async () => {
+  const { media, place, settle } = createSeekingVideo();
+  const patches: ProviderStatePatch[] = [];
+  const provider = createNativeProvider(media, { endTime: 5 });
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  place(5.5);
+
+  media.dispatchEvent(new Event('timeupdate'));
+  settle();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({ playback: 'ended' })
+  );
+  expect(patches.filter((patch) => 'seeking' in patch).at(-1)).toMatchObject({
+    seeking: false
+  });
+});
+
+// A playhead that arrives past the boundary while the player is already ended
+// is still corrected: what suppresses the second write is the position, not the
+// ended latch. Decoding delivers frames after the boundary `pause()`, and each
+// one reports a position outside the configured window until something moves it
+// back.
+test('corrects a further overshoot after the boundary already ended', async () => {
+  const { media, place, settle, writes } = createSeekingVideo();
+  const provider = createNativeProvider(media, { endTime: 5 });
+  await provider.attach();
+  place(5.5);
+  media.dispatchEvent(new Event('timeupdate'));
+  settle();
+
+  place(5.9);
+  media.dispatchEvent(new Event('timeupdate'));
+  settle();
+
+  // One write per overshoot, and `writes` is read whole rather than cleared
+  // between the two: an ordered record of every write is what tells a second
+  // correction from a second run of the first.
+  expect(writes).toEqual([5, 5]);
+});
+
+// A real element does not have to land on the value written — the seek
+// algorithm clamps into `seekable`, and engines snap to a frame boundary — so
+// the playhead can settle a hair PAST `endTime`. A correction guarded by
+// `currentTime !== endTime` is true again on the re-entry it just caused, and
+// the run resumes. The distance does not matter to the cut, which is why this
+// element overshoots by a 60fps frame rather than by a tuned amount: what stops
+// the second write is that the playhead is still sitting where the first
+// correction put it, wherever that was.
+test('corrects once against an element that settles past the boundary', async () => {
+  const landing = 1 / 60;
+  const { media, place, settle, writes } = createSeekingVideo(
+    (requested) => requested + landing
+  );
+  const provider = createNativeProvider(media, { endTime: 5 });
+  await provider.attach();
+  place(5.5);
+
+  media.dispatchEvent(new Event('timeupdate'));
+  settle();
+
+  expect(writes).toEqual([5]);
+  expect(media.currentTime).toBe(5 + landing);
 });

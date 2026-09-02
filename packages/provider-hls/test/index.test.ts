@@ -6,6 +6,7 @@ import type {
   ProviderEvent,
   ProviderStatePatch
 } from '@playdeck/core';
+import { createSeekingVideo } from '@playdeck/test-support/seeking-video';
 import { createHlsProvider } from '../src/index';
 import { captureRethrows } from './fixtures/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
@@ -1370,5 +1371,36 @@ test('a throwing subscriber does not starve the subscribers behind it', () => {
 
   expect(after.mock.calls.map((call) => call[0])).toContainEqual({
     hlsEngine: 'hls.js'
+  });
+});
+
+// The end boundary is the native adapter's, and this provider composes it, so
+// the fixed point that stops a corrected playhead from seeking again is
+// inherited rather than reimplemented. Asserted here because composition is the
+// only thing holding it: nothing else in this file exercises the boundary at
+// all, so an HLS provider that grew a boundary of its own would seek forever at
+// `endTime` with no test on this side to say so.
+test('inherits the native end boundary correction, and issues it once', async () => {
+  const { media, place, settle, writes } = createSeekingVideo();
+  stubNativeHlsSupport(media);
+  const patches: ProviderStatePatch[] = [];
+  const provider = createHlsProvider(
+    media,
+    { ...source, engine: 'native' },
+    { endTime: 5, loadHls: fakeHlsLoader().loadHls }
+  );
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  place(5.5);
+
+  media.dispatchEvent(new Event('timeupdate'));
+  settle();
+
+  expect(writes).toEqual([5]);
+  expect(patches).toContainEqual(
+    expect.objectContaining({ playback: 'ended' })
+  );
+  expect(patches.filter((patch) => 'seeking' in patch).at(-1)).toMatchObject({
+    seeking: false
   });
 });
