@@ -7,25 +7,9 @@
 // attach the fake over a media element's `textTracks` getter, the same way
 // existing tests override `duration`/`buffered`/`seekable`.
 //
-// Why it lives here (#314). Both provider packages carried their own copy.
-// Diffing them found no behavioural difference at all: the two files differed
-// only in comment wording, plus a native-only `mountNative`/`latest` pair that
-// builds a video element around the fake and merges the patches it emits.
-// Those two helpers are genuinely native-specific and stayed in
-// packages/provider-native/test/fixtures/fake-text-tracks.ts — there was no
-// deliberate difference in the fixture core that needed preserving as a
-// parameter. The comment wording here is the union of the two copies.
-//
-// Two details are load-bearing and easy to lose when reading past them:
-//
-//   - `default` is only set when the init explicitly provides it, so tests can
-//     produce a fake track that omits the property entirely (as real
-//     `TextTrack` objects do) rather than defaulting it to `false`.
-//
-//   - `mode` is a real accessor (not a plain field) that calls `onModeChange`
-//     when assigned — mirroring the DOM spec, where assigning `TextTrack.mode`
-//     queues a `change` event on the owning `TextTrackList`. Tests that don't
-//     care about that cascade can ignore the callback entirely.
+// It lives in its own package so that the native and HLS tests share one
+// definition, and so that neither provider has to reach into the other's test
+// tree to get it.
 export type FakeTrackInit = {
   readonly kind: string;
   readonly label: string;
@@ -69,7 +53,14 @@ export const createFakeTrack = (
     label: init.label,
     language: init.language,
     id: init.id ?? '',
+    // Set only when the init provides it, so a fake track can omit the
+    // property entirely the way a real `TextTrack` does, rather than carrying
+    // a defaulted `false` no caller asked for.
     ...(init.default !== undefined ? { default: init.default } : {}),
+    // A real accessor rather than a plain field: assigning `TextTrack.mode`
+    // queues a `change` event on the owning `TextTrackList` in the DOM spec,
+    // and `onModeChange` is how that cascade reaches the fake list. A test
+    // that does not exercise the cascade can leave the callback off.
     get mode() {
       return mode;
     },
