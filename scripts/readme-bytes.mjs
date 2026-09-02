@@ -4,16 +4,16 @@
 //
 // The shape is `docs-examples.mjs`'s -- a marked region the generator owns, a
 // `--check` mode that fails instead of writing -- applied to numbers instead of
-// code. The reason is the same failure this repo has already had twice: a
-// hand-maintained table is falsified by any change that moves a bundle, and
-// nothing goes red. #509 shipped that table with three figures already stale
-// from its own sibling commits, and #317 was the same rot on the origins table.
+// code. The reason is a failure this repo has had before: a hand-maintained
+// table is falsified by any change that moves a bundle, and nothing goes red.
+// #509 shipped that table with figures already stale from its own sibling
+// commits, and #317 was the same rot on the origins table.
 //
 // Two sources are read, and they are not equally strong.
 //
 // The first-party figures come from `bundle-budgets.mjs`, which is what
 // `pnpm test:budgets` gates against, so the table cannot disagree with the
-// gate. The two third-party figures cannot: hls.js and `@vimeo/player` are
+// gate. The third-party figures cannot: hls.js and `@vimeo/player` are
 // external to those bundles, so the budget script never sees them. They are
 // measured here from the installed packages instead, and the version each was
 // measured at is checked against the manifest that pins it -- a stale install
@@ -30,6 +30,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
+import { build } from 'vite';
 import { measureBundles, targets } from './bundle-budgets.mjs';
 
 const console = globalThis.console;
@@ -67,8 +68,8 @@ const kb = (value) => (value / 10).toFixed(1);
  * `carried` is what "the above" stands for: the two HLS rows quote the row
  * before them rather than repeating its addends, so the total has to be told
  * what it is adding to. `emphasis` is on one addend only, and deliberately: the
- * hls.js figure is six times the row it is added to, and it is the reason that
- * row is worth printing at all.
+ * hls.js figure dwarfs the row it is added to, and it is the reason that row is
+ * worth printing at all.
  * @param {Record<string, number>} figures
  * @returns {{ playing: string; downloads: string; total: number }[]}
  */
@@ -238,6 +239,10 @@ export const proseAnchors = (figures, budgets, versions) => [
  * than a no-op. Zero means the sentence it guards was reworded and is now
  * ungated -- the silent failure this whole script exists to prevent -- and more
  * than one means it is guarding a number it was not aimed at.
+ *
+ * Every misaimed anchor is reported, not only the first. One reworded paragraph
+ * usually breaks more than one of them, and finding that out a CI run at a time
+ * is the slowest way to learn it.
  * @param {string} text
  * @param {string} table
  * @param {readonly { label: string; pattern: RegExp; value: string }[]} anchors
@@ -245,31 +250,112 @@ export const proseAnchors = (figures, budgets, versions) => [
  */
 export const renderReadme = (text, table, anchors) => {
   const open = text.indexOf(`${OPEN}\n`);
-  if (open === -1) throw new Error(`${README} has no ${OPEN} marker.`);
+  if (open === -1) {
+    throw new Error(
+      `${README} has no ${OPEN} marker. Put it back around the byte table, or drop this script.`
+    );
+  }
   const close = text.indexOf(`\n${CLOSE}`, open);
-  if (close === -1) throw new Error(`Marker ${OPEN} is never closed.`);
+  if (close === -1) {
+    throw new Error(
+      `Marker ${OPEN} is never closed. Add a ${CLOSE} line after the byte table.`
+    );
+  }
 
   let out = `${text.slice(0, open)}${OPEN}\n\n${table}\n${text.slice(close)}`;
 
+  /** @type {string[]} */
+  const misaimed = [];
   for (const { label, pattern, value } of anchors) {
     const matches = out.match(new RegExp(pattern, 'g')) ?? [];
     if (matches.length !== 1) {
-      throw new Error(
-        `The anchor for ${label} matched ${matches.length} places in ${README}, not one. Its sentence was reworded, or the pattern is aimed too widely.`
+      misaimed.push(
+        `  The anchor for ${label} matched ${matches.length} places in ${README}, not one. Its sentence was reworded, or the pattern is aimed too widely.`
       );
+      continue;
     }
     out = out.replace(pattern, value);
+  }
+  if (misaimed.length > 0) {
+    throw new Error(
+      `Anchors that no longer own exactly one number:\n${misaimed.join('\n')}`
+    );
   }
 
   return out;
 };
 
-// Where the two third-party figures come from, and the manifest that pins each.
-// The minified build rather than the ESM one a bundler consumes: what a page
-// downloads is what came out of the consumer's minifier, and the published
-// `.min.js` is the closest thing to that which does not depend on whose
-// bundler it is. `packages/provider-hls/node_modules` and not the root, because
-// that is the copy the adapter's `import('hls.js')` resolves to.
+/**
+ * Everything about the section that the measurements disagree with, one reason
+ * per figure.
+ *
+ * `--check` used to say only that something no longer matched, which in CI
+ * cannot tell a bundle that grew from a dependency that was upgraded from a
+ * paragraph somebody reworded. Each of those has a different fix, and the log
+ * is the only place a reader finds out which one they are looking at.
+ *
+ * Table rows are compared by the value of their cells rather than as text, so
+ * that one figure widening a column reports the row that moved rather than
+ * every row under it.
+ * @param {string} text
+ * @param {string} table
+ * @param {readonly { label: string; pattern: RegExp; value: string }[]} anchors
+ * @returns {string[]}
+ */
+export const driftReasons = (text, table, anchors) => {
+  /** @param {string} block @returns {Map<string, string>} */
+  const rowsOf = (block) =>
+    new Map(
+      block.split('\n').map((line) => {
+        const [, playing = '', downloads = '', total = ''] = line
+          .split('|')
+          .map((cell) => cell.trim());
+        return [playing, `${downloads} = ${total}`];
+      })
+    );
+
+  const open = text.indexOf(`${OPEN}\n`);
+  const close = text.indexOf(`\n${CLOSE}`, open);
+  const printed = rowsOf(text.slice(open + OPEN.length, close).trim());
+
+  /** @type {string[]} */
+  const reasons = [];
+  for (const [playing, measured] of rowsOf(table)) {
+    const was = printed.get(playing);
+    if (was === measured) continue;
+    reasons.push(
+      was === undefined
+        ? `  The table has no row for ${playing}, which measures ${measured}.`
+        : `  The row for ${playing} measures ${measured}, and ${README} prints ${was}.`
+    );
+  }
+  for (const { label, pattern, value } of anchors) {
+    const [found] = text.match(pattern) ?? [];
+    if (found !== value) {
+      reasons.push(
+        `  The prose figure for ${label} measures ${value}, and ${README} prints ${found}.`
+      );
+    }
+  }
+  return reasons;
+};
+
+// Where the third-party figures come from, and the manifest that pins each.
+//
+// `file` is the entry a bundler resolves from the adapter's dynamic import,
+// not a published `.min.js`. The section's premise is what a page downloads,
+// and no bundler graph reaches a `.min.js`: those are UMD browser globals.
+// hls.js routes `import` to `dist/hls.mjs` and `hls.js/light` to
+// `dist/hls.light.mjs` through its `exports` map; `@vimeo/player` has no
+// `exports` map and routes it through `module`, which is `dist/player.es.js`.
+//
+// Those entries ship as authored: unbundled, unminified, comments and all.
+// Gzipping one where it sits would weigh the source rather than what a page
+// downloads, so each is put through the same build the first-party bundles are
+// -- see `minifiedGzipKilobytes` below.
+//
+// `packages/provider-hls/node_modules` and not the root, because that is the
+// copy the adapter's `import('hls.js')` resolves to.
 /**
  * @type {readonly {
  *   key: string;
@@ -279,7 +365,7 @@ export const renderReadme = (text, table, anchors) => {
  *   file: string;
  * }[]}
  */
-export const thirdParty = [
+const thirdParty = [
   {
     key: 'hlsJs',
     package: 'hls.js',
@@ -288,7 +374,7 @@ export const thirdParty = [
       manifest: 'packages/provider-hls/package.json',
       field: 'dependencies'
     },
-    file: 'dist/hls.min.js'
+    file: 'dist/hls.mjs'
   },
   {
     key: 'hlsJsLight',
@@ -298,7 +384,7 @@ export const thirdParty = [
       manifest: 'packages/provider-hls/package.json',
       field: 'dependencies'
     },
-    file: 'dist/hls.light.min.js'
+    file: 'dist/hls.light.mjs'
   },
   {
     key: 'vimeoSdk',
@@ -308,7 +394,7 @@ export const thirdParty = [
       manifest: 'packages/provider-vimeo/package.json',
       field: 'dependencies'
     },
-    file: 'dist/player.min.js'
+    file: 'dist/player.es.js'
   }
 ];
 
@@ -340,6 +426,52 @@ export const pinnedVersion = (target, installed, manifests) => {
   return installed;
 };
 
+/**
+ * A third-party entry put through the same build the first-party bundles are,
+ * then gzipped the same way, so that a table row adds like units.
+ *
+ * Every first-party figure is the gzipped size of a `dist/index.js` that
+ * `vite build` produced from a `lib` entry with no `minify` set, and every row
+ * of the table adds a first-party figure to a third-party one. Which minifier
+ * that default selects, and how hard it squeezes, is not something this file
+ * needs to know or may assume -- what the sum needs is that the same one ran
+ * over both sides. So this calls `vite build` too, at the same defaults, rather
+ * than reaching for a standalone minifier that would put the two halves of a
+ * row in different units. `write: false` keeps it in memory; `sourcemap: false`
+ * because the map is not downloaded and no figure should carry it.
+ *
+ * The entries measured here are self-contained -- neither imports anything at
+ * run time -- so bundling adds nothing to them and this is minification in
+ * practice. Chunks are summed anyway rather than assuming one, because that is
+ * what a consumer whose graph did split would download.
+ * @param {string} path Relative to the repository root.
+ * @returns {Promise<number>}
+ */
+const minifiedGzipKilobytes = async (path) => {
+  const built = await build({
+    configFile: false,
+    logLevel: 'silent',
+    root: repoRoot,
+    build: {
+      write: false,
+      sourcemap: false,
+      emptyOutDir: false,
+      lib: { entry: join(repoRoot, path), formats: ['es'], fileName: 'entry' }
+    }
+  });
+
+  const code = (Array.isArray(built) ? built : [built])
+    .flatMap((bundle) => ('output' in bundle ? [...bundle.output] : []))
+    .flatMap((chunk) => (chunk.type === 'chunk' ? [chunk.code] : []))
+    .join('');
+  if (code === '') {
+    throw new Error(
+      `Building ${path} produced no code. Check that the entry the package's manifest points at still exists.`
+    );
+  }
+  return gzipSync(code).length / 1024;
+};
+
 /** @param {string} path @returns {Promise<Record<string, unknown>>} */
 const readJson = async (path) =>
   JSON.parse(await readFile(join(repoRoot, path), 'utf8'));
@@ -356,15 +488,20 @@ const measure = async () => {
   /** @param {string} name */
   const sizeOf = (name) => {
     const found = measured.find((bundle) => bundle.name === name);
-    if (!found)
-      throw new Error(`bundle-budgets.mjs no longer measures ${name}`);
+    if (!found) {
+      throw new Error(
+        `bundle-budgets.mjs no longer measures ${name}. Point this figure at a target that module still has, or drop the row that prints it.`
+      );
+    }
     return tenths(found.size);
   };
   /** @param {string} name */
   const budgetOf = (name) => {
     const found = targets.find((target) => target.name === name);
     if (found?.budget == null) {
-      throw new Error(`bundle-budgets.mjs no longer budgets ${name}`);
+      throw new Error(
+        `bundle-budgets.mjs no longer budgets ${name}. Give it a budget again, or take the sentence that quotes one out of ${README}.`
+      );
     }
     return found.budget;
   };
@@ -398,8 +535,7 @@ const measure = async () => {
     );
     versions[target.package] = pinnedVersion(target, installed, manifests);
     figures[target.key] = tenths(
-      gzipSync(await readFile(join(repoRoot, target.installedAt, target.file)))
-        .length / 1024
+      await minifiedGzipKilobytes(join(target.installedAt, target.file))
     );
   }
 
@@ -419,11 +555,9 @@ const main = async () => {
   const { figures, budgets, versions } = await measure();
   const path = join(repoRoot, README);
   const before = await readFile(path, 'utf8');
-  const after = renderReadme(
-    before,
-    renderTable(composeRows(figures)),
-    proseAnchors(figures, budgets, versions)
-  );
+  const table = renderTable(composeRows(figures));
+  const anchors = proseAnchors(figures, budgets, versions);
+  const after = renderReadme(before, table, anchors);
 
   if (before === after) {
     if (!check) console.log(`${README} already matches the measurements.`);
@@ -431,7 +565,7 @@ const main = async () => {
   }
   if (check) {
     throw new Error(
-      `${README}'s byte figures no longer match what is built and installed — run \`pnpm docs:bytes\`.`
+      `${README}'s byte figures no longer match what is built and installed — run \`pnpm docs:bytes\`:\n${driftReasons(before, table, anchors).join('\n')}`
     );
   }
   await writeFile(path, after);

@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   composeRows,
+  driftReasons,
   pinnedVersion,
   proseAnchors,
   renderReadme,
@@ -153,6 +154,33 @@ test('an anchor that matches twice fails rather than rewriting both', () => {
         anchors()
       ),
     /matched 2 places/
+  );
+});
+
+test('names the row and the prose figure that drifted, not just "something"', () => {
+  const table = renderTable(composeRows(figures));
+  const drifted = readme.replace('stale table', table.replace('4.8', '9.9'));
+  const reasons = driftReasons(drifted, table, anchors());
+
+  assert.deepEqual(reasons, [
+    '  The row for HLS on Safari and iOS measures the above + HLS adapter 4.8 = **35.6 KB**, and README.md prints the above + HLS adapter 9.9 = **35.6 KB**.',
+    '  The prose figure for the stylesheet, excluded from every row measures 5.8, and README.md prints 0.0.',
+    "  The prose figure for hls.js's smallest build measures 106.4, and README.md prints 0.0.",
+    '  The prose figure for the HLS adapter over it measures 4.8, and README.md prints 0.0.',
+    '  The prose figure for what `hls.js/light` saves measures 53.5, and README.md prints 0.0.',
+    "  The prose figure for core's budget measures 10, and README.md prints 0.",
+    "  The prose figure for the primitives' budget measures 18, and README.md prints 0.",
+    "  The prose figure for the stylesheet's budget measures 2.5, and README.md prints 0.",
+    '  The prose figure for the measured hls.js version measures 1.6.16, and README.md prints 0.0.0.',
+    '  The prose figure for the measured `@vimeo/player` version measures 2.30.4, and README.md prints 0.0.0.'
+  ]);
+});
+
+test('reports nothing once the section already carries the measurements', () => {
+  const table = renderTable(composeRows(figures));
+  assert.deepEqual(
+    driftReasons(renderReadme(readme, table, anchors()), table, anchors()),
+    []
   );
 });
 

@@ -786,10 +786,11 @@ jobs:
       # `pnpm test:budgets` gates against, so a change that moves a bundle
       # cannot leave a stale figure in the prose (#511). It runs here and not
       # beside `docs:check` in `static` for one reason: `static` builds no
-      # packages, and seven of the figures are the gzipped size of a
+      # packages, and the first-party figures are the gzipped size of a built
       # `dist/index.js`. `pnpm build` above is what makes them measurable, and
       # duplicating that build into `static` would cost more than the check.
-      # The other two are read from `node_modules`, which every job installs.
+      # The third-party figures are read from `node_modules`, which every job
+      # installs.
       - run: pnpm docs:bytes:check
 
   # Every job in this workflow runs on Linux, deliberately. A macOS job
