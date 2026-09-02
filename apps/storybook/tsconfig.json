@@ -19,9 +19,7 @@
     // references below are what make `tsc -b` build those declarations first.
     "paths": {
       "@playdeck/core": ["../../packages/core/dist/index.d.ts"],
-      "@playdeck/provider-hls": [
-        "../../packages/provider-hls/dist/index.d.ts"
-      ],
+      "@playdeck/provider-hls": ["../../packages/provider-hls/dist/index.d.ts"],
       "@playdeck/react": ["../../packages/react/dist/index.d.ts"]
     },
     "tsBuildInfoFile": "dist/.tsbuildinfo"
