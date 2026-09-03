@@ -7,13 +7,17 @@ const preview: Preview = {
   tags: ['autodocs'],
   globalTypes: {
     theme: {
-      description: 'Mount the optional @playdeck/react/theme.css',
+      description:
+        'Mount one of the optional stylesheets: @playdeck/react/theme.css ' +
+        '(overlaid) or @playdeck/react/docked.css (docked). Never both — ' +
+        'they share one `@layer playdeck`.',
       toolbar: {
         title: 'Theme',
         icon: 'paintbrush',
         items: [
           { value: 'headless', title: 'Headless' },
-          { value: 'themed', title: 'Themed' }
+          { value: 'themed', title: 'Themed' },
+          { value: 'docked', title: 'Docked' }
         ],
         dynamicTitle: true
       }
