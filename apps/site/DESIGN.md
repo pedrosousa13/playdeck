@@ -105,9 +105,10 @@ clearing it is what fixes the ladder's ceiling above.
 
 **There is a sixth set of colour roles, `--stage-*`, and it is not a third
 theme.** `--stage-field`, `--stage-ink`, `--stage-surface`, `--stage-sunken`,
-`--stage-line-strong` and `--stage-accent` are declared once in `tokens.css` and
-never reassigned, so they do not move with `data-theme` or with
-`prefers-color-scheme`. Five of the six are the dark theme's own raw values, and
+`--stage-line-strong`, `--stage-accent` and `--stage-hairline` are declared
+once in `tokens.css` and never reassigned, so they do not move with
+`data-theme` or with `prefers-color-scheme`. Six of the seven are the dark
+theme's own raw values, and
 `--stage-field` `#0A0A0F` is a near-black of its own, a shade lighter than the
 dark theme's field. They exist because a picture
 is watched in the dark whatever the room is lit like, and a player frame that

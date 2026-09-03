@@ -373,6 +373,11 @@ for (const entry of readySources) {
      * `--playdeck-*` value that could put a colour on this page from outside
      * the system. */
     --playdeck-color-focus: var(--stage-accent);
+    /* `docked` only: the bar's top border, the activation button's border and
+     * the settings/captions menu's border, since that skin draws no scrim to
+     * supply any of those edges. Inert under `theme`, which never reads this
+     * token. */
+    --playdeck-color-hairline: var(--stage-hairline);
     /* The seek slider's three grounds, and the one place here where the choice
      * is arithmetic rather than taste. On `--color-line`, the quieter
      * separator role, the loaded range measures below the 3:1 that non-text UI

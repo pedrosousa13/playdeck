@@ -210,6 +210,15 @@
   --stage-sunken: var(--dark-sunken);
   --stage-line-strong: var(--dark-line-strong);
   --stage-accent: var(--dark-blue);
+  /* `docked.css`'s one added token, read in three places: the control bar's
+   * top border, the activation button's own border, and the settings/captions
+   * menu's border — `docked` draws no scrim to supply any of those edges the
+   * way `theme`'s gradient does. Set from `--dark-line` rather than a new
+   * hex, the same way the other `--stage-*` roles reuse a dark-mode primitive
+   * instead of each carrying a literal — it lands close to `docked.css`'s own
+   * dark default (`#2a2a2d` on `#141416`). Never moves with `data-theme`,
+   * like every other `--stage-*` token. */
+  --stage-hairline: var(--dark-line);
 
   /* ---- type ---------------------------------------------------------------
    * Two families from one superfamily. Plex Sans carries prose; Plex Mono

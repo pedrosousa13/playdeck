@@ -304,6 +304,31 @@ test('below 48rem, the resting docked viewport already gives the controls a row 
 });
 
 /**
+ * `docked.css` draws the bar's top border from `--playdeck-color-hairline`
+ * (`border-block-start`, read here as the physical `border-top-color`
+ * Chromium reports), and `.bench__stage` is supposed to map that token to
+ * `--stage-hairline` so the line is always the stage's own dark line rather
+ * than whichever literal `docked.css` falls back to on its own. `--stage-*`
+ * never moves with `prefers-color-scheme`, so both schemes must agree.
+ */
+test('under docked, the bar’s top hairline is the stage’s own dark line in both colour schemes', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(landing);
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+  await position(page, 'skin', 'docked').click();
+
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const borderTop = await controls(page).evaluate(
+      (el) => getComputedStyle(el).borderTopColor
+    );
+    expect(borderTop).toBe('rgb(38, 38, 46)');
+  }
+});
+
+/**
  * The maintainer's own ruling on #594: the second theme has to differ in
  * *layout*, not only in colour, or two themes that only repaint the same box
  * read as a palette picker rather than as an argument that the markup is a
