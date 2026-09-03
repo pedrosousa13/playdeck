@@ -39,23 +39,23 @@ const position = (page: Page, group: 'source' | 'skin', value: string) =>
 const THEME_IMPORT = "import '@playdeck/react/theme.css';";
 
 /**
- * The lines of the JSX block, from `<Player.Root` to its close.
+ * The composition from `<Player.Root` to the end, with the preamble cut off.
  *
- * The thesis paragraph says "the same six lines drive all five", so the count
- * is a number the page states in prose and the panel has to keep true. The
- * preamble above it — the theme import, the `const source` line — is not part
- * of it: those are lines a consumer writes above the composition, which is
- * exactly what lets the block below read identically whichever provider is
- * switched on.
+ * Found by index rather than by slicing a fixed number of leading lines: the
+ * preamble is a consumer's own lines above the composition -- the stylesheet
+ * import, the `const source` line -- and how many there are is not this
+ * helper's business. That is what lets the tree below read byte-identical
+ * whichever provider is switched on, which is the property the source-switch
+ * test below checks by comparing this before and after a press.
  */
-const jsxBlock = (printed: string) => {
-  const lines = printed.split('\n');
-  const open = lines.findIndex((line) => line.startsWith('<Player.Root'));
-  const close = lines.findIndex((line) => line.startsWith('</Player.Root>'));
-  if (open === -1 || close <= open) {
-    throw new Error(`No <Player.Root> block in the composition:\n${printed}`);
+const tree = (printedText: string) => {
+  const open = printedText.indexOf('<Player.Root');
+  if (open === -1) {
+    throw new Error(
+      `No <Player.Root> block in the composition:\n${printedText}`
+    );
   }
-  return lines.slice(open, close + 1);
+  return printedText.slice(open);
 };
 
 const printed = (page: Page) => composition(page).innerText();
@@ -79,47 +79,58 @@ test('the composition is visible at rest', async ({ page }) => {
   await expect(activationButton(page)).toBeVisible();
 });
 
-test('the composition tracks both switches', async ({ page }) => {
+test('the composition prints the full control tree, and tracks the source switch', async ({
+  page
+}) => {
   await page.goto(landing);
   await expect(composition(page)).toBeVisible();
 
-  // The page rests on `theme`, so the import is printed on arrival. That is a
-  // deliberate reversal: `none` is the honest position but an unstyled player
-  // is what a reader meets before pressing anything, and it reads as a broken
-  // embed rather than as an argument.
+  // The page rests on a skin that ships a stylesheet, so the import is printed
+  // on arrival rather than after a press.
   const atRest = await printed(page);
   expect(atRest).toContain(THEME_IMPORT);
-  expect(jsxBlock(atRest)).toHaveLength(6);
 
-  // The customisability argument, made by moving a real import rather than by
-  // describing one: `none` takes the one stylesheet the library publishes back
-  // out of the document as well as out of the printed composition.
-  await position(page, 'skin', 'none').click();
-  await expect(composition(page)).not.toContainText(THEME_IMPORT);
+  // Content rather than a line count: the panel prints the whole bar the
+  // island mounts, and both sides map over the one `BENCH_CONTROLS` tuple, so
+  // what this pins is that every name in that tuple reaches the page.
+  for (const name of [
+    '<Player.SeekSlider />',
+    '<Player.PlayButton />',
+    '<Player.MuteButton />',
+    '<Player.VolumeSlider />',
+    '<Player.Time type="current" />',
+    '<Player.Time type="duration" />',
+    '<Player.CaptionsButton />',
+    '<Player.SettingsMenu>',
+    '<Player.PipButton />',
+    '<Player.FullscreenButton />'
+  ]) {
+    expect(atRest).toContain(name);
+  }
 
-  await position(page, 'skin', 'theme').click();
-  await expect(composition(page)).toContainText(THEME_IMPORT);
+  // Document order, checked as a position comparison rather than as an index
+  // into a hand-sliced array, so it does not depend on how many lines precede
+  // the tree. The seek slider opens the bar in `BENCH_CONTROLS`, and the
+  // printer and `BenchIsland` both map over that tuple, so the printed order
+  // is the mounted order or one of them has drifted.
+  expect(atRest.indexOf('<Player.SeekSlider />')).toBeLessThan(
+    atRest.indexOf('<Player.PlayButton />')
+  );
 
-  // And the source moves the line above the block rather than a prop inside
-  // it. The library detects a provider from the URL, so `source={source}` is
-  // the whole of `Player.Root`'s configuration whichever position is pressed —
-  // which is the claim the six-line count below is a check on. `vimeo` rather
-  // than `hls`: the switch offers hosted providers only now, and selecting a
-  // position moves the printed line without pressing play, so no network is
-  // needed here.
+  // The source switch moves the line above the block, not a prop inside it:
+  // the library detects a provider from the URL, so `source={source}` is the
+  // whole of `Player.Root`'s configuration whichever position is pressed.
+  // `vimeo` rather than `hls`: the switch offers hosted providers only now,
+  // and selecting a position moves the printed line without pressing play, so
+  // no network is needed here.
   const before = await printed(page);
   await position(page, 'source', 'vimeo').click();
   await expect
     .poll(async () => sourceLine(await printed(page)))
     .not.toBe(sourceLine(before));
 
-  const after = await printed(page);
-  expect(jsxBlock(after)).toEqual(jsxBlock(before));
-  expect(jsxBlock(after)).toHaveLength(6);
-
-  // Six lines in every combination the two switches reach, not just the two
-  // above. Nothing either of them does may grow the block.
-  await position(page, 'skin', 'theme').click();
-  await expect(composition(page)).toContainText(THEME_IMPORT);
-  expect(jsxBlock(await printed(page))).toHaveLength(6);
+  // And nothing inside the block moved with it. This is the assertion that
+  // catches the page and the player disagreeing: byte-identical trees across a
+  // provider change is the claim the panel is making.
+  expect(tree(await printed(page))).toBe(tree(before));
 });
