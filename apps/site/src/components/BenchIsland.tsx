@@ -595,7 +595,18 @@ const Credit = ({ credit }: { readonly credit: BenchCredit }) => (
  * mount node as `--bench-aspect-ratio` -- the custom property
  * `.bench__stage`'s own rule in `Bench.astro` reads -- the same way
  * `Bench.astro` sets it inline for the position the page rests on before this
- * component ever mounts. */
+ * component ever mounts.
+ *
+ * `data-bench-skin` is mirrored onto the same mount node for the same reason:
+ * `docked`'s second row makes `Player.Viewport` -- which carries this
+ * attribute itself, see `Stage` below -- taller than this outer box's own
+ * ratio-locked cell can hold, and `Bench.astro`'s `.bench__stage[data-bench-skin='docked']`
+ * rule is what stops constraining that cell's height once a reader is on that
+ * skin. Written here rather than left for `Bench.astro`'s own markup to carry
+ * a default, because there is no default: `#bench-stage` does not know the
+ * skin until a script has read `matchMedia` or a reader has pressed the
+ * switch, the same reason `--bench-aspect-ratio` above is script-written and
+ * not printed inline for every position in advance. */
 const StagePortal = ({
   poster,
   aspectRatio,
@@ -609,6 +620,9 @@ const StagePortal = ({
   useEffect(() => {
     mount?.style.setProperty('--bench-aspect-ratio', aspectRatio);
   }, [mount, aspectRatio]);
+  useEffect(() => {
+    mount?.setAttribute('data-bench-skin', skin);
+  }, [mount, skin]);
   if (mount === null) return null;
   return createPortal(<Stage poster={poster} skin={skin} />, mount);
 };

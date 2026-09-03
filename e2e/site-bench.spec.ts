@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { activationButton } from './locators';
+import { activationButton, controls, media } from './locators';
 
 /**
  * The bench on `/`: the switches, and the composition they build.
@@ -225,3 +225,100 @@ test('the preamble is always four lines, in every combination', async ({
     }
   }
 });
+
+/**
+ * The maintainer's own ruling on #594: the second theme has to differ in
+ * *layout*, not only in colour, or two themes that only repaint the same box
+ * read as a palette picker rather than as an argument that the markup is a
+ * consumer's own. `docked` docks -- the bar takes a row of its own below the
+ * picture -- and `theme` keeps floating over it exactly as before.
+ *
+ * `@real`: the bar is `hidden` until the activation press has produced a
+ * real player (`ControlBar` in `BenchIsland.tsx` hides it under `!ready`), so
+ * proving its position needs a real one, which for the two hosted-only
+ * positions this switch offers means a real request to `youtube.com` or
+ * `vimeo.com`. Excluded from the default run for the same reason every other
+ * `@real` test here is.
+ *
+ * Measured against `[data-playdeck-part="media"]` rather than the outer
+ * frame: the picture is the box either skin's own claim is about, and
+ * `media`'s own box is what the non-stretching assertion below needs too.
+ *
+ * The comparison is only meaningful at a width where both skins are
+ * reachable -- the skin fieldset is `hidden md:block`, so below 48rem
+ * `theme` cannot be pressed at all. The narrow case below does not try: it
+ * presses nothing and checks the position a narrow reader actually rests on,
+ * which is `docked` with no switch to leave it from -- the case the ruling
+ * itself names as the one most worth getting right.
+ */
+const activateAndMeasure = async (page: Page) => {
+  await activationButton(page).click();
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+  const controlsBox = await controls(page).boundingBox();
+  const mediaBox = await media(page).boundingBox();
+  if (controlsBox === null || mediaBox === null) {
+    throw new Error('Could not measure the bar or the picture.');
+  }
+  // Held on the bar before reading it: theme's own auto-hide must not catch
+  // this read mid-fade.
+  await page.mouse.move(
+    controlsBox.x + controlsBox.width / 2,
+    controlsBox.y + controlsBox.height / 2
+  );
+  return { controlsBox, mediaBox };
+};
+
+/** Every ready entry in `bench-sources.ts` is 2048x858, 2.3869:1. */
+const expectNotStretched = (mediaBox: { width: number; height: number }) => {
+  expect(mediaBox.width / mediaBox.height).toBeCloseTo(2048 / 858, 1);
+};
+
+test(
+  'at 1440px, the themed bar overlays the picture and the docked bar sits below it @real',
+  { tag: '@real' },
+  async ({ page }) => {
+    test.slow();
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await page.goto(landing);
+    await expect(activationButton(page)).toBeVisible();
+    await position(page, 'skin', 'theme').click();
+    const themed = await activateAndMeasure(page);
+    // Over the picture: the bar's own box sits inside the picture's vertical
+    // span rather than under it.
+    expect(themed.controlsBox.y).toBeGreaterThanOrEqual(themed.mediaBox.y - 1);
+    expect(
+      themed.controlsBox.y + themed.controlsBox.height
+    ).toBeLessThanOrEqual(themed.mediaBox.y + themed.mediaBox.height + 1);
+    expectNotStretched(themed.mediaBox);
+
+    await page.goto(landing);
+    await expect(activationButton(page)).toBeVisible();
+    await position(page, 'skin', 'docked').click();
+    const docked = await activateAndMeasure(page);
+    // Below the picture: the bar starts at or after the picture's own bottom
+    // edge, never inside it -- the assertion this ruling exists to add.
+    expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
+      docked.mediaBox.y + docked.mediaBox.height - 1
+    );
+    expectNotStretched(docked.mediaBox);
+  }
+);
+
+test(
+  'below 48rem, the resting docked bar sits below the picture, with no switch to change it @real',
+  { tag: '@real' },
+  async ({ page }) => {
+    test.slow();
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto(landing);
+    await expect(activationButton(page)).toBeVisible();
+    await expect(page.locator('[data-bench-switch="skin"]')).toBeHidden();
+
+    const docked = await activateAndMeasure(page);
+    expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
+      docked.mediaBox.y + docked.mediaBox.height - 1
+    );
+    expectNotStretched(docked.mediaBox);
+  }
+);

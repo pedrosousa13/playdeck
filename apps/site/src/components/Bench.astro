@@ -325,6 +325,24 @@ const aspectRatio = `${fallback.width} / ${fallback.height}`;
     --playdeck-transition-easing: var(--ease);
   }
 
+  /* This box wraps `[data-playdeck-part='viewport']` (`StagePortal`'s own
+   * portal target) rather than being it, so the ratio above and the
+   * viewport's own ratio -- read from the same variable, several rules down --
+   * are two boxes agreeing, not one. `docked`'s second row makes the viewport
+   * taller than a single ratio-locked cell can hold, and this box has to stop
+   * constraining its own height to that ratio or `.bench__frame`'s
+   * `overflow: hidden` would crop the bar the same way it would crop anything
+   * else that overflowed the frame.
+   *
+   * `data-bench-skin` reaches this element because `StagePortal` in
+   * `BenchIsland.tsx` mirrors it onto the mount node it already writes
+   * `--bench-aspect-ratio` onto, for the same reason: this box is `Bench.astro`'s
+   * own, sized before any player exists, and a script-driven attribute is
+   * what lets it keep being the right shape once one does. */
+  .bench__stage[data-bench-skin='docked'] {
+    aspect-ratio: auto;
+  }
+
   /* One cell, and every layer in it.
    *
    * A single named area rather than absolute positioning, because that is what
@@ -357,6 +375,18 @@ const aspectRatio = `${fallback.width} / ${fallback.height}`;
      * its intrinsic width. Without this the picture would refuse to shrink
      * below that and push the frame wider than the page. */
     min-inline-size: 0;
+  }
+
+  /* The poster is `position: absolute; inset: 0` inline (`poster.tsx`), and a
+   * grid container is the containing block for an absolutely-positioned child
+   * regardless of the container's own `position`. Pinned to `stack` rather
+   * than left `auto` for the same reason `docked`'s activation rule below is:
+   * an `auto` grid-area on an abspos item resolves against the WHOLE grid, so
+   * once `docked` gives the viewport a second row (below) an unpinned poster
+   * would stretch down over the bar's row too. Harmless under `theme`, where
+   * `stack` is the only row there is. */
+  :global(.bench__stage) :global([data-playdeck-part='poster']) {
+    grid-area: stack;
   }
 
   /* The other half of the same defect, on the other skin -- issue #552,
@@ -464,6 +494,77 @@ const aspectRatio = `${fallback.width} / ${fallback.height}`;
     position: relative;
     z-index: 1;
     place-self: end stretch;
+  }
+
+  /* The maintainer's ruling on #594: two themes that only repaint the same box
+   * read as a palette picker, not as an argument that the markup is a
+   * consumer's own, so `docked` has to differ in layout too -- the bar takes
+   * a row of its own below the picture rather than a layer inside it.
+   *
+   * The viewport becomes two rows, and `aspect-ratio: auto` undoes the
+   * unscoped rule several rules up: with a bar in a row of its own, the
+   * container's ratio would apply to picture and bar together rather than to
+   * the picture alone.
+   *
+   * The ratio moves onto a `::before` rather than onto
+   * `[data-playdeck-part='media']`: media is a state this player reaches, not
+   * a part that is always there -- at rest, before a reader has pressed the
+   * activation button, nothing here has mounted a `<video>` or an `<iframe>`
+   * at all, so a `stack` row sized from media's own contribution would size
+   * itself from nothing and collapse to zero (measured: `#bench-stage` itself
+   * went to `height: 0` at rest, taking the activation button's own hit
+   * target with it). Poster and activation cannot stand in for it either --
+   * both are `position: absolute` in the library's own components
+   * (`poster.tsx`, `loading-error.tsx`) and absolutely-positioned grid items
+   * are excluded from track sizing entirely. A generated box is the one thing
+   * in this row guaranteed to exist in every state this player is ever in,
+   * which is exactly the property this row's height needs. `pointer-events:
+   * none` because it is a sizing box and not a target: the activation button
+   * stacks above it regardless (an absolutely-positioned box always paints
+   * over a static one), but a reader should never be able to tell this
+   * element is here at all.
+   *
+   * The activation button still gets its own `grid-area: stack`, the same pin
+   * the poster rule above states for both skins: an `auto` grid-area on an
+   * abspos item resolves against the whole grid, and once this row is one of
+   * two rather than the only one, that would centre the badge across the
+   * picture and the bar's row combined rather than the picture alone.
+   * `theme`'s own badge-redraw rule three rules up already carries this pin
+   * for itself; this is `docked`'s, which has no badge rule of its own to
+   * carry it.
+   *
+   * Unlayered and scoped to `[data-bench-skin='docked']`, the same idiom the
+   * badge redraw uses: this beats `docked.css`'s own rules for the same parts
+   * regardless of specificity, and scoping it leaves `theme` -- one row, one
+   * cell, exactly as it reads above -- untouched. */
+  :global(.bench__stage)
+    :global([data-playdeck-part='viewport'][data-bench-skin='docked']) {
+    grid-template-areas: 'stack' 'controls';
+    aspect-ratio: auto;
+  }
+
+  :global(.bench__stage)
+    :global(
+      [data-playdeck-part='viewport'][data-bench-skin='docked']
+    )::before {
+    content: '';
+    grid-area: stack;
+    inline-size: 100%;
+    aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 2048 / 858));
+    pointer-events: none;
+  }
+
+  :global(.bench__stage)
+    :global([data-bench-skin='docked'] [data-playdeck-part='activation']) {
+    grid-area: stack;
+  }
+
+  :global(.bench__stage)
+    :global([data-bench-skin='docked'] [data-playdeck-part='controls']) {
+    grid-area: controls;
+    position: static;
+    z-index: auto;
+    place-self: stretch;
   }
 
   /* The `[hidden]` reset, needed here rather than assumed: the attribute is
