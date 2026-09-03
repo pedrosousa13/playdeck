@@ -227,6 +227,76 @@ test('the preamble is always four lines, in every combination', async ({
 });
 
 /**
+ * The maintainer's ruling on #594, pinned at rest and without `@real`: this is
+ * the structural half of that ruling, not a replacement for the two
+ * bounding-box tests below it. Those two prove the *rendered* result -- a
+ * real player's pixels, measured after activation against a hosted provider
+ * -- which is exactly why they need `@real` and sit outside the default run.
+ * This test proves the *structure* the ruling is actually about: the
+ * viewport's own CSS grid, readable with the player dormant, no activation,
+ * no network beyond loading the page. Neither test is redundant with the
+ * other -- this one is the pin CI actually runs on every PR; the other two
+ * are the proof that the structure this one checks produces the layout the
+ * ruling promises. Losing either leaves a gap: drop this one and the exact
+ * regression #594 fixed (an unlayered rule quietly defeating `docked.css`)
+ * goes unguarded in CI again; drop the `@real` pair and nothing ever checks
+ * that the grid shape actually renders where the ruling says it should.
+ *
+ * The controls element exists in the DOM at rest in both skins and at both
+ * widths below (the island renders it hidden/empty before activation), so its
+ * own `grid-area` is readable without activation -- confirmed by measurement,
+ * not assumed.
+ */
+const gridShape = (page: Page) =>
+  page.evaluate(() => {
+    const vp = document.querySelector('[data-playdeck-part="viewport"]');
+    const ctrl = document.querySelector('[data-playdeck-part="controls"]');
+    if (vp === null) {
+      throw new Error('No viewport part in the document.');
+    }
+    return {
+      areas: getComputedStyle(vp).gridTemplateAreas,
+      controlsArea: ctrl === null ? null : getComputedStyle(ctrl).gridArea
+    };
+  });
+
+test("at 1440px, the resting theme keeps controls in the picture's own row, and docked gives them one of their own", async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(landing);
+  // Waited on first, so hydration has actually happened before the next
+  // assertion: the island is `client:only`, and a grid read taken before it
+  // mounts would pass against the page's pre-hydration markup rather than
+  // against `Bench.astro`'s rule.
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+
+  const themed = await gridShape(page);
+  expect(themed.areas).toBe('"stack"');
+  expect(themed.controlsArea).toBe('stack');
+
+  await position(page, 'skin', 'docked').click();
+  const docked = await gridShape(page);
+  expect(docked.areas).toBe('"stack" "controls"');
+  expect(docked.controlsArea).toBe('controls');
+});
+
+test('below 48rem, the resting docked viewport already gives the controls a row of their own', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(landing);
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+  // Below 48rem the skin fieldset is hidden and there is no switch to reach
+  // `theme` from, so this is the shape a narrow reader actually rests on.
+  await expect(page.locator('[data-bench-switch="skin"]')).toBeHidden();
+
+  const docked = await gridShape(page);
+  expect(docked.areas).toBe('"stack" "controls"');
+  expect(docked.controlsArea).toBe('controls');
+});
+
+/**
  * The maintainer's own ruling on #594: the second theme has to differ in
  * *layout*, not only in colour, or two themes that only repaint the same box
  * read as a palette picker rather than as an argument that the markup is a
