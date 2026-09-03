@@ -333,6 +333,42 @@ describe.each(fixtures)(
       expect(activationRule).not.toMatch(/(?<!min-)block-size:\s*4rem/);
     });
 
+    // The control bar is two rows and no wrapper element draws them: `Controls`
+    // renders one part and takes `children` opaquely. The split comes from
+    // `flex-wrap: wrap` on that part plus a 100% basis on the seek slider, which
+    // lands on its own line because the contract puts it first in the composed
+    // children — so its basis is the first thing wrap has to place. A consumer
+    // who reorders the children loses the split, which is the price of not
+    // materialising a `controls-row` element inside their markup.
+    test('wraps the control bar and gives the seek slider its own row', () => {
+      const controlsRule = withoutComments.match(
+        /:where\(\[data-playdeck-part='controls'\]\)\s*\{[^}]*\}/
+      )?.[0];
+      expect(controlsRule).toMatch(/flex-wrap:\s*wrap/);
+      const seekRule = withoutComments.match(
+        /:where\(\[data-playdeck-part='seek-slider'\]\)\s*\{[^}]*\}/
+      )?.[0];
+      expect(seekRule).toMatch(/flex:\s*1\s+1\s+100%/);
+    });
+
+    // An auto inline-end margin on the duration `Time` eats the second row's
+    // free space, which is what holds the trailing buttons against the end. It
+    // is stated on that element rather than on the first trailing button
+    // because every control is gated and renders nothing when its provider
+    // cannot honour it: an absent `CaptionsButton` would take the margin with
+    // it, and the group would collapse back to the start.
+    //
+    // Measured from a rendered bar composed in the contract order at 640px:
+    // without this the row packs left and the gap between the duration `Time`
+    // and `CaptionsButton` is the bar's own 4px `gap`; with it that gap is
+    // 152.2px on Chromium and 152.25px on Firefox, and the trailing group sits
+    // flush against the bar's inner end.
+    test('pushes the trailing controls to the end with the duration Time', () => {
+      expect(withoutComments).toMatch(
+        /\[data-playdeck-part='time'\]\[data-time-type='duration'\][^{]*\{[^}]*margin-inline-end:\s*auto/
+      );
+    });
+
     test('declares no !important', () => {
       // A theme that needs !important has already lost the override argument.
       expect(withoutComments).not.toMatch(/!\s*important/i);

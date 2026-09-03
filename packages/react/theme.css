@@ -178,6 +178,15 @@
   /* ---- control surface --------------------------------------------------- */
   :where([data-playdeck-part='controls']) {
     display: flex;
+    /* Two rows out of one element. `Controls` renders a single part and takes
+     * `children` opaquely — it has no concept of a row — so the split is drawn
+     * here instead of by a wrapper the primitives would have to materialise
+     * inside a consumer's markup. Wrapping plus the seek slider's 100% basis
+     * below is the whole mechanism, and it works because the seek slider is
+     * first in the composed children: its basis is the first thing wrap has to
+     * place, so it takes line one and everything after it falls to line two.
+     * A consumer who reorders the children loses the split. */
+    flex-wrap: wrap;
     gap: var(--playdeck-space-1, 0.25rem);
     align-items: center;
     padding: var(--playdeck-space-2, 0.5rem);
@@ -258,10 +267,24 @@
     white-space: nowrap;
   }
 
+  /* The second row's free space, spent here. This is what holds the trailing
+   * controls — captions, the settings trigger, picture-in-picture, fullscreen —
+   * against the inline end. It is stated on the duration `Time` rather than on
+   * the first of them because every control is gated and renders nothing when
+   * its provider cannot honour it: an absent captions button would take the
+   * margin with it and the whole group would collapse back to the start.
+   * `data-time-type` is the attribute `Time` writes in both its timed and
+   * untimed branches, so the margin survives a duration that has no value. */
+  :where([data-playdeck-part='time'][data-time-type='duration']) {
+    margin-inline-end: auto;
+  }
+
   /* ---- sliders ----------------------------------------------------------- */
   :where([data-playdeck-part='seek-slider']) {
     position: relative;
-    flex: 1 1 auto;
+    /* A full-width basis, not `auto`: this is what puts the slider on a line of
+     * its own under the control surface's `flex-wrap: wrap`. */
+    flex: 1 1 100%;
     min-inline-size: 4rem;
   }
 
