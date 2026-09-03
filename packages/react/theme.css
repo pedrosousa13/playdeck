@@ -22,6 +22,17 @@
  *      tokens anywhere above the player — or on the player itself — and they
  *      take effect, while nothing leaks into the surrounding document.
  *
+ *      Two tokens break rule 3 on purpose: `--playdeck-activation-fill` and
+ *      `--playdeck-activation-border` are DECLARED on
+ *      `[data-playdeck-part='activation']`, not only read. `ActivationButton`
+ *      writes its background and border inline as `var()` reads of these two
+ *      names so a bare player never paints the user agent's own button face
+ *      over its poster (#555); declaring them here is what lets a consumer's
+ *      own ancestor-set value still lose to a value set on the part itself,
+ *      the same way any custom property resolves — the nearest declaration in
+ *      the inheritance chain wins, and a declaration on the element is nearer
+ *      than one above it.
+ *
  * Tokens, with their defaults:
  *
  *   Color        --playdeck-color-surface       rgb(0 0 0 / 0.72)
@@ -42,6 +53,7 @@
  *   Shape        --playdeck-radius              0.375rem
  *                --playdeck-radius-large        0.5rem
  *   Controls     --playdeck-control-size        2.75rem  (44px, the locked target)
+ *                --playdeck-activation-size     4rem
  *                --playdeck-control-icon-size   1.25rem
  *                --playdeck-control-hover       rgb(255 255 255 / 0.12)
  *                --playdeck-slider-thickness    0.25rem
@@ -95,12 +107,39 @@
   :where([data-playdeck-part='activation']) {
     display: grid;
     place-items: center;
-    inline-size: 4rem;
-    block-size: 4rem;
-    border: 0;
-    border-radius: 50%;
+    /* A floor, not a fixed size: an explicit `inline-size`/`block-size` here
+     * would beat a consumer's own padding or `min-height` however they write
+     * it, imposing the badge look on any labelled affordance rather than
+     * offering it as a default. Icon-only content stays inside the floor and
+     * still measures exactly 4rem square, so the default badge is unchanged; a
+     * label grows the box the way content always grows one under `min-*`
+     * sizing. `border-radius: 2rem` is the same circle as `50%` at 4rem square
+     * and a pill past it, where `50%` would draw an ellipse. `box-sizing` is
+     * what absorbs `padding-inline` inside the floor rather than adding it on
+     * top, which would turn the icon-only badge into a pill.
+     *
+     * `fit-content` is what makes the floor a floor here, and it is not
+     * decorative. `ActivationButton` positions this part `position: absolute;
+     * inset: 0; margin: auto` inline (`loading-error.tsx`), and against four
+     * zero offsets an `auto` size is not shrink-to-fit — it is solved to fill
+     * the containing block, which a `min-*` alone does nothing to stop. The
+     * badge would paint over the whole picture, and `margin: auto` would have
+     * no leftover space to centre. `fit-content` sizes the box to its content
+     * instead, the floor raises that to 4rem, and the offsets are then
+     * over-constrained, which is the state `margin: auto` needs to centre. */
+    box-sizing: border-box;
+    inline-size: fit-content;
+    block-size: fit-content;
+    min-inline-size: var(--playdeck-activation-size, 4rem);
+    min-block-size: var(--playdeck-activation-size, 4rem);
+    padding-inline: var(--playdeck-space-3, 0.75rem);
+    border-radius: 2rem;
     color: var(--playdeck-color-on-surface, #fff);
-    background-color: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
+    --playdeck-activation-fill: var(
+      --playdeck-color-surface,
+      rgb(0 0 0 / 0.72)
+    );
+    --playdeck-activation-border: 0;
     cursor: pointer;
     transition: opacity var(--playdeck-transition-duration, 150ms)
       var(--playdeck-transition-easing, ease);
@@ -139,6 +178,15 @@
   /* ---- control surface --------------------------------------------------- */
   :where([data-playdeck-part='controls']) {
     display: flex;
+    /* Two rows out of one element. `Controls` renders a single part and takes
+     * `children` opaquely — it has no concept of a row — so the split is drawn
+     * here instead of by a wrapper the primitives would have to materialise
+     * inside a consumer's markup. Wrapping plus the seek slider's 100% basis
+     * below is the whole mechanism, and it works because the seek slider is
+     * first in the composed children: its basis is the first thing wrap has to
+     * place, so it takes line one and everything after it falls to line two.
+     * A consumer who reorders the children loses the split. */
+    flex-wrap: wrap;
     gap: var(--playdeck-space-1, 0.25rem);
     align-items: center;
     padding: var(--playdeck-space-2, 0.5rem);
@@ -162,6 +210,44 @@
     opacity: var(--playdeck-overlay-opacity, 1);
     transition: opacity var(--playdeck-transition-duration, 150ms)
       var(--playdeck-transition-easing, ease);
+  }
+
+  /* ---- auto-hide ----------------------------------------------------------
+   * `theme.css` only. `docked.css` never reads `data-idle`, so this pairing
+   * lives here rather than anywhere shared.
+   *
+   * The idle state is the one selected for, and that direction is load-bearing.
+   * `Viewport` writes `data-idle` from an effect, so the attribute is absent
+   * until its node is mounted; keying the visible look on `[data-idle='false']`
+   * instead would leave the bar hidden across that first paint. Absent reads as
+   * awake here, which is also what a composition that renders `Controls`
+   * outside `Viewport` gets — nothing above the bar carries the attribute, so
+   * the auto-hide is simply a no-op there.
+   *
+   * `pointer-events: none` lands with the start of the fade rather than its
+   * end. A reader who moves the pointer gets the bar back at once, and nothing
+   * here stops a consumer choosing a gentler timing of their own.
+   *
+   * `:focus-within` is the whole of the stay-visible rule, and it covers an
+   * open menu too: `SettingsMenuContent` renders in-tree and moves focus to its
+   * first item on open, so an open menu always holds focus inside this part.
+   * The timer never inspects focus or menu state, which is why `data-idle` can
+   * read `"true"` while the bar is plainly on screen — the attribute states
+   * that nothing has moved, and this rule states that something in the bar
+   * still needs looking at.
+   *
+   * `transition: opacity` is already on the base control-surface rule above,
+   * and that rule is already named in the `prefers-reduced-motion: reduce`
+   * block, so neither is restated here.
+   */
+  :where([data-idle='true'] [data-playdeck-part='controls']) {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :where([data-playdeck-part='controls']:focus-within) {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   /* Every button-shaped control shares one box. */
@@ -219,10 +305,24 @@
     white-space: nowrap;
   }
 
+  /* The second row's free space, spent here. This is what holds the trailing
+   * controls — captions, the settings trigger, picture-in-picture, fullscreen —
+   * against the inline end. It is stated on the duration `Time` rather than on
+   * the first of them because every control is gated and renders nothing when
+   * its provider cannot honour it: an absent captions button would take the
+   * margin with it and the whole group would collapse back to the start.
+   * `data-time-type` is the attribute `Time` writes in both its timed and
+   * untimed branches, so the margin survives a duration that has no value. */
+  :where([data-playdeck-part='time'][data-time-type='duration']) {
+    margin-inline-end: auto;
+  }
+
   /* ---- sliders ----------------------------------------------------------- */
   :where([data-playdeck-part='seek-slider']) {
     position: relative;
-    flex: 1 1 auto;
+    /* A full-width basis, not `auto`: this is what puts the slider on a line of
+     * its own under the control surface's `flex-wrap: wrap`. */
+    flex: 1 1 100%;
     min-inline-size: 4rem;
   }
 
@@ -258,6 +358,7 @@
     [data-playdeck-part='seek-slider-input'],
     [data-playdeck-part='volume-slider']
   ) {
+    display: block;
     inline-size: 100%;
     margin: 0;
     accent-color: var(--playdeck-color-accent, #3ea6ff);
@@ -397,6 +498,89 @@
     }
   }
 
+  /* ---- volume reveal ------------------------------------------------------
+   * The slider is always laid out at its full inline size beside the mute
+   * button, so nothing around it moves when it appears: only `opacity` and
+   * `pointer-events` change. `pointer-events: none` at rest is what keeps an
+   * invisible range input from being a target a pointer can land on and drag,
+   * and it is a hard switch rather than a transition — dragging a thumb that is
+   * half-way through a fade is not a state worth animating into.
+   *
+   * Every branch of the reveal selector ends on the slider as its subject,
+   * whether qualified by the mute button's state through the adjacent-sibling
+   * combinator or by the slider's own. `MuteButton` and `VolumeSlider` are
+   * adjacent siblings with no wrapper (`transport-controls.tsx` renders them as
+   * independent parts), so the combinator is the only way to reach one from the
+   * other. The slider's own `:hover` branch is what lets a reader travel from
+   * the button onto the control without it fading out under the pointer.
+   */
+  @media (pointer: fine) {
+    :where([data-playdeck-part='volume-slider']) {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--playdeck-transition-duration, 150ms)
+        var(--playdeck-transition-easing, ease);
+    }
+
+    :where(
+      [data-playdeck-part='mute-button']:hover
+        + [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='mute-button']:focus-within
+        + [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='volume-slider']:hover,
+      [data-playdeck-part='volume-slider']:focus-within
+    ) {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* Not hidden to save room: iOS Safari ignores a programmatic `volume` write,
+   * so on a coarse pointer this control cannot move anything, and a slider that
+   * answers nothing is worse than no slider. */
+  @media (pointer: coarse) {
+    :where([data-playdeck-part='volume-slider']) {
+      display: none;
+    }
+  }
+
+  /* ---- below 48rem --------------------------------------------------------
+   * The scrim is a gradient because the bar floats over the picture and the
+   * frame beneath it has to stay readable through the fade. A narrow viewport
+   * spends more of that frame on the bar, since the second row wraps again
+   * rather than shrinking its targets, so the gradient's soft top edge covers a
+   * large share of the picture with neither the picture nor the controls fully
+   * legible through it. A flat surface
+   * colour draws the same box with one hard edge instead, which is the trade a
+   * narrow viewport wants.
+   *
+   * `background`, not `background-color`, because the base rule sets the
+   * gradient through `background`: a longhand here would leave the shorthand's
+   * image painted over the colour it declares.
+   *
+   * The volume slider goes for a reason of its own, unrelated to the coarse
+   * pointer above, which is why the declaration is repeated rather than shared
+   * with that query. There it cannot move anything; here it can, and the room
+   * its 5rem box costs the second row is worth more than the control — every
+   * remaining button holds its 44px target and wraps rather than shrinks, so
+   * the slider's width is paid for in lines of bar over the picture.
+   *
+   * Nothing here states a `position`. This file's rules are layered `:where()`
+   * (header rule 1), so any `position` written here would lose to the ordinary
+   * unlayered CSS a composition uses to float the bar in the first place, and
+   * the rule would read as doing something it cannot do. `docked.css` puts the
+   * bar under the picture instead, and never floats it to begin with.
+   */
+  @media (max-width: 48rem) {
+    :where([data-playdeck-part='controls']) {
+      background: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
+    }
+
+    :where([data-playdeck-part='volume-slider']) {
+      display: none;
+    }
+  }
+
   /* ---- menus ------------------------------------------------------------- */
   :where([data-playdeck-part='settings-menu-root']) {
     position: relative;
@@ -460,9 +644,11 @@
 
   /* ---- reduced motion ---------------------------------------------------- */
   @media (prefers-reduced-motion: reduce) {
-    /* Nonessential movement only: opacity transitions on the control surface
-     * and the activation affordance. No state change is conveyed by motion, so
-     * nothing is hidden by removing it. */
+    /* Nonessential movement only: opacity transitions on the control surface,
+     * the activation affordance and the volume reveal. No state change is
+     * conveyed by motion, so nothing is hidden by removing it — the volume
+     * slider still appears and disappears on hover and focus, it just stops
+     * fading into and out of the bar. */
     :where(
       [data-playdeck-part='controls'],
       [data-playdeck-part='activation'],
@@ -472,7 +658,8 @@
       [data-playdeck-part='fullscreen-button'],
       [data-playdeck-part='pip-button'],
       [data-playdeck-part='airplay-button'],
-      [data-playdeck-part='settings-menu-trigger']
+      [data-playdeck-part='settings-menu-trigger'],
+      [data-playdeck-part='volume-slider']
     ) {
       transition-duration: 0.01ms;
     }

@@ -97,6 +97,28 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   separate axis (`ready`/`idle` means "is there a seek window") and does not
   move during a stall. The undebounced signal stays available to consumers as
   `state.buffering`.
+- **`data-idle`** — `"true"` once playback has run 2500ms with no pointer or
+  keyboard input, `"false"` otherwise. Only on `viewport`, written there by
+  `Viewport` itself.
+  The timer runs only while playback is `playing`: it is armed when playback
+  starts, and pausing clears it and writes `"false"`, so a paused player never
+  goes idle and input during a pause starts nothing. A `pointermove`,
+  `pointerdown`, `touchstart`, `keydown` or `focusin` resets it — all five bound
+  to the viewport element rather than to `document`, so one player's pointer
+  traffic never keeps a second player on the same page awake.
+  **Absent until the viewport mounts, and absence means awake.** So key the idle
+  look on `[data-idle='true']` rather than keying the visible look on
+  `[data-idle='false']`: the latter would hide whatever it styles across that
+  first paint, and it would also miss a composition that renders `Controls`
+  outside `Viewport`, where nothing above the bar carries the attribute at all.
+  It reports input, not attention. The timer never inspects focus or whether a
+  menu is open, so `data-idle` can read `"true"` while a focused control keeps
+  the controls plainly on screen — pair it with `:focus-within` if that is the
+  behaviour you want. `@playdeck/react/theme.css` does exactly that to fade its
+  overlaid control bar out; `@playdeck/react/docked.css` never reads the
+  attribute, because nothing it draws sits over the picture.
+  Written straight to the DOM rather than through player state, like the
+  aspect-ratio property below, so going idle and coming back re-renders nothing.
 
 Style and query against these attributes rather than internal class names.
 
@@ -282,13 +304,25 @@ unmounts at `ready` rather than wearing it:
    The overlay carries `dormant`, `eligible`, `loading-provider` and `error`;
    it unmounts at `ready`, so no stylesheet ever sees that value. Each of the
    four wants a different affordance. The button positions itself (absolutely,
-   inset 0, z-index 30), so this only paints. */
+   inset 0, z-index 30) and resets the user agent's own button face, so this
+   only paints.
+
+   The fill goes through `--playdeck-activation-fill` rather than through
+   `background`. Whatever `ActivationButton` writes inline is out of a
+   stylesheet's reach, and it writes each of those properties as a read of a
+   token: `background-color` from `--playdeck-activation-fill` and `border`
+   from `--playdeck-activation-border`, so a bare player never paints the user
+   agent's own button face over its poster. A `background` or `border`
+   declaration written here would lose to them, whatever its specificity.
+   Setting the tokens reaches the same paint instead, and they cascade and vary
+   by state exactly as a `background` would -- the rules below move the fill per
+   `data-state` and on hover. Everything else here is ordinary CSS against the
+   part. */
 
 [data-playdeck-part='activation'] {
   display: grid;
   place-items: center;
-  border: 0;
-  background: rgb(11 14 19 / 65%);
+  --playdeck-activation-fill: rgb(11 14 19 / 65%);
   color: #ffffff;
   font: inherit;
   cursor: pointer;
@@ -297,7 +331,7 @@ unmounts at `ready` rather than wearing it:
 /* The resting state: a press here starts activation. One of the two states a
    press acts on at all — `error` below is the other. */
 [data-playdeck-part='activation'][data-state='dormant']:hover {
-  background: rgb(11 14 19 / 40%);
+  --playdeck-activation-fill: rgb(11 14 19 / 40%);
 }
 
 /* Activation is committed and the provider is on its way. Pressing again does
@@ -319,11 +353,11 @@ unmounts at `ready` rather than wearing it:
    reads "Play", is `aria-disabled`, and says so through that rather than
    through colour. */
 [data-playdeck-part='activation'][data-state='error'] {
-  background: rgb(63 18 18 / 85%);
+  --playdeck-activation-fill: rgb(63 18 18 / 85%);
 }
 
 [data-playdeck-part='activation'][data-state='error']:hover {
-  background: rgb(90 26 26 / 85%);
+  --playdeck-activation-fill: rgb(90 26 26 / 85%);
 }
 ```
 

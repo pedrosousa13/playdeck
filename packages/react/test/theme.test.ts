@@ -2,6 +2,7 @@
 // Reads files off disk rather than rendering anything, and happy-dom's global
 // `URL` cannot resolve `import.meta.url` into a file path.
 
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { URL } from 'node:url';
 import { describe, expect, test } from 'vitest';
@@ -10,6 +11,31 @@ import { describe, expect, test } from 'vitest';
 // only mean anything side by side if the formula behind them is literally the
 // same one.
 import { contrast, over, parseColor } from './contrast';
+
+/**
+ * One stylesheet the file-shaped suite below runs against, with the inventory
+ * that suite freezes for it. The expectations are per file rather than shared
+ * because each stylesheet draws its own set of parts: two themes can reach the
+ * same contract through different CSS, and a shared inventory would have to be
+ * the union, which is a subset check for both of them.
+ */
+type StylesheetFixture = {
+  readonly label: string;
+  readonly source: string;
+  readonly exportPath: string;
+  readonly expected: {
+    readonly atRules: readonly string[];
+    readonly pseudoFunctions: readonly string[];
+    readonly pseudoElements: readonly string[];
+    readonly functions: readonly string[];
+    // The needle list `leaves every hand-drawn slider rule out of
+    // forced-colors mode` checks for, inside and outside the
+    // `(forced-colors: none)` query. Per file because a stylesheet that
+    // declares a forced-colors rule for a different set of parts needs a
+    // different needle list, even where the mechanism is the same CSS.
+    readonly forcedColorsSliderNeedles: readonly string[];
+  };
+};
 
 // Enforces the theme contract from issue #10: consumers must be able to restyle
 // everything without specificity fights or forks. Two CSS tools make that work,
@@ -21,273 +47,481 @@ const themeSource = await readFile(
   'utf8'
 );
 
+// Read defensively so the fixture entry below can be written before the file
+// exists: an empty source fails every assertion in the suite rather than
+// erroring out of module evaluation, which is what makes the red step readable.
+const dockedPath = new URL('../docked.css', import.meta.url);
+const dockedSource = existsSync(dockedPath)
+  ? await readFile(dockedPath, 'utf8')
+  : '';
+
 // Strips comments so a selector-shaped example inside one is not analysed.
 const withoutComments = themeSource.replace(/\/\*[\s\S]*?\*\//g, '');
 
-// Every selector list in the file: the text before each `{` that is not itself
-// an at-rule preamble.
-const selectorLists = [...withoutComments.matchAll(/([^{}]+)\{/g)]
-  .map(([, selector]) => selector.trim())
-  .filter((selector) => selector.length > 0 && !selector.startsWith('@'));
-
-describe('theme contract', () => {
-  test('every rule lives inside the playdeck cascade layer', () => {
-    // Unlayered consumer CSS beats layered CSS whatever its specificity, so the
-    // layer is what lets a consumer override without `!important`.
-    expect(withoutComments).toMatch(/@layer\s+playdeck\s*\{/);
-
-    // Nothing may sit outside the layer block. Walk braces and assert every
-    // declaration block is nested within it.
-    const layerStart = withoutComments.indexOf('@layer');
-    const beforeLayer = withoutComments.slice(0, layerStart);
-    expect(beforeLayer).not.toContain('{');
-
-    let depth = 0;
-    let layerDepth: number | undefined;
-    let outsideLayer = '';
-    for (let index = 0; index < withoutComments.length; index++) {
-      const character = withoutComments[index];
-      if (character === '{') {
-        depth++;
-        if (layerDepth === undefined && index > layerStart) layerDepth = depth;
-        continue;
-      }
-      if (character !== '}') continue;
-      if (depth === layerDepth) layerDepth = undefined;
-      depth--;
-      if (depth === 0) outsideLayer += withoutComments.slice(index + 1);
-    }
-    expect(outsideLayer.trim()).toBe('');
-  });
-
-  // The declared browser support floor (Chrome/Edge 99, Firefox 97, Safari and
-  // iOS 15.4) is set by the newest CSS feature in this file, which today is
-  // `@layer`. Nothing recomputes that when a rule is added, so this freezes the
-  // inventory instead: a new at-rule, functional pseudo-class, pseudo-element or
-  // CSS function fails here, and moving the floor becomes a deliberate act with
-  // a docs change attached rather than a side effect of a styling tweak.
-  //
-  // This gates the inventory, not a feature-to-version mapping -- no caniuse
-  // dataset to refresh, nothing that rots.
-  test('uses only the CSS features the declared support floor covers', () => {
-    const atRules = new Set(
-      [...withoutComments.matchAll(/@([a-z-]+)/g)].map(([, name]) => name)
-    );
-    const pseudoFunctions = new Set(
-      [...withoutComments.matchAll(/:([a-z-]+)\(/g)].map(([, name]) => name)
-    );
-    const pseudoElements = new Set(
-      [...withoutComments.matchAll(/::([a-z-]+)/g)].map(([, name]) => name)
-    );
-    const functions = new Set(
-      [...withoutComments.matchAll(/(?<![\w-:])([a-z-]+)\(/g)]
-        .map(([, name]) => name)
-        .filter((name) => !pseudoFunctions.has(name))
-    );
-
-    expect([...atRules].sort()).toEqual(['layer', 'media']);
-    expect([...pseudoFunctions].sort()).toEqual(['where']);
-    // All four are vendor-prefixed and never standardised, so none has a
-    // Baseline date to move the floor with -- but every engine has shipped its
-    // own family since long before Chrome 99, Firefox 97 and Safari 15.4, and
-    // none has an unprefixed spelling to migrate to.
-    //
-    // The three `::-moz-*` names were absent until #190's Gecko half, on the
-    // stated grounds that `::-moz-range-thumb` "honours no paint property while
-    // the native appearance is on, so a rule naming it would be dead CSS".
-    // Pixel-differencing real Firefox builds disproved that. It honours no
-    // `outline` and no `box-shadow`, which is what had been probed; it does
-    // honour `background-color`, `border` and its own box metrics. What is true
-    // is the consequence: the first paint property to reach any part of a range
-    // input switches Gecko's native widget off for the whole control, so the
-    // track and the `accent-color` progress fill have to be drawn here too.
-    // That is why three names arrived together rather than one.
-    expect([...pseudoElements].sort()).toEqual([
-      '-moz-range-progress',
-      '-moz-range-thumb',
-      '-moz-range-track',
-      '-webkit-slider-thumb'
-    ]);
-    // `calc` and `linear-gradient` are far below the floor (IE9 and Safari 6.1
-    // respectively) and do not set it; they are listed because this asserts the
-    // whole inventory, not a subset -- a subset check would let a new feature
-    // through unnoticed, which is the failure mode this exists to prevent.
-    expect([...functions].sort()).toEqual([
-      'calc',
-      'env',
-      'linear-gradient',
-      'rgb',
-      'var'
-    ]);
-  });
-
-  test('every selector is specificity-zero via :where()', () => {
-    expect(selectorLists.length).toBeGreaterThan(0);
-    const offenders = selectorLists.filter((selector) => {
-      // Strip every :where(...) group, including nested parens. What remains
-      // must carry no specificity of its own: no class, id, attribute,
-      // pseudo-class or type selector outside a :where().
-      let stripped = selector;
-      let previous: string;
-      do {
-        previous = stripped;
-        stripped = stripped.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '');
-      } while (stripped !== previous);
-      // The documented exemption (#190, #415): a native range input's thumb,
-      // track and progress fill are reachable only through pseudo-elements, and
-      // Selectors 4 forbids a pseudo-element inside `:where()`, so no rule that
-      // paints one can be specificity-zero. Each carries its pseudo-element's
-      // own (0,0,1), which any single consumer class outranks, and rule 1 -- the
-      // cascade layer -- still makes unlayered consumer CSS win outright.
+const fixtures: readonly StylesheetFixture[] = [
+  {
+    label: 'theme.css',
+    source: themeSource,
+    exportPath: './theme.css',
+    expected: {
+      atRules: ['layer', 'media'],
+      pseudoFunctions: ['where'],
+      // All four are vendor-prefixed and never standardised, so none has a
+      // Baseline date to move the floor with -- but every engine has shipped
+      // its own family since long before Chrome 99, Firefox 97 and Safari
+      // 15.4, and none has an unprefixed spelling to migrate to.
       //
-      // Six rules take it today, and the four names below are what they are
-      // built from. It was one rule and one name when #414 added a ring to the
-      // `::-webkit-slider-thumb` of both sliders. Gecko's half of #190 made it
-      // four rules and four names: Gecko honours neither `outline` nor
-      // `box-shadow` on its thumb, and the first paint property to land on any
-      // part of a range input switches its native widget off for the whole
-      // control, so the ring there costs a redraw of the track and the progress
-      // fill as well. #415 made it six rules without adding a name, because the
-      // seek slider is now drawn rather than decorated on all three engines: it
-      // takes a `::-webkit-slider-thumb` rule of its own, and one more rule
-      // silencing `::-moz-range-track` and `::-moz-range-progress` for that one
-      // input so the theme's bar is its track and `seek-progress` its fill.
-      //
-      // Still removed by exact name, one name at a time, so any OTHER
-      // pseudo-element -- and every class, id, attribute or type selector left
-      // outside a `:where()` -- still fails below.
-      for (const exempt of [
-        '::-webkit-slider-thumb',
+      // The three `::-moz-*` names were absent until #190's Gecko half, on the
+      // stated grounds that `::-moz-range-thumb` "honours no paint property
+      // while the native appearance is on, so a rule naming it would be dead
+      // CSS". Pixel-differencing real Firefox builds disproved that. It honours
+      // no `outline` and no `box-shadow`, which is what had been probed; it
+      // does honour `background-color`, `border` and its own box metrics. What
+      // is true is the consequence: the first paint property to reach any part
+      // of a range input switches Gecko's native widget off for the whole
+      // control, so the track and the `accent-color` progress fill have to be
+      // drawn here too. That is why three names arrived together rather than
+      // one.
+      pseudoElements: [
+        '-moz-range-progress',
+        '-moz-range-thumb',
+        '-moz-range-track',
+        '-webkit-slider-thumb'
+      ],
+      // `calc` and `linear-gradient` are far below the floor (IE9 and Safari
+      // 6.1 respectively) and do not set it; they are listed because every
+      // inventory here is exhaustive rather than a floor-setting subset.
+      functions: ['calc', 'env', 'linear-gradient', 'rgb', 'var'],
+      // One needle per rule the query holds, each chosen to occur in the file
+      // exactly where that rule is and nowhere else. The three `::-moz-*` names
+      // are #190's; the rest are #415's, and they are listed by selector text
+      // rather than by pseudo-element name because `::-webkit-slider-thumb`
+      // also names the shared ring rule, which lives OUTSIDE this query and has
+      // to.
+      forcedColorsSliderNeedles: [
         '::-moz-range-track',
         '::-moz-range-progress',
-        '::-moz-range-thumb'
-      ])
-        stripped = stripped.split(exempt).join('');
-      return /[.#[]|::?[a-z]|[a-z]/i.test(stripped.replace(/[\s,>+~*]/g, ''));
-    });
-    expect(offenders).toEqual([]);
-  });
-
-  test('every button-shaped part is carried by every button rule', () => {
-    // The button rules are hand-listed selector groups, so a new control
-    // primitive is styled only if someone remembers to add it to all of them --
-    // and a control that misses one silently loses its box, its hover tint or
-    // its forced-colors border while looking fine everywhere else.
-    const buttonParts = [
-      'play-button',
-      'mute-button',
-      'captions-button',
-      'fullscreen-button',
-      'pip-button',
-      'airplay-button',
-      'settings-menu-trigger'
-    ];
-    // Anchored on "mentions any button part" rather than on one named part.
-    // Anchoring on `play-button` missed a rule listing only, say, mute-button
-    // and pip-button; anchoring on "two or more" then missed a rule that names
-    // exactly one -- which is the shape that silently drops a single control's
-    // hover tint, the very failure this test exists to catch.
-    const buttonRules = selectorLists.filter((selector) =>
-      buttonParts.some((part) =>
-        selector.includes(`data-playdeck-part='${part}'`)
-      )
-    );
-    expect(buttonRules.length).toBeGreaterThan(0);
-    const missing = buttonRules.flatMap((rule) =>
-      buttonParts
-        .filter((part) => !rule.includes(`data-playdeck-part='${part}'`))
-        .map((part) => `${part} missing from: ${rule.replace(/\s+/g, ' ')}`)
-    );
-    expect(missing).toEqual([]);
-  });
-
-  test('declares no !important', () => {
-    // A theme that needs !important has already lost the override argument.
-    expect(withoutComments).not.toMatch(/!\s*important/i);
-  });
-
-  test('disables nonessential motion under prefers-reduced-motion', () => {
-    expect(withoutComments).toMatch(
-      /@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)/
-    );
-  });
-
-  test('keeps control states distinguishable in forced-colors mode', () => {
-    expect(withoutComments).toMatch(/@media\s*\(\s*forced-colors\s*:\s*active/);
-  });
-
-  // Both hand-drawn sliders work by switching an engine's native range widget
-  // off, and forced colors is the mode where that widget was the only thing
-  // painting the control in the user's own palette. Unguarded, #190's Gecko
-  // volume slider flattened to `Canvas` -- the progress fill and the unfilled
-  // track alike at `rgb(255 255 255)`, 1.00:1, so the slider stated no value at
-  // all. #415's seek slider is held out of the mode for the same reason and at a
-  // measured price: `theme.css` records that positioning the input there takes
-  // the loaded range from 21.00:1 against the unfilled one to 1.00:1 on
-  // Chromium, and that drawing the control there flattens Gecko's thumb to
-  // between 2.05:1 and 2.85:1 against the canvas.
-  // `e2e/thumb-contrast.spec.ts` measures that from rendered pixels; this
-  // asserts the structural reason for it, which costs no browser and fails in
-  // the same edit.
-  test('leaves every hand-drawn slider rule out of forced-colors mode', () => {
-    const query = /@media\s*\(\s*forced-colors\s*:\s*none\s*\)/.exec(
-      withoutComments
-    );
-    expect(query).not.toBeNull();
-
-    // Walk to the `}` that closes the query, so "inside it" is the block and
-    // not everything after the preamble.
-    const start = query!.index;
-    let depth = 0;
-    let end = withoutComments.indexOf('{', start);
-    for (; end < withoutComments.length; end++) {
-      if (withoutComments[end] === '{') depth++;
-      else if (withoutComments[end] === '}' && --depth === 0) break;
+        '::-moz-range-thumb',
+        // `appearance: none` on the seek input, which is what turns Blink's and
+        // WebKit's native widget off. Both occurrences -- this one and the
+        // thumb rule's own -- are inside.
+        'appearance: none',
+        // The rule the line above sits in, so moving `position: relative` out
+        // alone still fails: on its own that hands the bar's rows to the
+        // engine's track, which is the trade this query exists to refuse.
+        ":where([data-playdeck-part='seek-slider-input']) {",
+        // The fill `accent-color` stopped painting once the widget went off.
+        ":where([data-playdeck-part='seek-progress']) {",
+        // And the thumb, redrawn whole because nothing paints it any more.
+        ":where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb"
+      ]
     }
+  },
+  {
+    label: 'docked.css',
+    source: dockedSource,
+    exportPath: './docked.css',
+    expected: {
+      atRules: ['layer', 'media'],
+      pseudoFunctions: ['where'],
+      pseudoElements: [
+        '-moz-range-progress',
+        '-moz-range-thumb',
+        '-moz-range-track',
+        '-webkit-slider-thumb'
+      ],
+      // No `linear-gradient` -- docked.css draws no scrim.
+      functions: ['calc', 'env', 'rgb', 'var'],
+      forcedColorsSliderNeedles: [
+        '::-moz-range-track',
+        '::-moz-range-progress',
+        '::-moz-range-thumb',
+        'appearance: none',
+        ":where([data-playdeck-part='seek-slider-input']) {",
+        ":where([data-playdeck-part='seek-progress']) {",
+        ":where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb"
+      ]
+    }
+  }
+];
 
-    // One needle per rule the query holds, each chosen to occur in the file
-    // exactly where that rule is and nowhere else. The three `::-moz-*` names
-    // are #190's; the rest are #415's, and they are listed by selector text
-    // rather than by pseudo-element name because `::-webkit-slider-thumb` also
-    // names the shared ring rule, which lives OUTSIDE this query and has to.
-    const names = [
-      '::-moz-range-track',
-      '::-moz-range-progress',
-      '::-moz-range-thumb',
-      // `appearance: none` on the seek input, which is what turns Blink's and
-      // WebKit's native widget off. Both occurrences -- this one and the thumb
-      // rule's own -- are inside.
-      'appearance: none',
-      // The rule the line above sits in, so moving `position: relative` out
-      // alone still fails: on its own that hands the bar's rows to the engine's
-      // track, which is the trade this query exists to refuse.
-      ":where([data-playdeck-part='seek-slider-input']) {",
-      // The fill `accent-color` stopped painting once the widget went off.
-      ":where([data-playdeck-part='seek-progress']) {",
-      // And the thumb, redrawn whole because nothing paints it any more.
-      ":where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb"
-    ];
-    const guarded = withoutComments.slice(start, end + 1);
-    expect(names.filter((name) => guarded.includes(name))).toEqual(names);
-    // And nowhere outside it, or the query is decorative: one unguarded paint
-    // property on any part is enough to switch the whole native widget off.
-    const elsewhere =
-      withoutComments.slice(0, start) + withoutComments.slice(end + 1);
-    expect(names.filter((name) => elsewhere.includes(name))).toEqual([]);
-  });
+/**
+ * Strips every `:where(...)` group from a selector, including one nested
+ * inside another to any depth. One pass removes only the innermost complete
+ * group (a `:where(...)` whose contents themselves hold no unstripped
+ * `:where(`), so the surrounding loop reruns until nothing more changes --
+ * which is what makes depth unbounded rather than fixed at one level.
+ */
+export const stripWhereGroups = (selector: string): string => {
+  let stripped = selector;
+  let previous: string;
+  do {
+    previous = stripped;
+    stripped = stripped.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '');
+  } while (stripped !== previous);
+  return stripped;
+};
 
-  test('is reachable as @playdeck/react/theme.css and shipped in the tarball', async () => {
-    const manifest = JSON.parse(
-      await readFile(new URL('../package.json', import.meta.url), 'utf8')
-    ) as {
-      exports: Record<string, unknown>;
-      files: string[];
-      sideEffects: unknown;
-    };
-    expect(manifest.exports['./theme.css']).toBe('./theme.css');
-    expect(manifest.files).toContain('theme.css');
-  });
+test('stripWhereGroups removes :where() nested three deep', () => {
+  expect(stripWhereGroups(':where(a :where(b :where(c)))').trim()).toBe('');
+});
 
+describe.each(fixtures)(
+  '$label contract',
+  ({ label, source, exportPath, expected }) => {
+    // Strips comments so a selector-shaped example inside one is not analysed.
+    const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    // Every selector list in the file: the text before each `{` that is not
+    // itself an at-rule preamble.
+    const selectorLists = [...withoutComments.matchAll(/([^{}]+)\{/g)]
+      .map(([, selector]) => selector.trim())
+      .filter((selector) => selector.length > 0 && !selector.startsWith('@'));
+
+    test('every rule lives inside the playdeck cascade layer', () => {
+      // Unlayered consumer CSS beats layered CSS whatever its specificity, so
+      // the layer is what lets a consumer override without `!important`.
+      expect(withoutComments).toMatch(/@layer\s+playdeck\s*\{/);
+
+      // Nothing may sit outside the layer block. Walk braces and assert every
+      // declaration block is nested within it.
+      const layerStart = withoutComments.indexOf('@layer');
+      const beforeLayer = withoutComments.slice(0, layerStart);
+      expect(beforeLayer).not.toContain('{');
+
+      let depth = 0;
+      let layerDepth: number | undefined;
+      let outsideLayer = '';
+      for (let index = 0; index < withoutComments.length; index++) {
+        const character = withoutComments[index];
+        if (character === '{') {
+          depth++;
+          if (layerDepth === undefined && index > layerStart)
+            layerDepth = depth;
+          continue;
+        }
+        if (character !== '}') continue;
+        if (depth === layerDepth) layerDepth = undefined;
+        depth--;
+        if (depth === 0) outsideLayer += withoutComments.slice(index + 1);
+      }
+      expect(outsideLayer.trim()).toBe('');
+    });
+
+    // The declared browser support floor (Chrome/Edge 99, Firefox 97, Safari
+    // and iOS 15.4) is set by the newest CSS feature any stylesheet the package
+    // ships reaches for, and `@layer` is the feature that put it there. Nothing
+    // recomputes the floor when a rule is added, so each fixture freezes its own
+    // inventory instead: a new at-rule, functional pseudo-class, pseudo-element
+    // or CSS function fails here, and moving the floor becomes a deliberate act
+    // with a docs change attached rather than a side effect of a styling tweak.
+    //
+    // This gates the inventory, not a feature-to-version mapping -- no caniuse
+    // dataset to refresh, nothing that rots.
+    test('uses only the CSS features the declared support floor covers', () => {
+      const atRules = new Set(
+        [...withoutComments.matchAll(/@([a-z-]+)/g)].map(([, name]) => name)
+      );
+      const pseudoFunctions = new Set(
+        [...withoutComments.matchAll(/:([a-z-]+)\(/g)].map(([, name]) => name)
+      );
+      const pseudoElements = new Set(
+        [...withoutComments.matchAll(/::([a-z-]+)/g)].map(([, name]) => name)
+      );
+      const functions = new Set(
+        [...withoutComments.matchAll(/(?<![\w-:])([a-z-]+)\(/g)]
+          .map(([, name]) => name)
+          .filter((name) => !pseudoFunctions.has(name))
+      );
+
+      // Each list is the file's whole inventory rather than the subset that
+      // sets the floor: a subset check would let a new feature through
+      // unnoticed, which is the failure mode this exists to prevent.
+      expect([...atRules].sort()).toEqual(expected.atRules);
+      expect([...pseudoFunctions].sort()).toEqual(expected.pseudoFunctions);
+      expect([...pseudoElements].sort()).toEqual(expected.pseudoElements);
+      expect([...functions].sort()).toEqual(expected.functions);
+    });
+
+    test('every selector is specificity-zero via :where()', () => {
+      expect(selectorLists.length).toBeGreaterThan(0);
+      const offenders = selectorLists.filter((selector) => {
+        // Strip every :where(...) group, including nested parens. What remains
+        // must carry no specificity of its own: no class, id, attribute,
+        // pseudo-class or type selector outside a :where().
+        let stripped = stripWhereGroups(selector);
+        // The documented exemption (#190, #415): a native range input's thumb,
+        // track and progress fill are reachable only through pseudo-elements,
+        // and Selectors 4 forbids a pseudo-element inside `:where()`, so no rule
+        // that paints one can be specificity-zero. Each carries its
+        // pseudo-element's own (0,0,1), which any single consumer class
+        // outranks, and rule 1 -- the cascade layer -- still makes unlayered
+        // consumer CSS win outright.
+        //
+        // The four names below are the exemption's whole membership, and each
+        // was earned in `theme.css` first. It was one name when #414 added a
+        // ring to the `::-webkit-slider-thumb` of both sliders. Gecko's half of
+        // #190 added the other three: Gecko honours neither `outline` nor
+        // `box-shadow` on its thumb, and the first paint property to land on any
+        // part of a range input switches its native widget off for the whole
+        // control, so the ring there costs a redraw of the track and the
+        // progress fill as well. #415 added rules without adding a name, because
+        // the seek slider is now drawn rather than decorated on all three
+        // engines: it takes a `::-webkit-slider-thumb` rule of its own, and one
+        // more rule silences `::-moz-range-track` and `::-moz-range-progress`
+        // for that one input so the theme's bar is its track and `seek-progress`
+        // its fill.
+        //
+        // The list is not per fixture because it describes the engines rather
+        // than any one stylesheet: these are the parts of a range input that no
+        // selector can reach from inside a `:where()`, whatever paints them.
+        //
+        // Still removed by exact name, one name at a time, so any OTHER
+        // pseudo-element -- and every class, id, attribute or type selector left
+        // outside a `:where()` -- still fails below.
+        for (const exempt of [
+          '::-webkit-slider-thumb',
+          '::-moz-range-track',
+          '::-moz-range-progress',
+          '::-moz-range-thumb'
+        ])
+          stripped = stripped.split(exempt).join('');
+        return /[.#[]|::?[a-z]|[a-z]/i.test(stripped.replace(/[\s,>+~*]/g, ''));
+      });
+      expect(offenders).toEqual([]);
+    });
+
+    test('every button-shaped part is carried by every button rule', () => {
+      // The button rules are hand-listed selector groups, so a new control
+      // primitive is styled only if someone remembers to add it to all of them
+      // -- and a control that misses one silently loses its box, its hover tint
+      // or its forced-colors border while looking fine everywhere else.
+      const buttonParts = [
+        'play-button',
+        'mute-button',
+        'captions-button',
+        'fullscreen-button',
+        'pip-button',
+        'airplay-button',
+        'settings-menu-trigger'
+      ];
+      // Anchored on "mentions any button part" rather than on one named part.
+      // Anchoring on `play-button` missed a rule listing only, say, mute-button
+      // and pip-button; anchoring on "two or more" then missed a rule that names
+      // exactly one -- which is the shape that silently drops a single control's
+      // hover tint, the very failure this test exists to catch.
+      //
+      // And every named part has to be a button part, not merely one of them.
+      // The volume reveal's
+      // `[data-playdeck-part='mute-button']:hover +
+      // [data-playdeck-part='volume-slider']` names a button alongside a
+      // slider, but its subject is the slider: it reaches past the button
+      // rather than styling it, so it is out of scope for a check that guards
+      // the shared button box, not a rule that has dropped six controls from
+      // one.
+      const buttonRules = selectorLists.filter((selector) => {
+        const namedParts = [
+          ...selector.matchAll(/data-playdeck-part='([a-z-]+)'/g)
+        ].map(([, name]) => name);
+        return (
+          namedParts.some((name) => buttonParts.includes(name)) &&
+          namedParts.every((name) => buttonParts.includes(name))
+        );
+      });
+      expect(buttonRules.length).toBeGreaterThan(0);
+      const missing = buttonRules.flatMap((rule) =>
+        buttonParts
+          .filter((part) => !rule.includes(`data-playdeck-part='${part}'`))
+          .map((part) => `${part} missing from: ${rule.replace(/\s+/g, ' ')}`)
+      );
+      expect(missing).toEqual([]);
+    });
+
+    test('sizes the activation part with a min-* floor, not a fixed size', () => {
+      // An explicit `inline-size`/`block-size` on the activation part beats a
+      // consumer's own padding or `min-height` however they write it, because a
+      // used value is not a fallback — imposing the badge look on any labelled
+      // affordance rather than offering it as a default. Measured on the
+      // fixed-size rule, a button carrying the `white-space: nowrap` label
+      // "Watch the trailer" at 16px system-ui: the box stayed 64px wide while
+      // its own content wanted 96.55px on chromium and 111.83px on firefox, so
+      // the label ran outside the circle drawn for an icon. Under the floor
+      // below the same button measures 120.55px and 135.83px and the icon-only
+      // one is still 64px square. A `min-*` floor keeps that default and
+      // lets anything wider grow, and `border-radius: 2rem` draws the circle at
+      // that size and a pill past it, where `50%` would draw an ellipse.
+      const activationRule = withoutComments.match(
+        /:where\(\[data-playdeck-part='activation'\]\)\s*\{[^}]*\}/
+      )?.[0];
+      expect(activationRule).toBeDefined();
+      // `padding-inline` is absorbed by the floor rather than added to it only
+      // under `border-box`, so without it the icon-only badge becomes a pill.
+      expect(activationRule).toMatch(/box-sizing:\s*border-box/);
+      expect(activationRule).toMatch(
+        /min-inline-size:\s*var\(--playdeck-activation-size,\s*4rem\)/
+      );
+      expect(activationRule).toMatch(
+        /min-block-size:\s*var\(--playdeck-activation-size,\s*4rem\)/
+      );
+      expect(activationRule).toMatch(
+        /padding-inline:\s*var\(--playdeck-space-3/
+      );
+      // A floor alone does not size a box, and this part is positioned
+      // `position: absolute; inset: 0` by the primitive that renders it, where
+      // an `auto` size is solved to fill the containing block rather than
+      // shrinking to fit. Without a stated size the badge paints over the whole
+      // picture and `margin: auto` has no leftover space to centre it -- which
+      // is a full-bleed box that is still perfectly concentric, so a centring
+      // assertion passes on it. `stories/theme.stories.tsx`'s
+      // `ActivationIsCentred` measures that from a rendered story; this asserts
+      // the structural reason for it, and covers any theme drawing this part.
+      expect(activationRule).toMatch(/inline-size:\s*fit-content/);
+      expect(activationRule).toMatch(/block-size:\s*fit-content/);
+      expect(activationRule).not.toMatch(/(?<!min-)inline-size:\s*4rem/);
+      expect(activationRule).not.toMatch(/(?<!min-)block-size:\s*4rem/);
+    });
+
+    // The control bar is two rows and no wrapper element draws them: `Controls`
+    // renders one part and takes `children` opaquely. The split comes from
+    // `flex-wrap: wrap` on that part plus a 100% basis on the seek slider, which
+    // lands on its own line because the contract puts it first in the composed
+    // children — so its basis is the first thing wrap has to place. A consumer
+    // who reorders the children loses the split, which is the price of not
+    // materialising a `controls-row` element inside their markup.
+    test('wraps the control bar and gives the seek slider its own row', () => {
+      const controlsRule = withoutComments.match(
+        /:where\(\[data-playdeck-part='controls'\]\)\s*\{[^}]*\}/
+      )?.[0];
+      expect(controlsRule).toMatch(/flex-wrap:\s*wrap/);
+      const seekRule = withoutComments.match(
+        /:where\(\[data-playdeck-part='seek-slider'\]\)\s*\{[^}]*\}/
+      )?.[0];
+      expect(seekRule).toMatch(/flex:\s*1\s+1\s+100%/);
+    });
+
+    // An auto inline-end margin on the duration `Time` eats the second row's
+    // free space, which is what holds the trailing buttons against the end. It
+    // is stated on that element rather than on the first trailing button
+    // because every control is gated and renders nothing when its provider
+    // cannot honour it: an absent `CaptionsButton` would take the margin with
+    // it, and the group would collapse back to the start.
+    //
+    // Measured from a rendered bar composed in the contract order at 640px:
+    // without this the row packs left and the gap between the duration `Time`
+    // and `CaptionsButton` is the bar's own 4px `gap`; with it that gap is
+    // 152.2px on Chromium and 152.25px on Firefox, and the trailing group sits
+    // flush against the bar's inner end.
+    test('pushes the trailing controls to the end with the duration Time', () => {
+      expect(withoutComments).toMatch(
+        /\[data-playdeck-part='time'\]\[data-time-type='duration'\][^{]*\{[^}]*margin-inline-end:\s*auto/
+      );
+    });
+
+    // The slider keeps its box at rest and only its paint changes, so no
+    // neighbour moves when it appears. Measured by driving the Theme/Theme
+    // story, whose bar is `position: absolute; inset: auto 0 0 0` inside a
+    // relatively positioned 640px viewport: at rest and revealed alike the
+    // slider is 80x44 at x=120, and the gap from the mute button's inline end
+    // to the duration `Time` is 88px — identical in both states, on chromium
+    // and on firefox. What does change is `opacity` 0 -> 1 and
+    // `pointer-events` `none` -> `auto`, on hovering the mute button, on
+    // moving the pointer from it onto the slider, and on focusing the slider;
+    // all three return to rest when the pointer leaves and the input blurs.
+    // Under an emulated coarse pointer (`matchMedia('(pointer: coarse)')`
+    // true) the same slider computes `display: none` and measures 0x0, and
+    // that 88px gap collapses to the bar's own 4px.
+    test('hides the volume slider at rest on a fine pointer and reveals it on hover or focus', () => {
+      expect(withoutComments).toMatch(
+        /@media\s*\(\s*pointer:\s*fine\s*\)\s*\{[^]*?opacity:\s*0;[^]*?pointer-events:\s*none;[^]*?\}/
+      );
+      // `\s*` around the combinator, not a literal space: the formatter breaks
+      // this selector across two lines, and whitespace between a combinator and
+      // its operands is not part of what is being asserted.
+      expect(withoutComments).toMatch(
+        /mute-button'\]:hover\s*\+\s*\[data-playdeck-part='volume-slider'\]/
+      );
+      expect(withoutComments).toMatch(/volume-slider'\]:focus-within/);
+    });
+
+    test('hides the volume slider outright on a coarse pointer', () => {
+      expect(withoutComments).toMatch(
+        /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{[^]*?volume-slider'\][^]*?display:\s*none/
+      );
+    });
+
+    test('declares no !important', () => {
+      // A theme that needs !important has already lost the override argument.
+      expect(withoutComments).not.toMatch(/!\s*important/i);
+    });
+
+    test('disables nonessential motion under prefers-reduced-motion', () => {
+      expect(withoutComments).toMatch(
+        /@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)/
+      );
+    });
+
+    test('keeps control states distinguishable in forced-colors mode', () => {
+      expect(withoutComments).toMatch(
+        /@media\s*\(\s*forced-colors\s*:\s*active/
+      );
+    });
+
+    // A hand-drawn slider works by switching an engine's native range widget
+    // off, and forced colors is the mode where that widget was the only thing
+    // painting the control in the user's own palette. Unguarded, #190's Gecko
+    // volume slider flattened to `Canvas` -- the progress fill and the unfilled
+    // track alike at `rgb(255 255 255)`, 1.00:1, so the slider stated no value
+    // at all. #415's seek slider is held out of the mode for the same reason and
+    // at a measured price, which `theme.css` records where it draws that
+    // control: positioning the input there takes the loaded range from 21.00:1
+    // against the unfilled one to 1.00:1 on Chromium, and drawing the control
+    // there flattens Gecko's thumb to between 2.05:1 and 2.85:1 against the
+    // canvas. Any stylesheet that draws the same controls buys the same trade,
+    // which is why the guard is asserted per fixture against the needles that
+    // fixture names.
+    // `e2e/thumb-contrast.spec.ts` measures that from rendered pixels; this
+    // asserts the structural reason for it, which costs no browser and fails in
+    // the same edit.
+    test('leaves every hand-drawn slider rule out of forced-colors mode', () => {
+      const query = /@media\s*\(\s*forced-colors\s*:\s*none\s*\)/.exec(
+        withoutComments
+      );
+      expect(query).not.toBeNull();
+
+      // Walk to the `}` that closes the query, so "inside it" is the block and
+      // not everything after the preamble.
+      const start = query!.index;
+      let depth = 0;
+      let end = withoutComments.indexOf('{', start);
+      for (; end < withoutComments.length; end++) {
+        if (withoutComments[end] === '{') depth++;
+        else if (withoutComments[end] === '}' && --depth === 0) break;
+      }
+
+      const names = expected.forcedColorsSliderNeedles;
+      const guarded = withoutComments.slice(start, end + 1);
+      expect(names.filter((name) => guarded.includes(name))).toEqual(names);
+      // And nowhere outside it, or the query is decorative: one unguarded paint
+      // property on any part is enough to switch the whole native widget off.
+      const elsewhere =
+        withoutComments.slice(0, start) + withoutComments.slice(end + 1);
+      expect(names.filter((name) => elsewhere.includes(name))).toEqual([]);
+    });
+
+    test(`is reachable as @playdeck/react/${label} and shipped in the tarball`, async () => {
+      const manifest = JSON.parse(
+        await readFile(new URL('../package.json', import.meta.url), 'utf8')
+      ) as {
+        exports: Record<string, unknown>;
+        files: string[];
+      };
+      expect(manifest.exports[exportPath]).toBe(exportPath);
+      expect(manifest.files).toContain(exportPath.replace(/^\.\//, ''));
+    });
+  }
+);
+
+describe('theme contract', () => {
   // `sideEffects` is an array here, which means "these files and nothing else".
   // A stylesheet left out of it is declared side-effect-free, and a bundler is
   // then entitled to drop a consumer's bare `import
@@ -560,6 +794,197 @@ describe('slider non-text contrast', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// `docked.css`'s own palette.
+//
+// Stated as literals rather than read out of the file the way `tokenDefault`
+// reads theme.css's. `docked.css` states a theme-paired default for the palette
+// tokens these pairs are built from -- a light one in the cascade's normal
+// position and a dark repeat inside `@media (prefers-color-scheme: dark)` --
+// and `tokenDefault` throws on any token read with more than one fallback, by
+// design: one fallback per token is what makes it a trustworthy reading of what
+// ships. Reading a paired token through it therefore cannot work, and picking
+// one side of the pair would mean writing the literal here anyway. That is a
+// statement about the tokens these pairs read, not about the file: whether some
+// other token there carries one default or two is not what decides this, so
+// check the token before assuming it can be read. The pairs below are checked
+// against the ratios `docked.css`'s own header comment states, and moving a
+// default without restating them fails here.
+//
+// Every colour is opaque, so nothing needs compositing with `over` first.
+describe('docked.css text contrast', () => {
+  const textPairs = [
+    { name: 'on-surface vs surface (light)', fg: '#1c1c1e', bg: '#f4f4f2' },
+    { name: 'on-surface vs surface (dark)', fg: '#ededed', bg: '#141416' },
+    { name: 'accent vs surface (light)', fg: '#2b52d6', bg: '#f4f4f2' },
+    { name: 'accent vs surface (dark)', fg: '#3ea6ff', bg: '#141416' }
+  ];
+
+  test.each(textPairs)('$name clears 4.5:1', ({ fg, bg }) => {
+    const ratio = contrast(parseColor(fg), parseColor(bg));
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// A UI component's own boundary (1.4.11), not text (1.4.3), so the floor is
+// 3:1 -- the same rule `theme.css`'s own `slider non-text contrast` describe
+// checks, above. `track` is `seek-buffered`, the unfilled boundary, checked
+// against the surface it sits on; `buffered` is `seek-buffered-range`, the
+// loaded boundary, checked against the track it composites over (never the
+// surface directly, the same composite order `theme.css`'s own describe uses
+// and for the same reason: that is the surface the boundary is actually
+// painted against). `focus` is the `:focus-visible` outline, checked against
+// the surface it is drawn on.
+describe('docked.css slider non-text contrast', () => {
+  const nonTextPairs = [
+    { name: 'track vs surface (light)', fg: '#84847d', bg: '#f4f4f2' },
+    { name: 'track vs surface (dark)', fg: '#6d6d70', bg: '#141416' },
+    { name: 'buffered vs track (light)', fg: '#1c1c1e', bg: '#84847d' },
+    { name: 'buffered vs track (dark)', fg: '#ededed', bg: '#6d6d70' },
+    { name: 'focus vs surface (light)', fg: '#2b52d6', bg: '#f4f4f2' },
+    { name: 'focus vs surface (dark)', fg: '#3ea6ff', bg: '#141416' }
+  ];
+
+  test.each(nonTextPairs)('$name clears 3:1', ({ fg, bg }) => {
+    const ratio = contrast(parseColor(fg), parseColor(bg));
+    expect(ratio).toBeGreaterThanOrEqual(3);
+  });
+
+  // The margins the header comment states, pinned so a token move has to
+  // restate what it did rather than quietly spending headroom.
+  test('states the ratio of every boundary', () => {
+    const stated = Object.fromEntries(
+      nonTextPairs.map(({ name, fg, bg }) => [
+        name,
+        `${contrast(parseColor(fg), parseColor(bg)).toFixed(2)}:1`
+      ])
+    );
+    expect(stated).toEqual({
+      'track vs surface (light)': '3.42:1',
+      'track vs surface (dark)': '3.57:1',
+      'buffered vs track (light)': '4.52:1',
+      'buffered vs track (dark)': '4.41:1',
+      'focus vs surface (light)': '5.81:1',
+      'focus vs surface (dark)': '7.10:1'
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The two describes above check `docked.css`'s token PAIRS. A pair being sound
+// says nothing about which token a rule actually reads: the Gecko range track
+// once read `--playdeck-color-hairline`, a 1px-border colour the spec rejects
+// for a slider boundary, and every pair-shaped assertion above passed straight
+// through it. These read the declarations out of the file itself.
+const dockedWithoutComments = dockedSource.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** The `var(--name, default)` a declaration reads, as name and parsed colour. */
+const varRead = (declaration: string): { token: string; fallback: string } => {
+  const match = /var\(\s*(--[\w-]+),\s*([^)]*\)?[^)]*)\)/.exec(declaration);
+  if (match === null)
+    throw new Error(`no \`var()\` in the declaration \`${declaration}\``);
+  return { token: match[1], fallback: match[2].trim() };
+};
+
+describe('docked.css reads the token each measured boundary is measured on', () => {
+  // The shared range-track rule and its dark repeat, in document order. The
+  // seek input resets its own track to `transparent` in a later rule, so the
+  // control these two actually paint is the volume slider.
+  const trackRules = [
+    ...dockedWithoutComments.matchAll(
+      /\[data-playdeck-part='volume-slider'\]\s*\)::-moz-range-track\s*\{([^}]*)\}/g
+    )
+  ].map((match) => match[1]);
+
+  test('has a light Gecko range-track rule and a dark repeat', () => {
+    expect(trackRules).toHaveLength(2);
+  });
+
+  // The defect this exists to catch: the spec rejects `-hairline` here by name
+  // ("`-track` and `-buffered` in particular are not swapped for `-hairline`"),
+  // and the file's own dark block already defines `--playdeck-color-track`.
+  test.each([
+    { scheme: 'light', index: 0, surface: '#f4f4f2' },
+    { scheme: 'dark', index: 1, surface: '#141416' }
+  ])(
+    'the $scheme Gecko range track reads --playdeck-color-track',
+    ({ index }) => {
+      const background = /background-color:([^;]*);/.exec(trackRules[index]);
+      expect(varRead(background?.[1] ?? '').token).toBe(
+        '--playdeck-color-track'
+      );
+    }
+  );
+
+  // And the default it reads has to clear 1.4.11's floor against the bar the
+  // volume slider is painted on -- which is what a token name alone does not
+  // prove, since a consumer-facing token still ships its own default.
+  test.each([
+    { scheme: 'light', index: 0, surface: '#f4f4f2' },
+    { scheme: 'dark', index: 1, surface: '#141416' }
+  ])(
+    'the $scheme Gecko range track clears 3:1 against the control bar',
+    ({ index, surface }) => {
+      const background = /background-color:([^;]*);/.exec(trackRules[index]);
+      const { fallback } = varRead(background?.[1] ?? '');
+      const ratio = contrast(
+        over(parseColor(fallback), parseColor(surface)),
+        parseColor(surface)
+      );
+      expect(ratio).toBeGreaterThanOrEqual(3);
+    }
+  );
+
+  test('states the measured range-track ratio in each scheme', () => {
+    const stated = Object.fromEntries(
+      [
+        { scheme: 'light', index: 0, surface: '#f4f4f2' },
+        { scheme: 'dark', index: 1, surface: '#141416' }
+      ].map(({ scheme, index, surface }) => {
+        const background = /background-color:([^;]*);/.exec(trackRules[index]);
+        const { fallback } = varRead(background?.[1] ?? '');
+        return [
+          `range track vs control bar (${scheme})`,
+          `${contrast(
+            over(parseColor(fallback), parseColor(surface)),
+            parseColor(surface)
+          ).toFixed(2)}:1`
+        ];
+      })
+    );
+    expect(stated).toEqual({
+      'range track vs control bar (light)': '3.42:1',
+      'range track vs control bar (dark)': '3.57:1'
+    });
+  });
+
+  // `--playdeck-control-hover` is the one token this file gives a default that
+  // is not theme.css's, and it is translucent -- so unlike every opaque token
+  // above it composites differently in each scheme, and a missing dark repeat
+  // leaves 6% black on a near-black bar: a hover state that paints nothing.
+  const hoverReads = [
+    ...dockedWithoutComments.matchAll(
+      /background-color:\s*(var\(--playdeck-control-hover,[^;]*\));/g
+    )
+  ].map((match) => varRead(match[1]).fallback);
+
+  test('repeats the hover fill for dark the way every other token is repeated', () => {
+    expect(new Set(hoverReads).size).toBe(2);
+  });
+
+  test('the dark hover fill is at least as visible on its bar as the light one is on its own', () => {
+    const visibility = (fill: string, surface: string): number =>
+      contrast(
+        over(parseColor(fill), parseColor(surface)),
+        parseColor(surface)
+      );
+    const [light, dark] = [...new Set(hoverReads)];
+    expect(visibility(dark, '#141416')).toBeGreaterThanOrEqual(
+      visibility(light, '#f4f4f2')
+    );
+  });
+});
+
 describe('headless import chain', () => {
   test('no primitive source file imports CSS', async () => {
     // The whole point of the separate entry: importing a primitive must never
@@ -571,5 +996,50 @@ describe('headless import chain', () => {
     );
     expect(source).not.toMatch(/import\s+['"][^'"]+\.css['"]/);
     expect(source).not.toMatch(/from\s+['"][^'"]+\.css['"]/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The overlay rules, and why they are not inside the `describe.each` above.
+//
+// Both belong to `theme.css` alone, for the same reason: they exist to protect
+// a bar drawn over the picture, and `docked.css` never draws one. It reads no
+// `data-idle` at all, and it has no scrim to flatten below 48rem — so an
+// assertion placed in the parameterised suite would run against that fixture
+// too and fail on it forever. They read the module-scope `withoutComments` the
+// same way `theme contract` and `slider non-text contrast` do.
+describe('theme.css overlay rules (not shared with docked.css)', () => {
+  // The idle state is the selected one, so an absent `data-idle` renders
+  // exactly like `data-idle='false'`. That is what the attribute's own
+  // lifetime requires: `Viewport` writes it from an effect that returns early
+  // while its node is still null, so there is a first paint with no attribute
+  // at all, and a rule keyed on `[data-idle='false']` to mean "visible" would
+  // leave the bar hidden across it.
+  test('fades the control surface out while data-idle, and back in on focus-within', () => {
+    expect(withoutComments).toMatch(
+      /:where\(\[data-idle='true'\] \[data-playdeck-part='controls'\]\)\s*\{[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/
+    );
+    expect(withoutComments).toMatch(
+      /:where\(\[data-playdeck-part='controls'\]:focus-within\)\s*\{[^}]*opacity:\s*1;/
+    );
+  });
+
+  // Two declarations inside one `max-width: 48rem` query, and no third: the
+  // narrow fallback flattens the scrim and drops the volume slider, and says
+  // nothing about where the bar sits. A `position` written here would be
+  // layered `:where()` CSS, which the unlayered rule a real composition uses to
+  // float the bar beats whatever this file said — so the query claims only what
+  // it can deliver. Moving the bar out of the overlay is `docked.css`'s job,
+  // and that theme never puts it there to begin with.
+  test('flattens the scrim and drops the volume slider below 48rem', () => {
+    const query = withoutComments.match(
+      /@media\s*\(\s*max-width:\s*48rem\s*\)\s*\{[^]*?\n {2}\}/
+    )?.[0];
+    expect(query).toBeDefined();
+    expect(query).toMatch(
+      /background:\s*var\(--playdeck-color-surface,\s*rgb\(0 0 0 \/ 0\.72\)\)/
+    );
+    expect(query).toMatch(/volume-slider'\][^]*?display:\s*none/);
+    expect(query).not.toMatch(/position:/);
   });
 });

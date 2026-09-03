@@ -49,9 +49,15 @@ const meta = {
       }
     }
   },
+  // The label's colour is the story's, not the library's. The primitive resets
+  // the user agent's opaque button face so a poster shows through it (#555),
+  // which leaves the default text child painted `buttontext` over whatever is
+  // behind it -- here a stand-in for dark media, where black text is
+  // unreadable. A consumer supplies the colour, the same way the stories below
+  // that ship CSS of their own do.
   render: () => (
     <Player.Viewport style={{ width: 480, height: 270, background: '#0b0e13' }}>
-      <Player.ActivationButton />
+      <Player.ActivationButton style={{ color: '#fff' }} />
     </Player.Viewport>
   )
 } satisfies Meta<typeof Player.ActivationButton>;
@@ -279,6 +285,18 @@ export const OverlayOnPoster: Story = {
       )
     );
 
+    // Nothing styles this button, and that has to mean the poster is still
+    // visible through it. A `<button>` the user agent paints is opaque
+    // `buttonface` with a 2px outset border, and this one is full-bleed above
+    // the poster -- so a headless player shipped a grey rectangle where the
+    // picture was (#555). The primitive states its own fill and border as
+    // reads of `--playdeck-activation-fill`/`--playdeck-activation-border`,
+    // whose fallbacks are the reset, so the affordance is legible over the
+    // poster rather than instead of it.
+    const overlayPaint = globalThis.getComputedStyle(button);
+    await expect(overlayPaint.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    await expect(overlayPaint.borderTopWidth).toBe('0px');
+
     // Stacked, not merely both present. `elementFromPoint` cannot see the
     // poster — it is `pointer-events: none` — so the layering is read off the
     // boxes and the stacking order rather than off a hit-test stack: the
@@ -294,8 +312,8 @@ export const OverlayOnPoster: Story = {
     // The centring claim, made load-bearing: nothing styles the button, so a
     // centred icon is the `<button>` centring its own content across the
     // full-bleed box. Not an exact match — the UA button stylesheet's
-    // asymmetric padding/border offsets the content box by ~1.5px vertically
-    // — so allow a few pixels, and measure against the boxes rather than
+    // asymmetric padding offsets the content box by 1.5px vertically, measured
+    // on chromium — so allow a few pixels, and measure against the boxes rather
     // fixed coordinates so a viewport-size change does not rewrite the test.
     const centre = (box: DOMRect) => ({
       x: box.left + box.width / 2,

@@ -9,6 +9,12 @@ import type { Decorator } from '@storybook/react-vite';
 // covered where it belongs: packages/react/test/theme.test.ts asserts the
 // exports and files entries, and publint/attw check the tarball.
 import themeCss from '../../../packages/react/theme.css?inline';
+// The second theme, mounted by the same mechanism and never alongside the
+// first: both files open `@layer playdeck`, and two files declaring one layer
+// name merge into it rather than shadowing each other, so a document carrying
+// both would have their rules for a shared selector competing on source order
+// alone. `withTheme` below is an either/or for exactly that reason.
+import dockedCss from '../../../packages/react/docked.css?inline';
 
 /**
  * Mounts a stylesheet as a `<style>` inside the story's own tree, so it is torn
@@ -27,12 +33,19 @@ export const withCss =
   );
 
 const withThemeCss = withCss(themeCss);
+const withDockedCss = withCss(dockedCss);
 
 /**
- * Mounts the optional theme when the toolbar's Theme toggle is on. This is the
- * only place the stylesheet is mounted; a story that wants it regardless of the
- * toolbar pins itself with `globals: { theme: 'themed' }` (see
- * `stories/theme.stories.tsx`).
+ * Mounts one optional theme, or none, from the toolbar's Theme toggle. This is
+ * the only place either stylesheet is mounted; a story that wants one
+ * regardless of the toolbar pins itself with `globals: { theme: 'themed' }`
+ * (see `stories/theme.stories.tsx`), and `e2e/a11y.spec.ts` reaches the docked
+ * one the same way through a story URL's `globals=theme:docked`.
+ *
+ * Never both at once — see the import comment above.
  */
-export const withTheme: Decorator = (Story, context) =>
-  context.globals.theme === 'themed' ? withThemeCss(Story, context) : <Story />;
+export const withTheme: Decorator = (Story, context) => {
+  if (context.globals.theme === 'themed') return withThemeCss(Story, context);
+  if (context.globals.theme === 'docked') return withDockedCss(Story, context);
+  return <Story />;
+};

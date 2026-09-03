@@ -394,11 +394,16 @@ const aspectRatio = `${fallback.width} / ${fallback.height}`;
    * `data-bench-skin` rides on the viewport, written by `Stage` in
    * `BenchIsland.tsx` in the same React commit as the state it reports, so the
    * rule matches only while the position it is written for is the one selected.
-   * Under `theme` nothing here applies and the stylesheet does its own work. */
+   * Under `theme` nothing here applies and the stylesheet does its own work.
+   *
+   * Written as the two `--playdeck-activation-*` tokens rather than as
+   * `background-color`/`border`, because that is the only spelling that
+   * reaches this part: the button states both properties inline as reads of
+   * those tokens, and an inline declaration beats any stylesheet. */
   :global(.bench__stage)
     :global([data-bench-skin='none'] [data-playdeck-part='activation']) {
-    background-color: transparent;
-    border: 0;
+    --playdeck-activation-fill: transparent;
+    --playdeck-activation-border: 0;
   }
 
   /* The other half of the same defect, on the other skin -- issue #552,
@@ -435,7 +440,10 @@ const aspectRatio = `${fallback.width} / ${fallback.height}`;
     place-content: center;
     inline-size: 100%;
     block-size: 100%;
-    background-color: transparent;
+    /* The token, not `background-color`: the button reads it inline, and an
+     * inline declaration beats any stylesheet. Clearing it is what lets the
+     * `::before` below be the only badge on the frame. */
+    --playdeck-activation-fill: transparent;
     border-radius: 0;
     outline-offset: calc(-1 * var(--space-1));
   }

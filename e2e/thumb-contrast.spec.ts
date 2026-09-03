@@ -155,6 +155,65 @@ const state = (ratios: Record<string, number>): string =>
     .join(', ');
 
 /**
+ * #541: the range input, its painted fill and its buffered range share one
+ * vertical centre line, under two different inherited fonts.
+ *
+ * A range input is inline-level, so `seek-slider` laid it into a line box and
+ * grew past it by the descender space under the baseline, while `seek-buffered`
+ * and `seek-progress` are centred on the container with `inset-block-start: 50%`
+ * — so the input's own centre sat above theirs by a gap that is a function of
+ * the consumer's font, and never by zero. Measured here before `display: block`,
+ * as the centres of the three boxes: 70, 72 and 72 at the workbench's own font,
+ * and 70, 74 and 74 at Georgia 32px. Two fonts and not one because a single
+ * offset could not tell a font-dependent gap from a constant one.
+ *
+ * Box centres rather than `centreRow`, the per-row pixel sampling the rest of
+ * this file uses. All three of these parts are real elements, so there is no
+ * pseudo-element to reach for and nothing that needs a screenshot to see; and
+ * `centreRow` samples one row horizontally, which is the axis this defect does
+ * not live on — the thumb ring is 16px tall with a 2px border, so every row
+ * inside that span reads `#000` whether or not the input has drifted, and a
+ * sampling assertion here would have passed on the broken stylesheet. The rest
+ * of the file measures paint, which only pixels can settle; this measures
+ * layout, which `boundingBox()` settles exactly.
+ */
+const assertOneCentreLine = async (page: Page, storyId: string) => {
+  await page.goto(themedStory(storyId));
+  const centre = async (part: string): Promise<number> => {
+    const locator = page.locator(`[data-playdeck-part="${part}"]`);
+    await expect(locator).toBeVisible();
+    const box = (await locator.boundingBox())!;
+    return box.y + box.height / 2;
+  };
+
+  // Stated as offsets from the input rather than as three absolute numbers, so
+  // a failure reports the drift itself and not where the story happened to sit
+  // on the page. Exact equality, and it is not a stricter floor than the defect
+  // needs: with no line box the three centres are the same layout position, and
+  // all three engines put them there to the pixel.
+  const input = await centre('seek-slider-input');
+  expect({
+    'painted fill': (await centre('seek-progress')) - input,
+    'buffered range': (await centre('seek-buffered')) - input
+  }).toEqual({ 'painted fill': 0, 'buffered range': 0 });
+};
+
+test('the seek input sits on its own track at the default inherited font', async ({
+  page
+}) => {
+  await assertOneCentreLine(page, 'player-seekslider--with-buffered-ranges');
+});
+
+test('the seek input sits on its own track under a different inherited font', async ({
+  page
+}) => {
+  await assertOneCentreLine(
+    page,
+    'player-seekslider--with-buffered-ranges-large-inherited-font'
+  );
+});
+
+/**
  * The volume slider at exactly half, which is why this story and not another:
  * at 50% a range input's thumb centre lands on the track's centre on every
  * engine, whatever thumb width that engine chose. So the thumb is found by
@@ -163,9 +222,41 @@ const state = (ratios: Record<string, number>): string =>
  * It is also the slider the theme does not cover with anything: `VolumeSlider`
  * renders the input alone, so what a screenshot shows beside the thumb is the
  * slider itself. The seek slider is the opposite case, below.
+ *
+ * The theme reveals this control rather than showing it: under
+ * `(pointer: fine)` it rests at `opacity: 0` with `pointer-events: none`, and
+ * comes back to `opacity: 1` on hover or focus-within of `MuteButton` or of
+ * itself. Measured at rest on this story, both engines report
+ * `opacity: '0'`, `pointer-events: 'none'`, and an `elementFromPoint` at the
+ * slider's own centre that resolves to `viewport` — so a screenshot taken here
+ * samples the story's ground through a fully transparent control, which is
+ * exactly what it read: a darkest pixel of `rgb(11 14 19)`, the story's own
+ * background, and a flat 1.00:1 either side of the thumb.
+ *
+ * Focus, not hover, is what reveals it here. `pointer-events: none` takes the
+ * element out of hit testing, so it cannot match `:hover` at all while at rest
+ * — measured, a `mouse.move` onto its centre leaves all three of `opacity`,
+ * `:hover` and the hit test unchanged on both engines. `focus()` needs no hit
+ * target and lands on the `:focus-within` branch of the same selector list the
+ * theme's spec writes down, which reads `opacity: '1'` and
+ * `pointer-events: 'auto'` on both. That the standalone slider has no reachable
+ * hover state is a property of the theme, not of this file.
+ *
+ * The reveal is a 150ms `opacity` transition, so the opacity is polled to 1
+ * before anything is sampled rather than waited out on a timeout — the same
+ * idiom `e2e/theme-idle.spec.ts` measures the bar's own fade with. The focus
+ * ring this raises is `outline` at `outline-offset: 2px`, which paints outside
+ * the border box `centreRow` clips to, so it reaches no sampled pixel.
  */
 const volumeRow = async (page: Page): Promise<Row> => {
   await page.goto(themedStory('player-volumeslider--half-volume'));
+  const slider = page.locator('[data-playdeck-part="volume-slider"]');
+  await slider.focus();
+  await expect
+    .poll(() =>
+      slider.evaluate((element) => globalThis.getComputedStyle(element).opacity)
+    )
+    .toBe('1');
   return centreRow(page, '[data-playdeck-part="volume-slider"]');
 };
 

@@ -253,89 +253,200 @@ const scan = async (page: Page) => {
     .analyze();
 };
 
-for (const state of states) {
-  test(`no accessibility violations in the ${state.name} state`, async ({
-    page
-  }) => {
-    await page.goto(state.url);
-    // The idle state renders no controls at all, so wait on the viewport.
-    await expect(page.locator('[data-playdeck-part="viewport"]')).toBeVisible();
+// Every state above is scanned twice: once headless — the default the library
+// ships, and what this file has always scanned — and once with `docked.css`
+// mounted, through the same `theme` toolbar global
+// `apps/storybook/.storybook/theme.tsx` already uses to mount `theme.css`.
+// `theme.css` gets no third pass: its own overlay behaviour is covered by
+// `e2e/theme-idle.spec.ts`, and on this composition an unlayered `layoutCss`
+// beats both theme files for every property it sets, so a themed sweep would
+// be scanning the same tree twice for the same answer.
+//
+// The `docked` pass appends to the URL `state.url` already carries rather than
+// rebuilding a story id out of `state.name`: only four of the nine names are
+// their own story id (`paused`, `captions-on`, `menu-open` and
+// `captions-menu-open` are all `composition`; `error` is `error-state`).
+//
+// It also runs under `prefers-color-scheme: dark`, and that is a measured
+// necessity rather than extra coverage. The example paints its own chrome
+// unlayered — `.playdeck-example-controls { background: rgb(4, 6, 10) }`,
+// `.playdeck-example-error` and `.playdeck-example-menu` the same — and
+// unlayered beats every `@layer playdeck` rule whatever its specificity, so
+// the theme never gets to supply a background here. It does still supply
+// `color`, which the example declares on no part. Mount `docked.css` in the
+// light scheme and the result is its light-surface foreground (`#1c1c1e`) on
+// the example's near-black bar: axe measures 1.19:1 and is right to fail it.
+// That is not a defect in either file, it is two files disagreeing about which
+// surface they are painting on, and the dark scheme is the one where they
+// agree — `#ededed` on `rgb(4, 6, 10)`. `docked.css`'s light half is held to
+// 4.5:1 where the claim can be made honestly, against its own surface token:
+// `docked.css text contrast` in `packages/react/test/theme.test.ts`.
+const themes = [
+  { name: 'headless', globals: '', prefix: '', hairline: '0px' },
+  {
+    name: 'docked',
+    globals: ';theme:docked',
+    prefix: 'docked ',
+    hairline: '1px',
+    colorScheme: 'dark'
+  }
+] as const;
 
-    if (state.open) {
-      await (state.open === 'captions' ? captionsTrigger : settingsTrigger)(
-        page
-      ).click();
-      await expect(settingsMenu(page)).toHaveAttribute(
-        'data-playdeck-menu',
-        'open'
-      );
+// One `incomplete` id the docked pass tolerates either way, keyed by state
+// name. Held to the same rule as `knownIncomplete` — a diagnosed finding with a
+// written reason — but expressed as *optional* rather than expected, because
+// this one is genuinely engine-dependent and a fixed expectation for it would
+// be wrong on some engine whichever way it was written. Everything outside this
+// list is still matched by equality, so a new, undiagnosed id fails as before.
+//
+// menu-open / color-contrast (messageKey `bgOverlap`, on the current-time
+// `<time>`): a layout consequence of the composition, not a colour one, and not
+// specific to `docked.css` — `theme:themed` produces the identical geometry,
+// measured. `.playdeck-example-controls` is `flex-direction: column` and
+// declares no `align-items`; both theme files set `align-items: center` on that
+// same part. Mount either and the two example rows stop stretching to the bar's
+// full 768px and centre at their content width instead, which slides the
+// current time to the middle of the bar and under the settings menu — an opaque
+// popup anchored to the bar's right edge, opening upward over the seek row.
+//
+// The overlap itself is structural and present on both engines (the menu spans
+// x 304-490 in each; the current time spans 286.3-331.5 on chromium and
+// 270.8-316.0 on firefox — the row's centred width differs by ~31px on font
+// metrics alone). What differs is whether axe notices: it resolves a
+// background at the text's own centre, and that centre lands inside the menu on
+// chromium (308.9) and clear of it on firefox (293.4). So chromium returns the
+// text needs-review and firefox returns it clean, and both are right about the
+// same geometry. Absorbing it as expected would fail on firefox; expecting it
+// absent would fail on chromium.
+//
+// Nothing is hidden from a user by it: `<time>` is not focusable, so SC 2.4.11
+// is untouched, and the text sits behind a popup the reader opened. The
+// captions menu is narrower and its states clear the time on both engines.
+const dockedOptionalIncomplete: Readonly<Record<string, readonly string[]>> = {
+  'menu-open': ['color-contrast']
+};
 
-      // Both menus render the same `settings-menu` part, so the attribute above
-      // says a menu is open, not which one. Pin the identity on content: the
-      // captions menu always carries an "Off" radio item, and the settings
-      // menu's labels are rates, qualities and "Auto" — never "Off". Repoint
-      // either state at the other trigger and this flips.
-      await expect(
-        page.getByRole('menuitemradio', { name: 'Off', exact: true }),
-        `the ${state.open} menu must be the one that opened`
-      ).toHaveCount(state.open === 'captions' ? 1 : 0);
-
-      // The zero-violations claim below is only worth anything for
-      // `scrollable-region-focusable` if the region actually scrolls. The
-      // example bounds the menu at `max-height: 12rem; overflow-y: auto`, and
-      // a rate list plus a quality ladder overflows that — but a CSS edit
-      // could quietly take the overflow away and turn this state into a scan
-      // of a rule that no longer applies. Pin it.
-      //
-      // Settings only. `.playdeck-example-menu` is what bounds a menu at
-      // `max-height: 12rem; overflow-y: auto`, and the composition applies it
-      // to the settings menu alone — the captions menu takes no className, so
-      // it computes `overflow-y: visible` and cannot scroll at any item count.
-      // `reference-player.tsx` records the same asymmetry against its own
-      // height bound.
-      if (state.open === 'settings') {
-        const scroll = await settingsMenu(page).evaluate((el) => ({
-          scrollHeight: el.scrollHeight,
-          clientHeight: el.clientHeight,
-          overflowY: getComputedStyle(el).overflowY
-        }));
-        expect(
-          scroll.scrollHeight,
-          `the menu must genuinely scroll for this state to exercise ` +
-            `scrollable-region-focusable (overflow-y: ${scroll.overflowY})`
-        ).toBeGreaterThan(scroll.clientHeight);
+for (const theme of themes) {
+  for (const state of states) {
+    test(`no accessibility violations in the ${theme.prefix}${state.name} state`, async ({
+      page
+    }) => {
+      if ('colorScheme' in theme) {
+        await page.emulateMedia({ colorScheme: theme.colorScheme });
       }
-    }
+      await page.goto(`${state.url}${theme.globals}`);
+      // The idle state renders no controls at all, so wait on the viewport.
+      await expect(
+        page.locator('[data-playdeck-part="viewport"]')
+      ).toBeVisible();
 
-    if (state.globalShortcuts) {
-      // Same reasoning as the scroll pin above. This state and `paused` scan
-      // the same tree; the only difference is where the shortcut listener is
-      // attached, and that is not something axe can see. Drop the `global`
-      // prop from the story and the scan would still pass while covering
-      // nothing, so assert the mode engaged before believing the result.
-      await expect(controls(page)).toHaveAttribute('data-state', 'global');
-    }
+      // Pin the stylesheet that arrived, not the one the URL asked for. The
+      // packaging smoke check's lesson (task 12): both themes read the same
+      // tokens onto the same parts, so a `theme:docked` URL that silently fell
+      // back to unthemed — a toolbar value the preview does not know, a
+      // decorator that never matched it — would scan exactly what the headless
+      // pass already scanned and report it as a second theme's clean bill.
+      // `border-block-start` on the control bar is the discriminator: it is
+      // `docked.css`'s hairline between bar and picture, drawn because there is
+      // no scrim here to supply that edge, and the string `border-block-start`
+      // appears nowhere in `theme.css`. The example's own unlayered
+      // `.playdeck-example-controls` declares no border either, so nothing
+      // above `@layer playdeck` can forge this number. `Controls` is rendered
+      // in every state — `hidden` in `idle` and `error`, which is
+      // `display: none` and still has a computed border width.
+      const hairline = await controls(page).evaluate(
+        (element) => getComputedStyle(element).borderBlockStartWidth
+      );
+      expect(
+        hairline,
+        `the ${theme.name} pass must scan the stylesheet it names: ` +
+          `docked.css draws a 1px border-block-start on the control bar and ` +
+          `theme.css draws none, so 0px here under \`docked\` means the ` +
+          `toolbar global never mounted it`
+      ).toBe(theme.hairline);
 
-    const results = await scan(page);
-    // The full violation objects, not just a count — a bare length assertion
-    // tells whoever reads the CI log nothing about what broke.
-    expect(results.violations).toEqual([]);
+      if (state.open) {
+        await (state.open === 'captions' ? captionsTrigger : settingsTrigger)(
+          page
+        ).click();
+        await expect(settingsMenu(page)).toHaveAttribute(
+          'data-playdeck-menu',
+          'open'
+        );
 
-    // `results.incomplete` is axe's needs-review bucket: rules it could not
-    // conclusively pass or fail. Matching it against `knownIncomplete` (an
-    // equality, not a subset check) is what makes the WCAG 1.4.3
-    // (color-contrast) claim over this state's text real rather than
-    // parked: a new, undiagnosed rule id fails here instead of being
-    // silently absorbed alongside a documented one. `Player.LoadingIndicator`
-    // used to force a color-contrast entry on every composition-backed state
-    // by occupying the full viewport even while idle; that is fixed (#32,
-    // `packages/react/src/index.tsx`). The states with a `knownIncomplete`
-    // above carry a distinct, diagnosed finding that is not this example's
-    // to fix; every other state is expected fully clean.
-    expect(results.incomplete.map((incomplete) => incomplete.id)).toEqual(
-      state.knownIncomplete ?? []
-    );
-  });
+        // Both menus render the same `settings-menu` part, so the attribute above
+        // says a menu is open, not which one. Pin the identity on content: the
+        // captions menu always carries an "Off" radio item, and the settings
+        // menu's labels are rates, qualities and "Auto" — never "Off". Repoint
+        // either state at the other trigger and this flips.
+        await expect(
+          page.getByRole('menuitemradio', { name: 'Off', exact: true }),
+          `the ${state.open} menu must be the one that opened`
+        ).toHaveCount(state.open === 'captions' ? 1 : 0);
+
+        // The zero-violations claim below is only worth anything for
+        // `scrollable-region-focusable` if the region actually scrolls. The
+        // example bounds the menu at `max-height: 12rem; overflow-y: auto`, and
+        // a rate list plus a quality ladder overflows that — but a CSS edit
+        // could quietly take the overflow away and turn this state into a scan
+        // of a rule that no longer applies. Pin it.
+        //
+        // Settings only. `.playdeck-example-menu` is what bounds a menu at
+        // `max-height: 12rem; overflow-y: auto`, and the composition applies it
+        // to the settings menu alone — the captions menu takes no className, so
+        // it computes `overflow-y: visible` and cannot scroll at any item count.
+        // `reference-player.tsx` records the same asymmetry against its own
+        // height bound.
+        if (state.open === 'settings') {
+          const scroll = await settingsMenu(page).evaluate((el) => ({
+            scrollHeight: el.scrollHeight,
+            clientHeight: el.clientHeight,
+            overflowY: getComputedStyle(el).overflowY
+          }));
+          expect(
+            scroll.scrollHeight,
+            `the menu must genuinely scroll for this state to exercise ` +
+              `scrollable-region-focusable (overflow-y: ${scroll.overflowY})`
+          ).toBeGreaterThan(scroll.clientHeight);
+        }
+      }
+
+      if (state.globalShortcuts) {
+        // Same reasoning as the scroll pin above. This state and `paused` scan
+        // the same tree; the only difference is where the shortcut listener is
+        // attached, and that is not something axe can see. Drop the `global`
+        // prop from the story and the scan would still pass while covering
+        // nothing, so assert the mode engaged before believing the result.
+        await expect(controls(page)).toHaveAttribute('data-state', 'global');
+      }
+
+      const results = await scan(page);
+      // The full violation objects, not just a count — a bare length assertion
+      // tells whoever reads the CI log nothing about what broke.
+      expect(results.violations).toEqual([]);
+
+      // `results.incomplete` is axe's needs-review bucket: rules it could not
+      // conclusively pass or fail. Matching it against `knownIncomplete` (an
+      // equality, not a subset check) is what makes the WCAG 1.4.3
+      // (color-contrast) claim over this state's text real rather than
+      // parked: a new, undiagnosed rule id fails here instead of being
+      // silently absorbed alongside a documented one. `Player.LoadingIndicator`
+      // used to force a color-contrast entry on every composition-backed state
+      // by occupying the full viewport even while idle; that is fixed (#32,
+      // `packages/react/src/index.tsx`). The states with a `knownIncomplete`
+      // above carry a distinct, diagnosed finding that is not this example's
+      // to fix; every other state is expected fully clean.
+      const optionalIncomplete =
+        theme.name === 'docked'
+          ? (dockedOptionalIncomplete[state.name] ?? [])
+          : [];
+      expect(
+        results.incomplete
+          .map((incomplete) => incomplete.id)
+          .filter((id) => !optionalIncomplete.includes(id))
+      ).toEqual(state.knownIncomplete ?? []);
+    });
+  }
 }
 
 // WCAG 2.2 SC 2.4.11 Focus Not Obscured, asserted directly rather than

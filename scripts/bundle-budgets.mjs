@@ -162,24 +162,45 @@ export const targets = [
     // Shipped as-is rather than built: it is plain CSS, and the primitives
     // never import it, which is what keeps the headless chain CSS-free. That
     // decision is also why the ceiling below is on a subset. Because the file
-    // ships as authored, its comments are bytes a consumer downloads, and
-    // 69.47% of its gzipped size is prose as of this change -- so a ceiling on
-    // the whole file is in practice a comment budget, and #453 records it
-    // failing a change that added 0.07 KB of rules and roughly 2 KB of
-    // explanation. The repo asks for that explanation elsewhere; it should not
-    // be priced here.
+    // ships as authored, its comments are bytes a consumer downloads, and the
+    // great majority of its gzipped size is prose -- so a ceiling on the whole
+    // file is in practice a comment budget, and #453 records it failing a
+    // change that added 0.07 KB of rules and roughly 2 KB of explanation. The
+    // repo asks for that explanation elsewhere; it should not be priced here.
     //
     // 2.5 KB, not the 6 KB this target carried before. 6 KB was set against a
-    // number that included the prose and cannot be carried across. The rules
-    // alone gzip to 1.77 KB as of this change (5.79 KB shipped), so 2.5 KB
-    // leaves 0.73 KB of headroom: room for the rule set to grow by roughly 40%
-    // before anything fails, which is generous for a stylesheet whose whole job
-    // is colour, radius and spacing, and still tight enough that a second
-    // control surface arriving here has to be argued for. The shipped figure
-    // is still measured and printed every run, so it cannot grow unobserved; it
-    // simply is not what fails the build.
+    // number that included the prose and cannot be carried across. It was
+    // chosen to sit roughly 40% above what the rules alone gzipped to at the
+    // time: room for the rule set to grow before anything fails, which is
+    // generous for a stylesheet whose whole job is colour, radius and spacing,
+    // and still tight enough that a second control surface arriving here has to
+    // be argued for. That growth has since been partly spent, and no figure is
+    // restated here, because a rule set under active edit outruns any number
+    // written beside it -- `pnpm test:budgets` prints the rules, the shipped
+    // size and the headroom on every run. The shipped figure is measured and
+    // printed too, so it cannot grow unobserved; it simply is not what fails
+    // the build.
     name: '@playdeck/react/theme.css',
     path: 'packages/react/theme.css',
+    budget: 2.5,
+    budgetedSubset: { label: 'CSS rules', extract: stripCssComments }
+  },
+  {
+    // The second theme, shipped as authored for the same reason theme.css is,
+    // and so budgeted the same way: on the rules, with the shipped figure still
+    // measured and printed.
+    //
+    // 2.5 KB is measured, not copied from the theme above -- the two landed on
+    // the same ceiling independently. docked.css carries the same range-input
+    // pseudo-element weight and forced-colors block against a smaller layout
+    // section -- it never overlays or auto-hides -- and its rules gzipped to a
+    // little over 2 KB when this was set, so 2.5 KB was simply the next 0.5 KB
+    // step up from them. That is a tighter margin than the theme was given, and
+    // deliberately: the two files do comparable work, so the one that arrived
+    // second gets no more room than the first. Where either stands now is
+    // printed by `pnpm test:budgets` rather than restated here.
+    name: '@playdeck/react/docked.css',
+    path: 'packages/react/docked.css',
     budget: 2.5,
     budgetedSubset: { label: 'CSS rules', extract: stripCssComments }
   },

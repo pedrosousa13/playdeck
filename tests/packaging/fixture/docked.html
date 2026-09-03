@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Playdeck packaging fixture (docked)</title>
+  </head>
+  <body>
+    <!--
+      The same mechanism as index.html, and the same reasoning: a theme token
+      set above the player for the smoke test in scripts/verify-packaging.mjs
+      to read back. A different value, so neither page's assertion can pass by
+      reading the other page's fixture.
+
+      A page of its own rather than a second import on index.html, because
+      theme.css and docked.css both open `@layer playdeck` -- two of them on
+      one document merge into that layer and compete for the selectors they
+      share on source order alone.
+    -->
+    <div id="root" style="--playdeck-color-on-surface: rgb(4, 5, 6)"></div>
+    <script type="module" src="/src/docked.tsx"></script>
+  </body>
+</html>

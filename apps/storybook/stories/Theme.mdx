@@ -5,8 +5,9 @@ import { Meta } from '@storybook/addon-docs/blocks';
 # Theme
 
 Playdeck ships two independent things: headless primitives that import no CSS at
-all, and one optional stylesheet. Nothing in the primitives depends on the
-stylesheet, and importing the stylesheet changes no behaviour — only appearance.
+all, and an optional stylesheet — two of those, and a page imports one or the
+other. Nothing in the primitives depends on either, and importing one changes no
+behaviour — only appearance.
 
 ## Headless usage
 
@@ -54,6 +55,13 @@ The stylesheet styles the parts you render. It adds no elements, changes no
 markup, and gates nothing — a control that was absent because its capability is
 `unavailable` stays absent.
 
+**Or the other one.** `@playdeck/react/docked.css` is a second stylesheet with
+the same contract: it docks the control bar under the picture instead of
+overlaying it, and never hides it. Import one or the other and never both —
+both open `@layer playdeck`, and two files declaring one layer name merge into
+it and compete for the selectors they share on source order alone. Everything
+below applies to whichever you chose.
+
 ## Overriding it
 
 Two CSS features do the work, and you don't have to think about either:
@@ -85,9 +93,9 @@ it either way.
 ## Tokens
 
 Everything worth changing is a custom property, read as `var(--name, default)`.
-The file declares none of them, which is deliberate: a declaration — even on the
-player element — would beat a value you set on an ancestor, because a
-declaration always wins over inheritance. Reading with fallbacks means you can
+The file declares none of them bar the two activation tokens noted below, which
+is deliberate: a declaration — even on the player element — would beat a value
+you set on an ancestor, because a declaration always wins over inheritance. Reading with fallbacks means you can
 set tokens **anywhere above the player**, or on the player itself, and they take
 effect. It also means nothing leaks into the surrounding document.
 
@@ -108,17 +116,49 @@ Baseline in May 2023, later than the floor Playdeck declares (Chrome 99, Firefox
 Safari 15.4). Use it if your target is newer — nothing in the theme requires or
 prevents either.
 
-| Group     | Tokens                                                                                                                                                                                                                            |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Color     | `--playdeck-color-surface`, `--playdeck-color-on-surface`, `--playdeck-color-accent`, `--playdeck-color-track`, `--playdeck-color-buffered`, `--playdeck-color-thumb-ring`, `--playdeck-color-focus`, `--playdeck-color-backdrop` |
-| Type      | `--playdeck-font-family`, `--playdeck-font-size`, `--playdeck-font-size-small`, `--playdeck-line-height`                                                                                                                          |
-| Spacing   | `--playdeck-space-1`, `--playdeck-space-2`, `--playdeck-space-3`                                                                                                                                                                  |
-| Shape     | `--playdeck-radius`, `--playdeck-radius-large`                                                                                                                                                                                    |
-| Controls  | `--playdeck-control-size`, `--playdeck-control-icon-size`, `--playdeck-control-hover`, `--playdeck-slider-thickness`                                                                                                              |
-| Overlays  | `--playdeck-overlay-opacity`, `--playdeck-overlay-scrim`                                                                                                                                                                          |
-| Motion    | `--playdeck-transition-duration`, `--playdeck-transition-easing`                                                                                                                                                                  |
-| Safe area | `--playdeck-safe-bottom`, `--playdeck-safe-left`, `--playdeck-safe-right`                                                                                                                                                         |
-| Poster    | `--playdeck-poster-fit`, `--playdeck-poster-position`                                                                                                                                                                             |
+| Group      | Tokens                                                                                                                                                                                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Color      | `--playdeck-color-surface`, `--playdeck-color-on-surface`, `--playdeck-color-accent`, `--playdeck-color-track`, `--playdeck-color-buffered`, `--playdeck-color-thumb-ring`, `--playdeck-color-focus`, `--playdeck-color-backdrop`, `--playdeck-color-hairline` |
+| Type       | `--playdeck-font-family`, `--playdeck-font-size`, `--playdeck-font-size-small`, `--playdeck-line-height`                                                                                                                                                       |
+| Spacing    | `--playdeck-space-1`, `--playdeck-space-2`, `--playdeck-space-3`                                                                                                                                                                                               |
+| Shape      | `--playdeck-radius`, `--playdeck-radius-large`                                                                                                                                                                                                                 |
+| Controls   | `--playdeck-control-size`, `--playdeck-control-icon-size`, `--playdeck-control-hover`, `--playdeck-slider-thickness`                                                                                                                                           |
+| Activation | `--playdeck-activation-size`, `--playdeck-activation-fill`, `--playdeck-activation-border`                                                                                                                                                                     |
+| Overlays   | `--playdeck-overlay-opacity`, `--playdeck-overlay-scrim`                                                                                                                                                                                                       |
+| Motion     | `--playdeck-transition-duration`, `--playdeck-transition-easing`                                                                                                                                                                                               |
+| Safe area  | `--playdeck-safe-bottom`, `--playdeck-safe-left`, `--playdeck-safe-right`                                                                                                                                                                                      |
+| Poster     | `--playdeck-poster-fit`, `--playdeck-poster-position`                                                                                                                                                                                                          |
+
+**The two activation paint tokens are declared, not only read.**
+`ActivationButton` writes `background-color` and `border` on itself inline, as
+reads of `--playdeck-activation-fill` and `--playdeck-activation-border`, so a
+player carrying no stylesheet at all never paints the user agent's own button
+face over its poster. Both stylesheets therefore _declare_ that pair on
+`[data-playdeck-part='activation']` rather than only reading it — which is what
+lets a value you set on the part itself beat the stylesheet's, since the nearest
+declaration in the inheritance chain wins. Set them on the part, not on an
+ancestor. A `style` prop passed to `ActivationButton` is spread after the
+primitive's own styles and wins outright either way.
+
+**`--playdeck-activation-size` is a floor, not a size.** The activation part is
+`fit-content` with `--playdeck-activation-size` as its `min-inline-size` and
+`min-block-size`, so icon-only content still measures a 4rem badge while a
+label grows the box past it.
+
+**`--playdeck-color-hairline` is `docked.css`'s alone.** It paints the 1px rule
+between the docked bar and the picture, and the settings and captions menu's own
+border. `theme.css` neither reads nor needs it: its scrim supplies both edges.
+
+**`docked.css` reads the same names with defaults of its own.** Its bar is a
+neutral surface rather than a scrim over the picture, so the colours it paints
+from mostly carry two defaults each — a light one in the cascade's normal
+position and a dark one repeated inside a `@media (prefers-color-scheme: dark)`
+block at the foot of the file — while a token whose `theme.css` default already
+suits both, such as `--playdeck-color-backdrop` behind the media, is read
+unchanged. Spacing, control sizing, typography, motion, safe area and the
+activation size keep `theme.css`'s defaults throughout. Each file's header
+comment lists its own, so read `packages/react/docked.css` for docked's rather
+than assuming the theme's.
 
 **`--playdeck-control-size` has a floor.** The 44×44 px minimum touch target is
 enforced by the primitives with an inline `min-width`/`min-height`, so a smaller

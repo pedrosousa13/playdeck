@@ -112,6 +112,42 @@ export const WithBufferedRanges: Story = {
   }
 };
 
+/**
+ * The same fixture as `WithBufferedRanges`, under a deliberately different
+ * inherited font. #541: the input sits on a text baseline and gains a
+ * descender gap below it, so the offset between `seek-buffered`'s 50% and the
+ * input's own centre is a function of the consumer's font — this is the
+ * fixture `e2e/thumb-contrast.spec.ts` points its second measurement at, so
+ * the fix is checked at more than one font size and not only Storybook's own
+ * default.
+ */
+export const WithBufferedRangesLargeInheritedFont: Story = {
+  render: () => (
+    <Player.Viewport
+      style={{
+        width: 480,
+        height: 270,
+        background: '#0b0e13',
+        fontFamily: 'Georgia, serif',
+        fontSize: '32px'
+      }}
+    >
+      <Player.SeekSlider style={{ width: '90%', margin: '2rem auto' }} />
+    </Player.Viewport>
+  ),
+  parameters: ready(
+    { seek: available },
+    {
+      currentTime: 30,
+      duration: 100,
+      buffered: [
+        { start: 0, end: 45 },
+        { start: 60, end: 80 }
+      ]
+    }
+  )
+};
+
 /** Mid-playback stall: `data-buffering` flips once the debounce admits it. */
 export const Stalled: Story = {
   parameters: ready(

@@ -65,6 +65,26 @@ const viewportStyle: CSSProperties = {
 // usable therefore publishes `undefined` rather than a number pair.
 const MEDIA_ASPECT_RATIO_PROPERTY = '--playdeck-media-aspect-ratio';
 
+// How long playback runs with no pointer or keyboard input before the themes'
+// auto-hide rule takes the controls away. A constant local to this file rather
+// than a `Viewport` prop: the value is CSS-driven, and a consumer who wants no
+// auto-hide overrides the `[data-idle='true']` rule instead of configuring a
+// number through a component that takes no configuration otherwise. The
+// reasoning is set out at length under "No prop" in
+// `docs/superpowers/specs/2026-09-02-player-themes-design.md`.
+const IDLE_DELAY_MS = 2500;
+
+// Reset on any of these, all bound to the viewport node rather than to
+// `document`, so a page carrying more than one player never has one player's
+// pointer traffic keep a different one awake.
+const IDLE_RESET_EVENTS = [
+  'pointermove',
+  'pointerdown',
+  'touchstart',
+  'keydown',
+  'focusin'
+] as const;
+
 export const assignRef = <Value,>(
   ref: Ref<Value> | undefined,
   value: Value | null
@@ -122,6 +142,60 @@ export const Viewport = ({ children, ref, style, ...rest }: ViewportProps) => {
         node.style.removeProperty(MEDIA_ASPECT_RATIO_PROPERTY);
       }
     });
+  }, [controller]);
+  // The idle timer behind the themes' auto-hide rule, written straight to the
+  // node for the same reason the aspect ratio above is: only CSS reads it, and
+  // a `PlayerState` field would wake every state consumer on every tick.
+  // `controller.subscribe` rather than `usePlayerState` for that same reason —
+  // subscribing through the hook is what re-renders, while this effect reacts
+  // only to a playback transition, gated below, and never to the
+  // many-times-a-second ticks the same subscription otherwise carries. It also
+  // never inspects focus or whether a menu is open: `:focus-within` in the
+  // theme stylesheets keeps the bar visible independently of what `data-idle`
+  // says, so the two concerns stay in separate layers.
+  useEffect(() => {
+    const node = viewportNode.current;
+    if (!node) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let playing = false;
+    const setIdle = (value: boolean) => {
+      node.setAttribute('data-idle', value ? 'true' : 'false');
+    };
+    const clearTimer = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    };
+    const arm = () => {
+      clearTimer();
+      timer = setTimeout(() => setIdle(true), IDLE_DELAY_MS);
+    };
+    // Only re-arms while playing, so input during a pause leaves the timer
+    // disarmed rather than starting one that would idle a paused player.
+    const reset = () => {
+      setIdle(false);
+      if (playing) arm();
+    };
+    for (const type of IDLE_RESET_EVENTS) node.addEventListener(type, reset);
+    setIdle(false);
+    const unsubscribe = controller.subscribe((state) => {
+      const nowPlaying = state.playback === 'playing';
+      if (nowPlaying === playing) return;
+      playing = nowPlaying;
+      if (playing) {
+        arm();
+      } else {
+        clearTimer();
+        setIdle(false);
+      }
+    });
+    return () => {
+      clearTimer();
+      for (const type of IDLE_RESET_EVENTS)
+        node.removeEventListener(type, reset);
+      unsubscribe();
+    };
   }, [controller]);
   return (
     <div

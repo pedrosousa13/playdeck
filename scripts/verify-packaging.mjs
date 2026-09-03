@@ -636,6 +636,65 @@ async function runFixture(packages, tarballDir) {
   }
 }
 
+// One fixture page, loaded and read back: the player mounted and asked for the
+// clip, and the stylesheet that page imports reached it.
+//
+// The stylesheet subpath is checked end to end. The fixture imports it by the
+// specifier the README hands consumers, so the bundler had to reach it through
+// the installed package's export map -- a subpath `files` and `exports`
+// disagreed about fails the build before this runs. What is left to establish
+// is that what arrived is the stylesheet, and each fixture page's markup sets
+// `--playdeck-color-on-surface` above the player so this can read it back. The
+// two pages set different values, so neither can pass by reading the other's.
+// Reading a token the fixture set, rather than a shipped default, keeps an
+// empty or truncated stylesheet failing here while a change to either theme's
+// own palette does not.
+//
+// What this depends on, and the way it can go inert: nothing but the two
+// stylesheets may declare a property that consults that token on the viewport.
+// A primitive that starts reading it inline -- which ADR-0001 blesses, and
+// `PosterImage` already does for `--playdeck-poster-fit` -- would colour the
+// element with no stylesheet present, and this check would pass on a run where
+// nothing arrived. Whoever tokenises that property has to move this check to
+// one the stylesheets alone still own.
+/**
+ * @param {import('@playwright/test').Page} page
+ * @param {string} baseUrl
+ * @param {string} pathname
+ * @param {string} stylesheet
+ * @param {string} expectedColor
+ */
+const assertThemedPage = async (
+  page,
+  baseUrl,
+  pathname,
+  stylesheet,
+  expectedColor
+) => {
+  await page.goto(`${baseUrl}${pathname}`);
+  const media = page.locator('[data-playdeck-part="media"]');
+  await media.waitFor();
+  const source = await media.locator('source').getAttribute('src');
+  if (source !== '/fixture.mp4') {
+    throw new Error(
+      `Expected the smoke player on ${pathname} to request /fixture.mp4, got: ${source}`
+    );
+  }
+
+  const themedColor = await page
+    .locator('[data-playdeck-part="viewport"]')
+    .evaluate(
+      (/** @type {Element} */ element) =>
+        globalThis.getComputedStyle(element).color
+    );
+  if (themedColor !== expectedColor) {
+    throw new Error(
+      `${stylesheet} did not reach ${pathname}: the viewport should read its ` +
+        `colour from the token the fixture sets, expected ${expectedColor}, got ${themedColor}.`
+    );
+  }
+};
+
 /** @param {string} distDir */
 async function smokeTest(distDir) {
   /** @type {Record<string, string>} */
@@ -680,45 +739,25 @@ async function smokeTest(distDir) {
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error));
 
-    await page.goto(`http://127.0.0.1:${address.port}`);
-    const media = page.locator('[data-playdeck-part="media"]');
-    await media.waitFor();
-    const source = await media.locator('source').getAttribute('src');
-    if (source !== '/fixture.mp4') {
-      throw new Error(
-        `Expected the smoke player to request /fixture.mp4, got: ${source}`
-      );
-    }
-
-    // The stylesheet subpath, end to end. The fixture imports it by the
-    // specifier the README hands consumers, so the bundler had to reach it
-    // through the installed package's export map -- a subpath `files` and
-    // `exports` disagreed about fails the build before this runs. What is left
-    // to establish is that what arrived is the theme, and the fixture's markup
-    // sets `--playdeck-color-on-surface` above the player so this can read it
-    // back. Reading a token the fixture set, rather than a shipped default,
-    // keeps an empty or truncated stylesheet failing here while a change to the
-    // theme's own palette does not.
-    //
-    // What this depends on, and the way it can go inert: nothing but theme.css
-    // may declare a property that consults that token on the viewport. A
-    // primitive that starts reading it inline -- which ADR-0001 blesses, and
-    // `PosterImage` already does for `--playdeck-poster-fit` -- would colour
-    // the element with no stylesheet present, and this check would pass on a
-    // run where nothing arrived. Whoever tokenises that property has to move
-    // this check to one theme.css alone still owns.
-    const themedColor = await page
-      .locator('[data-playdeck-part="viewport"]')
-      .evaluate(
-        (/** @type {Element} */ element) =>
-          globalThis.getComputedStyle(element).color
-      );
-    if (themedColor !== 'rgb(1, 2, 3)') {
-      throw new Error(
-        '@playdeck/react/theme.css did not reach the page: the viewport ' +
-          `should read its colour from the token the fixture sets, got ${themedColor}.`
-      );
-    }
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    await assertThemedPage(
+      page,
+      baseUrl,
+      '/index.html',
+      '@playdeck/react/theme.css',
+      'rgb(1, 2, 3)'
+    );
+    // A second page rather than a second import on the first. Both stylesheets
+    // open `@layer playdeck`, so two of them on one document merge into that
+    // layer and compete on source order -- whichever loaded second would win
+    // every selector they share, and neither could be said to have arrived.
+    await assertThemedPage(
+      page,
+      baseUrl,
+      '/docked.html',
+      '@playdeck/react/docked.css',
+      'rgb(4, 5, 6)'
+    );
 
     if (pageErrors.length > 0) {
       throw new Error(
