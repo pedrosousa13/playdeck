@@ -22,6 +22,12 @@ const themeTarget = targets.find(
 const themeSource = () =>
   readFile(join(repoRoot, 'packages/react/theme.css'), 'utf8');
 
+const dockedTarget = targets.find(
+  (target) => target.name === '@playdeck/react/docked.css'
+);
+const dockedSource = () =>
+  readFile(join(repoRoot, 'packages/react/docked.css'), 'utf8');
+
 // ---- the stripper ----------------------------------------------------------
 //
 // What the theme's budget is now enforced against, so every case below is a way
@@ -112,11 +118,14 @@ test('ends an unterminated string at a carriage return, not only a newline', () 
 
 // ---- the two figures and which one is the ceiling --------------------------
 
-test('the theme is the only target whose ceiling is on a subset', async () => {
+test('the stylesheets are the only targets whose ceiling is on a subset', async () => {
   assert.ok(themeTarget, 'the theme stylesheet is still a budget target');
-  assert.equal(themeTarget.budgetedSubset?.extract, stripCssComments);
+  assert.ok(dockedTarget, 'the docked stylesheet is still a budget target');
+  for (const target of [themeTarget, dockedTarget]) {
+    assert.equal(target.budgetedSubset?.extract, stripCssComments);
+  }
   for (const target of targets) {
-    if (target === themeTarget) continue;
+    if (target === themeTarget || target === dockedTarget) continue;
     assert.equal(
       target.budgetedSubset,
       undefined,
@@ -134,6 +143,30 @@ test('reports the shipped size alongside the rules-only size it gates on', async
   assert.ok(
     budgeted !== null && budgeted.size < size,
     `rules-only ${budgeted?.size} should be under shipped ${size}`
+  );
+});
+
+test("reports docked.css's shipped size alongside its rules-only size", async () => {
+  // The same two figures the theme reports, for the same reason: docked.css
+  // also ships as authored, so its prose is bytes a consumer downloads and has
+  // to stay observable even though the ceiling is not on it.
+  assert.ok(dockedTarget);
+  const { size, budgeted } = measureTarget(dockedTarget, await dockedSource());
+  assert.equal(budgeted?.label, 'CSS rules');
+  assert.ok(
+    budgeted !== null && budgeted.size < size,
+    `rules-only ${budgeted?.size} should be under shipped ${size}`
+  );
+});
+
+test('docked.css is inside its budget as it stands', async () => {
+  // The gate's own decision, run against the real file rather than a synthetic
+  // one: the budget is set from a measurement, so a budget set below the file
+  // it was measured from would otherwise ship red.
+  assert.ok(dockedTarget);
+  assert.deepEqual(
+    overBudget([measureTarget(dockedTarget, await dockedSource())]),
+    []
   );
 });
 

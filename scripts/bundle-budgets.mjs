@@ -184,6 +184,23 @@ export const targets = [
     budgetedSubset: { label: 'CSS rules', extract: stripCssComments }
   },
   {
+    // The second theme, shipped as authored for the same reason theme.css is,
+    // and so budgeted the same way: on the rules, with the shipped figure still
+    // measured and printed.
+    //
+    // 2.5 KB is measured, not copied from the theme above. docked.css carries
+    // the same range-input pseudo-element weight and forced-colors block
+    // against a smaller layout section -- it never overlays or auto-hides --
+    // and lands at 2.13 KB of rules (4.61 KB shipped) as of this change. That
+    // is the next 0.5 KB up, and it leaves 0.37 KB of headroom rather than the
+    // theme's 0.73: the two files do comparable work, so the one that arrived
+    // second has less room to grow before it has to be argued for.
+    name: '@playdeck/react/docked.css',
+    path: 'packages/react/docked.css',
+    budget: 2.5,
+    budgetedSubset: { label: 'CSS rules', extract: stripCssComments }
+  },
+  {
     name: '@playdeck/provider-native',
     path: 'packages/provider-native/dist/index.js',
     budget: null
