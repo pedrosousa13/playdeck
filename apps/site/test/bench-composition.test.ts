@@ -70,7 +70,7 @@ describe('buildComposition', () => {
   // Pinned rather than assumed, so a later session does not reintroduce it as
   // a "harmless" default.
   it('names no prop on Player.Root but the source', () => {
-    for (const skin of ['theme'] as const) {
+    for (const skin of ['theme', 'docked'] as const) {
       const code = buildComposition({
         source: 'native',
         skin,
@@ -81,15 +81,7 @@ describe('buildComposition', () => {
     }
   });
 
-  it('adds the theme import only when the theme skin is chosen', () => {
-    const bare = buildComposition({
-      source: 'native',
-      skin: 'none',
-      sourceUrl: NATIVE_URL
-    });
-    expect(bare).not.toContain('theme.css');
-    expect(bare.split('\n')[0]).toBe(`const source = '${NATIVE_URL}';`);
-
+  it('prints a four-line preamble with a real import, for either skin', () => {
     const themed = buildComposition({
       source: 'native',
       skin: 'theme',
@@ -99,6 +91,32 @@ describe('buildComposition', () => {
     expect(themed.split('\n')[1]).toBe('');
     expect(themed.split('\n')[2]).toBe(`const source = '${NATIVE_URL}';`);
     expect(themed.split('\n')[3]).toBe('');
+
+    const docked = buildComposition({
+      source: 'native',
+      skin: 'docked',
+      sourceUrl: NATIVE_URL
+    });
+    expect(docked.split('\n')[0]).toBe("import '@playdeck/react/docked.css';");
+    expect(docked.split('\n')[1]).toBe('');
+    expect(docked.split('\n')[2]).toBe(`const source = '${NATIVE_URL}';`);
+    expect(docked.split('\n')[3]).toBe('');
+  });
+
+  it('prints the same control tree under either skin', () => {
+    const themed = buildComposition({
+      source: 'native',
+      skin: 'theme',
+      sourceUrl: NATIVE_URL
+    });
+    const docked = buildComposition({
+      source: 'native',
+      skin: 'docked',
+      sourceUrl: NATIVE_URL
+    });
+    const compositionBlock = (code: string) =>
+      code.slice(code.indexOf('<Player.Root'));
+    expect(compositionBlock(themed)).toBe(compositionBlock(docked));
   });
 
   it('carries a long source URL through whole, without truncating or eliding it', () => {

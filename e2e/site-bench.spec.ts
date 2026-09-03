@@ -35,8 +35,9 @@ const composition = (page: Page) => page.locator('[data-bench-composition]');
 const position = (page: Page, group: 'source' | 'skin', value: string) =>
   page.locator(`[data-bench-switch="${group}"] [data-value="${value}"]`);
 
-/** The library's one opt-in stylesheet, as a consumer would import it. */
+/** The library's two authored stylesheets, as a consumer would import them. */
 const THEME_IMPORT = "import '@playdeck/react/theme.css';";
+const DOCKED_IMPORT = "import '@playdeck/react/docked.css';";
 
 /**
  * The composition from `<Player.Root` to the end, with the preamble cut off.
@@ -133,4 +134,94 @@ test('the composition prints the full control tree, and tracks the source switch
   // catches the page and the player disagreeing: byte-identical trees across a
   // provider change is the claim the panel is making.
   expect(tree(await printed(page))).toBe(tree(before));
+});
+
+test('the skin group offers theme and docked, in that order, and no third position', async ({
+  page
+}) => {
+  await page.goto(landing);
+  const skinButtons = page.locator('[data-bench-switch="skin"] [data-value]');
+  await expect(skinButtons).toHaveCount(2);
+  await expect(skinButtons.nth(0)).toHaveAttribute('data-value', 'theme');
+  await expect(skinButtons.nth(1)).toHaveAttribute('data-value', 'docked');
+});
+
+test('the skin fieldset is hidden below 48rem', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(landing);
+  // Waited on first, so hydration has actually happened before the next
+  // assertion: the island is `client:only`, and a check for `toBeHidden` on
+  // an element the DOM does not have yet at all would pass for the wrong
+  // reason -- absent, not hidden by the rule under test.
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+  await expect(page.locator('[data-bench-switch="skin"]')).toBeHidden();
+});
+
+test('docked.css is a real <link>, in the document, when pressed, and theme.css is gone', async ({
+  page
+}) => {
+  await page.goto(landing);
+  await expect(composition(page)).toBeVisible();
+
+  const stylesheetHrefs = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(
+        (link) => (link as HTMLLinkElement).href
+      )
+    );
+
+  // At rest, above 48rem, the resting skin is `theme`.
+  await expect
+    .poll(async () =>
+      (await stylesheetHrefs()).some((href) => href.includes('theme'))
+    )
+    .toBe(true);
+
+  await position(page, 'skin', 'docked').click();
+
+  // The switch is a swap, never a stack: `docked.css` arrives and `theme.css`
+  // leaves in the same commit, so both are never on the document at once.
+  await expect
+    .poll(async () => {
+      const hrefs = await stylesheetHrefs();
+      return {
+        docked: hrefs.some((href) => href.includes('docked')),
+        theme: hrefs.some((href) => href.includes('theme'))
+      };
+    })
+    .toEqual({ docked: true, theme: false });
+});
+
+/**
+ * The composition's preamble, the lines above `<Player.Root`. Point 6 of the
+ * spec depends on every combination printing exactly four: an import, a blank
+ * line, the `const source` line, a blank line -- never zero, now that `none`
+ * is gone and every remaining position ships a stylesheet.
+ */
+const preambleLines = (printedText: string) => {
+  const lines = printedText.split('\n');
+  const open = lines.findIndex((line) => line.startsWith('<Player.Root'));
+  return lines.slice(0, open);
+};
+
+test('the preamble is always four lines, in every combination', async ({
+  page
+}) => {
+  await page.goto(landing);
+  for (const [skinToken, importLine] of [
+    ['theme', THEME_IMPORT],
+    ['docked', DOCKED_IMPORT]
+  ] as const) {
+    await position(page, 'skin', skinToken).click();
+    for (const sourceToken of ['youtube', 'vimeo']) {
+      await position(page, 'source', sourceToken).click();
+      await expect
+        .poll(async () => preambleLines(await printed(page)))
+        .toHaveLength(4);
+      const lines = preambleLines(await printed(page));
+      expect(lines[0]).toBe(importLine);
+      expect(lines[1]).toBe('');
+      expect(lines[3]).toBe('');
+    }
+  }
 });

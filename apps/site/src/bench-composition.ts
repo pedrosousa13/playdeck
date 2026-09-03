@@ -51,7 +51,7 @@ const CONTROL_LINES: Record<BenchControlName, readonly string[]> = {
   fullscreenButton: ['<Player.FullscreenButton />']
 };
 
-export type SkinName = 'none' | 'theme';
+export type SkinName = 'theme' | 'docked';
 
 export type BenchPosition = {
   readonly source: PlayerProvider;
@@ -74,12 +74,15 @@ export const buildComposition = ({
   // does can add a second one, so the branch that wrapped two or more props
   // onto their own lines went with it rather than sitting unreachable.
 
-  // The theme import and the source declaration are lines a consumer would
+  // The skin import and the source declaration are lines a consumer would
   // write above the composition, not props on it. Keeping them out of
   // `Player.Root` is what lets the tree below read byte-identical regardless
-  // of which provider is switched on.
+  // of which provider is switched on. Every remaining position ships a
+  // stylesheet, so the import line is unconditional now: there is no third,
+  // unstyled position that prints zero lines here.
   const preamble = [
-    ...(skin === 'theme' ? ["import '@playdeck/react/theme.css';", ''] : []),
+    `import '@playdeck/react/${skin}.css';`,
+    '',
     `const source = '${sourceUrl}';`,
     ''
   ];

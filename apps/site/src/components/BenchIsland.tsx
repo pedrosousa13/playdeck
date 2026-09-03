@@ -59,29 +59,18 @@ import * as Player from '@playdeck/react';
 /*
  * ---- how the skin switch applies a real stylesheet -------------------------
  *
- * `theme` is the library's one opt-in stylesheet, and the switch has to be able
- * to apply it and take it away again without shipping it to a reader who never
- * presses the switch. Three ways were available.
- *
- * A plain `import '@playdeck/react/theme.css'` — what `HeroPlayer.astro` did —
- * is loaded for everybody and can never be removed, so `none` would be a lie.
- *
- * A dynamic `import('@playdeck/react/theme.css')` defers the cost, but Vite
- * turns a dynamically imported stylesheet into a chunk that injects a `<style>`
- * element on evaluation, and nothing hands back a handle to remove it. Pressing
- * `theme` once would make `none` unreachable for the rest of the page's life.
- *
- * `?url` is the third and is what this uses. Vite emits `theme.css` as its own
- * hashed asset and this import is the string address of it, so no byte of the
- * stylesheet is in the page's own CSS or JavaScript. The effect below appends a
- * `<link>` at `theme` and removes it at `none`, which is the same mechanism a
- * consumer's bundler performs at build time, done at a reader's request
- * instead. `none` therefore really is no CSS: no rule in the document matches a
- * `[data-playdeck-part]` element except the geometry `Bench.astro` writes, and
- * geometry is the consumer's in both positions — the library's own stylesheet
- * says so in as many words, and states only appearance.
+ * Both skins are real, authored stylesheets now, and the switch has to be able
+ * to load whichever one is selected without ever having both in the document at
+ * once. `?url` is the mechanism: Vite emits each stylesheet as its own hashed
+ * asset and this import is the string address of it, so no byte of either is in
+ * the page's own CSS or JavaScript. The effect below appends a `<link>` at
+ * whichever href the current skin resolves to and removes it on cleanup, the
+ * same mechanism a consumer's bundler performs at build time, done at a
+ * reader's request instead — now swapping between two real stylesheets rather
+ * than adding and removing one.
  */
 import themeHref from '@playdeck/react/theme.css?url';
+import dockedHref from '@playdeck/react/docked.css?url';
 import type { PlayerProvider } from '@playdeck/core';
 import {
   benchSources,
@@ -395,12 +384,12 @@ const Stage = ({
   const fromKeyboardRef = useRef(false);
   return (
     /*
-     * `data-bench-skin` is what scopes `Bench.astro`'s one appearance reset to
-     * the `none` position. It rides on the viewport rather than on
-     * `.bench__stage` because the viewport is React's: the attribute then
-     * arrives in the same commit as the state it reports, where writing it onto
-     * the Astro element would mean a `setAttribute` in an effect and a frame in
-     * which the document and the switch disagree.
+     * `data-bench-skin` is what scopes `Bench.astro`'s badge-redraw rule to the
+     * `theme` position. It rides on the viewport rather than on `.bench__stage`
+     * because the viewport is React's: the attribute then arrives in the same
+     * commit as the state it reports, where writing it onto the Astro element
+     * would mean a `setAttribute` in an effect and a frame in which the
+     * document and the switch disagree.
      */
     <Player.Viewport data-bench-skin={skin}>
       <Player.Media />
@@ -626,20 +615,10 @@ const StagePortal = ({
 
 const BenchIsland = ({ base }: Props) => {
   /*
-   * `theme` is the resting position, and the reasoning is worth keeping because
-   * the opposite was tried first.
-   *
-   * `none` is the honest one: it applies no CSS at all, which is what the
-   * library actually ships. But an unstyled player is what a reader meets
-   * before they have pressed anything, and it reads as a broken embed rather
-   * than as an argument. The maintainer looked at both and said so. Leading
-   * with it sells the library badly, because the first impression is a player
-   * that appears not to work rather than a library that gets out of your way.
-   *
-   * So the page opens on the one opt-in stylesheet the library publishes, and
-   * `none` is the switch a reader presses to see what is underneath. The
-   * demonstration survives the reversal intact. What changes is which of the
-   * two a reader has to ask for.
+   * The default follows `matchMedia`, read once, synchronously, the same way
+   * `readySources[0]` already is: `theme` rests above 48rem, `docked` below
+   * it, because the floating theme was already collapsing toward close to
+   * `docked`'s own layout at that width -- see the spec's own account of why.
    */
   const [position, setPosition] = useState<BenchPosition & ResolvedSource>(
     () => {
@@ -655,20 +634,22 @@ const BenchIsland = ({ base }: Props) => {
       }
       return {
         source: initial.provider,
-        skin: 'theme',
+        skin: window.matchMedia('(min-width: 48rem)').matches
+          ? 'theme'
+          : 'docked',
         ...entryFor(initial.provider, base)
       };
     }
   );
 
   // The skin, applied and removed as a real `<link>` — see the import above
-  // for why that rather than an import of either kind. The cleanup is what
-  // makes `none` mean what it says.
+  // for why that rather than an import of either kind. Always exactly one
+  // `<link>` in the head: every position now ships a stylesheet, so this is a
+  // swap between two hrefs rather than a conditional add and remove.
   useEffect(() => {
-    if (position.skin !== 'theme') return;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = themeHref;
+    link.href = position.skin === 'theme' ? themeHref : dockedHref;
     document.head.append(link);
     return () => {
       link.remove();

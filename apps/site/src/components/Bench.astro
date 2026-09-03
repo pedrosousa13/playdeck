@@ -59,17 +59,16 @@
  * own: every value is read as `var(--playdeck-…, fallback)`, so the block below
  * is the whole of what this site says to it.
  *
- * The mapping is inert while the switch reads `none` — nothing reads a custom
- * property no stylesheet is asking for — which is what lets it be stated once
- * here rather than toggled. It spends this site's role tokens and writes no
- * colour, so rule 1 of `DESIGN.md` holds across the seam.
+ * The mapping is read the same way by both stylesheets, which is what lets it
+ * be stated once here rather than toggled. It spends this site's role tokens
+ * and writes no colour, so rule 1 of `DESIGN.md` holds across the seam.
  *
  * ---- geometry is the page's, in both skin positions -------------------------
  *
  * The rules under `.bench__stage` are layout and nothing else, and they apply
- * whichever way the skin switch is set. That is not this page bending the rule
- * that `none` applies no CSS: it is the line the library itself draws. Its
- * stylesheet says "appearance only; layer geometry belongs to the components",
+ * whichever way the skin switch is set. That is not this page reaching into
+ * either skin's job: it is the line the library itself draws. Its own
+ * stylesheets say "appearance only; layer geometry belongs to the components",
  * so that a player works with no stylesheet at all and so that a consumer can
  * put the controls somewhere other than over the picture. Where the layers sit
  * is therefore the consumer's decision in every composition the library ships
@@ -360,52 +359,6 @@ const aspectRatio = `${fallback.width} / ${fallback.height}`;
     min-inline-size: 0;
   }
 
-  /* The activation affordance is an overlay, and this is what makes it behave
-   * like one under the `none` skin.
-   *
-   * The library ships this part `position: absolute; inset: 0; margin: auto`
-   * with no size, so with no stylesheet at all it is full-bleed — which is the
-   * behaviour this page wants, because a click anywhere on the picture should
-   * start the clip. What comes with it is the user agent's own button paint,
-   * and measured on this frame that is an opaque `rgb(239, 239, 239)` fill and
-   * a `2px outset` black border, at `z-index: 30`, over a poster at 10. The
-   * still was loaded, decoded and marked `visible` by the library's poster
-   * state machine, and painted over regardless.
-   *
-   * So this is not the page reaching into the skin. An element whose whole job
-   * is to overlay a picture, and which occludes it instead, is not styled — it
-   * is broken, and the browser rather than the library is what broke it. Both
-   * declarations say only that: no size, no radius, no badge, no hover. Those
-   * are chrome and they stay the theme's, which is what keeps the two skin
-   * positions a contrast about chrome rather than about whether there is a
-   * picture at all.
-   *
-   * ---- and this is why it is scoped rather than unconditional ---------------
-   *
-   * Written unscoped first, and that falsified the paragraph above. This rule
-   * is unlayered while `theme.css` lives entirely inside `@layer playdeck`, and
-   * an unlayered declaration beats a layered one for the same property whatever
-   * the specificities are — the `[hidden]` reset below relies on exactly that.
-   * So the reset reached the themed player too: the part computed
-   * `rgba(0, 0, 0, 0)` under both skins, and `theme.css`'s own
-   * `--playdeck-color-surface` fill never landed. Pressing `theme` gave a bare
-   * glyph with no badge.
-   *
-   * `data-bench-skin` rides on the viewport, written by `Stage` in
-   * `BenchIsland.tsx` in the same React commit as the state it reports, so the
-   * rule matches only while the position it is written for is the one selected.
-   * Under `theme` nothing here applies and the stylesheet does its own work.
-   *
-   * Written as the two `--playdeck-activation-*` tokens rather than as
-   * `background-color`/`border`, because that is the only spelling that
-   * reaches this part: the button states both properties inline as reads of
-   * those tokens, and an inline declaration beats any stylesheet. */
-  :global(.bench__stage)
-    :global([data-bench-skin='none'] [data-playdeck-part='activation']) {
-    --playdeck-activation-fill: transparent;
-    --playdeck-activation-border: 0;
-  }
-
   /* The other half of the same defect, on the other skin -- issue #552,
    * filed against the library rather than fixed there: under `theme`, this
    * part is sized into a roughly 4rem badge, so only the badge was pressable
@@ -427,12 +380,10 @@ const aspectRatio = `${fallback.width} / ${fallback.height}`;
    * stage — and a rounded corner clips hit testing, not just paint. Squared
    * off here; the badge below carries its own roundness instead.
    *
-   * Unlayered and scoped to `[data-bench-skin='theme']` for the same two
-   * reasons the `none` block above is scoped rather than unconditional: this
-   * beats `theme.css`'s own layered rule for the same property regardless of
-   * specificity, and scoping it keeps `none` untouched -- that position is
-   * already full-bleed with no badge at all, and drawing one there would be
-   * this page adding chrome the `none` position exists to not have. */
+   * Unlayered and scoped to `[data-bench-skin='theme']`: this beats
+   * `theme.css`'s own layered rule for the same property regardless of
+   * specificity, and scoping it keeps `docked` untouched here -- that
+   * position's own stylesheet handles this part its own way. */
   :global(.bench__stage)
     :global([data-bench-skin='theme'] [data-playdeck-part='activation']) {
     grid-area: stack;
@@ -472,11 +423,11 @@ const aspectRatio = `${fallback.width} / ${fallback.height}`;
    * box opened out, and everything below undoes the theme's control-bar
    * treatment of that part for this one instance -- the bar's own buttons are
    * 44px chips with a hover tint, and a hover tint at this size would wash
-   * the picture. `border: 0` and a transparent background hold under `none`
-   * too, where without them a bare `<button>` would paint the browser's own
-   * opaque fill full-bleed over the picture -- the same defect the `none`
-   * activation reset above exists to prevent, on a part that reset does not
-   * reach.
+   * the picture. `border: 0` and a transparent background hold regardless of
+   * skin, where without them a bare `<button>` would paint the browser's own
+   * opaque fill full-bleed over the picture -- the same class of defect the
+   * badge-redraw rule above exists to prevent on the activation button, on a
+   * part that rule does not reach.
    *
    * `position` and `z-index` for the reason the control bar carries them —
    * the media declares a layer of its own and an unpositioned box in the same
