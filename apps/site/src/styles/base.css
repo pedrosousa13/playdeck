@@ -114,8 +114,30 @@ pre {
    * fence too wide for the column scrolls and is reachable from the keyboard
    * with the site's own focus ring. What is left is the bar's weight: a
    * platform-width scrollbar inside a well this small reads as a second border.
-   * The colour is inherited from the root. */
+   * The colour is inherited from the root. That is true of every block Astro's
+   * own `<Code>` or markdown pipeline renders; the bench's own block below is
+   * built by hand and gets neither for free. */
   scrollbar-width: thin;
+}
+
+/* The bench's own composition panel, highlighted by `Bench.astro`'s own `pre`
+ * transformer rather than by Astro's `<Code>` or its markdown pipeline, so it
+ * carries none of what those two give every other `.astro-code` block for
+ * free: no `margin` and no `overflow-x`, where the UA stylesheet's own
+ * `margin: 1em 0` on `<pre>` would otherwise stand, `base.css` sets no margin
+ * of its own on `pre` and Tailwind's Preflight is deliberately not imported.
+ *
+ * Scoped to `[data-bench-composition]` -- the attribute that same transformer
+ * stamps on this one block -- rather than added to `.astro-code` itself,
+ * because every other `.astro-code` block on this site (`/start`,
+ * `/archetypes`) already relies on that UA margin for its own vertical
+ * spacing: measured at 14px, live spacing a site-wide `margin: 0` would
+ * silently remove. `overflow-x: auto` is what lets a line too wide for the
+ * column scroll, the behaviour the deleted `<pre>` in `CompositionPanel.tsx`
+ * used to set with `overflow-x-auto`. */
+.astro-code[data-bench-composition] {
+  margin: 0;
+  overflow-x: auto;
 }
 
 /*

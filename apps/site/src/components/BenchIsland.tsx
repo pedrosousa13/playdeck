@@ -78,11 +78,7 @@ import {
   type BenchCredit,
   type BenchPoster
 } from '@/bench-sources';
-import {
-  buildComposition,
-  type BenchPosition,
-  type SkinName
-} from '@/bench-composition';
+import { type BenchPosition, type SkinName } from '@/bench-composition';
 import { BENCH_CONTROLS, type BenchControlName } from '@/bench-controls';
 import { QUIET_START, quietLine, recordLoad } from '@/bench-quiet';
 /*
@@ -99,6 +95,8 @@ import CompositionPanel from './CompositionPanel';
 interface Props {
   /** `import.meta.env.BASE_URL`, read in `Bench.astro` and passed down. */
   readonly base: string;
+  /** `Bench.astro`'s four precomputed strings, keyed `${provider}:${skin}`. */
+  readonly compositions: Readonly<Record<string, string>>;
 }
 
 /**
@@ -627,7 +625,7 @@ const StagePortal = ({
   return createPortal(<Stage poster={poster} skin={skin} />, mount);
 };
 
-const BenchIsland = ({ base }: Props) => {
+const BenchIsland = ({ base, compositions }: Props) => {
   /*
    * The default follows `matchMedia`, read once, synchronously, the same way
    * `readySources[0]` already is: `theme` rests above 48rem, `docked` below
@@ -669,6 +667,18 @@ const BenchIsland = ({ base }: Props) => {
       link.remove();
     };
   }, [position.skin]);
+
+  // `Bench.astro`'s frontmatter precomputes one highlighted string per
+  // reachable (source, skin) pair -- see its own comment for why that is
+  // exhaustive. The throw below is safe only because Task 5 already landed:
+  // `position.skin` can no longer be `'none'`, so every reachable `position`
+  // has an entry here.
+  const html = compositions[`${position.source}:${position.skin}`];
+  if (html === undefined) {
+    throw new Error(
+      `BenchIsland: no precomputed composition for ${position.source}:${position.skin}.`
+    );
+  }
 
   return (
     /*
@@ -734,7 +744,7 @@ const BenchIsland = ({ base }: Props) => {
             source={position.source}
           />
         </div>
-        <CompositionPanel composition={buildComposition(position)} />
+        <CompositionPanel html={html} />
       </div>
     </Player.Root>
   );

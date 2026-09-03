@@ -76,7 +76,11 @@
  */
 import Sweep from './Sweep.astro';
 import BenchIsland from './BenchIsland';
-import { benchSources } from '../bench-sources';
+import { benchSources, readySources } from '../bench-sources';
+import { codeToHtml } from 'shiki';
+import type { ShikiTransformer } from 'shiki';
+import { shikiConfig } from '../shiki';
+import { buildComposition } from '../bench-composition';
 
 // Resolved against the configured base the way every other address on this
 // site is, rather than written as a root-absolute literal.
@@ -114,6 +118,74 @@ const credit = fallback.credit;
 // box is the right shape before any script runs and stays the right shape
 // after one does.
 const aspectRatio = `${fallback.width} / ${fallback.height}`;
+
+/**
+ * `codeToHtml`'s output is a whole `<pre><code>…</code></pre>`, carrying
+ * `class="shiki shiki-themes github-light github-dark"` rather than the
+ * `astro-code` class `base.css`'s token-colour selectors key on and that
+ * Astro's own `<Code>` adds automatically. This `pre` hook adds it, plus the
+ * one attribute `CompositionPanel.tsx` used to set on its own `<pre>` that
+ * Shiki does not already emit itself, `data-bench-composition` -- Shiki's own
+ * output already carries `tabindex="0"`, so that assignment below is a
+ * harmless no-op, not a restoration. `hast.properties.class` types as `string
+ * | number | (string | number)[] | undefined`, not a plain string, so this
+ * merges it rather than assuming a string it might not be.
+ */
+const addBenchPreAttributes: ShikiTransformer['pre'] = function (hast) {
+  const existingClass = hast.properties.class;
+  const classText = Array.isArray(existingClass)
+    ? existingClass.join(' ')
+    : (existingClass ?? '');
+  hast.properties.class = `${classText} astro-code`.trim();
+  hast.properties['data-bench-composition'] = '';
+  hast.properties.tabindex = '0';
+  return hast;
+};
+
+/**
+ * Marks every rendered line with its 1-indexed position, so `BenchIsland.tsx`
+ * can address a changed line with `[data-line="N"]` after a press without
+ * re-parsing the highlighted HTML.
+ */
+const markLineNumbers: ShikiTransformer['line'] = function (hast, line) {
+  hast.properties['data-line'] = String(line);
+  return hast;
+};
+
+/**
+ * One highlighted string per (source, skin) pair the switches can reach,
+ * today `readySources` is `youtube` and `vimeo`, and `SKIN_POSITIONS` is
+ * `theme` and `docked`, so this is four strings, computed once here in Node
+ * and handed to `BenchIsland` as props. `readySources.map` rather than a
+ * hardcoded pair count, so a third `ready: true` source in `bench-sources.ts`
+ * grows this table rather than silently leaving a position unhighlighted.
+ * `SKIN_POSITIONS` itself stays a fixed pair rather than reading `SkinName`
+ * some other way, because Task 5 is what makes `'theme' | 'docked'` the whole
+ * of that type, so this hardcoded lookup and `BenchIsland.tsx`'s hard throw
+ * over it cover every reachable position -- nothing here typechecks the
+ * `.astro` frontmatter itself (`tsconfig.json`'s own comment records that
+ * gap), so this is a runtime dependency on Task 5, not a compile-time one.
+ */
+const SKIN_POSITIONS = ['theme', 'docked'] as const;
+
+const compositions: Record<string, string> = {};
+for (const entry of readySources) {
+  for (const skin of SKIN_POSITIONS) {
+    const code = buildComposition({
+      source: entry.provider,
+      skin,
+      sourceUrl: entry.source(base)
+    });
+    compositions[`${entry.provider}:${skin}`] = await codeToHtml(code, {
+      lang: 'tsx',
+      ...shikiConfig,
+      transformers: [
+        ...shikiConfig.transformers,
+        { name: 'playdeck:bench-pre', pre: addBenchPreAttributes, line: markLineNumbers }
+      ]
+    });
+  }
+}
 ---
 
 <div class="bench">
@@ -222,7 +294,7 @@ const aspectRatio = `${fallback.width} / ${fallback.height}`;
      * proves the resting claim: a spec records every request `/` makes at
      * rest and fails if one leaves this origin. */
   }
-  <BenchIsland base={base} client:only="react" />
+  <BenchIsland base={base} compositions={compositions} client:only="react" />
 </div>
 
 <style>

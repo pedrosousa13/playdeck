@@ -80,6 +80,13 @@ test('the composition is visible at rest', async ({ page }) => {
   await expect(activationButton(page)).toBeVisible();
 });
 
+test('the composition panel is highlighted', async ({ page }) => {
+  await page.goto(landing);
+  await expect(
+    composition(page).locator('span[style*="--shiki"]').first()
+  ).toBeVisible();
+});
+
 test('the composition prints the full control tree, and tracks the source switch', async ({
   page
 }) => {
