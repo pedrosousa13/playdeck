@@ -81,6 +81,11 @@ jobs:
       # served from the apex, so its prefix is the root its build already
       # defaults to and there is nothing to say (#519).
       - run: pnpm --filter @playdeck/site build
+        env:
+          # This public flag is deliberately set only in the workflow that
+          # publishes playdeck.video. Local and pull-request builds omit the
+          # Plausible script entirely.
+          PUBLIC_PLAUSIBLE_ANALYTICS: 'true'
 
       # What the artifact holds is the script's to say, not this file's — the
       # verification harness assembles the same artifact, and one definition is

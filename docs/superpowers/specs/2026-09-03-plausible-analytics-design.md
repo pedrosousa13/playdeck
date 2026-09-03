@@ -13,7 +13,11 @@ the integration. It will render the following external, deferred script only
 when an explicit public build-time variable is present:
 
 ```html
-<script defer data-domain="playdeck.video" src="https://analytics.pedrosousa.me/js/script.js"></script>
+<script
+  defer
+  data-domain="playdeck.video"
+  src="https://analytics.pedrosousa.me/js/script.js"
+></script>
 ```
 
 The deployment workflow supplies the variable for its production build. Other
