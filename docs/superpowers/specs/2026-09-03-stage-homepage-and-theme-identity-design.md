@@ -103,6 +103,12 @@ light default `docked.css` uses and the same dark default under
 query string, `(prefers-color-scheme: dark)`, which the feature inventory
 test does not pin. The volume slider stays hidden on coarse pointers.
 
+`test/theme.test.ts`'s existing `flattens the scrim and drops the volume
+slider below 48rem` test asserts the exact contents of the sole
+`(max-width: 48rem)` block, including a `background:` fallback that this
+design removes. That test is rewritten, not extended, to assert the docked
+row, the scheme-token colours, and the `data-idle` override.
+
 **Cut from the mockup.** A hover time tip and a centre play glyph on pause.
 Neither has a part the primitives emit, and a theme does not add components.
 
@@ -214,10 +220,17 @@ Providers, Archetypes. "Unstyled by default" and "one adapter, not five"
 now live in cards 02 and 01.
 
 **Motion.** One entrance: the hero text and the stage rise 12px and fade
-in, staggered by 80ms, once, on load, driven by CSS animation on the
-elements themselves with no scroll observer. Cards lift 2px on hover. All
-motion is inside `@media (prefers-reduced-motion: no-preference)`, so the
-reduced-motion e2e test sees a settled page with nothing to wait for.
+in, staggered by 80ms, once, on load, driven by CSS animation with no
+scroll observer. Cards lift 2px on hover. All motion is inside
+`@media (prefers-reduced-motion: no-preference)`, and the entrance is
+additionally keyed on `html[data-entered]`, an attribute a two-line inline
+script in `index.astro` sets before first paint. With no script the
+attribute is never set, the elements render at their resting opacity and
+transform, and nothing animates. This is what keeps
+`e2e/site-landing.spec.ts`'s two "settled and readable" tests passing
+unchanged: the no-JavaScript one because the attribute is absent, and the
+reduced-motion one because the media query excludes it. Neither test
+polls, so the animation must never be observable in either condition.
 
 **Type.** The display face and the `--text-4xl` rung already exist in
 `tokens.css`. No new font is loaded.
@@ -225,8 +238,9 @@ reduced-motion e2e test sees a settled page with nothing to wait for.
 ## What gets deleted
 
 - `index.astro`'s `figures` array and the `.figures` and `.figure` styles.
-- `Bench.astro`'s two-column grid that placed the switches beside the
-  composition.
+- `BenchIsland.tsx`'s two-column grid (`md:grid-cols-2`) that placed the
+  switches beside the composition. `Bench.astro`'s own `.bench__frame` grid,
+  which stacks the picture over the docked bar, stays.
 
 ## Amendments to DESIGN.md
 
