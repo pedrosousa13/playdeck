@@ -347,6 +347,13 @@ export const ActivationIsCentred: Story = {
   play: async ({ canvas }) => {
     const button = await canvas.findByRole('button', { name: 'Play video' });
     const styles = globalThis.getComputedStyle(button);
+    // The badge fill, which the theme no longer declares on the part: it sets
+    // `--playdeck-activation-fill`, and the primitive's inline
+    // `background-color` reads it. An inline declaration always beats a
+    // stylesheet, so a plain inline `transparent` would have made this
+    // unreachable and left the themed player with no badge at all — this is
+    // the assertion that catches that.
+    await expect(styles.backgroundColor).toBe('rgba(0, 0, 0, 0.72)');
     // First that the theme reached the part at all -- an unthemed overlay fills
     // the viewport, and a full-bleed box is trivially concentric with it, so
     // the centring assertion below is only meaningful once the box is 4rem.

@@ -19,6 +19,9 @@ import {
   render,
   screen
 } from '@testing-library/react';
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRef } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ProviderStatePatch } from '@playdeck/core';
@@ -110,6 +113,57 @@ test('ActivationButton geometry is a default the consumer can override', () => {
   expect(activation.style.position).toBe('static');
   expect(activation.style.inset).toBe('8px');
   expect(activation.style.zIndex).toBe('1');
+});
+
+test('replaces the UA default paint with tokens a stylesheet can still reach', async () => {
+  render(
+    <Player.Root loading="interaction" source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.ActivationButton />
+      </Player.Viewport>
+    </Player.Root>
+  );
+  const button = screen.getByRole('button');
+  // happy-dom validates a `background-color`-typed longhand against a fixed
+  // colour grammar that does not recognise the two-argument
+  // `var(name, fallback)` form and silently drops the whole declaration
+  // rather than storing it — confirmed against this repo's pinned happy-dom
+  // (20.8.9): `el.style.backgroundColor = 'var(--x, red)'` leaves
+  // `el.style.backgroundColor` at `''` and the declaration list at length 0,
+  // even though a real browser stores and serialises it unchanged. `border`,
+  // set as the shorthand, does not go through that per-property validation —
+  // it copies its raw text into its three longhands, whitespace collapsed —
+  // so `button.style.borderColor` is what actually observes it, and it comes
+  // back without the space a browser preserves; a bare `button.style.border`
+  // read (the shorthand itself) does not round-trip either, for the ordinary
+  // reason a shorthand getter has to re-serialise from parsed longhands and
+  // happy-dom's serialiser does not special-case a `var()`-only value the way
+  // a browser's does.
+  expect(button.style.borderColor).toBe('var(--playdeck-activation-border,0)');
+  // The fill token has no such longhand to fall back on — `background-color`
+  // is already a leaf property, and every property this test tried on it
+  // (`background`, `backgroundColor`, `setProperty`, `cssText`, plain
+  // assignment) hit the same validation gap. Checked against the primitive's
+  // own source text instead, the same way `theme.test.ts` checks `theme.css`
+  // for a declaration a DOM render can't observe in this environment.
+  //
+  // Resolved through `node:path` rather than `new URL(relative,
+  // import.meta.url)`, which `theme.test.ts` can use because it runs in the
+  // node environment. Here the DOM's own `URL` is the one in scope, and it
+  // resolves a relative reference against the page rather than against the
+  // `file:` base it was given — measured, this file's
+  // `file:///…/test/style-precedence.test.tsx` plus `../src/loading-error.tsx`
+  // comes back as `http://localhost:3000/packages/react/src/loading-error.tsx`.
+  const source = await readFile(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../src/loading-error.tsx'
+    ),
+    'utf8'
+  );
+  expect(source).toMatch(
+    /backgroundColor:\s*['"]var\(--playdeck-activation-fill,\s*transparent\)['"]/
+  );
 });
 
 test('ErrorDisplay geometry is a default the consumer can override', () => {

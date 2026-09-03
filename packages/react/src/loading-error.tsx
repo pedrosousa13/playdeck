@@ -18,11 +18,22 @@ export type ActivationButtonProps = ComponentPropsWithRef<'button'>;
 // space all falls to `right`/`bottom` and the box lands in the corner. Stating
 // it here rather than in `theme.css` centres the box for any consumer
 // stylesheet that sizes this part, not just the bundled theme.
+//
+// #555: the fill and the border are stated here too, as reads of two tokens
+// whose fallbacks are the reset. Written flat — `backgroundColor:
+// 'transparent'` — they would be unreachable: an inline declaration beats any
+// stylesheet, so the theme's own badge fill could never land and a themed
+// player would lose its badge. Read as `var()` instead, the primitive keeps a
+// bare player off the user agent's opaque `buttonface` and 2px outset border,
+// which paint over a poster this overlay is meant to sit on, while a
+// stylesheet still decides the themed case by setting the token.
 const activationOverlayStyle: CSSProperties = {
   position: 'absolute',
   inset: 0,
   margin: 'auto',
-  zIndex: 30
+  zIndex: 30,
+  backgroundColor: 'var(--playdeck-activation-fill, transparent)',
+  border: 'var(--playdeck-activation-border, 0)'
 };
 
 export const ActivationButton = ({

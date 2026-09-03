@@ -22,6 +22,17 @@
  *      tokens anywhere above the player — or on the player itself — and they
  *      take effect, while nothing leaks into the surrounding document.
  *
+ *      Two tokens break rule 3 on purpose: `--playdeck-activation-fill` and
+ *      `--playdeck-activation-border` are DECLARED on
+ *      `[data-playdeck-part='activation']`, not only read. `ActivationButton`
+ *      writes its background and border inline as `var()` reads of these two
+ *      names so a bare player never paints the user agent's own button face
+ *      over its poster (#555); declaring them here is what lets a consumer's
+ *      own ancestor-set value still lose to a value set on the part itself,
+ *      the same way any custom property resolves — the nearest declaration in
+ *      the inheritance chain wins, and a declaration on the element is nearer
+ *      than one above it.
+ *
  * Tokens, with their defaults:
  *
  *   Color        --playdeck-color-surface       rgb(0 0 0 / 0.72)
@@ -110,10 +121,13 @@
     min-inline-size: var(--playdeck-activation-size, 4rem);
     min-block-size: var(--playdeck-activation-size, 4rem);
     padding-inline: var(--playdeck-space-3, 0.75rem);
-    border: 0;
     border-radius: 2rem;
     color: var(--playdeck-color-on-surface, #fff);
-    background-color: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
+    --playdeck-activation-fill: var(
+      --playdeck-color-surface,
+      rgb(0 0 0 / 0.72)
+    );
+    --playdeck-activation-border: 0;
     cursor: pointer;
     transition: opacity var(--playdeck-transition-duration, 150ms)
       var(--playdeck-transition-easing, ease);

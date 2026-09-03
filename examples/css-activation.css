@@ -2,13 +2,22 @@
    The overlay carries `dormant`, `eligible`, `loading-provider` and `error`;
    it unmounts at `ready`, so no stylesheet ever sees that value. Each of the
    four wants a different affordance. The button positions itself (absolutely,
-   inset 0, z-index 30), so this only paints. */
+   inset 0, z-index 30) and resets the user agent's own button face, so this
+   only paints.
+
+   The fill goes through `--playdeck-activation-fill` rather than through
+   `background`. That is the one property on this part a stylesheet cannot set
+   directly: the button writes `background-color` inline as a read of that
+   token, so a bare player never paints an opaque box over its poster, and an
+   inline declaration beats any stylesheet. Setting the token instead reaches
+   the same paint, and it cascades and varies by state exactly as a `background`
+   would -- the rules below change it per `data-state` and on hover. Everything
+   else here is ordinary CSS against the part. */
 
 [data-playdeck-part='activation'] {
   display: grid;
   place-items: center;
-  border: 0;
-  background: rgb(11 14 19 / 65%);
+  --playdeck-activation-fill: rgb(11 14 19 / 65%);
   color: #ffffff;
   font: inherit;
   cursor: pointer;
@@ -17,7 +26,7 @@
 /* The resting state: a press here starts activation. One of the two states a
    press acts on at all — `error` below is the other. */
 [data-playdeck-part='activation'][data-state='dormant']:hover {
-  background: rgb(11 14 19 / 40%);
+  --playdeck-activation-fill: rgb(11 14 19 / 40%);
 }
 
 /* Activation is committed and the provider is on its way. Pressing again does
@@ -39,9 +48,9 @@
    reads "Play", is `aria-disabled`, and says so through that rather than
    through colour. */
 [data-playdeck-part='activation'][data-state='error'] {
-  background: rgb(63 18 18 / 85%);
+  --playdeck-activation-fill: rgb(63 18 18 / 85%);
 }
 
 [data-playdeck-part='activation'][data-state='error']:hover {
-  background: rgb(90 26 26 / 85%);
+  --playdeck-activation-fill: rgb(90 26 26 / 85%);
 }
