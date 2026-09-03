@@ -429,8 +429,12 @@ The Storybook build — where primitives are exercised in isolation, where the
 deterministic story run and the visual checks live, and where a local media
 fixture is available that the marketing site cannot serve. Distinct from the
 marketing site, which argues to a reader; the workbench is for proving a
-component behaves. One deployment publishes both, and they are named
-individually rather than collectively.
+component behaves. Nothing publishes it: the deployed artifact is the site
+alone ([ADR-0007](docs/adr/0007-the-deployed-artifact-is-the-site-alone.md)), and
+the workbench is a development tool for this repository whose stories are browser
+tests. The site and the workbench are named individually; there is no collective
+noun for the two, and `surface` in particular is not one — that word names a
+refused prop, above.
 _Avoid_: playground, sandbox, storybook (lower-case, as a common noun)
 
 **Stance**:
