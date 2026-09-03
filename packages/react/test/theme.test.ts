@@ -772,3 +772,29 @@ describe('headless import chain', () => {
     expect(source).not.toMatch(/from\s+['"][^'"]+\.css['"]/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Auto-hide, and why it is not inside the `describe.each` above.
+//
+// This rule belongs to `theme.css` alone. `docked.css` never reads `data-idle`
+// at all — nothing in that theme is drawn over the picture, so there is nothing
+// for an auto-hide to protect — so an assertion placed in the parameterised
+// suite would run against that fixture too and fail on it forever. It reads the
+// module-scope `withoutComments` the same way `theme contract` and `slider
+// non-text contrast` do.
+describe('theme.css auto-hide (not shared with docked.css)', () => {
+  // The idle state is the selected one, so an absent `data-idle` renders
+  // exactly like `data-idle='false'`. That is what the attribute's own
+  // lifetime requires: `Viewport` writes it from an effect that returns early
+  // while its node is still null, so there is a first paint with no attribute
+  // at all, and a rule keyed on `[data-idle='false']` to mean "visible" would
+  // leave the bar hidden across it.
+  test('fades the control surface out while data-idle, and back in on focus-within', () => {
+    expect(withoutComments).toMatch(
+      /:where\(\[data-idle='true'\] \[data-playdeck-part='controls'\]\)\s*\{[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/
+    );
+    expect(withoutComments).toMatch(
+      /:where\(\[data-playdeck-part='controls'\]:focus-within\)\s*\{[^}]*opacity:\s*1;/
+    );
+  });
+});

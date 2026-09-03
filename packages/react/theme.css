@@ -212,6 +212,44 @@
       var(--playdeck-transition-easing, ease);
   }
 
+  /* ---- auto-hide ----------------------------------------------------------
+   * `theme.css` only. `docked.css` never reads `data-idle`, so this pairing
+   * lives here rather than anywhere shared.
+   *
+   * The idle state is the one selected for, and that direction is load-bearing.
+   * `Viewport` writes `data-idle` from an effect, so the attribute is absent
+   * until its node is mounted; keying the visible look on `[data-idle='false']`
+   * instead would leave the bar hidden across that first paint. Absent reads as
+   * awake here, which is also what a composition that renders `Controls`
+   * outside `Viewport` gets — nothing above the bar carries the attribute, so
+   * the auto-hide is simply a no-op there.
+   *
+   * `pointer-events: none` lands with the start of the fade rather than its
+   * end. A reader who moves the pointer gets the bar back at once, and nothing
+   * here stops a consumer choosing a gentler timing of their own.
+   *
+   * `:focus-within` is the whole of the stay-visible rule, and it covers an
+   * open menu too: `SettingsMenuContent` renders in-tree and moves focus to its
+   * first item on open, so an open menu always holds focus inside this part.
+   * The timer never inspects focus or menu state, which is why `data-idle` can
+   * read `"true"` while the bar is plainly on screen — the attribute states
+   * that nothing has moved, and this rule states that something in the bar
+   * still needs looking at.
+   *
+   * `transition: opacity` is already on the base control-surface rule above,
+   * and that rule is already named in the `prefers-reduced-motion: reduce`
+   * block, so neither is restated here.
+   */
+  :where([data-idle='true'] [data-playdeck-part='controls']) {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :where([data-playdeck-part='controls']:focus-within) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   /* Every button-shaped control shares one box. */
   :where(
     [data-playdeck-part='play-button'],
