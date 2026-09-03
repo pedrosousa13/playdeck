@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Proves the deployed surface works where it is served from, against the built
+// Proves the deployed site works where it is served from, against the built
 // artifact rather than against the configuration that produced it (#519).
 //
 // The bug this exists to catch is #435: a root-absolute URL emitted by a build
@@ -41,7 +41,7 @@ const process = globalThis.process;
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
-// Where the surface is served from. The site is at the root, which is what the
+// Where the site is served from. The site is at the root, which is what the
 // deploy serves it at, so the artifact under test is the artifact that ships.
 const sitePath = '/';
 const artifactDir = join(repoRoot, 'deploy-dist');
@@ -125,28 +125,26 @@ const serveArtifact = async (directory) => {
  *
  * @param {import('@playwright/test').Page} page
  * @param {string[]} failures
- * @param {string} surface
+ * @param {string} name
  */
-const recordFailures = (page, failures, surface) => {
+const recordFailures = (page, failures, name) => {
   page.on('response', (response) => {
     const status = response.status();
     if (status >= 400) {
-      failures.push(`${surface}: ${status} for ${response.url()}`);
+      failures.push(`${name}: ${status} for ${response.url()}`);
     }
   });
   page.on('requestfailed', (request) => {
     const reason = request.failure()?.errorText ?? 'no reason given';
-    failures.push(
-      `${surface}: request failed for ${request.url()} (${reason})`
-    );
+    failures.push(`${name}: request failed for ${request.url()} (${reason})`);
   });
   page.on('console', (message) => {
     const text = message.text();
     if (message.type() !== 'error') return;
-    failures.push(`${surface}: console error — ${text}`);
+    failures.push(`${name}: console error — ${text}`);
   });
   page.on('pageerror', (error) => {
-    failures.push(`${surface}: uncaught ${error.message}`);
+    failures.push(`${name}: uncaught ${error.message}`);
   });
 };
 
@@ -241,8 +239,8 @@ if (shouldBuild) {
   // site's prefix is the literal `base: '/'` in `apps/site/astro.config.ts`,
   // and no part of the site build reads an environment variable to find it.
   //
-  // The packages come first, and they are a prerequisite rather than a surface:
-  // the site's landing page renders the gzipped size of every bundle
+  // The packages come first, and they are a prerequisite rather than something
+  // served: the site's landing page renders the gzipped size of every bundle
   // `pnpm test:budgets` gates, measured at build time from the module that gate
   // measures with, and that module reads build output. Building them here is
   // what makes `pnpm test:deploy` prove the tree under test rather than
