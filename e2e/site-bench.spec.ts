@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { activationButton } from './locators';
+import { activationButton, controls } from './locators';
 
 /**
  * The bench on `/`: the switches, and the composition they build.
@@ -77,6 +77,27 @@ test('the composition is visible at rest', async ({ page }) => {
   // reached yet.
   await expect(composition(page)).toBeVisible();
   await expect(activationButton(page)).toBeVisible();
+});
+
+test('the seek slider composes first, so the control bar keeps its two-row split', async ({
+  page
+}) => {
+  // `theme.css`'s control-surface rule wraps the composed children into two
+  // rows only because the seek slider is the first of them: its 100% basis is
+  // the first thing `flex-wrap` has to place, so it takes row one and
+  // everything after it falls to row two. A consumer who reorders the
+  // children loses the split -- which is exactly what happened here (#593):
+  // the bar rendered as three rows because the seek slider composed third.
+  await page.goto(landing);
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+
+  await activationButton(page).click();
+  await expect(controls(page)).toBeVisible();
+
+  const firstChildPart = await controls(page).evaluate((element) =>
+    element.firstElementChild?.getAttribute('data-playdeck-part')
+  );
+  expect(firstChildPart).toBe('seek-slider');
 });
 
 test('the composition tracks both switches', async ({ page }) => {
