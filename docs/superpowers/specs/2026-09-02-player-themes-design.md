@@ -153,22 +153,49 @@ never the button's. Only `opacity` is animated; `pointer-events` is a hard
 switch with no transition, since dragging a half-visible thumb mid-fade is
 not a state worth animating into. Nothing about layout moves.
 
-**Below 48rem** the bar leaves the picture and sits under it on a dark
-surface, instead of overlaying the picture, and keeps two rows: `SeekSlider`
-still takes its own row exactly as it does above 48rem. Row two keeps every
-control from the row-two contract except `VolumeSlider`, which is hidden by
-the same `display: none` rule a coarse pointer already gets. Every button in
-that row keeps `theme.css`'s existing `flex: 0 0 auto` and its locked 44px
-minimum, so none of them may shrink to fit; when the available width cannot
-hold the row as one line, the same `flex-wrap: wrap` that splits
-`SeekSlider` onto its own row lets the remaining buttons wrap onto a further
-line rather than shrinking below the target or being dropped. At 320px, the
-narrowest width `e2e/a11y.spec.ts`'s reflow cases already check, this
-produces a third line, which is accepted rather than treated as a defect:
-losing a control or a hit target would be worse than a taller bar. The
-picture keeps its own aspect ratio,
-`aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9)`, because `Viewport`
-(`viewport-media.tsx`) owns that output and nothing in the theme touches it.
+**Test amendment.** `packages/react/test/theme.test.ts`'s `every
+button-shaped part is carried by every button rule` check picks up any
+selector list naming one of the seven button parts and then requires it to
+name all seven. The hover-adjacency selector above names `mute-button`, one
+of those seven, alongside `volume-slider`, which is not -- so unamended, the
+check would fail on a selector whose subject is the slider, not the button.
+The check's `buttonRules` filter is amended to require every
+`data-playdeck-part` a selector list names to be one of the seven button
+parts, not merely one of them: a rule reaching past a button to a slider is
+out of scope for a check that guards the shared button-shape contract, not a
+failure of it.
+
+**Below 48rem** the scrim flattens to a solid surface colour and `VolumeSlider`
+is hidden by the same `display: none` rule a coarse pointer already gets;
+`theme.css` makes no attempt to move the bar out of an overlay position at
+this or any width. Every rule in `theme.css` is a `:where()` selector inside
+`@layer playdeck`, and unlayered consumer CSS always wins over layered CSS
+whatever its specificity (the file's own header rule 1) -- so a
+`position: static` written here could only ever beat another layered
+`:where()` rule, never the ordinary unlayered CSS a real composition uses to
+float the bar in the first place. `apps/storybook/stories/reference/reference-player.tsx`'s
+own `.playdeck-example-controls { position: absolute; ... }` is exactly that
+shape, which is why that file reaches for a `@container` query rather than a
+theme rule when it wants different layout at a narrow width. An earlier
+draft of this document proposed exactly such a `position: static` rule; it
+is dropped rather than shipped as dead CSS that reads as doing something it
+cannot do. Docking the bar for real -- never positioning it over the picture
+to begin with, so there is nothing to cancel -- is `docked.css`'s job, below.
+
+Two rows still hold below 48rem: `SeekSlider` still takes its own row
+exactly as it does above 48rem. Row two keeps every control from the
+row-two contract except `VolumeSlider`. Every button in that row keeps
+`theme.css`'s existing `flex: 0 0 auto` and its locked 44px minimum, so none
+of them may shrink to fit; when the available width cannot hold the row as
+one line, the same `flex-wrap: wrap` that splits `SeekSlider` onto its own
+row lets the remaining buttons wrap onto a further line rather than
+shrinking below the target or being dropped. At 320px, the narrowest width
+`e2e/a11y.spec.ts`'s reflow cases already check, this produces a third
+line, which is accepted rather than treated as a defect: losing a control or
+a hit target would be worse than a taller bar. The picture keeps its own
+aspect ratio, `aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9)`,
+because `Viewport` (`viewport-media.tsx`) owns that output and nothing in
+the theme touches it.
 
 Only `transform` and `opacity` (and `transform`'s longhands, `translate` and
 `scale`) are animated anywhere in this file. `theme.css`'s header comment
@@ -314,20 +341,49 @@ consumer of a theme gets from the `viewport` part today.
 existing token in `theme.css` already uses, and a
 `@media (prefers-color-scheme: dark)` block at the end of the file repeats
 the same declarations, on the same selectors, reading
-`var(--playdeck-color-x, <dark default>)` instead. Four tokens, light
+`var(--playdeck-color-x, <dark default>)` instead. Seven tokens, light
 default then dark default:
 
 - `--playdeck-color-surface`: `#f4f4f2` light, `#141416` dark
 - `--playdeck-color-on-surface`: `#1c1c1e` light, `#ededed` dark
 - `--playdeck-color-accent`: `#2b52d6` light, `#3ea6ff` dark
+- `--playdeck-color-focus`: `#2b52d6` light, `#3ea6ff` dark (reuses accent's
+  own value by default; theme.css keeps the two tokens independent and so
+  does this file, a consumer can still set them apart)
+- `--playdeck-color-track` (paints `seek-buffered`, the unfilled boundary):
+  `#84847d` light, `#6d6d70` dark -- theme.css's own translucent-white
+  default composites to near-invisible against a light surface, so this file
+  needs its own
+- `--playdeck-color-buffered` (paints `seek-buffered-range`, the loaded
+  boundary): `#1c1c1e` light, `#ededed` dark -- the same values
+  `--playdeck-color-on-surface` carries, kept as an independent token a
+  consumer can still move separately
 - `--playdeck-color-hairline` (new; nothing in `theme.css`'s token table
   names a border colour today, because the floating theme draws no borders
   outside forced-colors mode): `#d9d9d6` light, `#2a2a2d` dark
 
-The first three are not new tokens: `theme.css`'s header comment already
-names `--playdeck-color-surface`, `--playdeck-color-on-surface` and
-`--playdeck-color-accent` in its token table, each with a single default;
-`docked.css` reads them with a different fallback, never a declaration.
+`--playdeck-color-hairline` is the only new token. The other six are not new:
+`theme.css`'s header comment already names all of `--playdeck-color-surface`,
+`-on-surface`, `-accent`, `-focus`, `-track` and `-buffered` in its token
+table, each with a single default; `docked.css` reads every one of them with
+a different fallback, never a declaration. `-track` and `-buffered` in
+particular are not swapped for `-hairline`: an earlier draft of this
+document read `seek-buffered`/`seek-buffered-range` from
+`--playdeck-color-hairline`/`-on-surface` instead, silently dropping both
+tokens from `docked.css` -- an omission that contradicted this same
+document's own claim that every token besides the light/dark palette listed
+here keeps `theme.css`'s default untouched. Checked at the 3:1 non-text floor
+(WCAG 1.4.11), the same rule `theme.css`'s own `slider non-text contrast`
+suite checks: `--playdeck-color-track` against `--playdeck-color-surface` is
+3.42:1 light, 3.57:1 dark; `--playdeck-color-buffered` against
+`--playdeck-color-track` (composited the same way `theme.css` composites its
+own buffered-over-track boundary, never over the surface directly) is 4.52:1
+light, 4.41:1 dark; `--playdeck-color-focus` against
+`--playdeck-color-surface` is 5.81:1 light, 7.10:1 dark. An earlier draft's
+track default, `#d9d9d6` -- read from `--playdeck-color-hairline`, meant for
+a 1px border rather than a slider boundary -- measured roughly 1.15:1
+against `#f4f4f2`, far under the floor; the `--playdeck-color-track` default
+above replaces it for that reason, not only for the token-naming one.
 `light-dark()` is not used. It is above `theme.css`'s declared support
 floor (Chrome 99 / Firefox 97 / Safari 15.4; `light-dark()` needs roughly
 Chrome 123 / Firefox 120 / Safari 17.5) and it is not one of the five
@@ -359,6 +415,22 @@ needs no addition to the feature-inventory test's pinned list:
 rules), not the feature written inside the parens, so `prefers-color-scheme`
 is not a name that test pins at all and `docked.css`'s second `@media` block
 passes it with no change to the test.
+
+The dark defaults for the four hand-drawn slider pseudo-elements
+(`::-moz-range-track`, `::-moz-range-progress`, `::-moz-range-thumb`,
+`seek-progress`'s and the seek input's own `::-webkit-slider-thumb`) nest
+inside the SAME `@media (forced-colors: none)` block their light defaults
+live in, as a `@media (prefers-color-scheme: dark)` sub-block, rather than
+the other way around. This file has exactly one `(forced-colors: none)`
+occurrence for the same reason `theme.css` does: `theme.test.ts`'s `leaves
+every hand-drawn slider rule out of forced-colors mode` needle walk finds
+the first `(forced-colors: none)` text match and walks its braces to find
+where that block closes, so a second occurrence -- or the slider rules
+arriving nested the other way, inside `(prefers-color-scheme: dark)`, where
+the walk starting from the top-level match never reaches them -- would sit
+outside what the walk checks, silently. AND semantics make the nesting
+order otherwise unobservable in the rendered result: both conditions still
+have to hold either way.
 
 **Volume.** Same hover-expand behaviour as the floating theme, same
 `(pointer: coarse)` hide. The mechanism is identical CSS, so it is written
@@ -492,6 +564,13 @@ values, at 4.5:1, using `packages/react/test/contrast.ts`'s existing
 `parseColor`/`over` helpers the same way `theme.test.ts` already composites
 `theme.css`'s token defaults. This is the same check, run a second time
 against a second file's default palette, rather than a new mechanism.
+Alongside the text check, the same non-text 3:1 floor `theme.css`'s own
+`slider non-text contrast` describe checks: `--playdeck-color-track`
+against `--playdeck-color-surface`, and `--playdeck-color-buffered`
+against `--playdeck-color-track` (composited, never against the surface
+directly, for the same reason `theme.css`'s own describe composites that
+way), plus `--playdeck-color-focus` against `--playdeck-color-surface`,
+each in both colour schemes.
 `docked.css` also joins `theme.test.ts`'s other suites over the same file,
 not only the contrast one: the cascade-layer check, the zero-specificity
 check, the feature-inventory check, and the token-table invariants, all run
