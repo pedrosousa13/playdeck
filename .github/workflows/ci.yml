@@ -78,8 +78,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # typecheck first: it is `tsc -b`, which emits the package declarations
       # the examples project resolves through its `paths`. test:docs proves the
-      # checker itself works before docs:check trusts it.
-      - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:docs && pnpm test:audit-unit && pnpm docs:check
+      # checker itself works before docs:check trusts it, and test:audit-unit
+      # proves the story-fixture rule before test:story-fixtures runs it over
+      # the workbench.
+      - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:docs && pnpm test:audit-unit && pnpm test:story-fixtures && pnpm docs:check
 
   # A job rather than a step because a pull request runs its own copy of this
   # file: a deleted step leaves the job around it still reporting green,

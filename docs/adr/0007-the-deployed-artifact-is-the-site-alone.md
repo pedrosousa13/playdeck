@@ -57,23 +57,27 @@ repository, and its stories remain browser tests. Nothing publishes it.
   terminal. `apps/storybook/.storybook/main.ts` still reads it into the
   bundler's `base`, and `stories/asset-url.ts` still resolves fixtures against
   that value, because building the workbench under a prefix is the only way to
-  see that a root-absolute literal has crept back into a story. It is the
+  see what a root-absolute literal in a story actually does. It is the
   workbench's mechanism and only the workbench's: the site reaches its own
   prefix through Astro's `base`, which `apps/site`'s `build:based` and
   `e2e/site-search.spec.ts` already drive under `/playdeck/`. What the workflow
   no longer does is pass a value: nothing serves the workbench, so there is no
   prefix for the deploy to state. `apps/storybook/README.md` carries the
   reasoning, which is where a reader meets the mechanism.
-- **The prefix check is now a manual one, and nothing in CI replaces it.**
-  Building the workbench under a prefix and driving a browser through it is what
-  caught a story addressing a fixture with a root-absolute literal instead of
-  going through `stories/asset-url.ts`. That harness built the workbench because
-  the deploy published it; it no longer builds it, so the check is gone. The
-  discipline it defended is still worth keeping, and a reader who wants it back
-  should reach for something cheaper than the browser check — a static scan for
-  root-absolute literals in the stories would catch the authoring mistake
-  directly rather than its symptom. Until then the gap is real and is recorded
-  here rather than left to be discovered.
+- **The prefix check is a static scan now, not a browser one.** Building the
+  workbench under a prefix and driving a browser through it is what caught a
+  story addressing a fixture with a root-absolute literal instead of going
+  through `stories/asset-url.ts`. That harness built the workbench because the
+  deploy published it; it no longer builds it, so that check is gone. #583
+  replaced it with the cheaper thing this bullet used to ask for:
+  `scripts/story-fixtures.mjs`, run as `pnpm test:story-fixtures` in the
+  `static` job, reads the stories and reports every root-absolute literal that
+  names a file under `apps/storybook/public/`. Scoping it to the fixture tree
+  is what keeps it from needing an ignore list for the literals a story means
+  to leave unresolvable. It catches the authoring mistake directly rather than
+  its symptom, and that is all it catches: no build runs, so nothing here shows
+  that the workbench works under a prefix. Seeing that is still the pair of
+  commands in `apps/storybook/README.md`, run by a person.
 - `wrangler.jsonc`'s `html_handling` default is unchanged and its justification
   is not. It used to be the setting that made `/storybook/` serve
   `storybook/index.html`; it is now the setting that makes every Astro route
