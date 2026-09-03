@@ -35,10 +35,15 @@
  *                                  default the way theme.css's `#fff` does
  *                                  against its own dark scrim)
  *   --playdeck-color-track         #84847d light / #6d6d70 dark  (paints
- *                                  `seek-buffered`, the unfilled boundary;
- *                                  theme.css's own translucent-white default
- *                                  reads as near-invisible composited onto a
- *                                  light surface, so this file needs its own)
+ *                                  `seek-buffered`, the unfilled boundary,
+ *                                  and Gecko's `::-moz-range-track`, which is
+ *                                  the volume slider's own unfilled boundary
+ *                                  — `-hairline` is a 1px border colour and
+ *                                  measures 1.28:1 there, so it is not the
+ *                                  token either boundary reads; theme.css's
+ *                                  own translucent-white default reads as
+ *                                  near-invisible composited onto a light
+ *                                  surface, so this file needs its own)
  *   --playdeck-color-buffered      #1c1c1e light / #ededed dark  (paints
  *                                  `seek-buffered-range`, the loaded
  *                                  boundary; reuses on-surface's own values,
@@ -62,6 +67,15 @@
  * floor with a margin; `docked.css slider non-text contrast` in
  * `theme.test.ts` asserts them, and `docked.css text contrast` beside it holds
  * the 1.4.3 text pairs at 4.5:1.
+ *
+ * One more colour token carries its own defaults: `--playdeck-control-hover`,
+ * the hover fill, is `rgb(0 0 0 / 0.06)` light and `rgb(255 255 255 / 0.12)`
+ * dark — theme.css declares only the second, which paints nothing on a light
+ * bar. Composited, the fill reads 1.14:1 light and 1.40:1 dark against the
+ * surface below it. That is a hover affordance rather than a component
+ * boundary, so 1.4.11's floor does not apply to it and neither default claims
+ * to clear one; what the dark repeat buys is that the two schemes are equally
+ * visible, where 6% black on `#141416` was 1.01:1 and painted nothing.
  *
  * Every other token this file reads keeps theme.css's own default — spacing,
  * control sizing, typography, motion, safe-area, activation size — so a
@@ -316,7 +330,7 @@
     )::-moz-range-track {
       block-size: var(--playdeck-slider-thickness, 0.25rem);
       border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
-      background-color: var(--playdeck-color-hairline, #d9d9d6);
+      background-color: var(--playdeck-color-track, #84847d);
     }
 
     :where(
@@ -382,7 +396,7 @@
         [data-playdeck-part='seek-slider-input'],
         [data-playdeck-part='volume-slider']
       )::-moz-range-track {
-        background-color: var(--playdeck-color-hairline, #2a2a2d);
+        background-color: var(--playdeck-color-track, #6d6d70);
       }
 
       :where(
@@ -608,6 +622,20 @@
       border-color: var(--playdeck-color-hairline, #2a2a2d);
       color: var(--playdeck-color-on-surface, #ededed);
       background-color: var(--playdeck-color-surface, #141416);
+    }
+
+    :where(
+      [data-playdeck-part='play-button'],
+      [data-playdeck-part='mute-button'],
+      [data-playdeck-part='captions-button'],
+      [data-playdeck-part='fullscreen-button'],
+      [data-playdeck-part='pip-button'],
+      [data-playdeck-part='airplay-button'],
+      [data-playdeck-part='settings-menu-trigger'],
+      [data-playdeck-part='menu-item'],
+      [data-playdeck-part='menu-radio-item']
+    ):where(:hover) {
+      background-color: var(--playdeck-control-hover, rgb(255 255 255 / 0.12));
     }
 
     :where([data-playdeck-part]):where(:focus-visible) {

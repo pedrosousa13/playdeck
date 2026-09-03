@@ -865,6 +865,121 @@ describe('docked.css slider non-text contrast', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The two describes above check `docked.css`'s token PAIRS. A pair being sound
+// says nothing about which token a rule actually reads: the Gecko range track
+// once read `--playdeck-color-hairline`, a 1px-border colour the spec rejects
+// for a slider boundary, and every pair-shaped assertion above passed straight
+// through it. These read the declarations out of the file itself.
+const dockedWithoutComments = dockedSource.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** The `var(--name, default)` a declaration reads, as name and parsed colour. */
+const varRead = (declaration: string): { token: string; fallback: string } => {
+  const match = /var\(\s*(--[\w-]+),\s*([^)]*\)?[^)]*)\)/.exec(declaration);
+  if (match === null)
+    throw new Error(`no \`var()\` in the declaration \`${declaration}\``);
+  return { token: match[1], fallback: match[2].trim() };
+};
+
+describe('docked.css reads the token each measured boundary is measured on', () => {
+  // The shared range-track rule and its dark repeat, in document order. The
+  // seek input resets its own track to `transparent` in a later rule, so the
+  // control these two actually paint is the volume slider.
+  const trackRules = [
+    ...dockedWithoutComments.matchAll(
+      /\[data-playdeck-part='volume-slider'\]\s*\)::-moz-range-track\s*\{([^}]*)\}/g
+    )
+  ].map((match) => match[1]);
+
+  test('has a light Gecko range-track rule and a dark repeat', () => {
+    expect(trackRules).toHaveLength(2);
+  });
+
+  // The defect this exists to catch: the spec rejects `-hairline` here by name
+  // ("`-track` and `-buffered` in particular are not swapped for `-hairline`"),
+  // and the file's own dark block already defines `--playdeck-color-track`.
+  test.each([
+    { scheme: 'light', index: 0, surface: '#f4f4f2' },
+    { scheme: 'dark', index: 1, surface: '#141416' }
+  ])(
+    'the $scheme Gecko range track reads --playdeck-color-track',
+    ({ index }) => {
+      const background = /background-color:([^;]*);/.exec(trackRules[index]);
+      expect(varRead(background?.[1] ?? '').token).toBe(
+        '--playdeck-color-track'
+      );
+    }
+  );
+
+  // And the default it reads has to clear 1.4.11's floor against the bar the
+  // volume slider is painted on -- which is what a token name alone does not
+  // prove, since a consumer-facing token still ships its own default.
+  test.each([
+    { scheme: 'light', index: 0, surface: '#f4f4f2' },
+    { scheme: 'dark', index: 1, surface: '#141416' }
+  ])(
+    'the $scheme Gecko range track clears 3:1 against the control bar',
+    ({ index, surface }) => {
+      const background = /background-color:([^;]*);/.exec(trackRules[index]);
+      const { fallback } = varRead(background?.[1] ?? '');
+      const ratio = contrast(
+        over(parseColor(fallback), parseColor(surface)),
+        parseColor(surface)
+      );
+      expect(ratio).toBeGreaterThanOrEqual(3);
+    }
+  );
+
+  test('states the measured range-track ratio in each scheme', () => {
+    const stated = Object.fromEntries(
+      [
+        { scheme: 'light', index: 0, surface: '#f4f4f2' },
+        { scheme: 'dark', index: 1, surface: '#141416' }
+      ].map(({ scheme, index, surface }) => {
+        const background = /background-color:([^;]*);/.exec(trackRules[index]);
+        const { fallback } = varRead(background?.[1] ?? '');
+        return [
+          `range track vs control bar (${scheme})`,
+          `${contrast(
+            over(parseColor(fallback), parseColor(surface)),
+            parseColor(surface)
+          ).toFixed(2)}:1`
+        ];
+      })
+    );
+    expect(stated).toEqual({
+      'range track vs control bar (light)': '3.42:1',
+      'range track vs control bar (dark)': '3.57:1'
+    });
+  });
+
+  // `--playdeck-control-hover` is the one token this file gives a default that
+  // is not theme.css's, and it is translucent -- so unlike every opaque token
+  // above it composites differently in each scheme, and a missing dark repeat
+  // leaves 6% black on a near-black bar: a hover state that paints nothing.
+  const hoverReads = [
+    ...dockedWithoutComments.matchAll(
+      /background-color:\s*(var\(--playdeck-control-hover,[^;]*\));/g
+    )
+  ].map((match) => varRead(match[1]).fallback);
+
+  test('repeats the hover fill for dark the way every other token is repeated', () => {
+    expect(new Set(hoverReads).size).toBe(2);
+  });
+
+  test('the dark hover fill is at least as visible on its bar as the light one is on its own', () => {
+    const visibility = (fill: string, surface: string): number =>
+      contrast(
+        over(parseColor(fill), parseColor(surface)),
+        parseColor(surface)
+      );
+    const [light, dark] = [...new Set(hoverReads)];
+    expect(visibility(dark, '#141416')).toBeGreaterThanOrEqual(
+      visibility(light, '#f4f4f2')
+    );
+  });
+});
+
 describe('headless import chain', () => {
   test('no primitive source file imports CSS', async () => {
     // The whole point of the separate entry: importing a primitive must never
