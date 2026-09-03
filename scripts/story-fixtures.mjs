@@ -8,16 +8,29 @@
 // What used to catch that was scripts/check-deploy-artifact.mjs, which built
 // the workbench under a prefix and drove a browser through it. #534 stopped
 // deploying the workbench, so that harness stopped building it and the check
-// went with it (#583). This is the cheaper replacement the ADR asked for: no
-// build and no browser, so it runs in the `static` job and cannot flake. It
-// catches the authoring mistake directly rather than the 404 downstream, which
-// also means it proves less — a prefixed build that works is still only shown
-// by the two commands in apps/storybook/README.md.
+// went with it. This is the cheaper one docs/adr/0007 asked for in its place:
+// it reads the sources and starts neither a build nor a browser, so what it
+// depends on is the repository and nothing that has to be served. It catches
+// the authoring mistake directly rather than the 404 downstream, which also
+// means it proves less — that a prefixed build works is still shown only by
+// the two commands in apps/storybook/README.md.
 //
-// The judgement is separated from the IO the way scripts/client-boundary.mjs
-// separates them: which literals are the defect is decided here and tested
-// directly on hand-written sources, while the caller supplies the bytes and
-// the fixture set.
+// The judgement is a pure function and the IO is `main()` behind the CLI guard
+// at the foot of the file, which is scripts/readme-bytes.mjs's shape: which
+// literals are the defect is decided in `storyFixtureProblems` and exercised
+// on hand-written sources by story-fixtures.test.mjs, and importing this
+// module reads nothing.
+//
+// The strings are taken from TypeScript's own parser rather than from a scan
+// of the characters. A scan cannot tell a string from JSX text, and an
+// apostrophe in JSX prose -- `<p>it's fine</p>` -- reads to one as a string
+// that opens and never closes, which desyncs everything after it: a real
+// bypass further down the same file then goes unreported and the gate silently
+// stops gating. A quote inside a regular expression does the same thing, and
+// `stories/parts.contract.test.ts` holds one. The parser has no such state to
+// lose: JSX text arrives as `JsxText` and a regular expression as a regular
+// expression, neither being a string, comments are not nodes at all, and the
+// files that document this rule can go on naming the literal not to write.
 //
 // Which literals it reaches is read off the filesystem rather than off a list
 // of names, because the alternative is an ignore list that grows every time a
@@ -33,6 +46,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
+import ts from 'typescript';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -42,68 +56,84 @@ const STORIES = 'apps/storybook/stories';
 const PUBLIC = 'apps/storybook/public';
 
 /**
- * Every string literal in a source, with the line it opens on.
- *
- * A scan rather than a parse, and it tracks comments for one reason: the
- * places this repository explains the rule -- `stories/asset-url.ts`'s doc
- * comment, and the comment above the second resolver in
- * `stories/reference/reference-player.tsx` -- name the literal not to write. A
- * scan that read comments would fail on the files that document it. Tracking
- * them here rather than stripping them first also keeps a `//` inside a string
- * (`https://...`) from swallowing the rest of its line.
- *
- * A `${...}` inside a template literal is read as part of the string, so
- * `` `${assetUrl('poster.svg')} 640w` `` is one literal that starts with a
- * brace and is judged as such. That costs nothing: an interpolated path is not
- * root-absolute, which is the only shape the rule reports.
+ * Every string a source spells out, with the line it starts on: the string
+ * literals, and each literal chunk of a template. A template's chunks are
+ * taken one by one rather than as a whole, so a rule inside a long CSS
+ * template is reported on its own line, and so that nothing inside `${...}` --
+ * an expression, not text -- is read as a path.
  * @param {string} source
- * @returns {Generator<{ line: number; value: string }>}
+ * @returns {{ line: number; value: string }[]}
  */
-function* stringLiterals(source) {
-  let index = 0;
-  let line = 1;
-  while (index < source.length) {
-    const char = source[index];
-    if (char === '\n') {
-      line += 1;
-      index += 1;
-    } else if (char === '/' && source[index + 1] === '/') {
-      while (index < source.length && source[index] !== '\n') index += 1;
-    } else if (char === '/' && source[index + 1] === '*') {
-      index += 2;
-      while (
-        index < source.length &&
-        !(source[index] === '*' && source[index + 1] === '/')
-      ) {
-        if (source[index] === '\n') line += 1;
-        index += 1;
-      }
-      index += 2;
-    } else if (char === "'" || char === '"' || char === '`') {
-      const opened = line;
-      let value = '';
-      index += 1;
-      while (index < source.length && source[index] !== char) {
-        if (source[index] === '\\') {
-          value += source[index + 1] ?? '';
-          index += 2;
-          continue;
-        }
-        if (source[index] === '\n') line += 1;
-        value += source[index];
-        index += 1;
-      }
-      index += 1;
-      yield { line: opened, value };
-    } else {
-      index += 1;
+const spelledStrings = (source) => {
+  const file = ts.createSourceFile(
+    'story.tsx',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX
+  );
+
+  /** @type {{ line: number; value: string }[]} */
+  const strings = [];
+  /** @param {ts.Node} node */
+  const visit = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      strings.push({
+        line: file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1,
+        value: node.text
+      });
     }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return strings;
+};
+
+/**
+ * The paths one string spells out, each with where in the string it starts, in
+ * the three shapes a fixture is addressed in. The whole string is the plain case (`src="/tracer.mp4"`); a `url(...)`
+ * payload, quoted or bare, is how CSS names one, and the issue that asked for
+ * this check named it; and a descriptor list (`srcSet`, `sizes`) is
+ * comma-separated candidates each ending at their first space --
+ * `player-fixture.stories.tsx` already writes one of those through the
+ * resolver, so the bypass form of that line has to be visible from here.
+ * @param {string} value
+ * @returns {{ path: string; offset: number }[]}
+ */
+const spelledPaths = (value) => {
+  /** @type {{ path: string; offset: number }[]} */
+  const paths = [{ path: value, offset: 0 }];
+
+  for (const match of value.matchAll(/url\(\s*(['"]?)([^'")\s]*)\1\s*\)/g)) {
+    paths.push({
+      path: match[2],
+      offset: (match.index ?? 0) + match[0].indexOf(match[2])
+    });
   }
-}
+
+  let at = 0;
+  for (const part of value.split(',')) {
+    const leading = part.length - part.trimStart().length;
+    paths.push({
+      path: part.trim().split(/\s/)[0],
+      offset: at + leading
+    });
+    at += part.length + 1;
+  }
+  return paths;
+};
 
 /**
  * The literals in one story source that address a fixture without the
- * resolver, each with the line it sits on.
+ * resolver, each with the line it sits on. A template chunk can be many lines
+ * long, so the line is counted to where the path starts rather than taken from
+ * where the chunk does. One fixture named twice on one line is one finding.
  *
  * A query or a fragment names the same file, so both are cut before the set is
  * asked. A `//` opening is left alone: that is a protocol-relative URL, which
@@ -115,10 +145,18 @@ function* stringLiterals(source) {
 export const storyFixtureProblems = (source, fixtures) => {
   /** @type {{ line: number; path: string }[]} */
   const problems = [];
-  for (const { line, value } of stringLiterals(source)) {
-    if (!value.startsWith('/') || value.startsWith('//')) continue;
-    const path = value.split(/[?#]/)[0];
-    if (fixtures.has(path.slice(1))) problems.push({ line, path });
+  /** @type {Set<string>} */
+  const seen = new Set();
+  for (const { line, value } of spelledStrings(source)) {
+    for (const { path: candidate, offset } of spelledPaths(value)) {
+      if (!candidate.startsWith('/') || candidate.startsWith('//')) continue;
+      const path = candidate.split(/[?#]/)[0];
+      if (!fixtures.has(path.slice(1))) continue;
+      const at = line + value.slice(0, offset).split('\n').length - 1;
+      if (seen.has(`${at}\t${path}`)) continue;
+      seen.add(`${at}\t${path}`);
+      problems.push({ line: at, path });
+    }
   }
   return problems;
 };
@@ -139,16 +177,19 @@ export const fixturePaths = (dir) =>
   );
 
 /**
- * The story sources to read: the TypeScript under `stories/`, which is every
- * file that renders a story or the components one mounts.
+ * The story sources to read: every `.ts` and `.tsx` under `stories/` — the
+ * stories, the components they mount, and the contract tests and helpers
+ * beside them. Reading more than renders is deliberate: the defect is the
+ * literal rather than what renders it, and a rule that had to decide which
+ * files render would be a list to keep true.
  *
- * The `.mdx` beside them is not read. It is markdown, where an apostrophe in
- * prose opens nothing and the scan above would mistake several for strings,
- * and the fixtures live in the stories those pages embed rather than in the
- * pages. `stories/reference/reference-player.tsx` *is* read, like any other
- * source: it declares a second copy of the resolver, because the lint rule
- * scoping that directory denies the import, and a root-absolute literal is the
- * same defect there.
+ * The `.mdx` beside them is not read, and that is a hole rather than a
+ * judgement — it is markdown, the parser above is TypeScript's, and nothing
+ * here parses MDX. `apps/storybook/README.md` says so where it describes what
+ * this covers. `stories/reference/reference-player.tsx` *is* read, like any
+ * other source: it declares a second copy of the resolver, because the lint
+ * rule scoping that directory denies the import, and a root-absolute literal
+ * is the same defect there.
  * @param {string} dir
  * @returns {string[]}
  */

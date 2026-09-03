@@ -91,6 +91,84 @@ test('leaves a relative literal alone', () => {
   );
 });
 
+// The defect the hand-rolled scanner this replaced could not see: an
+// apostrophe in JSX text is prose, not a string opener, and reading it as one
+// desynced everything after it -- so a genuine bypass further down the file
+// went unreported and the gate silently stopped gating. Today's stories are
+// one line of copy away from that, which is why the parser is TypeScript's.
+test('reports a bypass that follows an apostrophe in JSX text', () => {
+  assert.deepEqual(
+    storyFixtureProblems(
+      '<p>it\'s a fixture</p>\n<img src="/tracer.mp4" />\n',
+      fixtures
+    ),
+    [{ line: 2, path: '/tracer.mp4' }]
+  );
+});
+
+// The same class as the apostrophe, and it was live: a quote inside a regular
+// expression opened a phantom string for the scanner this replaced, and
+// stories/parts.contract.test.ts:46 is
+// `/data-playdeck-part="([^"]+)"/g` -- so everything after that line in that
+// file went unread. To a parser a regular expression is a node and not a
+// string, and the text inside it is never a candidate path.
+test('reports a bypass that follows a regular expression holding a quote', () => {
+  assert.deepEqual(
+    storyFixtureProblems(
+      'const part = /data-playdeck-part="([^"]+)"/g;\nconst src = "/tracer.mp4";\n',
+      fixtures
+    ),
+    [{ line: 2, path: '/tracer.mp4' }]
+  );
+});
+
+// A fixture is addressed in more shapes than a bare `src`, and the issue that
+// asked for this check named `url()` among them. `srcSet` is not hypothetical
+// either: player-fixture.stories.tsx already writes a descriptor-bearing one
+// through the resolver, so the bypass form of that exact line has to be
+// visible here. A descriptor list is read candidate by candidate, each up to
+// its first space, and the same fixture named twice in one literal is one
+// finding.
+test('reports a fixture inside a srcSet descriptor list', () => {
+  assert.deepEqual(
+    storyFixtureProblems(
+      '<img srcSet="/poster.svg 640w, /poster.svg 1280w" />\n',
+      fixtures
+    ),
+    [{ line: 1, path: '/poster.svg' }]
+  );
+});
+
+test('reports a fixture inside url(), quoted or bare', () => {
+  assert.deepEqual(
+    storyFixtureProblems(
+      'const css = `background: url(/poster.svg)`;\n',
+      fixtures
+    ),
+    [{ line: 1, path: '/poster.svg' }]
+  );
+  assert.deepEqual(
+    storyFixtureProblems(
+      '<div style={{ background: "url(\'/poster.svg\')" }} />\n',
+      fixtures
+    ),
+    [{ line: 1, path: '/poster.svg' }]
+  );
+});
+
+// A template with a hole is several literal chunks, and a bypass in any of
+// them sits on its own line. The interpolated part is an expression rather
+// than text, so nothing inside `${...}` is read as a path.
+test('reports a bypass in an interpolated template, on its own line', () => {
+  assert.deepEqual(
+    storyFixtureProblems(
+      'const css = `\n  background: url(${a});\n  mask: url(/poster.svg);\n`;\n',
+      fixtures
+    ),
+    [{ line: 3, path: '/poster.svg' }]
+  );
+});
+
 // The rule scopes itself against a set read off the filesystem, which is what
 // makes it silently disableable: point the reader at a directory that holds no
 // fixtures and every case above still passes while no story is checked at all.

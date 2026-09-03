@@ -68,16 +68,19 @@ repository, and its stories remain browser tests. Nothing publishes it.
   workbench under a prefix and driving a browser through it is what caught a
   story addressing a fixture with a root-absolute literal instead of going
   through `stories/asset-url.ts`. That harness built the workbench because the
-  deploy published it; it no longer builds it, so that check is gone. #583
-  replaced it with the cheaper thing this bullet used to ask for:
+  deploy published it; it no longer builds it, so that check is gone. In its
+  place is the cheaper thing this bullet used to ask for:
   `scripts/story-fixtures.mjs`, run as `pnpm test:story-fixtures` in the
-  `static` job, reads the stories and reports every root-absolute literal that
-  names a file under `apps/storybook/public/`. Scoping it to the fixture tree
-  is what keeps it from needing an ignore list for the literals a story means
-  to leave unresolvable. It catches the authoring mistake directly rather than
-  its symptom, and that is all it catches: no build runs, so nothing here shows
-  that the workbench works under a prefix. Seeing that is still the pair of
-  commands in `apps/storybook/README.md`, run by a person.
+  `static` job, parses the `.ts` and `.tsx` under `apps/storybook/stories/` and
+  reports a root-absolute literal that names a file under
+  `apps/storybook/public/`. Scoping it to the fixture tree is what keeps it
+  from needing an ignore list for the literals a story means to leave
+  unresolvable. It catches the authoring mistake directly rather than its
+  symptom, and that is the limit of it: a path assembled at runtime is not a
+  literal to find, the `.mdx` pages are markdown and are not parsed, and no
+  build runs, so nothing here shows that the workbench works under a prefix.
+  Seeing that is still the pair of commands in `apps/storybook/README.md`, run
+  by a person.
 - `wrangler.jsonc`'s `html_handling` default is unchanged and its justification
   is not. It used to be the setting that made `/storybook/` serve
   `storybook/index.html`; it is now the setting that makes every Astro route

@@ -26,12 +26,17 @@ which is where `storybook dev` and the Vitest browser run serve the workbench �
 so the default path is the one every command above takes.
 
 `pnpm test:story-fixtures` (root, and in CI's `static` job) is what keeps a
-story from writing the literal instead. It reads the stories without building
-or serving anything and reports every root-absolute literal naming a file that
-exists under `public/` — which is exactly a reference that should have gone
-through `asset-url.ts`. A root-absolute literal naming something else is left
-alone, so the deliberately unresolvable `/__playdeck__/...` posters need no
-exemption. `scripts/story-fixtures.mjs` carries the reasoning.
+story from writing the literal instead. It parses the `.ts` and `.tsx` under
+`stories/` without building or serving anything, and reports a root-absolute
+literal — on its own, inside `url(...)`, or in a `srcSet`-style descriptor list
+— that names a file which exists under `public/`, since that is exactly a
+reference that should have gone through `asset-url.ts`. A root-absolute literal
+naming something else is left alone, so the deliberately unresolvable
+`/__playdeck__/...` posters need no exemption.
+
+What it does not see: a path assembled at runtime rather than spelled out, and
+the `.mdx` pages, which are markdown and are not parsed.
+`scripts/story-fixtures.mjs` carries the reasoning.
 
 That catches the authoring mistake, not the 404 it causes, and it does not show
 that a prefixed build works. Seeing that still takes a build served from the
