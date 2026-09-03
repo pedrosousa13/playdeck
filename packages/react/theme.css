@@ -258,6 +258,7 @@
     [data-playdeck-part='seek-slider-input'],
     [data-playdeck-part='volume-slider']
   ) {
+    display: block;
     inline-size: 100%;
     margin: 0;
     accent-color: var(--playdeck-color-accent, #3ea6ff);
