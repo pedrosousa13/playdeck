@@ -365,8 +365,7 @@ the changed lines' opacity to 1 with the transition suppressed for one
 frame, the standard flash-then-fade shape, a class toggled off, a layout
 read forced, then removed, and the declared transition carries it back to 0
 on its own. Never `border-color`, which this system does not animate; a bar
-present throughout that only changes opacity is what keeps this inside rule
-5.
+present throughout that only changes opacity is what keeps this inside rule 5.
 
 **Under reduced motion, no fade, and no branch is needed.** `base.css`'s
 site-wide rule already collapses every `transition-duration` to `0.01ms`
@@ -390,7 +389,7 @@ adapter` and replaces the sentence with the one below.
   `index.astro` reads it today; measured against the repository as it
   stands this comes out as `17 kB` against a budget of `18`
   (`scripts/bundle-budgets.mjs`'s `@playdeck/react (primitives, excl.
-  React)` target), so the headline is what the script returns today, not a
+React)` target), so the headline is what the script returns today, not a
   value typed independent of it.
 - `One adapter`, "Adding YouTube costs 6 kB. The other four never reach
   your bundle." `6 kB` is `youtube.size.toFixed(0)` from the same
@@ -446,7 +445,7 @@ over native video, HLS, YouTube, Vimeo and Wistia."
 ## What is deleted
 
 - The `'none'` member of `SkinName` (`bench-composition.ts`), the `{ value:
-  'none', … }` entry in `BenchSwitches.tsx`'s `skinPositions`, and every
+'none', … }` entry in `BenchSwitches.tsx`'s `skinPositions`, and every
   `'none'` string those two files and `e2e/site-bench.spec.ts` carry
   (`position(page, 'skin', 'none').click()` and the paragraph of comment
   explaining why `theme` had to become the resting position against it).
@@ -507,7 +506,7 @@ to fill with a real child. `BenchIsland.tsx`'s
 - The `jsxBlock` helper and its `toHaveLength(6)` assertions are dropped,
   the block is no longer six lines under any combination, replaced by an
   assertion that the preamble is always four lines (import, blank, `const
-  source`, blank) across all four positions, which is what point 6 depends
+source`, blank) across all four positions, which is what point 6 depends
   on.
 - `e2e/site-landing.spec.ts`: `thesis` is the display sentence, not the
   lede, and is untouched by this document. A new assertion covers the
@@ -622,30 +621,31 @@ and `none`'s absence is no longer why this document keeps it.
 
 ## What was asked and settled
 
-| Question | Ruling |
-| --- | --- |
-| The two skin positions | `theme` and `docked`, replacing `none` and `theme` |
-| The new `--playdeck-color-hairline` mapping | `.bench__stage` gains one line, `--playdeck-color-hairline: var(--stage-hairline)`; `tokens.css` gains `--stage-hairline: var(--dark-line)` |
-| Default position below 48rem | `docked`, because the floating theme collapses to close to the same layout there anyway |
-| Skin fieldset below 48rem | Hidden; the two positions differ only by `VolumeSlider` on a fine pointer, identical on a coarse one, which is nearly every narrow viewport |
-| How the default is chosen without a flash | `matchMedia` read once in the island's `useState` initializer, matching the existing `readySources[0]` pattern |
-| What the panel prints | The real mounted tree, ten controls, not one collapsed `<Player.Controls />` tag |
-| Where `SeekSlider` sits in that order | First, ahead of `PlayButton`; it moves from third in today's mounted order, so it stays first in document order for the theme's row split |
-| What keeps the printed tree and the mounted tree in step | A shared exhaustive array (`bench-controls.ts`) both files map over, not a test that diffs them after the fact |
-| Settings menu content | Real content, `examples/react-menus.tsx`'s `RateMenu` as written, not an empty shell |
-| Where highlighting runs | Build time, in `Bench.astro`, via Shiki's `codeToHtml` directly, four precomputed strings; the highlighter ships zero client bytes, the four highlighted strings still travel as island props |
-| How `apps/site` reaches `codeToHtml` | `shiki` added to `apps/site/package.json`'s `devDependencies`, pinned inside Astro's own `^4.0.2` range |
-| How the panel avoids nesting `<pre>` in `<pre>` | A `pre` transformer hook adds the `astro-code` class plus `data-bench-composition` and `tabindex` to Shiki's own `<pre>`; `CompositionPanel.tsx` renders one `<div dangerouslySetInnerHTML>` around it and no `<pre>` of its own |
-| What `.astro-code` gains for the deleted `<pre>`'s `m-0`/`overflow-x-auto` | `margin: 0` and `overflow-x: auto`, harmless on every Astro-emitted block, which already carries both |
-| The per-line hook Shiki exposes | `line`, confirmed against the `ShikiTransformer` type section 3's `shiki` dependency step makes importable: `(this: ShikiTransformerContext, hast: Element, line: number) => Element \| void` |
-| The instruction line | "Same markup. Two stylesheets. Press one.", above the switches, styled like the promoted status line |
-| The status line's rung | `--text-fn` mono to `--text-md` sans; the credit takes the fine-print rung, `--text-sm`, already named on this page |
-| How "changed lines" is computed | An index-wise diff of two known plain-text line arrays, always the same length now that `none` is gone |
-| Whether the badge-redraw workaround survives #552 as shipped | Yes: the selector is unchanged and unscoped, only its size floors instead of fixes, so the bench's icon-only button still measures the 4rem default and the block stays, rescoped to whichever skin is loaded |
-| The changed-line accent bar's contrast against `--color-sunken` | `5.88:1` in light, `8.66:1` in dark; both clear the 3:1 non-text UI owes |
-| The close's four cells | `17 kB`, `One adapter`, `Plays anyway`, `Nothing lies`, two measured, two written, matching the page's existing mix |
-| Why `0` and `Unstyled by default` are dropped | Both repeat a claim made better elsewhere on the page now; neither has a live demonstration left to point at |
-| The lede's last clause | "…and one source prop chooses the provider.", replacing a line count that stopped being true |
-| The `<Player.Time>` separator | Stays; it was never `none`-specific, both remaining themes still need it supplied as a child |
-| Whether the 2026-08-31 "no capability table" ruling is reopened | No; the close's four cells answer the maintainer's separate 2026-09-02 request in prose, which the 2026-08-31 spec's own table did not rule out |
+| Question                                                                   | Ruling                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The two skin positions                                                     | `theme` and `docked`, replacing `none` and `theme`                                                                                                                                                                               |
+| The new `--playdeck-color-hairline` mapping                                | `.bench__stage` gains one line, `--playdeck-color-hairline: var(--stage-hairline)`; `tokens.css` gains `--stage-hairline: var(--dark-line)`                                                                                      |
+| Default position below 48rem                                               | `docked`, because the floating theme collapses to close to the same layout there anyway                                                                                                                                          |
+| Skin fieldset below 48rem                                                  | Hidden; the two positions differ only by `VolumeSlider` on a fine pointer, identical on a coarse one, which is nearly every narrow viewport                                                                                      |
+| How the default is chosen without a flash                                  | `matchMedia` read once in the island's `useState` initializer, matching the existing `readySources[0]` pattern                                                                                                                   |
+| What the panel prints                                                      | The real mounted tree, ten controls, not one collapsed `<Player.Controls />` tag                                                                                                                                                 |
+| Where `SeekSlider` sits in that order                                      | First, ahead of `PlayButton`; it moves from third in today's mounted order, so it stays first in document order for the theme's row split                                                                                        |
+| What keeps the printed tree and the mounted tree in step                   | A shared exhaustive array (`bench-controls.ts`) both files map over, not a test that diffs them after the fact                                                                                                                   |
+| Settings menu content                                                      | Real content, `examples/react-menus.tsx`'s `RateMenu` as written, not an empty shell                                                                                                                                             |
+| Where highlighting runs                                                    | Build time, in `Bench.astro`, via Shiki's `codeToHtml` directly, four precomputed strings; the highlighter ships zero client bytes, the four highlighted strings still travel as island props                                    |
+| How `apps/site` reaches `codeToHtml`                                       | `shiki` added to `apps/site/package.json`'s `devDependencies`, pinned inside Astro's own `^4.0.2` range                                                                                                                          |
+| How the panel avoids nesting `<pre>` in `<pre>`                            | A `pre` transformer hook adds the `astro-code` class plus `data-bench-composition` and `tabindex` to Shiki's own `<pre>`; `CompositionPanel.tsx` renders one `<div dangerouslySetInnerHTML>` around it and no `<pre>` of its own |
+| What `.astro-code` gains for the deleted `<pre>`'s `m-0`/`overflow-x-auto` | `margin: 0` and `overflow-x: auto`, harmless on every Astro-emitted block, which already carries both                                                                                                                            |
+| The per-line hook Shiki exposes                                            | `line`, confirmed against the `ShikiTransformer` type section 3's `shiki` dependency step makes importable: `(this: ShikiTransformerContext, hast: Element, line: number) => Element \| void`                                    |
+| The instruction line                                                       | "Same markup. Two stylesheets. Press one.", above the switches, styled like the promoted status line                                                                                                                             |
+| The status line's rung                                                     | `--text-fn` mono to `--text-md` sans; the credit takes the fine-print rung, `--text-sm`, already named on this page                                                                                                              |
+| How "changed lines" is computed                                            | An index-wise diff of two known plain-text line arrays, always the same length now that `none` is gone                                                                                                                           |
+| Whether the badge-redraw workaround survives #552 as shipped               | Yes: the selector is unchanged and unscoped, only its size floors instead of fixes, so the bench's icon-only button still measures the 4rem default and the block stays, rescoped to whichever skin is loaded                    |
+| The changed-line accent bar's contrast against `--color-sunken`            | `5.88:1` in light, `8.66:1` in dark; both clear the 3:1 non-text UI owes                                                                                                                                                         |
+| The close's four cells                                                     | `17 kB`, `One adapter`, `Plays anyway`, `Nothing lies`, two measured, two written, matching the page's existing mix                                                                                                              |
+| Why `0` and `Unstyled by default` are dropped                              | Both repeat a claim made better elsewhere on the page now; neither has a live demonstration left to point at                                                                                                                     |
+| The lede's last clause                                                     | "…and one source prop chooses the provider.", replacing a line count that stopped being true                                                                                                                                     |
+| The `<Player.Time>` separator                                              | Stays; it was never `none`-specific, both remaining themes still need it supplied as a child                                                                                                                                     |
+| Whether the 2026-08-31 "no capability table" ruling is reopened            | No; the close's four cells answer the maintainer's separate 2026-09-02 request in prose, which the 2026-08-31 spec's own table did not rule out                                                                                  |
+
 </content>
