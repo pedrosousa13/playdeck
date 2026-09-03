@@ -18,7 +18,7 @@
     "test:packages": "node scripts/verify-packaging.mjs",
     "test:deploy": "node scripts/check-deploy-artifact.mjs",
     "test:site-links": "node scripts/check-site-links.mjs",
-    "test:site-analytics": "node --test scripts/site-analytics.test.mjs",
+    "test:site-analytics": "node scripts/check-site-analytics.mjs",
     "test:budgets": "node scripts/check-bundle-budgets.mjs",
     "test:story-fixtures": "node scripts/story-fixtures.mjs",
     "test:bundle": "turbo run build --filter=@playdeck/bundle-native-only && pnpm --filter @playdeck/bundle-native-only test",

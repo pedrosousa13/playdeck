@@ -86,6 +86,9 @@ jobs:
           # publishes playdeck.video. Local and pull-request builds omit the
           # Plausible script entirely.
           PUBLIC_PLAUSIBLE_ANALYTICS: 'true'
+      - run: pnpm test:site-analytics
+        env:
+          PUBLIC_PLAUSIBLE_ANALYTICS: 'true'
 
       # What the artifact holds is the script's to say, not this file's — the
       # verification harness assembles the same artifact, and one definition is
