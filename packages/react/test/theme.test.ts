@@ -774,15 +774,15 @@ describe('headless import chain', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Auto-hide, and why it is not inside the `describe.each` above.
+// The overlay rules, and why they are not inside the `describe.each` above.
 //
-// This rule belongs to `theme.css` alone. `docked.css` never reads `data-idle`
-// at all — nothing in that theme is drawn over the picture, so there is nothing
-// for an auto-hide to protect — so an assertion placed in the parameterised
-// suite would run against that fixture too and fail on it forever. It reads the
-// module-scope `withoutComments` the same way `theme contract` and `slider
-// non-text contrast` do.
-describe('theme.css auto-hide (not shared with docked.css)', () => {
+// Both belong to `theme.css` alone, for the same reason: they exist to protect
+// a bar drawn over the picture, and `docked.css` never draws one. It reads no
+// `data-idle` at all, and it has no scrim to flatten below 48rem — so an
+// assertion placed in the parameterised suite would run against that fixture
+// too and fail on it forever. They read the module-scope `withoutComments` the
+// same way `theme contract` and `slider non-text contrast` do.
+describe('theme.css overlay rules (not shared with docked.css)', () => {
   // The idle state is the selected one, so an absent `data-idle` renders
   // exactly like `data-idle='false'`. That is what the attribute's own
   // lifetime requires: `Viewport` writes it from an effect that returns early
@@ -796,5 +796,24 @@ describe('theme.css auto-hide (not shared with docked.css)', () => {
     expect(withoutComments).toMatch(
       /:where\(\[data-playdeck-part='controls'\]:focus-within\)\s*\{[^}]*opacity:\s*1;/
     );
+  });
+
+  // Two declarations inside one `max-width: 48rem` query, and no third: the
+  // narrow fallback flattens the scrim and drops the volume slider, and says
+  // nothing about where the bar sits. A `position` written here would be
+  // layered `:where()` CSS, which the unlayered rule a real composition uses to
+  // float the bar beats whatever this file said — so the query claims only what
+  // it can deliver. Moving the bar out of the overlay is `docked.css`'s job,
+  // and that theme never puts it there to begin with.
+  test('flattens the scrim and drops the volume slider below 48rem', () => {
+    const query = withoutComments.match(
+      /@media\s*\(\s*max-width:\s*48rem\s*\)\s*\{[^]*?\n {2}\}/
+    )?.[0];
+    expect(query).toBeDefined();
+    expect(query).toMatch(
+      /background:\s*var\(--playdeck-color-surface,\s*rgb\(0 0 0 \/ 0\.72\)\)/
+    );
+    expect(query).toMatch(/volume-slider'\][^]*?display:\s*none/);
+    expect(query).not.toMatch(/position:/);
   });
 });
