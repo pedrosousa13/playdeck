@@ -290,7 +290,7 @@ picture.
 
 ## 4. The instruction line
 
-One line, mono, above the switch groups: "Same markup. Two stylesheets.
+One line, sans, above the switch groups: "Same markup. Two stylesheets.
 Press one." It sits in `BenchIsland.tsx`, inside the switches column
 (`<div className="grid gap-[var(--space-4)]">`), immediately before
 `<BenchSwitches>`, the first thing in that column, so it reads before the
