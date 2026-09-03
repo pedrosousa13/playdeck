@@ -50,7 +50,7 @@ Both halves are needed: the first makes a demonstration possible, the second is
 what the page requires of any claim it makes. A request for autoplay prose on its
 own does not reopen it.
 
-Note that this file is about a claim *on the landing page*. It is not about the
+Note that this file is about a claim _on the landing page_. It is not about the
 library's behaviour when a browser refuses autoplay — that is a separate decline,
 recorded in `default-presentation-on-blocked-autoplay.md`.
 
