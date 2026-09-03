@@ -382,12 +382,15 @@ const Stage = ({
   const fromKeyboardRef = useRef(false);
   return (
     /*
-     * `data-bench-skin` is what scopes `Bench.astro`'s badge-redraw rule to the
-     * `theme` position. It rides on the viewport rather than on `.bench__stage`
-     * because the viewport is React's: the attribute then arrives in the same
-     * commit as the state it reports, where writing it onto the Astro element
-     * would mean a `setAttribute` in an effect and a frame in which the
-     * document and the switch disagree.
+     * `data-bench-skin` is what scopes `Bench.astro`'s docked-only layout
+     * rules -- the viewport's two-row grid, its `::before` ratio box, and the
+     * control bar's own row -- to the `docked` position; the badge-redraw
+     * rule needs no such scoping, since both skins hit the same defect. It
+     * rides on the viewport rather than on `.bench__stage` because the
+     * viewport is React's: the attribute then arrives in the same commit as
+     * the state it reports, where writing it onto the Astro element would
+     * mean a `setAttribute` in an effect and a frame in which the document
+     * and the switch disagree.
      */
     <Player.Viewport data-bench-skin={skin}>
       <Player.Media />

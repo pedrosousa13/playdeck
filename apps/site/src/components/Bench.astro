@@ -467,10 +467,10 @@ for (const entry of readySources) {
   }
 
   /* The other half of the same defect, on the other skin -- issue #552,
-   * filed against the library rather than fixed there: under `theme`, this
-   * part is sized into a roughly 4rem badge, so only the badge was pressable
-   * and the rest of the picture did nothing. Measured directly: a click two
-   * inches from the badge, well inside the frame, reached no control at all.
+   * filed against the library rather than fixed there: this part is sized
+   * into a roughly 4rem badge, so only the badge was pressable and the rest
+   * of the picture did nothing. Measured directly: a click two inches from
+   * the badge, well inside the frame, reached no control at all.
    *
    * The fix redraws the badge as a background rather than as the button's own
    * box, the technique `HeroPlayer.astro` used for the same part before this
@@ -487,12 +487,18 @@ for (const entry of readySources) {
    * stage — and a rounded corner clips hit testing, not just paint. Squared
    * off here; the badge below carries its own roundness instead.
    *
-   * Unlayered and scoped to `[data-bench-skin='theme']`: this beats
-   * `theme.css`'s own layered rule for the same property regardless of
-   * specificity, and scoping it keeps `docked` untouched here -- that
-   * position's own stylesheet handles this part its own way. */
+   * Unlayered and, until now, scoped to `[data-bench-skin='theme']`: the
+   * scoping deferred to `docked.css` to handle this part its own way. But
+   * `docked.css` floors the badge exactly as `theme.css` does -- `fit-content`
+   * before a 4rem `min-inline-size`/`min-block-size` floor, positioned by the
+   * primitive's own `position: absolute; inset: 0; margin: auto`
+   * (`docked.css`'s `[data-playdeck-part='activation']` vs `theme.css`'s) --
+   * so the same defect exists under both, and the same redraw fixes both.
+   * Dropping the qualifier is safe because `data-bench-skin` is always
+   * `theme` or `docked` now, never absent and never `none`: there is no third
+   * position left for an unqualified rule to wrongly catch. */
   :global(.bench__stage)
-    :global([data-bench-skin='theme'] [data-playdeck-part='activation']) {
+    :global([data-playdeck-part='activation']) {
     grid-area: stack;
     grid-template-areas: 'face';
     place-content: center;
@@ -502,14 +508,18 @@ for (const entry of readySources) {
      * inline declaration beats any stylesheet. Clearing it is what lets the
      * `::before` below be the only badge on the frame. */
     --playdeck-activation-fill: transparent;
+    /* Same idiom, for the border: `theme.css` already floors this token at
+     * `0`, but `docked.css` declares a visible 1px hairline
+     * (`--playdeck-activation-border`), and the primitive reads this one
+     * inline too. Left alone, this full-bleed box would trace that hairline
+     * around the whole stage under `docked`. */
+    --playdeck-activation-border: 0;
     border-radius: 0;
     outline-offset: calc(-1 * var(--space-1));
   }
 
   :global(.bench__stage)
-    :global(
-      [data-bench-skin='theme'] [data-playdeck-part='activation']
-    )::before {
+    :global([data-playdeck-part='activation'])::before {
     content: '';
     grid-area: face;
     inline-size: var(--space-8);
@@ -519,9 +529,7 @@ for (const entry of readySources) {
   }
 
   :global(.bench__stage)
-    :global(
-      [data-bench-skin='theme'] [data-playdeck-part='activation'] > svg
-    ) {
+    :global([data-playdeck-part='activation'] > svg) {
     grid-area: face;
   }
 
@@ -601,14 +609,11 @@ for (const entry of readySources) {
    * over a static one), but a reader should never be able to tell this
    * element is here at all.
    *
-   * The activation button still gets its own `grid-area: stack`, the same pin
-   * the poster rule above states for both skins: an `auto` grid-area on an
-   * abspos item resolves against the whole grid, and once this row is one of
-   * two rather than the only one, that would centre the badge across the
-   * picture and the bar's row combined rather than the picture alone.
-   * `theme`'s own badge-redraw rule three rules up already carries this pin
-   * for itself; this is `docked`'s, which has no badge rule of its own to
-   * carry it.
+   * The activation button needs no pin of its own here: the badge-redraw
+   * rule above is unscoped now and already states `grid-area: stack` for
+   * both skins, which is what keeps an `auto` grid-area from resolving
+   * against the whole two-row grid and centring the badge across the picture
+   * and the bar's row combined rather than the picture alone.
    *
    * Unlayered and scoped to `[data-bench-skin='docked']`, the same idiom the
    * badge redraw uses: this beats `docked.css`'s own rules for the same parts
@@ -629,11 +634,6 @@ for (const entry of readySources) {
     inline-size: 100%;
     aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 2048 / 858));
     pointer-events: none;
-  }
-
-  :global(.bench__stage)
-    :global([data-bench-skin='docked'] [data-playdeck-part='activation']) {
-    grid-area: stack;
   }
 
   :global(.bench__stage)
