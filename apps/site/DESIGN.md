@@ -838,12 +838,12 @@ instead of stranded on it.
 Unlisted rather than listed, because of what the sheet is for. It is a wall of
 token names that exists so a later ticket can check its work against the
 rendered system, and a reader who came to find out what this library does is not
-its audience — a fourth name in a strip of three would spend the site's
-navigation on the site's own scaffolding. Public rather than moved or made
-build-only, because it has to be rendered by the same build, in the same themes,
-from the same tokens, or it stops being evidence about the shipped site; and a
-served address a reader can type costs nothing a build-only artefact would not
-also cost.
+its audience — another name in the strip would spend the site's navigation on
+the site's own scaffolding. Public rather than moved or made build-only,
+because it has to be rendered by the same build, in the same themes, from the
+same tokens, or it stops being evidence about the shipped site; and a served
+address a reader can type costs nothing a build-only artefact would not also
+cost.
 
 **The sheet survives 320px by breaking a word, which is the opposite trade from
 the provider table's.** Its type specimen sets one line of prose at every rung,
@@ -1450,8 +1450,9 @@ sections are that; a product navigation selling the library is not, and would
 still be refused.
 
 What the rule still forbids is unchanged and is worth restating, because the
-list is now three names long and the fourth is the tempting one. **A header here
-gains nothing that sells, and nothing that duplicates a page's own navigation.**
+list named above is the kind a reader is always tempted to extend by one. **A
+header here gains nothing that sells, and nothing that duplicates a page's own
+navigation.**
 The workbench is not among the destinations and will not be: #534 records the
 decision that it is not to be a public surface, and the same ruling was made
 about a Storybook link on `/`. What the site carries out is the absence of
@@ -1471,14 +1472,14 @@ no script", and every clause of it is false.** It described a row taking
 announce, and it argued that three short words did not need the disclosure the
 rail gets. That was true of the row as first built and stopped being true when
 this header was rebuilt on shadcn: there is no second line, no `flex-basis`
-anywhere in the file, and below `40rem` the three names live inside a `Sheet`
-that does not exist until a script mounts it. Nothing in the repository failed
+anywhere in the file, and below `40rem` the names live inside a `Sheet` that
+does not exist until a script mounts it. Nothing in the repository failed
 while the layout moved out from under the sentence, which is why it is corrected
 here as a false claim rather than quietly edited into agreement.
 
 **What the header does is render one list twice, and exactly one copy is
-interactive at a time.** At `40rem` and above the three names sit inline beside
-the trail, in normal flow and in source order. Below it they are drawn only
+interactive at a time.** At `40rem` and above the names sit inline beside the
+trail, in normal flow and in source order. Below it they are drawn only
 inside `SiteNavSheet`'s sheet, reached through a trigger button beside the
 trail. `hidden min-[40rem]:flex` on the inline list and `min-[40rem]:hidden` on
 the trigger are complementary, keyed to the same breakpoint from both
@@ -1491,18 +1492,20 @@ count them without knowing the viewport.
 the same trade the rail records below**: a native element that worked closed
 with no JavaScript, replaced by a component that does not. The cost is smaller
 here than there. A reader with no script below that width still has the wordmark at
-the head of the trail on every document page, and `/`'s close still prints the
-same three destinations, so what is lost is this route to a section rather than
-the section.
+the head of the trail on every document page, and `/`'s close still links
+Reference, Providers and Archetypes, so for those what is lost is this route to
+a section rather than the section. Guides is the exception, and it is worth
+knowing rather than smoothing over: `/` does not link it anywhere, so below
+`40rem` with no script that section has no route from the landing page at all.
 
 **Which destination is marked is derived from the path, not passed in.** The
 first segment of `Astro.url.pathname` with the deployment prefix taken off, so a
-page added under one of the three sections is marked without being told to mark
+page added under one of those sections is marked without being told to mark
 itself and no page can claim a section it is not served from. The prefix is
 stripped rather than compared against a literal for the reason every address on
 this site is built from `import.meta.env.BASE_URL`: at the apex the two are the
 same string, and `astro build --base` is what makes the difference observable
-(#435). `/` and `/design` sit in none of the three sections, so nothing in the
+(#435). `/` and `/design` sit in none of those sections, so nothing in the
 strip claims to be the page the reader is on there.
 
 Search is on documentation pages only. `/` and `/design` pass
@@ -1547,10 +1550,9 @@ strip naming the page directly above the page's own `h1` of the same name would
 be that word twice in eighty pixels. That `h1` cannot move, because
 `scripts/check-deploy-artifact.mjs` identifies the site's root document in a
 browser by a heading named exactly `Playdeck` — which is also why nothing in
-this header may be promoted to a heading with that name. The three destinations
-are the reason a reader on `/` is not stranded there without the foot of the
-page, and they are internal links on `/`, which that check requires at least one
-of.
+this header may be promoted to a heading with that name. The destinations are
+the reason a reader on `/` is not stranded there without the foot of the page,
+and they are internal links on `/`, which that check requires at least one of.
 
 **This used to give a second reason — that the `h1` was "the wordmark at the
 title rung" — and that half is no longer true.** `/`'s `h1` still reads
@@ -1728,13 +1730,13 @@ decision.
 
 **The decision has since been taken and it matches the accident.** `/design` is
 public and unlisted — served at its own address, carrying the shared header, and
-absent from the header's three destinations. _Stances_ above holds the
-reasoning. What changes here is that the absence is deliberate now: a later
-session finding this sheet unreachable from the navigation is looking at a
-ruling rather than at an oversight, and a fourth name in the strip is a decision
-to reopen rather than a tidy-up. `e2e/site-nav.spec.ts` pins both halves — that
-the sheet is served and gives a reader the same way back as every other page,
-and that the navigation does not name it.
+absent from the header's destinations. _Stances_ above holds the reasoning.
+What changes here is that the absence is deliberate now: a later session finding
+this sheet unreachable from the navigation is looking at a ruling rather than at
+an oversight, and another name in the strip is a decision to reopen rather than
+a tidy-up. `e2e/site-nav.spec.ts` pins both halves — that the sheet is served
+and gives a reader the same way back as every other page, and that the
+navigation does not name it.
 
 `data-theme` has two writers and they are not interchangeable: the pre-paint
 script in `Base.astro` applies a stored choice before the browser paints, and
