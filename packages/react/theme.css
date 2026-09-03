@@ -110,14 +110,26 @@
     /* A floor, not a fixed size: an explicit `inline-size`/`block-size` here
      * would beat a consumer's own padding or `min-height` however they write
      * it, imposing the badge look on any labelled affordance rather than
-     * offering it as a default. Icon-only content stays inside the floor and still
-     * measures exactly 4rem square, so the default badge is unchanged; a label
-     * grows the box the way content always grows one under `min-*` sizing.
-     * `border-radius: 2rem` is the same circle as `50%` at 4rem square and a
-     * pill past it, where `50%` would draw an ellipse. `box-sizing` is what
-     * absorbs `padding-inline` inside the floor rather than adding it on top,
-     * which would turn the icon-only badge into a pill. */
+     * offering it as a default. Icon-only content stays inside the floor and
+     * still measures exactly 4rem square, so the default badge is unchanged; a
+     * label grows the box the way content always grows one under `min-*`
+     * sizing. `border-radius: 2rem` is the same circle as `50%` at 4rem square
+     * and a pill past it, where `50%` would draw an ellipse. `box-sizing` is
+     * what absorbs `padding-inline` inside the floor rather than adding it on
+     * top, which would turn the icon-only badge into a pill.
+     *
+     * `fit-content` is what makes the floor a floor here, and it is not
+     * decorative. `ActivationButton` positions this part `position: absolute;
+     * inset: 0; margin: auto` inline (`loading-error.tsx`), and against four
+     * zero offsets an `auto` size is not shrink-to-fit — it is solved to fill
+     * the containing block, which a `min-*` alone does nothing to stop. The
+     * badge would paint over the whole picture, and `margin: auto` would have
+     * no leftover space to centre. `fit-content` sizes the box to its content
+     * instead, the floor raises that to 4rem, and the offsets are then
+     * over-constrained, which is the state `margin: auto` needs to centre. */
     box-sizing: border-box;
+    inline-size: fit-content;
+    block-size: fit-content;
     min-inline-size: var(--playdeck-activation-size, 4rem);
     min-block-size: var(--playdeck-activation-size, 4rem);
     padding-inline: var(--playdeck-space-3, 0.75rem);

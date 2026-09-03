@@ -318,6 +318,17 @@ describe.each(fixtures)(
       expect(activationRule).toMatch(
         /padding-inline:\s*var\(--playdeck-space-3/
       );
+      // A floor alone does not size a box, and this part is positioned
+      // `position: absolute; inset: 0` by the primitive that renders it, where
+      // an `auto` size is solved to fill the containing block rather than
+      // shrinking to fit. Without a stated size the badge paints over the whole
+      // picture and `margin: auto` has no leftover space to centre it -- which
+      // is a full-bleed box that is still perfectly concentric, so a centring
+      // assertion passes on it. `stories/theme.stories.tsx`'s
+      // `ActivationIsCentred` measures that from a rendered story; this asserts
+      // the structural reason for it, and covers any theme drawing this part.
+      expect(activationRule).toMatch(/inline-size:\s*fit-content/);
+      expect(activationRule).toMatch(/block-size:\s*fit-content/);
       expect(activationRule).not.toMatch(/(?<!min-)inline-size:\s*4rem/);
       expect(activationRule).not.toMatch(/(?<!min-)block-size:\s*4rem/);
     });

@@ -323,9 +323,14 @@ export const ControlSizeFloorHolds: Story = {
  * The activation overlay is the one part whose box the theme replaces rather
  * than decorates: the primitive pins `position: absolute; inset: 0` inline so
  * an unstyled overlay is a full-bleed click target, and the theme sizes it down
- * to a 4rem circle. A fixed size against four zero offsets is over-constrained,
- * and the circle landed in the corner (#160) until the primitive started
- * stating `margin: auto` alongside the offsets it over-constrains. The theme
+ * to a 4rem badge. It does that with `fit-content` under a `min-*` floor rather
+ * than a fixed size, so a label grows the box; what matters here is that both
+ * are a stated size, and a stated size against four zero offsets is
+ * over-constrained. The circle landed in the corner (#160) until the primitive
+ * started stating `margin: auto` alongside the offsets it over-constrains. An
+ * `auto` size would not be over-constrained at all — it is solved to fill the
+ * containing block, which is the full-bleed box this story exists to rule out,
+ * and one `margin: auto` has no leftover space to centre. The theme
  * itself says nothing about position — this story is the bundled-theme case of
  * that inline default, and `Player/ActivationButton`'s `SizedByConsumerCss` is
  * the general one. `place-items: center` does not do it — that centres the icon
@@ -357,9 +362,15 @@ export const ActivationIsCentred: Story = {
     // First that the theme reached the part at all -- an unthemed overlay fills
     // the viewport, and a full-bleed box is trivially concentric with it, so
     // the centring assertion below is only meaningful once the box is 4rem.
+    // These two are the whole of that guard: a box sized by the floor alone,
+    // with nothing stating a size, measures the viewport's own 480x270 here and
+    // is still perfectly concentric, so the centring assertion passes on it.
     await expect(styles.width).toBe('64px');
     await expect(styles.height).toBe('64px');
-    await expect(styles.borderRadius).toBe('50%');
+    // 2rem, not 50%. Both draw the same circle on a 4rem square box, and the
+    // theme floors this part rather than fixing it, so a labelled affordance
+    // grows past 4rem -- where `50%` would draw an ellipse and `2rem` a pill.
+    await expect(styles.borderRadius).toBe('32px');
 
     const viewport = button.closest('[data-playdeck-part="viewport"]')!;
     const centre = (element: Element) => {
