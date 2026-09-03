@@ -289,6 +289,39 @@ describe.each(fixtures)(
       expect(missing).toEqual([]);
     });
 
+    test('sizes the activation part with a min-* floor, not a fixed size', () => {
+      // An explicit `inline-size`/`block-size` on the activation part beats a
+      // consumer's own padding or `min-height` however they write it, because a
+      // used value is not a fallback — imposing the badge look on any labelled
+      // affordance rather than offering it as a default. Measured on the
+      // fixed-size rule, a button carrying the `white-space: nowrap` label
+      // "Watch the trailer" at 16px system-ui: the box stayed 64px wide while
+      // its own content wanted 96.55px on chromium and 111.83px on firefox, so
+      // the label ran outside the circle drawn for an icon. Under the floor
+      // below the same button measures 120.55px and 135.83px and the icon-only
+      // one is still 64px square. A `min-*` floor keeps that default and
+      // lets anything wider grow, and `border-radius: 2rem` draws the circle at
+      // that size and a pill past it, where `50%` would draw an ellipse.
+      const activationRule = withoutComments.match(
+        /:where\(\[data-playdeck-part='activation'\]\)\s*\{[^}]*\}/
+      )?.[0];
+      expect(activationRule).toBeDefined();
+      // `padding-inline` is absorbed by the floor rather than added to it only
+      // under `border-box`, so without it the icon-only badge becomes a pill.
+      expect(activationRule).toMatch(/box-sizing:\s*border-box/);
+      expect(activationRule).toMatch(
+        /min-inline-size:\s*var\(--playdeck-activation-size,\s*4rem\)/
+      );
+      expect(activationRule).toMatch(
+        /min-block-size:\s*var\(--playdeck-activation-size,\s*4rem\)/
+      );
+      expect(activationRule).toMatch(
+        /padding-inline:\s*var\(--playdeck-space-3/
+      );
+      expect(activationRule).not.toMatch(/(?<!min-)inline-size:\s*4rem/);
+      expect(activationRule).not.toMatch(/(?<!min-)block-size:\s*4rem/);
+    });
+
     test('declares no !important', () => {
       // A theme that needs !important has already lost the override argument.
       expect(withoutComments).not.toMatch(/!\s*important/i);

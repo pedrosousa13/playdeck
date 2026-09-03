@@ -42,6 +42,7 @@
  *   Shape        --playdeck-radius              0.375rem
  *                --playdeck-radius-large        0.5rem
  *   Controls     --playdeck-control-size        2.75rem  (44px, the locked target)
+ *                --playdeck-activation-size     4rem
  *                --playdeck-control-icon-size   1.25rem
  *                --playdeck-control-hover       rgb(255 255 255 / 0.12)
  *                --playdeck-slider-thickness    0.25rem
@@ -95,10 +96,22 @@
   :where([data-playdeck-part='activation']) {
     display: grid;
     place-items: center;
-    inline-size: 4rem;
-    block-size: 4rem;
+    /* A floor, not a fixed size: an explicit `inline-size`/`block-size` here
+     * would beat a consumer's own padding or `min-height` however they write
+     * it, imposing the badge look on any labelled affordance rather than
+     * offering it as a default. Icon-only content stays inside the floor and still
+     * measures exactly 4rem square, so the default badge is unchanged; a label
+     * grows the box the way content always grows one under `min-*` sizing.
+     * `border-radius: 2rem` is the same circle as `50%` at 4rem square and a
+     * pill past it, where `50%` would draw an ellipse. `box-sizing` is what
+     * absorbs `padding-inline` inside the floor rather than adding it on top,
+     * which would turn the icon-only badge into a pill. */
+    box-sizing: border-box;
+    min-inline-size: var(--playdeck-activation-size, 4rem);
+    min-block-size: var(--playdeck-activation-size, 4rem);
+    padding-inline: var(--playdeck-space-3, 0.75rem);
     border: 0;
-    border-radius: 50%;
+    border-radius: 2rem;
     color: var(--playdeck-color-on-surface, #fff);
     background-color: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
     cursor: pointer;
