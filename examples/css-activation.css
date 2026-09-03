@@ -6,13 +6,16 @@
    only paints.
 
    The fill goes through `--playdeck-activation-fill` rather than through
-   `background`. That is the one property on this part a stylesheet cannot set
-   directly: the button writes `background-color` inline as a read of that
-   token, so a bare player never paints an opaque box over its poster, and an
-   inline declaration beats any stylesheet. Setting the token instead reaches
-   the same paint, and it cascades and varies by state exactly as a `background`
-   would -- the rules below change it per `data-state` and on hover. Everything
-   else here is ordinary CSS against the part. */
+   `background`. Whatever `ActivationButton` writes inline is out of a
+   stylesheet's reach, and it writes each of those properties as a read of a
+   token: `background-color` from `--playdeck-activation-fill` and `border`
+   from `--playdeck-activation-border`, so a bare player never paints the user
+   agent's own button face over its poster. A `background` or `border`
+   declaration written here would lose to them, whatever its specificity.
+   Setting the tokens reaches the same paint instead, and they cascade and vary
+   by state exactly as a `background` would -- the rules below move the fill per
+   `data-state` and on hover. Everything else here is ordinary CSS against the
+   part. */
 
 [data-playdeck-part='activation'] {
   display: grid;
