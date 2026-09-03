@@ -798,11 +798,16 @@ describe('slider non-text contrast', () => {
 // `docked.css`'s own palette.
 //
 // Stated as literals rather than read out of the file the way `tokenDefault`
-// reads theme.css's, because `docked.css` deliberately reads every colour token
-// with TWO defaults -- a light one in the cascade's normal position and a dark
-// one inside `@media (prefers-color-scheme: dark)` -- and `tokenDefault` throws
-// on exactly that, by design: one fallback per token is what makes it a
-// trustworthy reading of what ships. The pairs below are therefore checked
+// reads theme.css's. `docked.css` states a theme-paired default for the palette
+// tokens these pairs are built from -- a light one in the cascade's normal
+// position and a dark repeat inside `@media (prefers-color-scheme: dark)` --
+// and `tokenDefault` throws on any token read with more than one fallback, by
+// design: one fallback per token is what makes it a trustworthy reading of what
+// ships. Reading a paired token through it therefore cannot work, and picking
+// one side of the pair would mean writing the literal here anyway. That is a
+// statement about the tokens these pairs read, not about the file: whether some
+// other token there carries one default or two is not what decides this, so
+// check the token before assuming it can be read. The pairs below are checked
 // against the ratios `docked.css`'s own header comment states, and moving a
 // default without restating them fails here.
 //
