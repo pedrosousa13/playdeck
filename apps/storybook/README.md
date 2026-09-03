@@ -25,22 +25,28 @@ against that value rather than by a root-absolute literal. Unset, it is `/`,
 which is where `storybook dev` and the Vitest browser run serve the workbench —
 so the default path is the one every command above takes.
 
-The mechanism stays although nothing is served under a prefix any more, because
-it is how a build is checked against a prefix at all — the only way to see that
-a root-absolute literal has crept back into a story. Building alone is not
-enough to see it; the build has to be served from the prefix it was given, and
-the broken reference then 404s:
+`pnpm test:story-fixtures` (root, and in CI's `static` job) is what keeps a
+story from writing the literal instead. It parses the `.ts` and `.tsx` under
+`stories/` without building or serving anything, and reports a root-absolute
+literal — on its own, inside `url(...)`, or in a `srcSet`-style descriptor list
+— that names a file which exists under `public/`, since that is exactly a
+reference that should have gone through `asset-url.ts`. A root-absolute literal
+naming something else is left alone, so the deliberately unresolvable
+`/__playdeck__/...` posters need no exemption.
+
+What it does not see: a path assembled at runtime rather than spelled out, and
+the `.mdx` pages, which are markdown and are not parsed.
+`scripts/story-fixtures.mjs` carries the reasoning.
+
+That catches the authoring mistake, not the 404 it causes, and it does not show
+that a prefixed build works. Seeing that still takes a build served from the
+prefix it was given, which is the mechanism this section is about and is a
+person at a terminal:
 
 ```sh
 PLAYDECK_BASE_PATH=/whatever/ pnpm build
 npx http-server storybook-static --push-state -o /whatever/
 ```
-
-**Nothing automated does this any more.** The deploy check used to build the
-workbench under a prefix and drive a browser through it, and that is what caught
-a story bypassing `asset-url.ts`; the workbench is no longer deployed, so that
-harness no longer builds it. Until something replaces it, the two commands above
-are the whole of the check, and they run when a person remembers to run them.
 
 ## Story conventions
 
