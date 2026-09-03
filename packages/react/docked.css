@@ -1,0 +1,617 @@
+/*
+ * @playdeck/react/docked.css — the second optional theme.
+ *
+ * Same contract as theme.css: every selector lives inside `@layer playdeck`,
+ * every selector is wrapped in `:where()`, and every colour is read as
+ * `var(--name, default)` and never declared — except the range-input
+ * pseudo-elements, which carry their own (0,0,1) for the reason theme.css's
+ * header explains, and the two `--playdeck-activation-*` names, which that
+ * header explains too. Standalone: this file shares no `@import` with
+ * theme.css, so a consumer who imports only this one never downloads a byte of
+ * the other theme's scrim or auto-hide rules, and vice versa. Both files open
+ * `@layer playdeck`, and two files declaring one layer name merge into it, so
+ * a page must import one or the other and never both.
+ *
+ * The layout difference from theme.css: nothing here is ever positioned over
+ * the picture, so there is no overlay to auto-hide and `data-idle` is never
+ * read. The colour difference: every token below carries a light default in
+ * the cascade's normal position and a dark default repeated inside a
+ * `@media (prefers-color-scheme: dark)` block at the foot of the file, so a
+ * page's own light/dark switch composes with either default the same way any
+ * consumer override already composes with a theme.css token. Every token name
+ * is one `theme.css` already declares — this file never invents a new colour
+ * token, only new defaults for the ones that exist, with one exception noted
+ * below.
+ *
+ *   --playdeck-color-surface       #f4f4f2 light / #141416 dark
+ *   --playdeck-color-on-surface    #1c1c1e light / #ededed dark
+ *   --playdeck-color-accent        #2b52d6 light / #3ea6ff dark
+ *   --playdeck-color-focus         #2b52d6 light / #3ea6ff dark  (reuses
+ *                                  accent's own value by default; theme.css
+ *                                  keeps the two tokens independent and so
+ *                                  does this file — a consumer can still set
+ *                                  them apart — but a blue focus ring on a
+ *                                  neutral bar needs no separate colour by
+ *                                  default the way theme.css's `#fff` does
+ *                                  against its own dark scrim)
+ *   --playdeck-color-track         #84847d light / #6d6d70 dark  (paints
+ *                                  `seek-buffered`, the unfilled boundary;
+ *                                  theme.css's own translucent-white default
+ *                                  reads as near-invisible composited onto a
+ *                                  light surface, so this file needs its own)
+ *   --playdeck-color-buffered      #1c1c1e light / #ededed dark  (paints
+ *                                  `seek-buffered-range`, the loaded
+ *                                  boundary; reuses on-surface's own values,
+ *                                  as an independent token a consumer can
+ *                                  still move separately)
+ *   --playdeck-color-hairline      #d9d9d6 light / #2a2a2d dark  (new; the
+ *                                  only token this file adds. The 1px top
+ *                                  border separating the bar from the
+ *                                  picture and the settings/captions menu's
+ *                                  own border, since there is no scrim here
+ *                                  to supply either edge)
+ *
+ * Non-text contrast (WCAG 2.2 1.4.11's 3:1 floor for a UI component's own
+ * boundary, the same rule `theme.css`'s `slider non-text contrast` describe in
+ * `theme.test.ts` checks): `--playdeck-color-track` against
+ * `--playdeck-color-surface` is 3.42:1 light, 3.57:1 dark;
+ * `--playdeck-color-buffered` against `--playdeck-color-track` (composited the
+ * same way theme.css composites its own buffered-over-track boundary) is
+ * 4.52:1 light, 4.41:1 dark; `--playdeck-color-focus` against
+ * `--playdeck-color-surface` is 5.81:1 light, 7.10:1 dark. All four clear the
+ * floor with a margin; `docked.css slider non-text contrast` in
+ * `theme.test.ts` asserts them, and `docked.css text contrast` beside it holds
+ * the 1.4.3 text pairs at 4.5:1.
+ *
+ * Every other token this file reads keeps theme.css's own default — spacing,
+ * control sizing, typography, motion, safe-area, activation size — so a
+ * consumer who already set one of those for theme.css needs no second
+ * override to get the same effect here.
+ */
+
+@layer playdeck {
+  :where([data-playdeck-part='viewport']) {
+    font-family: var(
+      --playdeck-font-family,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      roboto,
+      helvetica,
+      arial,
+      sans-serif
+    );
+    color: var(--playdeck-color-on-surface, #1c1c1e);
+    background-color: var(--playdeck-color-surface, #f4f4f2);
+  }
+
+  :where([data-playdeck-part='media']) {
+    background-color: var(--playdeck-color-backdrop, #000);
+  }
+
+  /* ---- activation and status --------------------------------------------- */
+  /* `fit-content` before the floor, for the reason theme.css's own activation
+   * rule records: `ActivationButton` positions this part `position: absolute;
+   * inset: 0; margin: auto` inline, and against four zero offsets an `auto`
+   * size is solved to fill the containing block rather than shrinking to fit.
+   * A `min-*` floor alone does nothing to stop that, so the badge would paint
+   * full-bleed over the picture — perfectly concentric, and therefore invisible
+   * to a centring check. The positioning belongs to the primitive, so it costs
+   * every theme that draws this part the same two declarations. */
+  :where([data-playdeck-part='activation']) {
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    inline-size: fit-content;
+    block-size: fit-content;
+    min-inline-size: var(--playdeck-activation-size, 4rem);
+    min-block-size: var(--playdeck-activation-size, 4rem);
+    padding-inline: var(--playdeck-space-3, 0.75rem);
+    border-radius: 2rem;
+    color: var(--playdeck-color-on-surface, #1c1c1e);
+    --playdeck-activation-fill: var(--playdeck-color-surface, #f4f4f2);
+    --playdeck-activation-border: 1px solid
+      var(--playdeck-color-hairline, #d9d9d6);
+    cursor: pointer;
+    transition: opacity var(--playdeck-transition-duration, 150ms)
+      var(--playdeck-transition-easing, ease);
+  }
+
+  :where([data-playdeck-part='loading-indicator']) {
+    color: var(--playdeck-color-on-surface, #1c1c1e);
+  }
+
+  :where([data-playdeck-part='error']) {
+    display: grid;
+    gap: var(--playdeck-space-2, 0.5rem);
+    place-items: center;
+    padding: var(--playdeck-space-3, 0.75rem);
+    border-radius: var(--playdeck-radius-large, 0.5rem);
+    color: var(--playdeck-color-on-surface, #1c1c1e);
+    background-color: var(--playdeck-color-surface, #f4f4f2);
+  }
+
+  :where([data-playdeck-part='error-message']) {
+    margin: 0;
+    font-size: var(--playdeck-font-size, 0.875rem);
+    line-height: var(--playdeck-line-height, 1.4);
+  }
+
+  :where([data-playdeck-part='error-retry']) {
+    padding: var(--playdeck-space-1, 0.25rem) var(--playdeck-space-3, 0.75rem);
+    border: 1px solid var(--playdeck-color-on-surface, #1c1c1e);
+    border-radius: var(--playdeck-radius, 0.375rem);
+    color: var(--playdeck-color-on-surface, #1c1c1e);
+    font: inherit;
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  /* ---- control surface: docked, never overlaid, never hidden ------------- */
+  :where([data-playdeck-part='controls']) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--playdeck-space-1, 0.25rem);
+    align-items: center;
+    padding: var(--playdeck-space-2, 0.5rem);
+    padding-bottom: calc(
+      var(--playdeck-space-2, 0.5rem) +
+        var(--playdeck-safe-bottom, env(safe-area-inset-bottom, 0px))
+    );
+    padding-left: calc(
+      var(--playdeck-space-2, 0.5rem) +
+        var(--playdeck-safe-left, env(safe-area-inset-left, 0px))
+    );
+    padding-right: calc(
+      var(--playdeck-space-2, 0.5rem) +
+        var(--playdeck-safe-right, env(safe-area-inset-right, 0px))
+    );
+    color: var(--playdeck-color-on-surface, #1c1c1e);
+    background-color: var(--playdeck-color-surface, #f4f4f2);
+    border-block-start: 1px solid var(--playdeck-color-hairline, #d9d9d6);
+  }
+
+  :where(
+    [data-playdeck-part='play-button'],
+    [data-playdeck-part='mute-button'],
+    [data-playdeck-part='captions-button'],
+    [data-playdeck-part='fullscreen-button'],
+    [data-playdeck-part='pip-button'],
+    [data-playdeck-part='airplay-button'],
+    [data-playdeck-part='settings-menu-trigger']
+  ) {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    inline-size: var(--playdeck-control-size, 2.75rem);
+    block-size: var(--playdeck-control-size, 2.75rem);
+    padding: 0;
+    border: 0;
+    border-radius: var(--playdeck-radius, 0.375rem);
+    color: var(--playdeck-color-on-surface, #1c1c1e);
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  :where(
+    [data-playdeck-part='play-button'],
+    [data-playdeck-part='mute-button'],
+    [data-playdeck-part='captions-button'],
+    [data-playdeck-part='fullscreen-button'],
+    [data-playdeck-part='pip-button'],
+    [data-playdeck-part='airplay-button'],
+    [data-playdeck-part='settings-menu-trigger']
+  ):where(:hover) {
+    background-color: var(--playdeck-control-hover, rgb(0 0 0 / 0.06));
+  }
+
+  :where([data-playdeck-part]):where(:focus-visible) {
+    outline: 2px solid var(--playdeck-color-focus, #2b52d6);
+    outline-offset: 2px;
+  }
+
+  :where([data-playdeck-part] svg) {
+    inline-size: var(--playdeck-control-icon-size, 1.25rem);
+    block-size: var(--playdeck-control-icon-size, 1.25rem);
+  }
+
+  :where([data-playdeck-part='time']) {
+    padding-inline: var(--playdeck-space-2, 0.5rem);
+    font-size: var(--playdeck-font-size-small, 0.8125rem);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  :where([data-playdeck-part='time'][data-time-type='duration']) {
+    margin-inline-end: auto;
+  }
+
+  /* ---- sliders ----------------------------------------------------------- */
+  :where([data-playdeck-part='seek-slider']) {
+    position: relative;
+    flex: 1 1 100%;
+    min-inline-size: 4rem;
+  }
+
+  :where([data-playdeck-part='seek-buffered']) {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 50%;
+    block-size: var(--playdeck-slider-thickness, 0.25rem);
+    translate: 0 -50%;
+    border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+    background-color: var(--playdeck-color-track, #84847d);
+    pointer-events: none;
+  }
+
+  :where([data-playdeck-part='seek-buffered-range']) {
+    position: absolute;
+    inset-block: 0;
+    border-radius: inherit;
+    background-color: var(--playdeck-color-buffered, #1c1c1e);
+  }
+
+  :where(
+    [data-playdeck-part='seek-slider'][data-buffering='true']
+      [data-playdeck-part='seek-buffered-range']
+  ) {
+    opacity: 0.6;
+  }
+
+  :where(
+    [data-playdeck-part='seek-slider-input'],
+    [data-playdeck-part='volume-slider']
+  ) {
+    display: block;
+    inline-size: 100%;
+    margin: 0;
+    accent-color: var(--playdeck-color-accent, #2b52d6);
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  @media (pointer: fine) {
+    :where([data-playdeck-part='volume-slider']) {
+      inline-size: 5rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--playdeck-transition-duration, 150ms)
+        var(--playdeck-transition-easing, ease);
+    }
+
+    :where(
+      [data-playdeck-part='mute-button']:hover
+        + [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='mute-button']:focus-within
+        + [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='volume-slider']:hover,
+      [data-playdeck-part='volume-slider']:focus-within
+    ) {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  @media (pointer: coarse) {
+    :where([data-playdeck-part='volume-slider']) {
+      display: none;
+    }
+  }
+
+  :where(
+    [data-playdeck-part='seek-slider-input'],
+    [data-playdeck-part='volume-slider']
+  )::-webkit-slider-thumb {
+    outline: 2px solid var(--playdeck-color-thumb-ring, #000);
+  }
+
+  /* Held out of forced colors for the reason theme.css records at length: the
+   * first paint property to reach any part of a range input switches the
+   * engine's native widget off for the whole control, and in forced-colors mode
+   * that widget is the only thing painting the slider in the user's palette. */
+  @media (forced-colors: none) {
+    :where(
+      [data-playdeck-part='seek-slider-input'],
+      [data-playdeck-part='volume-slider']
+    )::-moz-range-track {
+      block-size: var(--playdeck-slider-thickness, 0.25rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      background-color: var(--playdeck-color-hairline, #d9d9d6);
+    }
+
+    :where(
+      [data-playdeck-part='seek-slider-input'],
+      [data-playdeck-part='volume-slider']
+    )::-moz-range-progress {
+      block-size: var(--playdeck-slider-thickness, 0.25rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      background-color: var(--playdeck-color-accent, #2b52d6);
+    }
+
+    :where(
+      [data-playdeck-part='seek-slider-input'],
+      [data-playdeck-part='volume-slider']
+    )::-moz-range-thumb {
+      box-sizing: border-box;
+      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      border: 2px solid var(--playdeck-color-thumb-ring, #000);
+      border-radius: 50%;
+      background-color: var(--playdeck-color-accent, #2b52d6);
+    }
+
+    :where([data-playdeck-part='seek-slider-input']) {
+      position: relative;
+      appearance: none;
+    }
+
+    :where([data-playdeck-part='seek-progress']) {
+      inset-block: 0;
+      border-radius: inherit;
+      background-color: var(--playdeck-color-accent, #2b52d6);
+    }
+
+    :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
+      appearance: none;
+      box-sizing: border-box;
+      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      outline: none;
+      border: 2px solid var(--playdeck-color-thumb-ring, #000);
+      border-radius: 50%;
+      background-color: var(--playdeck-color-accent, #2b52d6);
+    }
+
+    :where([data-playdeck-part='seek-slider-input'])::-moz-range-track,
+    :where([data-playdeck-part='seek-slider-input'])::-moz-range-progress {
+      background-color: transparent;
+    }
+
+    /* Dark-mode overrides for the rules directly above, nested here rather than
+     * the other way around (a `(forced-colors: none)` block inside the
+     * dark-scheme block at the foot of the file) so this file has exactly ONE
+     * `@media (forced-colors: none)` occurrence. `theme.test.ts`'s `leaves
+     * every hand-drawn slider rule out of forced-colors mode` finds the FIRST
+     * such occurrence with `RegExp.exec` and walks its braces to find where it
+     * closes; a second, later occurrence would sit outside that walk entirely
+     * and read as unguarded, with no failure pointing at why. AND semantics
+     * make the nesting order otherwise unobservable: both conditions still have
+     * to hold for these declarations to apply either way. */
+    @media (prefers-color-scheme: dark) {
+      :where(
+        [data-playdeck-part='seek-slider-input'],
+        [data-playdeck-part='volume-slider']
+      )::-moz-range-track {
+        background-color: var(--playdeck-color-hairline, #2a2a2d);
+      }
+
+      :where(
+        [data-playdeck-part='seek-slider-input'],
+        [data-playdeck-part='volume-slider']
+      )::-moz-range-progress,
+      :where(
+        [data-playdeck-part='seek-slider-input'],
+        [data-playdeck-part='volume-slider']
+      )::-moz-range-thumb,
+      :where([data-playdeck-part='seek-progress']),
+      :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
+        background-color: var(--playdeck-color-accent, #3ea6ff);
+      }
+    }
+  }
+
+  /* ---- menus ------------------------------------------------------------- */
+  :where([data-playdeck-part='settings-menu-root']) {
+    position: relative;
+  }
+
+  :where(
+    [data-playdeck-part='settings-menu'],
+    [data-playdeck-part='captions-menu']
+  ) {
+    position: absolute;
+    inset-block-end: calc(100% + var(--playdeck-space-1, 0.25rem));
+    inset-inline-end: 0;
+    min-inline-size: 10rem;
+    padding: var(--playdeck-space-1, 0.25rem);
+    border: 1px solid var(--playdeck-color-hairline, #d9d9d6);
+    border-radius: var(--playdeck-radius-large, 0.5rem);
+    color: var(--playdeck-color-on-surface, #1c1c1e);
+    background-color: var(--playdeck-color-surface, #f4f4f2);
+    box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.15);
+  }
+
+  :where(
+    [data-playdeck-part='menu-item'],
+    [data-playdeck-part='menu-radio-item']
+  ) {
+    display: flex;
+    gap: var(--playdeck-space-2, 0.5rem);
+    align-items: center;
+    inline-size: 100%;
+    min-block-size: var(--playdeck-control-size, 2.75rem);
+    padding-inline: var(--playdeck-space-2, 0.5rem);
+    border: 0;
+    border-radius: var(--playdeck-radius, 0.375rem);
+    color: inherit;
+    font: inherit;
+    font-size: var(--playdeck-font-size, 0.875rem);
+    text-align: start;
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  :where(
+    [data-playdeck-part='menu-item'],
+    [data-playdeck-part='menu-radio-item']
+  ):where(:hover) {
+    background-color: var(--playdeck-control-hover, rgb(0 0 0 / 0.06));
+  }
+
+  :where([data-playdeck-part='menu-radio-indicator']) {
+    display: inline-grid;
+    place-items: center;
+    inline-size: var(--playdeck-control-icon-size, 1.25rem);
+  }
+
+  /* ---- captions ---------------------------------------------------------- */
+  :where([data-playdeck-part='caption-cue']) {
+    font-family: inherit;
+    line-height: var(--playdeck-line-height, 1.4);
+  }
+
+  /* ---- reduced motion -----------------------------------------------------
+   * No auto-hide here (docked.css never reads data-idle), so only the volume
+   * reveal fade and the activation opacity fade need collapsing.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    :where(
+      [data-playdeck-part='activation'],
+      [data-playdeck-part='volume-slider']
+    ) {
+      transition-duration: 0.01ms;
+    }
+  }
+
+  /* ---- forced colors ------------------------------------------------------
+   * Same shape as theme.css's block, restated for this file's own selectors.
+   */
+  @media (forced-colors: active) {
+    :where([data-playdeck-part='controls']) {
+      background: canvas;
+      border-block-start-color: canvastext;
+    }
+
+    :where(
+      [data-playdeck-part='play-button'],
+      [data-playdeck-part='mute-button'],
+      [data-playdeck-part='captions-button'],
+      [data-playdeck-part='fullscreen-button'],
+      [data-playdeck-part='pip-button'],
+      [data-playdeck-part='airplay-button'],
+      [data-playdeck-part='settings-menu-trigger'],
+      [data-playdeck-part='menu-item'],
+      [data-playdeck-part='menu-radio-item']
+    ) {
+      border: 1px solid buttonborder;
+      color: buttontext;
+      background-color: buttonface;
+      forced-color-adjust: none;
+    }
+
+    :where(
+      [data-playdeck-part='play-button'],
+      [data-playdeck-part='mute-button'],
+      [data-playdeck-part='captions-button'],
+      [data-playdeck-part='fullscreen-button'],
+      [data-playdeck-part='pip-button'],
+      [data-playdeck-part='airplay-button'],
+      [data-playdeck-part='settings-menu-trigger'],
+      [data-playdeck-part='menu-item'],
+      [data-playdeck-part='menu-radio-item']
+    ):where(:hover) {
+      color: highlighttext;
+      background-color: highlight;
+    }
+
+    :where([data-playdeck-part]):where(:focus-visible) {
+      outline: 2px solid highlight;
+    }
+
+    :where(
+      [data-playdeck-part='settings-menu'],
+      [data-playdeck-part='captions-menu']
+    ) {
+      border: 1px solid canvastext;
+      background-color: canvas;
+    }
+
+    :where([data-playdeck-part='seek-buffered']) {
+      border: 1px solid canvastext;
+      background-color: canvas;
+    }
+
+    :where([data-playdeck-part='seek-buffered-range']) {
+      background-color: canvastext;
+    }
+  }
+
+  /* ---- dark tokens --------------------------------------------------------
+   * Same declarations as their light-default siblings above, reading the same
+   * token names with a dark fallback instead. Never a declaration — see the
+   * header comment.
+   */
+  @media (prefers-color-scheme: dark) {
+    :where([data-playdeck-part='viewport']) {
+      color: var(--playdeck-color-on-surface, #ededed);
+      background-color: var(--playdeck-color-surface, #141416);
+    }
+
+    :where([data-playdeck-part='activation']) {
+      color: var(--playdeck-color-on-surface, #ededed);
+      --playdeck-activation-fill: var(--playdeck-color-surface, #141416);
+      --playdeck-activation-border: 1px solid
+        var(--playdeck-color-hairline, #2a2a2d);
+    }
+
+    :where([data-playdeck-part='loading-indicator']) {
+      color: var(--playdeck-color-on-surface, #ededed);
+    }
+
+    :where([data-playdeck-part='error']) {
+      color: var(--playdeck-color-on-surface, #ededed);
+      background-color: var(--playdeck-color-surface, #141416);
+    }
+
+    :where([data-playdeck-part='error-retry']) {
+      border-color: var(--playdeck-color-on-surface, #ededed);
+      color: var(--playdeck-color-on-surface, #ededed);
+    }
+
+    :where([data-playdeck-part='controls']) {
+      color: var(--playdeck-color-on-surface, #ededed);
+      background-color: var(--playdeck-color-surface, #141416);
+      border-block-start-color: var(--playdeck-color-hairline, #2a2a2d);
+    }
+
+    :where(
+      [data-playdeck-part='play-button'],
+      [data-playdeck-part='mute-button'],
+      [data-playdeck-part='captions-button'],
+      [data-playdeck-part='fullscreen-button'],
+      [data-playdeck-part='pip-button'],
+      [data-playdeck-part='airplay-button'],
+      [data-playdeck-part='settings-menu-trigger']
+    ) {
+      color: var(--playdeck-color-on-surface, #ededed);
+    }
+
+    :where([data-playdeck-part='seek-buffered']) {
+      background-color: var(--playdeck-color-track, #6d6d70);
+    }
+
+    :where([data-playdeck-part='seek-buffered-range']) {
+      background-color: var(--playdeck-color-buffered, #ededed);
+    }
+
+    :where(
+      [data-playdeck-part='seek-slider-input'],
+      [data-playdeck-part='volume-slider']
+    ) {
+      accent-color: var(--playdeck-color-accent, #3ea6ff);
+    }
+
+    :where(
+      [data-playdeck-part='settings-menu'],
+      [data-playdeck-part='captions-menu']
+    ) {
+      border-color: var(--playdeck-color-hairline, #2a2a2d);
+      color: var(--playdeck-color-on-surface, #ededed);
+      background-color: var(--playdeck-color-surface, #141416);
+    }
+
+    :where([data-playdeck-part]):where(:focus-visible) {
+      outline-color: var(--playdeck-color-focus, #3ea6ff);
+    }
+  }
+}

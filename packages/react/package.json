@@ -46,7 +46,8 @@
         "default": "./esm-only.cjs"
       }
     },
-    "./theme.css": "./theme.css"
+    "./theme.css": "./theme.css",
+    "./docked.css": "./docked.css"
   },
   "files": [
     "CHANGELOG.md",
@@ -54,6 +55,7 @@
     "!dist/**/*.d.ts.map",
     "!dist/.tsbuildinfo*",
     "theme.css",
+    "docked.css",
     "esm-only.cjs",
     "esm-only.d.cts"
   ],

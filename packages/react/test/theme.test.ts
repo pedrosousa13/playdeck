@@ -2,6 +2,7 @@
 // Reads files off disk rather than rendering anything, and happy-dom's global
 // `URL` cannot resolve `import.meta.url` into a file path.
 
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { URL } from 'node:url';
 import { describe, expect, test } from 'vitest';
@@ -45,6 +46,14 @@ const themeSource = await readFile(
   new URL('../theme.css', import.meta.url),
   'utf8'
 );
+
+// Read defensively so the fixture entry below can be written before the file
+// exists: an empty source fails every assertion in the suite rather than
+// erroring out of module evaluation, which is what makes the red step readable.
+const dockedPath = new URL('../docked.css', import.meta.url);
+const dockedSource = existsSync(dockedPath)
+  ? await readFile(dockedPath, 'utf8')
+  : '';
 
 // Strips comments so a selector-shaped example inside one is not analysed.
 const withoutComments = themeSource.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -104,6 +113,32 @@ const fixtures: readonly StylesheetFixture[] = [
         // The fill `accent-color` stopped painting once the widget went off.
         ":where([data-playdeck-part='seek-progress']) {",
         // And the thumb, redrawn whole because nothing paints it any more.
+        ":where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb"
+      ]
+    }
+  },
+  {
+    label: 'docked.css',
+    source: dockedSource,
+    exportPath: './docked.css',
+    expected: {
+      atRules: ['layer', 'media'],
+      pseudoFunctions: ['where'],
+      pseudoElements: [
+        '-moz-range-progress',
+        '-moz-range-thumb',
+        '-moz-range-track',
+        '-webkit-slider-thumb'
+      ],
+      // No `linear-gradient` -- docked.css draws no scrim.
+      functions: ['calc', 'env', 'rgb', 'var'],
+      forcedColorsSliderNeedles: [
+        '::-moz-range-track',
+        '::-moz-range-progress',
+        '::-moz-range-thumb',
+        'appearance: none',
+        ":where([data-playdeck-part='seek-slider-input']) {",
+        ":where([data-playdeck-part='seek-progress']) {",
         ":where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb"
       ]
     }
@@ -755,6 +790,77 @@ describe('slider non-text contrast', () => {
       'ring vs track': '3.13:1',
       'ring vs buffered': '13.35:1',
       'accent vs ring': '8.10:1'
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `docked.css`'s own palette.
+//
+// Stated as literals rather than read out of the file the way `tokenDefault`
+// reads theme.css's, because `docked.css` deliberately reads every colour token
+// with TWO defaults -- a light one in the cascade's normal position and a dark
+// one inside `@media (prefers-color-scheme: dark)` -- and `tokenDefault` throws
+// on exactly that, by design: one fallback per token is what makes it a
+// trustworthy reading of what ships. The pairs below are therefore checked
+// against the ratios `docked.css`'s own header comment states, and moving a
+// default without restating them fails here.
+//
+// Every colour is opaque, so nothing needs compositing with `over` first.
+describe('docked.css text contrast', () => {
+  const textPairs = [
+    { name: 'on-surface vs surface (light)', fg: '#1c1c1e', bg: '#f4f4f2' },
+    { name: 'on-surface vs surface (dark)', fg: '#ededed', bg: '#141416' },
+    { name: 'accent vs surface (light)', fg: '#2b52d6', bg: '#f4f4f2' },
+    { name: 'accent vs surface (dark)', fg: '#3ea6ff', bg: '#141416' }
+  ];
+
+  test.each(textPairs)('$name clears 4.5:1', ({ fg, bg }) => {
+    const ratio = contrast(parseColor(fg), parseColor(bg));
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// A UI component's own boundary (1.4.11), not text (1.4.3), so the floor is
+// 3:1 -- the same rule `theme.css`'s own `slider non-text contrast` describe
+// checks, above. `track` is `seek-buffered`, the unfilled boundary, checked
+// against the surface it sits on; `buffered` is `seek-buffered-range`, the
+// loaded boundary, checked against the track it composites over (never the
+// surface directly, the same composite order `theme.css`'s own describe uses
+// and for the same reason: that is the surface the boundary is actually
+// painted against). `focus` is the `:focus-visible` outline, checked against
+// the surface it is drawn on.
+describe('docked.css slider non-text contrast', () => {
+  const nonTextPairs = [
+    { name: 'track vs surface (light)', fg: '#84847d', bg: '#f4f4f2' },
+    { name: 'track vs surface (dark)', fg: '#6d6d70', bg: '#141416' },
+    { name: 'buffered vs track (light)', fg: '#1c1c1e', bg: '#84847d' },
+    { name: 'buffered vs track (dark)', fg: '#ededed', bg: '#6d6d70' },
+    { name: 'focus vs surface (light)', fg: '#2b52d6', bg: '#f4f4f2' },
+    { name: 'focus vs surface (dark)', fg: '#3ea6ff', bg: '#141416' }
+  ];
+
+  test.each(nonTextPairs)('$name clears 3:1', ({ fg, bg }) => {
+    const ratio = contrast(parseColor(fg), parseColor(bg));
+    expect(ratio).toBeGreaterThanOrEqual(3);
+  });
+
+  // The margins the header comment states, pinned so a token move has to
+  // restate what it did rather than quietly spending headroom.
+  test('states the ratio of every boundary', () => {
+    const stated = Object.fromEntries(
+      nonTextPairs.map(({ name, fg, bg }) => [
+        name,
+        `${contrast(parseColor(fg), parseColor(bg)).toFixed(2)}:1`
+      ])
+    );
+    expect(stated).toEqual({
+      'track vs surface (light)': '3.42:1',
+      'track vs surface (dark)': '3.57:1',
+      'buffered vs track (light)': '4.52:1',
+      'buffered vs track (dark)': '4.41:1',
+      'focus vs surface (light)': '5.81:1',
+      'focus vs surface (dark)': '7.10:1'
     });
   });
 });
