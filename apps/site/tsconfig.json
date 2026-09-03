@@ -11,7 +11,19 @@
     // `@/*` -> `src/*`, matching the alias `astro.config.ts` registers for
     // Vite and the alias `components.json` declares for shadcn's tooling. Only
     // for `tsc`'s own resolution; the build's is the Vite alias above.
-    "paths": { "@/*": ["./src/*"] },
+    // `@playdeck/react` is stated rather than left to node resolution, for
+    // `include`'s one out-of-package file below: a module specifier resolves
+    // from the importing file's own directory, and `examples/` sits outside
+    // this app, so the walk up from `examples/react-menus.tsx` never reaches
+    // `apps/site/node_modules`, where the workspace link lives.
+    // `apps/storybook/tsconfig.json` carries the same block for the same
+    // reason. The target is the built declarations, which is what node
+    // resolution already reaches through the package's `exports`, and the
+    // reference below is what makes `tsc -b` build them first.
+    "paths": {
+      "@/*": ["./src/*"],
+      "@playdeck/react": ["../../packages/react/dist/index.d.ts"]
+    },
     // Outside the package, unlike `apps/storybook`, which writes its own to
     // `dist/`. Here `dist/` is Astro's *output* directory: `astro build` clears
     // it, so a buildinfo kept there is destroyed by every build, and one written
@@ -44,7 +56,20 @@
   // `.tsx` is here for the site's one React island. It is real TypeScript that
   // `tsc` can parse, so it belongs in this pass rather than being left to the
   // Astro tooling that has to handle the templates.
-  "include": ["astro.config.ts", "src/**/*.ts", "src/**/*.tsx"],
+  //
+  // `examples/react-menus.tsx` is named one by one rather than swept in with a
+  // glob, the way `apps/storybook/tsconfig.json` names the two archetype
+  // examples: `ControlBar` in `BenchIsland.tsx` mounts its `RateMenu`, and this
+  // project is `composite`, so a file it compiles but was not told about is a
+  // hard error ("File is not listed within the file list of project"). It
+  // cannot be a project *reference* either, since `examples/` is `noEmit`
+  // (TS6310, the same error `tsconfig.test.json`'s own comment names).
+  "include": [
+    "astro.config.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "../../examples/react-menus.tsx"
+  ],
   // The island imports `@playdeck/react`, which resolves to declarations that
   // package emits rather than to its source, so this project cannot be checked
   // until that one has been built. Declaring the reference is what makes

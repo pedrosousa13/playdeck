@@ -46,7 +46,14 @@
  * deliberately empty, so it carries no ambient `ImportMetaEnv` declaration.
  * `SearchCommand.tsx` resolves the same global the same way.
  */
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject
+} from 'react';
 import { createPortal } from 'react-dom';
 import * as Player from '@playdeck/react';
 /*
@@ -87,7 +94,16 @@ import {
   type BenchPosition,
   type SkinName
 } from '@/bench-composition';
+import { BENCH_CONTROLS, type BenchControlName } from '@/bench-controls';
 import { QUIET_START, quietLine, recordLoad } from '@/bench-quiet';
+/*
+ * The settings menu the bench mounts, taken from the examples rather than
+ * written again here: `examples/react-menus.tsx` is where a consumer reads the
+ * shape of a menu built from the parts, and a second copy on this page would
+ * be a second thing to keep true. `apps/site/tsconfig.json` names the file in
+ * its own `include` for this import -- see the comment there.
+ */
+import { RateMenu } from '../../../../examples/react-menus';
 import BenchSwitches from './BenchSwitches';
 import CompositionPanel from './CompositionPanel';
 
@@ -176,7 +192,8 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
     activation: snapshot.activation,
     playing: snapshot.playback === 'playing',
     muted: snapshot.muted,
-    fullscreen: snapshot.fullscreen
+    fullscreen: snapshot.fullscreen,
+    pictureInPicture: snapshot.pictureInPicture
   }));
   /*
    * Where the keyboard goes when the affordance it was standing on disappears.
@@ -204,6 +221,66 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
     fromKeyboardRef.current = false;
     playButton.current?.focus();
   }, [fromKeyboardRef, ready]);
+  /*
+   * Keyed by `BenchControlName`, so the tuple in `bench-controls.ts` is the one
+   * place either the mounted tree here or the printed tree in
+   * `bench-composition.ts` can grow or shrink from: a name added there and not
+   * answered here is a missing key on a total `Record` and does not compile.
+   *
+   * The values are elements rather than component references, because two of
+   * them are not a component alone -- `playButton` carries the `ref` the focus
+   * move above writes into, and `timeDuration` carries the separator that
+   * belongs in front of it. A table of components could hold neither.
+   *
+   * The separator is the page's own text rather than a gap opened in CSS,
+   * because a skin that draws no rule between the two `<time>` elements renders
+   * them flush against each other as `1:2410:34`. That reads as a defect rather
+   * than as an unstyled control, and a consumer writing this bar by hand would
+   * put a separator in for the same reason, so the composition prints one. It
+   * travels with `timeDuration` rather than taking an eleventh entry of its
+   * own, because it is consumer text and not a part.
+   */
+  const controls: Record<BenchControlName, ReactNode> = {
+    seekSlider: <Player.SeekSlider />,
+    playButton: (
+      <Player.PlayButton ref={playButton}>
+        {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
+      </Player.PlayButton>
+    ),
+    muteButton: (
+      <Player.MuteButton>
+        {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
+      </Player.MuteButton>
+    ),
+    volumeSlider: <Player.VolumeSlider />,
+    timeCurrent: <Player.Time type="current" />,
+    timeDuration: (
+      <>
+        <span aria-hidden="true"> / </span>
+        <Player.Time type="duration" />
+      </>
+    ),
+    captionsButton: <Player.CaptionsButton />,
+    settingsMenu: <RateMenu />,
+    pipButton: (
+      <Player.PipButton>
+        {state.pictureInPicture ? (
+          <Player.PipExitIcon />
+        ) : (
+          <Player.PipEnterIcon />
+        )}
+      </Player.PipButton>
+    ),
+    fullscreenButton: (
+      <Player.FullscreenButton>
+        {state.fullscreen ? (
+          <Player.FullscreenExitIcon />
+        ) : (
+          <Player.FullscreenEnterIcon />
+        )}
+      </Player.FullscreenButton>
+    )
+  };
   return (
     /*
      * A focusable region that owns the media keyboard map — Space, the arrows,
@@ -212,7 +289,16 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
      * Each control is capability-gated by the library rather than by this page.
      * `Player.FullscreenButton` is the visible instance: it renders only while
      * the fullscreen capability reads `available`, so where fullscreen is
-     * refused it is absent rather than present and dead.
+     * refused it is absent rather than present and dead. `VolumeSlider`,
+     * `CaptionsButton`, the settings menu and `PipButton` are gated the same
+     * way, which is why mounting all ten costs a provider that refuses some of
+     * them nothing.
+     *
+     * Rendered by mapping over `BENCH_CONTROLS` rather than by writing the
+     * children out here, because the theme's grid splits row one from row two
+     * by source order and has no wrapper element to split on: the order in the
+     * tuple *is* the layout, and one list nothing can reorder by hand is what
+     * keeps it that way.
      *
      * Hidden until the activation has produced a player, which is the mirror of
      * the affordance's own render condition — the bar arrives exactly as the
@@ -223,32 +309,9 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
      * at once, without unmounting a subtree that is about to come back.
      */
     <Player.Controls hidden={!ready}>
-      <Player.PlayButton ref={playButton}>
-        {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
-      </Player.PlayButton>
-      <Player.MuteButton>
-        {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
-      </Player.MuteButton>
-      <Player.SeekSlider />
-      {/*
-       * The separator is the page's own text rather than a gap opened in CSS,
-       * because under the `none` skin there is no CSS to open one and the two
-       * `<time>` elements render flush against each other as `1:2410:34`. That
-       * reads as a defect rather than as an unstyled control, which is the one
-       * thing the `none` position must not do: it is here to show what ships,
-       * and what ships is not broken. A consumer writing this by hand would put
-       * a separator in for the same reason, so the composition prints one.
-       */}
-      <Player.Time type="current" />
-      <span aria-hidden="true"> / </span>
-      <Player.Time type="duration" />
-      <Player.FullscreenButton>
-        {state.fullscreen ? (
-          <Player.FullscreenExitIcon />
-        ) : (
-          <Player.FullscreenEnterIcon />
-        )}
-      </Player.FullscreenButton>
+      {BENCH_CONTROLS.map((name) => (
+        <Fragment key={name}>{controls[name]}</Fragment>
+      ))}
     </Player.Controls>
   );
 };
