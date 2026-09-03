@@ -130,8 +130,10 @@ const fixtures: readonly StylesheetFixture[] = [
         '-moz-range-track',
         '-webkit-slider-thumb'
       ],
-      // No `linear-gradient` -- docked.css draws no scrim.
-      functions: ['calc', 'env', 'rgb', 'var'],
+      // `linear-gradient` joins the list once the seek fill becomes a
+      // two-stop gradient like theme.css's own (#594's follow-up spec) --
+      // docked.css still draws no scrim, which is a different rule.
+      functions: ['calc', 'env', 'linear-gradient', 'rgb', 'var'],
       forcedColorsSliderNeedles: [
         '::-moz-range-track',
         '::-moz-range-progress',
