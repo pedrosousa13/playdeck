@@ -11,8 +11,13 @@ const viewportStyle = {
   // Wide enough for the full control row at the largest size these stories
   // demonstrate (`--playdeck-control-size: 3.5rem` in AccentAndSizeTokens). The
   // buttons are `flex: 0 0 auto` so they push out of the box rather than
-  // shrink, and at 480 the row overflowed by 49px once AirPlayButton made it
-  // six buttons.
+  // shrink, and back when the control surface did not wrap that is what made
+  // the row at 480 overflow by 49px once AirPlayButton made it six buttons.
+  // The surface wraps now, so a row too wide for the box falls to a further
+  // line instead of spilling out of it — measured at 480, this composition
+  // draws the same two rows it draws here, with no overflow on either axis.
+  // The width is therefore what keeps the second row a single line at the
+  // largest token size, not what stops an inline overflow.
   width: 640
 };
 
@@ -31,15 +36,22 @@ const ThemedPlayer = () => (
       style={{ position: 'absolute', inset: 'auto 0 0 0' }}
       aria-label="Video player controls"
     >
+      {/*
+       * Child order is the theme's two-row layout, not a preference: the
+       * control surface wraps and the seek slider carries a 100% flex basis,
+       * so the slider takes a line of its own only while it is first in the
+       * composed children. Everything after it falls to the second row in the
+       * order written here. Reordering these scrambles the rows.
+       */}
+      <Player.SeekSlider />
       <Player.PlayButton>
         <Player.PlayIcon />
       </Player.PlayButton>
-      <Player.Time />
-      <Player.SeekSlider />
       <Player.MuteButton>
         <Player.VolumeHighIcon />
       </Player.MuteButton>
       <Player.VolumeSlider />
+      <Player.Time />
       <Player.CaptionsButton>
         <Player.CaptionsIcon />
       </Player.CaptionsButton>
