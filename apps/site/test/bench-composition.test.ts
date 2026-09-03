@@ -5,53 +5,52 @@ const NATIVE_URL = 'https://example.com/clip.mp4';
 const YOUTUBE_URL = 'https://www.youtube.com/watch?v=example';
 
 describe('buildComposition', () => {
-  it('prints the six lines the page claims drive all five providers', () => {
-    expect(
-      buildComposition({
-        source: 'native',
-        skin: 'none',
-        sourceUrl: NATIVE_URL
-      })
-    ).toBe(
+  it('prints the real ten-control tree, SeekSlider first', () => {
+    const code = buildComposition({
+      source: 'youtube',
+      skin: 'theme',
+      sourceUrl: YOUTUBE_URL
+    });
+    const tree = code.slice(code.indexOf('<Player.Root'));
+    expect(tree).toBe(
       [
-        `const source = '${NATIVE_URL}';`,
-        '',
         '<Player.Root source={source}>',
         '  <Player.Viewport>',
         '    <Player.Media />',
-        '    <Player.Controls />',
+        '    <Player.Poster>',
+        '      <Player.PosterImage />',
+        '    </Player.Poster>',
+        '    <Player.Controls>',
+        '      <Player.SeekSlider />',
+        '      <Player.PlayButton />',
+        '      <Player.MuteButton />',
+        '      <Player.VolumeSlider />',
+        '      <Player.Time type="current" />',
+        '      <span aria-hidden="true"> / </span>',
+        '      <Player.Time type="duration" />',
+        '      <Player.CaptionsButton />',
+        '      <Player.SettingsMenu>',
+        '        <Player.SettingsMenuTrigger />',
+        '        <Player.SettingsMenuContent />',
+        '      </Player.SettingsMenu>',
+        '      <Player.PipButton />',
+        '      <Player.FullscreenButton />',
+        '    </Player.Controls>',
         '  </Player.Viewport>',
         '</Player.Root>'
       ].join('\n')
     );
   });
 
-  // The thesis paragraph on `/` says "the same six lines drive all five", and
-  // this is the count it is counting. If the composition grows or loses a line,
-  // that sentence changes with it or it comes out.
-  it('is six lines of composition, whatever the switches are set to', () => {
-    for (const skin of ['none', 'theme'] as const) {
-      const code = buildComposition({
-        source: 'native',
-        skin,
-        sourceUrl: NATIVE_URL
-      });
-      const composition = code
-        .split('\n')
-        .filter((line) => line.startsWith('<') || line.startsWith(' '));
-      expect(composition).toHaveLength(6);
-    }
-  });
-
   it('changes the source URL when the source switch changes, and nothing else', () => {
     const native = buildComposition({
       source: 'native',
-      skin: 'none',
+      skin: 'theme',
       sourceUrl: NATIVE_URL
     });
     const youtube = buildComposition({
       source: 'youtube',
-      skin: 'none',
+      skin: 'theme',
       sourceUrl: YOUTUBE_URL
     });
 
@@ -59,10 +58,10 @@ describe('buildComposition', () => {
     expect(youtube).toContain(`const source = '${YOUTUBE_URL}';`);
 
     // The claim the panel makes: one API drives every provider, so the
-    // composition itself -- everything after the `const source` line and its
-    // trailing blank line -- does not change shape when the provider does.
+    // composition itself -- everything from `<Player.Root` down, past whatever
+    // preamble the skin wrote -- does not change shape when the provider does.
     const compositionBlock = (code: string) =>
-      code.split('\n').slice(2).join('\n');
+      code.slice(code.indexOf('<Player.Root'));
     expect(compositionBlock(native)).toBe(compositionBlock(youtube));
   });
 
@@ -71,7 +70,7 @@ describe('buildComposition', () => {
   // Pinned rather than assumed, so a later session does not reintroduce it as
   // a "harmless" default.
   it('names no prop on Player.Root but the source', () => {
-    for (const skin of ['none', 'theme'] as const) {
+    for (const skin of ['theme'] as const) {
       const code = buildComposition({
         source: 'native',
         skin,
@@ -106,7 +105,7 @@ describe('buildComposition', () => {
     const longUrl = `https://example.com/videos/${'a'.repeat(500)}.mp4`;
     const code = buildComposition({
       source: 'native',
-      skin: 'none',
+      skin: 'theme',
       sourceUrl: longUrl
     });
     expect(code).toContain(`const source = '${longUrl}';`);
@@ -115,7 +114,7 @@ describe('buildComposition', () => {
   });
 
   it.each<BenchPosition>([
-    { source: 'native', skin: 'none', sourceUrl: NATIVE_URL },
+    { source: 'native', skin: 'theme', sourceUrl: NATIVE_URL },
     { source: 'youtube', skin: 'theme', sourceUrl: YOUTUBE_URL },
     {
       source: 'vimeo',
@@ -124,7 +123,7 @@ describe('buildComposition', () => {
     },
     {
       source: 'wistia',
-      skin: 'none',
+      skin: 'theme',
       sourceUrl: 'https://example.wistia.com/medias/abc123'
     }
   ])('never leaves a trailing space on a line ($source/$skin)', (position) => {

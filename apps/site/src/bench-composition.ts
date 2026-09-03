@@ -15,6 +15,41 @@
  * printing itself is not an argument. Autoplay recovery is not sold on `/`.
  */
 import type { PlayerProvider } from '@playdeck/core';
+import { BENCH_CONTROLS, type BenchControlName } from './bench-controls';
+
+/**
+ * Each control's printed source, one entry short of the lines it prints:
+ * `timeDuration` carries the separator's line too, since the separator is
+ * consumer text between the two `Player.Time`s rather than a control of its
+ * own (see the spec's row-two contract). The settings menu prints that a
+ * settings control exists, trigger and content, both self-closing, without
+ * printing what `RateMenu` mounts inside it, per the spec's own instruction
+ * that the panel need not print what is inside a menu.
+ *
+ * `Record<BenchControlName, ...>` is what makes this table and `ControlBar`'s
+ * own record in `BenchIsland.tsx` unable to drift: a name added to
+ * `BENCH_CONTROLS` and forgotten in either one is a compile error.
+ */
+const CONTROL_LINES: Record<BenchControlName, readonly string[]> = {
+  seekSlider: ['<Player.SeekSlider />'],
+  playButton: ['<Player.PlayButton />'],
+  muteButton: ['<Player.MuteButton />'],
+  volumeSlider: ['<Player.VolumeSlider />'],
+  timeCurrent: ['<Player.Time type="current" />'],
+  timeDuration: [
+    '<span aria-hidden="true"> / </span>',
+    '<Player.Time type="duration" />'
+  ],
+  captionsButton: ['<Player.CaptionsButton />'],
+  settingsMenu: [
+    '<Player.SettingsMenu>',
+    '  <Player.SettingsMenuTrigger />',
+    '  <Player.SettingsMenuContent />',
+    '</Player.SettingsMenu>'
+  ],
+  pipButton: ['<Player.PipButton />'],
+  fullscreenButton: ['<Player.FullscreenButton />']
+};
 
 export type SkinName = 'none' | 'theme';
 
@@ -41,20 +76,27 @@ export const buildComposition = ({
 
   // The theme import and the source declaration are lines a consumer would
   // write above the composition, not props on it. Keeping them out of
-  // `Player.Root` is what lets the six lines below read byte-identical
-  // regardless of which provider is switched on.
+  // `Player.Root` is what lets the tree below read byte-identical regardless
+  // of which provider is switched on.
   const preamble = [
     ...(skin === 'theme' ? ["import '@playdeck/react/theme.css';", ''] : []),
     `const source = '${sourceUrl}';`,
     ''
   ];
 
+  const controlLines = BENCH_CONTROLS.flatMap((name) => CONTROL_LINES[name]);
+
   return [
     ...preamble,
     '<Player.Root source={source}>',
     '  <Player.Viewport>',
     '    <Player.Media />',
-    '    <Player.Controls />',
+    '    <Player.Poster>',
+    '      <Player.PosterImage />',
+    '    </Player.Poster>',
+    '    <Player.Controls>',
+    ...controlLines.map((line) => `      ${line}`),
+    '    </Player.Controls>',
     '  </Player.Viewport>',
     '</Player.Root>'
   ].join('\n');
