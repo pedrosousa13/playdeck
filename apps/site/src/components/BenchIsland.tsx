@@ -223,13 +223,13 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
      * at once, without unmounting a subtree that is about to come back.
      */
     <Player.Controls hidden={!ready}>
+      <Player.SeekSlider />
       <Player.PlayButton ref={playButton}>
         {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
       </Player.PlayButton>
       <Player.MuteButton>
         {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
       </Player.MuteButton>
-      <Player.SeekSlider />
       {/*
        * The separator is the page's own text rather than a gap opened in CSS,
        * because under the `none` skin there is no CSS to open one and the two
