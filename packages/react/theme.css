@@ -460,6 +460,52 @@
     }
   }
 
+  /* ---- volume reveal ------------------------------------------------------
+   * The slider is always laid out at its full inline size beside the mute
+   * button, so nothing around it moves when it appears: only `opacity` and
+   * `pointer-events` change. `pointer-events: none` at rest is what keeps an
+   * invisible range input from being a target a pointer can land on and drag,
+   * and it is a hard switch rather than a transition — dragging a thumb that is
+   * half-way through a fade is not a state worth animating into.
+   *
+   * Every branch of the reveal selector ends on the slider as its subject,
+   * whether qualified by the mute button's state through the adjacent-sibling
+   * combinator or by the slider's own. `MuteButton` and `VolumeSlider` are
+   * adjacent siblings with no wrapper (`transport-controls.tsx` renders them as
+   * independent parts), so the combinator is the only way to reach one from the
+   * other. The slider's own `:hover` branch is what lets a reader travel from
+   * the button onto the control without it fading out under the pointer.
+   */
+  @media (pointer: fine) {
+    :where([data-playdeck-part='volume-slider']) {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--playdeck-transition-duration, 150ms)
+        var(--playdeck-transition-easing, ease);
+    }
+
+    :where(
+      [data-playdeck-part='mute-button']:hover
+        + [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='mute-button']:focus-within
+        + [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='volume-slider']:hover,
+      [data-playdeck-part='volume-slider']:focus-within
+    ) {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* Not hidden to save room: iOS Safari ignores a programmatic `volume` write,
+   * so on a coarse pointer this control cannot move anything, and a slider that
+   * answers nothing is worse than no slider. */
+  @media (pointer: coarse) {
+    :where([data-playdeck-part='volume-slider']) {
+      display: none;
+    }
+  }
+
   /* ---- menus ------------------------------------------------------------- */
   :where([data-playdeck-part='settings-menu-root']) {
     position: relative;
@@ -523,9 +569,11 @@
 
   /* ---- reduced motion ---------------------------------------------------- */
   @media (prefers-reduced-motion: reduce) {
-    /* Nonessential movement only: opacity transitions on the control surface
-     * and the activation affordance. No state change is conveyed by motion, so
-     * nothing is hidden by removing it. */
+    /* Nonessential movement only: opacity transitions on the control surface,
+     * the activation affordance and the volume reveal. No state change is
+     * conveyed by motion, so nothing is hidden by removing it — the volume
+     * slider still appears and disappears on hover and focus, it just stops
+     * fading into and out of the bar. */
     :where(
       [data-playdeck-part='controls'],
       [data-playdeck-part='activation'],
@@ -535,7 +583,8 @@
       [data-playdeck-part='fullscreen-button'],
       [data-playdeck-part='pip-button'],
       [data-playdeck-part='airplay-button'],
-      [data-playdeck-part='settings-menu-trigger']
+      [data-playdeck-part='settings-menu-trigger'],
+      [data-playdeck-part='volume-slider']
     ) {
       transition-duration: 0.01ms;
     }

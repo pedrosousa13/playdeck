@@ -275,11 +275,24 @@ describe.each(fixtures)(
       // and pip-button; anchoring on "two or more" then missed a rule that names
       // exactly one -- which is the shape that silently drops a single control's
       // hover tint, the very failure this test exists to catch.
-      const buttonRules = selectorLists.filter((selector) =>
-        buttonParts.some((part) =>
-          selector.includes(`data-playdeck-part='${part}'`)
-        )
-      );
+      //
+      // And every named part has to be a button part, not merely one of them.
+      // The volume reveal's
+      // `[data-playdeck-part='mute-button']:hover +
+      // [data-playdeck-part='volume-slider']` names a button alongside a
+      // slider, but its subject is the slider: it reaches past the button
+      // rather than styling it, so it is out of scope for a check that guards
+      // the shared button box, not a rule that has dropped six controls from
+      // one.
+      const buttonRules = selectorLists.filter((selector) => {
+        const namedParts = [
+          ...selector.matchAll(/data-playdeck-part='([a-z-]+)'/g)
+        ].map(([, name]) => name);
+        return (
+          namedParts.some((name) => buttonParts.includes(name)) &&
+          namedParts.every((name) => buttonParts.includes(name))
+        );
+      });
       expect(buttonRules.length).toBeGreaterThan(0);
       const missing = buttonRules.flatMap((rule) =>
         buttonParts
@@ -366,6 +379,38 @@ describe.each(fixtures)(
     test('pushes the trailing controls to the end with the duration Time', () => {
       expect(withoutComments).toMatch(
         /\[data-playdeck-part='time'\]\[data-time-type='duration'\][^{]*\{[^}]*margin-inline-end:\s*auto/
+      );
+    });
+
+    // The slider keeps its box at rest and only its paint changes, so no
+    // neighbour moves when it appears. Measured by driving the Theme/Theme
+    // story, whose bar is `position: absolute; inset: auto 0 0 0` inside a
+    // relatively positioned 640px viewport: at rest and revealed alike the
+    // slider is 80x44 at x=120, and the gap from the mute button's inline end
+    // to the duration `Time` is 88px — identical in both states, on chromium
+    // and on firefox. What does change is `opacity` 0 -> 1 and
+    // `pointer-events` `none` -> `auto`, on hovering the mute button, on
+    // moving the pointer from it onto the slider, and on focusing the slider;
+    // all three return to rest when the pointer leaves and the input blurs.
+    // Under an emulated coarse pointer (`matchMedia('(pointer: coarse)')`
+    // true) the same slider computes `display: none` and measures 0x0, and
+    // that 88px gap collapses to the bar's own 4px.
+    test('hides the volume slider at rest on a fine pointer and reveals it on hover or focus', () => {
+      expect(withoutComments).toMatch(
+        /@media\s*\(\s*pointer:\s*fine\s*\)\s*\{[^]*?opacity:\s*0;[^]*?pointer-events:\s*none;[^]*?\}/
+      );
+      // `\s*` around the combinator, not a literal space: the formatter breaks
+      // this selector across two lines, and whitespace between a combinator and
+      // its operands is not part of what is being asserted.
+      expect(withoutComments).toMatch(
+        /mute-button'\]:hover\s*\+\s*\[data-playdeck-part='volume-slider'\]/
+      );
+      expect(withoutComments).toMatch(/volume-slider'\]:focus-within/);
+    });
+
+    test('hides the volume slider outright on a coarse pointer', () => {
+      expect(withoutComments).toMatch(
+        /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{[^]*?volume-slider'\][^]*?display:\s*none/
       );
     });
 
