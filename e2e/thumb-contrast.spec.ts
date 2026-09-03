@@ -222,9 +222,41 @@ test('the seek input sits on its own track under a different inherited font', as
  * It is also the slider the theme does not cover with anything: `VolumeSlider`
  * renders the input alone, so what a screenshot shows beside the thumb is the
  * slider itself. The seek slider is the opposite case, below.
+ *
+ * The theme reveals this control rather than showing it: under
+ * `(pointer: fine)` it rests at `opacity: 0` with `pointer-events: none`, and
+ * comes back to `opacity: 1` on hover or focus-within of `MuteButton` or of
+ * itself. Measured at rest on this story, both engines report
+ * `opacity: '0'`, `pointer-events: 'none'`, and an `elementFromPoint` at the
+ * slider's own centre that resolves to `viewport` — so a screenshot taken here
+ * samples the story's ground through a fully transparent control, which is
+ * exactly what it read: a darkest pixel of `rgb(11 14 19)`, the story's own
+ * background, and a flat 1.00:1 either side of the thumb.
+ *
+ * Focus, not hover, is what reveals it here. `pointer-events: none` takes the
+ * element out of hit testing, so it cannot match `:hover` at all while at rest
+ * — measured, a `mouse.move` onto its centre leaves all three of `opacity`,
+ * `:hover` and the hit test unchanged on both engines. `focus()` needs no hit
+ * target and lands on the `:focus-within` branch of the same selector list the
+ * theme's spec writes down, which reads `opacity: '1'` and
+ * `pointer-events: 'auto'` on both. That the standalone slider has no reachable
+ * hover state is a property of the theme, not of this file.
+ *
+ * The reveal is a 150ms `opacity` transition, so the opacity is polled to 1
+ * before anything is sampled rather than waited out on a timeout — the same
+ * idiom `e2e/theme-idle.spec.ts` measures the bar's own fade with. The focus
+ * ring this raises is `outline` at `outline-offset: 2px`, which paints outside
+ * the border box `centreRow` clips to, so it reaches no sampled pixel.
  */
 const volumeRow = async (page: Page): Promise<Row> => {
   await page.goto(themedStory('player-volumeslider--half-volume'));
+  const slider = page.locator('[data-playdeck-part="volume-slider"]');
+  await slider.focus();
+  await expect
+    .poll(() =>
+      slider.evaluate((element) => globalThis.getComputedStyle(element).opacity)
+    )
+    .toBe('1');
   return centreRow(page, '[data-playdeck-part="volume-slider"]');
 };
 
