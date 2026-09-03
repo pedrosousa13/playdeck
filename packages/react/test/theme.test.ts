@@ -110,6 +110,27 @@ const fixtures: readonly StylesheetFixture[] = [
   }
 ];
 
+/**
+ * Strips every `:where(...)` group from a selector, including one nested
+ * inside another to any depth. One pass removes only the innermost complete
+ * group (a `:where(...)` whose contents themselves hold no unstripped
+ * `:where(`), so the surrounding loop reruns until nothing more changes --
+ * which is what makes depth unbounded rather than fixed at one level.
+ */
+export const stripWhereGroups = (selector: string): string => {
+  let stripped = selector;
+  let previous: string;
+  do {
+    previous = stripped;
+    stripped = stripped.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '');
+  } while (stripped !== previous);
+  return stripped;
+};
+
+test('stripWhereGroups removes :where() nested three deep', () => {
+  expect(stripWhereGroups(':where(a :where(b :where(c)))').trim()).toBe('');
+});
+
 describe.each(fixtures)(
   '$label contract',
   ({ label, source, exportPath, expected }) => {
@@ -193,12 +214,7 @@ describe.each(fixtures)(
         // Strip every :where(...) group, including nested parens. What remains
         // must carry no specificity of its own: no class, id, attribute,
         // pseudo-class or type selector outside a :where().
-        let stripped = selector;
-        let previous: string;
-        do {
-          previous = stripped;
-          stripped = stripped.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '');
-        } while (stripped !== previous);
+        let stripped = stripWhereGroups(selector);
         // The documented exemption (#190, #415): a native range input's thumb,
         // track and progress fill are reachable only through pseudo-elements,
         // and Selectors 4 forbids a pseudo-element inside `:where()`, so no rule
