@@ -605,24 +605,47 @@ describe('theme contract', () => {
  * this file only declares, since a declaration would beat a consumer's
  * inherited value and there would be no `var(name, default)` to find.
  */
+/**
+ * `withoutComments` with the `@media (max-width: 48rem)` block's contents
+ * removed, so `tokenDefault` reads only the desktop default of a token that
+ * this block deliberately gives a second phone-only fallback -- a third,
+ * nested inside its own dark-scheme query -- for `-track` and `-buffered`,
+ * so far. Without this, `tokenDefault` finds more than one distinct
+ * fallback for the same token and throws -- correctly, since agreement is
+ * what makes it a trustworthy reading of what ships, but the phone block is
+ * an intentional divergence and not a defect for it to catch.
+ */
+const withoutPhoneDockingBlock = (() => {
+  const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(withoutComments);
+  if (query === null) return withoutComments;
+  const start = query.index;
+  let depth = 0;
+  let end = withoutComments.indexOf('{', start);
+  for (; end < withoutComments.length; end++) {
+    if (withoutComments[end] === '{') depth++;
+    else if (withoutComments[end] === '}' && --depth === 0) break;
+  }
+  return withoutComments.slice(0, start) + withoutComments.slice(end + 1);
+})();
+
 const tokenDefault = (name: string): string => {
   const reads = new RegExp(`var\\(\\s*${name}\\s*,\\s*`, 'g');
   const defaults = new Set<string>();
   for (
-    let read = reads.exec(withoutComments);
+    let read = reads.exec(withoutPhoneDockingBlock);
     read !== null;
-    read = reads.exec(withoutComments)
+    read = reads.exec(withoutPhoneDockingBlock)
   ) {
     // Scan to the `)` that closes this `var()`, so a nested `rgb(...)` in the
     // fallback position is taken whole.
     const start = read.index + read[0].length;
     let depth = 1;
     let end = start;
-    for (; end < withoutComments.length && depth > 0; end++) {
-      if (withoutComments[end] === '(') depth++;
-      else if (withoutComments[end] === ')') depth--;
+    for (; end < withoutPhoneDockingBlock.length && depth > 0; end++) {
+      if (withoutPhoneDockingBlock[end] === '(') depth++;
+      else if (withoutPhoneDockingBlock[end] === ')') depth--;
     }
-    defaults.add(withoutComments.slice(start, end - 1).trim());
+    defaults.add(withoutPhoneDockingBlock.slice(start, end - 1).trim());
   }
   if (defaults.size !== 1)
     throw new Error(
@@ -1024,22 +1047,95 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     );
   });
 
-  // Two declarations inside one `max-width: 48rem` query, and no third: the
-  // narrow fallback flattens the scrim and drops the volume slider, and says
-  // nothing about where the bar sits. A `position` written here would be
-  // layered `:where()` CSS, which the unlayered rule a real composition uses to
-  // float the bar beats whatever this file said — so the query claims only what
-  // it can deliver. Moving the bar out of the overlay is `docked.css`'s job,
-  // and that theme never puts it there to begin with.
-  test('flattens the scrim and drops the volume slider below 48rem', () => {
-    const query = withoutComments.match(
-      /@media\s*\(\s*max-width:\s*48rem\s*\)\s*\{[^]*?\n {2}\}/
-    )?.[0];
-    expect(query).toBeDefined();
-    expect(query).toMatch(
-      /background:\s*var\(--playdeck-color-surface,\s*rgb\(0 0 0 \/ 0\.72\)\)/
+  // A real `position` now, unlike the comment this replaces: `controls`
+  // takes `position: static` and its own `grid-row` inside this query, and
+  // the viewport becomes `display: grid` to give it one. That is real,
+  // testable CSS for a bare consumer -- but inert on `/`'s own bench, where
+  // `Bench.astro`'s own unlayered `place-self: end stretch` rule for the
+  // `theme` skin carries no width query and beats this whatever the
+  // viewport, per header rule 1. See this plan's "Before you start" section
+  // for the fuller account; the short version is that `theme` is unreachable
+  // below 48rem on the real bench anyway, so the two never actually collide.
+  /**
+   * The whole `@media (max-width: 48rem)` block's text, walked by brace depth
+   * rather than matched by a fixed-line regex -- the block now nests a second
+   * `@media (prefers-color-scheme: dark)` query, so its own closing brace is
+   * not the first `\n  }` after the opener any more.
+   */
+  const phoneDockingBlock = (): string => {
+    const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(
+      withoutComments
     );
+    expect(query).not.toBeNull();
+    const start = query!.index;
+    let depth = 0;
+    let end = withoutComments.indexOf('{', start);
+    for (; end < withoutComments.length; end++) {
+      if (withoutComments[end] === '{') depth++;
+      else if (withoutComments[end] === '}' && --depth === 0) break;
+    }
+    return withoutComments.slice(start, end + 1);
+  };
+
+  test('docks the control surface below the picture, in the scheme tokens, below 48rem', () => {
+    const query = phoneDockingBlock();
+
+    // The scrim is gone: a flat surface colour, not the gradient the base
+    // rule reads, and not the old translucent-black fallback either.
+    expect(query).toMatch(
+      /background:\s*var\(--playdeck-color-surface,\s*#f4f4f2\)/
+    );
+    expect(query).toMatch(
+      /color:\s*var\(--playdeck-color-on-surface,\s*#1c1c1e\)/
+    );
+    expect(query).toMatch(
+      /border-block-start:\s*1px solid var\(--playdeck-color-hairline,\s*#d9d9d6\)/
+    );
+
+    // The track and the loaded range get an opaque phone-only fallback: the
+    // base rule's translucent white is built for a dark video backdrop and
+    // is close to invisible on a flat light surface.
+    expect(query).toMatch(
+      /--playdeck-color-track,\s*#84847d/
+    );
+    expect(query).toMatch(
+      /--playdeck-color-buffered,\s*#1c1c1e/
+    );
+
+    // Nothing hides on a phone: idle no longer fades the bar.
+    expect(query).toMatch(
+      /:where\(\[data-idle='true'\] \[data-playdeck-part='controls'\]\)\s*\{[^}]*opacity:\s*1;[^}]*pointer-events:\s*auto;/
+    );
+
     expect(query).toMatch(/volume-slider'\][^]*?display:\s*none/);
-    expect(query).not.toMatch(/position:/);
+
+    // The dark repeat, nested inside the same query -- the file's second
+    // `@media` occurrence, which the feature-inventory test does not pin
+    // (it asserts the *set* of at-rule names, and 'media' was already in it).
+    const darkQuery = /@media\s*\(\s*prefers-color-scheme:\s*dark\s*\)/.exec(
+      query
+    );
+    expect(darkQuery).not.toBeNull();
+    expect(query).toMatch(
+      /background:\s*var\(--playdeck-color-surface,\s*#141416\)/
+    );
+    expect(query).toMatch(
+      /color:\s*var\(--playdeck-color-on-surface,\s*#ededed\)/
+    );
+    expect(query).toMatch(
+      /border-block-start-color:\s*var\(--playdeck-color-hairline,\s*#2a2a2d\)/
+    );
+    expect(query).toMatch(/--playdeck-color-track,\s*#6d6d70/);
+    expect(query).toMatch(/--playdeck-color-buffered,\s*#ededed/);
+  });
+
+  test('places the control surface in a grid row of its own below 48rem', () => {
+    const query = phoneDockingBlock();
+    expect(query).toMatch(
+      /:where\(\[data-playdeck-part='viewport'\]\)\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*1fr auto;/
+    );
+    expect(query).toMatch(
+      /:where\(\[data-playdeck-part='controls'\]\)\s*\{[^}]*position:\s*static;[^}]*grid-row:\s*2;/
+    );
   });
 });

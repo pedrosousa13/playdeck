@@ -44,6 +44,7 @@
  *                --playdeck-color-thumb-ring    #000
  *                --playdeck-color-focus         #fff
  *                --playdeck-color-backdrop      #000
+ *                --playdeck-color-hairline      #d9d9d6 (phone docking only)
  *   Typography   --playdeck-font-family         system-ui stack
  *                --playdeck-font-size           0.875rem
  *                --playdeck-font-size-small     0.8125rem
@@ -624,39 +625,89 @@
   }
 
   /* ---- below 48rem --------------------------------------------------------
-   * The scrim is a gradient because the bar floats over the picture and the
-   * frame beneath it has to stay readable through the fade. A narrow viewport
-   * spends more of that frame on the bar, since the second row wraps again
-   * rather than shrinking its targets, so the gradient's soft top edge covers a
-   * large share of the picture with neither the picture nor the controls fully
-   * legible through it. A flat surface
-   * colour draws the same box with one hard edge instead, which is the trade a
-   * narrow viewport wants.
+   * Real docking now, not only a flatter scrim: the bar leaves the overlay
+   * position and takes a row of its own under the picture, in the scheme's
+   * own surface tokens rather than a translucent black built for a video
+   * backdrop.
    *
-   * `background`, not `background-color`, because the base rule sets the
-   * gradient through `background`: a longhand here would leave the shorthand's
-   * image painted over the colour it declares.
+   * This is real CSS and it is testable in isolation -- a bare consumer with
+   * no positioning of their own, a Storybook story, this file's own tests --
+   * but it is inert on `/`'s own bench. `Bench.astro`'s
+   * `[data-playdeck-part='controls']` rule for the `theme` skin sets
+   * `place-self: end stretch` with no width query of its own, and that rule
+   * is unlayered: header rule 1 means it beats anything here whatever the
+   * viewport. In practice this never collides on the bench anyway, because
+   * `BenchIsland` only rests on `docked` below 48rem and the skin switch is
+   * `hidden` there, so `theme` is unreachable at this width on the real page.
+   * What this buys is every OTHER consumer -- Storybook, the docs examples,
+   * a real app that ships no positioning CSS of its own -- getting a real
+   * docked bar below 48rem from `theme.css` alone.
    *
-   * The volume slider goes for a reason of its own, unrelated to the coarse
-   * pointer above, which is why the declaration is repeated rather than shared
-   * with that query. There it cannot move anything; here it can, and the room
-   * its 5rem box costs the second row is worth more than the control — every
-   * remaining button holds its 44px target and wraps rather than shrinks, so
-   * the slider's width is paid for in lines of bar over the picture.
-   *
-   * Nothing here states a `position`. This file's rules are layered `:where()`
-   * (header rule 1), so any `position` written here would lose to the ordinary
-   * unlayered CSS a composition uses to float the bar in the first place, and
-   * the rule would read as doing something it cannot do. `docked.css` puts the
-   * bar under the picture instead, and never floats it to begin with.
+   * `display: grid` on the viewport is what gives `controls` a row to sit
+   * in; `media`, `poster` and `activation` are all positioned `absolute`
+   * inline by the primitives that render them (documented at the top of this
+   * file), so switching the viewport from block to grid does not move them
+   * -- an absolutely positioned box is excluded from grid track sizing and
+   * still resolves its offsets against the same containing block either way.
+   * Reserving height for the picture itself is not this rule's job and was
+   * never theme.css's job at any width: "Layer geometry is deliberately NOT
+   * here" at the top of this file already says so, and a bare consumer needs
+   * their own sizing (an aspect-ratio wrapper, most simply) at every width,
+   * not only this one.
    */
   @media (max-width: 48rem) {
+    :where([data-playdeck-part='viewport']) {
+      display: grid;
+      grid-template-rows: 1fr auto;
+    }
+
     :where([data-playdeck-part='controls']) {
-      background: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
+      position: static;
+      grid-row: 2;
+      background: var(--playdeck-color-surface, #f4f4f2);
+      color: var(--playdeck-color-on-surface, #1c1c1e);
+      border-block-start: 1px solid var(--playdeck-color-hairline, #d9d9d6);
+    }
+
+    /* The scrim's translucent-white track/buffered defaults are built for a
+     * dark video backdrop and read as close to invisible on this flat light
+     * surface -- the same reasoning `docked.css`'s own header comment gives
+     * for carrying its own opaque defaults. These two declarations are why
+     * `tokenDefault()` in `theme.test.ts` is scoped to skip this block: it is
+     * a deliberate second fallback, not disagreement. */
+    :where([data-playdeck-part='seek-buffered']) {
+      background-color: var(--playdeck-color-track, #84847d);
+    }
+
+    :where([data-playdeck-part='seek-buffered-range']) {
+      background-color: var(--playdeck-color-buffered, #1c1c1e);
+    }
+
+    /* Nothing hides on a phone: there is no overlay to auto-hide over the
+     * picture any more, so idle no longer fades this part. */
+    :where([data-idle='true'] [data-playdeck-part='controls']) {
+      opacity: 1;
+      pointer-events: auto;
     }
 
     :where([data-playdeck-part='volume-slider']) {
       display: none;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :where([data-playdeck-part='controls']) {
+        background: var(--playdeck-color-surface, #141416);
+        color: var(--playdeck-color-on-surface, #ededed);
+        border-block-start-color: var(--playdeck-color-hairline, #2a2a2d);
+      }
+
+      :where([data-playdeck-part='seek-buffered']) {
+        background-color: var(--playdeck-color-track, #6d6d70);
+      }
+
+      :where([data-playdeck-part='seek-buffered-range']) {
+        background-color: var(--playdeck-color-buffered, #ededed);
+      }
     }
   }
 
