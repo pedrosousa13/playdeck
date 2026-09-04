@@ -123,7 +123,7 @@ test('the four feature cards are present, numbered in order', async ({
   await expect(cards.nth(1)).toContainText('02');
   await expect(cards.nth(1)).toContainText('Style it');
   await expect(cards.nth(2)).toContainText('03');
-  await expect(cards.nth(2)).toContainText('Ask before you render');
+  await expect(cards.nth(2)).toContainText('Ask what the provider can do');
   await expect(cards.nth(3)).toContainText('04');
   await expect(cards.nth(3)).toContainText('Recover from refused autoplay');
 });

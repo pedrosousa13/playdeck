@@ -1746,8 +1746,8 @@ checks its work against, and the place to add a specimen when a token is added.
 
 It is not part of the site's own navigation, and **nothing on the site links to
 it at all.** `/` carried the one link, in the ways-onward row at the foot of the
-page, and the rebuilt close carries Start, Reference, Providers and Archetypes
-and nothing else. That was not ruled on at the time: the link went out with the page
+page, and the rebuilt close carries Reference, Providers and Archetypes and
+nothing else. That was not ruled on at the time: the link went out with the page
 it was on, and this passage recorded the absence as something waiting for a
 decision.
 
@@ -2038,6 +2038,23 @@ not a demonstration, since `/` still mounts its player with
 sentence two paragraphs up is corrected by this one: they are advertised, not
 sold by demonstration, and the distinction is the whole of what changed.
 
+**The settings menu the bar composes was extracted out of the panel it prints,
+on 2026-09-04.** It used to be printed by hand in `bench-composition.ts`,
+transcribing `examples/react-menus.tsx`'s `RateMenu` line for line and
+running the panel to roughly fifty-five lines for a control that is one menu
+among ten. `QualityAndRateMenu`, a real component in the new
+`BenchSettingsMenu.tsx`, now carries that menu's content on its own;
+`BenchIsland.tsx` mounts `Player.SettingsMenu` around it directly rather
+than through the examples' own `RateMenu`, and the panel prints
+`<QualityAndRateMenu />` inside `Player.SettingsMenuContent` — what mounts,
+not a transcription of it.
+
+**And the mono row under the switches gained the two blocks that used to
+stack under it on their own, the same day.** The HLS explainer folds into
+the quiet line's own row now (explainer first, quiet line after, wrapping
+under 48rem), and the credit — see the attribution passage below — opens
+that same row from its start.
+
 **The page carries one block of code and it is generated, which retires the one
 exception `/` used to hold.** The fifth version wrote four snippets by hand in
 its own frontmatter, and this document defended them: they were three or four
@@ -2131,6 +2148,32 @@ is the whole of what the control does, so with no script there is nothing to
 press rather than a control that swallows a click, and nothing is lost,
 because the command was never behind the button. The feedback is a text swap
 on the button with the same words said once through a `role="status"` line.
+
+**The hero row changed shape on 2026-09-04.** The install pill used to be
+centred against a left-aligned page while the Start link sat underneath it,
+underlined like any other link — two calls to action reading as one
+decoration and one afterthought. They are one left-aligned flex row now,
+directly under the lede, wrapping under a narrow viewport the way every
+other row on this page already does. Start stopped being an underlined text
+link in the same pass — it is `.thesis__start`, a filled button in
+`--color-accent` with `--color-surface` text, `--radius-md` and the 44px hit
+target every other control on this site owes, so a reader scanning for the
+one thing to press finds it by shape rather than by colour alone.
+
+**And the close went back to printing the command once, on the same day.**
+The two paragraphs above describe a close that still repeats it, and the
+repeat is gone: `.close__install` and its styles are deleted, and the close
+now opens on the measured line alone. What replaced the repeated command is
+the same primary Start button the hero carries, reused rather than restyled
+a second time, ahead of the same links as before. `data-install`,
+`data-install-command`, `data-install-copy` and `data-install-status` exist
+exactly once on the page now, in the hero.
+
+**And `close__links` dropped its own Start entry, once the button above it
+made the same trip.** The row used to open with a plain "Start" text link,
+which read as a second, weaker call to action directly under a button
+already making the first one. It is Reference, Providers and Archetypes
+now — the ways onward that are not already on the page in button form.
 
 **The page makes no claim about any other library.** No comparison, no named
 competitor, no implied one. A draft opened with "every video player ships a
@@ -2401,6 +2444,16 @@ the type rule above gives sentences to Sans regardless of size. It is not a
 footer: a footer would put the credit somewhere a reader has to leave the
 argument to find, and CC BY does not ask for that, only for the credit to be
 findable near the work.
+
+**"The same visual position" stopped being true on 2026-09-04, for the
+scripted half.** The homepage structure review moved `BenchIsland.tsx`'s
+`Credit` off the picture entirely: it no longer mounts directly under the
+stage, it opens the mono row that also carries the HLS explainer and the
+quiet line, at that row's own start, so the frame's bottom edge now meets
+the sweep with nothing under it. `Bench.astro`'s own `<noscript>` paragraph
+is unmoved — there is no switch row for it to join without a script to build
+one, and CC BY's obligation is only that the credit be findable near the
+work, which a no-JavaScript reader still gets directly under the frame.
 
 `public/archetype-captions.vtt` is the same rule a second time, and is stated
 here so the copy does not read as an accident. The archetypes mount in two

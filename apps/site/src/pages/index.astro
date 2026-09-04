@@ -129,23 +129,25 @@ const install = 'pnpm add @playdeck/react';
       </p>
 
       {
-        /* The install command, moved up from the close (2026-09-03): a
-         * reader who is convinced by the first screen should not have to
-         * scroll to act on it. It keeps its four `data-install*` attributes
-         * and the script below unchanged, so `e2e/site-landing.spec.ts`'s
-         * copy tests hold whichever section the markup lives in. */
+        /* The install command and the Start link, one left-aligned row under
+         * the lede (2026-09-03): both are the call to action, so both sit at
+         * the same edge the sentence above them reads from rather than the
+         * pill floating centred against a left-aligned page. The install
+         * group keeps its four `data-install*` attributes and the script
+         * below unchanged, so `e2e/site-landing.spec.ts`'s copy tests hold
+         * whichever section the markup lives in. */
       }
-      <div class="install" data-install>
-        <code class="install__command" data-install-command>{install}</code>
-        <button class="install__copy" type="button" hidden data-install-copy>
-          Copy
-        </button>
-        <span class="u-visually-hidden" role="status" data-install-status></span>
-      </div>
+      <div class="thesis__actions">
+        <div class="install" data-install>
+          <code class="install__command" data-install-command>{install}</code>
+          <button class="install__copy" type="button" hidden data-install-copy>
+            Copy
+          </button>
+          <span class="u-visually-hidden" role="status" data-install-status></span>
+        </div>
 
-      <p class="thesis__actions">
         <a class="thesis__start" href={startUrl}>Start &rarr;</a>
-      </p>
+      </div>
     </section>
 
     <Bench />
@@ -153,24 +155,23 @@ const install = 'pnpm add @playdeck/react';
     <FeatureCards />
 
     {
-      /* The close: the install command repeated, one measured line, and the
-       * ways onward. A reader who leaves before this has already had the
-       * whole argument, which is the test every part of this page has to
-       * pass, so the close takes no treatment of its own. */
+      /* The close: one measured line, the same primary Start button the hero
+       * carries, and the ways onward. The install command no longer repeats
+       * here (2026-09-03) -- it is the hero's alone now, so `data-install*`
+       * exists exactly once on the page. A reader who leaves before this has
+       * already had the whole argument, which is the test every part of this
+       * page has to pass, so the close takes no treatment of its own. */
     }
     <section class="close">
-      <p class="close__install">
-        <code>{install}</code>
-      </p>
-
       <p class="close__measured">
         {primitives.size.toFixed(0)} kB gzipped, the whole of what
         `@playdeck/react` ships. Adding YouTube costs {youtube.size.toFixed(0)} kB.
         0 requests to a provider before play.
       </p>
 
+      <a class="thesis__start" href={startUrl}>Start &rarr;</a>
+
       <p class="close__links">
-        <a href={startUrl}>Start &rarr;</a>
         <a href={referenceUrl}>Reference &rarr;</a>
         <a href={providersUrl}>Providers &rarr;</a>
         <a href={archetypesUrl}>Archetypes &rarr;</a>
@@ -276,14 +277,50 @@ const install = 'pnpm add @playdeck/react';
     color: var(--color-ink-muted);
   }
 
+  /* The install pill and the Start link, one row at the page's own left
+   * edge -- both are the call to action, so both sit where the sentence
+   * above them reads from rather than the pill floating centred against a
+   * left-aligned page. Wraps rather than scrolling, for the same reader a
+   * narrow viewport already asks every other row on this page to wrap for. */
   .thesis__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
     margin: 0;
   }
 
+  /* The primary button on this page, and the only one: filled with the
+   * accent rather than underlined, so a reader scanning for the one thing to
+   * press finds it by shape rather than by colour alone. `--hit-target`, the
+   * same 44px floor every other control on this site owes; `--radius-md`,
+   * the rung every other panel-sized surface here uses. The hover and active
+   * steps are the accent mixed toward `--color-ink` rather than a literal of
+   * their own, which keeps rule 1: no colour not already in the scale. */
   .thesis__start {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-block-size: var(--hit-target);
+    padding-inline: var(--space-5);
     font-family: var(--font-display);
     font-size: var(--text-lg);
     font-weight: var(--weight-semibold);
+    color: var(--color-surface);
+    text-decoration: none;
+    background-color: var(--color-accent);
+    border-radius: var(--radius-md);
+    transition: background-color var(--duration-fast) var(--ease);
+  }
+
+  .thesis__start:hover {
+    color: var(--color-surface);
+    background-color: color-mix(in srgb, var(--color-accent) 88%, var(--color-ink));
+  }
+
+  .thesis__start:active {
+    color: var(--color-surface);
+    background-color: color-mix(in srgb, var(--color-accent) 76%, var(--color-ink));
   }
 
   /* ---- entrance -------------------------------------------------------
@@ -365,18 +402,6 @@ const install = 'pnpm add @playdeck/react';
     justify-items: start;
   }
 
-  .close__install {
-    padding: var(--space-3) var(--space-5);
-    background-color: var(--color-sunken);
-    border-radius: var(--radius-md);
-  }
-
-  .close__install code {
-    font-family: var(--font-mono);
-    font-size: var(--text-xl);
-    color: var(--color-ink);
-  }
-
   .close__measured {
     max-inline-size: var(--measure);
     font-family: var(--font-mono);
@@ -385,23 +410,16 @@ const install = 'pnpm add @playdeck/react';
     font-variant-numeric: tabular-nums;
   }
 
-  /* The one element in this section that is centred rather than set against
-   * the left edge. `.thesis` lays its children out with `justify-items: start`
-   * (2026-09-03: this moved here from `.close`, which shares the same rule),
-   * so this pill is already shrink-to-fit and only its placement in the track
-   * has to move — `justify-self` on the item, not a change to the container,
-   * because every sibling here keeps the start edge the section reads down.
-   *
-   * `justify-content` inside it as well, for the case the box is wider than
-   * its contents: the command and its copy button stay together in the middle
-   * rather than the command sitting alone at the left of a centred box. */
+  /* Left-aligned now, inside `.thesis__actions` (2026-09-03), rather than
+   * centred against a left-aligned page: it used to be the one element in
+   * this section set apart from the edge everything else read down, which
+   * read as decoration rather than as the second half of the call to action
+   * the Start button beside it now makes it. */
   .install {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
-    justify-content: center;
-    justify-self: center;
     min-block-size: var(--hit-target);
     padding: var(--space-2) var(--space-3);
     background-color: var(--color-sunken);

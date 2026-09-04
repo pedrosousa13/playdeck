@@ -83,13 +83,14 @@ import { type BenchPosition, type SkinName } from '@/bench-composition';
 import { BENCH_CONTROLS, type BenchControlName } from '@/bench-controls';
 import { QUIET_START, quietLine, recordLoad } from '@/bench-quiet';
 /*
- * The settings menu the bench mounts, taken from the examples rather than
- * written again here: `examples/react-menus.tsx` is where a consumer reads the
- * shape of a menu built from the parts, and a second copy on this page would
- * be a second thing to keep true. `apps/site/tsconfig.json` names the file in
- * its own `include` for this import -- see the comment there.
+ * The settings menu's content, in its own component so the composition panel
+ * can print exactly what mounts (`bench-composition.ts`'s `<QualityAndRateMenu />`)
+ * rather than transcribing every line of it by hand. `examples/react-menus.tsx`'s
+ * `RateMenu` is the consumer-facing version of the same reasoning, wrapping
+ * `Player.SettingsMenu` around the same content for a reader of the examples --
+ * see `BenchSettingsMenu.tsx`'s own comment for why the two do not share code.
  */
-import { RateMenu } from '../../../../examples/react-menus';
+import { QualityAndRateMenu } from './BenchSettingsMenu';
 import BenchSwitches from './BenchSwitches';
 import BenchStats from './BenchStats';
 import CompositionPanel from './CompositionPanel';
@@ -265,7 +266,14 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
       </>
     ),
     captionsButton: <Player.CaptionsButton />,
-    settingsMenu: <RateMenu />,
+    settingsMenu: (
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger aria-label="Settings" />
+        <Player.SettingsMenuContent>
+          <QualityAndRateMenu />
+        </Player.SettingsMenuContent>
+      </Player.SettingsMenu>
+    ),
     pipButton: (
       <Player.PipButton>
         {state.pictureInPicture ? (
@@ -849,12 +857,15 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
         skin={position.skin}
         source={position.source}
       />
-      <Credit credit={position.credit} />
-      {/* The readout: the two switch groups and the quiet line in one row
-       * (2026-09-03's stage redraw), the HLS explainer under that on the one
-       * position it applies to, the live stats readout under that -- directly
-       * under the picture it reports on, not after the composition below it
-       * -- and the composition full width last. */}
+      {/* The readout: the two switch groups in their own row, the mono line
+       * under that -- the credit, the HLS explainer on the one position it
+       * applies to, and the quiet line, wrapping under 48rem
+       * (2026-09-03) -- the live stats readout under that, and the
+       * composition full width last. The credit moved here from directly
+       * under the picture: it is a fact about the switches' current
+       * position the same way the explainer and the quiet line are, not a
+       * caption on the frame, so the picture's own bottom edge now meets the
+       * sweep with nothing under it. */}
       <div className="grid gap-[var(--space-6)]">
         <div className="flex flex-wrap items-end justify-between gap-[var(--space-4)]">
           <BenchSwitches
@@ -871,9 +882,12 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
             skin={position.skin}
             source={position.source}
           />
-          <QuietLine sourceUrl={position.sourceUrl} />
+          <div className="flex flex-wrap items-baseline gap-x-[var(--space-4)] gap-y-[var(--space-1)]">
+            <Credit credit={position.credit} />
+            {position.source === 'hls' ? <HlsExplainer /> : null}
+            <QuietLine sourceUrl={position.sourceUrl} />
+          </div>
         </div>
-        {position.source === 'hls' ? <HlsExplainer /> : null}
         <BenchStats />
         <CompositionPanel html={html} changedLines={changedLines} />
       </div>
