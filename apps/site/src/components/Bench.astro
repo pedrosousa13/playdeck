@@ -306,14 +306,35 @@ for (const entry of readySources) {
   /* The raised body of the instrument, and the one element on this site that
    * takes `--elevation-instrument`. Two rows: the picture, and the sweep along
    * the bottom edge. `overflow: hidden` is what makes the band the frame's own
-   * edge rather than a strip lying under it. */
+   * edge rather than a strip lying under it.
+   *
+   * The stage's own light (2026-09-03): a soft accent glow behind the frame,
+   * a 1px ring on the frame itself, and the existing deep shadow. This is a
+   * deliberate, scoped amendment to the "no coloured glow" line in
+   * DESIGN.md's depth section -- recorded there, not silently at odds with
+   * it. */
   .bench__frame {
+    position: relative;
     display: grid;
     grid-template-rows: 1fr auto;
     overflow: hidden;
     background-color: var(--stage-field);
     border-radius: var(--radius-lg);
-    box-shadow: var(--elevation-instrument);
+    box-shadow:
+      inset 0 0 0 1px var(--color-line),
+      var(--elevation-instrument);
+  }
+
+  .bench__frame::before {
+    content: '';
+    position: absolute;
+    inset: calc(-1 * var(--space-6));
+    z-index: -1;
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--color-accent) 20%, transparent),
+      transparent 70%
+    );
   }
 
   /* The screen, and the reason a dormant instrument is worth looking at.
@@ -418,6 +439,24 @@ for (const entry of readySources) {
    * what lets it keep being the right shape once one does. */
   .bench__stage[data-bench-skin='docked'] {
     aspect-ratio: auto;
+  }
+
+  /* The crossfade on a skin flip (2026-09-03): `data-bench-skin` is the
+   * attribute `StagePortal` in `BenchIsland.tsx` already writes onto this
+   * element on every skin change (`mount.setAttribute('data-bench-skin',
+   * skin)`), so nothing new is written for this -- the flip below reads the
+   * same attribute `.bench__stage[data-bench-skin='docked']` above already
+   * keys off. `data-stage-flip` is set and cleared by `StagePortal` around
+   * that same write; see its own comment for why the drop to 0.6 has no
+   * transition and only the return to 1 does. */
+  .bench__stage {
+    opacity: 1;
+    transition: opacity 240ms var(--ease);
+  }
+
+  .bench__stage[data-stage-flip] {
+    opacity: 0.6;
+    transition: none;
   }
 
   /* One cell, and every layer in it.

@@ -727,11 +727,10 @@ const BenchIsland = ({ base, compositions }: Props) => {
         skin={position.skin}
       />
       <Credit credit={position.credit} />
-      <QuietLine sourceUrl={position.sourceUrl} />
-      {/* The readout: the switches and what the provider answered on one side,
-       * the composition they built on the other, stacked below 48rem. */}
-      <div className="grid items-start gap-[var(--space-6)] md:grid-cols-2">
-        <div className="grid gap-[var(--space-4)]">
+      {/* The readout: the two switch groups and the quiet line in one row
+       * (2026-09-03's stage redraw), the composition full width below. */}
+      <div className="grid gap-[var(--space-6)]">
+        <div className="flex flex-wrap items-end justify-between gap-[var(--space-4)]">
           <BenchSwitches
             onSkin={(skin: SkinName) =>
               setPosition((current) => ({ ...current, skin }))
@@ -746,6 +745,7 @@ const BenchIsland = ({ base, compositions }: Props) => {
             skin={position.skin}
             source={position.source}
           />
+          <QuietLine sourceUrl={position.sourceUrl} />
         </div>
         <CompositionPanel html={html} />
       </div>

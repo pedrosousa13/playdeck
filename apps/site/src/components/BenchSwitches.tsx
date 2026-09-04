@@ -100,7 +100,7 @@ function Group<T>({
       <legend className="p-0 font-mono text-[length:var(--text-fn)] tracking-[var(--tracking-fn)] text-[var(--color-ink-subtle)] uppercase">
         {legend}
       </legend>
-      <div className="mt-[var(--space-2)] flex flex-wrap gap-[var(--space-2)]">
+      <div className="mt-[var(--space-2)] inline-flex flex-wrap gap-[2px] rounded-[var(--radius-md)] border-[length:var(--line-width)] border-solid border-[var(--color-line)] bg-[var(--color-sunken)] p-[2px]">
         {positions.map((position) => {
           const chosen = position.value === selected;
           return (
@@ -112,21 +112,16 @@ function Group<T>({
             <label
               key={position.token}
               className={cn(
-                // The pressed state is the accent boundary the theme switch
-                // already presses to, rather than a lift: no control on this
-                // site lifts. Rest, hover and focus are the other three, and
-                // focus is `base.css`'s one outline drawn on the input below.
-                //
                 // The hairline is `var(--line-width)` and not Tailwind's bare
                 // `border`, which is its own 1px. The two happen to be equal
                 // today, which is exactly why the token has to be written: a
                 // literal that agrees with a token by coincidence is the one
                 // that stops agreeing silently. `index.astro` spells it the
                 // same way for the install button and the close's rules.
-                'relative inline-flex min-h-[var(--hit-target)] cursor-pointer items-center rounded-[var(--radius-md)] border-[length:var(--line-width)] border-solid border-[var(--color-line-strong)] px-[var(--space-4)] font-mono text-[length:var(--text-xs)] tracking-[var(--tracking-fn)] active:border-[var(--color-accent)]',
+                'relative inline-flex min-h-[var(--hit-target)] cursor-pointer items-center rounded-[calc(var(--radius-md)-2px)] px-[var(--space-4)] font-mono text-[length:var(--text-xs)] tracking-[var(--tracking-fn)]',
                 chosen
-                  ? 'bg-[var(--color-accent)] text-[var(--color-field)]'
-                  : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-sunken)] hover:text-[var(--color-ink)]'
+                  ? 'bg-[var(--color-ink)] text-[var(--color-surface)]'
+                  : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]'
               )}
             >
               <input
@@ -178,7 +173,7 @@ export default function BenchSwitches({
   onSkin
 }: BenchSwitchesProps) {
   return (
-    <div className="grid gap-[var(--space-5)]">
+    <div className="flex flex-wrap items-end gap-[var(--space-5)]">
       <Group
         group="source"
         legend="SOURCE"
