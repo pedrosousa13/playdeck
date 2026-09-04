@@ -540,6 +540,29 @@ test.each([
   }
 );
 
+// The iframe is what draws YouTube's own title bar on hover and its "More
+// videos" shelf on pause -- neither is reachable through a player var.
+// Chromeless mode keeps the pointer out of the iframe entirely so a
+// consumer's own click layer, not YouTube's, ever sees it hover; `controls:
+// true` leaves the pointer alone because there YouTube's chrome is the
+// consumer's chosen control surface.
+test.each([
+  ['unset', undefined, 'none'],
+  ['false', false, 'none'],
+  ['true', true, '']
+] as const)(
+  'sets the iframe pointer-events to the expected value when the controls option is %s',
+  async (_label, controls, expected) => {
+    const { fake, provider } = createAdapter('M7lc1UVf-VE', { controls });
+
+    await provider.attach();
+    await provider.load();
+
+    const harness = fake.players[0]!;
+    expect(harness.iframe.style.pointerEvents).toBe(expected);
+  }
+);
+
 // SIDEPRO-210. `loop: 1` on its own is a documented no-op for a single-video
 // embed -- YouTube loops a *playlist*, so the one video has to be named as its
 // own single-entry playlist for the loop var to mean anything. Setting one
