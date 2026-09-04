@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
-    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && pagefind --site dist",
-    "build:based": "ASTRO_TELEMETRY_DISABLED=1 astro build --base /playdeck/ --outDir dist-base && pagefind --site dist-base",
+    "build": "node ../../scripts/media-sprite-fright.mjs && ASTRO_TELEMETRY_DISABLED=1 astro build && pagefind --site dist",
+    "build:based": "node ../../scripts/media-sprite-fright.mjs && ASTRO_TELEMETRY_DISABLED=1 astro build --base /playdeck/ --outDir dist-base && pagefind --site dist-base",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview"
   },
   "dependencies": {
