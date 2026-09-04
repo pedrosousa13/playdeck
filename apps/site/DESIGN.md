@@ -2049,6 +2049,12 @@ than through the examples' own `RateMenu`, and the panel prints
 `<QualityAndRateMenu />` inside `Player.SettingsMenuContent` — what mounts,
 not a transcription of it.
 
+**And the mono row under the switches gained the two blocks that used to
+stack under it on their own, the same day.** The HLS explainer folds into
+the quiet line's own row now (explainer first, quiet line after, wrapping
+under 48rem), and the credit — see the attribution passage below — opens
+that same row from its start.
+
 **The page carries one block of code and it is generated, which retires the one
 exception `/` used to hold.** The fifth version wrote four snippets by hand in
 its own frontmatter, and this document defended them: they were three or four
@@ -2432,6 +2438,16 @@ the type rule above gives sentences to Sans regardless of size. It is not a
 footer: a footer would put the credit somewhere a reader has to leave the
 argument to find, and CC BY does not ask for that, only for the credit to be
 findable near the work.
+
+**"The same visual position" stopped being true on 2026-09-04, for the
+scripted half.** The homepage structure review moved `BenchIsland.tsx`'s
+`Credit` off the picture entirely: it no longer mounts directly under the
+stage, it opens the mono row that also carries the HLS explainer and the
+quiet line, at that row's own start, so the frame's bottom edge now meets
+the sweep with nothing under it. `Bench.astro`'s own `<noscript>` paragraph
+is unmoved — there is no switch row for it to join without a script to build
+one, and CC BY's obligation is only that the credit be findable near the
+work, which a no-JavaScript reader still gets directly under the frame.
 
 `public/archetype-captions.vtt` is the same rule a second time, and is stated
 here so the copy does not read as an accident. The archetypes mount in two

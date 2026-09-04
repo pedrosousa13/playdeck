@@ -857,12 +857,15 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
         skin={position.skin}
         source={position.source}
       />
-      <Credit credit={position.credit} />
-      {/* The readout: the two switch groups and the quiet line in one row
-       * (2026-09-03's stage redraw), the HLS explainer under that on the one
-       * position it applies to, the live stats readout under that -- directly
-       * under the picture it reports on, not after the composition below it
-       * -- and the composition full width last. */}
+      {/* The readout: the two switch groups in their own row, the mono line
+       * under that -- the credit, the HLS explainer on the one position it
+       * applies to, and the quiet line, wrapping under 48rem
+       * (2026-09-03) -- the live stats readout under that, and the
+       * composition full width last. The credit moved here from directly
+       * under the picture: it is a fact about the switches' current
+       * position the same way the explainer and the quiet line are, not a
+       * caption on the frame, so the picture's own bottom edge now meets the
+       * sweep with nothing under it. */}
       <div className="grid gap-[var(--space-6)]">
         <div className="flex flex-wrap items-end justify-between gap-[var(--space-4)]">
           <BenchSwitches
@@ -879,9 +882,12 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
             skin={position.skin}
             source={position.source}
           />
-          <QuietLine sourceUrl={position.sourceUrl} />
+          <div className="flex flex-wrap items-baseline gap-x-[var(--space-4)] gap-y-[var(--space-1)]">
+            <Credit credit={position.credit} />
+            {position.source === 'hls' ? <HlsExplainer /> : null}
+            <QuietLine sourceUrl={position.sourceUrl} />
+          </div>
         </div>
-        {position.source === 'hls' ? <HlsExplainer /> : null}
         <BenchStats />
         <CompositionPanel html={html} changedLines={changedLines} />
       </div>
