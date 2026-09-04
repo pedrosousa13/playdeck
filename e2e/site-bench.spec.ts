@@ -201,6 +201,25 @@ test('the composition prints the full control tree, and tracks the source switch
   expect(tree(await printed(page))).toBe(tree(before));
 });
 
+/**
+ * `BenchIsland.tsx`'s `HlsExplainer`: what HLS is, printed only while the
+ * `hls` position is selected -- the other three positions are named by host,
+ * not by protocol, and carry no word that needs unpacking the same way. No
+ * press needed for either half: switching the source switch moves the
+ * printed composition without pressing play (see the source-switch test
+ * above), so this reaches `vimeo` with no third-party network to guard.
+ */
+test('the HLS explainer is visible at rest and gone once vimeo is selected', async ({
+  page
+}) => {
+  await page.goto(landing);
+  const explainer = page.locator('[data-bench-explainer]');
+  await expect(explainer).toBeVisible();
+
+  await position(page, 'source', 'vimeo').click();
+  await expect(explainer).toBeHidden();
+});
+
 test('the skin group offers theme and docked, in that order, and no third position', async ({
   page
 }) => {

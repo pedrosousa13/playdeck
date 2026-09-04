@@ -573,6 +573,34 @@ const QuietLine = ({ sourceUrl }: { readonly sourceUrl: string }) => {
 };
 
 /**
+ * What HLS is, for a reader who is not a video person and does not recognise
+ * the word the source switch prints. Shown only for the `hls` position --
+ * the other three positions are named by host, not by protocol, and carry no
+ * word that needs unpacking the same way.
+ *
+ * Worded around this bench's own clip rather than HLS in general: three
+ * qualities and bandwidth-driven switching are what
+ * `scripts/media-sprite-fright.mjs`'s ladder and hls.js's own adaptive
+ * bitrate selection actually do here (`e2e/site-bench.spec.ts`'s stats-readout
+ * test pins the same three-rung ladder), not a claim about every HLS stream
+ * anywhere.
+ *
+ * `bench__explainer` is `.bench__quiet`'s own treatment under a name of its
+ * own -- `--text-fn`, mono, `--color-ink-subtle` -- because this paragraph
+ * qualifies the switch above it rather than captioning it, the same relation
+ * `.bench__quiet` has to the frame, but it is a different sentence with a
+ * different lifetime (present only on one position, not replaced on every
+ * press), so it gets its own class in `Bench.astro`'s stylesheet rather than
+ * borrowing the quiet line's.
+ */
+const HlsExplainer = () => (
+  <p data-bench-explainer className="bench__explainer">
+    HLS, HTTP Live Streaming: the clip is cut into short segments at three
+    qualities, and the player switches between them as your bandwidth changes.
+  </p>
+);
+
+/**
  * The CC BY credit for whichever film the source switch has selected.
  *
  * `Bench.astro` prints this same markup as static text inside `<noscript>`,
@@ -823,8 +851,10 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
       />
       <Credit credit={position.credit} />
       {/* The readout: the two switch groups and the quiet line in one row
-       * (2026-09-03's stage redraw), the composition full width below, and
-       * the live stats readout under that. */}
+       * (2026-09-03's stage redraw), the HLS explainer under that on the one
+       * position it applies to, the live stats readout under that -- directly
+       * under the picture it reports on, not after the composition below it
+       * -- and the composition full width last. */}
       <div className="grid gap-[var(--space-6)]">
         <div className="flex flex-wrap items-end justify-between gap-[var(--space-4)]">
           <BenchSwitches
@@ -843,8 +873,9 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
           />
           <QuietLine sourceUrl={position.sourceUrl} />
         </div>
-        <CompositionPanel html={html} changedLines={changedLines} />
+        {position.source === 'hls' ? <HlsExplainer /> : null}
         <BenchStats />
+        <CompositionPanel html={html} changedLines={changedLines} />
       </div>
     </Player.Root>
   );
