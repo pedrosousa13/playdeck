@@ -130,7 +130,7 @@ pre {
  * Scoped to `[data-bench-composition]` -- the attribute that same transformer
  * stamps on this one block -- rather than added to `.astro-code` itself,
  * because every other `.astro-code` block on this site (`/start`,
- * `/archetypes`) already relies on that UA margin for its own vertical
+ * `/examples`) already relies on that UA margin for its own vertical
  * spacing: measured at 14px, live spacing a site-wide `margin: 0` would
  * silently remove. `overflow-x: auto` is what lets a line too wide for the
  * column scroll, the behaviour the deleted `<pre>` in `CompositionPanel.tsx`

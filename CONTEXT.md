@@ -417,7 +417,7 @@ shares no tokens with it, and the two are deliberately separate.
 **Archetype**:
 A composed example player standing for a whole class of real product — the
 streaming-service layout and the course-platform layout, served on
-`/archetypes` and documented in `docs/archetypes.md`. An archetype is a
+`/examples` and documented in `docs/archetypes.md`. An archetype is a
 composition built from the same published primitives a consumer would use, not a
 preset or a variant the library ships: what it demonstrates is that the markup
 is yours. It is a _player_, never a kind of page — which page treatment a route

@@ -44,7 +44,7 @@
  * pointed at the previous film -- a still from one clip over a video of
  * another, on the page whose argument is that nothing here claims what it
  * cannot show. `DESIGN.md` records that failure under the heading about the
- * `media` prop `/archetypes`' compositions still carry. The fix there was to
+ * `media` prop `/examples`' compositions still carry. The fix there was to
  * bundle the clip and the words describing it into one prop, so a surface
  * replacing one could not fail to replace the other.
  *

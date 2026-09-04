@@ -4,7 +4,7 @@
  *
  * `astro.config.ts` hands it to `markdown.shikiConfig`, which is what colours
  * the fences inside the package READMEs the reference pages render. Astro's
- * `<Code>` component — which `/archetypes` uses for the source wells it prints
+ * `<Code>` component — which `/examples` uses for the source wells it prints
  * beside its players, and `/start` for the compositions it prints from
  * `examples/` — reads none of that configuration: it takes its
  * own props and defaults to a single `github-dark` theme with

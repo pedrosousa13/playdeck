@@ -62,7 +62,7 @@ const destinations = [
   { label: 'Guides', path: 'guides/' },
   { label: 'Reference', path: 'reference/' },
   { label: 'Providers', path: 'providers/' },
-  { label: 'Archetypes', path: 'archetypes/' }
+  { label: 'Examples', path: 'examples/' }
 ] as const;
 
 /** The labels, in order, which is what the strip's links have to read. */
@@ -163,9 +163,9 @@ test('aria-current marks the section the reader is in, and only that one', async
     'Providers'
   ]);
 
-  await page.goto(`${SITE}/archetypes/`);
+  await page.goto(`${SITE}/examples/`);
   await expect(nav(page).locator('a[aria-current="page"]')).toHaveText([
-    'Archetypes'
+    'Examples'
   ]);
 
   // `/` is in none of the sections the strip names, so nothing in it claims
@@ -195,7 +195,7 @@ const routes = [
   'reference/core/',
   'providers/',
   'providers/youtube/',
-  'archetypes/',
+  'examples/',
   'design/'
 ];
 

@@ -240,7 +240,7 @@ const SYNTAX = {
 
 /**
  * The two pages measured, and they are two because the site highlights code
- * through two readers of `src/shiki.ts` that share no code path: `/archetypes`
+ * through two readers of `src/shiki.ts` that share no code path: `/examples`
  * passes it to Astro's `<Code>` component, and a reference page gets it from
  * `markdown.shikiConfig` by way of the rendered README. A repaint that reached
  * one and not the other would leave half the site failing.
@@ -258,7 +258,7 @@ const SYNTAX = {
  * loudly, rather than leaving this measuring seven colours and saying nothing
  * at all about the eighth.
  */
-const HIGHLIGHTED = ['/archetypes/', '/reference/react/'] as const;
+const HIGHLIGHTED = ['/examples/', '/reference/react/'] as const;
 
 /** A used `rgb(...)` as the lower-case hex the palette above is written in. */
 const paintedHex = (value: string): string => {
