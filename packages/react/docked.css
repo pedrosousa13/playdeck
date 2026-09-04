@@ -55,6 +55,26 @@
  *                                  picture and the settings/captions menu's
  *                                  own border, since there is no scrim here
  *                                  to supply either edge)
+ *   --playdeck-color-accent-tint   #8fb0f0 light / #9dd0ff dark  (new; the
+ *                                  seek fill's gradient end. The dark value
+ *                                  is theme.css's own accent-tint default,
+ *                                  reused because docked's dark accent is
+ *                                  already the same colour as theme's)
+ *   --playdeck-control-pressed     rgb(0 0 0 / 0.1) light /
+ *                                  rgb(255 255 255 / 0.2) dark  (new; one
+ *                                  step past --playdeck-control-hover's own
+ *                                  0.06/0.12, the same "one darker" step
+ *                                  theme.css takes)
+ *   --playdeck-color-duration      #5c5c5c light / #a3a3a3 dark  (paints the
+ *                                  duration Time only, dimming it below the
+ *                                  current time's on-surface ink the same way
+ *                                  theme.css's own duration rule does; that
+ *                                  file declares the token with a single
+ *                                  `rgb(255 255 255 / 0.64)` default built for
+ *                                  its own dark scrim, so this pair is a
+ *                                  second default rather than an invention,
+ *                                  the same shape as --playdeck-color-accent-
+ *                                  tint and --playdeck-control-pressed above)
  *
  * Non-text contrast (WCAG 2.2 1.4.11's 3:1 floor for a UI component's own
  * boundary, the same rule `theme.css`'s `slider non-text contrast` describe in
@@ -201,7 +221,7 @@
     block-size: var(--playdeck-control-size, 2.75rem);
     padding: 0;
     border: 0;
-    border-radius: var(--playdeck-radius, 0.375rem);
+    border-radius: var(--playdeck-radius, 0.625rem);
     color: var(--playdeck-color-on-surface, #1c1c1e);
     background-color: transparent;
     cursor: pointer;
@@ -217,6 +237,18 @@
     [data-playdeck-part='settings-menu-trigger']
   ):where(:hover) {
     background-color: var(--playdeck-control-hover, rgb(0 0 0 / 0.06));
+  }
+
+  :where(
+    [data-playdeck-part='play-button'],
+    [data-playdeck-part='mute-button'],
+    [data-playdeck-part='captions-button'],
+    [data-playdeck-part='fullscreen-button'],
+    [data-playdeck-part='pip-button'],
+    [data-playdeck-part='airplay-button'],
+    [data-playdeck-part='settings-menu-trigger']
+  ):where(:active) {
+    background-color: var(--playdeck-control-pressed, rgb(0 0 0 / 0.1));
   }
 
   :where([data-playdeck-part]):where(:focus-visible) {
@@ -238,6 +270,12 @@
 
   :where([data-playdeck-part='time'][data-time-type='duration']) {
     margin-inline-end: auto;
+    /* Colour, not opacity: an `opacity` short of 1 here reads as mid-
+     * transition to `e2e/site-landing.spec.ts`'s `unsettled()` helper under
+     * `prefers-reduced-motion: reduce`, where nothing on the page is meant to
+     * still be animating. `theme.css`'s own duration rule carries the same
+     * reasoning at length. */
+    color: var(--playdeck-color-duration, #5c5c5c);
   }
 
   /* ---- sliders ----------------------------------------------------------- */
@@ -247,13 +285,18 @@
     min-inline-size: 4rem;
   }
 
+  :where([data-playdeck-part='seek-slider']:hover),
+  :where([data-playdeck-part='seek-slider']:focus-within) {
+    --playdeck-slider-thickness: 0.5rem;
+  }
+
   :where([data-playdeck-part='seek-buffered']) {
     position: absolute;
     inset-inline: 0;
     inset-block-start: 50%;
-    block-size: var(--playdeck-slider-thickness, 0.25rem);
+    block-size: var(--playdeck-slider-thickness, 0.375rem);
     translate: 0 -50%;
-    border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+    border-radius: calc(var(--playdeck-slider-thickness, 0.375rem) / 2);
     background-color: var(--playdeck-color-track, #84847d);
     pointer-events: none;
   }
@@ -328,8 +371,8 @@
       [data-playdeck-part='seek-slider-input'],
       [data-playdeck-part='volume-slider']
     )::-moz-range-track {
-      block-size: var(--playdeck-slider-thickness, 0.25rem);
-      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      block-size: var(--playdeck-slider-thickness, 0.375rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.375rem) / 2);
       background-color: var(--playdeck-color-track, #84847d);
     }
 
@@ -337,8 +380,8 @@
       [data-playdeck-part='seek-slider-input'],
       [data-playdeck-part='volume-slider']
     )::-moz-range-progress {
-      block-size: var(--playdeck-slider-thickness, 0.25rem);
-      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      block-size: var(--playdeck-slider-thickness, 0.375rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.375rem) / 2);
       background-color: var(--playdeck-color-accent, #2b52d6);
     }
 
@@ -347,8 +390,8 @@
       [data-playdeck-part='volume-slider']
     )::-moz-range-thumb {
       box-sizing: border-box;
-      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
-      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      inline-size: calc(var(--playdeck-slider-thickness, 0.375rem) * 4);
+      block-size: calc(var(--playdeck-slider-thickness, 0.375rem) * 4);
       border: 2px solid var(--playdeck-color-thumb-ring, #000);
       border-radius: 50%;
       background-color: var(--playdeck-color-accent, #2b52d6);
@@ -362,18 +405,43 @@
     :where([data-playdeck-part='seek-progress']) {
       inset-block: 0;
       border-radius: inherit;
-      background-color: var(--playdeck-color-accent, #2b52d6);
+      background: linear-gradient(
+        to right,
+        var(--playdeck-color-accent, #2b52d6),
+        var(--playdeck-color-accent-tint, #8fb0f0)
+      );
     }
 
     :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
       appearance: none;
       box-sizing: border-box;
-      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
-      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      inline-size: 0;
+      block-size: 0;
+      opacity: 1;
       outline: none;
       border: 2px solid var(--playdeck-color-thumb-ring, #000);
       border-radius: 50%;
       background-color: var(--playdeck-color-accent, #2b52d6);
+    }
+
+    :where([data-playdeck-part='seek-slider-input'])::-moz-range-thumb {
+      inline-size: 0;
+      block-size: 0;
+      opacity: 1;
+    }
+
+    :where(
+        [data-playdeck-part='seek-slider']:hover,
+        [data-playdeck-part='seek-slider']:focus-within
+      )
+      :where([data-playdeck-part='seek-slider-input'])::-moz-range-thumb,
+    :where(
+        [data-playdeck-part='seek-slider']:hover,
+        [data-playdeck-part='seek-slider']:focus-within
+      )
+      :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
+      inline-size: 1rem;
+      block-size: 1rem;
     }
 
     :where([data-playdeck-part='seek-slider-input'])::-moz-range-track,
@@ -407,9 +475,16 @@
         [data-playdeck-part='seek-slider-input'],
         [data-playdeck-part='volume-slider']
       )::-moz-range-thumb,
-      :where([data-playdeck-part='seek-progress']),
       :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
         background-color: var(--playdeck-color-accent, #3ea6ff);
+      }
+
+      :where([data-playdeck-part='seek-progress']) {
+        background: linear-gradient(
+          to right,
+          var(--playdeck-color-accent, #3ea6ff),
+          var(--playdeck-color-accent-tint, #9dd0ff)
+        );
       }
     }
   }
@@ -600,6 +675,10 @@
       color: var(--playdeck-color-on-surface, #ededed);
     }
 
+    :where([data-playdeck-part='time'][data-time-type='duration']) {
+      color: var(--playdeck-color-duration, #a3a3a3);
+    }
+
     :where([data-playdeck-part='seek-buffered']) {
       background-color: var(--playdeck-color-track, #6d6d70);
     }
@@ -636,6 +715,18 @@
       [data-playdeck-part='menu-radio-item']
     ):where(:hover) {
       background-color: var(--playdeck-control-hover, rgb(255 255 255 / 0.12));
+    }
+
+    :where(
+      [data-playdeck-part='play-button'],
+      [data-playdeck-part='mute-button'],
+      [data-playdeck-part='captions-button'],
+      [data-playdeck-part='fullscreen-button'],
+      [data-playdeck-part='pip-button'],
+      [data-playdeck-part='airplay-button'],
+      [data-playdeck-part='settings-menu-trigger']
+    ):where(:active) {
+      background-color: var(--playdeck-control-pressed, rgb(255 255 255 / 0.2));
     }
 
     :where([data-playdeck-part]):where(:focus-visible) {

@@ -1,0 +1,189 @@
+---
+/**
+ * The four cards that carry this page's advertising: compose it, style it,
+ * ask before you render, recover from refused autoplay. Composability and
+ * customisability are demonstrated by the bench above this component;
+ * capability querying and autoplay recovery are not — see `DESIGN.md`'s
+ * capability-argument section and this spec's own rulings for why the two
+ * stay claims rather than demonstrations here. Card 03 is not a capability
+ * table: it names one hook and no provider, the same restraint the bench's
+ * own history already settled on.
+ *
+ * Every identifier in every snippet is real: `usePlayerState` and
+ * `capabilities` are exported from `@playdeck/react`'s and `@playdeck/core`'s
+ * public surfaces respectively, and `'audible-then-muted'` is a literal
+ * member of `AutoplayMode` in `packages/core/src/types.ts`. Highlighted at
+ * build time by the same `shikiConfig` the bench's own composition panel
+ * uses, so the two never colour a token differently from each other.
+ */
+import { codeToHtml } from 'shiki';
+import type { ShikiTransformer } from 'shiki';
+import { shikiConfig } from '../shiki';
+
+/**
+ * `codeToHtml`'s own output carries `class="shiki shiki-themes github-light
+ * github-dark"`, not the `astro-code` class `base.css`'s token-colour
+ * selectors key on and that Astro's own `<Code>` component adds
+ * automatically — this component calls `codeToHtml` directly, the same
+ * reason `Bench.astro`'s own `addBenchPreAttributes` hook exists, and this
+ * one mirrors it. Without it every snippet below rendered in the inherited
+ * ink colour, with no well and no horizontal scroll, and its raw width
+ * pushed the page wider than the viewport at 320px.
+ */
+const addCardPreAttributes: ShikiTransformer['pre'] = function (hast) {
+  const existingClass = hast.properties.class;
+  const classText = Array.isArray(existingClass)
+    ? existingClass.join(' ')
+    : (existingClass ?? '');
+  hast.properties.class = `${classText} astro-code`.trim();
+  return hast;
+};
+
+const base = import.meta.env.BASE_URL;
+
+type Card = {
+  readonly headline: string;
+  readonly lines: readonly string[];
+  readonly snippet: string;
+  readonly href: string;
+};
+
+const cards: readonly Card[] = [
+  {
+    headline: 'Compose it',
+    lines: [
+      'Every control is a component. Reorder them, drop one, put your own',
+      'between them.'
+    ],
+    snippet: `<Player.Controls>\n  <Player.PlayButton />\n  <Logo />\n  <Player.Time type="current" />\n</Player.Controls>`,
+    href: `${base}reference/`
+  },
+  {
+    headline: 'Style it',
+    lines: [
+      'No CSS ships in the bundle. Two authored themes, or write your own',
+      'against stable part names.'
+    ],
+    snippet: `[data-playdeck-part='play-button'] {\n  border-radius: 999px;\n}`,
+    href: `${base}design/`
+  },
+  {
+    headline: 'Ask before you render',
+    lines: [
+      'Every provider declares what it can do. A control it cannot honour',
+      'renders nothing, and you can read the same answer.'
+    ],
+    snippet: `usePlayerState((s) => s.capabilities.pictureInPicture)`,
+    href: `${base}guides/capabilities-matrix/`
+  },
+  {
+    headline: 'Recover from refused autoplay',
+    lines: [
+      'Ask for sound. If the browser refuses, the player retries muted once',
+      'and tells you, so you can draw the unmute.'
+    ],
+    snippet: `<Player.Root autoplay="audible-then-muted">`,
+    href: `${base}reference/`
+  }
+];
+
+const highlighted = await Promise.all(
+  cards.map((card) =>
+    codeToHtml(card.snippet, {
+      lang: 'tsx',
+      ...shikiConfig,
+      transformers: [
+        ...shikiConfig.transformers,
+        { name: 'playdeck:card-pre', pre: addCardPreAttributes }
+      ]
+    })
+  )
+);
+---
+
+<section class="cards">
+  {
+    cards.map((card, index) => (
+      <a class="card" data-feature-card href={card.href}>
+        <span class="card__number">{String(index + 1).padStart(2, '0')}</span>
+        <h2 class="card__headline">{card.headline}</h2>
+        {card.lines.map((line) => (
+          <p class="card__line">{line}</p>
+        ))}
+        <div class="card__snippet" set:html={highlighted[index]} />
+      </a>
+    ))
+  }
+</section>
+
+<style>
+  .cards {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+    margin-block-start: var(--space-8);
+  }
+
+  @media (min-width: 48rem) {
+    .cards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .card {
+    display: grid;
+    gap: var(--space-2);
+    align-content: start;
+    padding: var(--space-5);
+    color: inherit;
+    text-decoration: none;
+    background-color: var(--color-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--elevation-panel);
+    transition: transform var(--duration-fast) var(--ease);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .card:hover {
+      transform: translateY(-2px);
+    }
+  }
+
+  .card__number {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    letter-spacing: var(--tracking-fn);
+    color: var(--color-ink-subtle);
+  }
+
+  .card__headline {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
+  }
+
+  .card__line {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+
+  /* `min-width: 0` on the wrapper for the same reason
+   * `CompositionPanel.tsx`'s own comment gives: it is the grid item
+   * `.card`'s layout actually constrains (the `<pre>` inside is one level
+   * down), and a grid item's automatic minimum size is its content's width
+   * unless something clips or scrolls that item itself. `overflow-x: auto`
+   * on the block below is what `Astro`'s own `<Code>` component would set as
+   * an HTML attribute on a block it rendered; `addCardPreAttributes` above
+   * only reaches the class, not that attribute, so it is set here instead. */
+  .card__snippet {
+    min-width: 0;
+  }
+
+  .card__snippet :global(.astro-code) {
+    margin: 0;
+    margin-block-start: var(--space-2);
+    overflow-x: auto;
+    font-size: var(--text-xs);
+  }
+</style>

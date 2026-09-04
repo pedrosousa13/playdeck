@@ -38,11 +38,15 @@
  *   Color        --playdeck-color-surface       rgb(0 0 0 / 0.72)
  *                --playdeck-color-on-surface    #fff
  *                --playdeck-color-accent        #3ea6ff
+ *                --playdeck-color-accent-tint   #9dd0ff
  *                --playdeck-color-track         rgb(255 255 255 / 0.36)
  *                --playdeck-color-buffered      rgb(255 255 255 / 0.7)
  *                --playdeck-color-thumb-ring    #000
  *                --playdeck-color-focus         #fff
  *                --playdeck-color-backdrop      #000
+ *                --playdeck-color-hairline      #d9d9d6 (phone docking only)
+ *                --playdeck-color-duration      rgb(255 255 255 / 0.64)
+ *                                                (duration Time only)
  *   Typography   --playdeck-font-family         system-ui stack
  *                --playdeck-font-size           0.875rem
  *                --playdeck-font-size-small     0.8125rem
@@ -56,7 +60,8 @@
  *                --playdeck-activation-size     4rem
  *                --playdeck-control-icon-size   1.25rem
  *                --playdeck-control-hover       rgb(255 255 255 / 0.12)
- *                --playdeck-slider-thickness    0.25rem
+ *                --playdeck-slider-thickness    0.375rem
+ *                --playdeck-control-pressed     rgb(255 255 255 / 0.2)
  *   Overlays     --playdeck-overlay-opacity     1
  *                --playdeck-overlay-scrim       bottom-up black gradient
  *   Motion       --playdeck-transition-duration 150ms
@@ -205,7 +210,7 @@
     color: var(--playdeck-color-on-surface, #fff);
     background: var(
       --playdeck-overlay-scrim,
-      linear-gradient(to top, rgb(0 0 0 / 0.72), rgb(0 0 0 / 0))
+      linear-gradient(to top, rgb(0 0 0 / 0.78), rgb(0 0 0 / 0) 65%)
     );
     opacity: var(--playdeck-overlay-opacity, 1);
     transition: opacity var(--playdeck-transition-duration, 150ms)
@@ -270,7 +275,7 @@
     block-size: var(--playdeck-control-size, 2.75rem);
     padding: 0;
     border: 0;
-    border-radius: var(--playdeck-radius, 0.375rem);
+    border-radius: var(--playdeck-radius, 0.625rem);
     color: var(--playdeck-color-on-surface, #fff);
     background-color: transparent;
     cursor: pointer;
@@ -286,6 +291,18 @@
     [data-playdeck-part='settings-menu-trigger']
   ):where(:hover) {
     background-color: var(--playdeck-control-hover, rgb(255 255 255 / 0.12));
+  }
+
+  :where(
+    [data-playdeck-part='play-button'],
+    [data-playdeck-part='mute-button'],
+    [data-playdeck-part='captions-button'],
+    [data-playdeck-part='fullscreen-button'],
+    [data-playdeck-part='pip-button'],
+    [data-playdeck-part='airplay-button'],
+    [data-playdeck-part='settings-menu-trigger']
+  ):where(:active) {
+    background-color: var(--playdeck-control-pressed, rgb(255 255 255 / 0.2));
   }
 
   :where([data-playdeck-part]):where(:focus-visible) {
@@ -315,6 +332,21 @@
    * untimed branches, so the margin survives a duration that has no value. */
   :where([data-playdeck-part='time'][data-time-type='duration']) {
     margin-inline-end: auto;
+    /* The current time stays full ink; only the total dims, and it dims by
+     * its own colour token rather than `opacity`: an `opacity` short of 1 here
+     * reads as mid-transition to anything that treats "not fully opaque" as
+     * unsettled, which is exactly what `e2e/site-landing.spec.ts`'s
+     * `unsettled()` helper does under `prefers-reduced-motion: reduce`, where
+     * nothing on the page is meant to still be animating. A translucent
+     * colour reaches the same look without that false read: composited over
+     * the same scrim, `rgb(255 255 255 / 0.64)` paints the identical pixel
+     * `opacity: 0.64` did, but the element's own `opacity` stays 1. `theme.css`
+     * has no selector that can reach a *consumer's* separator text between the
+     * two `Player.Time`s (it carries no `data-playdeck-part` and there is no
+     * previous-sibling combinator in CSS), so a composition that wants its
+     * own separator dimmed to match does that itself — see `BenchIsland.tsx`
+     * if this page's own separator should follow suit. */
+    color: var(--playdeck-color-duration, rgb(255 255 255 / 0.64));
   }
 
   /* ---- sliders ----------------------------------------------------------- */
@@ -326,13 +358,26 @@
     min-inline-size: 4rem;
   }
 
+  /* Growth by custom-property redeclaration, not by a hover-scoped copy of
+   * every rule below that reads the thickness: every one of them already
+   * reads `--playdeck-slider-thickness` with a fallback, and a custom
+   * property set here is inherited by all of them, so overriding the
+   * inherited value is what makes "every rule that reads it follows" true.
+   * `:focus-within` rather than `:focus`, because the element carrying focus
+   * is `seek-slider-input`, a descendant of this part and not this part
+   * itself. */
+  :where([data-playdeck-part='seek-slider']:hover),
+  :where([data-playdeck-part='seek-slider']:focus-within) {
+    --playdeck-slider-thickness: 0.5rem;
+  }
+
   :where([data-playdeck-part='seek-buffered']) {
     position: absolute;
     inset-inline: 0;
     inset-block-start: 50%;
-    block-size: var(--playdeck-slider-thickness, 0.25rem);
+    block-size: var(--playdeck-slider-thickness, 0.375rem);
     translate: 0 -50%;
-    border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+    border-radius: calc(var(--playdeck-slider-thickness, 0.375rem) / 2);
     background-color: var(--playdeck-color-track, rgb(255 255 255 / 0.36));
     pointer-events: none;
   }
@@ -433,8 +478,8 @@
       [data-playdeck-part='seek-slider-input'],
       [data-playdeck-part='volume-slider']
     )::-moz-range-track {
-      block-size: var(--playdeck-slider-thickness, 0.25rem);
-      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      block-size: var(--playdeck-slider-thickness, 0.375rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.375rem) / 2);
       background-color: var(--playdeck-color-track, rgb(255 255 255 / 0.36));
     }
 
@@ -442,8 +487,8 @@
       [data-playdeck-part='seek-slider-input'],
       [data-playdeck-part='volume-slider']
     )::-moz-range-progress {
-      block-size: var(--playdeck-slider-thickness, 0.25rem);
-      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      block-size: var(--playdeck-slider-thickness, 0.375rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.375rem) / 2);
       background-color: var(--playdeck-color-accent, #3ea6ff);
     }
 
@@ -452,8 +497,8 @@
       [data-playdeck-part='volume-slider']
     )::-moz-range-thumb {
       box-sizing: border-box;
-      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
-      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      inline-size: calc(var(--playdeck-slider-thickness, 0.375rem) * 4);
+      block-size: calc(var(--playdeck-slider-thickness, 0.375rem) * 4);
       border: 2px solid var(--playdeck-color-thumb-ring, #000);
       border-radius: 50%;
       background-color: var(--playdeck-color-accent, #3ea6ff);
@@ -474,20 +519,64 @@
     :where([data-playdeck-part='seek-progress']) {
       inset-block: 0;
       border-radius: inherit;
-      background-color: var(--playdeck-color-accent, #3ea6ff);
+      background: linear-gradient(
+        to right,
+        var(--playdeck-color-accent, #3ea6ff),
+        var(--playdeck-color-accent-tint, #9dd0ff)
+      );
     }
 
     :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
       appearance: none;
       box-sizing: border-box;
-      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
-      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
-      /* The ring is this border; the `outline` above also applies, and the two
-       * together draw a 20px thumb beside Gecko's 16px. */
+      /* Hidden at rest, 16px on hover/focus below. Zero size rather than
+       * `opacity: 0` — a zero-size box has no hit area of its own, so a
+       * press lands on the track underneath it; an invisible-but-full-size
+       * thumb would still eat that click. Opacity stays at its default 1, on
+       * purpose: nothing here relies on opacity to hide it.
+       *
+       * The ring is still this border, and the `outline` above still also
+       * applies: on hover/focus the two together draw a 20px thumb beside
+       * Gecko's 16px, the same figure as before this task -- unchanged
+       * because the 16px content box plus this 2px border each side is the
+       * same total the old `calc(thickness * 4)` formula gave at the old
+       * 0.25rem thickness. */
+      inline-size: 0;
+      block-size: 0;
+      opacity: 1;
       outline: none;
       border: 2px solid var(--playdeck-color-thumb-ring, #000);
       border-radius: 50%;
       background-color: var(--playdeck-color-accent, #3ea6ff);
+    }
+
+    :where([data-playdeck-part='seek-slider-input'])::-moz-range-thumb {
+      inline-size: 0;
+      block-size: 0;
+      opacity: 1;
+    }
+
+    /* 16px on hover or focus of the seek-slider part, a literal rather than
+     * a `calc()` off the thickness token — the two are deliberately
+     * decoupled now that hovering also grows the thickness to 0.5rem, which
+     * would make the old `calc(thickness * 4)` formula 32px. Grown by size,
+     * not `transform: scale()`: `scale` is not in this file's pinned
+     * function list and there is no reason to add one. The existing ring
+     * (the unconditional `::-webkit-slider-thumb { outline: ... }` rule
+     * above this query) is untouched and keeps drawing around whatever
+     * geometry is current. */
+    :where(
+        [data-playdeck-part='seek-slider']:hover,
+        [data-playdeck-part='seek-slider']:focus-within
+      )
+      :where([data-playdeck-part='seek-slider-input'])::-moz-range-thumb,
+    :where(
+        [data-playdeck-part='seek-slider']:hover,
+        [data-playdeck-part='seek-slider']:focus-within
+      )
+      :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
+      inline-size: 1rem;
+      block-size: 1rem;
     }
 
     /* Gecko's own track and fill, silenced for this input only: the bar behind
@@ -545,39 +634,89 @@
   }
 
   /* ---- below 48rem --------------------------------------------------------
-   * The scrim is a gradient because the bar floats over the picture and the
-   * frame beneath it has to stay readable through the fade. A narrow viewport
-   * spends more of that frame on the bar, since the second row wraps again
-   * rather than shrinking its targets, so the gradient's soft top edge covers a
-   * large share of the picture with neither the picture nor the controls fully
-   * legible through it. A flat surface
-   * colour draws the same box with one hard edge instead, which is the trade a
-   * narrow viewport wants.
+   * Real docking now, not only a flatter scrim: the bar leaves the overlay
+   * position and takes a row of its own under the picture, in the scheme's
+   * own surface tokens rather than a translucent black built for a video
+   * backdrop.
    *
-   * `background`, not `background-color`, because the base rule sets the
-   * gradient through `background`: a longhand here would leave the shorthand's
-   * image painted over the colour it declares.
+   * This is real CSS and it is testable in isolation -- a bare consumer with
+   * no positioning of their own, a Storybook story, this file's own tests --
+   * but it is inert on `/`'s own bench. `Bench.astro`'s
+   * `[data-playdeck-part='controls']` rule for the `theme` skin sets
+   * `place-self: end stretch` with no width query of its own, and that rule
+   * is unlayered: header rule 1 means it beats anything here whatever the
+   * viewport. In practice this never collides on the bench anyway, because
+   * `BenchIsland` only rests on `docked` below 48rem and the skin switch is
+   * `hidden` there, so `theme` is unreachable at this width on the real page.
+   * What this buys is every OTHER consumer -- Storybook, the docs examples,
+   * a real app that ships no positioning CSS of its own -- getting a real
+   * docked bar below 48rem from `theme.css` alone.
    *
-   * The volume slider goes for a reason of its own, unrelated to the coarse
-   * pointer above, which is why the declaration is repeated rather than shared
-   * with that query. There it cannot move anything; here it can, and the room
-   * its 5rem box costs the second row is worth more than the control — every
-   * remaining button holds its 44px target and wraps rather than shrinks, so
-   * the slider's width is paid for in lines of bar over the picture.
-   *
-   * Nothing here states a `position`. This file's rules are layered `:where()`
-   * (header rule 1), so any `position` written here would lose to the ordinary
-   * unlayered CSS a composition uses to float the bar in the first place, and
-   * the rule would read as doing something it cannot do. `docked.css` puts the
-   * bar under the picture instead, and never floats it to begin with.
+   * `display: grid` on the viewport is what gives `controls` a row to sit
+   * in; `media`, `poster` and `activation` are all positioned `absolute`
+   * inline by the primitives that render them (documented at the top of this
+   * file), so switching the viewport from block to grid does not move them
+   * -- an absolutely positioned box is excluded from grid track sizing and
+   * still resolves its offsets against the same containing block either way.
+   * Reserving height for the picture itself is not this rule's job and was
+   * never theme.css's job at any width: "Layer geometry is deliberately NOT
+   * here" at the top of this file already says so, and a bare consumer needs
+   * their own sizing (an aspect-ratio wrapper, most simply) at every width,
+   * not only this one.
    */
   @media (max-width: 48rem) {
+    :where([data-playdeck-part='viewport']) {
+      display: grid;
+      grid-template-rows: 1fr auto;
+    }
+
     :where([data-playdeck-part='controls']) {
-      background: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
+      position: static;
+      grid-row: 2;
+      background: var(--playdeck-color-surface, #f4f4f2);
+      color: var(--playdeck-color-on-surface, #1c1c1e);
+      border-block-start: 1px solid var(--playdeck-color-hairline, #d9d9d6);
+    }
+
+    /* The scrim's translucent-white track/buffered defaults are built for a
+     * dark video backdrop and read as close to invisible on this flat light
+     * surface -- the same reasoning `docked.css`'s own header comment gives
+     * for carrying its own opaque defaults. These two declarations are why
+     * `tokenDefault()` in `theme.test.ts` is scoped to skip this block: it is
+     * a deliberate second fallback, not disagreement. */
+    :where([data-playdeck-part='seek-buffered']) {
+      background-color: var(--playdeck-color-track, #84847d);
+    }
+
+    :where([data-playdeck-part='seek-buffered-range']) {
+      background-color: var(--playdeck-color-buffered, #1c1c1e);
+    }
+
+    /* Nothing hides on a phone: there is no overlay to auto-hide over the
+     * picture any more, so idle no longer fades this part. */
+    :where([data-idle='true'] [data-playdeck-part='controls']) {
+      opacity: 1;
+      pointer-events: auto;
     }
 
     :where([data-playdeck-part='volume-slider']) {
       display: none;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :where([data-playdeck-part='controls']) {
+        background: var(--playdeck-color-surface, #141416);
+        color: var(--playdeck-color-on-surface, #ededed);
+        border-block-start-color: var(--playdeck-color-hairline, #2a2a2d);
+      }
+
+      :where([data-playdeck-part='seek-buffered']) {
+        background-color: var(--playdeck-color-track, #6d6d70);
+      }
+
+      :where([data-playdeck-part='seek-buffered-range']) {
+        background-color: var(--playdeck-color-buffered, #ededed);
+      }
     }
   }
 

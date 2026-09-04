@@ -114,8 +114,48 @@ pre {
    * fence too wide for the column scrolls and is reachable from the keyboard
    * with the site's own focus ring. What is left is the bar's weight: a
    * platform-width scrollbar inside a well this small reads as a second border.
-   * The colour is inherited from the root. */
+   * The colour is inherited from the root. That is true of every block Astro's
+   * own `<Code>` or markdown pipeline renders; the bench's own block below is
+   * built by hand and gets neither for free. */
   scrollbar-width: thin;
+}
+
+/* The bench's own composition panel, highlighted by `Bench.astro`'s own `pre`
+ * transformer rather than by Astro's `<Code>` or its markdown pipeline, so it
+ * carries none of what those two give every other `.astro-code` block for
+ * free: no `margin` and no `overflow-x`, where the UA stylesheet's own
+ * `margin: 1em 0` on `<pre>` would otherwise stand, `base.css` sets no margin
+ * of its own on `pre` and Tailwind's Preflight is deliberately not imported.
+ *
+ * Scoped to `[data-bench-composition]` -- the attribute that same transformer
+ * stamps on this one block -- rather than added to `.astro-code` itself,
+ * because every other `.astro-code` block on this site (`/start`,
+ * `/archetypes`) already relies on that UA margin for its own vertical
+ * spacing: measured at 14px, live spacing a site-wide `margin: 0` would
+ * silently remove. `overflow-x: auto` is what lets a line too wide for the
+ * column scroll, the behaviour the deleted `<pre>` in `CompositionPanel.tsx`
+ * used to set with `overflow-x-auto`. */
+.astro-code[data-bench-composition] {
+  margin: 0;
+  overflow-x: auto;
+}
+
+/* The changed-line highlight (2026-09-03): `CompositionPanel.tsx` stamps
+ * `data-changed` on the `.line` Shiki's own `line` hook already wraps every
+ * printed line in, for the lines a switch flip just moved, and clears it
+ * again after 900ms -- keep that literal in sync with
+ * `CompositionPanel.tsx`'s own `HIGHLIGHT_MS` if either changes.
+ *
+ * No `prefers-reduced-motion` override here: this site's global reduced-
+ * motion rule (below) already collapses every `transition-duration` to
+ * 0.01ms with `!important`, which is indistinguishable from "no transition"
+ * for a plain background fade between two static states -- unlike the
+ * entrance reveal in `index.astro`, this is not a case where a from-state
+ * could flash before collapsing, so the general rule is enough on its own.
+ */
+.astro-code[data-bench-composition] .line[data-changed] {
+  background-color: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  transition: background-color 900ms var(--ease);
 }
 
 /*
