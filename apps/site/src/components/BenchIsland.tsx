@@ -82,6 +82,7 @@ import {
 import { type BenchPosition, type SkinName } from '@/bench-composition';
 import { BENCH_CONTROLS, type BenchControlName } from '@/bench-controls';
 import { QUIET_START, quietLine, recordLoad } from '@/bench-quiet';
+import { revealsOnly } from '@/bench-surface-toggle';
 /*
  * The settings menu's content, in its own component so the composition panel
  * can print exactly what mounts (`bench-composition.ts`'s `<QualityAndRateMenu />`)
@@ -367,14 +368,52 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
  * The empty fragment is how a `Player` button is given no visible content: the
  * library falls back to printing its own English wording for `children` that
  * are nullish, and this control's whole face is the picture behind it.
+ *
+ * ---- the reveal-only guard on a coarse pointer (2026-09-04, #598 follow-up) -
+ *
+ * A tap here also wakes the bar: `Viewport`'s idle-reset listener sits on
+ * `pointerdown` and this button is inside it, so the same gesture that
+ * reaches `PlayButton`'s own `onClick` has already reset `data-idle` by the
+ * time that click fires. On a coarse pointer with the bar hidden, letting
+ * both happen means the first tap after the bar faded both reveals it and
+ * pauses a clip the reader has not yet seen the controls for -- two outcomes
+ * from one gesture where only one was asked for.
+ *
+ * `onPointerDownCapture` is what makes reading "was it hidden before this
+ * tap" possible at all: React dispatches capture handlers against the root
+ * container before the native event ever reaches `Viewport`'s own
+ * bubble-phase listener, so this runs first and records the pre-tap state
+ * (`revealOnlyRef`) before anything has reset it. `onClick` then reads that
+ * recorded state and prevents the default only there, which is what stops
+ * `PlayButton`'s own handler (`if (!event.defaultPrevented) ... togglePlaybackWithOrigin`)
+ * from running. `revealsOnly` (`bench-surface-toggle.ts`) is the pure
+ * decision; this component is only the plumbing that gets it the two facts
+ * it needs. `apps/site/test/bench-surface-toggle.test.ts` covers the truth
+ * table.
  */
 const SurfaceToggle = () => {
   const ready = Player.usePlayerState(
     (snapshot) => snapshot.activation === 'ready'
   );
+  const revealOnlyRef = useRef(false);
   if (!ready) return null;
   return (
-    <Player.PlayButton data-surface-toggle="" tabIndex={-1}>
+    <Player.PlayButton
+      data-surface-toggle=""
+      onClick={(event) => {
+        if (revealOnlyRef.current) event.preventDefault();
+      }}
+      onPointerDownCapture={(event) => {
+        const viewport = event.currentTarget.closest(
+          '[data-playdeck-part="viewport"]'
+        );
+        revealOnlyRef.current = revealsOnly(
+          matchMedia('(pointer: coarse)').matches,
+          viewport?.getAttribute('data-idle') === 'true'
+        );
+      }}
+      tabIndex={-1}
+    >
       <></>
     </Player.PlayButton>
   );
@@ -667,9 +706,9 @@ const Credit = ({ credit }: { readonly credit: BenchCredit }) => (
  * ratio-locked cell can hold, and `Bench.astro`'s `.bench__stage[data-bench-skin='docked']`
  * rule is what stops constraining that cell's height once a reader is on that
  * skin. Written here rather than left for `Bench.astro`'s own markup to carry
- * a default, because there is no default: `#bench-stage` does not know the
- * skin until a script has read `matchMedia` or a reader has pressed the
- * switch, the same reason `--bench-aspect-ratio` above is script-written and
+ * a default, because `Bench.astro` renders before this component ever mounts:
+ * `#bench-stage` carries no `data-bench-skin` until this effect has run, the
+ * same reason `--bench-aspect-ratio` above is script-written and
  * not printed inline for every position in advance. */
 const StagePortal = ({
   poster,
@@ -723,10 +762,14 @@ const StagePortal = ({
 
 const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
   /*
-   * The default follows `matchMedia`, read once, synchronously, the same way
-   * `readySources[0]` already is: `theme` rests above 48rem, `docked` below
-   * it, because the floating theme was already collapsing toward close to
-   * `docked`'s own layout at that width -- see the spec's own account of why.
+   * `theme` rests at every width now (2026-09-04, reversing the width-keyed
+   * default this comment used to describe): the idle fade makes the floating
+   * bar a sound phone layout on its own, fading while playing and returning
+   * on a tap or a keystroke, so there is no width below which a reader is
+   * better served by a default they cannot see the switch to leave. See
+   * `theme.css`'s own "below 48rem" comment for the fuller account and
+   * `docs/superpowers/specs/2026-09-02-bench-two-themes-design.md`'s dated
+   * note for the ruling this replaces.
    */
   const [position, setPosition] = useState<BenchPosition & ResolvedSource>(
     () => {
@@ -742,9 +785,7 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
       }
       return {
         source: initial.provider,
-        skin: window.matchMedia('(min-width: 48rem)').matches
-          ? 'theme'
-          : 'docked',
+        skin: 'theme',
         ...entryFor(initial.provider, base)
       };
     }

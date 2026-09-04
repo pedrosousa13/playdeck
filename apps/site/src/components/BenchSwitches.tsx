@@ -90,13 +90,7 @@ function Group<T>({
     // Tailwind's preflight is not loaded on this site (see `tailwind.css`), so
     // the user agent's own fieldset border and legend padding are still there
     // to be turned off.
-    <fieldset
-      data-bench-switch={group}
-      className={cn(
-        'm-0 min-w-0 border-0 p-0',
-        group === 'skin' && 'hidden md:block'
-      )}
-    >
+    <fieldset data-bench-switch={group} className="m-0 min-w-0 border-0 p-0">
       <legend className="p-0 font-mono text-[length:var(--text-fn)] tracking-[var(--tracking-fn)] text-[var(--color-ink-subtle)] uppercase">
         {legend}
       </legend>
