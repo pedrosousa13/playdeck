@@ -702,6 +702,56 @@ for (const entry of readySources) {
     pointer-events: none;
   }
 
+  /* Letterboxed to 16:9 below 48rem: Sprite Fright's own clip is close to
+   * 2.39:1, so a stage shaped to the source's own ratio is short and the
+   * floating bar -- about 100px before the phone-bar trim in the theme's own
+   * stylesheet -- covers most of it while visible. A real youtube.com or
+   * vimeo.com embed never has that problem: it keeps a 16:9 stage and bars a
+   * widescreen film inside it, and this rule buys the bench the same shape at
+   * the same width. Every ready source is close enough to 2.39:1 that none
+   * needs to be carved out of it.
+   *
+   * Three boxes carry the source's own ratio above this query, and all three
+   * are forced here, to the same literal, at the same width: `.bench__stage`
+   * itself (the box `theme`'s one-row case sizes directly), the viewport's own
+   * copy of that ratio (redundant with the stage's under `theme`; inert under
+   * `docked`, where the more specific `[data-bench-skin='docked']` rule above
+   * already holds this property at `auto` for the whole two-row grid, at
+   * higher specificity than an unqualified selector can reach), and the
+   * `::before` sizing box just above, which is what actually sets the picture
+   * row's height under `docked`. Nothing here touches `.bench__stage`'s own
+   * `auto` under `docked` -- that box keeps sizing itself from its content,
+   * content whose own picture row is now this shape.
+   *
+   * The picture needs no `object-fit` rule to match: `Media` already renders
+   * with `objectFit: 'contain'` inline (`viewport-media.tsx`), so a box whose
+   * ratio disagrees with the source already bars rather than crops or
+   * stretches -- forcing the box's shape is the whole of what this rule has to
+   * do. The poster is the one part that does not already do that on its own:
+   * `PosterImage` defaults to `object-fit: cover` (`poster.tsx`), which crops
+   * a mismatched box instead of barring it, so the resting frame would
+   * disagree with the playing one the moment either rests on a source whose
+   * own ratio is not 16:9. `--playdeck-poster-fit: contain` is the same
+   * one-token fix every other bare-consumer default on this page gets --
+   * read, not declared, by `PosterImage` itself. */
+  @media (max-width: 48rem) {
+    .bench__stage {
+      aspect-ratio: 16 / 9;
+      --playdeck-poster-fit: contain;
+    }
+
+    :global(.bench__stage) :global([data-playdeck-part='viewport']) {
+      aspect-ratio: 16 / 9;
+    }
+
+    :global(.bench__stage)
+      :global(
+        [data-playdeck-part='viewport'][data-bench-skin='docked']
+      )::before {
+      aspect-ratio: 16 / 9;
+    }
+  }
+
   :global(.bench__stage)
     :global([data-bench-skin='docked'] [data-playdeck-part='controls']) {
     grid-area: controls;

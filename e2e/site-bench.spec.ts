@@ -571,6 +571,20 @@ const expectNotStretched = (mediaBox: { width: number; height: number }) => {
   expect(mediaBox.width / mediaBox.height).toBeCloseTo(2048 / 858, 1);
 };
 
+/**
+ * Below 48rem (2026-09-04): `Bench.astro`'s own "Letterboxed to 16:9" rule
+ * forces the stage to 16:9 regardless of the source's own ratio, so the
+ * picture's box disagrees with `expectNotStretched` above on purpose at this
+ * width -- that is the ruling, not a regression of it. `Media` still renders
+ * with `objectFit: 'contain'` (`viewport-media.tsx`), so the picture itself
+ * is still not stretched or cropped; what changed is the shape of the box
+ * it is contained in. Compared in pixels rather than as a ratio, the same
+ * way the new letterbox test below does, so both read the same tolerance.
+ */
+const expectLetterboxedTo169 = (box: { width: number; height: number }) => {
+  expect(Math.abs(box.height - (box.width * 9) / 16)).toBeLessThanOrEqual(1);
+};
+
 test('at 1440px, the themed bar overlays the picture and the docked bar sits below it', async ({
   page
 }) => {
@@ -615,7 +629,7 @@ test('below 48rem, the resting theme bar overlays the picture, and docked still 
   expect(themed.controlsBox.y + themed.controlsBox.height).toBeLessThanOrEqual(
     themed.mediaBox.y + themed.mediaBox.height + 1
   );
-  expectNotStretched(themed.mediaBox);
+  expectLetterboxedTo169(themed.mediaBox);
 
   await page.goto(landing);
   await expect(activationButton(page)).toBeVisible();
@@ -624,7 +638,55 @@ test('below 48rem, the resting theme bar overlays the picture, and docked still 
   expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
     docked.mediaBox.y + docked.mediaBox.height - 1
   );
-  expectNotStretched(docked.mediaBox);
+  expectLetterboxedTo169(docked.mediaBox);
+});
+
+/**
+ * The letterbox ruling itself (2026-09-04): a stage shaped to Sprite
+ * Fright's own 2.39:1 is short enough at 375px wide that the floating bar --
+ * about 100px before the trim below -- covers most of it while visible.
+ * `Bench.astro`'s own "Letterboxed to 16:9" rule gives the bench the shape a
+ * real youtube.com or vimeo.com embed already keeps at every width, and
+ * `theme.css`'s own "below 48rem" query trims the bar to fit inside what
+ * letterboxing gives back. Both are proven here: the shape holds with no
+ * player mounted yet -- `#bench-stage` is static markup at rest, sized from
+ * `Bench.astro`'s own CSS alone -- and the bar's own height holds once a
+ * real player has replaced it.
+ *
+ * 375x812 rather than the 375x800 the rest of this file's narrow tests use:
+ * the maintainer's own measurements for this ruling were taken at 812, a
+ * true iPhone viewport height, and the extra 12px changes nothing this test
+ * checks.
+ */
+test('below 48rem, the stage letterboxes to 16:9 and the bar fits under 76px', async ({
+  page
+}) => {
+  test.slow();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
+
+  const stageBox = await page.locator('#bench-stage').boundingBox();
+  if (stageBox === null) {
+    throw new Error('Could not measure the stage.');
+  }
+  expect(
+    Math.abs(stageBox.height - (stageBox.width * 9) / 16)
+  ).toBeLessThanOrEqual(1);
+
+  await activationButton(page).click();
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+  const controlsBox = await controls(page).boundingBox();
+  if (controlsBox === null) {
+    throw new Error('Could not measure the bar.');
+  }
+  // Held on the bar before reading it: theme's own auto-hide must not catch
+  // this read mid-fade.
+  await page.mouse.move(
+    controlsBox.x + controlsBox.width / 2,
+    controlsBox.y + controlsBox.height / 2
+  );
+  expect(controlsBox.height).toBeLessThanOrEqual(76);
 });
 
 /**
