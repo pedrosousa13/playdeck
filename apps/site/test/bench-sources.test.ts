@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { benchSources, readySources } from '../src/bench-sources';
+import {
+  benchSources,
+  readySources,
+  resolvePlayerSource
+} from '../src/bench-sources';
 import type { PlayerProvider } from '@playdeck/core';
 
 // Written by hand, and typed against `PlayerProvider` rather than inferred as
@@ -132,6 +136,29 @@ describe('benchSources', () => {
   it('gives every entry a start time', () => {
     for (const entry of benchSources) {
       expect(typeof entry.startTime).toBe('number');
+    }
+  });
+
+  // `resolvePlayerSource` is what `BenchIsland.tsx` and `Bench.astro` hand to
+  // `Player.Root`'s `source` prop and to `buildComposition`. `hls` pins its
+  // engine on an explicit source object -- this bench exists to demonstrate
+  // quality selection, and a browser whose `canPlayType` answers `'maybe'`
+  // for HLS would otherwise auto-detect onto the native decoder, where
+  // `selectQuality` is unavailable (`packages/provider-hls/src/index.ts`'s
+  // `selectHlsEngine`). Every other position stays the plain URL
+  // `entry.source` already resolves.
+  it('pins hls to the hls.js engine and leaves every other position a plain URL', () => {
+    for (const entry of benchSources) {
+      const resolved = resolvePlayerSource(entry, '/');
+      if (entry.provider === 'hls') {
+        expect(resolved).toEqual({
+          type: 'hls',
+          src: entry.source('/'),
+          engine: 'hls.js'
+        });
+      } else {
+        expect(resolved).toBe(entry.source('/'));
+      }
     }
   });
 });

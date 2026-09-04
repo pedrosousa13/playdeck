@@ -76,7 +76,7 @@
  */
 import Sweep from './Sweep.astro';
 import BenchIsland from './BenchIsland';
-import { benchSources, readySources } from '../bench-sources';
+import { benchSources, readySources, resolvePlayerSource } from '../bench-sources';
 import { codeToHtml } from 'shiki';
 import type { ShikiTransformer } from 'shiki';
 import { shikiConfig } from '../shiki';
@@ -179,7 +179,7 @@ for (const entry of readySources) {
     const code = buildComposition({
       source: entry.provider,
       skin,
-      sourceUrl: entry.source(base)
+      playerSource: resolvePlayerSource(entry, base)
     });
     compositionSources[`${entry.provider}:${skin}`] = code;
     compositions[`${entry.provider}:${skin}`] = await codeToHtml(code, {
@@ -789,6 +789,20 @@ for (const entry of readySources) {
    * parts above — the look of the frame's own furniture belongs to the file
    * that draws the frame, whichever tree happens to render it. */
   :global(.bench__quiet) {
+    font-family: var(--font-mono);
+    font-size: var(--text-fn);
+    color: var(--color-ink-subtle);
+    letter-spacing: var(--tracking-fn);
+  }
+
+  /* `BenchIsland.tsx`'s `HlsExplainer`, under the switch row on the one
+   * position it applies to: what HLS is, for a reader who does not
+   * recognise the word the source switch prints. Same treatment as
+   * `.bench__quiet` above -- it qualifies a control rather than captioning
+   * one -- under its own name because it is a different sentence with a
+   * different lifetime, not the quiet line's own text. `:global()` for the
+   * same reason as every other rule reaching out of the island. */
+  :global(.bench__explainer) {
     font-family: var(--font-mono);
     font-size: var(--text-fn);
     color: var(--color-ink-subtle);

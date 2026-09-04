@@ -64,7 +64,7 @@
  * unnecessary until the day a second film is added -- exactly the day a
  * lookup keyed by provider stops being able to tell the entries apart.
  */
-import type { PlayerProvider } from '@playdeck/core';
+import type { PlayerProvider, PlayerSource } from '@playdeck/core';
 
 /**
  * Every provider this page's switch can offer. `native` is the one member of
@@ -280,3 +280,35 @@ export const benchSources: readonly BenchSource[] = (
 ).map((provider) => ({ provider, ...bySource[provider] }));
 
 export const readySources = benchSources.filter((entry) => entry.ready);
+
+/**
+ * What `Player.Root`'s `source` prop actually receives for one entry, once
+ * `baseUrl` is known.
+ *
+ * Every position but `hls` is `entry.source(baseUrl)` verbatim: a plain URL
+ * is the whole of what `detectSource` needs to find a provider on its own.
+ * `hls` differs, and deliberately: this bench exists to demonstrate quality
+ * selection, and Chromium's `canPlayType('application/vnd.apple.mpegurl')`
+ * answers `'maybe'`, which sends the automatic engine pick to the native
+ * decoder -- where `selectQuality` is unavailable and `state.qualities` stays
+ * empty (`packages/provider-hls/src/index.ts`'s `selectHlsEngine`). The
+ * quality picker and the stats readout merged in #618 would therefore show
+ * nothing on this position in Chrome, on the one page whose job is to
+ * demonstrate them. So this position's own source pins `engine: 'hls.js'` on
+ * an explicit source object -- the shape `docs/provider-setup.md`'s
+ * "Explicit source objects" table documents -- rather than trusting the
+ * per-browser automatic pick every other position is happy to leave alone.
+ *
+ * `entry.source(baseUrl)` is still called for the `hls` case, once, for its
+ * `src` field: that function stays the one place this file computes the raw
+ * URL, used elsewhere for the no-JavaScript fallback's `href` and for the
+ * quiet line's own record of what loaded, both of which need a URL and never
+ * an engine.
+ */
+export const resolvePlayerSource = (
+  entry: BenchSource,
+  baseUrl: string
+): PlayerSource =>
+  entry.provider === 'hls'
+    ? { type: 'hls', src: entry.source(baseUrl), engine: 'hls.js' }
+    : entry.source(baseUrl);

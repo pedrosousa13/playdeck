@@ -71,9 +71,15 @@ const tree = (printedText: string) => {
 
 const printed = (page: Page) => composition(page).innerText();
 
-/** The `const source` line of the preamble, which is what a source press moves. */
+/**
+ * The `const source` line of the preamble, which is what a source press
+ * moves. A quoted URL for every position but `hls`, whose own source pins
+ * `engine: 'hls.js'` and so prints as an object instead
+ * (`bench-composition.ts`'s `printSourceValue`) -- the alternation covers
+ * both shapes.
+ */
 const sourceLine = (printedText: string) => {
-  const match = /^const source = '[^']*';$/m.exec(printedText);
+  const match = /^const source = (?:'[^']*'|\{[^}]*\});$/m.exec(printedText);
   if (match === null) {
     throw new Error(`No source line in the composition:\n${printedText}`);
   }
@@ -193,6 +199,25 @@ test('the composition prints the full control tree, and tracks the source switch
   // `vimeo` position pressed here is it, so no exception is reachable from
   // this pair and the trees stay byte-identical as they always did.
   expect(tree(await printed(page))).toBe(tree(before));
+});
+
+/**
+ * `BenchIsland.tsx`'s `HlsExplainer`: what HLS is, printed only while the
+ * `hls` position is selected -- the other three positions are named by host,
+ * not by protocol, and carry no word that needs unpacking the same way. No
+ * press needed for either half: switching the source switch moves the
+ * printed composition without pressing play (see the source-switch test
+ * above), so this reaches `vimeo` with no third-party network to guard.
+ */
+test('the HLS explainer is visible at rest and gone once vimeo is selected', async ({
+  page
+}) => {
+  await page.goto(landing);
+  const explainer = page.locator('[data-bench-explainer]');
+  await expect(explainer).toBeVisible();
+
+  await position(page, 'source', 'vimeo').click();
+  await expect(explainer).toBeHidden();
 });
 
 test('the skin group offers theme and docked, in that order, and no third position', async ({
@@ -590,27 +615,23 @@ test('below 48rem, the resting docked bar sits below the picture, with no switch
  * same manifest-plus-first-segment request, read from a different part of
  * the page.
  *
- * `canPlayType` is overridden before the page's own scripts run, denying
- * native HLS: `packages/provider-hls` auto-detects between hls.js and the
+ * No `canPlayType` override here any more: `bench-sources.ts`'s own source
+ * for this position pins `engine: 'hls.js'` (`resolvePlayerSource`), so the
+ * bench reaches the hls.js engine on whichever browser is running it -- the
+ * mechanism this page actually ships, not a test-only stand-in for it.
+ * `packages/provider-hls` would otherwise auto-detect between hls.js and the
  * browser's own HLS decoder (`provider-hls/src/index.ts`'s `nativeHls`
- * check), and current Chromium (measured: 149, this repo's pinned Playwright
- * build) answers "maybe" to that probe and gets routed onto the native
- * decoder -- under which `selectQuality` is correctly `unavailable`, the
- * same as it is for a plain progressive file, because that decoder publishes
- * no ladder to this library. The ladder this test pins is the one hls.js
- * publishes; forcing hls.js here is what makes that ladder reachable on a
- * browser that would otherwise quietly take the other path, the same reason
- * `e2e/hls.spec.ts`'s own `hls-hls-js` fixture forces it for its story.
+ * check), and current Chromium answers "maybe" to that probe and would get
+ * routed onto the native decoder -- under which `selectQuality` is correctly
+ * `unavailable`, the same as it is for a plain progressive file, because that
+ * decoder publishes no ladder to this library. That auto-detection is exactly
+ * what the pinned engine bypasses. The ladder this test pins is the one
+ * hls.js publishes, the same reason `e2e/hls.spec.ts`'s own `hls-hls-js`
+ * fixture forces it for its story.
  */
 test('after a press, the live stats readout reports a real rendition and the three-rung ladder', async ({
   page
 }) => {
-  await page.addInitScript(() => {
-    const original = HTMLMediaElement.prototype.canPlayType;
-    HTMLMediaElement.prototype.canPlayType = function (type: string) {
-      return /mpegurl/i.test(type) ? '' : original.call(this, type);
-    };
-  });
   await page.goto(landing);
   await activationButton(page).click();
   await expect(controls(page)).toBeVisible({ timeout: 20_000 });

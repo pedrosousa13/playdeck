@@ -3,13 +3,14 @@ import { buildComposition, type BenchPosition } from '../src/bench-composition';
 
 const NATIVE_URL = 'https://example.com/clip.mp4';
 const YOUTUBE_URL = 'https://www.youtube.com/watch?v=example';
+const HLS_URL = 'https://example.com/media/master.m3u8';
 
 describe('buildComposition', () => {
   it('prints the real ten-control tree, SeekSlider first', () => {
     const code = buildComposition({
       source: 'youtube',
       skin: 'theme',
-      sourceUrl: YOUTUBE_URL
+      playerSource: YOUTUBE_URL
     });
     const tree = code.slice(code.indexOf('<Player.Root'));
     expect(tree).toBe(
@@ -69,12 +70,12 @@ describe('buildComposition', () => {
     const native = buildComposition({
       source: 'native',
       skin: 'theme',
-      sourceUrl: NATIVE_URL
+      playerSource: NATIVE_URL
     });
     const youtube = buildComposition({
       source: 'youtube',
       skin: 'theme',
-      sourceUrl: YOUTUBE_URL
+      playerSource: YOUTUBE_URL
     });
 
     expect(native).toContain(`const source = '${NATIVE_URL}';`);
@@ -110,7 +111,7 @@ describe('buildComposition', () => {
       const code = buildComposition({
         source: 'native',
         skin,
-        sourceUrl: NATIVE_URL
+        playerSource: NATIVE_URL
       });
       expect(code).toContain('<Player.Root source={source}>');
       expect(code).not.toContain('autoplay');
@@ -121,7 +122,7 @@ describe('buildComposition', () => {
     const themed = buildComposition({
       source: 'native',
       skin: 'theme',
-      sourceUrl: NATIVE_URL
+      playerSource: NATIVE_URL
     });
     expect(themed.split('\n')[0]).toBe("import '@playdeck/react/theme.css';");
     expect(themed.split('\n')[1]).toBe('');
@@ -131,7 +132,7 @@ describe('buildComposition', () => {
     const docked = buildComposition({
       source: 'native',
       skin: 'docked',
-      sourceUrl: NATIVE_URL
+      playerSource: NATIVE_URL
     });
     expect(docked.split('\n')[0]).toBe("import '@playdeck/react/docked.css';");
     expect(docked.split('\n')[1]).toBe('');
@@ -143,12 +144,12 @@ describe('buildComposition', () => {
     const themed = buildComposition({
       source: 'native',
       skin: 'theme',
-      sourceUrl: NATIVE_URL
+      playerSource: NATIVE_URL
     });
     const docked = buildComposition({
       source: 'native',
       skin: 'docked',
-      sourceUrl: NATIVE_URL
+      playerSource: NATIVE_URL
     });
     const compositionBlock = (code: string) =>
       code.slice(code.indexOf('<Player.Root'));
@@ -160,25 +161,51 @@ describe('buildComposition', () => {
     const code = buildComposition({
       source: 'native',
       skin: 'theme',
-      sourceUrl: longUrl
+      playerSource: longUrl
     });
     expect(code).toContain(`const source = '${longUrl}';`);
     expect(code).not.toContain('…');
     expect(code).not.toContain('...');
   });
 
+  // The one position whose `const source` line is not a quoted URL: `hls`
+  // pins its engine, so `Player.Root` mounts an explicit source object
+  // (`bench-sources.ts`'s `resolvePlayerSource`) and the panel has to print
+  // that object rather than the string every other position resolves to --
+  // see `bench-composition.ts`'s own comment on why.
+  it('prints the hls position as a source object with its engine pinned', () => {
+    const code = buildComposition({
+      source: 'hls',
+      skin: 'theme',
+      playerSource: { type: 'hls', src: HLS_URL, engine: 'hls.js' }
+    });
+    expect(code).toContain(
+      `const source = { type: 'hls', src: '${HLS_URL}', engine: 'hls.js' };`
+    );
+    // Still a single line, so the preamble stays four lines like every other
+    // position's.
+    expect(code.split('\n')[2]).toBe(
+      `const source = { type: 'hls', src: '${HLS_URL}', engine: 'hls.js' };`
+    );
+  });
+
   it.each<BenchPosition>([
-    { source: 'native', skin: 'theme', sourceUrl: NATIVE_URL },
-    { source: 'youtube', skin: 'theme', sourceUrl: YOUTUBE_URL },
+    { source: 'native', skin: 'theme', playerSource: NATIVE_URL },
+    { source: 'youtube', skin: 'theme', playerSource: YOUTUBE_URL },
     {
       source: 'vimeo',
       skin: 'theme',
-      sourceUrl: 'https://vimeo.com/000000000'
+      playerSource: 'https://vimeo.com/000000000'
     },
     {
       source: 'wistia',
       skin: 'theme',
-      sourceUrl: 'https://example.wistia.com/medias/abc123'
+      playerSource: 'https://example.wistia.com/medias/abc123'
+    },
+    {
+      source: 'hls',
+      skin: 'theme',
+      playerSource: { type: 'hls', src: HLS_URL, engine: 'hls.js' }
     }
   ])('never leaves a trailing space on a line ($source/$skin)', (position) => {
     for (const line of buildComposition(position).split('\n')) {
