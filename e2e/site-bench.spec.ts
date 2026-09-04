@@ -100,7 +100,13 @@ test('the seek slider composes first, so the control bar keeps its two-row split
   await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
 
   await activationButton(page).click();
-  await expect(controls(page)).toBeVisible();
+  // The bar is `hidden` until the press has produced a real player -- the
+  // default source is `youtube`, so this is a real request to youtube.com,
+  // same as `activateAndMeasure` below. The default 5s budget is tight enough
+  // for that request to occasionally miss it under CI's slower, shared
+  // runner, so this waits on the same 20s `activateAndMeasure` already uses
+  // for the identical wait.
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
 
   const firstChildPart = await controls(page).evaluate((element) =>
     element.firstElementChild?.getAttribute('data-playdeck-part')
