@@ -170,7 +170,7 @@ copy, so the workbench and the site cannot disagree about what they say.
 
 The Storybook workbench stages every primitive against a mock provider, plus
 real-playback stories. It is a development tool for this repository rather than
-a published surface, and it runs against your own working tree with:
+something published, and it runs against your own working tree with:
 
 ```sh
 pnpm --filter @playdeck/storybook dev

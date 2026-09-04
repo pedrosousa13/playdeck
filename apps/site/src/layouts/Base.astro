@@ -76,6 +76,8 @@ interface Props {
 }
 
 const { title, documentation = true, stance = 'document' } = Astro.props;
+const shouldTrackWithPlausible =
+  import.meta.env.PUBLIC_PLAUSIBLE_ANALYTICS === 'true';
 ---
 
 <!doctype html>
@@ -84,6 +86,16 @@ const { title, documentation = true, stance = 'document' } = Astro.props;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
+    {
+      shouldTrackWithPlausible && (
+        <script
+          is:inline
+          defer
+          data-domain="playdeck.video"
+          src="https://analytics.pedrosousa.me/js/script.js"
+        ></script>
+      )
+    }
     <script is:inline>
       // `'playdeck-theme'` is duplicated from `ThemeToggle.astro`'s
       // `STORAGE_KEY` and the two have to stay identical: change one and the

@@ -79,6 +79,23 @@ consumer-supplied URL prop and provider option alike (#219, #236). A refused
 value is treated exactly as if the prop were absent — never a throw.
 _Avoid_: whitelist, sanitise, safe URL
 
+**Availability**:
+The answer to "can this player do this, right now" for one capability, published
+as the closed union `Availability` and carried per capability on
+`PlayerCapabilities`. Three states: `available`; `unknown` with a reason
+(`not-ready`, `provider-check`); `unavailable` with a reason (`browser`,
+`provider`, `provider-plan`, `provider-build`, `source`, `policy`). The reason is
+part of the answer and not decoration — `unknown` and `unavailable` are only
+honest when they say why, which is what lets a control explain itself rather than
+merely vanish. A control whose command the active provider cannot honour renders
+nothing rather than rendering disabled.
+
+The marketing site draws the same three states as its own colour roles
+(`--color-available`, `--color-unknown`, `--color-unavailable`) and binds them:
+colour there carries this domain meaning and is never spent on decoration, and a
+state is always drawn as its own word rather than a bare dot.
+_Avoid_: capability state, capability status, support level
+
 **Refused surface**:
 The name of one consumer-supplied URL prop the shared allowlist can refuse
 outside a provider, published as the closed union `RefusedUrlSurface`:
@@ -397,6 +414,29 @@ type scale, the one-gradient rule and the four audit constraints. That system is
 not the player's theme — `packages/react/theme.css` ships to consumers and
 shares no tokens with it, and the two are deliberately separate.
 
+**Archetype**:
+A composed example player standing for a whole class of real product — the
+streaming-service layout and the course-platform layout, served on
+`/archetypes` and documented in `docs/archetypes.md`. An archetype is a
+composition built from the same published primitives a consumer would use, not a
+preset or a variant the library ships: what it demonstrates is that the markup
+is yours. It is a _player_, never a kind of page — which page treatment a route
+is served in is its **Stance**.
+_Avoid_: template, preset, demo, variant
+
+**Workbench**:
+The Storybook build — where primitives are exercised in isolation, where the
+deterministic story run and the visual checks live, and where a local media
+fixture is available that the marketing site cannot serve. Distinct from the
+marketing site, which argues to a reader; the workbench is for proving a
+component behaves. Nothing publishes it: the deployed artifact is the site
+alone ([ADR-0007](docs/adr/0007-the-deployed-artifact-is-the-site-alone.md)), and
+the workbench is a development tool for this repository whose stories are browser
+tests. The site and the workbench are named individually; there is no collective
+noun for the two, and `surface` in particular is not one — that word names a
+refused prop, above.
+_Avoid_: playground, sandbox, storybook (lower-case, as a common noun)
+
 **Stance**:
 Which of the marketing site's two page treatments a route is served in:
 `argument` for `/`, `document` for every other route. `Base.astro` takes it as a
@@ -407,7 +447,8 @@ holding every route to the stance `DESIGN.md` assigns it. A separate axis from t
 `documentation` prop, which decides only whether a page is in the search index:
 `/design` is `documentation={false}` and `stance="document"`. Site-only — it
 says nothing about a player.
-_Avoid_: mode, register, treatment, archetype
+_Avoid_: mode, register, treatment, archetype — **Archetype** above is a
+composed example player, and using it for a page treatment would collide with it
 
 **Provider asymmetry readout**:
 The table on the marketing site's provider index that asks the same three

@@ -868,6 +868,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec turbo run build --filter=@playdeck/site...
+      - run: pnpm test:site-analytics
       # Reads the build the step above produced, which is what lets it see the
       # base path a visitor sees rather than the template that was meant to
       # produce it. It checks the external URLs too, and distinguishes a
