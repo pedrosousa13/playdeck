@@ -340,12 +340,17 @@ rule was actually defending is that a page may not reach for a face nobody
 chose, and three cuts of one superfamily is still one decision, so the count
 moves and the rule does not. A fourth family would still be refused.
 
-**Two places spend `--font-display` and they are both on `/`**: the thesis
-sentence under the `h1`, and the four figures in the close. Nothing else on the
-site may take it without an edit here, for the same reason the elevation
-allowlist below is written by hand. `tokens.css`'s own comment beside the face
-still claims the wordmark and a chapter title among its consumers; neither
-exists any more, and the file is wrong about that where this document is right.
+**Three places spend `--font-display` on `/` as of the 2026-09-03 stage
+redraw, and they replace the two that used to.** The thesis sentence under
+the `h1` is unchanged; the hero's Start link (`.thesis__start`) is new,
+moved up from the close along with the install command; and each feature
+card's headline (`.card__headline`) is new. The four figures in the close,
+the second of the original two consumers, are gone with the close itself —
+see "The landing page" below. Nothing else on the site may take it without an
+edit here, for the same reason the elevation allowlist below is written by
+hand. `tokens.css`'s own comment beside the face still claims the wordmark
+and a chapter title among its consumers; neither exists any more, and the
+file is wrong about that where this document is right.
 
 Self-hosted, and the only weights and the only subset the site uses: sans 400,
 sans 600, mono 400, condensed 700, latin. They arrive as devDependencies (`@fontsource/*`) so
@@ -419,11 +424,13 @@ dresses a name as a thesis.
 
 **Neither rung sets a heading on `/` either, and that is worth saying because
 the sentence above used to promise one.** `--text-4xl` goes to the thesis
-paragraph, for the reason below, and `--text-2xl` goes to the four figures in
-the close, which are `dt` elements and not headings. Both are still classes on
-that page and neither moves what an element resolves to, which is the whole of
-what the rule asks. What changed is that the argument stance no longer has a
-heading large enough to be worth an exception.
+paragraph, for the reason below. `--text-2xl` has no consumer on `/` as of the
+2026-09-03 stage redraw — it went to the close's four `dt` figures, which are
+gone with the close itself, and nothing replaces them at that rung. Both
+rungs are still opt-in classes rather than anything an element resolves to by
+default, which is the whole of what the rule asks, and `--text-2xl` having no
+consumer today does not un-declare it: the paragraph below still states what
+either rung is for a page that wants one.
 
 **On `/` the display rung now sets a paragraph rather than the heading.**
 `scripts/check-deploy-artifact.mjs` finds this site's root document by an `h1`
@@ -984,6 +991,18 @@ Also still banned: coloured glows, zero-offset halos, and stacked shadows
 imitating one large soft one. A shadow is cast by a surface above a surface. It
 is not a way to tint an edge.
 
+**One exception, named rather than left to erode the rule by precedent.**
+`.bench__frame` in `Bench.astro` carries a low-alpha `--color-accent` radial
+glow behind it as of 2026-09-03's stage redraw, composed with `color-mix()`
+rather than a new hex (rule 1 still holds — nothing here is a literal
+colour). It is the one element on the site with an elevation to begin with,
+so this is a second thing that element alone may spend, not a widening of
+what any panel may do. The 1px ring the same redraw drew around the frame is
+an `inset` box-shadow layered in the same `box-shadow` declaration as
+`--elevation-instrument`, not a `border` — the sentence "an elevated surface
+never also carries a border" is unchanged and still enforces the one pairing
+this rule exists to keep unassemblable.
+
 **What may spend an elevation, by name.** `--elevation-instrument` belongs to
 `.bench__frame` in `Bench.astro`, the box the player sits in on `/`, and to
 nothing else. It is the element that page is built around, and a second
@@ -1215,14 +1234,17 @@ out of however many a provider actually refused, picked by a lookup table's
 iteration order, and the maintainer's assessment was that this reads as
 arbitrary. The animation left with the element it dressed.
 
-**This app authors no animation at all, as of that cut.** Not the vocabulary
-above, not the reason line that replaced it as this section's subject, nothing
-else written since. `[data-stance='argument']` still exists on `/`'s `<body>`
-and still distinguishes it from every document route — see Stances — but there
-is no rule left anywhere in this codebase keyed off it. The three constraints
-below are kept as a record of what any animation this app writes has always had
-to satisfy, should one be written again, rather than as a description of
-something currently running:
+**This app authored no animation for a long stretch, and that changed on
+2026-09-03.** `index.astro` now runs one entrance reveal on load (the hero's
+own children and the stage, staggered by 80ms), `Bench.astro`'s stage
+crossfades on a skin flip, and its composition panel highlights a changed
+line. `[data-stance='argument']` is not what any of the three key off — the
+lesson recorded below (a vocabulary can be correct and still be dead weight)
+is why none of them is a revival of the deleted `.u-enter` machinery, each is
+scoped to the one element it dresses rather than to a site-wide class. The
+three constraints below are exactly what each of the three was built to
+satisfy, and are no longer a record of a vocabulary with nothing running
+against it:
 
 - **The resting state is what the CSS gives the element.** There is no
   `opacity: 0` default anywhere on this site. The animation is `both`-filled
@@ -2000,6 +2022,22 @@ list is two: composability, which the composition panel still demonstrates,
 and customisability, which the skin switch still does. Capability querying and
 autoplay recovery are not sold on `/` at all.
 
+**The page was redrawn again on 2026-09-03, as "The Stage."** The install
+command moved from the close into the hero, beside a new Start link; the
+switches and the quiet line now sit in one row under the stage rather than
+beside the composition panel, which is full width below them; the frame
+carries a soft accent glow, a hairline ring and its existing deep shadow; a
+switch flip highlights the composition's changed line and crossfades the
+stage; and four advertising cards — Compose, Style, Query, Recover — follow
+the bench. Autoplay recovery and capability querying, both cut from the page
+outright in the paragraph above, are now **advertised** in two of those four
+cards, each with a real prop name or hook and no provider named — a claim,
+not a demonstration, since `/` still mounts its player with
+`loading="interaction"` and a refusal still cannot be shown there. The
+"capability querying and autoplay recovery are not sold on `/` at all"
+sentence two paragraphs up is corrected by this one: they are advertised, not
+sold by demonstration, and the distinction is the whole of what changed.
+
 **The page carries one block of code and it is generated, which retires the one
 exception `/` used to hold.** The fifth version wrote four snippets by hand in
 its own frontmatter, and this document defended them: they were three or four
@@ -2061,28 +2099,38 @@ different changes to what the frame shows, none of which touched the sentence.
 string claims neither that nothing has loaded nor that no request has left, so
 the next change to the frame fails a gate instead of a reader.
 
-**The close is four figures, the command, the fine print and the ways onward.**
-The first figure is measured at build time from `scripts/bundle-budgets.mjs`,
-the module `pnpm test:budgets` gates with, so the page and the gate cannot state
-different numbers. The other three are facts about how the packages are
-published rather than measurements, so they are written. The close had an
-end-credits treatment for one page's life: its own dark panel, a three-line roll
-set in mono, and a heading over a second copy of the install command. On screen
-that was a large mostly empty box at the foot of the page, and the roll was a
-joke told in 12px type. A reader who leaves before the close has already had the
-whole argument, which is the test every part of this page has to pass, so the
-close takes no treatment of its own.
+**The close was four figures, the command, the fine print and the ways
+onward for two page's lives, and moved again on 2026-09-03.** The command
+opens the hero now instead — see the paragraph above — and the close keeps
+one measured line, read from `scripts/bundle-budgets.mjs` the same
+build-time module the first of the old four figures was, a second, larger
+repeat of the install command, and the same links as before. The fine print
+("React 19 peer, ESM only, named exports") is gone outright rather than
+moved: nothing on the page states it any more. The close had an end-credits
+treatment for one page's life before either of those: its own dark panel, a
+three-line roll set in mono, and a heading over a second copy of the install
+command. On screen that was a large mostly empty box at the foot of the page,
+and the roll was a joke told in 12px type. A reader who leaves before the
+close has already had the whole argument, which is the test every part of
+this page has to pass, so the close takes no treatment of its own.
 
-**The install line is the call to action, and it is click-to-copy.** It used to
-be printed twice, in the hero and in the credits, from one string in the page's
-frontmatter so that the two could not drift; the credits are gone and it is
-printed once, so the string is a `const` for tidiness rather than for safety.
-The command is selectable text; the
-copy button is `hidden` in the markup and revealed by a script. Writing to the
-clipboard is the whole of what the control does, so with no script there is
-nothing to press rather than a control that swallows a click, and nothing is
-lost, because the command was never behind the button. The feedback is a text
-swap on the button with the same words said once through a `role="status"` line.
+**The install line is the call to action, and it is click-to-copy where it is
+interactive.** It used to be printed twice, in the hero and in the credits,
+from one string in the page's frontmatter so that the two could not drift;
+the credits were cut and it was printed once, the `const` kept for tidiness
+rather than for safety. The 2026-09-03 stage redraw put it back to two: once
+in the hero, with the click-to-copy behaviour below and the `data-install*`
+attributes that carry it, and once again in the close, as a plain, larger
+repeat with no button and no separate `data-install` group of its own — the
+close reads the same `{install}` string rather than a second copy of it. Both
+still come from the one page-level `const`, which is once again there for the
+reason the sentence used to give it before the credits were cut: so the two
+printed copies cannot drift. The command is selectable text; the copy button
+is `hidden` in the markup and revealed by a script. Writing to the clipboard
+is the whole of what the control does, so with no script there is nothing to
+press rather than a control that swallows a click, and nothing is lost,
+because the command was never behind the button. The feedback is a text swap
+on the button with the same words said once through a `role="status"` line.
 
 **The page makes no claim about any other library.** No comparison, no named
 competitor, no implied one. A draft opened with "every video player ships a
@@ -2096,8 +2144,12 @@ what a switch is. A page that explains its own interface is a page that does not
 trust it.
 
 **Prose is held to `--measure` on the page**, and the page's own
-maximum is `72rem`. The width buys the readout its two columns, not longer
-lines.
+maximum is `72rem`. The width used to buy the readout its two columns; the
+2026-09-03 stage redraw dropped that grid — the switches and the quiet line
+share one row and the composition panel is full width below them, all still
+inside the same `72rem`. What the width buys now is room for the stage
+itself and for the two-column card grid below it, not longer prose lines and
+not a second readout column that no longer exists.
 
 One constraint on that page is `scripts/check-deploy-artifact.mjs`'s rather
 than this system's, and it is load-bearing: its `h1` is exactly `Playdeck`,
@@ -2565,3 +2617,24 @@ stranger's stylesheet has to be able to win against it; nothing here ships
 anywhere, so nothing here needs that. The two share no tokens and are not meant
 to match — `Bench.astro` maps one onto the other at a single seam, and that
 mapping is the whole of the contact between them.
+
+### The 2026-09-03 identity redraw
+
+`theme.css` and `docked.css` were redrawn together on 2026-09-03: a deeper,
+taller scrim; a seek bar that thickens and reveals its thumb on hover or
+focus; a two-stop gradient fill; a raised button radius and a pressed state;
+a dimmed duration; and, for `theme.css` alone, a real docked layout below
+48rem. Three tokens are new, and every other name in both files kept its own,
+so a consumer already overriding one keeps working:
+
+| Token | Default | Where |
+| --- | --- | --- |
+| `--playdeck-color-accent-tint` | `#9dd0ff` (`theme.css`) / `#8fb0f0` light, `#9dd0ff` dark (`docked.css`) | The seek fill's gradient end |
+| `--playdeck-control-pressed` | `rgb(255 255 255 / 0.2)` (`theme.css`) / `rgb(0 0 0 / 0.1)` light, `rgb(255 255 255 / 0.2)` dark (`docked.css`) | One step past `--playdeck-control-hover`, on `:active` |
+| `--playdeck-color-hairline` | `#d9d9d6` light / `#2a2a2d` dark | `theme.css`'s phone-docking control surface's top border, below 48rem — `docked.css` already had this token |
+
+`scripts/bundle-budgets.mjs` budgets each sheet's rules at 2.5 kB gzipped,
+raised to 3.0 kB in the same commit as whichever task crossed it, with the
+reason in that commit's message — the design is not thinned to fit. Neither
+sheet crossed it: measured after this redraw, `theme.css` rules at 2.32 kB,
+`docked.css` rules at 2.32 kB, both still under the floor.
