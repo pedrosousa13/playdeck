@@ -65,6 +65,16 @@
  *                                  step past --playdeck-control-hover's own
  *                                  0.06/0.12, the same "one darker" step
  *                                  theme.css takes)
+ *   --playdeck-color-duration      #5c5c5c light / #a3a3a3 dark  (paints the
+ *                                  duration Time only, dimming it below the
+ *                                  current time's on-surface ink the same way
+ *                                  theme.css's own duration rule does; that
+ *                                  file declares the token with a single
+ *                                  `rgb(255 255 255 / 0.64)` default built for
+ *                                  its own dark scrim, so this pair is a
+ *                                  second default rather than an invention,
+ *                                  the same shape as --playdeck-color-accent-
+ *                                  tint and --playdeck-control-pressed above)
  *
  * Non-text contrast (WCAG 2.2 1.4.11's 3:1 floor for a UI component's own
  * boundary, the same rule `theme.css`'s `slider non-text contrast` describe in
@@ -260,7 +270,12 @@
 
   :where([data-playdeck-part='time'][data-time-type='duration']) {
     margin-inline-end: auto;
-    opacity: 0.64;
+    /* Colour, not opacity: an `opacity` short of 1 here reads as mid-
+     * transition to `e2e/site-landing.spec.ts`'s `unsettled()` helper under
+     * `prefers-reduced-motion: reduce`, where nothing on the page is meant to
+     * still be animating. `theme.css`'s own duration rule carries the same
+     * reasoning at length. */
+    color: var(--playdeck-color-duration, #5c5c5c);
   }
 
   /* ---- sliders ----------------------------------------------------------- */
@@ -658,6 +673,10 @@
       [data-playdeck-part='settings-menu-trigger']
     ) {
       color: var(--playdeck-color-on-surface, #ededed);
+    }
+
+    :where([data-playdeck-part='time'][data-time-type='duration']) {
+      color: var(--playdeck-color-duration, #a3a3a3);
     }
 
     :where([data-playdeck-part='seek-buffered']) {

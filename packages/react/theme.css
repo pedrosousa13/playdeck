@@ -45,6 +45,8 @@
  *                --playdeck-color-focus         #fff
  *                --playdeck-color-backdrop      #000
  *                --playdeck-color-hairline      #d9d9d6 (phone docking only)
+ *                --playdeck-color-duration      rgb(255 255 255 / 0.64)
+ *                                                (duration Time only)
  *   Typography   --playdeck-font-family         system-ui stack
  *                --playdeck-font-size           0.875rem
  *                --playdeck-font-size-small     0.8125rem
@@ -330,14 +332,21 @@
    * untimed branches, so the margin survives a duration that has no value. */
   :where([data-playdeck-part='time'][data-time-type='duration']) {
     margin-inline-end: auto;
-    /* The current time stays full ink; only the total dims, which is what
-     * reads as "less important" without a second colour. `theme.css` has no
-     * selector that can reach a *consumer's* separator text between the two
-     * `Player.Time`s (it carries no `data-playdeck-part` and there is no
+    /* The current time stays full ink; only the total dims, and it dims by
+     * its own colour token rather than `opacity`: an `opacity` short of 1 here
+     * reads as mid-transition to anything that treats "not fully opaque" as
+     * unsettled, which is exactly what `e2e/site-landing.spec.ts`'s
+     * `unsettled()` helper does under `prefers-reduced-motion: reduce`, where
+     * nothing on the page is meant to still be animating. A translucent
+     * colour reaches the same look without that false read: composited over
+     * the same scrim, `rgb(255 255 255 / 0.64)` paints the identical pixel
+     * `opacity: 0.64` did, but the element's own `opacity` stays 1. `theme.css`
+     * has no selector that can reach a *consumer's* separator text between the
+     * two `Player.Time`s (it carries no `data-playdeck-part` and there is no
      * previous-sibling combinator in CSS), so a composition that wants its
      * own separator dimmed to match does that itself — see `BenchIsland.tsx`
      * if this page's own separator should follow suit. */
-    opacity: 0.64;
+    color: var(--playdeck-color-duration, rgb(255 255 255 / 0.64));
   }
 
   /* ---- sliders ----------------------------------------------------------- */

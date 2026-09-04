@@ -842,12 +842,39 @@ describe('docked.css text contrast', () => {
     { name: 'on-surface vs surface (light)', fg: '#1c1c1e', bg: '#f4f4f2' },
     { name: 'on-surface vs surface (dark)', fg: '#ededed', bg: '#141416' },
     { name: 'accent vs surface (light)', fg: '#2b52d6', bg: '#f4f4f2' },
-    { name: 'accent vs surface (dark)', fg: '#3ea6ff', bg: '#141416' }
+    { name: 'accent vs surface (dark)', fg: '#3ea6ff', bg: '#141416' },
+    // The duration `Time`'s own dimmed colour (#594's follow-up): opacity
+    // read as still-animating to `e2e/site-landing.spec.ts`'s
+    // `unsettled()` helper under reduced motion, so both sheets dim this
+    // text with a colour token instead. Checked here rather than assumed,
+    // the same as every other pair in this suite.
+    { name: 'duration vs surface (light)', fg: '#5c5c5c', bg: '#f4f4f2' },
+    { name: 'duration vs surface (dark)', fg: '#a3a3a3', bg: '#141416' }
   ];
 
   test.each(textPairs)('$name clears 4.5:1', ({ fg, bg }) => {
     const ratio = contrast(parseColor(fg), parseColor(bg));
     expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // The margins stated, pinned so a token move has to restate what it did
+  // rather than quietly spending headroom -- the same shape as `docked.css
+  // slider non-text contrast`'s own `states the ratio of every boundary`.
+  test('states the ratio of every text pair', () => {
+    const stated = Object.fromEntries(
+      textPairs.map(({ name, fg, bg }) => [
+        name,
+        `${contrast(parseColor(fg), parseColor(bg)).toFixed(2)}:1`
+      ])
+    );
+    expect(stated).toEqual({
+      'on-surface vs surface (light)': '15.45:1',
+      'on-surface vs surface (dark)': '15.72:1',
+      'accent vs surface (light)': '5.81:1',
+      'accent vs surface (dark)': '7.10:1',
+      'duration vs surface (light)': '6.07:1',
+      'duration vs surface (dark)': '7.29:1'
+    });
   });
 });
 
