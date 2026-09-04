@@ -1,24 +1,16 @@
 import * as Player from '@playdeck/react';
 
 /**
- * The label a quality rung prints: its height, and its bitrate alongside it
- * when the entry carries one. Neither is a promise the *library* makes about
- * every provider -- `PlayerQuality`'s fields are each independently nullable
- * -- so the rung's own id stands in for the one entry that carries neither.
+ * The label a quality rung prints: its height. Not a promise the *library*
+ * makes about every provider -- `PlayerQuality`'s `height` field is nullable
+ * -- so the rung's own id stands in for the one entry that carries none. The
+ * bitrate is not printed here; the stats readout under the player already
+ * shows it.
  */
 const qualityLabel = (quality: {
   readonly id: string;
   readonly height: number | null;
-  readonly bitrate: number | null;
-}): string => {
-  const height = quality.height === null ? null : `${quality.height}p`;
-  const bitrate =
-    quality.bitrate === null
-      ? null
-      : `${Math.round(quality.bitrate / 1000)} kbps`;
-  if (height !== null && bitrate !== null) return `${height} · ${bitrate}`;
-  return height ?? bitrate ?? quality.id;
-};
+}): string => (quality.height === null ? quality.id : `${quality.height}p`);
 
 // A settings menu built from the menu parts: quality, then playback rate.
 // `SettingsMenu` owns the open state and returns focus to the trigger on
