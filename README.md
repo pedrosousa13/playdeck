@@ -80,19 +80,19 @@ initial graph.
 Lazy loading is worth stating in bytes rather than in adjectives, because the
 number a reader cares about is the one for the source they are playing, and for
 one of these sources it is large. Gzip, excluding React itself and the optional
-`theme.css` (10.6 KB):
+`theme.css` (12.0 KB):
 
 <!-- bytes:table -->
 
 | Playing                                           | Downloads                                                          | Total        |
 | ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
-| MP4 or WebM                                       | core 7.8 + primitives 17.4 + native 5.8                            | **31.0 KB**  |
-| HLS on Safari and iOS                             | the above + HLS adapter 4.8                                        | **35.8 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **205.0 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 35.8 + hls.js light 113.0 | **148.8 KB** |
-| YouTube                                           | core 7.8 + primitives 17.4 + adapter 6.1                           | **31.3 KB**  |
-| Vimeo                                             | core 7.8 + primitives 17.4 + adapter 7.8 + `@vimeo/player` 8.5     | **41.5 KB**  |
-| Wistia                                            | core 7.8 + primitives 17.4 + adapter 5.3                           | **30.5 KB**  |
+| MP4 or WebM                                       | core 7.8 + primitives 17.9 + native 5.8                            | **31.5 KB**  |
+| HLS on Safari and iOS                             | the above + HLS adapter 4.8                                        | **36.3 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **205.5 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 36.3 + hls.js light 113.0 | **149.3 KB** |
+| YouTube                                           | core 7.8 + primitives 17.9 + adapter 6.1                           | **31.8 KB**  |
+| Vimeo                                             | core 7.8 + primitives 17.9 + adapter 7.8 + `@vimeo/player` 8.5     | **42.0 KB**  |
+| Wistia                                            | core 7.8 + primitives 17.9 + adapter 5.3                           | **31.0 KB**  |
 
 <!-- /bytes -->
 

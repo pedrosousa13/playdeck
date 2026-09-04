@@ -48,6 +48,7 @@ export type HlsParsedCueLike = {
 
 export type HlsConfigLike = {
   readonly renderTextTracksNatively?: boolean;
+  readonly preferManagedMediaSource?: boolean;
 };
 
 export type HlsInstanceLike = {

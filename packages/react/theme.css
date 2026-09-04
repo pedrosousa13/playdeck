@@ -55,7 +55,14 @@
  *                --playdeck-space-3             0.75rem
  *   Shape        --playdeck-radius              0.375rem
  *                --playdeck-radius-large        0.5rem
- *   Controls     --playdeck-control-size        2.75rem  (44px, the locked target)
+ *   Controls     --playdeck-control-size        2.75rem  (44px, the default
+ *                                                target -- themeable freely,
+ *                                                larger or smaller)
+ *                --playdeck-control-min-size    2.75rem  (44px; the locked
+ *                                                floor, independent of the
+ *                                                size above -- see
+ *                                                `controlTargetStyle` in
+ *                                                loading-error.tsx)
  *                --playdeck-activation-size     4rem
  *                --playdeck-control-icon-size   1.25rem
  *                --playdeck-control-hover       rgb(255 255 255 / 0.12)
@@ -689,8 +696,13 @@
        * clears WCAG 2.5.8's 24px minimum target size with room to spare, and
        * freeing those 8px per button is what the row-two overflow (#598)
        * needed to resolve on one line at 360px -- see the arithmetic in
-       * `theme.test.ts`'s phone-sizing test. */
+       * `theme.test.ts`'s phone-sizing test. Both tokens move together: the
+       * size above and the floor below are read separately by
+       * `controlTargetStyle` (loading-error.tsx) precisely so that a bare
+       * consumer setting only `--playdeck-control-size` cannot also move the
+       * floor -- this query is the one place that is allowed to. */
       --playdeck-control-size: 2.5rem;
+      --playdeck-control-min-size: 2.5rem;
       /* The seek row's own floor, independent of the button size above: row
        * two still needs 40px targets, but row one is a track and a thumb, not
        * a button, and 1.5rem (24px) is the WCAG 2.5.8 minimum it can shrink

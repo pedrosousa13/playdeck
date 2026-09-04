@@ -159,14 +159,17 @@ describe('PlayButton', () => {
     expect(ref.current).toBe(button);
     expect(button.classList.contains('c')).toBe(true);
     expect(button.style.color).toBe('red');
-    // A `var()` read (#598), not the literal `44px` it used to be, so a
-    // theme's own "below 48rem" query can shrink it; falls back to 44px --
-    // the desktop lock -- for a bare consumer with no stylesheet loaded.
+    // A `var()` read of the dedicated floor token, not the literal `44px`
+    // it used to be and not `--playdeck-control-size` either: a theme's own
+    // "below 48rem" query moves both together, but a bare consumer setting
+    // only `--playdeck-control-size` cannot also shrink the floor. Falls
+    // back to 44px -- the desktop lock -- for a bare consumer with no
+    // stylesheet loaded.
     expect(button.style.minWidth).toBe(
-      'var(--playdeck-control-size, 2.75rem)'
+      'var(--playdeck-control-min-size, 2.75rem)'
     );
     expect(button.style.minHeight).toBe(
-      'var(--playdeck-control-size, 2.75rem)'
+      'var(--playdeck-control-min-size, 2.75rem)'
     );
   });
 
@@ -606,7 +609,9 @@ describe('SeekSlider', () => {
 
   test('gives the wrapper and the scrubber input a 44px default target', () => {
     const { container } = renderWithPlayer(<Player.SeekSlider />, seekReady());
-    const wrapper = container.querySelector('[data-playdeck-part="seek-slider"]');
+    const wrapper = container.querySelector(
+      '[data-playdeck-part="seek-slider"]'
+    );
     const slider = screen.getByRole('slider', { name: 'Seek' });
     // A `var()` read, not the literal `44px` either used to carry, so a
     // theme's own "below 48rem" query can shrink the row -- the same move
@@ -2246,10 +2251,10 @@ describe('AirPlayButton', () => {
     expect(button.classList.contains('c')).toBe(true);
     expect(button.style.color).toBe('red');
     expect(button.style.minWidth).toBe(
-      'var(--playdeck-control-size, 2.75rem)'
+      'var(--playdeck-control-min-size, 2.75rem)'
     );
     expect(button.style.minHeight).toBe(
-      'var(--playdeck-control-size, 2.75rem)'
+      'var(--playdeck-control-min-size, 2.75rem)'
     );
     // A bare <button> inside a form submits it.
     expect(button.getAttribute('type')).toBe('button');
