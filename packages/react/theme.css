@@ -731,6 +731,69 @@
     box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.4);
   }
 
+  /* ---- menu, phone (issue #594's follow-up) --------------------------------
+   * A popover anchored above the trigger only works while there is picture
+   * enough above it to hold the popover's own height. Below 48rem the stage
+   * is letterboxed to 16:9 at as little as ~184px tall (`Bench.astro`'s own
+   * rule), and the menu -- Auto, three qualities, four rates, Restart -- is
+   * taller than that: anchored, it is cut off by the picture's bounds. What
+   * YouTube and Vimeo do instead is what this draws: the menu leaves the
+   * picture and becomes a sheet that slides up from the bottom of the
+   * screen, full width, over the page, with a scrim behind it.
+   *
+   * `position: fixed; inset: auto 0 0 0` is what makes it a sheet rather
+   * than a popover: pinned to the viewport's own bottom and both sides,
+   * however tall its content asks to be, capped at `max-block-size` and
+   * scrollable past that. It resolves against the *viewport*, not the
+   * stage, only because nothing between here and the document root carries
+   * a `transform`, `filter`, `perspective`, `contain: paint`/`layout` or
+   * `will-change: transform` -- any of those would make that ancestor the
+   * sheet's containing block and trap it inside the stage instead. The one
+   * ancestor that used to needed watching, `apps/site`'s own entrance
+   * animation on `.bench__stage`, ended its `enter` keyframe on
+   * `transform: translateY(0)` rather than `none`; both look identical at
+   * rest, but only `none` leaves no transform behind once the `forwards`
+   * fill keeps the last keyframe applied forever. Fixed there
+   * (`apps/site/src/pages/index.astro`), not here and not with a portal.
+   *
+   * The scrim is `box-shadow: 0 0 0 100vmax`, not a `::before`: a
+   * pseudo-element cannot sit inside `:where()` (Selectors 4 forbids it),
+   * so a rule painting one could never be specificity-zero, and it would
+   * also have to be excluded from `SettingsMenuContent`'s outside-pointerdown
+   * close -- a pointerdown on a pseudo-element targets its host, which
+   * `rootRef.contains()` already treats as inside. A shadow spread past any
+   * real viewport paints the same dimming with no element of its own: nothing
+   * is there to catch the pointerdown, so a tap on it reaches whatever is
+   * actually under the page, which the existing outside-pointerdown listener
+   * already closes the menu for.
+   */
+  @media (max-width: 48rem) {
+    :where(
+      [data-playdeck-part='settings-menu'],
+      [data-playdeck-part='captions-menu']
+    ) {
+      position: fixed;
+      inset: auto 0 0 0;
+      max-block-size: 70vh;
+      overflow-y: auto;
+      border-radius: var(--playdeck-radius-large, 0.5rem)
+        var(--playdeck-radius-large, 0.5rem) 0 0;
+      padding-block: var(--playdeck-space-2, 0.5rem);
+      padding-block-end: calc(
+        var(--playdeck-space-2, 0.5rem) +
+          var(--playdeck-safe-bottom, env(safe-area-inset-bottom, 0px))
+      );
+      box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.5);
+    }
+
+    :where(
+      [data-playdeck-part='menu-item'],
+      [data-playdeck-part='menu-radio-item']
+    ) {
+      min-block-size: 2.75rem;
+    }
+  }
+
   :where(
     [data-playdeck-part='menu-item'],
     [data-playdeck-part='menu-radio-item']

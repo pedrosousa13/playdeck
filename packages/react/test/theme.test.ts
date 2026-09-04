@@ -510,6 +510,48 @@ describe.each(fixtures)(
       expect(names.filter((name) => elsewhere.includes(name))).toEqual([]);
     });
 
+    // The mobile bottom sheet (issue #594's follow-up): below 48rem both
+    // menus leave the picture. A popover anchored above the trigger cannot
+    // fit inside a letterboxed 16:9 stage as short as ~184px tall, so the
+    // menu becomes a `position: fixed` sheet pinned to the viewport's own
+    // bottom -- not the stage's, which is what `inset: auto 0 0 0` needs the
+    // containing-block check elsewhere in this branch for -- capped at 70dvh
+    // and scrollable past it, with a scrim behind it. The scrim is a
+    // `box-shadow` spread past any real viewport rather than a `::before`:
+    // a pseudo-element cannot sit inside `:where()` (Selectors 4 forbids it),
+    // so a rule painting one could never pass the specificity-zero test
+    // above, and unlike the shadow it would also need its own carve-out from
+    // `SettingsMenuContent`'s outside-pointerdown close, since a pointerdown
+    // on a pseudo-element targets its host rather than reaching past it.
+    test('below 48rem, both menus become a fixed bottom sheet with a scrim', () => {
+      const sheetRule =
+        /:where\(\s*\[data-playdeck-part='settings-menu'\],\s*\[data-playdeck-part='captions-menu'\]\s*\)\s*\{\s*position:\s*fixed;\s*inset:\s*auto 0 0 0;\s*max-block-size:\s*70vh;\s*overflow-y:\s*auto;[^}]*\}/.exec(
+          withoutComments
+        );
+      expect(sheetRule).not.toBeNull();
+      // Rounded top corners, not all four: a sheet flush with the viewport's
+      // own edges on the other three.
+      expect(sheetRule![0]).toMatch(
+        /border-radius:\s*var\(--playdeck-radius-large,\s*0\.5rem\)\s+var\(--playdeck-radius-large,\s*0\.5rem\)\s+0\s+0;/
+      );
+      // The bottom safe-area inset, added to the block padding rather than
+      // replacing it.
+      expect(sheetRule![0]).toMatch(
+        /padding-block-end:\s*calc\(\s*var\(--playdeck-space-2,\s*0\.5rem\)\s*\+\s*var\(--playdeck-safe-bottom,\s*env\(safe-area-inset-bottom,\s*0px\)\)\s*\)/
+      );
+      expect(sheetRule![0]).toMatch(
+        /box-shadow:\s*0 0 0 100vmax rgb\(0 0 0 \/ 0\.5\);/
+      );
+
+      // The 44px hit target, restated for the sheet: the phone control-bar
+      // query elsewhere in this file shrinks `--playdeck-control-size` to
+      // 2.5rem (40px), and the menu items inherit that variable unless this
+      // rule overrides it back up.
+      expect(withoutComments).toMatch(
+        /:where\(\s*\[data-playdeck-part='menu-item'\],\s*\[data-playdeck-part='menu-radio-item'\]\s*\)\s*\{\s*min-block-size:\s*2\.75rem;\s*\}/
+      );
+    });
+
     test(`is reachable as @playdeck/react/${label} and shipped in the tarball`, async () => {
       const manifest = JSON.parse(
         await readFile(new URL('../package.json', import.meta.url), 'utf8')

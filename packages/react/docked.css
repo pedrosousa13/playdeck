@@ -552,6 +552,42 @@
     box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.15);
   }
 
+  /* ---- menu, phone (issue #594's follow-up) --------------------------------
+   * The same bottom sheet `theme.css` draws below 48rem, and for the same
+   * reason -- see that file's own comment for the popover-doesn't-fit
+   * argument, the containing-block requirement `inset: auto 0 0 0` leans on,
+   * and why the scrim is a `box-shadow` rather than a `::before`. Docked
+   * otherwise never draws a scrim (its bar is a flat surface, not one over a
+   * gradient), but the sheet is a modal affordance, not the bar's own
+   * surface, so it gets the same dimmed backdrop theme.css's sheet does.
+   */
+  @media (max-width: 48rem) {
+    :where(
+      [data-playdeck-part='settings-menu'],
+      [data-playdeck-part='captions-menu']
+    ) {
+      position: fixed;
+      inset: auto 0 0 0;
+      max-block-size: 70vh;
+      overflow-y: auto;
+      border-radius: var(--playdeck-radius-large, 0.5rem)
+        var(--playdeck-radius-large, 0.5rem) 0 0;
+      padding-block: var(--playdeck-space-2, 0.5rem);
+      padding-block-end: calc(
+        var(--playdeck-space-2, 0.5rem) +
+          var(--playdeck-safe-bottom, env(safe-area-inset-bottom, 0px))
+      );
+      box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.5);
+    }
+
+    :where(
+      [data-playdeck-part='menu-item'],
+      [data-playdeck-part='menu-radio-item']
+    ) {
+      min-block-size: 2.75rem;
+    }
+  }
+
   :where(
     [data-playdeck-part='menu-item'],
     [data-playdeck-part='menu-radio-item']

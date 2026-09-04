@@ -199,9 +199,18 @@ export const targets = [
     // deliberately: the two files do comparable work, so the one that arrived
     // second gets no more room than the first. Where either stands now is
     // printed by `pnpm test:budgets` rather than restated here.
+    //
+    // Raised to 3.0 KB (issue #594's follow-up, the phone settings sheet):
+    // the mobile bottom-sheet rules for `settings-menu`/`captions-menu` --
+    // `position: fixed`, the scrim, the rounded top corners, the 44px item
+    // floor -- pushed the rules to 2.55 KB, 0.05 KB over the old 2.5 KB
+    // ceiling. Per this repo's standing rule (`docs/superpowers/specs/
+    // 2026-09-03-stage-homepage-and-theme-identity-design.md`'s "Budget"
+    // section), a sheet that exceeds its budget gets it raised to 3.0 KB in
+    // the same commit, design not thinned to fit.
     name: '@playdeck/react/docked.css',
     path: 'packages/react/docked.css',
-    budget: 2.5,
+    budget: 3.0,
     budgetedSubset: { label: 'CSS rules', extract: stripCssComments }
   },
   {

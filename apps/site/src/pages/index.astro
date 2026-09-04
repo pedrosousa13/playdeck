@@ -355,8 +355,7 @@ const install = 'pnpm add @playdeck/react';
     html[data-entered] .thesis__display,
     html[data-entered] .thesis__lede,
     html[data-entered] .install,
-    html[data-entered] .thesis__actions,
-    html[data-entered] :global(.bench__stage) {
+    html[data-entered] .thesis__actions {
       animation: enter var(--duration-slow) var(--ease) forwards;
     }
 
@@ -376,7 +375,23 @@ const install = 'pnpm add @playdeck/react';
       animation-delay: 320ms;
     }
 
+    /* Fades only, no rise: `.bench__stage` wraps the settings menu's phone
+     * bottom sheet (`theme.css`/`docked.css`'s "menu, phone" rules), which
+     * needs it to carry no `transform` so it is not the sheet's `position:
+     * fixed` containing block. Writing `transform: none` into `enter`'s own
+     * end keyframe still leaves that ancestor with one: a `forwards`-filled
+     * `Animation` keeps targeting `transform` forever once played, whatever
+     * value its last keyframe named, so `getComputedStyle` reports a
+     * resolved `matrix(1, 0, 0, 1, 0, 0)` -- not the keyword `none` -- for
+     * as long as that `Animation` object exists, which is what actually
+     * establishes the containing block, independent of the matrix being the
+     * identity. `enter-fade` is `enter` with the `transform` line cut, so no
+     * `Animation` ever targets that property here and none survives to
+     * retain one. The rise this element loses is 12px on a stage that is
+     * already the page's largest element; the five rules above keep it for
+     * everything smaller. */
     html[data-entered] :global(.bench__stage) {
+      animation: enter-fade var(--duration-slow) var(--ease) forwards;
       animation-delay: 400ms;
     }
 
@@ -387,7 +402,16 @@ const install = 'pnpm add @playdeck/react';
       }
       to {
         opacity: 1;
-        transform: translateY(0);
+        transform: none;
+      }
+    }
+
+    @keyframes enter-fade {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
       }
     }
   }
