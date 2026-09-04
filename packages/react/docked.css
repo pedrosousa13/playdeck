@@ -523,6 +523,7 @@
           var(--playdeck-safe-right, env(safe-area-inset-right, 0px))
       );
       --playdeck-control-size: 2.5rem;
+      --playdeck-control-min-size: 2.5rem;
       --playdeck-seek-slider-min-block-size: 1.5rem;
     }
 

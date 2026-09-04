@@ -1205,6 +1205,10 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     // Still ahead of WCAG 2.5.8's 24px floor at 40px; 2.75rem (44px) is the
     // desktop-only lock the token's own doc comment records.
     expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
+    // The accessibility floor `controlTargetStyle` reads, moved down here
+    // alongside the size above -- the one place besides the desktop default
+    // allowed to move it (loading-error.tsx's own comment on the token).
+    expect(query).toMatch(/--playdeck-control-min-size:\s*2\.5rem;/);
     // The seek row's own floor, at the 24px WCAG 2.5.8 minimum itself --
     // independent of the button size above.
     expect(query).toMatch(/--playdeck-seek-slider-min-block-size:\s*1\.5rem;/);
@@ -1280,6 +1284,9 @@ describe('docked.css phone sizing (not shared with theme.css)', () => {
     // Still ahead of WCAG 2.5.8's 24px floor at 40px; 2.75rem (44px) is the
     // desktop-only lock the token's own doc comment records in theme.css.
     expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
+    // The accessibility floor `controlTargetStyle` reads; see theme.css's
+    // own copy of this test.
+    expect(query).toMatch(/--playdeck-control-min-size:\s*2\.5rem;/);
     expect(query).toMatch(/--playdeck-seek-slider-min-block-size:\s*1\.5rem;/);
 
     expect(query).toMatch(
