@@ -647,6 +647,15 @@ const courseCss = `
   font-size: 0.875rem;
 }
 .study-resume__button {
+  /* ActivationButton writes background-color and border of its own as an
+     inline style, reading --playdeck-activation-fill and
+     --playdeck-activation-border (default transparent / 0) — an inline
+     declaration outranks the background-color below however it is written,
+     so left unset this button renders fully transparent and its near-white
+     text sits unreadable on the banner's own light ground. Setting the two
+     tokens is how a consumer's stylesheet reaches this part at all. */
+  --playdeck-activation-fill: #1f6f63;
+  --playdeck-activation-border: 0;
   display: inline-flex;
   gap: 0.4rem;
   align-items: center;

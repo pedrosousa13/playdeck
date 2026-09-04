@@ -129,3 +129,31 @@ test('no clip is fetched before a press', async ({ page }) => {
   // the one claim on it that a reader cannot check by looking.
   expect(media).toEqual([]);
 });
+
+// `ActivationButton` writes `background-color` as an inline style reading
+// `--playdeck-activation-fill` (`loading-error.tsx`), which beats a class
+// selector's own `background-color` however it is written. Both examples set
+// the fill twice for exactly that reason — once as the token, once as the
+// property a bare consumer without the token would still read — and a class
+// that only set the property would render each of these two buttons fully
+// transparent: dark text unreadable on `stream-primary`'s dark card, and
+// near-white text unreadable on `study-resume__button`'s light banner. Read
+// back rather than asserted from the source, because the token is exactly the
+// half a class-only fix would silently miss.
+test('the resume affordances are not painted transparent', async ({
+  page
+}) => {
+  await page.goto(archetypes);
+
+  const streamResume = streaming(page).getByRole('button', {
+    name: 'Resume from 0:18',
+    exact: true
+  });
+  await expect(streamResume).toHaveCSS('background-color', 'rgb(236, 233, 245)');
+
+  const studyResume = course(page).getByRole('button', {
+    name: 'Resume the lesson from 0:14',
+    exact: true
+  });
+  await expect(studyResume).toHaveCSS('background-color', 'rgb(31, 111, 99)');
+});
