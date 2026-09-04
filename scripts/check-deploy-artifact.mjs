@@ -59,6 +59,47 @@ const mimeTypes = {
 };
 
 /**
+ * `apps/site/public/_redirects`, parsed the way Cloudflare Workers static
+ * assets read it: one `source destination [code]` rule per line, blank lines
+ * and `#` comments skipped. Read once at server start rather than per request
+ * — the artifact under test does not change while this server is up.
+ *
+ * @param {string} directory
+ * @returns {Promise<{ source: string; destination: string; code: number }[]>}
+ */
+const loadRedirects = async (directory) => {
+  const text = await readFile(join(directory, '_redirects'), 'utf8').catch(
+    () => ''
+  );
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'))
+    .map((line) => {
+      const [source, destination, code] = line.split(/\s+/);
+      return { source, destination, code: code ? Number(code) : 302 };
+    });
+};
+
+/**
+ * The destination for a request path, if `_redirects` names one. Only the
+ * subset of Cloudflare's matching this artifact's own `_redirects` uses: an
+ * exact match, or a `*` splat at the end of the source matching any suffix.
+ *
+ * @param {{ source: string; destination: string; code: number }[]} rules
+ * @param {string} pathname
+ */
+const matchRedirect = (rules, pathname) => {
+  for (const rule of rules) {
+    if (rule.source === pathname) return rule;
+    if (rule.source.endsWith('/*') && pathname.startsWith(rule.source.slice(0, -1))) {
+      return rule;
+    }
+  }
+  return null;
+};
+
+/**
  * Serves the assembled artifact at the origin root, which is what the Worker
  * does with the directory `wrangler.jsonc` names. The 404 is load-bearing
  * rather than incidental: `not_found_handling` is `"none"` precisely so a miss
@@ -68,12 +109,20 @@ const mimeTypes = {
  * @param {string} directory
  */
 const serveArtifact = async (directory) => {
+  const redirects = await loadRedirects(directory);
   const server = createServer(async (request, response) => {
     const { pathname } = new URL(request.url ?? '/', 'http://127.0.0.1');
     const notFound = () => {
       response.writeHead(404);
       response.end();
     };
+
+    const redirect = matchRedirect(redirects, pathname);
+    if (redirect) {
+      response.writeHead(redirect.code, { location: redirect.destination });
+      response.end();
+      return;
+    }
 
     const relative = pathname.slice(1);
     try {
@@ -146,6 +195,33 @@ const recordFailures = (page, failures, name) => {
   page.on('pageerror', (error) => {
     failures.push(`${name}: uncaught ${error.message}`);
   });
+};
+
+/**
+ * `/archetypes/` was the page's address before it was renamed to `/examples/`
+ * (#628). `apps/site/public/_redirects` is what keeps a link to the old
+ * address working, and `serveArtifact` above is what makes this artifact
+ * honour it the way the Worker does — so this is a check of the artifact, the
+ * same as `checkSite` below, and not a check of the browser following a
+ * redirect it already knows how to follow.
+ *
+ * @param {import('@playwright/test').Browser} browser
+ * @param {string} origin
+ * @param {string[]} failures
+ */
+const checkRedirect = async (browser, origin, failures) => {
+  const page = await browser.newPage();
+  recordFailures(page, failures, 'redirect');
+  await page.goto(`${origin}/archetypes/`);
+  const landed = new URL(page.url());
+  if (landed.pathname !== '/examples/') {
+    failures.push(
+      `redirect: /archetypes/ resolved to ${landed.pathname}, not /examples/.`
+    );
+  }
+  await page.getByRole('heading', { name: 'Examples', exact: true }).waitFor();
+  await page.waitForLoadState('networkidle');
+  await page.close();
 };
 
 /**
@@ -277,6 +353,7 @@ try {
   browser = await chromium.launch({ headless: true });
   console.log(`--- Visiting ${origin}${sitePath} ---`);
   await checkSite(browser, origin, failures);
+  await checkRedirect(browser, origin, failures);
 } catch (error) {
   // A thrown navigation or a locator that timed out is itself a failure, and
   // reporting it beside the recorded ones keeps the run to one report.
