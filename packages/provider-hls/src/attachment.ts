@@ -147,7 +147,29 @@ export const createHlsAttachment = (
     // lets this engine's caption pipeline (`CUES_PARSED`, below) stay fully
     // self-contained; see the text-track seam's `setCaptionRenderer` for
     // what this costs.
-    const instance = new HlsRuntime({ renderTextTracksNatively: false });
+    //
+    // `preferManagedMediaSource: false` overrides hls.js's own default
+    // (`true`), which reaches for the `ManagedMediaSource` global over plain
+    // `MediaSource` wherever WebKit exposes both. Managed buffering is gated
+    // on the media element actually streaming -- hls.js only appends
+    // fragments between the `startstreaming`/`endstreaming` events the
+    // browser fires on it -- and that event pair has a documented history of
+    // not firing reliably on WebKit (video-dev/hls.js#7984, fixed for the
+    // seek case in 1.6.19/1.7.1; this package is on 1.6.16). Measured on this
+    // site's own bench: the hls.js engine attaches and its manifest parses
+    // fine on WebKit, publishing a correct three-rung `qualities` ladder, but
+    // `quality` -- which only a `LEVEL_SWITCHED` event sets, and hls.js does
+    // not fire that until a fragment actually starts loading -- stays `null`
+    // for the full 20s a real press is given, because no `startstreaming`
+    // ever arrives to let buffering begin. Plain `MediaSource` carries no such
+    // gate, which is also what every other engine already uses (neither
+    // Chromium nor Firefox expose `ManagedMediaSource`), so this keeps every
+    // engine on the one well-exercised path rather than opting only WebKit
+    // into the newer, still-fragile one.
+    const instance = new HlsRuntime({
+      renderTextTracksNatively: false,
+      preferManagedMediaSource: false
+    });
     hls = instance;
     media.addEventListener('timeupdate', textTracks.handlers.onTimeUpdate);
     instance.on(HlsRuntime.Events.ERROR, (_event, data) =>

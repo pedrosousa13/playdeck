@@ -358,16 +358,22 @@ export const ErrorDisplay = ({
 // A `var()` read rather than the literal `44` it used to be (#598): an inline
 // style beats any stylesheet, so a fixed number here would have made
 // `theme.css`'s and `docked.css`'s own "below 48rem" queries dead CSS the
-// moment either tried to shrink `--playdeck-control-size` for one row of
-// phone-width buttons -- measured directly, the button stayed 44px wide with
-// the token correctly reading 2.5rem on its own ancestor. Reading the same
-// token this file's theme comments already document keeps the floor's
-// purpose intact for a bare consumer (falls back to the desktop 44px lock,
-// `--playdeck-control-size`'s own documented default) while letting a
-// stylesheet that redeclares the token -- the one thing a `var()` read, and
-// not a literal, can ever let happen -- shrink it, same as every other
-// themed dimension in this package.
+// moment either tried to shrink the control row for one row of phone-width
+// buttons.
+//
+// The token read is `--playdeck-control-min-size`, not `--playdeck-control-size`
+// itself: the two files' target-size class rule and this inline floor used to
+// read the same token (`--playdeck-control-size`), which quietly turned
+// Theme.mdx's documented contract -- "a smaller value is clamped up rather
+// than obeyed" -- into no floor at all, since a bare `--playdeck-control-size`
+// override on any ancestor moved both the size and its own floor together
+// (`stories/theme.stories.tsx`'s `ControlSizeFloorHolds` measured that
+// directly: 36px, not the locked 44px). A dedicated token keeps the floor
+// independent of the size a consumer themes: it falls back to the desktop
+// 44px lock for a bare consumer, same as before, and only the theme's own
+// "below 48rem" query -- which sets this token alongside
+// `--playdeck-control-size` -- is what moves it down to 40px.
 export const controlTargetStyle: CSSProperties = {
-  minWidth: 'var(--playdeck-control-size, 2.75rem)',
-  minHeight: 'var(--playdeck-control-size, 2.75rem)'
+  minWidth: 'var(--playdeck-control-min-size, 2.75rem)',
+  minHeight: 'var(--playdeck-control-min-size, 2.75rem)'
 };

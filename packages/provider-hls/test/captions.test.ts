@@ -219,7 +219,28 @@ test('does not expose caption commands on an unresolved HLS engine', async () =>
 test('constructs hls.js with renderTextTracksNatively off to avoid colliding with the native caption subsystem', async () => {
   const { hls } = await mountHlsEngineHls();
 
-  expect(hls.config).toEqual({ renderTextTracksNatively: false });
+  expect(hls.config).toEqual({
+    renderTextTracksNatively: false,
+    preferManagedMediaSource: false
+  });
+});
+
+// e2e/site-bench.spec.ts's live-stats test, WebKit only: hls.js attached and
+// parsed the manifest fine, publishing a correct three-rung `qualities`
+// ladder, but `quality` -- set only by a `LEVEL_SWITCHED` event, which hls.js
+// does not fire until a fragment starts loading -- stayed `null` for the
+// whole 20s a real press was given. hls.js prefers the `ManagedMediaSource`
+// global over plain `MediaSource` by default wherever WebKit exposes both,
+// and only appends fragments between the `startstreaming`/`endstreaming`
+// events the browser fires on that managed source -- a pair with a
+// documented history of not firing reliably on WebKit
+// (video-dev/hls.js#7984). `preferManagedMediaSource: false` above keeps
+// every engine on the same plain `MediaSource` path Chromium and Firefox
+// already use, since neither exposes `ManagedMediaSource` at all.
+test('constructs hls.js off ManagedMediaSource, so WebKit is not opted into its startstreaming gate', async () => {
+  const { hls } = await mountHlsEngineHls();
+
+  expect(hls.config?.preferManagedMediaSource).toBe(false);
 });
 
 test('discovers hls.js subtitle tracks and honors the default selection', async () => {

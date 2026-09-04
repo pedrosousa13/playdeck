@@ -140,16 +140,17 @@ test('no clip is fetched before a press', async ({ page }) => {
 // near-white text unreadable on `study-resume__button`'s light banner. Read
 // back rather than asserted from the source, because the token is exactly the
 // half a class-only fix would silently miss.
-test('the resume affordances are not painted transparent', async ({
-  page
-}) => {
+test('the resume affordances are not painted transparent', async ({ page }) => {
   await page.goto(examples);
 
   const streamResume = streaming(page).getByRole('button', {
     name: 'Resume from 0:18',
     exact: true
   });
-  await expect(streamResume).toHaveCSS('background-color', 'rgb(236, 233, 245)');
+  await expect(streamResume).toHaveCSS(
+    'background-color',
+    'rgb(236, 233, 245)'
+  );
 
   const studyResume = course(page).getByRole('button', {
     name: 'Resume the lesson from 0:14',

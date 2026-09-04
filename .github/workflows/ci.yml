@@ -493,6 +493,10 @@ jobs:
         timeout-minutes: 22
         with:
           browser: ${{ matrix.browser }}
+      # `test:e2e`'s Playwright config builds `apps/site` to serve the
+      # `site-*` specs (`playwright.config.ts`'s second `webServer`), so this
+      # job needs the same `ffmpeg` check and media cache the `site` job has.
+      - uses: ./.github/actions/sprite-fright-media
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=${{ matrix.browser }}
@@ -525,6 +529,10 @@ jobs:
         timeout-minutes: 22
         with:
           browser: chromium
+      # `test:e2e`'s Playwright config builds `apps/site` to serve the
+      # `site-*` specs (`playwright.config.ts`'s second `webServer`), so this
+      # job needs the same `ffmpeg` check and media cache the `site` job has.
+      - uses: ./.github/actions/sprite-fright-media
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
       - run: pnpm test:e2e --project=visual
@@ -579,6 +587,11 @@ jobs:
         timeout-minutes: 22
         with:
           browser: chromium
+      # `pnpm build` is `turbo run build`, which includes `@playdeck/site`:
+      # its `build` script runs `scripts/media-sprite-fright.mjs` before
+      # `astro build`, the same as `site` and `deploy-site.yml`. Same
+      # defensive `ffmpeg` check, same cache, keyed the same way.
+      - uses: ./.github/actions/sprite-fright-media
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
       # and hit that cache instead of rebuilding from scratch. It also has to
@@ -873,14 +886,7 @@ jobs:
       # `ffmpeg` check, same cache, keyed the same way, so a pull request that
       # touches neither the script nor the source film pays for neither the
       # download nor the encode.
-      - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
-      - uses: actions/cache@v6
-        with:
-          path: |
-            apps/site/public/media/sprite-fright
-            apps/site/public/sprite-fright-hls-poster-960w.webp
-            apps/site/public/sprite-fright-hls-poster-1920w.webp
-          key: sprite-fright-media-a69d68a5-a0e0-4a80-9d66-49f093c97aaf-804-${{ hashFiles('scripts/media-sprite-fright.mjs') }}
+      - uses: ./.github/actions/sprite-fright-media
       - run: pnpm exec turbo run build --filter=@playdeck/site...
       - run: pnpm test:site-analytics
       # Reads the build the step above produced, which is what lets it see the

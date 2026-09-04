@@ -774,13 +774,17 @@ test.describe('the phone control bar fits one row (#598)', () => {
       const controlsEl = document.querySelector(
         '[data-playdeck-part="controls"]'
       );
-      const seekEl = document.querySelector('[data-playdeck-part="seek-slider"]');
+      const seekEl = document.querySelector(
+        '[data-playdeck-part="seek-slider"]'
+      );
       // Scoped to `controlsEl` rather than `document`: `SurfaceToggle`
       // (`BenchIsland.tsx`) is `Player.PlayButton` too, full-bleed over the
       // whole picture and BEFORE the bar in document order, so an unscoped
       // query finds it first and reads the picture's own top instead of the
       // bar's second row.
-      const playEl = controlsEl?.querySelector('[data-playdeck-part="play-button"]');
+      const playEl = controlsEl?.querySelector(
+        '[data-playdeck-part="play-button"]'
+      );
       if (controlsEl === null || seekEl === null || playEl == null) {
         throw new Error('Missing a required control-bar part.');
       }
@@ -848,7 +852,7 @@ test.describe('the phone control bar fits one row (#598)', () => {
 test.describe('the settings menu is a bottom sheet on phones (#594 follow-up)', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test("the menu and every item sit inside the viewport, flush with its bottom, and a scrim tap closes it", async ({
+  test('the menu and every item sit inside the viewport, flush with its bottom, and a scrim tap closes it', async ({
     page
   }) => {
     test.slow();

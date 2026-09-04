@@ -219,9 +219,11 @@ describe('SettingsMenu', () => {
     const item = (await screen.findAllByRole('menuitem'))[0];
     // A `var()` read (#598), not the literal `44px` it used to be -- see
     // `controlTargetStyle`'s own comment in `loading-error.tsx`.
-    expect(item.style.minWidth).toBe('var(--playdeck-control-size, 2.75rem)');
+    expect(item.style.minWidth).toBe(
+      'var(--playdeck-control-min-size, 2.75rem)'
+    );
     expect(item.style.minHeight).toBe(
-      'var(--playdeck-control-size, 2.75rem)'
+      'var(--playdeck-control-min-size, 2.75rem)'
     );
   });
 });

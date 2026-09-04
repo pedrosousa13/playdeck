@@ -512,12 +512,12 @@ export const ReferencePlayer = ({
   // written back, which is what a positioning library would do for a consumer
   // that reached for one.
   //
-  // Two corrections, in this order: bound the box to the Viewport's height,
-  // then slide whatever still hangs over its top edge back down. Together they
-  // keep the menu inside the Viewport, which is the boundary that matters
-  // rather than the browser viewport — `.playdeck-example` is `overflow:
-  // hidden`, so an item outside it is painted nowhere even when its rect is
-  // on-screen.
+  // Three corrections, in this order: bound the box to the Viewport's height,
+  // slide whatever still hangs over its top edge back down, then slide
+  // whatever hangs past either side edge back in. Together they keep the menu
+  // inside the Viewport, which is the boundary that matters rather than the
+  // browser viewport — `.playdeck-example` is `overflow: hidden`, so an item
+  // outside it is painted nowhere even when its rect is on-screen.
   //
   // Found by part rather than by class, so the CaptionsMenu preset's content is
   // covered as well: it renders `SettingsMenuContent` itself and takes no
@@ -572,8 +572,24 @@ export const ReferencePlayer = ({
         }
         // The box is anchored at its bottom, so bounding its height moves its
         // top down by the same amount. What is left over is the shift.
-        const shift = Math.max(bounds.top - (natural.bottom - height), 0);
-        if (shift > 0) menu.style.translate = `0 ${shift}px`;
+        const shiftY = Math.max(bounds.top - (natural.bottom - height), 0);
+        // The box is anchored at `right: 0` against its own trigger's
+        // wrapper, which usually sits well inside the room that assumes —
+        // until the button row wraps. `.playdeck-example-row-buttons` wraps
+        // rather than shrinks its buttons (see above), and at large text
+        // sizes that puts a trigger on its own wrapped row starting from the
+        // Viewport's left edge. The menu still hangs off that trigger's own
+        // right edge, so its `min-width` then carries it past the Viewport's
+        // left edge with it — measured at -242 for the settings menu at
+        // 640px and 200% text. Checked both ways, since nothing rules out a
+        // trigger landing near the right edge with a menu wide enough to
+        // pass it too.
+        let shiftX = 0;
+        if (natural.left < bounds.left) shiftX = bounds.left - natural.left;
+        else if (natural.right > bounds.right)
+          shiftX = bounds.right - natural.right;
+        if (shiftX !== 0 || shiftY > 0)
+          menu.style.translate = `${shiftX}px ${shiftY}px`;
       }
     };
     // A menu exists in the DOM only while it is open (`SettingsMenuContent`

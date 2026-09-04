@@ -2700,7 +2700,7 @@ sheet crossed it: measured after this redraw, `theme.css` rules at 2.32 kB,
 **2026-09-04: the docked layout below 48rem was reversed.** `theme.css`'s
 own real docked layout below 48rem, named two paragraphs up, is gone. The
 control bar's idle fade — it fades while playing and returns on a tap or a
-keystroke — turned out to make the *floating* bar a sound phone layout on
+keystroke — turned out to make the _floating_ bar a sound phone layout on
 its own, which removed the one reason a phone needed the bar out of the
 picture at all. `theme.css`'s "below 48rem" query now does sizing only — the
 row-two control-bar arithmetic from #598, a smaller control size and no gap so
