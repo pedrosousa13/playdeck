@@ -35,7 +35,10 @@ export default tseslint.config(
       'docs/superpowers/plans/**',
       // MPEG-TS media segments share the .ts extension with TypeScript.
       'apps/storybook/public/hls/**',
-      'apps/site/public/hls/**'
+      // scripts/media-sprite-fright.mjs's generated output -- gitignored, not
+      // gated: the same MPEG-TS collision as the entry above, on the clip
+      // that entry's own directory played before #519 removed it.
+      'apps/site/public/media/**'
     ]
   },
   js.configs.recommended,
