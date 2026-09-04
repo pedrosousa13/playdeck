@@ -1151,9 +1151,23 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     expect(query).toMatch(
       /padding-right:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
     );
+    // The bar's own height trim (2026-09-04): top and bottom halved the same
+    // way left and right already were, the safe-area calc on the bottom edge
+    // kept.
+    expect(query).toMatch(
+      /padding-top:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
+    );
+    expect(query).toMatch(
+      /padding-bottom:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
+    );
     // Still ahead of WCAG 2.5.8's 24px floor at 40px; 2.75rem (44px) is the
     // desktop-only lock the token's own doc comment records.
     expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
+    // The seek row's own floor, at the 24px WCAG 2.5.8 minimum itself --
+    // independent of the button size above.
+    expect(query).toMatch(
+      /--playdeck-seek-slider-min-block-size:\s*1\.5rem;/
+    );
 
     expect(query).toMatch(
       /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
@@ -1215,9 +1229,19 @@ describe('docked.css phone sizing (not shared with theme.css)', () => {
     expect(query).toMatch(
       /padding-right:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
     );
+    // Same trim as theme.css's own copy; see that file's comments.
+    expect(query).toMatch(
+      /padding-top:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
+    );
+    expect(query).toMatch(
+      /padding-bottom:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
+    );
     // Still ahead of WCAG 2.5.8's 24px floor at 40px; 2.75rem (44px) is the
     // desktop-only lock the token's own doc comment records in theme.css.
     expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
+    expect(query).toMatch(
+      /--playdeck-seek-slider-min-block-size:\s*1\.5rem;/
+    );
 
     expect(query).toMatch(
       /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
