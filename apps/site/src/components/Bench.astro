@@ -605,13 +605,21 @@ for (const entry of readySources) {
    * later in the markup, so it wins the overlap and its own buttons keep
    * their clicks.
    *
+   * `11` outranks the poster's own fixed `z-index: 10` (`poster.tsx`), which
+   * this part shares `stack` with under `theme` and did not always need to
+   * beat: the poster now shows again while a source that played sits paused
+   * (`PosterState`'s `'paused'`, `player-context.ts`), so this cell can hold
+   * a visible poster and a live control bar at once where before the two
+   * never coexisted. Under `docked` the bar is out of `stack` entirely (its
+   * own `z-index: auto` rule below), so the number only matters here.
+   *
    * No focus rule: it is not in the tab order (`SurfaceToggle` sets
    * `tabIndex={-1}`), and a pointer press on a `:focus-visible` site leaves no
    * ring. */
   :global(.bench__stage) :global([data-surface-toggle]) {
     grid-area: stack;
     position: relative;
-    z-index: 1;
+    z-index: 11;
     inline-size: 100%;
     block-size: 100%;
     border-radius: 0;
@@ -628,11 +636,14 @@ for (const entry of readySources) {
    * `position` and `z-index` are what put the bar in front of the picture
    * rather than behind it: the media declares a layer of its own, so a box left
    * unpositioned in the same cell paints underneath it however late it comes in
-   * the markup. Stacking here is asked for, not inherited from source order. */
+   * the markup. Stacking here is asked for, not inherited from source order.
+   * `11`, not `1`, for the same reason `[data-surface-toggle]` above carries
+   * it now: this part has to outrank the poster's own `z-index: 10` once the
+   * poster can show again while the bar is live. */
   :global(.bench__stage) :global([data-playdeck-part='controls']) {
     grid-area: stack;
     position: relative;
-    z-index: 1;
+    z-index: 11;
     place-self: end stretch;
   }
 

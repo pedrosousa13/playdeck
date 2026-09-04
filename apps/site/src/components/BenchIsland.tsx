@@ -367,10 +367,12 @@ const SurfaceToggle = () => {
  */
 const Stage = ({
   poster,
-  skin
+  skin,
+  source
 }: {
   readonly poster: BenchPoster;
   readonly skin: SkinName;
+  readonly source: PlayerProvider;
 }) => {
   /*
    * How the activation was given, carried from the press to the render that
@@ -418,8 +420,16 @@ const Stage = ({
        * wider than the viewport, so `100vw` never under-selects and asks a
        * browser to pick the smaller file only where the viewport itself is
        * narrow. `src` stays the 1024w file, for the one reader whose browser
-       * reads neither attribute. */}
-      <Player.Poster>
+       * reads neither attribute.
+       *
+       * `showWhilePaused` only for `youtube`: that is the one position whose
+       * iframe draws its own chrome -- a title bar, a "more videos" shelf, a
+       * pause glyph -- over an idle embed once nothing on this side covers
+       * it, and the poster reappearing while paused is what covers it back
+       * up. `vimeo` and every native position already show their own paused
+       * frame underneath, which is what the library's default (off) leaves
+       * alone. */}
+      <Player.Poster showWhilePaused={source === 'youtube'}>
         <Player.PosterImage
           alt=""
           src={poster.src}
@@ -613,11 +623,13 @@ const Credit = ({ credit }: { readonly credit: BenchCredit }) => (
 const StagePortal = ({
   poster,
   aspectRatio,
-  skin
+  skin,
+  source
 }: {
   readonly poster: BenchPoster;
   readonly aspectRatio: string;
   readonly skin: SkinName;
+  readonly source: PlayerProvider;
 }) => {
   const [mount] = useState(() => document.getElementById('bench-stage'));
   useEffect(() => {
@@ -652,7 +664,10 @@ const StagePortal = ({
     });
   }, [mount, skin]);
   if (mount === null) return null;
-  return createPortal(<Stage poster={poster} skin={skin} />, mount);
+  return createPortal(
+    <Stage poster={poster} skin={skin} source={source} />,
+    mount
+  );
 };
 
 const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
@@ -789,6 +804,7 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
         poster={position.poster}
         aspectRatio={position.aspectRatio}
         skin={position.skin}
+        source={position.source}
       />
       <Credit credit={position.credit} />
       {/* The readout: the two switch groups and the quiet line in one row

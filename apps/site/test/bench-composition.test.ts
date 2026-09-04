@@ -17,7 +17,7 @@ describe('buildComposition', () => {
         '<Player.Root source={source}>',
         '  <Player.Viewport>',
         '    <Player.Media />',
-        '    <Player.Poster>',
+        '    <Player.Poster showWhilePaused>',
         '      <Player.PosterImage />',
         '    </Player.Poster>',
         '    <Player.Controls>',
@@ -42,7 +42,7 @@ describe('buildComposition', () => {
     );
   });
 
-  it('changes the source URL when the source switch changes, and nothing else', () => {
+  it('changes the source URL when the source switch changes, and nothing else but the youtube poster line', () => {
     const native = buildComposition({
       source: 'native',
       skin: 'theme',
@@ -59,10 +59,23 @@ describe('buildComposition', () => {
 
     // The claim the panel makes: one API drives every provider, so the
     // composition itself -- everything from `<Player.Root` down, past whatever
-    // preamble the skin wrote -- does not change shape when the provider does.
-    const compositionBlock = (code: string) =>
-      code.slice(code.indexOf('<Player.Root'));
-    expect(compositionBlock(native)).toBe(compositionBlock(youtube));
+    // preamble the skin wrote -- does not change shape when the provider does,
+    // with exactly one deliberate exception: `showWhilePaused` on the youtube
+    // position's own `<Player.Poster>`, covering the chrome its embed draws
+    // over an idle iframe. Compared line by line rather than as one block, so
+    // a future difference anywhere else in the tree fails loudly instead of
+    // being folded into "the poster line changed too".
+    const compositionLines = (code: string) =>
+      code.slice(code.indexOf('<Player.Root')).split('\n');
+    const nativeLines = compositionLines(native);
+    const youtubeLines = compositionLines(youtube);
+    expect(youtubeLines).toHaveLength(nativeLines.length);
+    const differences = nativeLines
+      .map((line, index) => [line, youtubeLines[index]] as const)
+      .filter(([nativeLine, youtubeLine]) => nativeLine !== youtubeLine);
+    expect(differences).toEqual([
+      ['    <Player.Poster>', '    <Player.Poster showWhilePaused>']
+    ]);
   });
 
   // The autoplay switch is gone from the bench, and the prop is gone from this
