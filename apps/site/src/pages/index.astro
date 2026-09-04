@@ -86,41 +86,6 @@ if (youtube === undefined) {
   );
 }
 
-/*
- * The close's four cells. Two are measurements and two are claims, and the
- * mix is deliberate rather than a grid that decayed.
- *
- * Two used to be numbers that could not have been anything else. `0` — "CSS in
- * the bundle" — was a definitional fact dressed as a measurement. `1 of 5` was
- * worse: it read as a rating, and the maintainer said outright they could not
- * tell what it meant. Neither was telling a reader something they had to be
- * shown, which is the job the other two do.
- *
- * What replaces them says the same facts from the consumer's side rather than
- * the bundle's. The provider cell keeps a real number inside its sentence,
- * because "what does adding YouTube cost me" is the question a reader actually
- * has, and that number is read from `measureBundles` like the first figure
- * rather than typed.
- */
-const figures = [
-  {
-    value: `${primitives.size.toFixed(0)} kB`,
-    line: `Every primitive, gzipped. CI fails the build at ${primitives.budget}.`
-  },
-  {
-    value: 'One adapter, not five',
-    line: `Every provider is its own package. Adding YouTube costs ${youtube.size.toFixed(0)} kB; the other four never reach your bundle.`
-  },
-  {
-    value: '0',
-    line: 'Requests to a provider before someone presses play.'
-  },
-  {
-    value: 'Unstyled by default',
-    line: 'Every pixel on screen is a decision you made, not one you undid.'
-  }
-];
-
 const install = 'pnpm add @playdeck/react';
 ---
 
@@ -132,6 +97,15 @@ const install = 'pnpm add @playdeck/react';
   <SiteHeader documentation={false} />
 
   <main class="page">
+    <script is:inline>
+      // Before first paint: with no script this never runs, so the entrance
+      // CSS below (gated on this attribute) never applies and every element
+      // renders at its resting opacity and transform. `is:inline` because a
+      // deferred module script runs after parsing and would let the settled
+      // page flash before this attribute lands.
+      document.documentElement.setAttribute('data-entered', '');
+    </script>
+
     <section class="thesis">
       {
         /* Exactly `Playdeck`, and it cannot become anything else.
@@ -152,36 +126,13 @@ const install = 'pnpm add @playdeck/react';
         Wistia. You write the markup, you write the CSS, and the same six lines
         drive all five.
       </p>
-    </section>
-
-    <Bench />
-
-    {
-      /* The close: four figures, the command, and the ways onward. A reader who
-       * leaves before this has already had the whole argument, which is the
-       * test every part of this page has to pass, so the close takes no
-       * treatment of its own. */
-    }
-    <section class="close">
-      <dl class="figures">
-        {
-          figures.map(({ value, line }) => (
-            <div class="figure">
-              <dt class="figure__value">{value}</dt>
-              <dd class="figure__line">{line}</dd>
-            </div>
-          ))
-        }
-      </dl>
 
       {
-        /* The command is selectable text; the copy button is `hidden` in the
-         * markup and revealed by the script below. Writing to the clipboard is
-         * the whole of what the control does, so with no script there is
-         * nothing to press rather than a control that swallows a click, and
-         * nothing is lost — the command was never behind the button. The
-         * feedback is a text swap on the button with the same words said once
-         * through a `role="status"` line. */
+        /* The install command, moved up from the close (2026-09-03): a
+         * reader who is convinced by the first screen should not have to
+         * scroll to act on it. It keeps its four `data-install*` attributes
+         * and the script below unchanged, so `e2e/site-landing.spec.ts`'s
+         * copy tests hold whichever section the markup lives in. */
       }
       <div class="install" data-install>
         <code class="install__command" data-install-command>{install}</code>
@@ -191,14 +142,30 @@ const install = 'pnpm add @playdeck/react';
         <span class="u-visually-hidden" role="status" data-install-status></span>
       </div>
 
-      <p class="close__fineprint">React 19 peer, ESM only, named exports</p>
+      <p class="thesis__actions">
+        <a class="thesis__start" href={startUrl}>Start &rarr;</a>
+      </p>
+    </section>
 
-      {
-        /* Start leads, and it is the only one of these that is a route rather
-         * than a section: the command above tells a reader what to install and
-         * nothing about what to write next, and this is the link that does.
-         * What follows it is unchanged. */
-      }
+    <Bench />
+
+    {
+      /* The close: the install command repeated, one measured line, and the
+       * ways onward. A reader who leaves before this has already had the
+       * whole argument, which is the test every part of this page has to
+       * pass, so the close takes no treatment of its own. */
+    }
+    <section class="close">
+      <p class="close__install">
+        <code>{install}</code>
+      </p>
+
+      <p class="close__measured">
+        {primitives.size.toFixed(0)} kB gzipped, the whole of what
+        `@playdeck/react` ships. Adding YouTube costs {youtube.size.toFixed(0)} kB.
+        0 requests to a provider before play.
+      </p>
+
       <p class="close__links">
         <a href={startUrl}>Start &rarr;</a>
         <a href={referenceUrl}>Reference &rarr;</a>
@@ -306,6 +273,72 @@ const install = 'pnpm add @playdeck/react';
     color: var(--color-ink-muted);
   }
 
+  .thesis__actions {
+    margin: 0;
+  }
+
+  .thesis__start {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
+  }
+
+  /* ---- entrance -------------------------------------------------------
+   * One reveal, once, on load: the hero's own children and the stage rise
+   * 12px and fade in, staggered by 80ms. `DESIGN.md`'s "Entry motion"
+   * section records that this app authored none for a while and why, and
+   * the two rules that section holds any future animation to are both here.
+   *
+   * The resting state is what the CSS above already gives every element --
+   * full opacity, no transform -- so there is no `opacity: 0` default
+   * anywhere and a reader whose script never runs, or who asked for no
+   * motion, sees the settled page. `html[data-entered]` is what turns the
+   * animation on at all; with no script, or under
+   * `prefers-reduced-motion: reduce` below, this block simply never
+   * matches and nothing runs -- removed, not shortened.
+   */
+  @media (prefers-reduced-motion: no-preference) {
+    html[data-entered] .thesis__name,
+    html[data-entered] .thesis__display,
+    html[data-entered] .thesis__lede,
+    html[data-entered] .install,
+    html[data-entered] .thesis__actions,
+    html[data-entered] :global(.bench__stage) {
+      animation: enter var(--duration-slow) var(--ease) both;
+    }
+
+    html[data-entered] .thesis__display {
+      animation-delay: 80ms;
+    }
+
+    html[data-entered] .thesis__lede {
+      animation-delay: 160ms;
+    }
+
+    html[data-entered] .install {
+      animation-delay: 240ms;
+    }
+
+    html[data-entered] .thesis__actions {
+      animation-delay: 320ms;
+    }
+
+    html[data-entered] :global(.bench__stage) {
+      animation-delay: 400ms;
+    }
+
+    @keyframes enter {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  }
+
   /* ---- the close ----------------------------------------------------------- */
   .close {
     display: grid;
@@ -316,47 +349,29 @@ const install = 'pnpm add @playdeck/react';
     justify-items: start;
   }
 
-  /* Four figures across where there is width for them, and stacked where there
-   * is not. Each is one number and one sentence: the number is the claim and
-   * the sentence is what makes it checkable. */
-  .figures {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-5);
-    inline-size: 100%;
-    margin: 0;
+  .close__install {
+    padding: var(--space-3) var(--space-5);
+    background-color: var(--color-sunken);
+    border-radius: var(--radius-md);
   }
 
-  @media (min-width: 48rem) {
-    .figures {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
+  .close__install code {
+    font-family: var(--font-mono);
+    font-size: var(--text-xl);
+    color: var(--color-ink);
   }
 
-  .figure {
-    display: grid;
-    gap: var(--space-2);
-    align-content: start;
-    padding-block-start: var(--space-3);
-    border-block-start: var(--line-width) solid var(--color-line);
-  }
-
-  .figure__value {
-    font-family: var(--font-display);
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-semibold);
-    font-variant-numeric: tabular-nums;
-    line-height: var(--leading-tight);
-  }
-
-  .figure__line {
-    margin: 0;
+  .close__measured {
+    max-inline-size: var(--measure);
+    font-family: var(--font-mono);
     font-size: var(--text-sm);
-    color: var(--color-ink-muted);
+    color: var(--color-ink-subtle);
+    font-variant-numeric: tabular-nums;
   }
 
   /* The one element in this section that is centred rather than set against
-   * the left edge. `.close` lays its children out with `justify-items: start`,
+   * the left edge. `.thesis` lays its children out with `justify-items: start`
+   * (2026-09-03: this moved here from `.close`, which shares the same rule),
    * so this pill is already shrink-to-fit and only its placement in the track
    * has to move — `justify-self` on the item, not a change to the container,
    * because every sibling here keeps the start edge the section reads down.
@@ -404,12 +419,6 @@ const install = 'pnpm add @playdeck/react';
   .install__copy:active {
     color: var(--color-ink-subtle);
     border-color: var(--color-accent);
-  }
-
-  .close__fineprint {
-    max-inline-size: var(--measure);
-    font-size: var(--text-sm);
-    color: var(--color-ink-subtle);
   }
 
   .close__links {
