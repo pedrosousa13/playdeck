@@ -529,20 +529,13 @@
     :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
       appearance: none;
       box-sizing: border-box;
-      /* Hidden at rest, 16px on hover/focus below. Zero size rather than
-       * `opacity: 0` — a zero-size box has no hit area of its own, so a
-       * press lands on the track underneath it; an invisible-but-full-size
-       * thumb would still eat that click. Opacity stays at its default 1, on
-       * purpose: nothing here relies on opacity to hide it.
-       *
-       * The ring is still this border, and the `outline` above still also
-       * applies: on hover/focus the two together draw a 20px thumb beside
-       * Gecko's 16px, the same figure as before this task -- unchanged
-       * because the 16px content box plus this 2px border each side is the
-       * same total the old `calc(thickness * 4)` formula gave at the old
-       * 0.25rem thickness. */
-      inline-size: 0;
-      block-size: 0;
+      /* Visible at rest, 16px, growing to 20px on hover or focus below --
+       * the hero the seek bar is drawn around, not a control a reader has to
+       * find first. The ring is still this border, and the `outline` above
+       * still also applies: at rest the two together draw a 20px thumb,
+       * growing to 24px on hover or focus. */
+      inline-size: 1rem;
+      block-size: 1rem;
       opacity: 1;
       outline: none;
       border: 2px solid var(--playdeck-color-thumb-ring, #000);
@@ -551,20 +544,20 @@
     }
 
     :where([data-playdeck-part='seek-slider-input'])::-moz-range-thumb {
-      inline-size: 0;
-      block-size: 0;
+      inline-size: 1rem;
+      block-size: 1rem;
       opacity: 1;
     }
 
-    /* 16px on hover or focus of the seek-slider part, a literal rather than
+    /* 20px on hover or focus of the seek-slider part, a literal rather than
      * a `calc()` off the thickness token — the two are deliberately
      * decoupled now that hovering also grows the thickness to 0.5rem, which
-     * would make the old `calc(thickness * 4)` formula 32px. Grown by size,
-     * not `transform: scale()`: `scale` is not in this file's pinned
-     * function list and there is no reason to add one. The existing ring
-     * (the unconditional `::-webkit-slider-thumb { outline: ... }` rule
-     * above this query) is untouched and keeps drawing around whatever
-     * geometry is current. */
+     * would make a thickness-derived formula disagree with the rest size's
+     * own literal above. Grown by size, not `transform: scale()`: `scale` is
+     * not in this file's pinned function list and there is no reason to add
+     * one. The existing ring (the unconditional `::-webkit-slider-thumb {
+     * outline: ... }` rule above this query) is untouched and keeps drawing
+     * around whatever geometry is current. */
     :where(
         [data-playdeck-part='seek-slider']:hover,
         [data-playdeck-part='seek-slider']:focus-within
@@ -575,8 +568,8 @@
         [data-playdeck-part='seek-slider']:focus-within
       )
       :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
-      inline-size: 1rem;
-      block-size: 1rem;
+      inline-size: 1.25rem;
+      block-size: 1.25rem;
     }
 
     /* Gecko's own track and fill, silenced for this input only: the bar behind
