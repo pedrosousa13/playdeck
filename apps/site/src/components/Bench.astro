@@ -169,6 +169,11 @@ const markLineNumbers: ShikiTransformer['line'] = function (hast, line) {
 const SKIN_POSITIONS = ['theme', 'docked'] as const;
 
 const compositions: Record<string, string> = {};
+// The plain source `buildComposition` returns, keyed the same way as
+// `compositions` above. `BenchIsland` diffs this rather than the highlighted
+// HTML on a switch flip, because Shiki's own markup around each line would
+// make a text diff of the HTML noisy in a way the plain source is not.
+const compositionSources: Record<string, string> = {};
 for (const entry of readySources) {
   for (const skin of SKIN_POSITIONS) {
     const code = buildComposition({
@@ -176,6 +181,7 @@ for (const entry of readySources) {
       skin,
       sourceUrl: entry.source(base)
     });
+    compositionSources[`${entry.provider}:${skin}`] = code;
     compositions[`${entry.provider}:${skin}`] = await codeToHtml(code, {
       lang: 'tsx',
       ...shikiConfig,
@@ -294,7 +300,12 @@ for (const entry of readySources) {
      * proves the resting claim: a spec records every request `/` makes at
      * rest and fails if one leaves this origin. */
   }
-  <BenchIsland base={base} compositions={compositions} client:only="react" />
+  <BenchIsland
+    base={base}
+    compositions={compositions}
+    compositionSources={compositionSources}
+    client:only="react"
+  />
 </div>
 
 <style>

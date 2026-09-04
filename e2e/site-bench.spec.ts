@@ -199,6 +199,25 @@ test('docked.css is a real <link>, in the document, when pressed, and theme.css 
     .toEqual({ docked: true, theme: false });
 });
 
+test('a skin flip highlights the changed composition line, and the highlight clears', async ({
+  page
+}) => {
+  await page.goto(landing);
+  await expect(composition(page)).toBeVisible();
+
+  await position(page, 'skin', 'docked').click();
+
+  await expect
+    .poll(() => composition(page).locator('[data-changed]').count())
+    .toBeGreaterThan(0);
+
+  await expect
+    .poll(() => composition(page).locator('[data-changed]').count(), {
+      timeout: 1500
+    })
+    .toBe(0);
+});
+
 /**
  * The composition's preamble, the lines above `<Player.Root`. Point 6 of the
  * spec depends on every combination printing exactly four: an import, a blank

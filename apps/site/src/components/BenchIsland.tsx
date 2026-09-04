@@ -97,6 +97,8 @@ interface Props {
   readonly base: string;
   /** `Bench.astro`'s four precomputed strings, keyed `${provider}:${skin}`. */
   readonly compositions: Readonly<Record<string, string>>;
+  /** The same four keys, holding the plain source `compositions` highlights. */
+  readonly compositionSources: Readonly<Record<string, string>>;
 }
 
 /**
@@ -621,14 +623,39 @@ const StagePortal = ({
   useEffect(() => {
     mount?.style.setProperty('--bench-aspect-ratio', aspectRatio);
   }, [mount, aspectRatio]);
+  const isFirstSkinRender = useRef(true);
   useEffect(() => {
-    mount?.setAttribute('data-bench-skin', skin);
+    if (mount === null) return;
+    mount.setAttribute('data-bench-skin', skin);
+
+    if (isFirstSkinRender.current) {
+      isFirstSkinRender.current = false;
+      return;
+    }
+    /*
+     * The crossfade (2026-09-03): a hard drop to 0.6 opacity with no
+     * transition, then removed on the next animation frame so the return to
+     * 1 crosses `.bench__stage`'s own `transition: opacity 240ms`. Skipped
+     * outright under reduced motion, rather than relying on the site's
+     * global 0.01ms transition-duration collapse: that rule only shortens a
+     * transition that was going to run anyway, and `DESIGN.md`'s "Entry
+     * motion" section holds a visible reveal like this one to "removed, not
+     * shortened" -- the same reason `index.astro`'s own entrance is gated on
+     * a media query rather than left to that global rule.
+     */
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+    mount.setAttribute('data-stage-flip', '');
+    requestAnimationFrame(() => {
+      mount.removeAttribute('data-stage-flip');
+    });
   }, [mount, skin]);
   if (mount === null) return null;
   return createPortal(<Stage poster={poster} skin={skin} />, mount);
 };
 
-const BenchIsland = ({ base, compositions }: Props) => {
+const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
   /*
    * The default follows `matchMedia`, read once, synchronously, the same way
    * `readySources[0]` already is: `theme` rests above 48rem, `docked` below
@@ -682,6 +709,43 @@ const BenchIsland = ({ base, compositions }: Props) => {
       `BenchIsland: no precomputed composition for ${position.source}:${position.skin}.`
     );
   }
+
+  const source = compositionSources[`${position.source}:${position.skin}`];
+  if (source === undefined) {
+    throw new Error(
+      `BenchIsland: no precomputed source for ${position.source}:${position.skin}.`
+    );
+  }
+
+  /*
+   * The changed line indices between the previous render's composition and
+   * this one, 1-indexed to match the `data-line` attribute `Bench.astro`'s
+   * `markLineNumbers` transformer stamps on each Shiki line span.
+   *
+   * A ref rather than state: this only has to be right for the render it is
+   * read in (`CompositionPanel`'s own effect, keyed on `html`), and setting
+   * state here would ask React for a render this component does not need.
+   * `Player.Root`'s own `controlledMuted.current = muted` pattern does the
+   * same thing for the same reason (see its comment).
+   */
+  /* eslint-disable react-hooks/refs -- read and written in the same render,
+   * deliberately, to compare against the previous render's value; see the
+   * comment above. `QuietLine`'s `lastSourceUrl` does the same thing for the
+   * same reason (see its comment). */
+  const previousSourceRef = useRef(source);
+  const changedLines: readonly number[] = (() => {
+    const previous = previousSourceRef.current;
+    previousSourceRef.current = source;
+    if (previous === source) return [];
+    const previousLines = previous.split('\n');
+    const nextLines = source.split('\n');
+    const changed: number[] = [];
+    for (let index = 0; index < nextLines.length; index++) {
+      if (nextLines[index] !== previousLines[index]) changed.push(index + 1);
+    }
+    return changed;
+  })();
+  /* eslint-enable react-hooks/refs */
 
   return (
     /*
@@ -747,7 +811,7 @@ const BenchIsland = ({ base, compositions }: Props) => {
           />
           <QuietLine sourceUrl={position.sourceUrl} />
         </div>
-        <CompositionPanel html={html} />
+        <CompositionPanel html={html} changedLines={changedLines} />
       </div>
     </Player.Root>
   );

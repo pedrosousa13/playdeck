@@ -140,6 +140,24 @@ pre {
   overflow-x: auto;
 }
 
+/* The changed-line highlight (2026-09-03): `CompositionPanel.tsx` stamps
+ * `data-changed` on the `.line` Shiki's own `line` hook already wraps every
+ * printed line in, for the lines a switch flip just moved, and clears it
+ * again after 900ms -- keep that literal in sync with
+ * `CompositionPanel.tsx`'s own `HIGHLIGHT_MS` if either changes.
+ *
+ * No `prefers-reduced-motion` override here: this site's global reduced-
+ * motion rule (below) already collapses every `transition-duration` to
+ * 0.01ms with `!important`, which is indistinguishable from "no transition"
+ * for a plain background fade between two static states -- unlike the
+ * entrance reveal in `index.astro`, this is not a case where a from-state
+ * could flash before collapsing, so the general rule is enough on its own.
+ */
+.astro-code[data-bench-composition] .line[data-changed] {
+  background-color: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  transition: background-color 900ms var(--ease);
+}
+
 /*
  * Which of the two theme colours each token spends, in the same three states
  * and the same order as the role tokens in `tokens.css` — and for the same
