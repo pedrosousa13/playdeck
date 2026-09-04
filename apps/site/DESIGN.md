@@ -1746,8 +1746,8 @@ checks its work against, and the place to add a specimen when a token is added.
 
 It is not part of the site's own navigation, and **nothing on the site links to
 it at all.** `/` carried the one link, in the ways-onward row at the foot of the
-page, and the rebuilt close carries Start, Reference, Providers and Archetypes
-and nothing else. That was not ruled on at the time: the link went out with the page
+page, and the rebuilt close carries Reference, Providers and Archetypes and
+nothing else. That was not ruled on at the time: the link went out with the page
 it was on, and this passage recorded the absence as something waiting for a
 decision.
 
@@ -2165,9 +2165,15 @@ The two paragraphs above describe a close that still repeats it, and the
 repeat is gone: `.close__install` and its styles are deleted, and the close
 now opens on the measured line alone. What replaced the repeated command is
 the same primary Start button the hero carries, reused rather than restyled
-a second time, ahead of the same four links as before. `data-install`,
+a second time, ahead of the same links as before. `data-install`,
 `data-install-command`, `data-install-copy` and `data-install-status` exist
 exactly once on the page now, in the hero.
+
+**And `close__links` dropped its own Start entry, once the button above it
+made the same trip.** The row used to open with a plain "Start" text link,
+which read as a second, weaker call to action directly under a button
+already making the first one. It is Reference, Providers and Archetypes
+now — the ways onward that are not already on the page in button form.
 
 **The page makes no claim about any other library.** No comparison, no named
 competitor, no implied one. A draft opened with "every video player ships a
