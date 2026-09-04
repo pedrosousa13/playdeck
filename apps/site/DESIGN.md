@@ -2691,3 +2691,17 @@ raised to 3.0 kB in the same commit as whichever task crossed it, with the
 reason in that commit's message — the design is not thinned to fit. Neither
 sheet crossed it: measured after this redraw, `theme.css` rules at 2.32 kB,
 `docked.css` rules at 2.32 kB, both still under the floor.
+
+**2026-09-04: the docked layout below 48rem was reversed.** `theme.css`'s
+own real docked layout below 48rem, named two paragraphs up, is gone. The
+control bar's idle fade — it fades while playing and returns on a tap or a
+keystroke — turned out to make the *floating* bar a sound phone layout on
+its own, which removed the one reason a phone needed the bar out of the
+picture at all. `theme.css`'s "below 48rem" query now does sizing only — the
+row-two control-bar arithmetic from #598, a smaller control size and no gap so
+five buttons plus the times fit one line — and `--playdeck-color-hairline`
+is no longer one this file reads — `docked.css` still declares it, for a
+reader who chooses that skin. The bench followed: `theme` rests at every
+width now instead of switching to `docked` below 48rem, and the skin switch
+is visible at every width instead of hidden below it — see the equivalent
+note in `docs/superpowers/specs/2026-09-02-bench-two-themes-design.md`.

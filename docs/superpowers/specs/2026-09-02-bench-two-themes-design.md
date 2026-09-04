@@ -65,6 +65,18 @@ configurability nothing here uses. Tailwind's default `md` is 48rem in this
 project, the same breakpoint `BenchIsland.tsx` already spends on the
 readout's own `md:grid-cols-2` split.
 
+> **2026-09-04: reversed.** The maintainer put the control bar's idle fade
+> in place after this ruling — it fades while playing and returns on a tap
+> or a keystroke — which made the floating `theme` bar a sound phone layout
+> without leaving the picture, and removed the "close to the same layout"
+> argument this paragraph makes for defaulting to `docked` below 48rem.
+> `theme` rests at every width now, and the skin fieldset is visible at
+> every width instead of `hidden md:block` — the switch's only visible
+> effect below 48rem is no longer confined to one slider on a fine pointer,
+> because the two skins now differ in the fade behaviour itself, not only
+> in `VolumeSlider`. See `apps/site/DESIGN.md`'s matching note and
+> `theme.css`'s own "below 48rem" comment.
+
 **Loading stays a real `<link>` swap, one sheet at a time.** The existing
 effect in `BenchIsland.tsx`, appending a `<link>` at `themeHref` on mount
 and removing it on cleanup, extends to two hrefs rather than one
@@ -627,6 +639,8 @@ and `none`'s absence is no longer why this document keeps it.
 | The new `--playdeck-color-hairline` mapping                                | `.bench__stage` gains one line, `--playdeck-color-hairline: var(--stage-hairline)`; `tokens.css` gains `--stage-hairline: var(--dark-line)`                                                                                      |
 | Default position below 48rem                                               | `docked`, because the floating theme collapses to close to the same layout there anyway                                                                                                                                          |
 | Skin fieldset below 48rem                                                  | Hidden; the two positions differ only by `VolumeSlider` on a fine pointer, identical on a coarse one, which is nearly every narrow viewport                                                                                      |
+| **2026-09-04 reversal:** default position below 48rem                      | `theme`, at every width, once the control bar's idle fade made the floating bar a sound phone layout without leaving the picture — see the dated note under "1. The skin switch" above                                          |
+| **2026-09-04 reversal:** skin fieldset below 48rem                         | Visible, at every width — the two skins now differ in the fade behaviour itself, not only in `VolumeSlider`                                                                                                                      |
 | How the default is chosen without a flash                                  | `matchMedia` read once in the island's `useState` initializer, matching the existing `readySources[0]` pattern                                                                                                                   |
 | What the panel prints                                                      | The real mounted tree, ten controls, not one collapsed `<Player.Controls />` tag                                                                                                                                                 |
 | Where `SeekSlider` sits in that order                                      | First, ahead of `PlayButton`; it moves from third in today's mounted order, so it stays first in document order for the theme's row split                                                                                        |

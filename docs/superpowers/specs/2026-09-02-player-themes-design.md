@@ -192,7 +192,17 @@ row lets the remaining buttons wrap onto a further line rather than
 shrinking below the target or being dropped. At 320px, the narrowest width
 `e2e/a11y.spec.ts`'s reflow cases already check, this produces a third
 line, which is accepted rather than treated as a defect: losing a control or
-a hit target would be worse than a taller bar. The picture keeps its own
+a hit target would be worse than a taller bar.
+>
+> **2026-09-04: reversed for the desktop-locked 44px claim.** Measured on a
+> real phone at 375px, "accepted rather than treated as a defect" turned out
+> to be the wrong call: five buttons plus the times overflowed onto a third
+> row on ordinary phone widths, not only at 320px (#598). `theme.css`'s
+> "below 48rem" query now sizes controls at 2.5rem (still clearing WCAG
+> 2.5.8's 24px floor) and hides `pip-button` under a coarse pointer instead
+> of accepting the wrap; "theme.css makes no attempt to move the bar out of
+> an overlay position" above is unaffected and still holds.
+The picture keeps its own
 aspect ratio, `aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9)`,
 because `Viewport` (`viewport-media.tsx`) owns that output and nothing in
 the theme touches it.
