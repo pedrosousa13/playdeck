@@ -414,3 +414,7 @@ Recorded so none of it is reopened by a later session reading this fresh.
 | The archetypes on `/`                | No. They stay on `/archetypes`                                                                            |
 | What carries the capability argument | Nothing. The reason line that replaced the grid was cut too — see `DESIGN.md`'s animation section         |
 | Claims about other libraries         | None, of any kind                                                                                         |
+
+**Update, 2026-09-04:** the page named `/archetypes` in the table above is
+`/examples/` now. The ruling itself — the archetypes stay off `/` — is
+unchanged; it reads against that route today.

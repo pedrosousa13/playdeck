@@ -23,7 +23,9 @@ names it. In particular:
   is a claim, not a demonstration, and the maintainer confirmed on 2026-09-03
   that advertising is what was asked.
 - No claim about any other library.
-- The archetypes stay on `/archetypes`.
+- The archetypes stay on `/archetypes` (as of 2026-09-04, the page is
+  `/examples/`; the ruling itself — the archetypes stay off `/` — is
+  unchanged, and now reads against that route).
 - The two sheets stay standalone. Shared rules are duplicated, never imported.
 - The two sheets differ in layout on desktop, not only in colour.
 - Nothing is pushed until the maintainer has seen the page running.
