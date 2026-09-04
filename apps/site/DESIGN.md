@@ -2143,6 +2143,15 @@ link in the same pass — it is `.thesis__start`, a filled button in
 target every other control on this site owes, so a reader scanning for the
 one thing to press finds it by shape rather than by colour alone.
 
+**And the close went back to printing the command once, on the same day.**
+The two paragraphs above describe a close that still repeats it, and the
+repeat is gone: `.close__install` and its styles are deleted, and the close
+now opens on the measured line alone. What replaced the repeated command is
+the same primary Start button the hero carries, reused rather than restyled
+a second time, ahead of the same four links as before. `data-install`,
+`data-install-command`, `data-install-copy` and `data-install-status` exist
+exactly once on the page now, in the hero.
+
 **The page makes no claim about any other library.** No comparison, no named
 competitor, no implied one. A draft opened with "every video player ships a
 design", which is false: react-player ships no stylesheet and says so in its

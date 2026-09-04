@@ -155,21 +155,21 @@ const install = 'pnpm add @playdeck/react';
     <FeatureCards />
 
     {
-      /* The close: the install command repeated, one measured line, and the
-       * ways onward. A reader who leaves before this has already had the
-       * whole argument, which is the test every part of this page has to
-       * pass, so the close takes no treatment of its own. */
+      /* The close: one measured line, the same primary Start button the hero
+       * carries, and the ways onward. The install command no longer repeats
+       * here (2026-09-03) -- it is the hero's alone now, so `data-install*`
+       * exists exactly once on the page. A reader who leaves before this has
+       * already had the whole argument, which is the test every part of this
+       * page has to pass, so the close takes no treatment of its own. */
     }
     <section class="close">
-      <p class="close__install">
-        <code>{install}</code>
-      </p>
-
       <p class="close__measured">
         {primitives.size.toFixed(0)} kB gzipped, the whole of what
         `@playdeck/react` ships. Adding YouTube costs {youtube.size.toFixed(0)} kB.
         0 requests to a provider before play.
       </p>
+
+      <a class="thesis__start" href={startUrl}>Start &rarr;</a>
 
       <p class="close__links">
         <a href={startUrl}>Start &rarr;</a>
@@ -401,18 +401,6 @@ const install = 'pnpm add @playdeck/react';
     padding-block-start: var(--space-6);
     border-block-start: var(--line-width) solid var(--color-line-strong);
     justify-items: start;
-  }
-
-  .close__install {
-    padding: var(--space-3) var(--space-5);
-    background-color: var(--color-sunken);
-    border-radius: var(--radius-md);
-  }
-
-  .close__install code {
-    font-family: var(--font-mono);
-    font-size: var(--text-xl);
-    color: var(--color-ink);
   }
 
   .close__measured {
