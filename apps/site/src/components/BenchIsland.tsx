@@ -71,10 +71,11 @@ import * as Player from '@playdeck/react';
  */
 import themeHref from '@playdeck/react/theme.css?url';
 import dockedHref from '@playdeck/react/docked.css?url';
-import type { PlayerProvider } from '@playdeck/core';
+import type { PlayerProvider, PlayerSource } from '@playdeck/core';
 import {
   benchSources,
   readySources,
+  resolvePlayerSource,
   type BenchCredit,
   type BenchPoster
 } from '@/bench-sources';
@@ -103,26 +104,37 @@ interface Props {
 }
 
 /**
- * The bundle a position resolves to: the URL, the poster, the frame's
- * intrinsic dimensions, the start time and the credit, all read off one
- * `benchSources` entry so they can never drift apart from each other.
- * `sourceUrl` and `poster` are already resolved against the site's base path;
- * `startTime` is `0` on every entry today, so a press plays the film from its
- * own beginning rather than promising the moment the poster happens to show --
- * see the field's own comment in `bench-sources.ts` for why that replaced an
- * earlier version that pinned it to the poster's own timestamp.
- * `aspectRatio` is the CSS-ready `'width / height'` string, computed here
- * once from the two integers `bench-sources.ts` carries rather than a rounded
- * decimal anywhere -- `2048 / 858` is exact where `2.39` is not.
+ * The bundle a position resolves to: the URL, what `Player.Root` actually
+ * mounts, the poster, the frame's intrinsic dimensions, the start time and
+ * the credit, all read off one `benchSources` entry so they can never drift
+ * apart from each other. `sourceUrl` and `poster` are already resolved
+ * against the site's base path; `startTime` is `0` on every entry today, so a
+ * press plays the film from its own beginning rather than promising the
+ * moment the poster happens to show -- see the field's own comment in
+ * `bench-sources.ts` for why that replaced an earlier version that pinned it
+ * to the poster's own timestamp. `aspectRatio` is the CSS-ready
+ * `'width / height'` string, computed here once from the two integers
+ * `bench-sources.ts` carries rather than a rounded decimal anywhere --
+ * `2048 / 858` is exact where `2.39` is not.
+ *
+ * `sourceUrl` and `playerSource` are two different facts and neither can
+ * stand in for the other. `sourceUrl` is always a plain URL -- the quiet
+ * line's `recordLoad` needs one to read an origin off, and the no-JavaScript
+ * fallback in `Bench.astro` needs one for a real `href`. `playerSource` is
+ * what `Player.Root`'s own `source` prop receives, which for `hls` is an
+ * explicit object with its engine pinned rather than that same URL --
+ * `bench-sources.ts`'s `resolvePlayerSource` owns the difference; this file
+ * only carries both of what it returns.
  *
  * Derived here rather than remembered separately, because `BenchPosition`
- * carries the provider and its URL and the two must not drift: `buildComposition`
- * prints the URL and stays pure by having no opinion about where one came
- * from, so something has to hold them together and it is the press that does
- * it. The poster, dimensions, start time and credit ride along with the same
- * lookup for the same reason -- `bench-sources.ts` bundles all of it into one
- * object per provider precisely so that nothing here can pick up the URL for
- * one position and the poster, shape, start time or credit for another.
+ * carries the provider and its source and the two must not drift:
+ * `buildComposition` prints the source and stays pure by having no opinion
+ * about where it came from, so something has to hold them together and it is
+ * the press that does it. The poster, dimensions, start time and credit ride
+ * along with the same lookup for the same reason -- `bench-sources.ts`
+ * bundles all of it into one object per provider precisely so that nothing
+ * here can pick up the source for one position and the poster, shape, start
+ * time or credit for another.
  *
  * The throw is the same shape `index.astro` uses for a missing bundle target.
  * `benchSources` is built from a `Record<PlayerProvider, …>` and is therefore
@@ -131,6 +143,7 @@ interface Props {
  */
 type ResolvedSource = {
   readonly sourceUrl: string;
+  readonly playerSource: PlayerSource;
   readonly poster: BenchPoster;
   readonly aspectRatio: string;
   readonly startTime: number;
@@ -146,6 +159,7 @@ const entryFor = (provider: PlayerProvider, base: string): ResolvedSource => {
   }
   return {
     sourceUrl: entry.source(base),
+    playerSource: resolvePlayerSource(entry, base),
     poster: entry.poster(base),
     aspectRatio: `${entry.width} / ${entry.height}`,
     startTime: entry.startTime,
@@ -797,7 +811,7 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
      */
     <Player.Root
       loading="interaction"
-      source={position.sourceUrl}
+      source={position.playerSource}
       startTime={position.startTime}
       defaultMuted
     >

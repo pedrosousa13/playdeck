@@ -76,7 +76,7 @@
  */
 import Sweep from './Sweep.astro';
 import BenchIsland from './BenchIsland';
-import { benchSources, readySources } from '../bench-sources';
+import { benchSources, readySources, resolvePlayerSource } from '../bench-sources';
 import { codeToHtml } from 'shiki';
 import type { ShikiTransformer } from 'shiki';
 import { shikiConfig } from '../shiki';
@@ -179,7 +179,7 @@ for (const entry of readySources) {
     const code = buildComposition({
       source: entry.provider,
       skin,
-      sourceUrl: entry.source(base)
+      playerSource: resolvePlayerSource(entry, base)
     });
     compositionSources[`${entry.provider}:${skin}`] = code;
     compositions[`${entry.provider}:${skin}`] = await codeToHtml(code, {

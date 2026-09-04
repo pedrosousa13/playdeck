@@ -14,7 +14,7 @@
  * effect was to add a prop to the block below, and a knob that argues by
  * printing itself is not an argument. Autoplay recovery is not sold on `/`.
  */
-import type { PlayerProvider } from '@playdeck/core';
+import type { HlsSource, PlayerProvider, PlayerSource } from '@playdeck/core';
 import { BENCH_CONTROLS, type BenchControlName } from './bench-controls';
 
 /**
@@ -88,16 +88,43 @@ export type SkinName = 'theme' | 'docked';
 export type BenchPosition = {
   readonly source: PlayerProvider;
   readonly skin: SkinName;
-  // The URL the source switch resolved to. Resolving a provider to a URL is
-  // not this module's job -- it takes the URL as a field so it stays pure and
-  // has no opinion about where that URL came from.
-  readonly sourceUrl: string;
+  // What `Player.Root`'s `source` prop actually receives for this position --
+  // a plain URL for every position but `hls`, and an explicit source object
+  // with its engine pinned for that one (see `bench-sources.ts`'s
+  // `resolvePlayerSource`). Resolving a provider to it is not this module's
+  // job -- it takes the value as a field so it stays pure and has no opinion
+  // about where it came from -- but printing it honestly, whichever shape it
+  // is, is exactly this module's job.
+  readonly playerSource: PlayerSource;
+};
+
+/**
+ * The right-hand side of the composition's `const source = …;` line, as the
+ * literal a consumer would write. Every position but `hls` resolves to a
+ * plain URL string, printed as a quoted one; `hls` resolves to an explicit
+ * source object instead (`bench-sources.ts`'s `resolvePlayerSource`), so this
+ * prints that object rather than quietly falling back to a URL the player is
+ * not actually reading. The `throw` is not reachable from this bench today --
+ * every entry in `bench-sources.ts` resolves to a string or an `hls` object --
+ * and it is there so a position that resolved to a different object shape
+ * later fails loudly here rather than printing something the page is not
+ * doing.
+ */
+const printSourceValue = (value: PlayerSource): string => {
+  if (typeof value === 'string') return `'${value}'`;
+  if (value.type === 'hls') {
+    const hls: HlsSource = value;
+    return `{ type: 'hls', src: '${hls.src}', engine: '${hls.engine}' }`;
+  }
+  throw new Error(
+    `bench-composition: no printer for a '${value.type}' source object.`
+  );
 };
 
 export const buildComposition = ({
   skin,
   source,
-  sourceUrl
+  playerSource
 }: BenchPosition): string => {
   // The composition never names a provider on `Player.Root`: the library
   // detects one from the URL, so `source={source}` is the whole of `Root`'s
@@ -108,15 +135,22 @@ export const buildComposition = ({
   // one, so the branch that wrapped two or more props onto their own lines
   // went with it rather than sitting unreachable.
   //
-  // `hls` is not a special case here, and that absence was checked rather
-  // than assumed: `docs/provider-setup.md`'s own detection table resolves a
-  // `.m3u8` path to `{ type: 'hls', src }` on any host, the same automatic
-  // path `youtube.com` and `vimeo.com` addresses take, and
-  // `packages/react/src/provider-loaders.ts` dynamically imports
-  // `@playdeck/provider-hls` itself once `Player.Root` sees that type -- a
-  // consumer writes no import for it, the same as every other provider here.
-  // So the real import this position needs is the one every position needs:
-  // the skin's own stylesheet, printed below.
+  // `hls` is the one position whose `const source = …;` line is not a quoted
+  // URL. This bench exists to demonstrate quality selection, and in Chromium
+  // `canPlayType('application/vnd.apple.mpegurl')` answers `'maybe'`, which
+  // sends the automatic engine pick `docs/provider-setup.md` documents to the
+  // native decoder -- where `selectQuality` is unavailable and
+  // `state.qualities` stays empty
+  // (`packages/provider-hls/src/index.ts`'s `selectHlsEngine`). So this
+  // position's own source pins `engine: 'hls.js'` on an explicit source
+  // object (`bench-sources.ts`'s `resolvePlayerSource`), and
+  // `printSourceValue` above prints that object rather than the string every
+  // other position resolves to. It still needs no import of its own: the
+  // object is a literal, not a type, so the real import this position needs
+  // is the one every position needs: the skin's own stylesheet, printed
+  // below. `packages/react/src/provider-loaders.ts` dynamically imports
+  // `@playdeck/provider-hls` itself once `Player.Root` sees the `hls` type,
+  // the same as every other provider here.
   //
   // `Player.Poster` is the one part below `Root` that does name a provider,
   // and only one: `showWhilePaused` prints for `youtube` alone, because that
@@ -134,7 +168,7 @@ export const buildComposition = ({
   const preamble = [
     `import '@playdeck/react/${skin}.css';`,
     '',
-    `const source = '${sourceUrl}';`,
+    `const source = ${printSourceValue(playerSource)};`,
     ''
   ];
 
