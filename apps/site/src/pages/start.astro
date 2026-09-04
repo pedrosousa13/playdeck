@@ -38,7 +38,7 @@ import { bundledDependencies } from '../../../../scripts/readme-bytes.mjs';
  *   and `scripts/docs-examples.mjs` already generates the fences that show them
  *   in `README.md` and `packages/react/README.md` — so a reader comparing this
  *   page with either document is comparing two renderings of one file. This is
- *   the same arrangement `src/pages/archetypes.astro` uses and gives its reasons
+ *   the same arrangement `src/pages/examples.astro` uses and gives its reasons
  *   for: that script matches fences in Markdown and never looks at `.astro`, so
  *   what reaches an Astro page is the file itself rather than a fence generated
  *   from it.
@@ -283,8 +283,8 @@ const onward = [
     line: 'Which source values each provider accepts, and which it refuses.'
   },
   {
-    href: `${base}archetypes/`,
-    label: 'Archetypes',
+    href: `${base}examples/`,
+    label: 'Examples',
     line: 'Two finished players, running, printed beside the files they are.'
   }
 ];
@@ -474,7 +474,7 @@ const onward = [
 
 <style>
   /* Wider than the measure because two of the sections hold a full-width code
-     well and one holds a table, and narrower than `/archetypes` because nothing
+     well and one holds a table, and narrower than `/examples` because nothing
      here mounts a player. A literal where the decision is made, as `DESIGN.md`
      requires of a page's own maximum — one column width is not evidence about
      another — and prose inside is still held to the measure.

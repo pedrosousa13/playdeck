@@ -45,7 +45,7 @@ import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
  * with "every video player ships a design", which is false, and the maintainer
  * ruled the whole category out.
  *
- * No archetype. Those two belong on `/archetypes`, which is the page whose
+ * No archetype. Those two belong on `/examples`, which is the page whose
  * subject they are, and they came off `/` in `b348879` for being too much on a
  * marketing page. Putting them back behind a switch would still be putting them
  * back.
@@ -54,7 +54,7 @@ import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
 const startUrl = `${import.meta.env.BASE_URL}start/`;
 const referenceUrl = `${import.meta.env.BASE_URL}reference/`;
 const providersUrl = `${import.meta.env.BASE_URL}providers/`;
-const archetypesUrl = `${import.meta.env.BASE_URL}archetypes/`;
+const examplesUrl = `${import.meta.env.BASE_URL}examples/`;
 
 /*
  * The measured figure and the budget it is measured against, both read from the
@@ -174,7 +174,7 @@ const install = 'pnpm add @playdeck/react';
       <p class="close__links">
         <a href={referenceUrl}>Reference &rarr;</a>
         <a href={providersUrl}>Providers &rarr;</a>
-        <a href={archetypesUrl}>Archetypes &rarr;</a>
+        <a href={examplesUrl}>Examples &rarr;</a>
       </p>
     </section>
   </main>
