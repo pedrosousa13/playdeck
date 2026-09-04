@@ -604,10 +604,21 @@ describe('SeekSlider', () => {
     expect(ranges[1]!.style.width).toBe('20%');
   });
 
-  test('gives the scrubber input a 44px default target', () => {
-    renderWithPlayer(<Player.SeekSlider />, seekReady());
+  test('gives the wrapper and the scrubber input a 44px default target', () => {
+    const { container } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    const wrapper = container.querySelector('[data-playdeck-part="seek-slider"]');
     const slider = screen.getByRole('slider', { name: 'Seek' });
-    expect((slider as HTMLInputElement).style.minHeight).toBe('44px');
+    // A `var()` read, not the literal `44px` either used to carry, so a
+    // theme's own "below 48rem" query can shrink the row -- the same move
+    // #598 made for every button-shaped control's own target. Falls back to
+    // 2.75rem, the desktop lock, for a bare consumer with no stylesheet
+    // loaded.
+    expect((wrapper as HTMLElement).style.minHeight).toBe(
+      'var(--playdeck-seek-slider-min-block-size, 2.75rem)'
+    );
+    expect((slider as HTMLInputElement).style.minHeight).toBe(
+      'var(--playdeck-seek-slider-min-block-size, 2.75rem)'
+    );
   });
 
   test('forwards inputProps to the range control and chains onChange', () => {

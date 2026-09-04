@@ -502,12 +502,18 @@
    * This file docks at every width already, so nothing here moves the bar --
    * only the row-two overflow (#598) that `theme.css`'s own copy of this
    * query fixes, restated for this file because it shares no import with
-   * that one. Same arithmetic, same WCAG 2.5.8 floor; see that file's
-   * comments for both.
+   * that one, and, as of 2026-09-04, the same trim to the bar's own height.
+   * Same arithmetic, same WCAG 2.5.8 floors; see that file's comments for all
+   * three.
    */
   @media (max-width: 48rem) {
     :where([data-playdeck-part='controls']) {
       gap: 0;
+      padding-top: var(--playdeck-space-1, 0.25rem);
+      padding-bottom: calc(
+        var(--playdeck-space-1, 0.25rem) +
+          var(--playdeck-safe-bottom, env(safe-area-inset-bottom, 0px))
+      );
       padding-left: calc(
         var(--playdeck-space-1, 0.25rem) +
           var(--playdeck-safe-left, env(safe-area-inset-left, 0px))
@@ -517,6 +523,7 @@
           var(--playdeck-safe-right, env(safe-area-inset-right, 0px))
       );
       --playdeck-control-size: 2.5rem;
+      --playdeck-seek-slider-min-block-size: 1.5rem;
     }
 
     :where([data-playdeck-part='time']) {

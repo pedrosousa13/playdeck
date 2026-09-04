@@ -491,6 +491,22 @@ const useSeekPreview = (
   return { preview, seek };
 };
 
+// The wrapper's and the input's own floor, below. A `var()` read rather than
+// the literal `44` they both used to carry, the same move #598 made for every
+// button-shaped control's own target (`controlTargetStyle` in
+// `loading-error.tsx`): an inline style beats any stylesheet, so a fixed
+// number here would leave a theme's "below 48rem" query with nothing to
+// shrink. A token of its own rather than a second read of
+// `--playdeck-control-size` -- the row this floor sizes shares a line with
+// the button-shaped controls' own row only in the sense that both sit inside
+// the `Controls` part; `controlTargetStyle`'s row keeps its own
+// size at every width this package ships a phone query for, and coupling the
+// two would move one every time a theme moves the other. Falls back to
+// `2.75rem`, the same 44px desktop lock every other control-target floor in
+// this package defaults to, for a bare consumer with no stylesheet loaded.
+const SEEK_SLIDER_MIN_BLOCK_SIZE =
+  'var(--playdeck-seek-slider-min-block-size, 2.75rem)';
+
 // `aria-label` is the one prop this component accepts at the wrapper level and
 // renders somewhere else, and that asymmetry is deliberate. Everything else a
 // consumer writes at the top level describes the box — layout, classes, data
@@ -562,7 +578,11 @@ export const SeekSlider = ({
       data-provider={provider ?? undefined}
       data-playdeck-part="seek-slider"
       data-state={window ? 'ready' : 'idle'}
-      style={{ position: 'relative', minHeight: 44, ...style }}
+      style={{
+        position: 'relative',
+        minHeight: SEEK_SLIDER_MIN_BLOCK_SIZE,
+        ...style
+      }}
     >
       <div aria-hidden="true" data-playdeck-part="seek-buffered">
         {window
@@ -623,7 +643,11 @@ export const SeekSlider = ({
           if (window && Number.isFinite(next)) seek(next);
           inputProps?.onChange?.(event);
         }}
-        style={{ width: '100%', minHeight: 44, ...inputProps?.style }}
+        style={{
+          width: '100%',
+          minHeight: SEEK_SLIDER_MIN_BLOCK_SIZE,
+          ...inputProps?.style
+        }}
         type="range"
         value={value}
       />
