@@ -358,8 +358,7 @@ export default function SearchCommand({ base }: Props) {
           <DialogHeader className="sr-only">
             <DialogTitle>Search the documentation</DialogTitle>
             <DialogDescription>
-              Search the package references, provider setup guides and
-              examples.
+              Search the package references, provider setup guides and examples.
             </DialogDescription>
           </DialogHeader>
 

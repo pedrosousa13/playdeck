@@ -1207,9 +1207,7 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
     // The seek row's own floor, at the 24px WCAG 2.5.8 minimum itself --
     // independent of the button size above.
-    expect(query).toMatch(
-      /--playdeck-seek-slider-min-block-size:\s*1\.5rem;/
-    );
+    expect(query).toMatch(/--playdeck-seek-slider-min-block-size:\s*1\.5rem;/);
 
     expect(query).toMatch(
       /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
@@ -1226,9 +1224,10 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
   // this rule is gated on pointer, not on width, the same as the volume
   // slider's own long-standing `(pointer: coarse)` rule beside it.
   test('hides pip-button under a coarse pointer, alongside the volume slider', () => {
-    const coarseQuery = /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{([^]*?)\n {2}\}/.exec(
-      withoutComments
-    );
+    const coarseQuery =
+      /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{([^]*?)\n {2}\}/.exec(
+        withoutComments
+      );
     expect(coarseQuery).not.toBeNull();
     const body = coarseQuery![1];
     expect(body).toMatch(/data-playdeck-part='volume-slider'/);
@@ -1281,9 +1280,7 @@ describe('docked.css phone sizing (not shared with theme.css)', () => {
     // Still ahead of WCAG 2.5.8's 24px floor at 40px; 2.75rem (44px) is the
     // desktop-only lock the token's own doc comment records in theme.css.
     expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
-    expect(query).toMatch(
-      /--playdeck-seek-slider-min-block-size:\s*1\.5rem;/
-    );
+    expect(query).toMatch(/--playdeck-seek-slider-min-block-size:\s*1\.5rem;/);
 
     expect(query).toMatch(
       /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
@@ -1293,9 +1290,10 @@ describe('docked.css phone sizing (not shared with theme.css)', () => {
   // `pip-button` joins the volume slider under a coarse pointer (#598), the
   // same reasoning as `theme.css`'s own copy of this test.
   test('hides pip-button under a coarse pointer, alongside the volume slider', () => {
-    const coarseQuery = /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{([^]*?)\n {2}\}/.exec(
-      dockedWithoutComments
-    );
+    const coarseQuery =
+      /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{([^]*?)\n {2}\}/.exec(
+        dockedWithoutComments
+      );
     expect(coarseQuery).not.toBeNull();
     const body = coarseQuery![1];
     expect(body).toMatch(/data-playdeck-part='volume-slider'/);

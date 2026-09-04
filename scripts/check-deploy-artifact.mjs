@@ -92,7 +92,10 @@ const loadRedirects = async (directory) => {
 const matchRedirect = (rules, pathname) => {
   for (const rule of rules) {
     if (rule.source === pathname) return rule;
-    if (rule.source.endsWith('/*') && pathname.startsWith(rule.source.slice(0, -1))) {
+    if (
+      rule.source.endsWith('/*') &&
+      pathname.startsWith(rule.source.slice(0, -1))
+    ) {
       return rule;
     }
   }

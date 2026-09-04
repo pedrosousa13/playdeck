@@ -162,9 +162,7 @@ describe('PlayButton', () => {
     // A `var()` read (#598), not the literal `44px` it used to be, so a
     // theme's own "below 48rem" query can shrink it; falls back to 44px --
     // the desktop lock -- for a bare consumer with no stylesheet loaded.
-    expect(button.style.minWidth).toBe(
-      'var(--playdeck-control-size, 2.75rem)'
-    );
+    expect(button.style.minWidth).toBe('var(--playdeck-control-size, 2.75rem)');
     expect(button.style.minHeight).toBe(
       'var(--playdeck-control-size, 2.75rem)'
     );
@@ -606,7 +604,9 @@ describe('SeekSlider', () => {
 
   test('gives the wrapper and the scrubber input a 44px default target', () => {
     const { container } = renderWithPlayer(<Player.SeekSlider />, seekReady());
-    const wrapper = container.querySelector('[data-playdeck-part="seek-slider"]');
+    const wrapper = container.querySelector(
+      '[data-playdeck-part="seek-slider"]'
+    );
     const slider = screen.getByRole('slider', { name: 'Seek' });
     // A `var()` read, not the literal `44px` either used to carry, so a
     // theme's own "below 48rem" query can shrink the row -- the same move
@@ -2245,9 +2245,7 @@ describe('AirPlayButton', () => {
     expect(ref.current).toBe(button);
     expect(button.classList.contains('c')).toBe(true);
     expect(button.style.color).toBe('red');
-    expect(button.style.minWidth).toBe(
-      'var(--playdeck-control-size, 2.75rem)'
-    );
+    expect(button.style.minWidth).toBe('var(--playdeck-control-size, 2.75rem)');
     expect(button.style.minHeight).toBe(
       'var(--playdeck-control-size, 2.75rem)'
     );
