@@ -1,7 +1,10 @@
 import { expect, test } from 'vitest';
 import Hls from 'hls.js';
 import HlsLight from 'hls.js/light';
-import { hlsBuildLoaders, hlsBuildSupportsSubtitles } from '../src/adapter-values';
+import {
+  hlsBuildLoaders,
+  hlsBuildSupportsSubtitles
+} from '../src/adapter-values';
 
 // `createHlsProvider`'s `build` option (#579) is a primitive stand-in for
 // `loadHls`, so `@playdeck/react`'s `PlayerProviderOptions.hls` can carry it

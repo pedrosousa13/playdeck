@@ -49,9 +49,7 @@ test('forwards the hls build option to the hls adapter through Player.Root', asy
     </Player.Root>
   );
 
-  await waitFor(() =>
-    expect(mockedCreateHlsProvider).toHaveBeenCalledTimes(1)
-  );
+  await waitFor(() => expect(mockedCreateHlsProvider).toHaveBeenCalledTimes(1));
   const [mount, source, options] = mockedCreateHlsProvider.mock.calls[0]!;
   expect(mount).toBeInstanceOf(HTMLVideoElement);
   expect(source).toEqual({ type: 'hls', src: '/hls/master.m3u8' });
@@ -78,9 +76,7 @@ test('re-attaches the HLS adapter when the build option changes', async () => {
     </Player.Root>
   );
 
-  await waitFor(() =>
-    expect(mockedCreateHlsProvider).toHaveBeenCalledTimes(1)
-  );
+  await waitFor(() => expect(mockedCreateHlsProvider).toHaveBeenCalledTimes(1));
 
   rerender(
     <Player.Root
@@ -94,9 +90,7 @@ test('re-attaches the HLS adapter when the build option changes', async () => {
     </Player.Root>
   );
 
-  await waitFor(() =>
-    expect(mockedCreateHlsProvider).toHaveBeenCalledTimes(2)
-  );
+  await waitFor(() => expect(mockedCreateHlsProvider).toHaveBeenCalledTimes(2));
   const [, , options] = mockedCreateHlsProvider.mock.calls[1]!;
   expect(options).toMatchObject({ build: 'light' });
   expect(harness.fakes[0]!.counts().destroyCount).toBe(1);
@@ -121,9 +115,7 @@ test('keeps the installed HLS adapter when a value-equal provider option bag is 
     </Player.Root>
   );
 
-  await waitFor(() =>
-    expect(mockedCreateHlsProvider).toHaveBeenCalledTimes(1)
-  );
+  await waitFor(() => expect(mockedCreateHlsProvider).toHaveBeenCalledTimes(1));
 
   // A fresh object literal with the same value, as an inline prop produces on
   // every render.
