@@ -160,6 +160,53 @@ test('hides the poster after the first frame without changing its geometry', asy
   await expectMatchingRectangles(page);
 });
 
+// An embed provider (YouTube, Vimeo) draws its own chrome over an idle
+// iframe once nothing on this side covers it, and that chrome shows up while
+// paused, not only before the first play -- this fixture is native video, so
+// nothing here proves that half, only that the poster's own state machine
+// gives a consumer the hook to cover it: the same part, shown again, once a
+// source that played sits paused rather than playing.
+test('shows the poster again, as paused, once a played source is paused -- and hides it again on resume', async ({
+  page
+}) => {
+  // The ten-second clip (`source: 'long'`), not the default one-second tracer:
+  // this test pauses after confirmed playback, and the one-second clip can
+  // reach `ended` on its own in the time two clicks and their assertions take
+  // -- `NativeMp4StartTime`'s own comment records the same reason for the
+  // same choice.
+  await page.goto(
+    '/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story&args=source:long'
+  );
+  const visibleGeometry = await rect(poster(page));
+
+  await playButton(page).click();
+  await expect(poster(page)).toHaveAttribute('data-state', 'hidden');
+
+  // A retrying click, not a single one: real playback of a real clip can win
+  // a race against a command issued at an arbitrary instant (a network read,
+  // a decode stall), and a click that lands in that window is a no-op rather
+  // than a pause. `toPass` re-issues the click until the state agrees, the
+  // same shape `native-mp4.spec.ts` reaches for the imperative handle over
+  // for its own, unrelated, race.
+  await expect(async () => {
+    await playButton(page).click();
+    await expect(poster(page)).toHaveAttribute('data-state', 'paused', {
+      timeout: 1000
+    });
+  }).toPass({ timeout: 10000 });
+  await expect(poster(page)).toHaveCSS('visibility', 'visible');
+  expect(await rect(poster(page))).toEqual(visibleGeometry);
+  await expectMatchingRectangles(page);
+
+  await expect(async () => {
+    await playButton(page).click();
+    await expect(poster(page)).toHaveAttribute('data-state', 'hidden', {
+      timeout: 1000
+    });
+  }).toPass({ timeout: 10000 });
+  await expect(poster(page)).toHaveCSS('visibility', 'hidden');
+});
+
 test('CSS source files do not declare background images', () => {
   const violations = ['apps', 'packages']
     .flatMap(cssSourceFiles)
