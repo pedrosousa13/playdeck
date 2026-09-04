@@ -77,7 +77,10 @@ export const Poster = ({ children, style, ...safeRest }: PosterProps) => {
         ...style,
         // After `...style`, alone: derived from `posterState`, so a static
         // consumer value would pin the poster open for every source rather
-        // than override a layout choice.
+        // than override a layout choice. `'hidden'` is the only state this
+        // hides for -- `'paused'` (`player-context.ts`'s `PosterState`) reads
+        // as visible here same as `'visible'` does, and `data-state` is what
+        // tells the two apart for anyone who needs to.
         visibility: posterState === 'hidden' ? 'hidden' : 'visible'
       }}
     >

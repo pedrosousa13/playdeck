@@ -7,6 +7,7 @@ import {
   type MediaMetadataInput,
   type MediaSessionBinding,
   type MediaSessionLike,
+  type PlaybackState,
   type PlayerSource
 } from '@playdeck/core';
 import { INTERNAL_CONTROLLER } from './internal-controller.js';
@@ -14,7 +15,8 @@ import {
   collectPlayerActions,
   PlayerContext,
   PosterContext,
-  type PlayerHandle
+  type PlayerHandle,
+  type PosterState
 } from './player-context.js';
 import {
   useActivation,
@@ -235,6 +237,26 @@ export const Root = ({
 }: RootProps) => {
   const [controller] = useState(() => new PlayerController());
   const [hiddenTransition, setHiddenTransition] = useState<SourceTransition>();
+  // `hiddenTransition` also latches on a decoded frame with no confirmed play
+  // behind it at all (the `loadeddata` path below, `onLoadedData`) -- a native
+  // `<video>` that reached `HAVE_CURRENT_DATA` shows that frame on its own
+  // account, poster or no poster, so nothing needs covering back up were
+  // "paused" read off that latch alone. This second latch answers a narrower
+  // question, "has this source ever reached confirmed `playing`", set only
+  // from the one place that happens (the same subscription `posterPlayback`
+  // below is written from), and it is what tells a source merely sitting on
+  // its first ready frame apart from one that actually played and has since
+  // been paused.
+  const [confirmedPlayingTransition, setConfirmedPlayingTransition] =
+    useState<SourceTransition>();
+  // The live counterpart to both latches above: neither resets once set, so
+  // neither alone can tell a still-playing source from one sitting paused on
+  // it. Read fresh from the controller rather than assumed `'paused'`, and
+  // written from the same subscription the two latches are, so all three
+  // change in the same commit.
+  const [posterPlayback, setPosterPlayback] = useState<PlaybackState>(
+    () => controller.getState().playback
+  );
   const currentMedia = useRef<PlayerMediaMount | null>(null);
   const providerSourceTransition = useRef<SourceTransition | undefined>(
     undefined
@@ -778,7 +800,9 @@ export const Root = ({
     const unsubscribePoster = controller.subscribe((state) => {
       if (state.playback === 'playing' && providerSourceTransition.current) {
         setHiddenTransition(providerSourceTransition.current);
+        setConfirmedPlayingTransition(providerSourceTransition.current);
       }
+      setPosterPlayback(state.playback);
     });
     return () => {
       unsubscribePoster();
@@ -929,8 +953,24 @@ export const Root = ({
       volumeRequest
     ]
   );
-  const posterState =
-    hiddenTransition === sourceTransition ? 'hidden' : 'visible';
+  // `hiddenTransition === sourceTransition` is unchanged from before this
+  // state gained a third value: it answers "has the poster's job ended for
+  // this source" (a decoded frame, or confirmed playback, either latched
+  // forever), and where it says no the answer is `'visible'` exactly as it
+  // always was. Where it says yes, `confirmedPlayingTransition` -- latched
+  // only by confirmed `playing`, never by a decoded frame with no play behind
+  // it -- separates a source that actually played from one merely sitting
+  // ready, and `posterPlayback` supplies the live half neither latch can:
+  // whether a source that did play is playing now. Only a source that played
+  // and is not playing now reads `'paused'`; every other combination reads
+  // exactly as it did before this state had a third value.
+  const posterState: PosterState =
+    hiddenTransition !== sourceTransition
+      ? 'visible'
+      : confirmedPlayingTransition === sourceTransition &&
+          posterPlayback === 'paused'
+        ? 'paused'
+        : 'hidden';
 
   return (
     <PlayerContext.Provider value={value}>

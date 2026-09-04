@@ -1868,6 +1868,68 @@ test('hides the poster only for confirmed playback or the current media frame', 
   expect(poster.getAttribute('data-state')).toBe('hidden');
 });
 
+// The embed providers this covers (YouTube, Vimeo) draw their own chrome --
+// a title bar, a "more videos" shelf -- over an idle iframe once nothing on
+// this side of the frame covers it, and that chrome shows up while paused,
+// not only before the first play. `'paused'` is the poster's answer: the same
+// part, shown again, once a source that actually played sits paused rather
+// than playing.
+test('shows the poster again as paused once confirmed playback pauses, and hides it again on resume', () => {
+  const { Poster } = posterPrimitives;
+  render(
+    <LegacyRoot source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Pauseable poster</span>
+        </Poster>
+      </Player.Viewport>
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const poster = screen.getByText('Pauseable poster').parentElement!;
+
+  expect(poster.getAttribute('data-state')).toBe('visible');
+
+  fireEvent.play(media);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+
+  fireEvent.pause(media);
+  expect(poster.getAttribute('data-state')).toBe('paused');
+
+  fireEvent.play(media);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+});
+
+// A decoded frame with no confirmed play behind it (`onLoadedData` in
+// `root.tsx`) is the native-`<video>` case above, `hides the poster only for
+// confirmed playback or the current media frame` -- the element shows that
+// frame on its own account regardless of the poster, so there is nothing a
+// pause here needs to uncover. This is what tells that source apart from one
+// that actually played: a stray `pause` event with no confirmed `playing`
+// ever behind it must not read as the new `'paused'` state.
+test('a decoded frame with no confirmed play stays hidden through a stray pause event', () => {
+  const { Poster } = posterPrimitives;
+  render(
+    <LegacyRoot source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Unplayed poster</span>
+        </Poster>
+      </Player.Viewport>
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const poster = screen.getByText('Unplayed poster').parentElement!;
+
+  fireEvent.loadedData(media);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+
+  fireEvent.pause(media);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+});
+
 test('detached media loadeddata cannot hide the poster', () => {
   const { Poster } = posterPrimitives;
   const player = (showMedia: boolean) => (
