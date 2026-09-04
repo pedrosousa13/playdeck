@@ -44,7 +44,6 @@
  *                --playdeck-color-thumb-ring    #000
  *                --playdeck-color-focus         #fff
  *                --playdeck-color-backdrop      #000
- *                --playdeck-color-hairline      #d9d9d6 (phone docking only)
  *                --playdeck-color-duration      rgb(255 255 255 / 0.64)
  *                                                (duration Time only)
  *   Typography   --playdeck-font-family         system-ui stack
@@ -617,99 +616,76 @@
     }
   }
 
-  /* Not hidden to save room: iOS Safari ignores a programmatic `volume` write,
-   * so on a coarse pointer this control cannot move anything, and a slider that
-   * answers nothing is worse than no slider. */
+  /* The volume slider is not hidden to save room: iOS Safari ignores a
+   * programmatic `volume` write, so on a coarse pointer this control cannot
+   * move anything, and a slider that answers nothing is worse than no slider.
+   *
+   * `pip-button` IS hidden to save room (#598): a coarse pointer means a
+   * touchscreen, and every platform that ships one already puts
+   * picture-in-picture in its own system chrome (the video element's native
+   * controls, the OS multitasking view), so the in-bar affordance duplicates
+   * a gesture the platform already offers and is the one control a phone
+   * loses nothing by dropping. That is what makes the row of buttons fit one
+   * line at the control sizes below. */
   @media (pointer: coarse) {
-    :where([data-playdeck-part='volume-slider']) {
+    :where(
+      [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='pip-button']
+    ) {
       display: none;
     }
   }
 
   /* ---- below 48rem --------------------------------------------------------
-   * Real docking now, not only a flatter scrim: the bar leaves the overlay
-   * position and takes a row of its own under the picture, in the scheme's
-   * own surface tokens rather than a translucent black built for a video
-   * backdrop.
+   * Sizing only, as of 2026-09-04. This block used to dock the bar under the
+   * picture below 48rem -- position: static, a grid row of its own, the
+   * scheme's flat surface colours in place of the scrim -- and the maintainer
+   * reversed that ruling once the idle fade (below, and see the auto-hide
+   * rule above) made the *floating* bar a sound phone layout on its own: it
+   * fades while playing and returns on a tap or a keystroke, so there is no
+   * remaining reason to dock the bar out of the picture at this width. The
+   * bar stays exactly where the base rules put it -- positioned over the
+   * picture, painted with the scrim, `data-idle` still fading it out. See the
+   * bench composition's own history for the removed rules; `docked.css`
+   * still docks the bar, unconditionally, for a reader who chooses that skin.
    *
-   * This is real CSS and it is testable in isolation -- a bare consumer with
-   * no positioning of their own, a Storybook story, this file's own tests --
-   * but it is inert on `/`'s own bench. `Bench.astro`'s
-   * `[data-playdeck-part='controls']` rule for the `theme` skin sets
-   * `place-self: end stretch` with no width query of its own, and that rule
-   * is unlayered: header rule 1 means it beats anything here whatever the
-   * viewport. In practice this never collides on the bench anyway, because
-   * `BenchIsland` only rests on `docked` below 48rem and the skin switch is
-   * `hidden` there, so `theme` is unreachable at this width on the real page.
-   * What this buys is every OTHER consumer -- Storybook, the docs examples,
-   * a real app that ships no positioning CSS of its own -- getting a real
-   * docked bar below 48rem from `theme.css` alone.
-   *
-   * `display: grid` on the viewport is what gives `controls` a row to sit
-   * in; `media`, `poster` and `activation` are all positioned `absolute`
-   * inline by the primitives that render them (documented at the top of this
-   * file), so switching the viewport from block to grid does not move them
-   * -- an absolutely positioned box is excluded from grid track sizing and
-   * still resolves its offsets against the same containing block either way.
-   * Reserving height for the picture itself is not this rule's job and was
-   * never theme.css's job at any width: "Layer geometry is deliberately NOT
-   * here" at the top of this file already says so, and a bare consumer needs
-   * their own sizing (an aspect-ratio wrapper, most simply) at every width,
-   * not only this one.
+   * What is left is the row-two arithmetic: five buttons plus the times
+   * overflowed 375px onto a third row at the desktop control size (#598).
    */
   @media (max-width: 48rem) {
-    :where([data-playdeck-part='viewport']) {
-      display: grid;
-      grid-template-rows: 1fr auto;
-    }
-
     :where([data-playdeck-part='controls']) {
-      position: static;
-      grid-row: 2;
-      background: var(--playdeck-color-surface, #f4f4f2);
-      color: var(--playdeck-color-on-surface, #1c1c1e);
-      border-block-start: 1px solid var(--playdeck-color-hairline, #d9d9d6);
+      /* Zero rather than the base rule's `--playdeck-space-1`: row two's
+       * flex children need every pixel of that gap back to fit one line. */
+      gap: 0;
+      /* The base rule's `--playdeck-space-2` on both sides, halved: still
+       * the same calc shape so the safe-area inset survives untouched. */
+      padding-left: calc(
+        var(--playdeck-space-1, 0.25rem) +
+          var(--playdeck-safe-left, env(safe-area-inset-left, 0px))
+      );
+      padding-right: calc(
+        var(--playdeck-space-1, 0.25rem) +
+          var(--playdeck-safe-right, env(safe-area-inset-right, 0px))
+      );
+      /* 2.75rem is a desktop value: it is the size a pointer can miss by a
+       * few px and still correct on the next attempt, which a phone screen
+       * with no cursor to hover first has less need of. 2.5rem (40px) still
+       * clears WCAG 2.5.8's 24px minimum target size with room to spare, and
+       * freeing those 8px per button is what the row-two overflow (#598)
+       * needed to resolve on one line at 360px -- see the arithmetic in
+       * `theme.test.ts`'s phone-sizing test. */
+      --playdeck-control-size: 2.5rem;
     }
 
-    /* The scrim's translucent-white track/buffered defaults are built for a
-     * dark video backdrop and read as close to invisible on this flat light
-     * surface -- the same reasoning `docked.css`'s own header comment gives
-     * for carrying its own opaque defaults. These two declarations are why
-     * `tokenDefault()` in `theme.test.ts` is scoped to skip this block: it is
-     * a deliberate second fallback, not disagreement. */
-    :where([data-playdeck-part='seek-buffered']) {
-      background-color: var(--playdeck-color-track, #84847d);
-    }
-
-    :where([data-playdeck-part='seek-buffered-range']) {
-      background-color: var(--playdeck-color-buffered, #1c1c1e);
-    }
-
-    /* Nothing hides on a phone: there is no overlay to auto-hide over the
-     * picture any more, so idle no longer fades this part. */
-    :where([data-idle='true'] [data-playdeck-part='controls']) {
-      opacity: 1;
-      pointer-events: auto;
+    /* Trimmed so "0:01 / 1:30" costs no more width than the digits need --
+     * the base rule already sets `--playdeck-font-size-small` here, so only
+     * the padding is this query's to shrink. */
+    :where([data-playdeck-part='time']) {
+      padding-inline: var(--playdeck-space-1, 0.25rem);
     }
 
     :where([data-playdeck-part='volume-slider']) {
       display: none;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :where([data-playdeck-part='controls']) {
-        background: var(--playdeck-color-surface, #141416);
-        color: var(--playdeck-color-on-surface, #ededed);
-        border-block-start-color: var(--playdeck-color-hairline, #2a2a2d);
-      }
-
-      :where([data-playdeck-part='seek-buffered']) {
-        background-color: var(--playdeck-color-track, #6d6d70);
-      }
-
-      :where([data-playdeck-part='seek-buffered-range']) {
-        background-color: var(--playdeck-color-buffered, #ededed);
-      }
     }
   }
 

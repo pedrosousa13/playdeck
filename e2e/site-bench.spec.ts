@@ -229,15 +229,19 @@ test('the skin group offers theme and docked, in that order, and no third positi
   await expect(skinButtons.nth(1)).toHaveAttribute('data-value', 'docked');
 });
 
-test('the skin fieldset is hidden below 48rem', async ({ page }) => {
+/**
+ * The maintainer's reversal on 2026-09-04: the skin fieldset used to be
+ * `hidden` below 48rem because `docked` was the resting position there and a
+ * switch with no visible effect on a fine pointer was worse than no switch.
+ * Now that `theme` rests at every width (the idle fade makes the floating bar
+ * a sound phone layout on its own), the switch is reachable everywhere --
+ * see `theme.css`'s own "below 48rem" comment for the fuller account.
+ */
+test('the skin fieldset is visible below 48rem', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto(landing);
-  // Waited on first, so hydration has actually happened before the next
-  // assertion: the island is `client:only`, and a check for `toBeHidden` on
-  // an element the DOM does not have yet at all would pass for the wrong
-  // reason -- absent, not hidden by the rule under test.
   await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
-  await expect(page.locator('[data-bench-switch="skin"]')).toBeHidden();
+  await expect(page.locator('[data-bench-switch="skin"]')).toBeVisible();
 });
 
 test('docked.css is a real <link>, in the document, when pressed, and theme.css is gone', async ({
@@ -253,7 +257,7 @@ test('docked.css is a real <link>, in the document, when pressed, and theme.css 
       )
     );
 
-  // At rest, above 48rem, the resting skin is `theme`.
+  // At rest, at every width, the resting skin is `theme`.
   await expect
     .poll(async () =>
       (await stylesheetHrefs()).some((href) => href.includes('theme'))
@@ -424,19 +428,27 @@ test('at 1440px, the resting theme paints the controls part with the scrim gradi
   expect(themed.backgroundImage).toContain('gradient');
 });
 
-test('below 48rem, the resting docked viewport already gives the controls a row of their own', async ({
+/**
+ * The maintainer's reversal on 2026-09-04: `docked` is no longer the resting
+ * position below 48rem, so the shape a narrow reader actually rests on is now
+ * the same one the 1440px test above pins for `theme` -- controls sharing the
+ * picture's own grid cell, not a row of their own. `docked` is still reachable
+ * below 48rem: the switch is visible there now (see the fieldset-visibility
+ * test above), and pressing it still docks, which this file's "below 48rem,
+ * the resting theme bar overlays the picture, and docked still docks it
+ * there" test covers by pressing it explicitly.
+ */
+test('below 48rem, the resting theme keeps controls in the picture, and the skin switch is reachable', async ({
   page
 }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto(landing);
   await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
-  // Below 48rem the skin fieldset is hidden and there is no switch to reach
-  // `theme` from, so this is the shape a narrow reader actually rests on.
-  await expect(page.locator('[data-bench-switch="skin"]')).toBeHidden();
+  await expect(page.locator('[data-bench-switch="skin"]')).toBeVisible();
 
-  const docked = await gridShape(page);
-  expect(docked.areas).toBe('"stack" "controls"');
-  expect(docked.controlsArea).toBe('controls');
+  const themed = await gridShape(page);
+  expect(themed.areas).toBe('"stack"');
+  expect(themed.controlsArea).toBe('stack');
 });
 
 /**
@@ -484,11 +496,10 @@ test('under docked, the bar’s top hairline is the stage’s own dark line in b
  * frame: the picture is the box either skin's own claim is about, and
  * `media`'s own box is what the non-stretching assertion below needs too.
  *
- * The comparison is only meaningful at a width where both skins are
- * reachable -- the skin fieldset is `hidden md:block`, so below 48rem
- * `theme` cannot be pressed at all. The narrow case below does not try: it
- * presses nothing and checks the position a narrow reader actually rests on,
- * which is `docked` with no switch to leave it from -- the case the ruling
+ * Both skins are reachable at every width now (2026-09-04): the skin fieldset
+ * is visible below 48rem too, so the narrow test below presses `docked`
+ * explicitly rather than relying on it being the resting position -- `theme`
+ * is what a narrow reader actually rests on, and that is the case the ruling
  * itself names as the one most worth getting right.
  */
 /**
@@ -590,15 +601,25 @@ test('at 1440px, the themed bar overlays the picture and the docked bar sits bel
   expectNotStretched(docked.mediaBox);
 });
 
-test('below 48rem, the resting docked bar sits below the picture, with no switch to change it', async ({
+test('below 48rem, the resting theme bar overlays the picture, and docked still docks it there', async ({
   page
 }) => {
   test.slow();
   await page.setViewportSize({ width: 375, height: 800 });
+
   await page.goto(landing);
   await expect(activationButton(page)).toBeVisible();
-  await expect(page.locator('[data-bench-switch="skin"]')).toBeHidden();
+  await expect(page.locator('[data-bench-switch="skin"]')).toBeVisible();
+  const themed = await activateAndMeasure(page);
+  expect(themed.controlsBox.y).toBeGreaterThanOrEqual(themed.mediaBox.y - 1);
+  expect(themed.controlsBox.y + themed.controlsBox.height).toBeLessThanOrEqual(
+    themed.mediaBox.y + themed.mediaBox.height + 1
+  );
+  expectNotStretched(themed.mediaBox);
 
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
+  await position(page, 'skin', 'docked').click();
   const docked = await activateAndMeasure(page);
   expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
     docked.mediaBox.y + docked.mediaBox.height - 1
@@ -639,4 +660,105 @@ test('after a press, the live stats readout reports a real rendition and the thr
     timeout: 20_000
   });
   await expect(statValue(page, 'Ladder')).toContainText('3');
+});
+
+/**
+ * The row-two overflow (#598), on the resting `theme` skin: at the desktop
+ * control size, five buttons plus the times overflowed 375px onto a third
+ * row. `theme.css`'s "below 48rem" query fixes the arithmetic (2.5rem
+ * buttons, no gap, trimmed padding) and hides `pip-button` under a coarse
+ * pointer -- see that file's own comments for the numbers.
+ *
+ * A dedicated `test.use` context rather than a bare `setViewportSize`: a
+ * coarse pointer is what a real phone has and what the fix's `pip-button`
+ * hide and the volume slider's own long-standing hide are both gated on, so
+ * a context with no touch would leave the volume slider in the row and
+ * contradict the maintainer's own report from a real device.
+ */
+test.describe('the phone control bar fits one row (#598)', () => {
+  test.use({
+    viewport: { width: 360, height: 740 },
+    hasTouch: true,
+    isMobile: true
+  });
+
+  test("every control-bar button shares the play button's row, and the bar is no taller than the seek row plus one control row", async ({
+    page
+  }) => {
+    test.slow();
+    await page.goto(landing);
+    await expect(activationButton(page)).toBeVisible();
+    await activationButton(page).click();
+    await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+    const controlsBox = await controls(page).boundingBox();
+    if (controlsBox === null) {
+      throw new Error('Could not measure the bar.');
+    }
+    // Held on the bar before reading it, the same guard `activateAndMeasure`
+    // above uses: theme's own auto-hide must not catch this read mid-fade.
+    await page.mouse.move(
+      controlsBox.x + controlsBox.width / 2,
+      controlsBox.y + controlsBox.height / 2
+    );
+
+    const geometry = await page.evaluate(() => {
+      const controlsEl = document.querySelector(
+        '[data-playdeck-part="controls"]'
+      );
+      const seekEl = document.querySelector('[data-playdeck-part="seek-slider"]');
+      // Scoped to `controlsEl` rather than `document`: `SurfaceToggle`
+      // (`BenchIsland.tsx`) is `Player.PlayButton` too, full-bleed over the
+      // whole picture and BEFORE the bar in document order, so an unscoped
+      // query finds it first and reads the picture's own top instead of the
+      // bar's second row.
+      const playEl = controlsEl?.querySelector('[data-playdeck-part="play-button"]');
+      if (controlsEl === null || seekEl === null || playEl == null) {
+        throw new Error('Missing a required control-bar part.');
+      }
+      // Every button-shaped part the theme's own button rule carries
+      // (`theme.css`'s "every button-shaped part is carried by every button
+      // rule" test pins the same list), read from the DOM rather than
+      // hand-picked, so a control this clip does not gate on (captions,
+      // AirPlay) is simply absent from the result rather than throwing.
+      const buttonParts = [
+        'play-button',
+        'mute-button',
+        'captions-button',
+        'fullscreen-button',
+        'pip-button',
+        'airplay-button',
+        'settings-menu-trigger'
+      ];
+      const visibleTops = buttonParts
+        .flatMap((part) =>
+          Array.from(
+            controlsEl.querySelectorAll(`[data-playdeck-part="${part}"]`)
+          )
+        )
+        .filter((el) => (el as HTMLElement).offsetParent !== null)
+        .map((el) => el.getBoundingClientRect().top);
+      return {
+        controlsHeight: controlsEl.getBoundingClientRect().height,
+        seekHeight: seekEl.getBoundingClientRect().height,
+        playTop: playEl.getBoundingClientRect().top,
+        visibleTops
+      };
+    });
+
+    // `pip-button` is hidden under a coarse pointer, so this is play, mute,
+    // the settings trigger and fullscreen -- four, not the five the desktop
+    // size overflowed at.
+    expect(geometry.visibleTops.length).toBeGreaterThanOrEqual(3);
+    for (const top of geometry.visibleTops) {
+      expect(top).toBeCloseTo(geometry.playTop, 0);
+    }
+
+    // One control row's worth of slack (44px, the desktop control size, used
+    // as a safe upper bound) plus room for padding and gaps -- comfortably
+    // under the ~40px a genuine third row would add.
+    expect(geometry.controlsHeight).toBeLessThanOrEqual(
+      geometry.seekHeight + 44 + 24
+    );
+  });
 });

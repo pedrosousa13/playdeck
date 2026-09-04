@@ -159,8 +159,15 @@ describe('PlayButton', () => {
     expect(ref.current).toBe(button);
     expect(button.classList.contains('c')).toBe(true);
     expect(button.style.color).toBe('red');
-    expect(button.style.minWidth).toBe('44px');
-    expect(button.style.minHeight).toBe('44px');
+    // A `var()` read (#598), not the literal `44px` it used to be, so a
+    // theme's own "below 48rem" query can shrink it; falls back to 44px --
+    // the desktop lock -- for a bare consumer with no stylesheet loaded.
+    expect(button.style.minWidth).toBe(
+      'var(--playdeck-control-size, 2.75rem)'
+    );
+    expect(button.style.minHeight).toBe(
+      'var(--playdeck-control-size, 2.75rem)'
+    );
   });
 
   test('renders replacement children', () => {
@@ -2227,8 +2234,12 @@ describe('AirPlayButton', () => {
     expect(ref.current).toBe(button);
     expect(button.classList.contains('c')).toBe(true);
     expect(button.style.color).toBe('red');
-    expect(button.style.minWidth).toBe('44px');
-    expect(button.style.minHeight).toBe('44px');
+    expect(button.style.minWidth).toBe(
+      'var(--playdeck-control-size, 2.75rem)'
+    );
+    expect(button.style.minHeight).toBe(
+      'var(--playdeck-control-size, 2.75rem)'
+    );
     // A bare <button> inside a form submits it.
     expect(button.getAttribute('type')).toBe('button');
   });

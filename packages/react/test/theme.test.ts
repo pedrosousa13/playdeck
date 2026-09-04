@@ -609,13 +609,14 @@ describe('theme contract', () => {
  */
 /**
  * `withoutComments` with the `@media (max-width: 48rem)` block's contents
- * removed, so `tokenDefault` reads only the desktop default of a token that
- * this block deliberately gives a second phone-only fallback -- a third,
- * nested inside its own dark-scheme query -- for `-track` and `-buffered`,
- * so far. Without this, `tokenDefault` finds more than one distinct
- * fallback for the same token and throws -- correctly, since agreement is
- * what makes it a trustworthy reading of what ships, but the phone block is
- * an intentional divergence and not a defect for it to catch.
+ * removed. Nothing in that block gives a token a second, phone-only
+ * fallback today -- the docking layout that once did was reversed on
+ * 2026-09-04 once the idle fade made the floating bar a sound phone layout
+ * on its own; see that block's own header comment. `tokenDefault` still
+ * excludes it defensively rather than folding the exclusion away: a future
+ * phone-only override would otherwise make this throw for the wrong reason
+ * -- a second fallback found, rather than the cross-file disagreement this
+ * scan exists to catch.
  */
 const withoutPhoneDockingBlock = (() => {
   const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(withoutComments);
@@ -1076,22 +1077,13 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     );
   });
 
-  // A real `position` now, unlike the comment this replaces: `controls`
-  // takes `position: static` and its own `grid-row` inside this query, and
-  // the viewport becomes `display: grid` to give it one. That is real,
-  // testable CSS for a bare consumer -- but inert on `/`'s own bench, where
-  // `Bench.astro`'s own unlayered `place-self: end stretch` rule for the
-  // `theme` skin carries no width query and beats this whatever the
-  // viewport, per header rule 1. See this plan's "Before you start" section
-  // for the fuller account; the short version is that `theme` is unreachable
-  // below 48rem on the real bench anyway, so the two never actually collide.
   /**
    * The whole `@media (max-width: 48rem)` block's text, walked by brace depth
-   * rather than matched by a fixed-line regex -- the block now nests a second
-   * `@media (prefers-color-scheme: dark)` query, so its own closing brace is
-   * not the first `\n  }` after the opener any more.
+   * rather than matched by a fixed-line regex -- other blocks in this file
+   * nest their own `@media`, so a fixed-line match is not safe to reuse here
+   * even though this particular block no longer nests one itself.
    */
-  const phoneDockingBlock = (): string => {
+  const phoneBlock = (): string => {
     const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(withoutComments);
     expect(query).not.toBeNull();
     const start = query!.index;
@@ -1104,61 +1096,144 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     return withoutComments.slice(start, end + 1);
   };
 
-  test('docks the control surface below the picture, in the scheme tokens, below 48rem', () => {
-    const query = phoneDockingBlock();
+  // The maintainer's reversal on 2026-09-04: this query docked the bar below
+  // the picture below 48rem, and no longer does. The idle fade this describe
+  // block's first test already pins is what made that unnecessary -- a bar
+  // that fades while playing and returns on a tap or a keystroke is a sound
+  // phone layout without leaving the picture, so below 48rem the bar stays
+  // exactly where the base rules put it: positioned over the picture, painted
+  // with the scrim, and still faded by `data-idle`. `docked.css` is what a
+  // reader who wants the bar out of the picture still chooses.
+  test('stays overlaid below 48rem, with data-idle still able to hide it', () => {
+    const query = phoneBlock();
 
-    // The scrim is gone: a flat surface colour, not the gradient the base
-    // rule reads, and not the old translucent-black fallback either.
+    // No `position: static`, no `grid-row`, no grid on the viewport: the
+    // three declarations that took the bar out of the picture are gone
+    // entirely, not merely reworded.
+    expect(query).not.toMatch(/position:\s*static/);
+    expect(query).not.toMatch(/grid-row/);
+    expect(query).not.toMatch(/display:\s*grid/);
+    expect(query).not.toMatch(/grid-template-rows/);
+
+    // No flat surface colours in place of the scrim, and no dark-scheme
+    // repeat of them -- both were docking's, and both are gone with it.
+    expect(query).not.toMatch(/--playdeck-color-surface/);
+    expect(query).not.toMatch(/--playdeck-color-on-surface/);
+    expect(query).not.toMatch(/--playdeck-color-hairline/);
+    expect(query).not.toMatch(
+      /@media\s*\(\s*prefers-color-scheme:\s*dark\s*\)/
+    );
+
+    // The opaque phone-only track/buffered fallback was docking's flat
+    // surface needing more contrast than the translucent scrim default; gone
+    // with the surface it was drawn for.
+    expect(query).not.toMatch(/--playdeck-color-track/);
+    expect(query).not.toMatch(/--playdeck-color-buffered/);
+
+    // And the override that kept the bar visible through `data-idle` is
+    // gone too, which is what lets the fade this describe block's first
+    // test pins reach a phone again.
+    expect(query).not.toMatch(/data-idle/);
+  });
+
+  // The row-two arithmetic (#598): five buttons plus the times overflowed
+  // 375px onto a third row at the desktop control size. `docked.css` carries
+  // its own copy of this test, since the two files share no import.
+  test('sizes the control bar for one row below 48rem', () => {
+    const query = phoneBlock();
+
     expect(query).toMatch(
-      /background:\s*var\(--playdeck-color-surface,\s*#f4f4f2\)/
+      /:where\(\[data-playdeck-part='controls'\]\)\s*\{[^}]*gap:\s*0;/
     );
     expect(query).toMatch(
-      /color:\s*var\(--playdeck-color-on-surface,\s*#1c1c1e\)/
+      /padding-left:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
     );
     expect(query).toMatch(
-      /border-block-start:\s*1px solid var\(--playdeck-color-hairline,\s*#d9d9d6\)/
+      /padding-right:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
     );
+    // Still ahead of WCAG 2.5.8's 24px floor at 40px; 2.75rem (44px) is the
+    // desktop-only lock the token's own doc comment records.
+    expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
 
-    // The track and the loaded range get an opaque phone-only fallback: the
-    // base rule's translucent white is built for a dark video backdrop and
-    // is close to invisible on a flat light surface.
-    expect(query).toMatch(/--playdeck-color-track,\s*#84847d/);
-    expect(query).toMatch(/--playdeck-color-buffered,\s*#1c1c1e/);
-
-    // Nothing hides on a phone: idle no longer fades the bar.
     expect(query).toMatch(
-      /:where\(\[data-idle='true'\] \[data-playdeck-part='controls'\]\)\s*\{[^}]*opacity:\s*1;[^}]*pointer-events:\s*auto;/
+      /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
     );
 
     expect(query).toMatch(/volume-slider'\][^]*?display:\s*none/);
-
-    // The dark repeat, nested inside the same query -- the file's second
-    // `@media` occurrence, which the feature-inventory test does not pin
-    // (it asserts the *set* of at-rule names, and 'media' was already in it).
-    const darkQuery = /@media\s*\(\s*prefers-color-scheme:\s*dark\s*\)/.exec(
-      query
-    );
-    expect(darkQuery).not.toBeNull();
-    expect(query).toMatch(
-      /background:\s*var\(--playdeck-color-surface,\s*#141416\)/
-    );
-    expect(query).toMatch(
-      /color:\s*var\(--playdeck-color-on-surface,\s*#ededed\)/
-    );
-    expect(query).toMatch(
-      /border-block-start-color:\s*var\(--playdeck-color-hairline,\s*#2a2a2d\)/
-    );
-    expect(query).toMatch(/--playdeck-color-track,\s*#6d6d70/);
-    expect(query).toMatch(/--playdeck-color-buffered,\s*#ededed/);
   });
 
-  test('places the control surface in a grid row of its own below 48rem', () => {
-    const query = phoneDockingBlock();
+  // `pip-button` joins the volume slider under a coarse pointer (#598): a
+  // touchscreen already offers picture-in-picture from its own system
+  // chrome, so this is the one button a phone loses nothing by dropping --
+  // and dropping it is what lets row two's remaining four buttons plus the
+  // times fit one line. Read from the whole file rather than `phoneBlock()`:
+  // this rule is gated on pointer, not on width, the same as the volume
+  // slider's own long-standing `(pointer: coarse)` rule beside it.
+  test('hides pip-button under a coarse pointer, alongside the volume slider', () => {
+    const coarseQuery = /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{([^]*?)\n {2}\}/.exec(
+      withoutComments
+    );
+    expect(coarseQuery).not.toBeNull();
+    const body = coarseQuery![1];
+    expect(body).toMatch(/data-playdeck-part='volume-slider'/);
+    expect(body).toMatch(/data-playdeck-part='pip-button'/);
+    expect(body).toMatch(/display:\s*none;/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// docked.css's own copy of the row-two arithmetic (#598). Not the parameterised
+// `describe.each` above: that suite's assertions are shared shape, and this one
+// is a query only this file carries -- `theme.css` was never docked to begin
+// with, so it needs no width-scoped sizing of its own; see this file's own
+// `sizes the control bar for one row below 48rem` test.
+describe('docked.css phone sizing (not shared with theme.css)', () => {
+  const phoneBlock = (): string => {
+    const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(
+      dockedWithoutComments
+    );
+    expect(query).not.toBeNull();
+    const start = query!.index;
+    let depth = 0;
+    let end = dockedWithoutComments.indexOf('{', start);
+    for (; end < dockedWithoutComments.length; end++) {
+      if (dockedWithoutComments[end] === '{') depth++;
+      else if (dockedWithoutComments[end] === '}' && --depth === 0) break;
+    }
+    return dockedWithoutComments.slice(start, end + 1);
+  };
+
+  test('sizes the control bar for one row below 48rem', () => {
+    const query = phoneBlock();
+
     expect(query).toMatch(
-      /:where\(\[data-playdeck-part='viewport'\]\)\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*1fr auto;/
+      /:where\(\[data-playdeck-part='controls'\]\)\s*\{[^}]*gap:\s*0;/
     );
     expect(query).toMatch(
-      /:where\(\[data-playdeck-part='controls'\]\)\s*\{[^}]*position:\s*static;[^}]*grid-row:\s*2;/
+      /padding-left:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
     );
+    expect(query).toMatch(
+      /padding-right:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
+    );
+    // Still ahead of WCAG 2.5.8's 24px floor at 40px; 2.75rem (44px) is the
+    // desktop-only lock the token's own doc comment records in theme.css.
+    expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
+
+    expect(query).toMatch(
+      /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
+    );
+  });
+
+  // `pip-button` joins the volume slider under a coarse pointer (#598), the
+  // same reasoning as `theme.css`'s own copy of this test.
+  test('hides pip-button under a coarse pointer, alongside the volume slider', () => {
+    const coarseQuery = /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{([^]*?)\n {2}\}/.exec(
+      dockedWithoutComments
+    );
+    expect(coarseQuery).not.toBeNull();
+    const body = coarseQuery![1];
+    expect(body).toMatch(/data-playdeck-part='volume-slider'/);
+    expect(body).toMatch(/data-playdeck-part='pip-button'/);
+    expect(body).toMatch(/display:\s*none;/);
   });
 });

@@ -355,7 +355,19 @@ export const ErrorDisplay = ({
   );
 };
 
+// A `var()` read rather than the literal `44` it used to be (#598): an inline
+// style beats any stylesheet, so a fixed number here would have made
+// `theme.css`'s and `docked.css`'s own "below 48rem" queries dead CSS the
+// moment either tried to shrink `--playdeck-control-size` for one row of
+// phone-width buttons -- measured directly, the button stayed 44px wide with
+// the token correctly reading 2.5rem on its own ancestor. Reading the same
+// token this file's theme comments already document keeps the floor's
+// purpose intact for a bare consumer (falls back to the desktop 44px lock,
+// `--playdeck-control-size`'s own documented default) while letting a
+// stylesheet that redeclares the token -- the one thing a `var()` read, and
+// not a literal, can ever let happen -- shrink it, same as every other
+// themed dimension in this package.
 export const controlTargetStyle: CSSProperties = {
-  minWidth: 44,
-  minHeight: 44
+  minWidth: 'var(--playdeck-control-size, 2.75rem)',
+  minHeight: 'var(--playdeck-control-size, 2.75rem)'
 };

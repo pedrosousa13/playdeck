@@ -349,8 +349,17 @@
     }
   }
 
+  /* `pip-button` joins the volume slider here for the reason
+   * `theme.css`'s own copy of this rule records at length (#598): a coarse
+   * pointer means a touchscreen, and every platform that ships one already
+   * puts picture-in-picture in its own system chrome, so the in-bar
+   * affordance is the one control a phone loses nothing by dropping -- and
+   * dropping it is what lets row two fit one line at the sizes below. */
   @media (pointer: coarse) {
-    :where([data-playdeck-part='volume-slider']) {
+    :where(
+      [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='pip-button']
+    ) {
       display: none;
     }
   }
@@ -486,6 +495,32 @@
           var(--playdeck-color-accent-tint, #9dd0ff)
         );
       }
+    }
+  }
+
+  /* ---- below 48rem --------------------------------------------------------
+   * This file docks at every width already, so nothing here moves the bar --
+   * only the row-two overflow (#598) that `theme.css`'s own copy of this
+   * query fixes, restated for this file because it shares no import with
+   * that one. Same arithmetic, same WCAG 2.5.8 floor; see that file's
+   * comments for both.
+   */
+  @media (max-width: 48rem) {
+    :where([data-playdeck-part='controls']) {
+      gap: 0;
+      padding-left: calc(
+        var(--playdeck-space-1, 0.25rem) +
+          var(--playdeck-safe-left, env(safe-area-inset-left, 0px))
+      );
+      padding-right: calc(
+        var(--playdeck-space-1, 0.25rem) +
+          var(--playdeck-safe-right, env(safe-area-inset-right, 0px))
+      );
+      --playdeck-control-size: 2.5rem;
+    }
+
+    :where([data-playdeck-part='time']) {
+      padding-inline: var(--playdeck-space-1, 0.25rem);
     }
   }
 
