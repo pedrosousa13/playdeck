@@ -87,9 +87,9 @@ one of these sources it is large. Gzip, excluding React itself and the optional
 | Playing                                           | Downloads                                                          | Total        |
 | ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
 | MP4 or WebM                                       | core 7.8 + primitives 17.9 + native 5.8                            | **31.5 KB**  |
-| HLS on Safari and iOS                             | the above + HLS adapter 4.9                                        | **36.4 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **205.6 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 36.4 + hls.js light 113.0 | **149.4 KB** |
+| HLS on Safari and iOS                             | the above + HLS adapter 4.8                                        | **36.3 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **205.5 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 36.3 + hls.js light 113.0 | **149.3 KB** |
 | YouTube                                           | core 7.8 + primitives 17.9 + adapter 6.1                           | **31.8 KB**  |
 | Vimeo                                             | core 7.8 + primitives 17.9 + adapter 7.8 + `@vimeo/player` 8.5     | **42.0 KB**  |
 | Wistia                                            | core 7.8 + primitives 17.9 + adapter 5.3                           | **31.0 KB**  |
@@ -99,7 +99,7 @@ one of these sources it is large. Gzip, excluding React itself and the optional
 **hls.js is the whole story here, and it is not ours.** Adaptive streaming needs
 manifest parsing, MSE buffer management, ABR heuristics, MPEG-TS to fMP4
 transmuxing and CEA-608/708 extraction; hls.js's own smallest build is 113.0 KB,
-and Playdeck's HLS adapter over it is 4.9. What lazy loading buys is not a
+and Playdeck's HLS adapter over it is 4.8. What lazy loading buys is not a
 smaller hls.js. It is that the other four rows never download one, and that
 Safari and iOS do not either, because they play HLS natively and hls.js is never
 fetched there.
