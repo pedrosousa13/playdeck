@@ -43,7 +43,7 @@ names it. In particular:
 | Colour scheme of `/`                       | Follows the site's header toggle. Not always dark.                                        |
 | Docked theme on desktop                    | Same visual language as the floating theme, drawn in the page's scheme under the picture. |
 | Bench signal on a switch flip              | The changed composition lines highlight briefly; the stage crossfades.                    |
-| Feature order                              | Compose, Style, Query, Recover.                                                            |
+| Feature order                              | Compose, Style, Query, Recover.                                                           |
 | The close                                  | Replaced: one large install command, one line of measured facts, the links.               |
 | Bar fades when not interacted with         | Kept. The maintainer restated it on 2026-09-03.                                           |
 | Who implements                             | Sonnet subagents, one task each. The orchestrating session reviews every diff.            |
@@ -199,12 +199,12 @@ lines in `--color-ink-muted`, a Shiki-highlighted snippet built at build
 time by the same `shiki.ts` helper the composition uses, and a link. Draft
 copy, to be corrected at review:
 
-| No. | Headline                      | Lines                                                                                                                             | Snippet                                                                                  | Link                                       |
-| --- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------ |
-| 01  | Compose it                    | Every control is a component. Reorder them, drop one, put your own between them.                                                  | `<Player.Controls>` with `<Player.PlayButton />`, a consumer `<Logo />`, `<Player.Time>` | `/reference/`                              |
-| 02  | Style it                      | No CSS ships in the bundle. Two authored themes, or write your own against stable part names.                                     | `[data-playdeck-part='play-button'] { … }`                                               | `/design/`                                 |
-| 03  | Ask before you render         | Every provider declares what it can do. A control it cannot honour renders nothing, and you can read the same answer.             | `usePlayerState((s) => s.capabilities.pictureInPicture)`                                 | `/guides/capabilities-matrix/`             |
-| 04  | Recover from refused autoplay | Ask for sound. If the browser refuses, the player retries muted once and tells you, so you can draw the unmute.                   | `<Player.Root autoplay="audible-then-muted">`                                            | `/reference/`                              |
+| No. | Headline                      | Lines                                                                                                                 | Snippet                                                                                  | Link                           |
+| --- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------ |
+| 01  | Compose it                    | Every control is a component. Reorder them, drop one, put your own between them.                                      | `<Player.Controls>` with `<Player.PlayButton />`, a consumer `<Logo />`, `<Player.Time>` | `/reference/`                  |
+| 02  | Style it                      | No CSS ships in the bundle. Two authored themes, or write your own against stable part names.                         | `[data-playdeck-part='play-button'] { … }`                                               | `/design/`                     |
+| 03  | Ask before you render         | Every provider declares what it can do. A control it cannot honour renders nothing, and you can read the same answer. | `usePlayerState((s) => s.capabilities.pictureInPicture)`                                 | `/guides/capabilities-matrix/` |
+| 04  | Recover from refused autoplay | Ask for sound. If the browser refuses, the player retries muted once and tells you, so you can draw the unmute.       | `<Player.Root autoplay="audible-then-muted">`                                            | `/reference/`                  |
 
 Every name in a snippet is a real export or prop: `usePlayerState` and
 `capabilities` from `packages/react/src/index.tsx` and

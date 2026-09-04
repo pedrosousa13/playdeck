@@ -80,7 +80,7 @@ initial graph.
 Lazy loading is worth stating in bytes rather than in adjectives, because the
 number a reader cares about is the one for the source they are playing, and for
 one of these sources it is large. Gzip, excluding React itself and the optional
-`theme.css` (9.0 KB):
+`theme.css` (10.7 KB):
 
 <!-- bytes:table -->
 

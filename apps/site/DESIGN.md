@@ -2627,11 +2627,11 @@ a dimmed duration; and, for `theme.css` alone, a real docked layout below
 48rem. Three tokens are new, and every other name in both files kept its own,
 so a consumer already overriding one keeps working:
 
-| Token | Default | Where |
-| --- | --- | --- |
-| `--playdeck-color-accent-tint` | `#9dd0ff` (`theme.css`) / `#8fb0f0` light, `#9dd0ff` dark (`docked.css`) | The seek fill's gradient end |
-| `--playdeck-control-pressed` | `rgb(255 255 255 / 0.2)` (`theme.css`) / `rgb(0 0 0 / 0.1)` light, `rgb(255 255 255 / 0.2)` dark (`docked.css`) | One step past `--playdeck-control-hover`, on `:active` |
-| `--playdeck-color-hairline` | `#d9d9d6` light / `#2a2a2d` dark | `theme.css`'s phone-docking control surface's top border, below 48rem — `docked.css` already had this token |
+| Token                          | Default                                                                                                         | Where                                                                                                       |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `--playdeck-color-accent-tint` | `#9dd0ff` (`theme.css`) / `#8fb0f0` light, `#9dd0ff` dark (`docked.css`)                                        | The seek fill's gradient end                                                                                |
+| `--playdeck-control-pressed`   | `rgb(255 255 255 / 0.2)` (`theme.css`) / `rgb(0 0 0 / 0.1)` light, `rgb(255 255 255 / 0.2)` dark (`docked.css`) | One step past `--playdeck-control-hover`, on `:active`                                                      |
+| `--playdeck-color-hairline`    | `#d9d9d6` light / `#2a2a2d` dark                                                                                | `theme.css`'s phone-docking control surface's top border, below 48rem — `docked.css` already had this token |
 
 `scripts/bundle-budgets.mjs` budgets each sheet's rules at 2.5 kB gzipped,
 raised to 3.0 kB in the same commit as whichever task crossed it, with the

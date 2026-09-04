@@ -1092,9 +1092,7 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
    * not the first `\n  }` after the opener any more.
    */
   const phoneDockingBlock = (): string => {
-    const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(
-      withoutComments
-    );
+    const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(withoutComments);
     expect(query).not.toBeNull();
     const start = query!.index;
     let depth = 0;
@@ -1124,12 +1122,8 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     // The track and the loaded range get an opaque phone-only fallback: the
     // base rule's translucent white is built for a dark video backdrop and
     // is close to invisible on a flat light surface.
-    expect(query).toMatch(
-      /--playdeck-color-track,\s*#84847d/
-    );
-    expect(query).toMatch(
-      /--playdeck-color-buffered,\s*#1c1c1e/
-    );
+    expect(query).toMatch(/--playdeck-color-track,\s*#84847d/);
+    expect(query).toMatch(/--playdeck-color-buffered,\s*#1c1c1e/);
 
     // Nothing hides on a phone: idle no longer fades the bar.
     expect(query).toMatch(

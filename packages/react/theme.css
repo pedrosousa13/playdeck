@@ -566,14 +566,14 @@
      * above this query) is untouched and keeps drawing around whatever
      * geometry is current. */
     :where(
-      [data-playdeck-part='seek-slider']:hover,
-      [data-playdeck-part='seek-slider']:focus-within
-    )
+        [data-playdeck-part='seek-slider']:hover,
+        [data-playdeck-part='seek-slider']:focus-within
+      )
       :where([data-playdeck-part='seek-slider-input'])::-moz-range-thumb,
     :where(
-      [data-playdeck-part='seek-slider']:hover,
-      [data-playdeck-part='seek-slider']:focus-within
-    )
+        [data-playdeck-part='seek-slider']:hover,
+        [data-playdeck-part='seek-slider']:focus-within
+      )
       :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
       inline-size: 1rem;
       block-size: 1rem;
