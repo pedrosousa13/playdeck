@@ -359,7 +359,7 @@ export default function SearchCommand({ base }: Props) {
             <DialogTitle>Search the documentation</DialogTitle>
             <DialogDescription>
               Search the package references, provider setup guides and
-              archetypes.
+              examples.
             </DialogDescription>
           </DialogHeader>
 

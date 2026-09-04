@@ -6,7 +6,7 @@
       "outputs": ["dist/**", ".tsbuildinfo", ".next/**", "storybook-static/**"]
     },
     // The site is the one package that builds files from outside its own
-    // directory: `src/pages/archetypes.astro` imports the two compositions in
+    // directory: `src/pages/examples.astro` imports the two compositions in
     // `examples/`, `src/content.config.ts` loads the package READMEs and
     // `docs/provider-setup.md`, and `src/pages/index.astro` imports
     // `scripts/bundle-budgets.mjs` to measure the figures it prints. Turbo's

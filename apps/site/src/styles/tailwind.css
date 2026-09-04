@@ -8,7 +8,7 @@
  * `utilities`. Preflight resets bare-element styles globally (`h1`, `p`,
  * `code`, `pre`, `a`, tables, …), and this site has substantial hand-written
  * CSS in `base.css` and `doc.css` doing exactly that job already, for the
- * whole of `/reference/*`, `/providers/*`, `/archetypes` and `/design`.
+ * whole of `/reference/*`, `/providers/*`, `/examples` and `/design`.
  * Preflight loaded on top would silently win the cascade on every one of
  * those elements and wreck every documentation page — so it is never
  * imported. Only the two layers this file actually needs are:

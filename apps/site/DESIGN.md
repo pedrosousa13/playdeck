@@ -31,7 +31,7 @@ its opposite is what a generated interface looks like.
    until the longhands were measured in the built page. See below.
 
 Rules 1 and 5 govern what this app writes. The two archetype stylesheets are
-outside both, on `/archetypes`, and that is named here rather than left to be
+outside both, on `/examples`, and that is named here rather than left to be
 found. See _The archetypes, and why they are outside rules 1 and 5_ below.
 
 ## Palette
@@ -313,7 +313,7 @@ hue is `#b31d28`, which `github-light` already spends on `invalid` and
 than a red with less headroom. `e2e/site-contrast.spec.ts` pins that figure
 along with the whole set, so this table fails rather than rots.
 
-It measures the palette from two served pages — `/archetypes/`, which highlights
+It measures the palette from two served pages — `/examples/`, which highlights
 through Astro's `<Code>` component, and `/reference/react/`, which highlights
 through `markdown.shikiConfig` — because those are the site's two independent
 highlighting paths and, as it happens, the only two pages whose blocks paint all
@@ -364,7 +364,7 @@ itself.
 
 **This site reaches a third party in exactly two places, and both only because a
 reader asked.** The bench's source switch on `/` loads whichever provider is
-pressed, and the two archetypes on `/archetypes` play Blender open-movie
+pressed, and the two archetypes on `/examples` play Blender open-movie
 trailers from that foundation's own host once somebody presses them. Nothing is
 contacted before that press on either page. That is the claim worth defending,
 and it is the same claim the library itself makes about `loading="interaction"`.
@@ -483,7 +483,7 @@ the package index. It was chosen to put a line at the body rung inside the 65–
 character band, so a page that sets prose at another rung is choosing a
 different character count and says so where it does it. A page's own maximum
 width is a separate decision and stays a literal where that decision is made:
-`72rem` at `/`, `64rem` on `/archetypes`, `56rem` on `/start`, `46rem` on
+`72rem` at `/`, `64rem` on `/examples`, `56rem` on `/start`, `46rem` on
 `/design`, `52rem` on each of the two indexes — written twice, once in `src/pages/reference/index.astro`
 and once in `src/pages/providers/index.astro`, because two pages agreeing on a
 number is not the same fact as one number. The `74rem` rail-and-document shell
@@ -510,7 +510,7 @@ and those documents are mostly code; two of the provider setup pages at
 the other three; and `/start` is mostly two of them, because a quickstart that
 described the composition instead of printing it would be the second copy this
 site is built to avoid. No provider page mounts a player; the routes that do are `/`
-and `/archetypes`, and that has held through every rebuild of the landing page,
+and `/examples`, and that has held through every rebuild of the landing page,
 including the one that took `/` back down to a single island. The landing page
 carries one block of code too, the composition the bench's switches build, and
 that one is the exception to the exception: it is the only block on this site
@@ -523,7 +523,7 @@ set to the `github-light` and `github-dark` themes. The two names live in
 `src/shiki.ts` and are read by two paths: `astro.config.ts` hands them to
 `markdown.shikiConfig` for the READMEs' fences, and a page that prints a file
 from `examples/` hands them to Astro's `<Code>` component, which reads nothing
-from that configuration. `/archetypes` does that for the source wells beside its
+from that configuration. `/examples` does that for the source wells beside its
 players, and `/start` for the two compositions it prints. The landing page was
 once the `<Code>` reader, printing four hand-written snippets and one real file;
 it prints no highlighted code at all now.
@@ -569,7 +569,7 @@ every primitive this library publishes. A page that spent four times its own
 product to colour four keywords would be arguing against itself in the object it
 was arguing with, so the panel is a plain `<pre>` in `--color-ink` and the
 highlighter stays where it costs a reader nothing: the reference pages' fences,
-the two provider examples and `/archetypes`'s two source wells, all rendered at
+the two provider examples and `/examples`'s two source wells, all rendered at
 build time. That figure is a
 measurement and re-measurable the same way, with esbuild over the same imports.
 
@@ -599,7 +599,12 @@ about what the example is.
 
 ## The archetypes, and why they are outside rules 1 and 5
 
-`/archetypes` mounts `examples/archetype-streaming-service.tsx` and
+**As of 2026-09-04, the page is `/examples`, not `/archetypes`.** Every
+ruling below that names a route now reads against that page; the two
+composed players it mounts, and the reasons they sit outside rules 1 and 5,
+are unchanged.
+
+`/examples` mounts `examples/archetype-streaming-service.tsx` and
 `examples/archetype-course-platform.tsx`. `/` mounted the same two files for
 two of its lives and no longer does. Each carries its own stylesheet as a `<style>`
 element inside the component, and each writes hex literals by the dozen and
@@ -622,7 +627,7 @@ writes no colour and animates nothing but `transform` and `opacity`. A file
 under `examples/` is a consumer's code that this site happens to render, and it
 answers to `examples/`'s own constraints — one paste, no imports, no design
 system. Everything around the two players is inside the rules like every other
-page: `/archetypes` itself, and the container the compositions are
+page: `/examples` itself, and the container the compositions are
 mounted in, which is deliberately no container at all — no surface colour, no
 elevation, no hairline, because a bezel drawn by this site around a file that
 brings its own appearance would be this site's paint on a consumer's example.
@@ -634,7 +639,7 @@ components on the server, so whatever heading each composition drew over its
 picture was in the document before any script ran and landed in `/`'s heading
 outline. There is no Astro directive that defers the mount and skips the server
 render, so that was the cost of the deferral rather than an oversight. It is
-gone because the mount is gone: `/` mounts no archetype, and `/archetypes` uses
+gone because the mount is gone: `/` mounts no archetype, and `/examples` uses
 `client:only`, which renders nothing on the server at all.
 
 The second was about the words. `/` handed each composition a `media` prop
@@ -642,7 +647,7 @@ carrying the clip and the copy describing it as one thing, so that a surface
 replacing the clip could not fail to replace the sentence naming it, which is
 how the streaming card stopped announcing the title `Sintel` over a colour-bar
 test pattern. That prop still exists on both files and both compositions still
-take it. Nothing passes it now. `/archetypes` passes only the captions fixture
+take it. Nothing passes it now. `/examples` passes only the captions fixture
 and a resume position, so both players keep the Blender trailers the examples
 ship and the headings say what is actually on screen with no override at all.
 The design of the prop is worth keeping written down because the failure it was
@@ -770,7 +775,7 @@ served in. `Base.astro` takes `stance?: 'argument' | 'document'`, defaulting to
 | `/reference/<package>`  | `document` |
 | `/providers`            | `document` |
 | `/providers/<provider>` | `document` |
-| `/archetypes`           | `document` |
+| `/examples`             | `document` |
 | `/design`               | `document` |
 
 `argument` is the treatment `/` is written in: larger type, more negative space,
@@ -829,7 +834,7 @@ already makes about its own default, for the same reason: the property that
 holds for almost every page is the one that must not need an author to remember
 it.
 
-**`/archetypes` is a `document` deliberately, not by omission.** The persuading
+**`/examples` is a `document` deliberately, not by omission.** The persuading
 happens on `/`; that page exists so a reader can read the source of two composed
 players. A second marketing register there would be the site making its argument
 twice and being inconsistent about how, which is worse than either treatment on
@@ -1107,7 +1112,7 @@ The count is a count of what this app authors, and it is worth saying so rather
 than letting a reader find a moving element and conclude the rule had quietly
 lapsed. Three other things move on this site and none of them is in the count.
 The two archetypes animate `background-color` from their own stylesheets, on
-`/archetypes` only, outside rules 1 and 5 for the ownership reason above.
+`/examples` only, outside rules 1 and 5 for the ownership reason above.
 shadcn's dialog, sheet and dropdown open and close through `tw-animate-css`,
 which is a dependency's keyframes applied by a utility class, and they move
 `opacity` and `transform`. And `@playdeck/react/theme.css` brings its own
@@ -1421,7 +1426,7 @@ that already existed, and both still have two.
 | `src/pages/index.astro`                | The landing page at `/`, and its links                    |
 | `src/pages/start.astro`                | The quickstart at `/start`, printed from `examples/`      |
 | `src/pages/design.astro`               | The specimen sheet, served at `/design`                   |
-| `src/pages/archetypes.astro`           | Two composed players, and the files they are              |
+| `src/pages/examples.astro`             | Two composed players, and the files they are              |
 | `src/pages/guides/index.astro`         | The guide index, served at `/guides`                      |
 | `src/pages/guides/[guide].astro`       | One guide per migrated workbench document                 |
 | `src/pages/reference/index.astro`      | The package index, served at `/reference`                 |
@@ -1461,7 +1466,7 @@ for — see _Search_ below.
 
 **It then read "no call to action and no product navigation", and the second
 half of that is gone.** The header now carries the site's sections — Guides,
-Reference, Providers, Archetypes — on every page, named here rather than
+Reference, Providers, Examples — on every page, named here rather than
 counted, because the list has already grown once since this paragraph was
 written. That is a maintainer's decision rather
 than drift, and it was asked for in those words: links at the foot of `/` and
@@ -1516,7 +1521,7 @@ the same trade the rail records below**: a native element that worked closed
 with no JavaScript, replaced by a component that does not. The cost is smaller
 here than there. A reader with no script below that width still has the wordmark at
 the head of the trail on every document page, and `/`'s close still links
-Reference, Providers and Archetypes, so for those what is lost is this route to
+Reference, Providers and Examples, so for those what is lost is this route to
 a section rather than the section. Guides is the exception, and it is worth
 knowing rather than smoothing over: `/` does not link it anywhere, so below
 `40rem` with no script that section has no route from the landing page at all.
@@ -1746,7 +1751,7 @@ checks its work against, and the place to add a specimen when a token is added.
 
 It is not part of the site's own navigation, and **nothing on the site links to
 it at all.** `/` carried the one link, in the ways-onward row at the foot of the
-page, and the rebuilt close carries Reference, Providers and Archetypes and
+page, and the rebuilt close carries Reference, Providers and Examples and
 nothing else. That was not ruled on at the time: the link went out with the page
 it was on, and this passage recorded the absence as something waiting for a
 decision.
@@ -1773,7 +1778,7 @@ otherwise hold it.
 shadcn is the site's component system by the maintainer's call, taken after
 being told what it costs in payload. It arrived in #542 and it covers five
 interactive parts of the site: the header's collapse below 40rem, the theme
-switch, search, the rail's "Contents", and the source wells on `/archetypes`.
+switch, search, the rail's "Contents", and the source wells on `/examples`.
 
 **This paragraph used to say "every interactive part", and there is now a
 carve-out.** The bench's switches on `/` are a native `<fieldset>` of
@@ -2072,7 +2077,7 @@ for two of its lives and were by a wide margin the largest thing on it: two
 running products, four hundred lines of composition, their own stylesheets,
 their own clip, a poster, a scroll-mount disclosure and a licence paragraph, all
 in the middle of an argument about an API. The maintainer's objection was that
-too much was going on, and they were most of it. They live on `/archetypes` now,
+too much was going on, and they were most of it. They live on `/examples` now,
 the page whose subject those two files are, which prints each one's whole source
 beside the player it builds. `tracer-45s.mp4` and its poster left with them,
 because nothing else served either, and putting them back behind a skin switch
@@ -2172,7 +2177,7 @@ exactly once on the page now, in the hero.
 **And `close__links` dropped its own Start entry, once the button above it
 made the same trip.** The row used to open with a plain "Start" text link,
 which read as a second, weaker call to action directly under a button
-already making the first one. It is Reference, Providers and Archetypes
+already making the first one. It is Reference, Providers and Examples
 now — the ways onward that are not already on the page in button form.
 
 **The page makes no claim about any other library.** No comparison, no named
@@ -2254,7 +2259,7 @@ ground because this section sits on the field rather than on a panel.
 ## The bench's player, and the site's islands
 
 `/` mounts a real player. Two routes ship a renderer, and `/` mounts exactly one
-island: `BenchIsland`, `client:only`. `/archetypes` mounts the two archetype
+island: `BenchIsland`, `client:only`. `/examples` mounts the two archetype
 compositions beside the source of each, also `client:only`, and their two source
 wells `client:visible`. Every
 other page is HTML, CSS, the inline theme and rail scripts, and the search
@@ -2343,7 +2348,7 @@ keyed by provider that quietly forgot the poster or the credit is a compile
 error rather than a defect on the page. See that file's own module comment for
 the failure this bundling replaced: an earlier version of `Bench.astro` set the
 source alone and left the poster pointed at the previous film, the same class of
-defect the `media` prop on `/archetypes` (below) was built against, one file
+defect the `media` prop on `/examples` (below) was built against, one file
 over.
 
 **The poster is two files, not one, and neither is `public/bunny-poster.webp`.**
@@ -2472,7 +2477,7 @@ can carry. The length was chosen against the last mark rather than around it,
 because the streaming rail drops any chapter at or past the duration and a clip
 ending before 38s would silently draw one tick where the fixture asks for two.
 All of that reasoning is about a page that no longer mounts them. The fixture
-left with the archetypes, and `/archetypes` plays the Blender trailers the
+left with the archetypes, and `/examples` plays the Blender trailers the
 examples ship. The reasoning is kept because the constraint is not: a chapter
 mark at or past the duration is dropped silently by the streaming rail, so any
 future surface that overrides the media on either archetype inherits that
@@ -2485,7 +2490,7 @@ should be a clip that plays rather than a path into this repository's `public/`.
 `/` overrode it while it mounted them, because it is the page carrying #542's
 no-third-party-request criterion, and that criterion covers every request the
 page can cause, including the ones a press causes. It mounts them no longer, so
-nothing on this site overrides the media any more: `/archetypes` passes only a
+nothing on this site overrides the media any more: `/examples` passes only a
 captions URL and a resume position, keeps the trailers, and carries the CC BY
 attribution beside them, which is where that line belongs now that it describes
 what is actually on screen.

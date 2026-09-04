@@ -37,7 +37,7 @@ export default defineConfig({
    *
    * Two routes carry one: `src/pages/index.astro` mounts the hero, whose island
    * renders the player and the capability ledger reading it, and
-   * `src/pages/archetypes.astro` mounts the two composed archetypes beside the
+   * `src/pages/examples.astro` mounts the two composed archetypes beside the
    * source of each. Every `client:` directive in the site is on one of those
    * two pages and every one of them is `client:only` — see
    * `src/components/HeroPlayer.astro` for why that rather than a hydrating
@@ -78,7 +78,7 @@ export default defineConfig({
        * Where `@playdeck/react` is, stated once for every importer rather than
        * left to a walk up the directory tree.
        *
-       * `/archetypes` mounts two compositions that live in `examples/`, and a
+       * `/examples` mounts two compositions that live in `examples/`, and a
        * bare specifier resolves from the importing file's own directory: the
        * walk up from `examples/` never reaches `apps/site/node_modules`, where
        * the workspace link to this package is, so the resolver fell through to
@@ -143,7 +143,7 @@ export default defineConfig({
      * theme CSS reaches for cannot do on its own.
      *
      * The values themselves live in `src/shiki.ts` because Astro's `<Code>`
-     * component reads nothing from here, and `/archetypes` uses it to render
+     * component reads nothing from here, and `/examples` uses it to render
      * two real files from `examples/`. That file explains why the two readers
      * cannot be allowed to drift, and carries the colour overrides that are the
      * other reason neither may type its own values.
