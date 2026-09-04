@@ -90,11 +90,31 @@ export const AirPlayIcon = (props: IconProps): ReactElement => (
   </Icon>
 );
 
+// A cog, not the old wavy-edged blob it replaces: that shape read as a puzzle
+// piece at the 20px this trigger renders at, its teeth too shallow and too
+// close together to separate at that size. This one is drawn from two clean
+// primitives instead of one intricate outline -- eight identical rounded
+// teeth, each the same rect rotated 45° around the centre, sunk one unit into
+// a ring so the join is seamless, and the ring itself a hollow annulus (two
+// same-winding circles, `evenodd` punching the hole) rather than a filled
+// disc. Both read as distinct shapes well below 24px.
 export const SettingsIcon = (props: IconProps): ReactElement => (
   <Icon {...props}>
-    <path d="M12 8a4 4 0 100 8 4 4 0 000-8zm0 2a2 2 0 110 4 2 2 0 010-4z" />
+    <g>
+      {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => (
+        <rect
+          height="3.2"
+          key={angle}
+          rx="1.1"
+          transform={`rotate(${angle} 12 12)`}
+          width="3.2"
+          x="10.4"
+          y="1.6"
+        />
+      ))}
+    </g>
     <path
-      d="M10.5 2h3l.5 2.6a7.5 7.5 0 011.7 1l2.5-1 1.5 2.6-2 1.7a7.6 7.6 0 010 2l2 1.7-1.5 2.6-2.5-1a7.5 7.5 0 01-1.7 1L13.5 22h-3l-.5-2.6a7.5 7.5 0 01-1.7-1l-2.5 1L4.3 15.8l2-1.7a7.6 7.6 0 010-2l-2-1.7L5.8 7.8l2.5 1a7.5 7.5 0 011.7-1L10.5 2z"
+      d="M3.8,12 A8.2,8.2 0 1,0 20.2,12 A8.2,8.2 0 1,0 3.8,12 Z M6.8,12 A5.2,5.2 0 1,0 17.2,12 A5.2,5.2 0 1,0 6.8,12 Z"
       fillRule="evenodd"
     />
   </Icon>

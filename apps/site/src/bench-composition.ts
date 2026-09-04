@@ -21,10 +21,19 @@ import { BENCH_CONTROLS, type BenchControlName } from './bench-controls';
  * Each control's printed source, one entry short of the lines it prints:
  * `timeDuration` carries the separator's line too, since the separator is
  * consumer text between the two `Player.Time`s rather than a control of its
- * own (see the spec's row-two contract). The settings menu prints that a
- * settings control exists, trigger and content, both self-closing, without
- * printing what `RateMenu` mounts inside it, per the spec's own instruction
- * that the panel need not print what is inside a menu.
+ * own (see the spec's row-two contract). The settings menu now prints
+ * `RateMenu`'s real children -- the quality group, the rate group and the
+ * restart item, transcribed by hand from `examples/react-menus.tsx` rather
+ * than generated from it, the same way every other line here is a reader's
+ * eye on a component and not a build step's. A change to that fixture that
+ * is not carried here is a panel that shows a menu the bench does not mount.
+ *
+ * Unconditional on `source`, deliberately: `RateMenu`'s own JSX never
+ * branches on which provider is playing -- the group that vanishes for a
+ * source with no ladder is a runtime decision inside the component, not a
+ * different tree -- so printing it the same way for every position is what
+ * keeps the "byte-identical across a provider change" claim the source-switch
+ * test makes actually true.
  *
  * `Record<BenchControlName, ...>` is what makes this table and `ControlBar`'s
  * own record in `BenchIsland.tsx` unable to drift: a name added to
@@ -43,8 +52,31 @@ const CONTROL_LINES: Record<BenchControlName, readonly string[]> = {
   captionsButton: ['<Player.CaptionsButton />'],
   settingsMenu: [
     '<Player.SettingsMenu>',
-    '  <Player.SettingsMenuTrigger />',
-    '  <Player.SettingsMenuContent />',
+    '  <Player.SettingsMenuTrigger aria-label="Settings" />',
+    '  <Player.SettingsMenuContent>',
+    '    <Player.MenuRadioGroup',
+    '      aria-label="Quality"',
+    "      value={selectedQualityId ?? ''}",
+    '      onValueChange={selectQuality}',
+    '    >',
+    '      <Player.MenuRadioItem value="">Auto</Player.MenuRadioItem>',
+    '      {qualities.map((quality) => (',
+    '        <Player.MenuRadioItem key={quality.id} value={quality.id}>',
+    '          {qualityLabel(quality)}',
+    '        </Player.MenuRadioItem>',
+    '      ))}',
+    '    </Player.MenuRadioGroup>',
+    '    <Player.MenuRadioGroup',
+    '      value={String(rate)}',
+    '      onValueChange={setPlaybackRate}',
+    '    >',
+    '      <Player.MenuRadioItem value="0.5">0.5×</Player.MenuRadioItem>',
+    '      <Player.MenuRadioItem value="1">1×</Player.MenuRadioItem>',
+    '      <Player.MenuRadioItem value="1.5">1.5×</Player.MenuRadioItem>',
+    '      <Player.MenuRadioItem value="2">2×</Player.MenuRadioItem>',
+    '    </Player.MenuRadioGroup>',
+    '    <Player.MenuItem onSelect={restart}>Restart</Player.MenuItem>',
+    '  </Player.SettingsMenuContent>',
     '</Player.SettingsMenu>'
   ],
   pipButton: ['<Player.PipButton />'],
