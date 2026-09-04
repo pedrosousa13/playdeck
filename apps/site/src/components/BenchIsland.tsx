@@ -90,6 +90,7 @@ import { QUIET_START, quietLine, recordLoad } from '@/bench-quiet';
  */
 import { RateMenu } from '../../../../examples/react-menus';
 import BenchSwitches from './BenchSwitches';
+import BenchStats from './BenchStats';
 import CompositionPanel from './CompositionPanel';
 
 interface Props {
@@ -808,7 +809,8 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
       />
       <Credit credit={position.credit} />
       {/* The readout: the two switch groups and the quiet line in one row
-       * (2026-09-03's stage redraw), the composition full width below. */}
+       * (2026-09-03's stage redraw), the composition full width below, and
+       * the live stats readout under that. */}
       <div className="grid gap-[var(--space-6)]">
         <div className="flex flex-wrap items-end justify-between gap-[var(--space-4)]">
           <BenchSwitches
@@ -828,6 +830,7 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
           <QuietLine sourceUrl={position.sourceUrl} />
         </div>
         <CompositionPanel html={html} changedLines={changedLines} />
+        <BenchStats />
       </div>
     </Player.Root>
   );

@@ -35,6 +35,14 @@ const composition = (page: Page) => page.locator('[data-bench-composition]');
 const position = (page: Page, group: 'source' | 'skin', value: string) =>
   page.locator(`[data-bench-switch="${group}"] [data-value="${value}"]`);
 
+/** One field's `<dd>` in the live stats readout, found by its `<dt>`'s exact
+ * text -- `BenchStats.tsx` pairs the two inside one wrapper `<div>`. */
+const statValue = (page: Page, label: string) =>
+  page
+    .locator('[data-bench-stats] > div')
+    .filter({ has: page.locator('dt', { hasText: new RegExp(`^${label}$`) }) })
+    .locator('dd');
+
 /** The library's two authored stylesheets, as a consumer would import them. */
 const THEME_IMPORT = "import '@playdeck/react/theme.css';";
 const DOCKED_IMPORT = "import '@playdeck/react/docked.css';";
@@ -130,7 +138,10 @@ test('the composition prints the full control tree, and tracks the source switch
 
   // Content rather than a line count: the panel prints the whole bar the
   // island mounts, and both sides map over the one `BENCH_CONTROLS` tuple, so
-  // what this pins is that every name in that tuple reaches the page.
+  // what this pins is that every name in that tuple reaches the page. The
+  // settings-menu lines pin `RateMenu`'s real children -- the quality group
+  // included, not a self-closing stand-in -- per `bench-composition.ts`'s own
+  // `CONTROL_LINES.settingsMenu`.
   for (const name of [
     '<Player.SeekSlider />',
     '<Player.PlayButton />',
@@ -140,6 +151,12 @@ test('the composition prints the full control tree, and tracks the source switch
     '<Player.Time type="duration" />',
     '<Player.CaptionsButton />',
     '<Player.SettingsMenu>',
+    '<Player.SettingsMenuTrigger aria-label="Settings" />',
+    '<Player.MenuRadioGroup',
+    'aria-label="Quality"',
+    '<Player.MenuRadioItem value="">Auto</Player.MenuRadioItem>',
+    '{qualities.map((quality) => (',
+    '<Player.MenuItem onSelect={restart}>Restart</Player.MenuItem>',
     '<Player.PipButton />',
     '<Player.FullscreenButton />'
   ]) {
@@ -563,4 +580,43 @@ test('below 48rem, the resting docked bar sits below the picture, with no switch
     docked.mediaBox.y + docked.mediaBox.height - 1
   );
   expectNotStretched(docked.mediaBox);
+});
+
+/**
+ * The live stats readout (`BenchStats.tsx`), on the default HLS position: a
+ * real rendition is playing, so "Playing" carries a real height and "Ladder"
+ * carries the whole three-rung count `scripts/media-sprite-fright.mjs`
+ * encodes. The 20s budget matches `activateAndMeasure`'s own -- this is the
+ * same manifest-plus-first-segment request, read from a different part of
+ * the page.
+ *
+ * `canPlayType` is overridden before the page's own scripts run, denying
+ * native HLS: `packages/provider-hls` auto-detects between hls.js and the
+ * browser's own HLS decoder (`provider-hls/src/index.ts`'s `nativeHls`
+ * check), and current Chromium (measured: 149, this repo's pinned Playwright
+ * build) answers "maybe" to that probe and gets routed onto the native
+ * decoder -- under which `selectQuality` is correctly `unavailable`, the
+ * same as it is for a plain progressive file, because that decoder publishes
+ * no ladder to this library. The ladder this test pins is the one hls.js
+ * publishes; forcing hls.js here is what makes that ladder reachable on a
+ * browser that would otherwise quietly take the other path, the same reason
+ * `e2e/hls.spec.ts`'s own `hls-hls-js` fixture forces it for its story.
+ */
+test('after a press, the live stats readout reports a real rendition and the three-rung ladder', async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    const original = HTMLMediaElement.prototype.canPlayType;
+    HTMLMediaElement.prototype.canPlayType = function (type: string) {
+      return /mpegurl/i.test(type) ? '' : original.call(this, type);
+    };
+  });
+  await page.goto(landing);
+  await activationButton(page).click();
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+  await expect(statValue(page, 'Playing')).toContainText(/\d+p/, {
+    timeout: 20_000
+  });
+  await expect(statValue(page, 'Ladder')).toContainText('3');
 });
