@@ -168,7 +168,7 @@ test('the choice holds on a document page as well as on the argument page', asyn
   for (const route of [
     '/reference/',
     '/providers/',
-    '/archetypes/',
+    '/examples/',
     '/design/'
   ]) {
     await page.goto(`${SITE}${route}`);

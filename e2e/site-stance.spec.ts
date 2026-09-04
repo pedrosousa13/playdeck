@@ -92,7 +92,7 @@ const stances = [
   ['/reference/core/', 'document'],
   ['/providers/', 'document'],
   ['/providers/youtube/', 'document'],
-  ['/archetypes/', 'document'],
+  ['/examples/', 'document'],
   ['/design/', 'document']
 ] as const;
 

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * The site's `/archetypes` page: two composed players, and the files they are.
+ * The site's `/examples` page: two composed players, and the files they are.
  *
  * What is worth an end-to-end test here is not how either layout looks — that
  * is what the Storybook stories assert, against dialed capabilities and with no
@@ -22,7 +22,7 @@ import { expect, test, type Page } from '@playwright/test';
  * The storybook one owns `baseURL`, so this address is written out rather than
  * navigated to as a path.
  */
-const archetypes = 'http://127.0.0.1:4322/archetypes/';
+const examples = 'http://127.0.0.1:4322/examples/';
 
 // The two sections, located the way a reader reaches them: by the heading each
 // one is titled with. Both are `client:only` islands, so nothing under either
@@ -49,7 +49,7 @@ const course = (page: Page) =>
 test('both archetypes mount, and each is the file printed beside it', async ({
   page
 }) => {
-  await page.goto(archetypes);
+  await page.goto(examples);
 
   // The streaming layout: its own title card, with the two ways in that the
   // composition draws only when a resume position was passed to it.
@@ -116,7 +116,7 @@ test('no clip is fetched before a press', async ({ page }) => {
       media.push(request.url());
   });
 
-  await page.goto(archetypes);
+  await page.goto(examples);
   await expect(
     course(page).getByRole('navigation', {
       name: 'Lesson outline',
@@ -143,7 +143,7 @@ test('no clip is fetched before a press', async ({ page }) => {
 test('the resume affordances are not painted transparent', async ({
   page
 }) => {
-  await page.goto(archetypes);
+  await page.goto(examples);
 
   const streamResume = streaming(page).getByRole('button', {
     name: 'Resume from 0:18',
