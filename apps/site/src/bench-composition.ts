@@ -73,6 +73,16 @@ export const buildComposition = ({
   // prop here rather than a list: with autoplay gone, nothing either switch
   // does can add a second one, so the branch that wrapped two or more props
   // onto their own lines went with it rather than sitting unreachable.
+  //
+  // `hls` is not a special case here, and that absence was checked rather
+  // than assumed: `docs/provider-setup.md`'s own detection table resolves a
+  // `.m3u8` path to `{ type: 'hls', src }` on any host, the same automatic
+  // path `youtube.com` and `vimeo.com` addresses take, and
+  // `packages/react/src/provider-loaders.ts` dynamically imports
+  // `@playdeck/provider-hls` itself once `Player.Root` sees that type -- a
+  // consumer writes no import for it, the same as every other provider here.
+  // So the real import this position needs is the one every position needs:
+  // the skin's own stylesheet, printed below.
 
   // The skin import and the source declaration are lines a consumer would
   // write above the composition, not props on it. Keeping them out of
