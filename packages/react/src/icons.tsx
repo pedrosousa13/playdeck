@@ -98,19 +98,31 @@ export const AirPlayIcon = (props: IconProps): ReactElement => (
 // a ring so the join is seamless, and the ring itself a hollow annulus (two
 // same-winding circles, `evenodd` punching the hole) rather than a filled
 // disc. Both read as distinct shapes well below 24px.
+//
+// The teeth are each rect's own rotated outline, written out as a path,
+// rather than one rect with a `transform="rotate(...)"` attribute. Engines
+// disagree on whether that attribute counts as a CSS `transform`:
+// `getComputedStyle` reflects it on Firefox but not Chromium or WebKit, which
+// made `e2e/site-landing.spec.ts`'s reduced-motion "settled" check -- opacity
+// 1 and an identity transform on every element -- see this static cog as
+// still mid-animation on Firefox alone. A path has no `transform` to disagree
+// about on any engine.
+const SETTINGS_ICON_TEETH = [
+  'M11.5,1.6 L12.5,1.6 A1.1,1.1 0 0 1 13.6,2.7 L13.6,3.7 A1.1,1.1 0 0 1 12.5,4.8 L11.5,4.8 A1.1,1.1 0 0 1 10.4,3.7 L10.4,2.7 A1.1,1.1 0 0 1 11.5,1.6 Z',
+  'M19.0004,4.2925 L19.7075,4.9996 A1.1,1.1 0 0 1 19.7075,6.5553 L19.0004,7.2624 A1.1,1.1 0 0 1 17.4447,7.2624 L16.7376,6.5553 A1.1,1.1 0 0 1 16.7376,4.9996 L17.4447,4.2925 A1.1,1.1 0 0 1 19.0004,4.2925 Z',
+  'M22.4,11.5 L22.4,12.5 A1.1,1.1 0 0 1 21.3,13.6 L20.3,13.6 A1.1,1.1 0 0 1 19.2,12.5 L19.2,11.5 A1.1,1.1 0 0 1 20.3,10.4 L21.3,10.4 A1.1,1.1 0 0 1 22.4,11.5 Z',
+  'M19.7075,19.0004 L19.0004,19.7075 A1.1,1.1 0 0 1 17.4447,19.7075 L16.7376,19.0004 A1.1,1.1 0 0 1 16.7376,17.4447 L17.4447,16.7376 A1.1,1.1 0 0 1 19.0004,16.7376 L19.7075,17.4447 A1.1,1.1 0 0 1 19.7075,19.0004 Z',
+  'M12.5,22.4 L11.5,22.4 A1.1,1.1 0 0 1 10.4,21.3 L10.4,20.3 A1.1,1.1 0 0 1 11.5,19.2 L12.5,19.2 A1.1,1.1 0 0 1 13.6,20.3 L13.6,21.3 A1.1,1.1 0 0 1 12.5,22.4 Z',
+  'M4.9996,19.7075 L4.2925,19.0004 A1.1,1.1 0 0 1 4.2925,17.4447 L4.9996,16.7376 A1.1,1.1 0 0 1 6.5553,16.7376 L7.2624,17.4447 A1.1,1.1 0 0 1 7.2624,19.0004 L6.5553,19.7075 A1.1,1.1 0 0 1 4.9996,19.7075 Z',
+  'M1.6,12.5 L1.6,11.5 A1.1,1.1 0 0 1 2.7,10.4 L3.7,10.4 A1.1,1.1 0 0 1 4.8,11.5 L4.8,12.5 A1.1,1.1 0 0 1 3.7,13.6 L2.7,13.6 A1.1,1.1 0 0 1 1.6,12.5 Z',
+  'M4.2925,4.9996 L4.9996,4.2925 A1.1,1.1 0 0 1 6.5553,4.2925 L7.2624,4.9996 A1.1,1.1 0 0 1 7.2624,6.5553 L6.5553,7.2624 A1.1,1.1 0 0 1 4.9996,7.2624 L4.2925,6.5553 A1.1,1.1 0 0 1 4.2925,4.9996 Z'
+];
+
 export const SettingsIcon = (props: IconProps): ReactElement => (
   <Icon {...props}>
     <g>
-      {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => (
-        <rect
-          height="3.2"
-          key={angle}
-          rx="1.1"
-          transform={`rotate(${angle} 12 12)`}
-          width="3.2"
-          x="10.4"
-          y="1.6"
-        />
+      {SETTINGS_ICON_TEETH.map((d, index) => (
+        <path d={d} key={index} />
       ))}
     </g>
     <path
