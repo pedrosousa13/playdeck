@@ -6,11 +6,9 @@
     "types": ["node", "vitest/globals"],
     // Not inherited from `tsconfig.json`: this project extends the base
     // config directly, so the `@/*` alias `tsconfig.json` and `astro.config.ts`
-    // both declare has to be repeated here for the same source tree to resolve.
-    // `@playdeck/react` for the same reason `tsconfig.json` states it: this
-    // project's `include` covers `src`, which is where the import of
-    // `examples/react-menus.tsx` lives, so that file is compiled here too and
-    // resolves its own specifiers from outside this app.
+    // both declare has to be repeated here for the same source tree to
+    // resolve. `@playdeck/react` for the same reason `tsconfig.json` states
+    // it: the target is the built declarations.
     "paths": {
       "@/*": ["./src/*"],
       "@playdeck/react": ["../../packages/react/dist/index.d.ts"]
@@ -27,7 +25,7 @@
   // a project reference to a `noEmit` project is TS6310, the same error
   // `tsconfig.json`'s own comment names for why it cannot reference `../e2e`.
   "references": [{ "path": "../../packages/core" }],
-  "include": ["src", "test", "../../examples/react-menus.tsx"],
+  "include": ["src", "test"],
   // Same exclusion as `tsconfig.json`, and for the same reason: this file
   // imports `astro:content`, a virtual module this project deliberately
   // does not generate ambient types for.

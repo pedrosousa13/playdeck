@@ -145,9 +145,11 @@ test('the composition prints the full control tree, and tracks the source switch
   // Content rather than a line count: the panel prints the whole bar the
   // island mounts, and both sides map over the one `BENCH_CONTROLS` tuple, so
   // what this pins is that every name in that tuple reaches the page. The
-  // settings-menu lines pin `RateMenu`'s real children -- the quality group
-  // included, not a self-closing stand-in -- per `bench-composition.ts`'s own
-  // `CONTROL_LINES.settingsMenu`.
+  // settings-menu lines pin `<QualityAndRateMenu />` inside
+  // `Player.SettingsMenuContent` -- the same tree `BenchIsland.tsx` mounts,
+  // per `bench-composition.ts`'s own `CONTROL_LINES.settingsMenu` -- rather
+  // than that component's own children, since the panel prints what mounts
+  // and nothing else.
   for (const name of [
     '<Player.SeekSlider />',
     '<Player.PlayButton />',
@@ -158,11 +160,8 @@ test('the composition prints the full control tree, and tracks the source switch
     '<Player.CaptionsButton />',
     '<Player.SettingsMenu>',
     '<Player.SettingsMenuTrigger aria-label="Settings" />',
-    '<Player.MenuRadioGroup',
-    'aria-label="Quality"',
-    '<Player.MenuRadioItem value="">Auto</Player.MenuRadioItem>',
-    '{qualities.map((quality) => (',
-    '<Player.MenuItem onSelect={restart}>Restart</Player.MenuItem>',
+    '<Player.SettingsMenuContent>',
+    '<QualityAndRateMenu />',
     '<Player.PipButton />',
     '<Player.FullscreenButton />'
   ]) {

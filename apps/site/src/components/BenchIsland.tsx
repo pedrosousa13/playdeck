@@ -83,13 +83,14 @@ import { type BenchPosition, type SkinName } from '@/bench-composition';
 import { BENCH_CONTROLS, type BenchControlName } from '@/bench-controls';
 import { QUIET_START, quietLine, recordLoad } from '@/bench-quiet';
 /*
- * The settings menu the bench mounts, taken from the examples rather than
- * written again here: `examples/react-menus.tsx` is where a consumer reads the
- * shape of a menu built from the parts, and a second copy on this page would
- * be a second thing to keep true. `apps/site/tsconfig.json` names the file in
- * its own `include` for this import -- see the comment there.
+ * The settings menu's content, in its own component so the composition panel
+ * can print exactly what mounts (`bench-composition.ts`'s `<QualityAndRateMenu />`)
+ * rather than transcribing every line of it by hand. `examples/react-menus.tsx`'s
+ * `RateMenu` is the consumer-facing version of the same reasoning, wrapping
+ * `Player.SettingsMenu` around the same content for a reader of the examples --
+ * see `BenchSettingsMenu.tsx`'s own comment for why the two do not share code.
  */
-import { RateMenu } from '../../../../examples/react-menus';
+import { QualityAndRateMenu } from './BenchSettingsMenu';
 import BenchSwitches from './BenchSwitches';
 import BenchStats from './BenchStats';
 import CompositionPanel from './CompositionPanel';
@@ -265,7 +266,14 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
       </>
     ),
     captionsButton: <Player.CaptionsButton />,
-    settingsMenu: <RateMenu />,
+    settingsMenu: (
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger aria-label="Settings" />
+        <Player.SettingsMenuContent>
+          <QualityAndRateMenu />
+        </Player.SettingsMenuContent>
+      </Player.SettingsMenu>
+    ),
     pipButton: (
       <Player.PipButton>
         {state.pictureInPicture ? (

@@ -2038,6 +2038,17 @@ not a demonstration, since `/` still mounts its player with
 sentence two paragraphs up is corrected by this one: they are advertised, not
 sold by demonstration, and the distinction is the whole of what changed.
 
+**The settings menu the bar composes was extracted out of the panel it prints,
+on 2026-09-04.** It used to be printed by hand in `bench-composition.ts`,
+transcribing `examples/react-menus.tsx`'s `RateMenu` line for line and
+running the panel to roughly fifty-five lines for a control that is one menu
+among ten. `QualityAndRateMenu`, a real component in the new
+`BenchSettingsMenu.tsx`, now carries that menu's content on its own;
+`BenchIsland.tsx` mounts `Player.SettingsMenu` around it directly rather
+than through the examples' own `RateMenu`, and the panel prints
+`<QualityAndRateMenu />` inside `Player.SettingsMenuContent` — what mounts,
+not a transcription of it.
+
 **The page carries one block of code and it is generated, which retires the one
 exception `/` used to hold.** The fifth version wrote four snippets by hand in
 its own frontmatter, and this document defended them: they were three or four
