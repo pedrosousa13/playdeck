@@ -112,6 +112,22 @@ test('the thesis and both groups of switches are on the page', async ({
   await expect(page.locator('[data-bench-switch="skin"]')).toHaveCount(1);
 });
 
+test('the four feature cards are present, numbered in order', async ({
+  page
+}) => {
+  await page.goto(landing);
+  const cards = page.locator('[data-feature-card]');
+  await expect(cards).toHaveCount(4);
+  await expect(cards.nth(0)).toContainText('01');
+  await expect(cards.nth(0)).toContainText('Compose it');
+  await expect(cards.nth(1)).toContainText('02');
+  await expect(cards.nth(1)).toContainText('Style it');
+  await expect(cards.nth(2)).toContainText('03');
+  await expect(cards.nth(2)).toContainText('Ask before you render');
+  await expect(cards.nth(3)).toContainText('04');
+  await expect(cards.nth(3)).toContainText('Recover from refused autoplay');
+});
+
 test('nothing on the page links to the workbench', async ({ page }) => {
   await page.goto(landing);
   // #534 records the decision that the workbench is not to be a public

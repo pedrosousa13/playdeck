@@ -2,6 +2,7 @@
 import Base from '../layouts/Base.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import Bench from '../components/Bench.astro';
+import FeatureCards from '../components/FeatureCards.astro';
 import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
 
 /**
@@ -148,6 +149,8 @@ const install = 'pnpm add @playdeck/react';
     </section>
 
     <Bench />
+
+    <FeatureCards />
 
     {
       /* The close: the install command repeated, one measured line, and the
