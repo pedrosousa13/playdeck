@@ -299,6 +299,19 @@ const install = 'pnpm add @playdeck/react';
    * animation on at all; with no script, or under
    * `prefers-reduced-motion: reduce` below, this block simply never
    * matches and nothing runs -- removed, not shortened.
+   *
+   * `forwards`, not `both`: `both` also fills *backwards*, which paints the
+   * 0% keyframe -- opacity 0, translated 12px -- for the entire
+   * `animation-delay` on every staggered element, before its animation has
+   * actually started. That turned the delay into a second, undocumented
+   * hidden state on top of the two this block is supposed to hold to, and a
+   * page loaded fast enough (a static build with nothing to wait on) could
+   * settle from the network's point of view while a later-staggered element
+   * -- `:global(.bench__stage)` waits a full 400ms -- was still sitting
+   * invisible. `forwards` keeps the one fill this reveal actually needs, the
+   * end state persisting once the last frame plays, and leaves the delay
+   * showing this element's own resting style, so the animation only ever
+   * adds motion on top of a page that was already rendered right.
    */
   @media (prefers-reduced-motion: no-preference) {
     html[data-entered] .thesis__name,
@@ -307,7 +320,7 @@ const install = 'pnpm add @playdeck/react';
     html[data-entered] .install,
     html[data-entered] .thesis__actions,
     html[data-entered] :global(.bench__stage) {
-      animation: enter var(--duration-slow) var(--ease) both;
+      animation: enter var(--duration-slow) var(--ease) forwards;
     }
 
     html[data-entered] .thesis__display {
