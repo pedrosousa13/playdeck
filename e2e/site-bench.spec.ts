@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { activationButton, controls, media } from './locators';
+import {
+  activationButton,
+  controls,
+  media,
+  settingsMenu,
+  settingsTrigger
+} from './locators';
 
 /**
  * The bench on `/`: the switches, and the composition they build.
@@ -822,5 +828,88 @@ test.describe('the phone control bar fits one row (#598)', () => {
     expect(geometry.controlsHeight).toBeLessThanOrEqual(
       geometry.seekHeight + 44 + 24
     );
+  });
+});
+
+/**
+ * The settings menu on a phone (issue #594's follow-up): opening the gear on
+ * the control bar used to anchor the menu inside the picture, above the
+ * trigger -- and the letterboxed 16:9 stage at 375px wide is only about
+ * 184px tall, shorter than the menu itself (Auto, three qualities, four
+ * rates, Restart), so the menu was cut off by the stage's own bounds.
+ * `theme.css`'s "menu, phone" rule turns it into a bottom sheet instead:
+ * `position: fixed`, pinned to the viewport rather than the stage, with a
+ * scrim behind it -- what YouTube and Vimeo do at this width.
+ *
+ * 375x812 rather than 375x800, matching the letterbox test above: a true
+ * iPhone viewport height, and what the maintainer's own report was measured
+ * against.
+ */
+test.describe('the settings menu is a bottom sheet on phones (#594 follow-up)', () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test("the menu and every item sit inside the viewport, flush with its bottom, and a scrim tap closes it", async ({
+    page
+  }) => {
+    test.slow();
+    await page.goto(landing);
+    await expect(activationButton(page)).toBeVisible();
+    await activationButton(page).click();
+    await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+    // Held on the bar before opening the menu, the same guard the letterbox
+    // and row-fit tests above use: theme's own auto-hide must not catch this
+    // mid-fade.
+    const controlsBox = await controls(page).boundingBox();
+    if (controlsBox === null) {
+      throw new Error('Could not measure the bar.');
+    }
+    await page.mouse.move(
+      controlsBox.x + controlsBox.width / 2,
+      controlsBox.y + controlsBox.height / 2
+    );
+
+    await settingsTrigger(page).click();
+    await expect(settingsMenu(page)).toBeVisible();
+
+    const viewport = page.viewportSize();
+    if (viewport === null) {
+      throw new Error('No viewport size.');
+    }
+
+    const menuBox = await settingsMenu(page).boundingBox();
+    if (menuBox === null) {
+      throw new Error('Could not measure the menu.');
+    }
+    expect(menuBox.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(viewport.width);
+    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(viewport.height);
+    // The sheet's whole point: its bottom edge is the viewport's own, not
+    // the stage's.
+    expect(menuBox.y + menuBox.height).toBeCloseTo(viewport.height, 0);
+
+    const items = await settingsMenu(page)
+      .locator('[role="menuitem"], [role="menuitemradio"]')
+      .all();
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      const box = await item.boundingBox();
+      if (box === null) continue; // Not every rung is necessarily visible.
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    }
+
+    // A tap on the scrim -- well above the sheet, which even at its tallest
+    // (`max-block-size: 70vh`, 568px of 812) leaves the top of the screen
+    // clear -- closes the menu. No code catches this deliberately: the
+    // shadow paints the dimming but is not an element, so the tap reaches
+    // past it to whatever the page has there, which
+    // `SettingsMenuContent`'s existing outside-pointerdown listener already
+    // treats as outside the menu.
+    await page.mouse.click(viewport.width / 2, 10);
+    await expect(settingsMenu(page)).toBeHidden();
   });
 });
