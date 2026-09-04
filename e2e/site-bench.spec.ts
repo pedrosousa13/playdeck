@@ -328,6 +328,47 @@ test("at 1440px, the resting theme keeps controls in the picture's own row, and 
   expect(docked.controlsArea).toBe('controls');
 });
 
+/**
+ * Regression test for the defect where `Bench.astro` set
+ * `--playdeck-overlay-scrim` unconditionally on `.bench__stage`, so `theme`
+ * painted the bar with the same flat surface colour `docked` uses instead of
+ * `theme.css`'s own gradient default -- the bar still shared the picture's
+ * own grid cell (caught by the test above), but with no gradient it read as
+ * an opaque strip rather than a scrim. Structure alone does not catch that:
+ * this checks the paint.
+ *
+ * Read at rest, no activation, for the same reason `gridShape` above is: the
+ * controls part exists in the DOM before a press, only `hidden` (which
+ * resolves to `display: none`), and `display: none` does not stop a
+ * `getComputedStyle` read of an element's own other properties -- `position`
+ * and `background-image` cascade and compute the same whether or not the box
+ * is painted.
+ */
+const controlsPaint = (page: Page) =>
+  page.evaluate(() => {
+    const ctrl = document.querySelector('[data-playdeck-part="controls"]');
+    if (ctrl === null) {
+      throw new Error('No controls part in the document.');
+    }
+    const style = getComputedStyle(ctrl);
+    return { position: style.position, backgroundImage: style.backgroundImage };
+  });
+
+test('at 1440px, the resting theme paints the controls part with the scrim gradient, not a flat surface', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(landing);
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+
+  // Positioned off the normal flow and sharing the picture's own grid cell --
+  // `gridShape`'s `'stack'` read above already pins the cell it shares --
+  // rather than sitting `static` in a row of its own the way `docked` does.
+  const themed = await controlsPaint(page);
+  expect(themed.position).not.toBe('static');
+  expect(themed.backgroundImage).toContain('gradient');
+});
+
 test('below 48rem, the resting docked viewport already gives the controls a row of their own', async ({
   page
 }) => {
