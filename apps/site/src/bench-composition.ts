@@ -64,15 +64,17 @@ export type BenchPosition = {
 
 export const buildComposition = ({
   skin,
+  source,
   sourceUrl
 }: BenchPosition): string => {
-  // The composition never names a provider: the library detects one from the
-  // URL, so `source={source}` is the whole of `Player.Root`'s configuration
-  // regardless of which provider switched on. What changes is the `const` line
-  // above it. That is the claim the panel makes -- and it is why there is one
-  // prop here rather than a list: with autoplay gone, nothing either switch
-  // does can add a second one, so the branch that wrapped two or more props
-  // onto their own lines went with it rather than sitting unreachable.
+  // The composition never names a provider on `Player.Root`: the library
+  // detects one from the URL, so `source={source}` is the whole of `Root`'s
+  // own configuration regardless of which provider switched on. What changes
+  // there is the `const` line above it. That is the claim the panel makes for
+  // `Player.Root` -- and it is why there is one prop on it rather than a
+  // list: with autoplay gone, nothing either switch does can add a second
+  // one, so the branch that wrapped two or more props onto their own lines
+  // went with it rather than sitting unreachable.
   //
   // `hls` is not a special case here, and that absence was checked rather
   // than assumed: `docs/provider-setup.md`'s own detection table resolves a
@@ -83,6 +85,13 @@ export const buildComposition = ({
   // consumer writes no import for it, the same as every other provider here.
   // So the real import this position needs is the one every position needs:
   // the skin's own stylesheet, printed below.
+  //
+  // `Player.Poster` is the one part below `Root` that does name a provider,
+  // and only one: `showWhilePaused` prints for `youtube` alone, because that
+  // is the one position whose embed draws its own chrome over an idle iframe
+  // once nothing on this side covers it (`BenchIsland.tsx`'s `Stage` carries
+  // the same condition on the real prop, and this line is the panel's report
+  // of it, not a second decision).
 
   // The skin import and the source declaration are lines a consumer would
   // write above the composition, not props on it. Keeping them out of
@@ -104,7 +113,9 @@ export const buildComposition = ({
     '<Player.Root source={source}>',
     '  <Player.Viewport>',
     '    <Player.Media />',
-    '    <Player.Poster>',
+    source === 'youtube'
+      ? '    <Player.Poster showWhilePaused>'
+      : '    <Player.Poster>',
     '      <Player.PosterImage />',
     '    </Player.Poster>',
     '    <Player.Controls>',

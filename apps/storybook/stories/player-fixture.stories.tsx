@@ -35,6 +35,12 @@ type PlayerFixtureProps = {
   // Opts a Vimeo-sourced fixture into the SEO-metadata suppression (#215), so
   // e2e/vimeo-seo-metadata.spec.ts can drive both sides of the option.
   readonly vimeoSuppressSeoMetadata?: boolean;
+  // Threads `Player.Poster`'s own `showWhilePaused` prop through to this
+  // fixture, so `e2e/poster.spec.ts` can drive both sides of it: off (the
+  // default every consumer gets) and on (what a YouTube-backed position of
+  // the bench sets, to cover the chrome its embed draws over an idle iframe
+  // while paused).
+  readonly posterShowWhilePaused?: boolean;
 };
 
 const PresentationControls = ({
@@ -246,7 +252,8 @@ const PlayerFixture = ({
   startTime,
   endTime,
   vimeoCustomControls,
-  vimeoSuppressSeoMetadata
+  vimeoSuppressSeoMetadata,
+  posterShowWhilePaused
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -341,7 +348,7 @@ const PlayerFixture = ({
           data-testid="viewport"
           style={{ aspectRatio: '16 / 9', maxWidth: '48rem', width: '100%' }}
         >
-          <Player.Poster>
+          <Player.Poster showWhilePaused={posterShowWhilePaused}>
             <Player.PosterImage
               alt=""
               decoding="async"
@@ -440,7 +447,8 @@ const meta: Meta<PlayerFixtureProps> = {
       options: ['custom', 'native']
     },
     startTime: { control: 'number' },
-    endTime: { control: 'number' }
+    endTime: { control: 'number' },
+    posterShowWhilePaused: { control: 'boolean' }
   },
   parameters: {
     docs: {

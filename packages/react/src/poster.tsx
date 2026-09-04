@@ -16,7 +16,19 @@ import {
   usePosterState
 } from './player-context.js';
 
-export type PosterProps = ComponentPropsWithRef<'div'>;
+export type PosterProps = ComponentPropsWithRef<'div'> & {
+  /**
+   * Show the poster again while a source that has played sits paused, not
+   * only before its first frame decodes. Off by default: a native
+   * `<video>` or HLS source already shows its own paused frame underneath,
+   * and covering that with the poster would be an unwanted regression for
+   * a consumer who never asked for it. Turn this on for a provider that
+   * draws its own chrome over an idle embed once nothing on this side
+   * covers it -- YouTube's title bar, "more videos" shelf and pause glyph
+   * are the reason this prop exists.
+   */
+  readonly showWhilePaused?: boolean;
+};
 
 export type ResponsivePoster = {
   readonly src: string;
@@ -63,8 +75,24 @@ const posterOverlayStyle: CSSProperties = {
   transform: 'none'
 };
 
-export const Poster = ({ children, style, ...safeRest }: PosterProps) => {
+export const Poster = ({
+  children,
+  showWhilePaused = false,
+  style,
+  ...safeRest
+}: PosterProps) => {
   const posterState = usePosterState();
+  // After `...style`, alone: derived from `posterState`, so a static
+  // consumer value would pin the poster open for every source rather than
+  // override a layout choice. `'hidden'` always hides. `'paused'`
+  // (`player-context.ts`'s `PosterState`) hides too unless `showWhilePaused`
+  // asks otherwise -- the default keeps a native `<video>` or HLS source's
+  // own paused frame on screen, which is what every consumer who never
+  // touched this prop already had. `data-state` still names the state
+  // apart from `'hidden'` regardless of the prop, so a stylesheet or a test
+  // can always tell a paused source from one that never played.
+  const hidden =
+    posterState === 'hidden' || (posterState === 'paused' && !showWhilePaused);
 
   return (
     <div
@@ -75,13 +103,7 @@ export const Poster = ({ children, style, ...safeRest }: PosterProps) => {
       style={{
         ...posterOverlayStyle,
         ...style,
-        // After `...style`, alone: derived from `posterState`, so a static
-        // consumer value would pin the poster open for every source rather
-        // than override a layout choice. `'hidden'` is the only state this
-        // hides for -- `'paused'` (`player-context.ts`'s `PosterState`) reads
-        // as visible here same as `'visible'` does, and `data-state` is what
-        // tells the two apart for anyone who needs to.
-        visibility: posterState === 'hidden' ? 'hidden' : 'visible'
+        visibility: hidden ? 'hidden' : 'visible'
       }}
     >
       {children}

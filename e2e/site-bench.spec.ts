@@ -47,7 +47,9 @@ const DOCKED_IMPORT = "import '@playdeck/react/docked.css';";
  * import, the `const source` line -- and how many there are is not this
  * helper's business. That is what lets the tree below read byte-identical
  * whichever provider is switched on, which is the property the source-switch
- * test below checks by comparing this before and after a press.
+ * test below checks by comparing this before and after a press. `youtube` is
+ * the one position that would break that (`<Player.Poster showWhilePaused>`
+ * in `bench-composition.ts`), but the source-switch test never presses it.
  */
 const tree = (printedText: string) => {
   const open = printedText.indexOf('<Player.Root');
@@ -166,9 +168,13 @@ test('the composition prints the full control tree, and tracks the source switch
     .poll(async () => sourceLine(await printed(page)))
     .not.toBe(sourceLine(before));
 
-  // And nothing inside the block moved with it. This is the assertion that
-  // catches the page and the player disagreeing: byte-identical trees across a
-  // provider change is the claim the panel is making.
+  // And nothing else inside the block moved with it. This is the assertion
+  // that catches the page and the player disagreeing: byte-identical trees
+  // across a provider change is the claim the panel is making. `youtube` is
+  // the one position whose `<Player.Poster>` carries `showWhilePaused`
+  // (`bench-composition.ts`), but neither the resting `hls` position nor the
+  // `vimeo` position pressed here is it, so no exception is reachable from
+  // this pair and the trees stay byte-identical as they always did.
   expect(tree(await printed(page))).toBe(tree(before));
 });
 

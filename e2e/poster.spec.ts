@@ -163,10 +163,13 @@ test('hides the poster after the first frame without changing its geometry', asy
 // An embed provider (YouTube, Vimeo) draws its own chrome over an idle
 // iframe once nothing on this side covers it, and that chrome shows up while
 // paused, not only before the first play -- this fixture is native video, so
-// nothing here proves that half, only that the poster's own state machine
+// nothing here proves that half, only that `showWhilePaused` (`poster.tsx`)
 // gives a consumer the hook to cover it: the same part, shown again, once a
-// source that played sits paused rather than playing.
-test('shows the poster again, as paused, once a played source is paused -- and hides it again on resume', async ({
+// source that played sits paused rather than playing. Off by default --
+// `bench-composition.ts` sets it only for the youtube position -- so this
+// fixture opts in explicitly through `posterShowWhilePaused`
+// (`player-fixture.stories.tsx`).
+test('shows the poster again, as paused, once a played source is paused with showWhilePaused set -- and hides it again on resume', async ({
   page
 }) => {
   // The ten-second clip (`source: 'long'`), not the default one-second tracer:
@@ -175,7 +178,7 @@ test('shows the poster again, as paused, once a played source is paused -- and h
   // -- `NativeMp4StartTime`'s own comment records the same reason for the
   // same choice.
   await page.goto(
-    '/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story&args=source:long'
+    '/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story&args=source:long;posterShowWhilePaused:!true'
   );
   const visibleGeometry = await rect(poster(page));
 
@@ -201,6 +204,33 @@ test('shows the poster again, as paused, once a played source is paused -- and h
   await expect(async () => {
     await playButton(page).click();
     await expect(poster(page)).toHaveAttribute('data-state', 'hidden', {
+      timeout: 1000
+    });
+  }).toPass({ timeout: 10000 });
+  await expect(poster(page)).toHaveCSS('visibility', 'hidden');
+});
+
+// The other side of the same knob, and the library's own default: a
+// consumer who never touches `showWhilePaused` keeps seeing whatever this
+// side of the frame already shows once paused -- a native `<video>`'s own
+// frame, or a provider's own chrome for a provider that draws none of its
+// own -- rather than having the poster laid back over it. `data-state` still
+// reports `'paused'` (it always does, regardless of the prop); only
+// `visibility` stays put.
+test('keeps the poster hidden through a pause when showWhilePaused is not set', async ({
+  page
+}) => {
+  await page.goto(
+    '/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story&args=source:long'
+  );
+
+  await playButton(page).click();
+  await expect(poster(page)).toHaveAttribute('data-state', 'hidden');
+  await expect(poster(page)).toHaveCSS('visibility', 'hidden');
+
+  await expect(async () => {
+    await playButton(page).click();
+    await expect(poster(page)).toHaveAttribute('data-state', 'paused', {
       timeout: 1000
     });
   }).toPass({ timeout: 10000 });
