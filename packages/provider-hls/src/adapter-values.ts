@@ -105,6 +105,24 @@ export type HlsModuleLoader = () => Promise<{
   readonly default: HlsConstructorLike;
 }>;
 
+export type HlsBuild = 'full' | 'light';
+
+// hls.js publishes stricter generic event signatures than the minimal
+// structural surface this adapter consumes, so the dynamic module boundary
+// narrows through a cast instead of importing hls.js types eagerly -- true of
+// both builds, since `hls.js/light` exports the same class shape.
+//
+// `createHlsProvider`'s `build` option resolves through this map rather than
+// through a consumer-supplied `loadHls`: it is the primitive `build` stands
+// in for, so a `PlayerProviderOptions.hls` bag (`@playdeck/react`) can carry
+// `{ build: 'light' }` through `Player.Root` without ever passing a function
+// across that boundary. `loadHls` itself is unaffected and stays the way to
+// pin a version or serve hls.js from somewhere else.
+export const hlsBuildLoaders: Record<HlsBuild, HlsModuleLoader> = {
+  full: () => import('hls.js'),
+  light: () => import('hls.js/light')
+};
+
 /**
  * Whether the hls.js build in hand carries the machinery that surfaces subtitle
  * tracks, read off the constructor's own default config.
