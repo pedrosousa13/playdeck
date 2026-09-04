@@ -11,22 +11,28 @@ import { activationButton } from './locators';
  * printed beside the machinery it describes is worth exactly what the gate
  * behind it is worth, and this file is that gate.
  *
- * Three tests, and the second is what makes the first mean anything. An empty
+ * Four tests now. The second is what makes the first mean anything: an empty
  * list of foreign requests is also what a listener attached to the wrong page
  * produces, so the at-rest assertion is paired with one that presses a hosted
- * provider and demands the request happen. `youtube` and `vimeo` turned
- * `ready: true` in `bench-sources.ts`, so this one runs now rather than
- * skipping itself -- and pressing a hosted provider is a real request to a
- * real host, so it is `@real`, same as the third.
+ * provider and demands the request happen. `youtube` and `vimeo` are
+ * `ready: true` in `bench-sources.ts`, and pressing one is a real request to
+ * a real host, so that test is `@real`.
  *
  * The third is a defect that nearly shipped rather than a property the page
  * was designed for. `bench-quiet.ts` and `apps/site/test/bench-quiet.test.ts`
  * carry it in full; what they cannot carry is the browser, because they drive
  * a pure function and the failure was a sequence of presses against a mounted
- * player. This is that sequence, and it too presses a hosted provider twice,
- * so it is `@real` as well -- moving real coverage of a defect that nearly
- * shipped out of the default run is the cost of the source switch no longer
- * having a same-origin position to press instead.
+ * player. This is that sequence -- and unlike while the switch was
+ * hosted-providers-only, it needs no `@real` tag to run: `hls` is
+ * same-origin and first in `bench-sources.ts`, so the press that reproduces
+ * the sequence is a request to this site's own origin, and the second press
+ * only switches the source selection without activating it (see the test's
+ * own comment for why that is enough).
+ *
+ * The fourth pins the reason `hls` is worth having beside the two hosted
+ * positions at all: a press on it fetches a real manifest and real segments,
+ * and every one of those requests stays on this origin. No `@real` tag either
+ * -- that is the whole point of the position existing.
  *
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so this address is written out rather than
@@ -137,7 +143,8 @@ test(
 
     const hosted = await hostedPositions(page);
     // Defensive rather than load-bearing: `youtube` and `vimeo` are both
-    // `ready: true` in `bench-sources.ts`, so this list is never empty today.
+    // `ready: true` in `bench-sources.ts`, so this list is never empty today
+    // -- `hls` never joins it, same-origin as it is, but the other two do.
     // Left in for the shape it protects against -- a page that quietly lost
     // every hosted position would fail this test loudly rather than by
     // skipping it.
@@ -162,47 +169,76 @@ test(
   }
 );
 
-test(
-  'the quiet line never claims no provider has been contacted once one has @real',
-  { tag: '@real' },
-  async ({ page }) => {
-    /*
-     * Two presses, no timing trick.
-     *
-     * Under `loading="interaction"` a source change returns `Player.Root` to
-     * `dormant`, so the first version of this line — which read the live
-     * activation state — printed the resting sentence again after a fetch had
-     * already gone out. The second clause of that sentence is a claim about
-     * the page's history, and history does not revert.
-     *
-     * Foreign requests rather than a media-extension filter: with no
-     * same-origin position left, a hosted provider's first request is an
-     * iframe document, not a file matching `.mp4`/`.m3u8`/`.ts`. `foreign`,
-     * defined above for the at-rest test, is the same test this needs --
-     * anything that left this origin.
-     */
-    const requests: string[] = [];
-    page.on('request', (request) => requests.push(request.url()));
+test('the quiet line never claims no provider has been contacted once one has', async ({
+  page
+}) => {
+  /*
+   * Two presses, no timing trick.
+   *
+   * Under `loading="interaction"` a source change returns `Player.Root` to
+   * `dormant`, so the first version of this line — which read the live
+   * activation state — printed the resting sentence again after a fetch had
+   * already gone out. The second clause of that sentence is a claim about
+   * the page's history, and history does not revert.
+   *
+   * The first press is on the switch's resting position, `hls`, which is
+   * same-origin — so this waits on the quiet line's own text rather than on
+   * a foreign request the way the equivalent wait did while every position
+   * left this origin; there is no foreign request for that wait to catch any
+   * more. The second press only selects `vimeo` on the source switch without
+   * pressing play again — `BenchSwitches`' `onSource` callback writes the new
+   * position and nothing else, and `Player.Root` only fetches from an
+   * activation press — so the sequence still reproduces the exact defect this
+   * test is named for (a source change resetting activation to `dormant`
+   * while the line keeps claiming what that reset would otherwise undo)
+   * without a second real request, hosted or otherwise.
+   */
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
 
-    await page.goto(landing);
-    await expect(activationButton(page)).toBeVisible();
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
 
-    const line = quietLine(page);
-    expect(claimsNoProviderContacted(await line.innerText())).toBe(true);
+  const line = quietLine(page);
+  expect(claimsNoProviderContacted(await line.innerText())).toBe(true);
 
-    await activationButton(page).click();
-    await expect.poll(() => foreign(requests).length).toBeGreaterThan(0);
+  await activationButton(page).click();
+  await expect
+    .poll(async () => claimsNoProviderContacted(await line.innerText()))
+    .toBe(false);
+  // And it really was same-origin, not just quiet about it.
+  expect(foreign(requests)).toEqual([]);
 
-    // The press that used to undo the sentence. `vimeo` rather than `hls`:
-    // the second position now has to be a different hosted provider, because
-    // there is no same-origin one left to switch to.
-    await page
-      .locator('[data-bench-switch="source"] [data-value="vimeo"]')
-      .click();
+  // The press that used to undo the sentence.
+  await page
+    .locator('[data-bench-switch="source"] [data-value="vimeo"]')
+    .click();
 
-    // Replaced, never removed: a line that vanished would move everything below
-    // it, and would also pass an assertion about what it does not say.
-    await expect(line).toHaveCount(1);
-    expect(claimsNoProviderContacted(await line.innerText())).toBe(false);
-  }
-);
+  // Replaced, never removed: a line that vanished would move everything below
+  // it, and would also pass an assertion about what it does not say.
+  await expect(line).toHaveCount(1);
+  expect(claimsNoProviderContacted(await line.innerText())).toBe(false);
+});
+
+test('pressing play on the hls position fetches a manifest from this origin and nothing else', async ({
+  page
+}) => {
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+
+  await page.goto(landing);
+  await expect(composition(page)).toBeVisible();
+
+  // Explicit rather than relied on as the resting default, so this test keeps
+  // proving what its name says even if the switch's default position ever
+  // moves: `bench-sources.ts` lists `hls` first today, and `readySources[0]`
+  // is what `BenchIsland.tsx` reads for the page's own default, but nothing
+  // here should depend on remembering that.
+  await page.locator('[data-bench-switch="source"] [data-value="hls"]').click();
+  await activationButton(page).click();
+
+  await expect
+    .poll(() => requests.some((url) => url.includes('.m3u8')))
+    .toBe(true);
+  expect(foreign(requests)).toEqual([]);
+});
