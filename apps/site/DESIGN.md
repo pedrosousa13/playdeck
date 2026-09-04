@@ -2132,6 +2132,17 @@ press rather than a control that swallows a click, and nothing is lost,
 because the command was never behind the button. The feedback is a text swap
 on the button with the same words said once through a `role="status"` line.
 
+**The hero row changed shape on 2026-09-04.** The install pill used to be
+centred against a left-aligned page while the Start link sat underneath it,
+underlined like any other link — two calls to action reading as one
+decoration and one afterthought. They are one left-aligned flex row now,
+directly under the lede, wrapping under a narrow viewport the way every
+other row on this page already does. Start stopped being an underlined text
+link in the same pass — it is `.thesis__start`, a filled button in
+`--color-accent` with `--color-surface` text, `--radius-md` and the 44px hit
+target every other control on this site owes, so a reader scanning for the
+one thing to press finds it by shape rather than by colour alone.
+
 **The page makes no claim about any other library.** No comparison, no named
 competitor, no implied one. A draft opened with "every video player ships a
 design", which is false: react-player ships no stylesheet and says so in its
