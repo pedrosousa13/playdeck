@@ -395,27 +395,31 @@ test('the seek slider clears 3:1 on both sides of its thumb and across its loade
   // right of that edge, so nothing above measures the played span against
   // anything. Sampled at 0.10, inside it and clear of the thumb at ~0.27..0.34:
   //
-  //     played span vs loaded range     1.69:1
-  //     played span vs unfilled track   2.28:1
+  //     played span vs loaded range     1.45:1
+  //     played span vs unfilled track   2.66:1
   //
-  // Both are below the 3:1 floor, and neither is new arithmetic: they are the
-  // same pair `theme.test.ts` has stated all along as `accent vs buffered` and
-  // `accent vs track`, 1.65:1 and 2.59:1 over the theme's own backdrop default.
-  // What #415 changed is whose pixel the fill is — this file's `seek-progress`
-  // rather than an engine's `accent-color` seen through a translucent bar — so
-  // the arithmetic and the screen now describe the same surface, and the three
-  // engines agree on it. Closing the gap means moving
-  // `--playdeck-color-accent`, which #415 puts out of scope, and 1.4.11 is
-  // already satisfied at the thumb by the ring rather than by the fill — see the
-  // long note in `theme.test.ts` for why no accent value clears both surfaces at
-  // once.
+  // Both are below the 3:1 floor. Until #594 neither was new arithmetic — the
+  // same pair `theme.test.ts` states as `accent vs buffered` and `accent vs
+  // track`, 1.65:1 and 2.59:1 over the theme's own backdrop default, because
+  // `seek-progress` was a flat `--playdeck-color-accent` fill and the sample
+  // point read that colour exactly. #594 gave it a left-to-right gradient
+  // instead, `--playdeck-color-accent` to the new `--playdeck-color-accent-tint`,
+  // so a pixel a third of the way across the played span (this sample sits at
+  // 0.10 of the full bar, the span itself runs 0..0.30) is already a blend
+  // toward the lighter tint rather than the accent on its own — which is what
+  // moves these two figures off `theme.test.ts`'s flat-fill arithmetic without
+  // either file disagreeing with what is actually on screen. Closing the gap
+  // means moving the gradient's colours, which is out of scope for two figures
+  // that were never required to clear 3:1, and 1.4.11 is already satisfied at
+  // the thumb by the ring rather than by the fill — see the long note in
+  // `theme.test.ts` for why no accent value clears both surfaces at once.
   //
   // Pinned rather than floored, because there is no floor here to assert: what
   // is worth catching is the figure moving without anyone saying so. Pinning is
   // safe here for the reason it was not in the volume test above — every pixel
   // in both pairs is painted from `theme.css`'s own tokens over this story's
   // ground, none of it is an engine's native track, and the three engines
-  // measured 1.6947 and 2.2805 alike.
+  // measured 1.4534 and 2.6591 alike.
   const played = row.at(0.1);
   const unmeasured = {
     'played span vs loaded range': contrast(played, row.at(0.7)),
@@ -429,8 +433,8 @@ test('the seek slider clears 3:1 on both sides of its thumb and across its loade
       ])
     )
   ).toEqual({
-    'played span vs loaded range': '1.69:1',
-    'played span vs unfilled track': '2.28:1'
+    'played span vs loaded range': '1.45:1',
+    'played span vs unfilled track': '2.66:1'
   });
 });
 
