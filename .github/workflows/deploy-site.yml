@@ -66,6 +66,32 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      # `apps/site/package.json`'s `build` runs
+      # `scripts/media-sprite-fright.mjs` before `astro build`, which needs
+      # `ffmpeg` on the runner. GitHub's own `ubuntu-latest` image ships it,
+      # so this is a fast no-op check most runs rather than a real install --
+      # left in defensively for the day the image drops it.
+      - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+
+      # Caches the clip itself -- the ladder under
+      # `apps/site/public/media/sprite-fright/` and its two posters -- rather
+      # than the downloaded source film, so a cache hit skips both the
+      # download and the encode. Keyed on the source film's own address
+      # (`SOURCE_URL` in the script) and the script's hash, so a change to
+      # either -- a different source, a different clip window, a different
+      # ladder -- invalidates the cache instead of shipping a stale one. The
+      # script's own idempotency check (`outputsExist`) is what makes a cache
+      # hit actually skip the work below: `apps/site/package.json`'s `build`
+      # runs the script unconditionally, and the script itself is what decides
+      # there is nothing left to do.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            apps/site/public/media/sprite-fright
+            apps/site/public/sprite-fright-hls-poster-960w.webp
+            apps/site/public/sprite-fright-hls-poster-1920w.webp
+          key: sprite-fright-media-a69d68a5-a0e0-4a80-9d66-49f093c97aaf-804-${{ hashFiles('scripts/media-sprite-fright.mjs') }}
+
       # The packages, before the site, because the landing page measures them.
       # It renders the gzipped size of every bundle `pnpm test:budgets` gates,
       # read at build time from the module that gate measures with rather than
