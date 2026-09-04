@@ -745,7 +745,18 @@ const streamingCss = `
    Tab and answers Enter and Space with no handler of this file's. What is set
    here is size and colour. What is NOT set is anything to do with where the box
    sits: the library writes that as an inline style, which no rule here could
-   outrank, so the inFlow object above undoes it at the point of use instead. */
+   outrank, so the inFlow object above undoes it at the point of use instead.
+
+   The fill and the border are set twice each, and the custom-property half is
+   not decoration: ActivationButton writes background-color and border of
+   its own as an inline style, reading --playdeck-activation-fill and
+   --playdeck-activation-border (default transparent / 0), and an inline
+   declaration outranks anything written here by class selector however it is
+   written. Left unset, both buttons render fully transparent — this file's own
+   background-color/border-color below never lands — which is invisible
+   text on the dark card behind stream-primary and a border-only outline on
+   stream-secondary. Setting the two tokens is how a consumer's stylesheet
+   reaches this part at all. */
 .stream-primary,
 .stream-secondary {
   display: inline-flex;
@@ -760,10 +771,14 @@ const streamingCss = `
   cursor: pointer;
 }
 .stream-primary {
+  --playdeck-activation-fill: #ece9f5;
+  --playdeck-activation-border: 0;
   background-color: #ece9f5;
   color: #14121c;
 }
 .stream-secondary {
+  --playdeck-activation-fill: rgb(236 233 245 / 0.12);
+  --playdeck-activation-border: 1px solid rgb(236 233 245 / 0.4);
   background-color: rgb(236 233 245 / 0.12);
   border-color: rgb(236 233 245 / 0.4);
   color: #ece9f5;
