@@ -867,6 +867,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # As in `deploy-site.yml`: `apps/site/package.json`'s `build` runs
+      # `scripts/media-sprite-fright.mjs` before `astro build`, so this job
+      # builds the same self-hosted clip that job deploys. Same defensive
+      # `ffmpeg` check, same cache, keyed the same way, so a pull request that
+      # touches neither the script nor the source film pays for neither the
+      # download nor the encode.
+      - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - uses: actions/cache@v6
+        with:
+          path: |
+            apps/site/public/media/sprite-fright
+            apps/site/public/sprite-fright-hls-poster-960w.webp
+            apps/site/public/sprite-fright-hls-poster-1920w.webp
+          key: sprite-fright-media-a69d68a5-a0e0-4a80-9d66-49f093c97aaf-804-${{ hashFiles('scripts/media-sprite-fright.mjs') }}
       - run: pnpm exec turbo run build --filter=@playdeck/site...
       - run: pnpm test:site-analytics
       # Reads the build the step above produced, which is what lets it see the

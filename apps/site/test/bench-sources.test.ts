@@ -4,24 +4,29 @@ import type { PlayerProvider } from '@playdeck/core';
 
 // Written by hand, and typed against `PlayerProvider` rather than inferred as
 // `string[]`, so a member removed from that union turns this line itself into
-// a type error instead of silently passing a shorter list. `native` and `hls`
-// are not in it: the maintainer cannot serve video from this site, so the
-// switch is hosted providers only, and `bench-sources.ts`'s own
-// `HostedProvider` type is what enforces that this list stays exactly the
-// other three.
-const HOSTED_PROVIDERS: PlayerProvider[] = ['youtube', 'vimeo', 'wistia'];
+// a type error instead of silently passing a shorter list. `native` is the
+// one member left out: there is still no raw progressive file this project
+// ships for a plain `<video>` to point at, and `bench-sources.ts`'s own
+// `BenchProvider` type is what enforces that this list stays exactly the
+// other four.
+const BENCH_PROVIDERS: PlayerProvider[] = ['hls', 'youtube', 'vimeo', 'wistia'];
 
 describe('benchSources', () => {
-  it('has exactly one entry per hosted provider, and no extras', () => {
+  it('has exactly one entry per bench provider, and no extras', () => {
     expect(benchSources.map((entry) => entry.provider).sort()).toEqual(
-      [...HOSTED_PROVIDERS].sort()
+      [...BENCH_PROVIDERS].sort()
     );
   });
 
-  it('marks only youtube and vimeo ready today', () => {
+  it('marks hls, youtube and vimeo ready today', () => {
     expect(readySources.map((entry) => entry.provider).sort()).toEqual(
-      ['vimeo', 'youtube'].sort()
+      ['hls', 'vimeo', 'youtube'].sort()
     );
+  });
+
+  it('lists hls first, which is what makes it the switch’s default', () => {
+    expect(benchSources[0]?.provider).toBe('hls');
+    expect(readySources[0]?.provider).toBe('hls');
   });
 
   it('never lets a ready entry produce a placeholder URL', () => {
@@ -30,14 +35,16 @@ describe('benchSources', () => {
     }
   });
 
-  // Every ready source is a hosted provider now, so its URL is a real
-  // cross-origin address rather than a same-origin path under `base` -- the
-  // opposite of what this file asserted while `native` and `hls` were the
-  // ready entries.
-  it('resolves both ready entries to a cross-origin URL, not a same-origin path', () => {
-    for (const entry of readySources) {
-      const url = entry.source('/');
-      expect(url.startsWith('https://')).toBe(true);
+  // `hls` resolves to a same-origin path under `base`; `youtube` and `vimeo`
+  // are hosted providers and resolve to a real cross-origin address.
+  it('resolves hls to a same-origin path, and youtube/vimeo to a cross-origin URL', () => {
+    const hls = benchSources.find((entry) => entry.provider === 'hls');
+    expect(hls?.source('/')).toBe('/media/sprite-fright/master.m3u8');
+
+    for (const entry of readySources.filter(
+      (candidate) => candidate.provider !== 'hls'
+    )) {
+      expect(entry.source('/').startsWith('https://')).toBe(true);
     }
   });
 
@@ -53,12 +60,23 @@ describe('benchSources', () => {
     expect(vimeo?.source('/')).toBe('https://vimeo.com/640499893');
   });
 
-  // Both providers play the same film today, so every ready entry's poster is
-  // the same asset -- which is the point being pinned here, rather than a
-  // difference between them the way an earlier version of this file asserted.
-  it('gives every ready entry the same poster', () => {
-    const posters = readySources.map((entry) => entry.poster('/').src);
-    expect(new Set(posters).size).toBe(1);
+  // `youtube` and `vimeo` share the still cut from Wikimedia's mirror; `hls`
+  // carries its own, cut from the clip `scripts/media-sprite-fright.mjs`
+  // itself produces, at that script's own frame size rather than the other
+  // release's.
+  it('gives hls its own poster, distinct from the shared youtube/vimeo one', () => {
+    const hostedPosters = readySources
+      .filter((entry) => entry.provider !== 'hls')
+      .map((entry) => entry.poster('/').src);
+    expect(new Set(hostedPosters).size).toBe(1);
+
+    const hls = benchSources.find((entry) => entry.provider === 'hls');
+    expect(hls?.poster('/')).toEqual({
+      src: '/sprite-fright-hls-poster-960w.webp',
+      srcSet:
+        '/sprite-fright-hls-poster-960w.webp 960w, /sprite-fright-hls-poster-1920w.webp 1920w'
+    });
+    expect(hostedPosters).not.toContain(hls?.poster('/').src);
   });
 
   it("resolves the youtube entry's poster to the Sprite Fright still, at both widths", () => {
@@ -70,15 +88,25 @@ describe('benchSources', () => {
     });
   });
 
-  // The film's real pixel dimensions, not a rounded aspect ratio -- every
-  // entry's `width`/`height` should be exact integers a browser can compute
-  // `width / height` from without any decimal in between.
-  it('gives every entry the film’s exact intrinsic dimensions', () => {
+  // Every entry's own pixel dimensions, not a rounded aspect ratio -- and
+  // `hls`'s do not have to match the other entries', because it is cut from a
+  // different official release of the same film. Every entry's own pair
+  // still has to be exact integers a browser can compute `width / height`
+  // from without any decimal in between.
+  it('gives every entry its own exact intrinsic dimensions', () => {
     for (const entry of benchSources) {
-      expect(entry.width).toBe(2048);
-      expect(entry.height).toBe(858);
       expect(Number.isInteger(entry.width)).toBe(true);
       expect(Number.isInteger(entry.height)).toBe(true);
+    }
+
+    const hls = benchSources.find((entry) => entry.provider === 'hls');
+    expect(hls).toMatchObject({ width: 1920, height: 804 });
+
+    for (const entry of benchSources.filter(
+      (candidate) => candidate.provider !== 'hls'
+    )) {
+      expect(entry.width).toBe(2048);
+      expect(entry.height).toBe(858);
     }
   });
 

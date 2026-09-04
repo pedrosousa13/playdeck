@@ -101,11 +101,12 @@ test('the seek slider composes first, so the control bar keeps its two-row split
 
   await activationButton(page).click();
   // The bar is `hidden` until the press has produced a real player -- the
-  // default source is `youtube`, so this is a real request to youtube.com,
-  // same as `activateAndMeasure` below. The default 5s budget is tight enough
-  // for that request to occasionally miss it under CI's slower, shared
-  // runner, so this waits on the same 20s `activateAndMeasure` already uses
-  // for the identical wait.
+  // default source is `hls`, so this is a real request to this site's own
+  // origin for the manifest and its first segment, same as
+  // `activateAndMeasure` below. The default 5s budget is tight enough for
+  // that request to occasionally miss it under CI's slower, shared runner,
+  // so this waits on the same 20s `activateAndMeasure` already uses for the
+  // identical wait.
   await expect(controls(page)).toBeVisible({ timeout: 20_000 });
 
   const firstChildPart = await controls(page).evaluate((element) =>
@@ -155,9 +156,10 @@ test('the composition prints the full control tree, and tracks the source switch
   // The source switch moves the line above the block, not a prop inside it:
   // the library detects a provider from the URL, so `source={source}` is the
   // whole of `Player.Root`'s configuration whichever position is pressed.
-  // `vimeo` rather than `hls`: the switch offers hosted providers only now,
-  // and selecting a position moves the printed line without pressing play, so
-  // no network is needed here.
+  // `vimeo` rather than the resting `hls`: selecting a position moves the
+  // printed line without pressing play, so no network is needed here whatever
+  // position is chosen -- `vimeo` just guarantees a change from whichever
+  // position the page happened to rest on.
   const before = await printed(page);
   await position(page, 'source', 'vimeo').click();
   await expect
@@ -266,7 +268,7 @@ test('the preamble is always four lines, in every combination', async ({
     ['docked', DOCKED_IMPORT]
   ] as const) {
     await position(page, 'skin', skinToken).click();
-    for (const sourceToken of ['youtube', 'vimeo']) {
+    for (const sourceToken of ['hls', 'youtube', 'vimeo']) {
       await position(page, 'source', sourceToken).click();
       await expect
         .poll(async () => preambleLines(await printed(page)))
@@ -280,20 +282,20 @@ test('the preamble is always four lines, in every combination', async ({
 });
 
 /**
- * The maintainer's ruling on #594, pinned at rest and without `@real`: this is
- * the structural half of that ruling, not a replacement for the two
- * bounding-box tests below it. Those two prove the *rendered* result -- a
- * real player's pixels, measured after activation against a hosted provider
- * -- which is exactly why they need `@real` and sit outside the default run.
- * This test proves the *structure* the ruling is actually about: the
- * viewport's own CSS grid, readable with the player dormant, no activation,
- * no network beyond loading the page. Neither test is redundant with the
- * other -- this one is the pin CI actually runs on every PR; the other two
- * are the proof that the structure this one checks produces the layout the
- * ruling promises. Losing either leaves a gap: drop this one and the exact
- * regression #594 fixed (an unlayered rule quietly defeating `docked.css`)
- * goes unguarded in CI again; drop the `@real` pair and nothing ever checks
- * that the grid shape actually renders where the ruling says it should.
+ * The maintainer's ruling on #594, pinned at rest: this is the structural half
+ * of that ruling, not a replacement for the two bounding-box tests below it.
+ * Those two prove the *rendered* result -- a real player's pixels, measured
+ * after an activation press -- while this one proves the *structure* the
+ * ruling is actually about: the viewport's own CSS grid, readable with the
+ * player dormant, no activation, no network beyond loading the page. Neither
+ * test is redundant with the other -- this one is the cheaper of the two and
+ * needs no activation to run; the other two are the proof that the structure
+ * this one checks produces the layout the ruling promises, at the cost of a
+ * real player attaching first. Losing either leaves a gap: drop this one and
+ * the exact regression #594 fixed (an unlayered rule quietly defeating
+ * `docked.css`) is guarded only by a slower pair; drop the other pair and
+ * nothing ever checks that the grid shape actually renders where the ruling
+ * says it should.
  *
  * The controls element exists in the DOM at rest in both skins and at both
  * widths below (the island renders it hidden/empty before activation), so its
@@ -422,12 +424,14 @@ test('under docked, the bar’s top hairline is the stage’s own dark line in b
  * consumer's own. `docked` docks -- the bar takes a row of its own below the
  * picture -- and `theme` keeps floating over it exactly as before.
  *
- * `@real`: the bar is `hidden` until the activation press has produced a
+ * Not `@real`: the bar is `hidden` until the activation press has produced a
  * real player (`ControlBar` in `BenchIsland.tsx` hides it under `!ready`), so
- * proving its position needs a real one, which for the two hosted-only
- * positions this switch offers means a real request to `youtube.com` or
- * `vimeo.com`. Excluded from the default run for the same reason every other
- * `@real` test here is.
+ * proving its position needs a real one -- but neither test below selects a
+ * source, so both press play on whatever the switch rests on, which is `hls`
+ * since `bench-sources.ts` lists it first. That request never leaves this
+ * origin, unlike the youtube.com/vimeo.com request a real player needed here
+ * before `hls` returned, so there is no third-party network for `@real` to be
+ * guarding these two against any more.
  *
  * Measured against `[data-playdeck-part="media"]` rather than the outer
  * frame: the picture is the box either skin's own claim is about, and
@@ -440,13 +444,53 @@ test('under docked, the bar’s top hairline is the stage’s own dark line in b
  * which is `docked` with no switch to leave it from -- the case the ruling
  * itself names as the one most worth getting right.
  */
+/**
+ * The picture's own box, read only once it has stopped moving.
+ *
+ * `hls` is a real local decode now, not an iframe embed: `controls` becomes
+ * visible the moment activation reaches `ready` (`ControlBar`'s own gate),
+ * which is earlier than the moment the `<video>` element's real intrinsic
+ * dimensions have settled the media box into its final size -- measured, not
+ * assumed, after this test started failing by a few pixels on one assertion
+ * and a double-digit number of them on another between otherwise identical
+ * runs, always on this test and never elsewhere. Polling for two identical
+ * reads in a row is what a settled box actually means; a fixed extra delay
+ * would only have been a guess at how long that settling takes.
+ */
+const stableBoundingBox = async (
+  locator: ReturnType<typeof media>
+): Promise<{ x: number; y: number; width: number; height: number }> => {
+  let previous: Awaited<ReturnType<typeof locator.boundingBox>> = null;
+  await expect
+    .poll(
+      async () => {
+        const current = await locator.boundingBox();
+        const stable =
+          current !== null &&
+          previous !== null &&
+          current.x === previous.x &&
+          current.y === previous.y &&
+          current.width === previous.width &&
+          current.height === previous.height;
+        previous = current;
+        return stable;
+      },
+      { timeout: 5_000 }
+    )
+    .toBe(true);
+  if (previous === null) {
+    throw new Error('Could not measure the picture.');
+  }
+  return previous;
+};
+
 const activateAndMeasure = async (page: Page) => {
   await activationButton(page).click();
   await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+  const mediaBox = await stableBoundingBox(media(page));
   const controlsBox = await controls(page).boundingBox();
-  const mediaBox = await media(page).boundingBox();
-  if (controlsBox === null || mediaBox === null) {
-    throw new Error('Could not measure the bar or the picture.');
+  if (controlsBox === null) {
+    throw new Error('Could not measure the bar.');
   }
   // Held on the bar before reading it: theme's own auto-hide must not catch
   // this read mid-fade.
@@ -457,57 +501,60 @@ const activateAndMeasure = async (page: Page) => {
   return { controlsBox, mediaBox };
 };
 
-/** Every ready entry in `bench-sources.ts` is 2048x858, 2.3869:1. */
+/**
+ * Every ready entry in `bench-sources.ts` is close to 2.39:1 -- `youtube` and
+ * `vimeo` at 2048x858 (2.3869), `hls` at its own clip's 1920x804 (2.3881) --
+ * cut from two different official releases of the same film rather than
+ * sharing one frame size. The one-decimal tolerance here is what lets this
+ * assertion hold for either without pinning it to whichever position the
+ * page happens to rest on.
+ */
 const expectNotStretched = (mediaBox: { width: number; height: number }) => {
   expect(mediaBox.width / mediaBox.height).toBeCloseTo(2048 / 858, 1);
 };
 
-test(
-  'at 1440px, the themed bar overlays the picture and the docked bar sits below it @real',
-  { tag: '@real' },
-  async ({ page }) => {
-    test.slow();
-    await page.setViewportSize({ width: 1440, height: 900 });
+test('at 1440px, the themed bar overlays the picture and the docked bar sits below it', async ({
+  page
+}) => {
+  test.slow();
+  await page.setViewportSize({ width: 1440, height: 900 });
 
-    await page.goto(landing);
-    await expect(activationButton(page)).toBeVisible();
-    await position(page, 'skin', 'theme').click();
-    const themed = await activateAndMeasure(page);
-    // Over the picture: the bar's own box sits inside the picture's vertical
-    // span rather than under it.
-    expect(themed.controlsBox.y).toBeGreaterThanOrEqual(themed.mediaBox.y - 1);
-    expect(
-      themed.controlsBox.y + themed.controlsBox.height
-    ).toBeLessThanOrEqual(themed.mediaBox.y + themed.mediaBox.height + 1);
-    expectNotStretched(themed.mediaBox);
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
+  await position(page, 'skin', 'theme').click();
+  const themed = await activateAndMeasure(page);
+  // Over the picture: the bar's own box sits inside the picture's vertical
+  // span rather than under it.
+  expect(themed.controlsBox.y).toBeGreaterThanOrEqual(themed.mediaBox.y - 1);
+  expect(themed.controlsBox.y + themed.controlsBox.height).toBeLessThanOrEqual(
+    themed.mediaBox.y + themed.mediaBox.height + 1
+  );
+  expectNotStretched(themed.mediaBox);
 
-    await page.goto(landing);
-    await expect(activationButton(page)).toBeVisible();
-    await position(page, 'skin', 'docked').click();
-    const docked = await activateAndMeasure(page);
-    // Below the picture: the bar starts at or after the picture's own bottom
-    // edge, never inside it -- the assertion this ruling exists to add.
-    expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
-      docked.mediaBox.y + docked.mediaBox.height - 1
-    );
-    expectNotStretched(docked.mediaBox);
-  }
-);
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
+  await position(page, 'skin', 'docked').click();
+  const docked = await activateAndMeasure(page);
+  // Below the picture: the bar starts at or after the picture's own bottom
+  // edge, never inside it -- the assertion this ruling exists to add.
+  expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
+    docked.mediaBox.y + docked.mediaBox.height - 1
+  );
+  expectNotStretched(docked.mediaBox);
+});
 
-test(
-  'below 48rem, the resting docked bar sits below the picture, with no switch to change it @real',
-  { tag: '@real' },
-  async ({ page }) => {
-    test.slow();
-    await page.setViewportSize({ width: 375, height: 800 });
-    await page.goto(landing);
-    await expect(activationButton(page)).toBeVisible();
-    await expect(page.locator('[data-bench-switch="skin"]')).toBeHidden();
+test('below 48rem, the resting docked bar sits below the picture, with no switch to change it', async ({
+  page
+}) => {
+  test.slow();
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
+  await expect(page.locator('[data-bench-switch="skin"]')).toBeHidden();
 
-    const docked = await activateAndMeasure(page);
-    expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
-      docked.mediaBox.y + docked.mediaBox.height - 1
-    );
-    expectNotStretched(docked.mediaBox);
-  }
-);
+  const docked = await activateAndMeasure(page);
+  expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
+    docked.mediaBox.y + docked.mediaBox.height - 1
+  );
+  expectNotStretched(docked.mediaBox);
+});

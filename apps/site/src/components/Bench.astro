@@ -154,10 +154,10 @@ const markLineNumbers: ShikiTransformer['line'] = function (hast, line) {
 
 /**
  * One highlighted string per (source, skin) pair the switches can reach,
- * today `readySources` is `youtube` and `vimeo`, and `SKIN_POSITIONS` is
- * `theme` and `docked`, so this is four strings, computed once here in Node
+ * today `readySources` is `hls`, `youtube` and `vimeo`, and `SKIN_POSITIONS`
+ * is `theme` and `docked`, so this is six strings, computed once here in Node
  * and handed to `BenchIsland` as props. `readySources.map` rather than a
- * hardcoded pair count, so a third `ready: true` source in `bench-sources.ts`
+ * hardcoded pair count, so a fourth `ready: true` source in `bench-sources.ts`
  * grows this table rather than silently leaving a position unhighlighted.
  * `SKIN_POSITIONS` itself stays a fixed pair rather than reading `SkinName`
  * some other way, because Task 5 is what makes `'theme' | 'docked'` the whole
@@ -218,12 +218,19 @@ for (const entry of readySources) {
          * frame: the still, and a link to where the switch's default position
          * plays.
          *
-         * There is no same-origin clip to hand a plain `<video>` any more, and
-         * a hosted provider is an iframe embed rather than a file, so there is
-         * nothing here for a browser with scripting off to attach to on its
-         * own — that embed's own player is itself a script. A link is the
-         * honest fallback: it costs one request, it costs it only on a click,
-         * and it never claims to be running a player it cannot run.
+         * A link rather than a real `<video>`, even though the default
+         * position's own clip is same-origin now: what plays it is
+         * `@playdeck/react`'s HLS provider, which is a script like every
+         * hosted provider's embed is, so there is still nothing here for a
+         * browser with scripting off to attach to on its own. A plain
+         * `<video src={fallbackUrl}>` would not fix that either — an
+         * `.m3u8` address is a manifest, not a file a `<video>` element plays
+         * without either the browser's own native HLS support or hls.js
+         * running, and neither is available to a reader who has turned
+         * scripting off. A link is still the honest fallback for every
+         * position, hosted or same-origin: it costs one request, it costs it
+         * only on a click, and it never claims to be running a player it
+         * cannot run.
          *
          * `<noscript>` is `display: none` while scripts run, so this is never
          * a second thing in the frame — it is the frame's only content exactly
@@ -361,18 +368,21 @@ for (const entry of readySources) {
    * once left a 2.39:1 film letterboxed inside a box shaped for a different
    * ratio — the same class of defect as a poster from one film over a video
    * of another, measured in bars down the sides rather than in a wrong title.
-   * The fallback, `2048 / 858`, is every current entry's own shape rather than
-   * the library's generic 16:9 one, so there is no frame — scripted or not,
-   * before or after a press — in which the box and the picture disagree. It
-   * stops being right the day a film of a different shape joins this file,
-   * which is the same day it would need to become source-derived rather than
-   * written here; nothing today makes that necessary.
+   * The fallback, `1920 / 804`, is the switch's resting position's own
+   * shape -- `hls`'s, since `bench-sources.ts` lists it first -- rather than
+   * the library's generic 16:9 one, so there is no frame at rest, scripted or
+   * not, in which the box and the picture disagree. It is a fallback rather
+   * than the only value read here for exactly the reason it can no longer be
+   * every entry's shape: `youtube` and `vimeo` are their own release's
+   * 2048x858, cut from a different source than `hls`'s clip, which is why
+   * `--bench-aspect-ratio` above -- not this literal -- is what actually
+   * tracks whichever position is selected once a script has run.
    *
    * Always dark. `--stage-*` never moves with `data-theme`, so the picture
    * reads the same in both themes — a cinema is dark regardless of the room. */
   .bench__stage {
     display: grid;
-    aspect-ratio: var(--bench-aspect-ratio, 2048 / 858);
+    aspect-ratio: var(--bench-aspect-ratio, 1920 / 804);
     background-color: var(--stage-sunken);
 
     /* ---- the player's tokens, spoken in this site's roles ----------------
@@ -476,7 +486,7 @@ for (const entry of readySources) {
    * once a provider has measured its media -- right to keep reading, because
    * the library knows the truth for a real `<video>` element where one exists.
    * What changed is the fallback. `16 / 9` was a guess about a film nobody had
-   * measured; `var(--bench-aspect-ratio, 2048 / 858)` is the same property
+   * measured; `var(--bench-aspect-ratio, 1920 / 804)` is the same property
    * `.bench__stage` reads above, so before a provider has measured anything --
    * and for `youtube`, which never does, see `MEDIA_ASPECT_RATIO_PROPERTY` in
    * `viewport-media.tsx` -- this cell is already the film's own shape rather
@@ -487,7 +497,7 @@ for (const entry of readySources) {
   :global(.bench__stage) :global([data-playdeck-part='viewport']) {
     display: grid;
     grid-template-areas: 'stack';
-    aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 2048 / 858));
+    aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 1920 / 804));
     inline-size: 100%;
   }
 
@@ -677,7 +687,7 @@ for (const entry of readySources) {
     content: '';
     grid-area: stack;
     inline-size: 100%;
-    aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 2048 / 858));
+    aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 1920 / 804));
     pointer-events: none;
   }
 

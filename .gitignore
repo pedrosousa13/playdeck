@@ -17,6 +17,17 @@ storybook-static/
 # The assembled deployment, composed from the site build above by
 # scripts/assemble-deploy.mjs and published as the Worker's assets (#519).
 deploy-dist/
+
+# The self-hosted HLS clip scripts/media-sprite-fright.mjs builds: the ladder
+# under apps/site/public/media/, and the two posters cut alongside it. Build
+# output like everything else in apps/site/public/dist ignores, derived from a
+# downloaded film rather than committed -- see that script's own header for
+# the source, the cache and why this is regenerated rather than checked in.
+# The downloaded source film itself is never under the repository at all --
+# it caches under the OS temp dir by default, or wherever
+# PLAYDECK_MEDIA_CACHE_DIR points -- so it needs no entry here.
+apps/site/public/media/
+apps/site/public/sprite-fright-hls-poster-*.webp
 *storybook.log
 playwright-report/
 test-results/

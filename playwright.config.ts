@@ -78,6 +78,11 @@ export default defineConfig({
     {
       command:
         'pnpm exec turbo run build --filter=@playdeck/site... && pnpm --filter @playdeck/site run build:based && node scripts/serve-site.mjs --port 4322 --mount /=apps/site/dist --mount /playdeck/=apps/site/dist-base',
+      // The site's own `build` and `build:based` scripts each run
+      // `scripts/media-sprite-fright.mjs` before `astro build`, so the bench's
+      // `hls` position has a real clip under `apps/site/public/media/` for
+      // both builds above -- idempotent and cached (see that script's own
+      // header), so a warm machine pays this once rather than once per build.
       url: 'http://127.0.0.1:4322/playdeck/reference/',
       gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
       reuseExistingServer: !process.env.CI,
