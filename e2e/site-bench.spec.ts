@@ -49,6 +49,16 @@ const statValue = (page: Page, label: string) =>
     .filter({ has: page.locator('dt', { hasText: new RegExp(`^${label}$`) }) })
     .locator('dd');
 
+// Measured 2026-09-05 on CI run 33949679832 (Playwright's Linux WebKit,
+// hls.js 1.6.16, `preferManagedMediaSource: false`): right after hls.js
+// appends the first H.264 segments to the video `SourceBuffer` it created for
+// the 804p rung, the element itself throws `MEDIA_ERR_DECODE` ("Failed to
+// send data for decoding"), so `readyState` never passes 1 and hls.js's
+// `checkFragmentChanged` tick -- which requires exactly that -- never fires
+// `LEVEL_SWITCHED`. See `.out-of-scope/webkit-hls-decode.md` (#632).
+const skipWithoutWebKitHlsDecode =
+  'Playwright\'s Linux WebKit throws MEDIA_ERR_DECODE ("Failed to send data for decoding") on the element right after hls.js appends the first H.264 segments, so readyState never passes 1 and hls.js never fires LEVEL_SWITCHED -- measured 2026-09-05 on CI run 33949679832 (.out-of-scope/webkit-hls-decode.md, #632).';
+
 /** The library's two authored stylesheets, as a consumer would import them. */
 const THEME_IMPORT = "import '@playdeck/react/theme.css';";
 const DOCKED_IMPORT = "import '@playdeck/react/docked.css';";
@@ -696,9 +706,8 @@ test('below 48rem, the stage letterboxes to 16:9 and the bar fits under 76px', a
 });
 
 /**
- * The live stats readout (`BenchStats.tsx`), on the default HLS position: a
- * real rendition is playing, so "Playing" carries a real height and "Ladder"
- * carries the whole three-rung count `scripts/media-sprite-fright.mjs`
+ * The live stats readout (`BenchStats.tsx`), on the default HLS position:
+ * "Ladder" carries the whole three-rung count `scripts/media-sprite-fright.mjs`
  * encodes. The 20s budget matches `activateAndMeasure`'s own -- this is the
  * same manifest-plus-first-segment request, read from a different part of
  * the page.
@@ -715,11 +724,39 @@ test('below 48rem, the stage letterboxes to 16:9 and the bar fits under 76px', a
  * decoder publishes no ladder to this library. That auto-detection is exactly
  * what the pinned engine bypasses. The ladder this test pins is the one
  * hls.js publishes, the same reason `e2e/hls.spec.ts`'s own `hls-hls-js`
- * fixture forces it for its story.
+ * fixture forces it for its story. Runs on every browser: hls.js parses the
+ * manifest and publishes the ladder before it ever tries to decode a
+ * segment, so this holds regardless of `skipWithoutWebKitHlsDecode` below.
  */
-test('after a press, the live stats readout reports a real rendition and the three-rung ladder', async ({
+test('after a press, the live stats readout reports the three-rung ladder', async ({
   page
 }) => {
+  await page.goto(landing);
+  await activationButton(page).click();
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+  await expect(statValue(page, 'Ladder')).toContainText('3', {
+    timeout: 20_000
+  });
+});
+
+/**
+ * The live stats readout (`BenchStats.tsx`), on the default HLS position: a
+ * real rendition is playing, so "Playing" carries a real height. Same setup
+ * as the ladder test above -- see there for why no `canPlayType` override is
+ * needed and why the engine is pinned to hls.js.
+ *
+ * Skipped on WebKit: unlike the ladder, which hls.js publishes straight from
+ * the manifest, a rendition only shows up here once the engine has decoded
+ * and started playing a segment, and that is exactly the step Playwright's
+ * Linux WebKit cannot get past. See `skipWithoutWebKitHlsDecode`.
+ */
+test('after a press, the live stats readout reports a real rendition', async ({
+  browserName,
+  page
+}) => {
+  test.skip(browserName === 'webkit', skipWithoutWebKitHlsDecode);
+
   await page.goto(landing);
   await activationButton(page).click();
   await expect(controls(page)).toBeVisible({ timeout: 20_000 });
@@ -727,7 +764,6 @@ test('after a press, the live stats readout reports a real rendition and the thr
   await expect(statValue(page, 'Playing')).toContainText(/\d+p/, {
     timeout: 20_000
   });
-  await expect(statValue(page, 'Ladder')).toContainText('3');
 });
 
 /**
