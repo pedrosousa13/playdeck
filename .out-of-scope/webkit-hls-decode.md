@@ -37,8 +37,13 @@ to send data for decoding". From then on `buffered` is empty, `seekable` is empt
 
 hls.js fires `LEVEL_SWITCHED` only from its `checkFragmentChanged` tick, which requires
 `media.readyState > 1` and a buffered range under the playhead; neither ever happens, so
-`PlayerState.quality` stays `null` and "Playing" prints the en dash. Chromium and
-Firefox pass on every run.
+`PlayerState.quality` stays `null` and "Playing" prints the en dash.
+
+This is a deterministic failure, not a rate, which is why one instrumented run was
+enough: WebKit failed this test on every attempt of the four CI runs that carried it
+(33905556602, 33912088294, 33912789627 and 33949679832, three attempts each under the
+configured `retries: 2` — twelve of twelve), while Chromium and Firefox passed it on
+each of those runs.
 
 The conclusion is a property of Playwright's Linux WebKit's media pipeline — its decoder
 rejects the H.264 stream the library correctly appended — not of the library or the
