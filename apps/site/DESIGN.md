@@ -1505,26 +1505,34 @@ does not exist until a script mounts it. Nothing in the repository failed
 while the layout moved out from under the sentence, which is why it is corrected
 here as a false claim rather than quietly edited into agreement.
 
-**What the header does is render one list twice, and exactly one copy is
-interactive at a time.** At `40rem` and above the names sit inline beside the
-trail, in normal flow and in source order. Below it they are drawn only
-inside `SiteNavSheet`'s sheet, reached through a trigger button beside the
-trail. `hidden min-[40rem]:flex` on the inline list and `min-[40rem]:hidden` on
-the trigger are complementary, keyed to the same breakpoint from both
-directions, and the sheet's content is portalled to `document.body` and not
-mounted until it is opened — so at rest there is exactly one set of links inside
-the `Site` landmark at every width, which is what lets `e2e/site-nav.spec.ts`
-count them without knowing the viewport.
+**What the header does is render one list three times, and exactly one copy is
+visible at a time.** At `40rem` and above the names sit inline beside the
+trail, in normal flow and in source order. Below it, a reader with a script
+gets them drawn inside `SiteNavSheet`'s sheet, reached through a trigger
+button beside the trail; a reader without one gets a `<noscript>` list
+rendered by the header itself, from the same `destinations` value, beside
+that trigger (#591). `hidden min-[40rem]:flex` on the inline list and
+`min-[40rem]:hidden` on both the trigger and the noscript list are keyed to
+the same breakpoint from every direction, the sheet's content is portalled to
+`document.body` and not mounted until it is opened, and a browser running
+scripts parses `<noscript>`'s contents as inert text rather than markup — so
+at rest there is exactly one set of links inside the `Site` landmark at every
+width, with or without a script, which is what lets `e2e/site-nav.spec.ts`
+count them without knowing either.
 
-**What that costs is a navigation below `40rem` that needs a script, and it is
-the same trade the rail records below**: a native element that worked closed
-with no JavaScript, replaced by a component that does not. The cost is smaller
-here than there. A reader with no script below that width still has the wordmark at
-the head of the trail on every document page, and `/`'s close still links
-Reference, Providers and Examples, so for those what is lost is this route to
-a section rather than the section. Guides is the exception, and it is worth
-knowing rather than smoothing over: `/` does not link it anywhere, so below
-`40rem` with no script that section has no route from the landing page at all.
+**This paragraph read "What that costs is a navigation below `40rem` that
+needs a script…" and went on to name Guides as the exception with no route from
+`/` at all below that width — and neither clause is true any more.** They were
+true of the header as it stood after the `Sheet` rewrite: the sheet is
+`client:only`, so it renders nothing server-side, and a reader with no script
+below `40rem` had no header navigation at all, Guides included, since `/`'s own
+close only ever linked Reference, Providers and Examples. The maintainer ruled
+on it as #591: the fallback belongs where the loss happens, in the header, as
+a `<noscript>` list drawn from the same `destinations` array rather than a
+second hand-written one, and `/`'s close is unchanged. So the cost this
+section used to record is paid off — no header destination depends on the
+script, Guides included — and it is corrected here as a false claim rather
+than quietly edited into agreement, the same as the paragraph above.
 
 **Which destination is marked is derived from the path, not passed in.** The
 first segment of `Astro.url.pathname` with the deployment prefix taken off, so a
@@ -1822,7 +1830,13 @@ The maintainer was told and took the trade. The mitigation is that no _content_
 depends on the script: the rail's links and the archetypes' printed source are
 rendered by Astro and handed to the island as children, so they are in the
 served HTML either way, and both islands use `forceMount` so a closed disclosure
-hides its content rather than deleting it.
+hides its content rather than deleting it. The header's own destinations
+belong on that list too, by a different mechanism (#591): `SiteNavSheet`'s
+sheet is `client:only`, so it has nothing to hand a child to render, and the
+header instead renders the same `destinations` a second time, as a
+`<noscript>` list beside the sheet — mitigation by a sibling rendering rather
+than a mounted-but-hidden child, since there is no child to mount without a
+script in the first place.
 
 **A shadcn component is source in this repository, not a dependency**, which is
 the model shadcn is built on. `src/components/ui/*.tsx` are ours to edit and
