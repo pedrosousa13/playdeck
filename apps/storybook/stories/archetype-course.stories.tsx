@@ -13,12 +13,6 @@ import {
 } from '../../../examples/archetype-course-platform';
 import { assetUrl } from './asset-url';
 
-declare global {
-  interface Window {
-    playdeckHandle?: Player.PlayerHandle;
-  }
-}
-
 /*
  * The workbench half of the course-platform archetype, mounting
  * `examples/archetype-course-platform.tsx` itself — the site mounts the same

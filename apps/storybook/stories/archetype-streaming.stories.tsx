@@ -13,12 +13,6 @@ import {
 } from '../../../examples/archetype-streaming-service';
 import { assetUrl } from './asset-url';
 
-declare global {
-  interface Window {
-    playdeckHandle?: Player.PlayerHandle;
-  }
-}
-
 /*
  * The workbench half of the streaming-service archetype. The site mounts the
  * same file — there is no second copy of this composition anywhere, and the

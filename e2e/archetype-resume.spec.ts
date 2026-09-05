@@ -87,12 +87,8 @@ const commandRefused = (page: Page): Promise<boolean> =>
 
 for (const { name, story, resumeButtonName } of cases) {
   test(`${name}: resume lands on the requested position or is refused, never silently dropped`, async ({
-    browserName,
     page
   }) => {
-    // WebKit does not launch in this environment.
-    test.skip(browserName === 'webkit', 'WebKit cannot launch here.');
-
     await countProviderLoads(page);
     await recordSeeks(page);
     await page.goto(story);
