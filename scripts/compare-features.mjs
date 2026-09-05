@@ -99,8 +99,10 @@
 // and finding that out one `pnpm compare:features` at a time is the slow way.
 
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
+
+import { lineDiff } from './line-diff.mjs';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -839,23 +841,85 @@ export const verifyAllAnchors = async (axes, columns, roots = {}) => {
   }
 };
 
+/**
+ * The two environment variables that exist for `compare-features.test.mjs`
+ * alone, and are never set by `pnpm compare:features` or by CI. Together they
+ * let a test exercise the one path no unit test of a pure function can reach
+ * -- the CLI's own exit code and printed diff when the checked-in document is
+ * stale -- in milliseconds:
+ *
+ *   PLAYDECK_COMPARE_DOC   read and write this file instead of the
+ *                          checked-in `docs/comparison/features.md`.
+ *   PLAYDECK_COMPARE_STUB  skip loading and evaluating every anchor, and
+ *                          render one fixed axis instead.
+ *
+ * The alternative was a test that evaluates every anchor in
+ * `tests/compare/features.mjs`, which reads several thousand files across six
+ * installed packages and a `packages/*\/dist` the `static` CI job -- the one
+ * that runs `pnpm test:audit-unit` -- never builds. That test would be slow
+ * where it ran at all, and would be measuring the anchors rather than this
+ * file's exit path.
+ * @returns {{ docPath: string; stub: boolean }}
+ */
+const testSeam = () => ({
+  docPath: process.env.PLAYDECK_COMPARE_DOC ?? join(repoRoot, FEATURES_PATH),
+  stub: process.env.PLAYDECK_COMPARE_STUB !== undefined
+});
+
+/**
+ * One axis and one column, with an anchor nothing evaluates. See `testSeam`.
+ * @returns {{ axes: readonly Axis[]; columns: readonly { name: string; module: string }[]; versions: readonly { name: string; version: string }[] }}
+ */
+const stubFeatures = () => ({
+  axes: [
+    {
+      id: 'stub',
+      label: 'A fixed axis, checked by nothing',
+      entries: {
+        Stub: {
+          status: /** @type {const} */ ('yes'),
+          anchor: /** @type {const} */ ({
+            kind: 'export',
+            module: 'stub',
+            name: 'Stub'
+          }),
+          source: 'nothing was read'
+        }
+      }
+    }
+  ],
+  columns: [{ name: 'Stub', module: 'stub' }],
+  versions: [{ name: 'Stub', version: '0.0.0' }]
+});
+
 const main = async () => {
   const check = process.argv.includes('--check');
-  const { axes } = await loadFeatures();
-  await verifyAllAnchors(axes, libraries);
+  const { docPath, stub } = testSeam();
 
-  const versions = await Promise.all(
-    libraries.map(async (library) => {
-      const manifest = /** @type {{ version: string }} */ (
-        await readJson(join(packageRoot(library.module), 'package.json'))
-      );
-      return { name: library.name, version: manifest.version };
-    })
-  );
+  const { axes, columns, versions } = stub
+    ? stubFeatures()
+    : await (async () => {
+        const loaded = await loadFeatures();
+        await verifyAllAnchors(loaded.axes, libraries);
+        return {
+          axes: loaded.axes,
+          columns: libraries,
+          versions: await Promise.all(
+            libraries.map(async (library) => {
+              const manifest = /** @type {{ version: string }} */ (
+                await readJson(
+                  join(packageRoot(library.module), 'package.json')
+                )
+              );
+              return { name: library.name, version: manifest.version };
+            })
+          )
+        };
+      })();
 
-  const footnoteNumber = footnoteNumbers(axes, libraries);
-  const table = renderTable(axes, libraries, footnoteNumber);
-  const footnotes = renderFootnotes(axes, libraries, footnoteNumber);
+  const footnoteNumber = footnoteNumbers(axes, columns);
+  const table = renderTable(axes, columns, footnoteNumber);
+  const footnotes = renderFootnotes(axes, columns, footnoteNumber);
   const after = renderFeaturesDoc({
     date: new Date().toISOString().slice(0, 10),
     versions,
@@ -863,7 +927,7 @@ const main = async () => {
     footnotes
   });
 
-  const path = join(repoRoot, FEATURES_PATH);
+  const path = docPath;
   let before = '';
   try {
     before = await readFile(path, 'utf8');
@@ -877,11 +941,20 @@ const main = async () => {
   }
 
   if (check) {
-    if (maskVolatile(before) === maskVolatile(after)) {
+    const maskedBefore = maskVolatile(before);
+    const maskedAfter = maskVolatile(after);
+    if (maskedBefore === maskedAfter) {
       console.log(
         `${FEATURES_PATH} already matches a fresh check (ignoring the measurement date).`
       );
       return;
+    }
+    // Printed before the error below, not folded into its message, for the
+    // reason `compare-libraries.mjs` gives at the same point: a thrown
+    // Error's message is one line by convention in this repo's gate scripts,
+    // and the diff can be many.
+    for (const line of lineDiff(maskedBefore, maskedAfter)) {
+      console.error(line);
     }
     throw new Error(
       `${FEATURES_PATH} no longer matches a fresh check -- run \`pnpm compare:features\`.`
@@ -892,7 +965,7 @@ const main = async () => {
     console.log(`${FEATURES_PATH} already matches a fresh check.`);
     return;
   }
-  await mkdir(join(repoRoot, 'docs/comparison'), { recursive: true });
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, after);
   console.log(`Wrote ${FEATURES_PATH} from a fresh check.`);
 };

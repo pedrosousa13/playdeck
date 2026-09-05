@@ -88,8 +88,10 @@ import react from '@vitejs/plugin-react';
 import { gzipSync } from 'node:zlib';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
+
+import { lineDiff } from './line-diff.mjs';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -708,64 +710,10 @@ export const maskVolatile = (doc) =>
   );
 
 /**
- * The minimal line-level difference between two documents, as an LCS
- * (longest common subsequence) diff: a line present only in `before` is
- * prefixed `-`, a line present only in `after` is prefixed `+`, and a line
- * identical in both is omitted. LCS rather than a positional
- * (line-by-line-at-the-same-index) comparison because this file's table is
- * padded to the widest cell in each column -- one figure gaining a digit can
- * shift every cell in that column, and a positional diff would then report
- * every row as different instead of naming the one figure that actually
- * changed.
- * @param {string} before
- * @param {string} after
- * @returns {string[]}
+ * Re-exported so this file's own public surface, and the tests that read
+ * it, are unchanged by the move to `line-diff.mjs`.
  */
-export const lineDiff = (before, after) => {
-  const a = before.split('\n');
-  const b = after.split('\n');
-  const n = a.length;
-  const m = b.length;
-
-  /** @type {number[][]} */
-  const lcs = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      lcs[i][j] =
-        a[i] === b[j]
-          ? (lcs[i + 1]?.[j + 1] ?? 0) + 1
-          : Math.max(lcs[i + 1]?.[j] ?? 0, lcs[i]?.[j + 1] ?? 0);
-    }
-  }
-
-  /** @type {string[]} */
-  const out = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) {
-      i += 1;
-      j += 1;
-      continue;
-    }
-    if ((lcs[i + 1]?.[j] ?? 0) >= (lcs[i]?.[j + 1] ?? 0)) {
-      out.push(`- ${a[i]}`);
-      i += 1;
-    } else {
-      out.push(`+ ${b[j]}`);
-      j += 1;
-    }
-  }
-  while (i < n) {
-    out.push(`- ${a[i]}`);
-    i += 1;
-  }
-  while (j < m) {
-    out.push(`+ ${b[j]}`);
-    j += 1;
-  }
-  return out;
-};
+export { lineDiff } from './line-diff.mjs';
 
 /** @param {string} path @returns {Promise<Record<string, unknown>>} */
 const readJson = async (path) =>
@@ -833,11 +781,58 @@ const measure = async () => {
   };
 };
 
+/**
+ * The two environment variables that exist for `compare-libraries.test.mjs`
+ * alone, and are never set by `pnpm compare:libraries` or by CI. Together
+ * they let a test exercise the one path no unit test of a pure function can
+ * reach -- the CLI's own exit code and printed diff when the checked-in
+ * document is stale -- in milliseconds and with no build:
+ *
+ *   PLAYDECK_COMPARE_DOC   read and write this file instead of the
+ *                          checked-in `docs/comparison/results.md`.
+ *   PLAYDECK_COMPARE_STUB  skip the measurement entirely and render a fixed
+ *                          row instead.
+ *
+ * The alternative was a test that runs seven real `vite build`s and seven
+ * `esbuild` builds against a `packages/*\/dist` that the `static` CI job --
+ * the one that runs `pnpm test:audit-unit` -- never builds. That test would
+ * be minutes long where it ran at all, and would be measuring the bundlers
+ * rather than this file's exit path.
+ * @returns {{ docPath: string; stub: boolean }}
+ */
+const testSeam = () => ({
+  docPath: process.env.PLAYDECK_COMPARE_DOC ?? join(repoRoot, RESULTS_PATH),
+  stub: process.env.PLAYDECK_COMPARE_STUB !== undefined
+});
+
+/**
+ * What `measure` would return, with no bundler run at all. See `testSeam`.
+ * @returns {{ date: string; nodeVersion: string; viteVersion: string; esbuildVersion: string; rows: Row[] }}
+ */
+const stubMeasurement = () => ({
+  date: '2000-01-01',
+  nodeVersion: 'v0.0.0',
+  viteVersion: '0.0.0',
+  esbuildVersion: '0.0.0',
+  rows: [
+    {
+      name: 'Stub',
+      version: '0.0.0',
+      composition: 'a fixed row, measured by nothing',
+      bytes: 1024,
+      esbuildBytes: 2048,
+      notCountedChunks: 0,
+      notCountedBytes: 0
+    }
+  ]
+});
+
 const main = async () => {
   const check = process.argv.includes('--check');
-  const data = await measure();
+  const { docPath, stub } = testSeam();
+  const data = stub ? stubMeasurement() : await measure();
   const after = renderResultsDoc(data);
-  const path = join(repoRoot, RESULTS_PATH);
+  const path = docPath;
 
   let before = '';
   try {
@@ -875,7 +870,7 @@ const main = async () => {
     console.log(`${RESULTS_PATH} already matches a fresh run.`);
     return;
   }
-  await mkdir(join(repoRoot, 'docs/comparison'), { recursive: true });
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, after);
   console.log(`Wrote ${RESULTS_PATH} from a fresh measurement.`);
 };
