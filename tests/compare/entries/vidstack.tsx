@@ -1,7 +1,8 @@
-// Vidstack's npm `latest` tag (0.6.15) is a stale pre-rewrite line last
-// published years ago; `docs/comparison/method.md` explains why this measures
-// the `next` tag's 1.x line instead, which is what vidstack.io's current docs
-// teach and what a reader installing the library today gets.
+// Checked 2026-09-05: @vidstack/react's `latest` npm dist-tag resolved to
+// 0.6.15, which has no `DefaultVideoLayout` export; its `next` dist-tag
+// resolved to 1.15.6, which is what vidstack.io's documentation installs and
+// what this fixture measures. `docs/comparison/method.md`'s "Vidstack's
+// version" section has the detail.
 //
 // `DefaultVideoLayout` from the `player/layouts/default` subpath is Vidstack's
 // own answer to "default controls" for a library that is otherwise a set of

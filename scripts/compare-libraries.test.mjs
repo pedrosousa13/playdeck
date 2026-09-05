@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  excludedChunks,
   gzipBytes,
   kb,
-  maskDate,
+  maskVolatile,
+  notCounted,
   pinnedVersion,
   reachableChunks,
   renderResultsDoc,
@@ -102,6 +104,48 @@ test('throws when the graph has no entry chunk', () => {
   assert.throws(() => reachableChunks(graph, () => false), /no entry chunk/);
 });
 
+// ---- excludedChunks: the complement, from the same build --------------------
+
+test('is empty when every chunk is reachable', () => {
+  const graph = [
+    chunk({ fileName: 'entry.js', isEntry: true, imports: ['shared.js'] }),
+    chunk({ fileName: 'shared.js', imports: [] })
+  ];
+  assert.deepEqual(
+    excludedChunks(graph, () => false),
+    []
+  );
+});
+
+test('names exactly the chunks reachableChunks left out', () => {
+  const graph = [
+    chunk({ fileName: 'entry.js', isEntry: true, imports: [] }),
+    chunk({
+      fileName: 'native-provider.js',
+      moduleIds: ['/pkg/provider-native/dist/index.js']
+    }),
+    chunk({
+      fileName: 'youtube-provider.js',
+      moduleIds: ['/pkg/provider-youtube/dist/index.js']
+    }),
+    chunk({
+      fileName: 'vimeo-provider.js',
+      moduleIds: ['/pkg/provider-vimeo/dist/index.js']
+    })
+  ];
+  /** @param {{ moduleIds: readonly string[] }} c */
+  const isRequired = (c) =>
+    c.moduleIds.some((id) => id.includes('/provider-native/'));
+  const excluded = excludedChunks(graph, isRequired);
+  assert.deepEqual(excluded.map((c) => c.fileName).sort(), [
+    'vimeo-provider.js',
+    'youtube-provider.js'
+  ]);
+  // The two sets never overlap and never drop a chunk between them.
+  const reachable = reachableChunks(graph, isRequired);
+  assert.equal(reachable.length + excluded.length, graph.length);
+});
+
 // ---- gzipBytes ---------------------------------------------------------------
 
 test('sums separate gzip sizes rather than gzipping the concatenation', () => {
@@ -152,6 +196,17 @@ test('formats bytes as kilobytes to two decimal places', () => {
   assert.equal(kb(0), '0.00');
 });
 
+// ---- notCounted ------------------------------------------------------------
+
+test('renders a bare 0 when nothing was excluded', () => {
+  assert.equal(notCounted(0, 0), '0');
+});
+
+test('names the chunk count and its gzipped size when something was excluded', () => {
+  assert.equal(notCounted(1, 1024), '1 chunk, 1.00 KB');
+  assert.equal(notCounted(9, 62976), '9 chunks, 61.50 KB');
+});
+
 // ---- renderTable ---------------------------------------------------------
 
 test('pads every cell in a column to the widest, the way Prettier does', () => {
@@ -160,21 +215,25 @@ test('pads every cell in a column to the widest, the way Prettier does', () => {
       name: 'Playdeck',
       version: '1.0.0',
       composition: 'core + native',
-      bytes: 20430
+      bytes: 20430,
+      notCountedChunks: 6,
+      notCountedBytes: 62976
     },
     {
       name: 'Video.js',
       version: '8.24.0',
       composition: 'videojs()',
-      bytes: 204390
+      bytes: 204390,
+      notCountedChunks: 0,
+      notCountedBytes: 0
     }
   ]).split('\n');
 
   assert.deepEqual(lines, [
-    '| Library  | Version | Composition measured | Gzipped   |',
-    '| -------- | ------- | -------------------- | --------- |',
-    '| Playdeck | 1.0.0   | core + native        | 19.95 KB  |',
-    '| Video.js | 8.24.0  | videojs()            | 199.60 KB |'
+    '| Library  | Version | Composition measured | Gzipped   | Not counted        |',
+    '| -------- | ------- | -------------------- | --------- | ------------------ |',
+    '| Playdeck | 1.0.0   | core + native        | 19.95 KB  | 6 chunks, 61.50 KB |',
+    '| Video.js | 8.24.0  | videojs()            | 199.60 KB | 0                  |'
   ]);
 });
 
@@ -190,7 +249,9 @@ test('rendering the same input twice produces byte-identical output', () => {
         name: 'Playdeck',
         version: '1.0.0',
         composition: 'core + native',
-        bytes: 20430
+        bytes: 20430,
+        notCountedChunks: 6,
+        notCountedBytes: 62976
       }
     ]
   };
@@ -220,7 +281,7 @@ test('changing only the date changes the rendered document', () => {
   );
 });
 
-// ---- maskDate: what `--check` is allowed to ignore --------------------------
+// ---- maskVolatile: what `--check` is allowed to ignore -----------------------
 
 test('masks the date so two renders taken on different days compare equal', () => {
   const base = {
@@ -232,14 +293,40 @@ test('masks the date so two renders taken on different days compare equal', () =
         name: 'Playdeck',
         version: '1.0.0',
         composition: 'core + native',
-        bytes: 20430
+        bytes: 20430,
+        notCountedChunks: 6,
+        notCountedBytes: 62976
       }
     ]
   };
   const older = renderResultsDoc(base);
   const later = renderResultsDoc({ ...base, date: '2026-09-12' });
   assert.notEqual(older, later);
-  assert.equal(maskDate(older), maskDate(later));
+  assert.equal(maskVolatile(older), maskVolatile(later));
+});
+
+test('masks the Node version so two renders on different Node installs compare equal', () => {
+  // The case #543's follow-up review named directly: CI runs Node 22 while a
+  // local checkout may not, and neither is a fact about the figures below.
+  const base = {
+    date: '2026-09-05',
+    nodeVersion: 'v22.14.0',
+    viteVersion: '8.1.5',
+    rows: [
+      {
+        name: 'Playdeck',
+        version: '1.0.0',
+        composition: 'core + native',
+        bytes: 20430,
+        notCountedChunks: 6,
+        notCountedBytes: 62976
+      }
+    ]
+  };
+  const ci = renderResultsDoc(base);
+  const local = renderResultsDoc({ ...base, nodeVersion: 'v24.18.1' });
+  assert.notEqual(ci, local);
+  assert.equal(maskVolatile(ci), maskVolatile(local));
 });
 
 test('a checked-in document with an older date but identical content matches a fresh render once masked', () => {
@@ -252,13 +339,15 @@ test('a checked-in document with an older date but identical content matches a f
         name: 'Video.js',
         version: '8.24.0',
         composition: 'videojs()',
-        bytes: 204390
+        bytes: 204390,
+        notCountedChunks: 0,
+        notCountedBytes: 0
       }
     ]
   };
   const checkedIn = renderResultsDoc(data);
   const freshRun = renderResultsDoc({ ...data, date: '2026-09-05' });
-  assert.equal(maskDate(checkedIn), maskDate(freshRun));
+  assert.equal(maskVolatile(checkedIn), maskVolatile(freshRun));
 });
 
 test('a changed byte figure still fails the masked comparison', () => {
@@ -271,7 +360,9 @@ test('a changed byte figure still fails the masked comparison', () => {
         name: 'Video.js',
         version: '8.24.0',
         composition: 'videojs()',
-        bytes: 204390
+        bytes: 204390,
+        notCountedChunks: 0,
+        notCountedBytes: 0
       }
     ]
   });
@@ -284,21 +375,57 @@ test('a changed byte figure still fails the masked comparison', () => {
         name: 'Video.js',
         version: '8.24.0',
         composition: 'videojs()',
-        bytes: 210000
+        bytes: 210000,
+        notCountedChunks: 0,
+        notCountedBytes: 0
       }
     ]
   });
-  assert.notEqual(maskDate(checkedIn), maskDate(freshRun));
+  assert.notEqual(maskVolatile(checkedIn), maskVolatile(freshRun));
 });
 
-test('only the date line is touched, so a version or figure change elsewhere still shows up', () => {
+test('a changed "Not counted" figure still fails the masked comparison', () => {
+  const checkedIn = renderResultsDoc({
+    date: '2026-01-01',
+    nodeVersion: 'v24.18.1',
+    viteVersion: '8.1.5',
+    rows: [
+      {
+        name: 'Vidstack',
+        version: '1.15.6',
+        composition: 'MediaPlayer + MediaProvider + DefaultVideoLayout',
+        bytes: 92200,
+        notCountedChunks: 9,
+        notCountedBytes: 62976
+      }
+    ]
+  });
+  const freshRun = renderResultsDoc({
+    date: '2026-09-05',
+    nodeVersion: 'v24.18.1',
+    viteVersion: '8.1.5',
+    rows: [
+      {
+        name: 'Vidstack',
+        version: '1.15.6',
+        composition: 'MediaPlayer + MediaProvider + DefaultVideoLayout',
+        bytes: 92200,
+        notCountedChunks: 10,
+        notCountedBytes: 70000
+      }
+    ]
+  });
+  assert.notEqual(maskVolatile(checkedIn), maskVolatile(freshRun));
+});
+
+test('only the date and Node version are touched, so the Vite version still shows up', () => {
   const doc = renderResultsDoc({
     date: '2026-09-05',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
     rows: []
   });
-  assert.equal(maskDate(doc).includes('2026-09-05'), false);
-  assert.equal(maskDate(doc).includes('v24.18.1'), true);
-  assert.equal(maskDate(doc).includes('8.1.5'), true);
+  assert.equal(maskVolatile(doc).includes('2026-09-05'), false);
+  assert.equal(maskVolatile(doc).includes('v24.18.1'), false);
+  assert.equal(maskVolatile(doc).includes('8.1.5'), true);
 });

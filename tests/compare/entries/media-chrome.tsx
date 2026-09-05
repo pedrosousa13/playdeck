@@ -6,10 +6,11 @@
 // `<video>` wired in through the `slot="media"` convention.
 //
 // `media-chrome/react` re-exports a React wrapper for every custom element in
-// the library from one module (`import * as Modules from '../index.js'`), so
-// importing any one of these pulls in the whole registry rather than only the
-// controls this file names -- `docs/comparison/method.md` records that as a
-// measured property of the library, not an artifact of this fixture.
+// the library from one module (`import * as Modules from '../index.js'`,
+// read from media-chrome 4.19.2's own `dist/react/index.js`), so importing
+// any one of these pulls in the whole registry rather than only the controls
+// this file names -- `docs/comparison/method.md` records that as a measured
+// property of the library at that version, not an artifact of this fixture.
 import { createRoot } from 'react-dom/client';
 import {
   MediaController,

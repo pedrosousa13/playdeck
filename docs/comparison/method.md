@@ -73,10 +73,10 @@ mechanically derivable in a way this harness can keep honest across runs.
 Where a library keeps its own provider list as data this repository could in
 principle read — react-player's `players.js` is a literal array of
 `{ key, canPlay, player }` entries — the other four do not: Media Chrome ships
-no provider list at all (it is deliberately playback-technology-agnostic and
-expects a consumer to attach one), video.js's reach is whatever
+no provider or engine module at all, and its controller wraps whatever media
+element the consumer slots in; video.js's reach is whatever
 `videojs-http-streaming` and its own tech registry decide to claim for a MIME
-type at runtime, and Vidstack's is scattered across per-provider loader
+type at runtime; and Vidstack's is scattered across per-provider loader
 classes with no single enumerable list. A parser that reached into one
 library's internal, unstable module shape to answer this would be bespoke,
 unverified by any test that would catch it silently going stale, and would
@@ -105,9 +105,10 @@ measured.
 - **Vidstack** — a React-first, composable player with a maintained default
   skin, structurally the closest thing to a "Playdeck plus a themed layout"
   among the candidates.
-- **Media Chrome** — a set of framework-agnostic custom elements with a React
-  wrapper, and the candidate closest to Playdeck's own headless, compose-it-
-  yourself design.
+- **Media Chrome** — a set of custom elements with a React wrapper. It ships
+  no provider or engine module; its controller wraps whatever media element
+  the consumer slots into it, which is the candidate closest to Playdeck's
+  own compose-it-yourself design.
 - **Video.js** — the most established general-purpose web video player,
   included specifically because it has no official React wrapper, which is
   itself a data point: what a React reader gets by default from the biggest
@@ -142,15 +143,13 @@ Brief was not needed for any of the four.
 
 ### Vidstack's version
 
-`@vidstack/react`'s `latest` npm tag is `0.6.15`, last published years ago and
-built on a different, now-superseded API (`MediaOutlet` rather than
-`MediaProvider`, no `DefaultVideoLayout` export at all). The actively
-maintained line is published under the `next` dist-tag, currently `1.15.6`,
-and is what [vidstack.io](https://vidstack.io)'s current documentation
-teaches. This measures `1.15.6` — the version a reader following Vidstack's
-own docs today would actually install — and records the tag mismatch here so
-nobody reads `results.md`'s version column against `npm view @vidstack/react
-version` and concludes the pin is stale.
+Checked 2026-09-05: `@vidstack/react`'s `latest` npm dist-tag resolved to
+`0.6.15`, which has no `DefaultVideoLayout` export — the import this fixture
+needs. Its `next` dist-tag resolved to `1.15.6`, which is what
+[vidstack.io](https://vidstack.io)'s documentation installs. This measures
+`1.15.6` for that reason, and records the tag mismatch here so nobody reads
+`results.md`'s version column against `npm view @vidstack/react version` and
+concludes the pin is stale.
 
 ## Equivalent composition per library
 
@@ -191,14 +190,22 @@ custom UI at all, while Playdeck's row draws one button.
 Vidstack's own documented answer to "give me default controls", and the
 closest thing among the five to a full, off-the-shelf skin: a play button,
 seek bar, volume, fullscreen, and settings/captions/chapters menus, all drawn
-by the library. Measured at 90.04 KB gzipped. The build's own module graph
-(inspected via each chunk's `moduleIds` and the identifiable strings in its
-code) code-splits nine further chunks away from that figure: a captions
-parser pulled in by the `media-captions` dependency (gated on a text track
-this fixture never adds), an AirPlay button, three Google Cast–related
-chunks, and a chapters/quality/keyboard-shortcuts overlay — none of which a
-plain MP4 with no alternate audio, quality, or chapter tracks and no casting
-device present can ever cause to load, so none are counted.
+by the library. Measured at 90.04 KB gzipped, with `results.md`'s "Not
+counted" column naming 15 further chunks (22.27 KB gzipped) the same build
+produced. That count and that size are what the harness measures; what
+follows is a reading of those 15 chunks' `moduleIds` and code, taken on the
+measurement date (2026-09-05) and not re-verified by
+`pnpm compare:libraries:check` — only the count and the total size are. Eight
+are the caption/text-track pipeline the `media-captions` dependency brings in
+(VTT/SRT/SSA parsing and an error dialog), gated on a text track this fixture
+never adds; three are Google Cast support; one is an AirPlay button; one is
+thumbnail-preview support, gated on a source that publishes preview
+thumbnails, which this fixture's plain MP4 does not; and one is the
+chapters/quality/keyboard-shortcuts overlay. The remaining chunk this reading
+did not identify. None of the fifteen is reachable without a text track, a
+casting device, AirPlay, alternate quality or chapter tracks, or thumbnail
+previews — none of which this fixture's fixed MP4 provides — so none are
+counted in the 90.04 KB figure.
 
 **Media Chrome** (`entries/media-chrome.tsx`) has no single "default"
 composition to reuse — like Playdeck, it publishes a set of parts rather than

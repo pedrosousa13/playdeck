@@ -11,14 +11,17 @@ Measured 2026-09-05 on Node v24.18.1, Vite 8.1.5, from
 marked external for every library alike and excluded from every figure below.
 "Gzipped" is the sum of each reachable chunk's own gzip size, not one gzip of
 their concatenation -- see `scripts/compare-libraries.mjs`'s header for why.
+"Not counted" is the chunks that same build produced but this fixture's fixed
+inputs cannot reach, gzipped the same way -- see
+`docs/comparison/method.md` for what each library's excluded chunks are.
 
-| Library      | Version | Composition measured                              | Gzipped   |
-| ------------ | ------- | ------------------------------------------------- | --------- |
-| Playdeck     | 1.0.0   | core + primitives + native provider               | 19.94 KB  |
-| react-player | 3.4.0   | default export, `controls`, html5 fallback player | 2.97 KB   |
-| Vidstack     | 1.15.6  | MediaPlayer + MediaProvider + DefaultVideoLayout  | 90.04 KB  |
-| Media Chrome | 4.19.2  | MediaController + a 7-button control bar          | 41.83 KB  |
-| Video.js     | 8.24.0  | videojs() with `controls: true`, hand-wrapped     | 199.64 KB |
+| Library      | Version | Composition measured                              | Gzipped   | Not counted          |
+| ------------ | ------- | ------------------------------------------------- | --------- | -------------------- |
+| Playdeck     | 1.0.0   | core + primitives + native provider               | 19.94 KB  | 6 chunks, 180.59 KB  |
+| react-player | 3.4.0   | default export, `controls`, html5 fallback player | 2.97 KB   | 14 chunks, 556.09 KB |
+| Vidstack     | 1.15.6  | MediaPlayer + MediaProvider + DefaultVideoLayout  | 90.04 KB  | 15 chunks, 22.27 KB  |
+| Media Chrome | 4.19.2  | MediaController + a 7-button control bar          | 41.83 KB  | 0                    |
+| Video.js     | 8.24.0  | videojs() with `controls: true`, hand-wrapped     | 199.64 KB | 0                    |
 
 Regenerate with `pnpm compare:libraries`. The date above records when this
 file was last regenerated; `pnpm compare:libraries:check` does not police

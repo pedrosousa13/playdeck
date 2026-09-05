@@ -5,10 +5,11 @@
 // control bar drawn by `dist/video.es.js` itself, with no separate package to
 // opt into.
 //
-// That same import statically pulls in videojs-http-streaming, mux.js,
-// mpd-parser and m3u8-parser -- video.js's HLS/DASH engine -- regardless of
-// whether this page ever plays anything but the MP4 URL below.
-// `docs/comparison/method.md` records that as measured, not asserted.
+// That same import -- read from video.js 8.24.0's own `dist/video.es.js` --
+// statically pulls in videojs-http-streaming, mux.js, mpd-parser and
+// m3u8-parser, video.js's HLS/DASH engine, regardless of whether this page
+// ever plays anything but the MP4 URL below. `docs/comparison/method.md`
+// records that as measured at that version, not asserted.
 import { createRoot } from 'react-dom/client';
 import { useEffect, useRef } from 'react';
 import videojs from 'video.js';

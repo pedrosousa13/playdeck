@@ -2,6 +2,7 @@
   "name": "@playdeck/compare-libraries",
   "version": "0.0.0",
   "private": true,
+  "description": "Private fixture pinning React video libraries for scripts/compare-libraries.mjs's byte comparison. Never published.",
   "type": "module",
   "devDependencies": {
     "@playdeck/react": "workspace:*",

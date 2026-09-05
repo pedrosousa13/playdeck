@@ -195,6 +195,25 @@ export const reachableChunks = (chunks, isRequired) => {
 };
 
 /**
+ * The complement of `reachableChunks`: every chunk the same build produced
+ * that this fixture's fixed inputs cannot reach. This is what the results
+ * table's "Not counted" column measures, from the same build the "Gzipped"
+ * column comes from rather than a second one -- see
+ * `docs/comparison/method.md` for what each library's excluded chunks
+ * actually are, read from their `moduleIds` and code on the measurement
+ * date.
+ * @param {readonly Chunk[]} chunks
+ * @param {(chunk: Chunk) => boolean} isRequired
+ * @returns {Chunk[]}
+ */
+export const excludedChunks = (chunks, isRequired) => {
+  const kept = new Set(
+    reachableChunks(chunks, isRequired).map((chunk) => chunk.fileName)
+  );
+  return chunks.filter((chunk) => !kept.has(chunk.fileName));
+};
+
+/**
  * The sum of each chunk's own gzip size -- see the file header for why this
  * is a sum of separate gzips and not one gzip of the concatenation.
  * @param {readonly Chunk[]} chunks
@@ -270,7 +289,30 @@ export const pinnedVersion = (packageName, declared, installed) => {
 export const kb = (bytes) => (bytes / 1024).toFixed(2);
 
 /**
- * @typedef {{ name: string; version: string; composition: string; bytes: number }} Row
+ * The "Not counted" cell for one row: how many chunks the build produced
+ * that `reachableChunks` did not count, and their combined gzip size. `"0"`
+ * on its own, not `"0 chunks, 0.00 KB"`, for the four libraries this fixture
+ * excludes nothing from -- a bare zero is the whole answer there, and
+ * spelling out a size for a set of zero chunks would read as a figure that
+ * was measured rather than a count that was.
+ * @param {number} count
+ * @param {number} bytes
+ * @returns {string}
+ */
+export const notCounted = (count, bytes) =>
+  count === 0
+    ? '0'
+    : `${count} chunk${count === 1 ? '' : 's'}, ${kb(bytes)} KB`;
+
+/**
+ * @typedef {{
+ *   name: string;
+ *   version: string;
+ *   composition: string;
+ *   bytes: number;
+ *   notCountedChunks: number;
+ *   notCountedBytes: number;
+ * }} Row
  */
 
 /**
@@ -282,13 +324,29 @@ export const kb = (bytes) => (bytes / 1024).toFixed(2);
  * @returns {string}
  */
 export const renderTable = (rows) => {
-  const header = ['Library', 'Version', 'Composition measured', 'Gzipped'];
-  const body = rows.map(({ name, version, composition, bytes }) => [
-    name,
-    version,
-    composition,
-    `${kb(bytes)} KB`
-  ]);
+  const header = [
+    'Library',
+    'Version',
+    'Composition measured',
+    'Gzipped',
+    'Not counted'
+  ];
+  const body = rows.map(
+    ({
+      name,
+      version,
+      composition,
+      bytes,
+      notCountedChunks,
+      notCountedBytes
+    }) => [
+      name,
+      version,
+      composition,
+      `${kb(bytes)} KB`,
+      notCounted(notCountedChunks, notCountedBytes)
+    ]
+  );
   const widths = header.map((_, column) =>
     Math.max(
       header[column]?.length ?? 0,
@@ -307,13 +365,16 @@ export const renderTable = (rows) => {
 };
 
 /**
- * The whole generated file. A date the caller passes in rather than one this
- * function reads for itself, so the render stays pure and testable: the same
- * inputs always produce the same document, which is what the determinism
- * check relies on. `--check` additionally tolerates the date line differing
- * on its own -- see `maskDate` and this script's `main` for why: a gate that
- * fails on the calendar alone is a gate nobody can keep green, and it is not
- * what "re-running on unchanged inputs produces the same numbers" asks for.
+ * The whole generated file. A date and a Node version the caller passes in
+ * rather than ones this function reads for itself, so the render stays pure
+ * and testable: the same inputs always produce the same document, which is
+ * what the determinism check relies on. `--check` additionally tolerates
+ * both of those two tokens differing on their own -- see `maskVolatile` and
+ * this script's `main` for why: a gate that fails on the calendar, or on
+ * which Node this happens to run under, is a gate nobody can keep green, and
+ * neither is what "re-running on unchanged inputs produces the same numbers"
+ * asks for. The Vite version is not masked: it is a pinned input read from
+ * the lockfile, not a fact about the machine running the check.
  * @param {{ date: string; nodeVersion: string; viteVersion: string; rows: readonly Row[] }} data
  * @returns {string}
  */
@@ -331,6 +392,9 @@ Measured ${date} on Node ${nodeVersion}, Vite ${viteVersion}, from
 marked external for every library alike and excluded from every figure below.
 "Gzipped" is the sum of each reachable chunk's own gzip size, not one gzip of
 their concatenation -- see \`scripts/compare-libraries.mjs\`'s header for why.
+"Not counted" is the chunks that same build produced but this fixture's fixed
+inputs cannot reach, gzipped the same way -- see
+\`docs/comparison/method.md\` for what each library's excluded chunks are.
 
 ${renderTable(rows)}
 
@@ -341,17 +405,25 @@ still match a fresh run. Re-run the command above to bring the date current.
 `;
 
 /**
- * A rendered document with its "Measured <date> ..." line's date replaced by
- * a fixed placeholder, so two renders taken on different days compare equal
- * wherever every other line already does. Only \`--check\` reaches for this:
- * the write path in \`main\` below still stamps the real date whenever it
- * writes, and this is what keeps \`--check\` from failing on the one line
- * that is expected to move between runs on otherwise unchanged inputs.
+ * A rendered document with its "Measured <date> on Node <version>" line's
+ * date and Node version both replaced by fixed placeholders, so two renders
+ * taken on different days, or produced by different Node installs, compare
+ * equal wherever every other line already does. Only \`--check\` reaches for
+ * this: the write path in \`main\` below still stamps the real date and the
+ * real \`process.version\` whenever it writes, and this is what keeps
+ * \`--check\` from failing on the two tokens that are expected to move
+ * between runs on otherwise unchanged inputs -- CI runs a different Node
+ * minor than a local checkout does, and both must read as the same document.
+ * The Vite version stays comparable: it is resolved from the lockfile this
+ * repository pins, not from the machine the check happens to run on.
  * @param {string} doc
  * @returns {string}
  */
-export const maskDate = (doc) =>
-  doc.replace(/Measured \d{4}-\d{2}-\d{2} on Node/, 'Measured <date> on Node');
+export const maskVolatile = (doc) =>
+  doc.replace(
+    /Measured \d{4}-\d{2}-\d{2} on Node v\d+\.\d+\.\d+,/,
+    'Measured <date> on Node <node-version>,'
+  );
 
 /** @param {string} path @returns {Promise<Record<string, unknown>>} */
 const readJson = async (path) =>
@@ -373,6 +445,7 @@ const measure = async () => {
   for (const library of libraries) {
     const chunks = await bundleEntry(library.entry);
     const bytes = gzipBytes(reachableChunks(chunks, library.requiredChunk));
+    const excluded = excludedChunks(chunks, library.requiredChunk);
     const installed = /** @type {{ version: string }} */ (
       await readJson(
         `tests/compare/node_modules/${library.package}/package.json`
@@ -387,7 +460,9 @@ const measure = async () => {
       name: library.name,
       version,
       composition: library.composition,
-      bytes
+      bytes,
+      notCountedChunks: excluded.length,
+      notCountedBytes: gzipBytes(excluded)
     });
   }
 
@@ -418,7 +493,7 @@ const main = async () => {
   }
 
   if (check) {
-    if (maskDate(before) === maskDate(after)) {
+    if (maskVolatile(before) === maskVolatile(after)) {
       console.log(
         `${RESULTS_PATH} already matches a fresh run (ignoring the measurement date).`
       );

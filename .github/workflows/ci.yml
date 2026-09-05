@@ -807,6 +807,12 @@ jobs:
       # The third-party figures are read from `node_modules`, which every job
       # installs.
       - run: pnpm docs:bytes:check
+      # Needs the same built `dist/` as the step above, for the same reason:
+      # the Playdeck figure is the gzipped size of a real bundle, not a typed
+      # number. The third-party libraries it measures are pinned exact
+      # versions in tests/compare/package.json and resolved by the lockfile,
+      # so this step reads no version this job has not already installed.
+      - run: pnpm compare:libraries:check
 
   # Every job in this workflow runs on Linux, deliberately. A macOS job
   # (`hls-native-webkit`) used to run the WebKit HLS suite here, because
