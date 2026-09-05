@@ -274,10 +274,32 @@ the match is case-insensitive.
 | `.webm`   | `{ type: 'video', sources: [{ …, 'video/webm' }] }` |
 | `.m3u8`   | `{ type: 'hls', src }`                              |
 
-Neither takes a `providerOptions` key: everything either provider reads is one
-of `Root`'s own props (`controls`, `loop`, `startTime`, `endTime`). An HLS
-engine is chosen per browser, and is pinned through an explicit source object
-rather than through options — see below.
+Native takes no `providerOptions` key of its own: everything it reads is one of
+`Root`'s own props (`controls`, `loop`, `startTime`, `endTime`).
+`providerOptions.hls` accepts `build`.
+
+<!-- example:ignore illustrates the shape rather than a mount; provider-hls-loader below is a fixture that type-checks a call this shape maps onto -->
+
+```ts
+providerOptions={{ hls: { build: 'light' } }}
+```
+
+`build` is `'full'` (the default) or `'light'`, and names which hls.js build
+`Player.Root` loads — `'light'` is about 53 KB gzip smaller and drops
+subtitles, alternate audio, CMCD, EME and Variable Substitution, covered in
+[`@playdeck/provider-hls`](../packages/provider-hls)'s README. It is a build
+_name_ rather than the loader function `createHlsProvider`'s own `loadHls`
+option takes: every value a provider bag declares is compared with
+`Object.is` (`providerBagEqual`, `packages/react/src/use-activation.ts`), so a
+function passed inline — a new one on every render — would tear the hls.js
+engine down and rebuild it each time rather than ever reaching a stable
+identity. Pinning an hls.js version or serving it from somewhere other than
+the bundled dependency still means reaching for `loadHls`, which means
+mounting `createHlsProvider` directly rather than through `Player.Root` — see
+its README's "Supplying your own hls.js".
+
+An HLS engine is chosen per browser, and is pinned through an explicit source
+object rather than through options — see below.
 
 Any other URL — a host no provider claims and a path with none of those three
 extensions — is refused. There is no fall-back provider that tries it anyway, so

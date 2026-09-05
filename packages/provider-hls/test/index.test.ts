@@ -205,6 +205,28 @@ test('honors a forced hls.js engine even where native HLS exists', async () => {
   expect(currentFakeHls().attachedMedia).toBe(media);
 });
 
+// `build` (#579) is the primitive `PlayerProviderOptions.hls` carries through
+// `Player.Root`; `loadHls` stays the direct-adapter option it always was. An
+// explicit `loadHls` wins over `build` rather than the two being combined, so
+// a caller that supplies both gets what it asked the loader to do, not a
+// silent second opinion from the build name beside it.
+test('an explicit loadHls wins over a build name given alongside it', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'canPlayType').mockReturnValue('maybe');
+  vi.stubGlobal('MediaSource', { isTypeSupported: () => true });
+  const loader = fakeHlsLoader();
+  const provider = createHlsProvider(
+    media,
+    { ...source, engine: 'hls.js' },
+    { build: 'light', loadHls: loader.loadHls }
+  );
+
+  await provider.attach();
+  await provider.load();
+
+  expect(loader.calls()).toBe(1);
+});
+
 test('reports quality selection honestly per engine', async () => {
   const nativeHarness = createHarness(stubNativeHlsSupport);
   await nativeHarness.provider.attach();

@@ -14,8 +14,10 @@ import {
   type NativePlaybackOptions
 } from '@playdeck/provider-native';
 import {
+  hlsBuildLoaders,
   readMediaRanges,
   unsupportedSelection,
+  type HlsBuild,
   type HlsEngineSelection,
   type HlsModuleLoader
 } from './adapter-values.js';
@@ -26,6 +28,7 @@ import { createHlsQualityLevels } from './quality-levels.js';
 import { createHlsTextTracks } from './text-tracks.js';
 
 export type {
+  HlsBuild,
   HlsConfigLike,
   HlsConstructorLike,
   HlsEngineSelection,
@@ -43,6 +46,20 @@ export type HlsEnvironment = {
 
 export type HlsProviderOptions = NativePlaybackOptions & {
   readonly loadHls?: HlsModuleLoader;
+  /**
+   * Which hls.js build to load, `'full'` (the default) or `'light'`, as a
+   * name rather than the loader function itself. This is the option
+   * `PlayerProviderOptions.hls` (`@playdeck/react`) exposes through
+   * `Player.Root`: `loadHls` cannot live in a provider option bag, whose
+   * values `providerBagEqual` compares with `Object.is`, so a function
+   * written inline would look different every render and tear the engine
+   * down. `build` is a primitive, so it compares safely and is the route
+   * `Player.Root` takes to `hls.js/light` -- see its README for what that
+   * build drops and saves.
+   *
+   * Ignored when `loadHls` is also given: an explicit loader always wins.
+   */
+  readonly build?: HlsBuild;
 };
 
 // The liveness derivation lives in `@playdeck/core`, so every adapter shares one
@@ -113,11 +130,6 @@ export const selectHlsEngine = (
   );
 };
 
-// hls.js publishes stricter generic event signatures than the minimal
-// structural surface this adapter consumes, so the dynamic module boundary
-// narrows through a cast instead of importing hls.js types eagerly.
-const defaultLoadHls: HlsModuleLoader = () => import('hls.js');
-
 // On the hls.js engine the native adapter stays attached for media-element
 // state, but hls.js is the sole caption owner: `Player.Media` cannot know the
 // engine at render time, so it renders sidecar `<track>` children for `hls`
@@ -149,7 +161,8 @@ export const createHlsProvider = (
   source: HlsSource,
   options: HlsProviderOptions = {}
 ): ProviderAdapter => {
-  const { loadHls = defaultLoadHls, ...nativeOptions } = options;
+  const { loadHls: explicitLoadHls, build, ...nativeOptions } = options;
+  const loadHls = explicitLoadHls ?? hlsBuildLoaders[build ?? 'full'];
   const selection = selectHlsEngine(
     source.engine ?? 'auto',
     detectHlsEnvironment(media)

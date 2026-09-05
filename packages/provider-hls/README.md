@@ -83,9 +83,9 @@ export const provider = createHlsProvider(videoElement, {
 | `deriveLiveState`      | The shared `isLive` / `atLiveEdge` derivation, re-exported from `@playdeck/core`. |
 
 Types: `HlsProviderOptions`, `HlsEnvironment`, `HlsEngineSelection`,
-`LiveDerivationInput`, `HlsModuleLoader`, and the structural shapes this adapter
-consumes from hls.js — `HlsConstructorLike`, `HlsInstanceLike`, `HlsConfigLike`,
-`HlsLevelLike`, `HlsSubtitleTrackLike`, `HlsParsedCueLike`.
+`LiveDerivationInput`, `HlsModuleLoader`, `HlsBuild`, and the structural shapes
+this adapter consumes from hls.js — `HlsConstructorLike`, `HlsInstanceLike`,
+`HlsConfigLike`, `HlsLevelLike`, `HlsSubtitleTrackLike`, `HlsParsedCueLike`.
 
 ## Supplying your own hls.js
 
@@ -126,6 +126,24 @@ createHlsProvider(videoElement, source, {
   loadHls: () => import('hls.js/light')
 });
 ```
+
+`build: 'light'` does the same thing as a name rather than a loader (#579),
+and it is the form `@playdeck/react` exposes through `Player.Root`:
+
+<!-- example:ignore the same call as provider-hls-loader, build in place of loadHls, alongside the Player.Root shape it stands in for -->
+
+```ts
+createHlsProvider(videoElement, source, { build: 'light' });
+
+// Reached through `Player.Root` the same way:
+// <Player.Root providerOptions={{ hls: { build: 'light' } }} source={source}>
+```
+
+`loadHls` stays the only way to pin an hls.js version or serve it from
+somewhere other than this package's own bundled dependency, and reaching it
+means mounting `createHlsProvider` directly the way this section's own example
+does: a provider option bag `Player.Root` fans into compares its values with
+`Object.is`, which a function passed inline can never do meaningfully twice.
 
 Subtitles are the half that reaches this adapter. The light build still parses a
 manifest's subtitle renditions and reports them once, and then never emits

@@ -147,7 +147,12 @@ const nativeOptionsEqual = (
 // is a new object on every render, and a reference compare would tear the embed
 // down and rebuild it each time. Own keys rather than each declared field, so
 // this stays correct as a provider's options grow, and shallow because every
-// option a provider bag declares is a primitive.
+// option a provider bag declares is meant to be a primitive -- `youtube`'s
+// pre-existing `loadIframeApi` is the one bag that is not, a gap
+// `PrimitiveOptionBag` (`provider-loaders.ts`) found rather than closed. Every
+// other bag is guarded by it: a field that stopped being a primitive fails to
+// compile there (#579), which is what let `hls` add a `build` option without
+// this comparison needing to change.
 //
 // Every key either side declares, compared as a value: a key set to `undefined`
 // therefore equals that key being absent, and an absent bag equals an empty one.
@@ -181,7 +186,8 @@ const providerOptionsEqual = (
 ): boolean =>
   providerBagEqual(left?.wistia, right?.wistia) &&
   providerBagEqual(left?.youtube, right?.youtube) &&
-  providerBagEqual(left?.vimeo, right?.vimeo);
+  providerBagEqual(left?.vimeo, right?.vimeo) &&
+  providerBagEqual(left?.hls, right?.hls);
 
 // A browser can report an intersection ratio a hair under the geometrically
 // exact value it is crossing -- documented for `threshold: 1`, where subpixel
