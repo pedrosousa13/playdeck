@@ -3,11 +3,13 @@ import {
   type Availability,
   type ProviderStatePatch
 } from '@playdeck/core';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import {
   StreamingServicePlayer,
-  StreamingServiceSurface
+  StreamingServiceSurface,
+  type StreamingServicePlayerProps
 } from '../../../examples/archetype-streaming-service';
 import { assetUrl } from './asset-url';
 
@@ -220,5 +222,53 @@ export const RealClip: StoryObj = {
       captionsSrc={assetUrl('archetype-captions.vtt')}
       resumeAt={18}
     />
+  )
+};
+
+/*
+ * The local clip this file resumes against, in place of the trailer `RealClip`
+ * fetches from Blender's own host. `tracer-10s.mp4` is served by this
+ * workbench itself, so mounting it makes no third-party request — which is
+ * what keeps this story out of `!test` below.
+ */
+const localMedia = {
+  source: {
+    type: 'video',
+    sources: [{ src: assetUrl('tracer-10s.mp4'), mimeType: 'video/mp4' }]
+  },
+  kicker: 'Local fixture',
+  title: 'Tracer clip',
+  blurb: 'A ten-second local clip used to exercise the resume affordance.',
+  credit: 'Playdeck test fixture.'
+} as const satisfies StreamingServicePlayerProps['media'];
+
+/**
+ * #551: the resume affordance mounted against a local clip, with its own
+ * `Player.Root` in place of `StreamingServicePlayer`'s so a ref reaches the
+ * handle `e2e/archetype-resume.spec.ts` reads. This renders exactly the tree
+ * `StreamingServicePlayer` renders — the same root props, the same surface,
+ * the same `media` and `resumeAt` — plus that ref.
+ *
+ * Tagged `real-playback` only, with no `!test`: the clip is local and
+ * same-origin, and `loading="interaction"` means nothing is fetched until the
+ * resume button is pressed, so the deterministic story run reaching this
+ * story costs it nothing.
+ */
+export const ResumeLocalClip: StoryObj = {
+  tags: ['real-playback'],
+  render: () => (
+    <Player.Root
+      loading="interaction"
+      ref={(handle) => {
+        window.playdeckHandle = handle ?? undefined;
+      }}
+      source={localMedia.source}
+    >
+      <StreamingServiceSurface
+        captionsSrc={assetUrl('archetype-captions.vtt')}
+        media={localMedia}
+        resumeAt={5}
+      />
+    </Player.Root>
   )
 };
