@@ -39,6 +39,21 @@ not imported by any entry and is not counted for any library — see "Where each
 alternative measures smaller, or wins on something else" below for what that
 costs each one differently.
 
+`results.md`'s "Not counted" column is the other half of that same build:
+every chunk that entry's `vite build` emitted that `reachableChunks` did not
+count, gzipped and summed the same way the "Gzipped" column is. What it holds
+differs by row. For Playdeck it is the other four provider adapters and
+hls.js, each loaded only for a source that actually needs it. For
+react-player it is its other, lazily-loaded provider packages. For Vidstack
+it is the split-off UI and caption modules the "Equivalent composition per
+library" section below names individually. For Media Chrome and Video.js it
+is nothing — both emit a single chunk, with no split to report. The column
+exists so "Gzipped" cannot hide code-splitting in either direction: a library
+that defers a lot would otherwise look smaller than what it actually ships,
+and a library that splits nothing gets no credit for that either without a
+number sitting next to it. It is measured from the same build the "Gzipped"
+figure comes from, not read off a library's documentation.
+
 ## What is not measured, and why
 
 **Playback performance.** Time-to-first-frame and similar are dominated by the

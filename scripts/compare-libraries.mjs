@@ -495,7 +495,7 @@ const main = async () => {
   if (check) {
     if (maskVolatile(before) === maskVolatile(after)) {
       console.log(
-        `${RESULTS_PATH} already matches a fresh run (ignoring the measurement date).`
+        `${RESULTS_PATH} already matches a fresh run (ignoring the measurement date and Node version).`
       );
       return;
     }
