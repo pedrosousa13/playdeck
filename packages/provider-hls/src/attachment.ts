@@ -156,13 +156,13 @@ export const createHlsAttachment = (
     // browser fires on it -- and that event pair has a documented history of
     // not firing reliably on WebKit (video-dev/hls.js#7984, fixed for the
     // seek case in 1.6.19/1.7.1; this package is on 1.6.16). Measured on this
-    // site's own bench: the ladder publishes and the segments append under
-    // either `MediaSource` flavour on Playwright's Linux WebKit -- managed
-    // buffering is not what's gating anything here. `quality` stays `null`
-    // because the element then fails to decode the appended stream
-    // (`MEDIA_ERR_DECODE`, see `.out-of-scope/webkit-hls-decode.md`), which no
-    // hls.js option changes. Plain `MediaSource` carries no such gate, which
-    // is also what every other engine already uses (neither
+    // site's own bench, with this option already `false`: the ladder
+    // publishes and the segments append fine on Playwright's Linux WebKit,
+    // and `quality` stays `null` because the element then fails to decode
+    // the appended stream (`MEDIA_ERR_DECODE`, see
+    // `.out-of-scope/webkit-hls-decode.md`) -- a step past anything this
+    // option gates. Plain `MediaSource` carries no such gate, which is also
+    // what every other engine already uses (neither
     // Chromium nor Firefox expose `ManagedMediaSource`), so this keeps every
     // engine on the one well-exercised path rather than opting only WebKit
     // into the newer, still-fragile one.
