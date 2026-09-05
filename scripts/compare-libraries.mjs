@@ -18,7 +18,7 @@
 // have. `write: false` keeps the build in memory, the same way
 // readme-bytes.mjs's `minifiedGzipKilobytes` does, so this never touches disk
 // and never risks measuring a stale dist/ left over from a previous run.
-// Two of the six rows are Playdeck, measuring the same entry point's worth of
+// Two rows are Playdeck, measuring the same entry point's worth of
 // primitives at two different control-bar compositions -- see the
 // `libraries` array below and docs/comparison/method.md's "Equivalent
 // composition per library" for which of the two is the fair comparison for
@@ -195,6 +195,14 @@ export const libraries = [
     package: 'video.js',
     entry: 'entries/video-js.tsx',
     composition: 'videojs() with `controls: true`, hand-wrapped',
+    requiredChunk: () => false
+  },
+  {
+    name: 'Video.js 10 (beta)',
+    package: '@videojs/react',
+    entry: 'entries/videojs-react.tsx',
+    composition:
+      'VideoPlayer + VideoSkin + Video (`@videojs/react/video` preset)',
     requiredChunk: () => false
   }
 ];

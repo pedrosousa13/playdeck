@@ -316,6 +316,9 @@ importers:
       '@playdeck/react':
         specifier: workspace:*
         version: link:../../packages/react
+      '@videojs/react':
+        specifier: 10.0.0-beta.32
+        version: 10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@vidstack/react':
         specifier: 1.15.6
         version: 1.15.6(@types/react@19.2.17)(react@19.2.8)
@@ -3253,11 +3256,40 @@ packages:
   '@ungap/structured-clone@1.4.0':
     resolution: {integrity: sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ==}
 
+  '@videojs/core@10.0.0-beta.32':
+    resolution: {integrity: sha512-+H5jgjTrzVtjrJjjeROTJkMnwgfKj6EnbPbBF7D2kwYUE3boyvaFUo9ZYWUShmKEPTLZIDf3jqVORqxwYRCrgQ==}
+
   '@videojs/http-streaming@3.17.5':
     resolution: {integrity: sha512-PRRQVu0hYW5h0XvRWpIyIpEatpMZzZtf7L1avV89Hnu+69f+0c7oLsSL9jwpg2nbvzGkdX5rQxQkz5Vc7tFR9w==}
     engines: {node: '>=8', npm: '>=5'}
     peerDependencies:
       video.js: ^8.19.0
+
+  '@videojs/media@10.0.0-beta.32':
+    resolution: {integrity: sha512-sdn1+utyRG1Dd05Mwey5f4x9JWU/vCAVU/ymUi1Zd/UqEeW/ds+NyTFTZAruqjXvOOBZ404ZZ2v2AmaTj1yZiw==}
+
+  '@videojs/react@10.0.0-beta.32':
+    resolution: {integrity: sha512-0Tx+vadJElEbZ2NdMR/VfqFbJM8yel3fw0hpAsEcUJ0g+/vWQqeoIiikU5ZOkd24tCX/67AZZ+6sjo3qIyUpKQ==}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0
+      react-dom: ^18.0.0 || ^19.0.0
+
+  '@videojs/spf@10.0.0-beta.32':
+    resolution: {integrity: sha512-PAvlUyu+f3MTRTSVf/kWPTBlcn2D9n+HEX/uZvAXSIG5jFMr4hxjmcaPy+jbcRtaRThhUEjafhrPhc/hzFzI+A==}
+
+  '@videojs/store@10.0.0-beta.32':
+    resolution: {integrity: sha512-zjU3g6T+RFhI0jZsYcRmsc4wd1ER3o6R+skY3O0bU8t2jxTxJRFJVlFZ/aMFfjXjtXLDDukBrnjzVgVcd5lXlQ==}
+    peerDependencies:
+      '@videojs/element': 10.0.0-beta.32
+      react: ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@videojs/element':
+        optional: true
+      react:
+        optional: true
+
+  '@videojs/utils@10.0.0-beta.32':
+    resolution: {integrity: sha512-RF6twQtEgZn0F2vIzLAH7CiMihZNXhD35lbIY/iv3Oj/Aj5oW7qQHaiWHkah7CTd8Snp4RXv6dGY3yyvEmYvcA==}
 
   '@videojs/vhs-utils@4.1.2':
     resolution: {integrity: sha512-1Dsv5dtWOq0LP1G37O46FQFA2tKAZON5UMe6dFPxT7JvPhEx8QIXcFQxan8+hHI3fX6aomFRFrUBJNgRYQDSXA==}
@@ -5324,6 +5356,10 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  shaka-player@5.2.8:
+    resolution: {integrity: sha512-CLverPUQCw/ouNsVVo6SVPBNt31Tf6H9h3aZqWaILe9y/WE4Ok5scImkHSriOFo5udm/OShPOH3YNH3Sb3quEA==}
+    engines: {node: '>=18'}
+
   sharp@0.35.2:
     resolution: {integrity: sha512-FVtFjtBCMiJS6yb5CX7Sop45WFMpeGw6oRKuJnXYgf/f1ms/D7LE/ZUSNxnW7rZ/dbslQWYkoqFHGPaDBtaK4w==}
     engines: {node: '>=20.9.0'}
@@ -5364,6 +5400,9 @@ packages:
   signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
+
+  signal-polyfill@0.2.2:
+    resolution: {integrity: sha512-p63Y4Er5/eMQ9RHg0M0Y64NlsQKpiu6MDdhBXpyywRuWiPywhJTpKJ1iB5K2hJEbFZ0BnDS7ZkJ+0AfTuL37Rg==}
 
   sirv@3.0.2:
     resolution: {integrity: sha512-2wcC/oGxHis/BoHkkPwldgiPSYcpZK3JU28WoMVv55yHJgcZ8rlXvuG9iZggz+sU1d4bRgIGASwyWqjxu3FM0g==}
@@ -8713,6 +8752,18 @@ snapshots:
 
   '@ungap/structured-clone@1.4.0': {}
 
+  '@videojs/core@10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)(react@19.2.8)':
+    dependencies:
+      '@videojs/media': 10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)
+      '@videojs/store': 10.0.0-beta.32(react@19.2.8)
+      '@videojs/utils': 10.0.0-beta.32
+    transitivePeerDependencies:
+      - '@svta/cml-cta'
+      - '@svta/cml-structured-field-values'
+      - '@svta/cml-utils'
+      - '@videojs/element'
+      - react
+
   '@videojs/http-streaming@3.17.5(video.js@8.24.0)':
     dependencies:
       '@babel/runtime': 7.29.7
@@ -8723,6 +8774,52 @@ snapshots:
       mpd-parser: 1.4.0
       mux.js: 7.1.0
       video.js: 8.24.0
+
+  '@videojs/media@10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)':
+    dependencies:
+      '@videojs/utils': 10.0.0-beta.32
+      '@vimeo/player': 2.30.4
+      dashjs: 5.2.1(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)
+      hls.js: 1.6.16
+      mux-embed: 5.18.1
+      shaka-player: 5.2.8
+    transitivePeerDependencies:
+      - '@svta/cml-cta'
+      - '@svta/cml-structured-field-values'
+      - '@svta/cml-utils'
+
+  '@videojs/react@10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@videojs/core': 10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)(react@19.2.8)
+      '@videojs/media': 10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)
+      '@videojs/spf': 10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)
+      '@videojs/store': 10.0.0-beta.32(react@19.2.8)
+      '@videojs/utils': 10.0.0-beta.32
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
+    transitivePeerDependencies:
+      - '@svta/cml-cta'
+      - '@svta/cml-structured-field-values'
+      - '@svta/cml-utils'
+      - '@videojs/element'
+
+  '@videojs/spf@10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)':
+    dependencies:
+      '@videojs/media': 10.0.0-beta.32(@svta/cml-cta@1.0.6(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0))(@svta/cml-structured-field-values@1.1.3(@svta/cml-utils@1.5.0))(@svta/cml-utils@1.5.0)
+      '@videojs/utils': 10.0.0-beta.32
+      signal-polyfill: 0.2.2
+    transitivePeerDependencies:
+      - '@svta/cml-cta'
+      - '@svta/cml-structured-field-values'
+      - '@svta/cml-utils'
+
+  '@videojs/store@10.0.0-beta.32(react@19.2.8)':
+    dependencies:
+      '@videojs/utils': 10.0.0-beta.32
+    optionalDependencies:
+      react: 19.2.8
+
+  '@videojs/utils@10.0.0-beta.32': {}
 
   '@videojs/vhs-utils@4.1.2':
     dependencies:
@@ -11178,6 +11275,8 @@ snapshots:
 
   semver@7.8.5: {}
 
+  shaka-player@5.2.8: {}
+
   sharp@0.35.2:
     dependencies:
       '@img/colour': 1.1.0
@@ -11298,6 +11397,8 @@ snapshots:
   siginfo@2.0.0: {}
 
   signal-exit@4.1.0: {}
+
+  signal-polyfill@0.2.2: {}
 
   sirv@3.0.2:
     dependencies:
