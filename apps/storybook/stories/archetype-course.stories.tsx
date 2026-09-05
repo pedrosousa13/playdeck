@@ -3,13 +3,21 @@ import {
   type Availability,
   type ProviderStatePatch
 } from '@playdeck/core';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import {
   CoursePlatformPlayer,
-  CoursePlatformSurface
+  CoursePlatformSurface,
+  type CoursePlatformPlayerProps
 } from '../../../examples/archetype-course-platform';
 import { assetUrl } from './asset-url';
+
+declare global {
+  interface Window {
+    playdeckHandle?: Player.PlayerHandle;
+  }
+}
 
 /*
  * The workbench half of the course-platform archetype, mounting
@@ -212,5 +220,52 @@ export const RealRecording: StoryObj = {
       captionsSrc={assetUrl('archetype-captions.vtt')}
       resumeAt={14}
     />
+  )
+};
+
+/*
+ * The local recording this file resumes against, in place of the trailer
+ * `RealRecording` fetches from Blender's own host. `tracer-10s.mp4` is served
+ * by this workbench itself, so mounting it makes no third-party request —
+ * which is what keeps this story out of `!test` below.
+ */
+const localMedia = {
+  source: {
+    type: 'video',
+    sources: [{ src: assetUrl('tracer-10s.mp4'), mimeType: 'video/mp4' }]
+  },
+  title: 'Tracer clip',
+  note: 'A ten-second local clip used to exercise the resume affordance.',
+  credit: 'Playdeck test fixture.'
+} as const satisfies CoursePlatformPlayerProps['media'];
+
+/**
+ * #551: the resume affordance mounted against a local recording, with its own
+ * `Player.Root` in place of `CoursePlatformPlayer`'s so a ref reaches the
+ * handle `e2e/archetype-resume.spec.ts` reads. This renders exactly the tree
+ * `CoursePlatformPlayer` renders — the same root props, the same surface, the
+ * same `media` and `resumeAt` — plus that ref.
+ *
+ * Tagged `real-playback` only, with no `!test`: the recording is local and
+ * same-origin, and `loading="interaction"` means nothing is fetched until the
+ * learner presses Resume or the picture itself, so the deterministic story
+ * run reaching this story costs it nothing.
+ */
+export const ResumeLocalRecording: StoryObj = {
+  tags: ['real-playback'],
+  render: () => (
+    <Player.Root
+      loading="interaction"
+      ref={(handle) => {
+        window.playdeckHandle = handle ?? undefined;
+      }}
+      source={localMedia.source}
+    >
+      <CoursePlatformSurface
+        captionsSrc={assetUrl('archetype-captions.vtt')}
+        media={localMedia}
+        resumeAt={5}
+      />
+    </Player.Root>
   )
 };

@@ -523,6 +523,7 @@ export const StreamingServiceSurface = ({
 }: StreamingServicePlayerProps): ReactElement => {
   const state = Player.usePlayerState((snapshot) => ({
     activation: snapshot.activation,
+    commandsReady: snapshot.commandsReady,
     errored: snapshot.error !== null,
     playing: snapshot.playback === 'playing',
     muted: snapshot.muted,
@@ -539,17 +540,30 @@ export const StreamingServiceSurface = ({
    * A ref rather than state: nothing renders from it, and the two affordances
    * that write it are `Player.ActivationButton`s that unmount the instant the
    * player is ready — so a re-render triggered here would be a re-render of a
-   * subtree that is being replaced anyway. The effect below fires once, on the
-   * transition into `ready`, and clears the flag so a later swap of the source
-   * does not silently seek somewhere nobody asked for.
+   * subtree that is being replaced anyway. The effect below clears the flag so
+   * a later swap of the source does not silently seek somewhere nobody asked
+   * for.
+   *
+   * It does NOT fire on the transition into `ready`. Activation readiness only
+   * means there is a picture: the native provider publishes it from inside
+   * `attach()`, and `attach()` returning is also the moment a `load()` gets
+   * queued that calls the element's own `load()` and empties it — so a seek
+   * issued the instant activation reads `ready` can land on an element that is
+   * about to be destroyed and vanish under it. `commandsReady` is the
+   * provider's own signal for the other side of that window: a command issued
+   * once it is true is accepted and will not be undone by a load that has yet
+   * to run (`PlayerState.commandsReady`, `packages/core/src/types.ts`). Gating
+   * the seek on it instead of on `ready` is what keeps the resume position from
+   * being silently lost (#551).
    */
   const resumeRequested = useRef(false);
   const ready = state.activation === 'ready';
   useEffect(() => {
-    if (!ready || !resumeRequested.current || resumeAt === null) return;
+    if (!state.commandsReady || !resumeRequested.current || resumeAt === null)
+      return;
     resumeRequested.current = false;
     void actions.seekTo(resumeAt);
-  }, [actions, ready, resumeAt]);
+  }, [actions, state.commandsReady, resumeAt]);
 
   /*
    * The two full-bleed overlays own the picture in exactly the states their own
@@ -1549,6 +1563,7 @@ export const CoursePlatformSurface = ({
 }: CoursePlatformPlayerProps): ReactElement => {
   const state = Player.usePlayerState((snapshot) => ({
     activation: snapshot.activation,
+    commandsReady: snapshot.commandsReady,
     errored: snapshot.error !== null,
     playing: snapshot.playback === 'playing',
     muted: snapshot.muted,
@@ -1562,14 +1577,25 @@ export const CoursePlatformSurface = ({
    * affordance that writes it unmounts as soon as the player is ready. The
    * effect clears the flag, so a later source swap cannot silently seek
    * somewhere nobody asked for.
+   *
+   * The effect does NOT fire as soon as activation reads `ready` — that only
+   * means there is a picture. The native provider publishes it from inside
+   * `attach()`, and `attach()` returning is also the moment a `load()` gets
+   * queued that calls the element's own `load()` and empties it, so a seek
+   * issued right there can land on an element about to be destroyed and vanish
+   * under it. `commandsReady` is the provider's own signal that a command
+   * issued now is accepted and will not be undone by a load that has yet to
+   * run (`PlayerState.commandsReady`), which is what the seek below waits for
+   * instead (#551).
    */
   const resumeRequested = useRef(false);
   const ready = state.activation === 'ready';
   useEffect(() => {
-    if (!ready || !resumeRequested.current || resumeAt === null) return;
+    if (!state.commandsReady || !resumeRequested.current || resumeAt === null)
+      return;
     resumeRequested.current = false;
     void actions.seekTo(resumeAt);
-  }, [actions, ready, resumeAt]);
+  }, [actions, state.commandsReady, resumeAt]);
 
   /*
    * The transport is docked below the picture rather than laid over it, so

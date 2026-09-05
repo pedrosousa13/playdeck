@@ -422,6 +422,7 @@ export const CoursePlatformSurface = ({
 }: CoursePlatformPlayerProps): ReactElement => {
   const state = Player.usePlayerState((snapshot) => ({
     activation: snapshot.activation,
+    commandsReady: snapshot.commandsReady,
     errored: snapshot.error !== null,
     playing: snapshot.playback === 'playing',
     muted: snapshot.muted,
@@ -435,14 +436,25 @@ export const CoursePlatformSurface = ({
    * affordance that writes it unmounts as soon as the player is ready. The
    * effect clears the flag, so a later source swap cannot silently seek
    * somewhere nobody asked for.
+   *
+   * The effect does NOT fire as soon as activation reads `ready` — that only
+   * means there is a picture. The native provider publishes it from inside
+   * `attach()`, and `attach()` returning is also the moment a `load()` gets
+   * queued that calls the element's own `load()` and empties it, so a seek
+   * issued right there can land on an element about to be destroyed and vanish
+   * under it. `commandsReady` is the provider's own signal that a command
+   * issued now is accepted and will not be undone by a load that has yet to
+   * run (`PlayerState.commandsReady`), which is what the seek below waits for
+   * instead (#551).
    */
   const resumeRequested = useRef(false);
   const ready = state.activation === 'ready';
   useEffect(() => {
-    if (!ready || !resumeRequested.current || resumeAt === null) return;
+    if (!state.commandsReady || !resumeRequested.current || resumeAt === null)
+      return;
     resumeRequested.current = false;
     void actions.seekTo(resumeAt);
-  }, [actions, ready, resumeAt]);
+  }, [actions, state.commandsReady, resumeAt]);
 
   /*
    * The transport is docked below the picture rather than laid over it, so
