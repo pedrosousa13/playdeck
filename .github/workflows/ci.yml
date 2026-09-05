@@ -813,6 +813,7 @@ jobs:
       # versions in tests/compare/package.json and resolved by the lockfile,
       # so this step reads no version this job has not already installed.
       - run: pnpm compare:libraries:check
+      - run: pnpm compare:features:check
 
   # Every job in this workflow runs on Linux, deliberately. A macOS job
   # (`hls-native-webkit`) used to run the WebKit HLS suite here, because
