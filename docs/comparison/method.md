@@ -407,6 +407,153 @@ one number off `results.md` without this paragraph would misread it:
   it is named here as an assertion this document is not making a measured
   claim about, in either direction.
 
+## Features
+
+`docs/comparison/features.md` (issue #638) extends this comparison onto ground
+`results.md` cannot cover: what each library can do, not what it weighs.
+Features cannot come out of a bundler the way bytes can, so this table needs a
+rule of its own to keep the property that makes the byte table publishable —
+that every figure in it is something a reader can re-derive rather than
+something they have to take on trust.
+
+**The rule: every cell is a sourced claim with a mechanical anchor, never an
+impression.** `tests/compare/features.mjs` encodes the table as data — one
+axis at a time, one entry per library, each an anchor
+`scripts/compare-features.mjs` re-evaluates against the actually-installed
+package on every run. A "yes", "partial" or "plugin" cell names something the
+generator can check for itself: a named export the installed package still
+has, a line still present in a shipped file or its type declarations, or a
+`package.json` field still set the way the cell says it is. A "no" cell is
+never a bare impression either — it carries the same kind of anchor turned
+around, checking that a named export, file text or `package.json` field is
+_absent_, plus a `source` naming what was read to reach that conclusion. A
+"plugin" cell names the plugin, and only when that plugin is itself documented
+somewhere — its own README, its own docs page, or the library's own docs
+naming it — never a guess at what probably exists. `pnpm compare:features`
+fails outright, naming every axis and library at once, if a single anchor no
+longer holds: that is what keeps a "yes" from surviving the export it named
+being renamed or removed in a later pin.
+
+Playdeck's own cells follow the identical rule and carry no adjective the
+other four rows do not. A `no` for Playdeck reads exactly like a `no` for any
+other library — a checked absence, not a confession — and a `yes` is anchored
+the same way theirs are: against `@playdeck/react` and `@playdeck/core`'s own
+exports, type declarations and READMEs, never asserted from what the rest of
+this repository already knows to be true.
+
+### How the axis list was built
+
+The axis list is the union of what each of the five libraries advertises
+about **itself**, not Playdeck's feature list with the other four libraries
+read against it — the second shape would make the table an argument for
+Playdeck before a reader reached row one, which is exactly the "reading of a
+competitor's README" `docs/comparison/method.md`'s "What is not measured"
+section above already rules out for the byte comparison, and would be worse
+here: a features table built from one library's marketing copy is not a
+comparison, it is that copy with four extra columns.
+
+So each library's own documentation was read for what it claims about itself,
+and every axis that surfaced in at least one of them was tried: react-player
+3.4.0's own `README.md` and its shipped `dist/*.d.ts` (the props table, the
+"Supported media" list, the `Config` interface naming Mux, Twitch, TikTok and
+Spotify as lazily-loaded providers); [vidstack.io](https://vidstack.io) and
+`@vidstack/react` 1.15.6's own `index.d.ts` (over a thousand exports, read for
+every primitive, provider loader and event the main entry actually carries);
+media-chrome 4.19.2's own `README.md` and
+[its "compatible media elements" docs page](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements),
+which is where the DASH, HLS, YouTube, Vimeo, Wistia, Cloudflare, JW Player,
+Mux and Shaka Player rows for that column come from — media-chrome ships none
+of them itself, and says so; video.js 8.24.0's own shipped
+`dist/video.es.js` and `dist/types/video.d.ts` (every `registerComponent` call
+is a built-in part, read directly rather than assumed from the docs site,
+which changes less often than the installed code); and, for Playdeck,
+`CONTEXT.md`, `packages/react/README.md` and the installed `@playdeck/react`
+and `@playdeck/core` packages, read under the identical rule.
+
+The result is deliberately larger than any one library's own feature list: it
+is why quality selection, playback rate, chapters and audio tracks all have
+rows even though `tests/compare/entries/playdeck.tsx`'s composition uses none
+of them, and why Chromecast, ads and a plugin system appear even though
+Playdeck has none of the three.
+
+### Dropped axes
+
+None. Every axis the issue's own minimum list names — captions, quality
+selection, playback rate, picture-in-picture, fullscreen, AirPlay,
+Chromecast, keyboard operation, screen-reader labelling, DRM, HLS, DASH, live
+streaming, YouTube, Vimeo, Wistia, other hosted providers, audio tracks,
+chapters, thumbnails, playlists, ads, analytics, a plugin system, a shipped
+skin, headless parts, a required stylesheet, lazy provider loading, React
+version, SSR, TypeScript types, ESM/CJS, and Playdeck's own capability
+honesty — got an anchored answer for all five libraries, so none needed to be
+dropped under the rule that governs it: drop an axis only where an honest,
+anchored answer cannot be written for every library. Two axes came close
+enough to be worth recording here rather than silently deciding them:
+
+- **Analytics hooks** ended up `no` for all five libraries — react-player's
+  `README.md`, `@vidstack/react`'s `index.d.ts`, media-chrome's `README.md`
+  and video.js's shipped `dist/video.es.js` were each checked and none names a
+  dedicated analytics-reporting adapter, as against a generic playback event a
+  consumer could wire to any analytics tool, which every library here
+  including Playdeck already has and which would have made the axis
+  unfalsifiable. The axis was kept rather than dropped because a flat row is
+  still an honest, checked answer, and dropping an axis merely because it did
+  not discriminate would be a second, quieter way to make the table an
+  argument.
+- **React version supported** is not a yes/no feature at all, and is recorded
+  as `yes` for every library that declares any range, with the actual range
+  carried in the cell's note rather than encoded in the status — the
+  differentiating fact (Playdeck: `>=19 <20`; react-player:
+  `^17.0.2 || ^18 || ^19`; `@vidstack/react`: `^18.0.0 || ^19.0.0`; media-chrome:
+  no declared range at all; video.js: no React integration to declare one for)
+  is in the footnote, not flattened into a status the four-value vocabulary
+  cannot hold.
+
+### Where each alternative has something Playdeck does not
+
+Read directly off the table: **quality selection and playback rate** are
+full, ready-made UI primitives in Vidstack and Media Chrome (and, for playback
+rate, video.js), where Playdeck ships only the command and capability behind
+a consumer's own `SettingsMenu` composition. **Audio track selection** and a
+**thumbnail preview on seek** exist in Vidstack and Media Chrome and are
+absent from Playdeck entirely. **Chapters** get a full navigation UI in
+Vidstack and video.js; Playdeck publishes the same `Chapter` collection on
+player state but ships no primitive to browse it. **Live streaming** gets a
+dedicated UI (a "LIVE" button or badge) in Vidstack, Media Chrome and video.js;
+Playdeck models the state and lets existing controls adapt to it, and stops
+there. **Chromecast** works in Vidstack and Media Chrome, and through a
+documented plugin in video.js; Playdeck has no casting beyond AirPlay. **DRM**,
+**playlists** and **ads** are each a documented video.js plugin away
+(`videojs-contrib-eme`, `videojs-playlist`, `videojs-contrib-ads`) with no
+equivalent path in Playdeck at all — these are recorded gaps
+(`.out-of-scope/dash.md` covers the DASH half of the same boundary), not
+oversights. **DASH** itself plays in react-player, Vidstack and video.js, and
+through a documented plugin in Media Chrome; Playdeck's refusal is
+deliberate and already on record. And react-player's `Config` interface
+reaches three named hosted providers — Mux, Twitch, TikTok and Spotify — none
+of which Playdeck's closed `PlayerSource` union carries.
+
+### Where Playdeck has something no alternative does
+
+The reverse, in the same tone: **capability honesty** is `no` for all four
+alternatives and `yes` for Playdeck alone — none of react-player, Vidstack,
+Media Chrome or video.js was found, on inspection of its own types or shipped
+code, to distinguish "this will never work" from "not known yet" with a
+reason attached, which is the axis `CONTEXT.md`'s `Availability` union exists
+to answer and the one this document's "What is not measured" section above
+already named as an assertion no measurement could settle either way; the
+features table settles it by checking for the union's absence directly.
+**Fullscreen, AirPlay and keyboard operation** are `no` for react-player
+specifically, which draws no UI of its own for a plain file and inherits
+whatever the native `<video>` element happens to expose. **SSR** is `no` for
+video.js, which ships no React integration at all to carry an SSR story one
+way or the other. **Headless, independently composable parts** — primitives a
+consumer imports and arranges individually rather than a single configured
+component — are `yes` for Playdeck, Vidstack and Media Chrome alike and `no`
+for react-player and video.js, so this is not a Playdeck-only property, but it
+is one video.js's own missing official React wrapper puts it on the wrong
+side of.
+
 ## Date and how to re-run
 
 `docs/comparison/results.md` carries its own measurement date, and the Node,
