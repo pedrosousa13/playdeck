@@ -50,12 +50,15 @@
  * comparison against a literal would look identical, and `astro build --base`
  * is what makes the difference observable (#435).
  *
- * At 40rem (640px) and above the links sit inline beside the wordmark,
- * in normal flow. Below that they are drawn only inside `SiteNavSheet`'s
- * sheet, reached through the trigger button beside it — CSS visibility, keyed
- * to the same breakpoint from both directions, is what keeps exactly one copy
- * of the list interactive at a time (see that component's own doc comment for
- * why `e2e/site-nav.spec.ts` still finds exactly one set of links). The
+ * At 40rem (640px) and above the links sit inline beside the wordmark, in
+ * normal flow. Below that, a reader with a script gets them drawn inside
+ * `SiteNavSheet`'s sheet, reached through the trigger button beside it; a
+ * reader without one gets a `<noscript>` list beside it instead, drawn from
+ * the same `destinations` array (#591) — no destination depends on the
+ * script. CSS visibility, keyed to the same breakpoint across all three
+ * renderings, is what keeps exactly one of them visible at a time (see that
+ * component's own doc comment, and the one beside the `<nav>` below, for why
+ * `e2e/site-nav.spec.ts` still finds exactly one set of links). The
  * platform's own `<details>` this used to be built from bought a focus trap,
  * an Escape handler and the announced open/closed state for free; `Sheet`
  * buys the same three from a Radix dialog instead, which is what the
@@ -223,13 +226,22 @@ const destinations = [
      * the wordmark and thesis directly under the hero carry the brand this
      * row would otherwise be asked to.
      *
-     * Two renderings of the same list rather than one disclosure: an inline
-     * `<ul>`, shown from 40rem up, and `SiteNavSheet`'s trigger plus sheet,
-     * shown below it. Only one is ever visible — `min-[40rem]:hidden` and
-     * `hidden min-[40rem]:flex` are complementary — and the sheet's own
-     * content does not exist in the DOM until opened, so at rest exactly one
-     * set of links is present for `e2e/site-nav.spec.ts` to find, the same
-     * guarantee the old single `<details>` gave for a different reason. */
+     * Three renderings of the same list rather than one disclosure: an
+     * inline `<ul>`, shown from 40rem up; `SiteNavSheet`'s trigger plus
+     * sheet, shown below it once a script has mounted; and a `<noscript>`
+     * list drawn from the same `destinations`, for a reader below that width
+     * with no script to mount the sheet with (#591 — that reader used to have
+     * no header navigation at all, Guides among the losses). The invariant is
+     * not "one list, hidden below 40rem" — it is that exactly one set of
+     * links is visible inside this landmark at every width, with or without
+     * a script, which is what lets `e2e/site-nav.spec.ts` count them without
+     * knowing either. `min-[40rem]:hidden` on both the sheet's trigger and
+     * the noscript list is what keeps the inline list the only one on screen
+     * from 40rem up; below it, the sheet's own content does not exist in the
+     * DOM until opened, and the noscript list exists only when no script
+     * runs to hide it and mount the sheet in its place — with one, the
+     * browser parses everything inside `<noscript>` as inert text rather
+     * than markup, so it contributes no `<a>` elements at all. */
   }
   <nav
     class={cn('shrink-0 [font-size:var(--text-sm)]', atHome && 'ms-auto')}
@@ -252,6 +264,36 @@ const destinations = [
       ))}
     </ul>
     <SiteNavSheet client:only="react" destinations={destinations} />
+    {
+      /* The fallback for a reader with no script: `SiteNavSheet` is
+       * `client:only="react"`, so without a script it renders nothing to the
+       * page at all, and a `<noscript>` written inside that component would
+       * never reach the page either — a `client:only` island emits no server
+       * HTML to carry it. So this has to live here, in the component that
+       * does render server-side, mapping the same `destinations` the two
+       * renderings above already use rather than a second hand-written list.
+       * `min-[40rem]:hidden` matches the sheet trigger's own class, so above
+       * that width this list stays off screen and the inline `<ul>` above is
+       * the only one visible. */
+    }
+    <noscript>
+      <ul class="m-0 flex list-none flex-col [gap:var(--space-1)] p-0 min-[40rem]:hidden">
+        {destinations.map(({ label, href, current }) => (
+          <li>
+            <a
+              class={cn(
+                'inline-block py-[var(--space-1)] text-muted-foreground no-underline hover:text-primary hover:underline active:text-muted-foreground',
+                current && 'font-semibold text-primary'
+              )}
+              href={href}
+              aria-current={current ? 'page' : undefined}
+            >
+              {label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </noscript>
   </nav>
 
   {

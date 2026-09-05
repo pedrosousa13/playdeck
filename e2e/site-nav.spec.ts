@@ -174,6 +174,49 @@ test('aria-current marks the section the reader is in, and only that one', async
   await expect(nav(page).locator('a[aria-current="page"]')).toHaveCount(0);
 });
 
+test.describe('with no JavaScript', () => {
+  test.use({ javaScriptEnabled: false });
+
+  // `SiteNavSheet` is `client:only="react"`, so with scripting disabled it
+  // renders nothing: below 40rem the inline `<ul>` is CSS-hidden and there is
+  // no sheet to fall back on. #591 is the header having no navigation at all
+  // for a scriptless reader on a narrow viewport, Guides included — the one
+  // destination `/`'s own close does not carry.
+  test('every destination is reachable below 40rem with no script', async ({
+    page
+  }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(landing);
+
+    const links = nav(page).getByRole('link');
+    await expect(links).toHaveText(labels);
+    for (const { label, path } of destinations) {
+      await expect(
+        nav(page).getByRole('link', { name: label, exact: true })
+      ).toHaveAttribute('href', `/${path}`);
+    }
+  });
+
+  // The companion case: at rest exactly one set of links is visible in the
+  // landmark at every width, with or without a script. Above 40rem that is
+  // still the inline list — the fallback list exists in the DOM but is
+  // `min-[40rem]:hidden`, so it must not double what the inline list shows.
+  test('the navigation is not doubled at 40rem and above with no script', async ({
+    page
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await page.goto(landing);
+
+    const links = nav(page).getByRole('link');
+    await expect(links).toHaveText(labels);
+    for (const { label, path } of destinations) {
+      await expect(
+        nav(page).getByRole('link', { name: label, exact: true })
+      ).toHaveAttribute('href', `/${path}`);
+    }
+  });
+});
+
 /**
  * Every route the site serves, in the shapes `DESIGN.md`'s stance table lists
  * them: the argument page, both section indexes, a page a level down inside
