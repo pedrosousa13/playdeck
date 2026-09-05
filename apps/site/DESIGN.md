@@ -1516,13 +1516,12 @@ that trigger (#591). `hidden min-[40rem]:flex` on the inline list and
 the same breakpoint from every direction, the sheet's content is portalled to
 `document.body` and not mounted until it is opened, and a browser running
 scripts parses `<noscript>`'s contents as inert text rather than markup — so
-at rest there is
-exactly one set of links inside the `Site` landmark at every width, with or
-without a script, which is what lets `e2e/site-nav.spec.ts` count them
-without knowing either.
+at rest there is exactly one set of links inside the `Site` landmark at every
+width, with or without a script, which is what lets `e2e/site-nav.spec.ts`
+count them without knowing either.
 
 **This paragraph read "What that costs is a navigation below `40rem` that
-needs a script" and went on to name Guides as the exception with no route from
+needs a script…" and went on to name Guides as the exception with no route from
 `/` at all below that width — and neither clause is true any more.** They were
 true of the header as it stood after the `Sheet` rewrite: the sheet is
 `client:only`, so it renders nothing server-side, and a reader with no script
