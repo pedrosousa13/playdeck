@@ -34,12 +34,12 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 | --------------------------------------------------- | ------------- | ------------- | ------------- | ------------- | ------------ | ------------------ |
 | Captions / text tracks                              | yes[^1]       | partial[^2]   | yes[^3]       | yes[^4]       | yes[^5]      | yes[^6]            |
 | Quality selection                                   | partial[^7]   | no[^8]        | yes[^9]       | yes[^10]      | partial[^11] | yes[^12]           |
-| Playback rate                                       | partial[^13]  | partial[^14]  | yes[^15]      | yes[^16]      | yes[^17]     | yes[^18]           |
+| Playback rate                                       | partial[^13]  | plugin[^14]   | yes[^15]      | yes[^16]      | yes[^17]     | yes[^18]           |
 | Picture-in-picture                                  | yes[^19]      | partial[^20]  | yes[^21]      | yes[^22]      | yes[^23]     | yes[^24]           |
-| Fullscreen                                          | yes[^25]      | no[^26]       | yes[^27]      | yes[^28]      | yes[^29]     | yes[^30]           |
+| Fullscreen                                          | yes[^25]      | plugin[^26]   | yes[^27]      | yes[^28]      | yes[^29]     | yes[^30]           |
 | AirPlay                                             | yes[^31]      | no[^32]       | yes[^33]      | yes[^34]      | plugin[^35]  | yes[^36]           |
 | Chromecast / Google Cast                            | no[^37]       | no[^38]       | yes[^39]      | yes[^40]      | plugin[^41]  | yes[^42]           |
-| Keyboard operation                                  | yes[^43]      | no[^44]       | yes[^45]      | yes[^46]      | yes[^47]     | yes[^48]           |
+| Keyboard operation                                  | yes[^43]      | plugin[^44]   | yes[^45]      | yes[^46]      | yes[^47]     | yes[^48]           |
 | Screen-reader labelling                             | yes[^49]      | partial[^50]  | yes[^51]      | yes[^52]      | yes[^53]     | yes[^54]           |
 | DRM / EME                                           | no[^55]       | no[^56]       | no[^57]       | no[^58]       | plugin[^59]  | yes[^60]           |
 | HLS                                                 | yes[^61]      | yes[^62]      | yes[^63]      | plugin[^64]   | yes[^65]     | yes[^66]           |
@@ -69,7 +69,7 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^2]: **Captions / text tracks — react-player**: partial. Captions render only through a native `<track>` child and the browser's own control UI; react-player draws no captions button itself. mechanical check: `react-player`'s `README.md` includes `kind="subtitles"`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package)
 
-[^3]: **Captions / text tracks — Vidstack**: yes. mechanical check: `@vidstack/react` exports `CaptionButton`. Source: [vidstack.io](https://vidstack.io)
+[^3]: **Captions / text tracks — Vidstack**: yes. mechanical check: `@vidstack/react` exports `CaptionButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^4]: **Captions / text tracks — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaCaptionsButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
@@ -81,19 +81,19 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^8]: **Quality selection — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Quality`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^9]: **Quality selection — Vidstack**: yes. mechanical check: `@vidstack/react` exports `useVideoQualityOptions`. Source: [vidstack.io](https://vidstack.io)
+[^9]: **Quality selection — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `DefaultQualityMenu`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
 
 [^10]: **Quality selection — Media Chrome**: yes. mechanical check: `media-chrome/react/menu` exports `MediaRenditionMenu`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
-[^11]: **Quality selection — Video.js**: partial. The `qualityLevels()` API and `QualityLevelList` ship in core with no default UI button; the documented UI plugin is `videojs-http-source-selector`. mechanical check: `video.js`'s `dist/video.es.js` includes `videojs.registerPlugin('qualityLevels'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+[^11]: **Quality selection — Video.js**: partial. The `qualityLevels()` API and `QualityLevelList` ship in core with no default UI button. A documented UI plugin exists (`videojs-http-source-selector`, npm `repository` github.com/jfujita/videojs-http-source-selector, third-party); the status reads the core API rather than that plugin. mechanical check: `video.js`'s `dist/video.es.js` includes `videojs.registerPlugin('qualityLevels'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
 
 [^12]: **Quality selection — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `QualityRadioGroup`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
 [^13]: **Playback rate — Playdeck**: partial. A `setPlaybackRate` command and capability exist; no dedicated playback-rate button or menu primitive ships. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `readonly setPlaybackRate: Availability;`. Source: packages/core/dist/types.d.ts (`PlayerCommand`, `PlayerCapabilities.setPlaybackRate`)
 
-[^14]: **Playback rate — react-player**: partial. A `playbackRate` prop sets the rate; no playback-rate control of react-player's own ships. Provider limit, not a status: its own README says the prop is "Only supported by YouTube, Wistia, and file paths". mechanical check: `react-player`'s `dist/types.d.ts` includes `playbackRate?: number;`. Source: react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)
+[^14]: **Playback rate — react-player**: plugin. A `playbackRate` prop sets the rate (`dist/types.d.ts`); no playback-rate control ships in react-player's own code, and its README's "Custom player controls" section composes `<MediaPlaybackRateButton>` for one. Provider limit, not a status: the same README says the prop is "Only supported by YouTube, Wistia, and file paths". Plugin `media-chrome`: npm `repository` github.com/muxinc/media-chrome, third-party. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `PlaybackRateButton`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package), its "Custom player controls" section, which composes Media Chrome parts around a `<ReactPlayer slot="media">`
 
-[^15]: **Playback rate — Vidstack**: yes. mechanical check: `@vidstack/react` exports `usePlaybackRateOptions`. Source: [vidstack.io](https://vidstack.io)
+[^15]: **Playback rate — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `DefaultSpeedMenu`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
 
 [^16]: **Playback rate — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaPlaybackRateButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
@@ -105,7 +105,7 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^20]: **Picture-in-picture — react-player**: partial. A `pip` prop enters and leaves picture-in-picture; no picture-in-picture control of react-player's own ships. Provider limit, not a status: its own README says it is "Only available when playing file URLs in certain browsers". mechanical check: `react-player`'s `dist/types.d.ts` includes `pip?: boolean;`. Source: react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)
 
-[^21]: **Picture-in-picture — Vidstack**: yes. Provider limit, not a status: Vidstack publishes this as provider-dependent player state, which an embedded provider leaves unset. mechanical check: `@vidstack/react` exports `PIPButton`. Source: [vidstack.io](https://vidstack.io)
+[^21]: **Picture-in-picture — Vidstack**: yes. Provider limit, not a status: Vidstack publishes this as provider-dependent player state, which an embedded provider leaves unset. mechanical check: `@vidstack/react` exports `PIPButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^22]: **Picture-in-picture — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaPipButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
@@ -115,9 +115,9 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^25]: **Fullscreen — Playdeck**: yes. mechanical check: `@playdeck/react` exports `FullscreenButton`. Source: packages/react/README.md
 
-[^26]: **Fullscreen — react-player**: no. No fullscreen prop or method of its own; a fullscreen button appears only when the native `<video controls>` or an iframe provider (YouTube, Vimeo) supplies one. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `fullscreen`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+[^26]: **Fullscreen — react-player**: plugin. No fullscreen prop, method or button in its own shipped code; its README's "Custom player controls" section composes `<MediaFullscreenButton>` for one. Without that, a fullscreen button appears only when the native `<video controls>` or an iframe provider (YouTube, Vimeo) supplies its own. Plugin `media-chrome`: npm `repository` github.com/muxinc/media-chrome, third-party. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `fullscreen`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package), its "Custom player controls" section, which composes Media Chrome parts around a `<ReactPlayer slot="media">`
 
-[^27]: **Fullscreen — Vidstack**: yes. mechanical check: `@vidstack/react` exports `FullscreenButton`. Source: [vidstack.io](https://vidstack.io)
+[^27]: **Fullscreen — Vidstack**: yes. mechanical check: `@vidstack/react` exports `FullscreenButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^28]: **Fullscreen — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaFullscreenButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
@@ -127,13 +127,13 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^31]: **AirPlay — Playdeck**: yes. Provider limit, not a status: Playdeck's YouTube adapter reports this capability as provider-unavailable (`packages/provider-youtube/src/adapter-values.ts`), as an embedded player would under any library here. mechanical check: `@playdeck/react` exports `AirPlayButton`. Source: packages/react/README.md
 
-[^32]: **AirPlay — react-player**: no. Ships `disableRemotePlayback` (opts out of the browser's own remote-playback picker) but no AirPlay-specific API of its own. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `irplay`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+[^32]: **AirPlay — react-player**: no. Searched for `irplay`, which catches `airplay`, `Airplay` and `AirPlay` alike. Ships `disableRemotePlayback` (opts out of the browser's own remote-playback picker) but no AirPlay-specific API of its own. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `irplay`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^33]: **AirPlay — Vidstack**: yes. mechanical check: `@vidstack/react` exports `AirPlayButton`. Source: [vidstack.io](https://vidstack.io)
+[^33]: **AirPlay — Vidstack**: yes. mechanical check: `@vidstack/react` exports `AirPlayButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^34]: **AirPlay — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaAirplayButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
-[^35]: **AirPlay — Video.js**: plugin. No AirPlay button in core. Plugin `videojs-airplay`: npm `repository` github.com/jgubman/videojs-airplay, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `AirPlay`. Source: [registry.npmjs.org/videojs-airplay](https://registry.npmjs.org/videojs-airplay)
+[^35]: **AirPlay — Video.js**: plugin. Searched for `AirPlay` rather than the broader `irplay` used in the react-player column: this bundle's only lower-case `airplay` string is inside the word `Fairplay`, a DRM key system, not an AirPlay control. No AirPlay button in core. Plugin `videojs-airplay`: npm `repository` github.com/jgubman/videojs-airplay, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `AirPlay`. Source: [registry.npmjs.org/videojs-airplay](https://registry.npmjs.org/videojs-airplay)
 
 [^36]: **AirPlay — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `AirPlayButton`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
@@ -141,19 +141,19 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^38]: **Chromecast / Google Cast — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Cast`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^39]: **Chromecast / Google Cast — Vidstack**: yes. mechanical check: `@vidstack/react` exports `GoogleCastButton`. Source: [vidstack.io](https://vidstack.io)
+[^39]: **Chromecast / Google Cast — Vidstack**: yes. mechanical check: `@vidstack/react` exports `GoogleCastButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^40]: **Chromecast / Google Cast — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaCastButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
-[^41]: **Chromecast / Google Cast — Video.js**: plugin. Core only detects a Chromecast _receiver_ context (`IS_CHROMECAST_RECEIVER`), which is not a sender button. Plugin `videojs-chromecast`: npm `repository` github.com/benjipott/video.js-chromecast, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `CastButton`. Source: [registry.npmjs.org/videojs-chromecast](https://registry.npmjs.org/videojs-chromecast)
+[^41]: **Chromecast / Google Cast — Video.js**: plugin. Searched for `CastButton` rather than the broader `Cast` used in the Playdeck column: this bundle's only `Chromecast` string is `IS_CHROMECAST_RECEIVER`, a receiver-context flag, which is not a sender button. Plugin `videojs-chromecast`: npm `repository` github.com/benjipott/video.js-chromecast, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `CastButton`. Source: [registry.npmjs.org/videojs-chromecast](https://registry.npmjs.org/videojs-chromecast)
 
 [^42]: **Chromecast / Google Cast — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `CastButton`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^43]: **Keyboard operation — Playdeck**: yes. mechanical check: `@playdeck/react` exports `Controls`. Source: packages/react/README.md ("Controls is a focusable region that owns the media keyboard shortcuts")
+[^43]: **Keyboard operation — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/index.js` includes `ArrowLeft`. Source: packages/react/README.md ("Controls is a focusable region that owns the media keyboard shortcuts")
 
-[^44]: **Keyboard operation — react-player**: no. No media keyboard handling of its own (`dist/Preview.js` binds `onKeyDown` for the `light`-mode preview button alone); keyboard operation comes from the native `<video controls>` or an iframe provider's own player. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `keyboard`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+[^44]: **Keyboard operation — react-player**: plugin. No media keyboard handling in its own shipped code (`dist/Preview.js` binds `onKeyDown` for the `light`-mode preview button alone); its README's "Custom player controls" section composes `<MediaController>`, which owns the media hotkeys (`hotkeys`, `nohotkeys` and `keydown` in media-chrome's `dist/media-controller.js`). Without it, keyboard operation comes from the native `<video controls>` or an iframe provider's own player. Plugin `media-chrome`: npm `repository` github.com/muxinc/media-chrome, third-party. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `keyboard`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package), its "Custom player controls" section, which composes Media Chrome parts around a `<ReactPlayer slot="media">`
 
-[^45]: **Keyboard operation — Vidstack**: yes. mechanical check: `@vidstack/react` exports `MEDIA_KEY_SHORTCUTS`. Source: [vidstack.io](https://vidstack.io)
+[^45]: **Keyboard operation — Vidstack**: yes. mechanical check: `@vidstack/react` exports `MEDIA_KEY_SHORTCUTS`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^46]: **Keyboard operation — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaKeyboardShortcutsDialog`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
@@ -163,15 +163,15 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^49]: **Screen-reader labelling — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/index.js` includes `aria-label`. Source: packages/react/README.md
 
-[^50]: **Screen-reader labelling — react-player**: partial. Only the `light`-mode preview button carries an authored `previewAriaLabel`; the native control set otherwise supplies its own accessible names. mechanical check: `react-player`'s `dist/types.d.ts` includes `previewAriaLabel?: string;`. Source: react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)
+[^50]: **Screen-reader labelling — react-player**: partial. Only the `light`-mode preview button carries an authored `previewAriaLabel`; the native control set otherwise supplies its own accessible names. Not `plugin`, unlike the fullscreen, playback-rate and keyboard rows: react-player authors one label of its own, so the answer is not only a plugin. mechanical check: `react-player`'s `dist/types.d.ts` includes `previewAriaLabel?: string;`. Source: react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)
 
-[^51]: **Screen-reader labelling — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `aria-label`. Source: [vidstack.io](https://vidstack.io)
+[^51]: **Screen-reader labelling — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `aria-label`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
 
 [^52]: **Screen-reader labelling — Media Chrome**: yes. mechanical check: `media-chrome`'s `dist/media-play-button.js` includes `aria-label`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
 [^53]: **Screen-reader labelling — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `controlText_`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
 
-[^54]: **Screen-reader labelling — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react`'s `dist/default/player/container.js` includes `aria-label`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)
+[^54]: **Screen-reader labelling — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react`'s `dist/default/player/container.js` includes `aria-label`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
 [^55]: **DRM / EME — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `requestMediaKeySystemAccess`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
 
@@ -183,37 +183,37 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^59]: **DRM / EME — Video.js**: plugin. Core has no EME call of its own. Plugin `videojs-contrib-eme`: its published npm manifest declares no `repository` field, so no owner is recorded here. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `requestMediaKeySystemAccess`. Source: [registry.npmjs.org/videojs-contrib-eme](https://registry.npmjs.org/videojs-contrib-eme)
 
-[^60]: **DRM / EME — Video.js 10 (beta)**: yes. A `source.drm` map of EME key-system ids on `ShakaVideo` and `HlsjsVideo`; the playback engine behind it (shaka-player, hls.js) is the consumer's own install. mechanical check: `@videojs/react` exports `KeySystems`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`reference/shaka-video.md`, "Protected content")
+[^60]: **DRM / EME — Video.js 10 (beta)**: yes. A `source.drm` map of EME key-system ids on `ShakaVideo` and `HlsjsVideo`; the key-system constants (`KeySystems`) are re-exported by `@videojs/react` from `@videojs/media`, whose `dist/default/core/drm.js` implements them. The playback engine behind it (shaka-player, hls.js) is the consumer's own install. mechanical check: `@videojs/react`'s `docs/reference/shaka-video.md` includes `source.drm`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`reference/shaka-video.md`, "Protected content")
 
 [^61]: **HLS — Playdeck**: yes. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `HlsSource`. Source: packages/core/dist/types.d.ts (`PlayerSource`); packages/provider-hls
 
 [^62]: **HLS — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.hls`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js (lazy `hls-video-element`)
 
-[^63]: **HLS — Vidstack**: yes. mechanical check: `@vidstack/react` exports `HLSProviderLoader`. Source: [vidstack.io](https://vidstack.io)
+[^63]: **HLS — Vidstack**: yes. mechanical check: `@vidstack/react` exports `HLSProviderLoader`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^64]: **HLS — Media Chrome**: plugin. No provider or engine module of its own; the documented compatible element is `<hls-video>`. Plugin `hls-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `hls`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
 
 [^65]: **HLS — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `videojs-http-streaming`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
 
-[^66]: **HLS — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/hls-video` exports `HlsVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)
+[^66]: **HLS — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/hls-video` exports `HlsVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
 [^67]: **DASH — Playdeck**: no. `PlayerSource` is a closed union of `string | VideoFileSource | HlsSource | YouTubeSource | VimeoSource | WistiaSource` (packages/core/dist/types.d.ts); `.out-of-scope/dash.md` records the decision. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `dash`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
 
 [^68]: **DASH — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.dash`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js (lazy `dash-video-element`)
 
-[^69]: **DASH — Vidstack**: yes. mechanical check: `@vidstack/react` exports `DASHProviderLoader`. Source: [vidstack.io](https://vidstack.io)
+[^69]: **DASH — Vidstack**: yes. mechanical check: `@vidstack/react` exports `DASHProviderLoader`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
-[^70]: **DASH — Media Chrome**: plugin. No provider or engine module of its own; the documented compatible element is `<dash-video>`. Plugin `dash-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `DashVideo`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
+[^70]: **DASH — Media Chrome**: plugin. Searched for `DashVideo` rather than the bare word: the package's only `dash` strings are its own `dashedToCamel` helper. No provider or engine module of its own; the documented compatible element is `<dash-video>`. Plugin `dash-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `DashVideo`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
 
 [^71]: **DASH — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `mpd-parser`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
 
-[^72]: **DASH — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/dash-video` exports `DashVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)
+[^72]: **DASH — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/dash-video` exports `DashVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
 [^73]: **Live streaming — Playdeck**: partial. Live playback state is modeled and existing controls adapt (an infinite/DVR duration); no dedicated live-indicator UI primitive ships. mechanical check: `@playdeck/core` exports `deriveLiveState`. Source: packages/core/dist/index.d.ts (`PlayerLiveState`, `deriveLiveState`)
 
 [^74]: **Live streaming — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `isLive`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^75]: **Live streaming — Vidstack**: yes. mechanical check: `@vidstack/react` exports `LiveButton`. Source: [vidstack.io](https://vidstack.io)
+[^75]: **Live streaming — Vidstack**: yes. mechanical check: `@vidstack/react` exports `LiveButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^76]: **Live streaming — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaLiveButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
@@ -225,37 +225,37 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^80]: **YouTube — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.youtube`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js (lazy `youtube-video-element`)
 
-[^81]: **YouTube — Vidstack**: yes. mechanical check: `@vidstack/react` exports `YouTubeProviderLoader`. Source: [vidstack.io](https://vidstack.io)
+[^81]: **YouTube — Vidstack**: yes. mechanical check: `@vidstack/react` exports `YouTubeProviderLoader`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^82]: **YouTube — Media Chrome**: plugin. No provider module of its own; the documented compatible element is `<youtube-video>`. Plugin `youtube-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `youtube`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
 
 [^83]: **YouTube — Video.js**: plugin. No YouTube tech in core. Plugin `videojs-youtube`: npm `repository` github.com/videojs/videojs-youtube, org-published. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `youtube`. Source: [registry.npmjs.org/videojs-youtube](https://registry.npmjs.org/videojs-youtube)
 
-[^84]: **YouTube — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/youtube-video` exports `YouTubeVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)
+[^84]: **YouTube — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/youtube-video` exports `YouTubeVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
 [^85]: **Vimeo — Playdeck**: yes. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `VimeoSource`. Source: packages/core/dist/types.d.ts (`PlayerSource`); packages/provider-vimeo
 
 [^86]: **Vimeo — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.vimeo`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js (lazy `vimeo-video-element`)
 
-[^87]: **Vimeo — Vidstack**: yes. mechanical check: `@vidstack/react` exports `VimeoProviderLoader`. Source: [vidstack.io](https://vidstack.io)
+[^87]: **Vimeo — Vidstack**: yes. mechanical check: `@vidstack/react` exports `VimeoProviderLoader`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^88]: **Vimeo — Media Chrome**: plugin. No provider module of its own; the documented compatible element is `<vimeo-video>`. Plugin `vimeo-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `vimeo`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
 
 [^89]: **Vimeo — Video.js**: plugin. No Vimeo tech in core. Plugin `videojs-vimeo`: npm `repository` github.com/eXon/videojs-vimeo, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `vimeo`. Source: [registry.npmjs.org/videojs-vimeo](https://registry.npmjs.org/videojs-vimeo)
 
-[^90]: **Vimeo — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/vimeo-video` exports `VimeoVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)
+[^90]: **Vimeo — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/vimeo-video` exports `VimeoVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
 [^91]: **Wistia — Playdeck**: yes. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `WistiaSource`. Source: packages/core/dist/types.d.ts (`PlayerSource`); packages/provider-wistia
 
 [^92]: **Wistia — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.wistia`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js
 
-[^93]: **Wistia — Vidstack**: no. mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `Wistia`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
+[^93]: **Wistia — Vidstack**: no. Searched for `istia`, which catches both `wistia` and `Wistia`; the same token is used in the Video.js and Video.js 10 (beta) columns. mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `istia`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
 
 [^94]: **Wistia — Media Chrome**: plugin. No provider module of its own; the documented compatible element is `<wistia-video>`. Plugin `wistia-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `wistia`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
 
-[^95]: **Wistia — Video.js**: no. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `Wistia`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
+[^95]: **Wistia — Video.js**: no. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `istia`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
 
-[^96]: **Wistia — Video.js 10 (beta)**: no. mechanical check: no file of `@videojs/react` matching `**/*.js` or `**/*.d.ts` contains `istia`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)
+[^96]: **Wistia — Video.js 10 (beta)**: no. mechanical check: no file of `@videojs/react` and `@videojs/core` and `@videojs/media` and `@videojs/spf` and `@videojs/store` and `@videojs/utils` matching `**/*.js` or `**/*.d.ts` contains `istia`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
 [^97]: **Other hosted providers (named) — Playdeck**: no. `PlayerSource` is a closed union of exactly five source kinds (packages/core/dist/types.d.ts), so no further hosted platform can be passed. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `Twitch`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
 
@@ -263,17 +263,17 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^99]: **Other hosted providers (named) — Vidstack**: no. Providers beyond HLS/DASH/YouTube/Vimeo/audio/video are not hosted platforms (e.g. a Remotion render provider). mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `Twitch`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
 
-[^100]: **Other hosted providers (named) — Media Chrome**: plugin. Documented compatible elements also include Cloudflare (`<cloudflare-video>`), JW Player, Mux, Shaka Player and Spotify. Plugin `cloudflare-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `cloudflare`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
+[^100]: **Other hosted providers (named) — Media Chrome**: plugin. The docs page lists 11 compatible elements. Beyond the HLS, DASH, YouTube, Vimeo and Wistia rows above, they are `<cloudflare-video>`, `<jwplayer-video>`, `<mux-video>`, `<shaka-video>`, `<spotify-audio>` and `<videojs-video>`. Plugin `cloudflare-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `cloudflare`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
 
 [^101]: **Other hosted providers (named) — Video.js**: no. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `Twitch`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
 
-[^102]: **Other hosted providers (named) — Video.js 10 (beta)**: yes. Twitch, TikTok, Spotify, Cloudflare Stream and Mux each ship as their own media component under the `@videojs/react/media/*` subpath. mechanical check: `@videojs/react/media/twitch-video` exports `TwitchVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)
+[^102]: **Other hosted providers (named) — Video.js 10 (beta)**: yes. Twitch, TikTok, Spotify, Cloudflare Stream and Mux each ship as their own media component under the `@videojs/react/media/*` subpath. mechanical check: `@videojs/react/media/twitch-video` exports `TwitchVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
 [^103]: **Audio tracks — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `AudioTrack`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
 
 [^104]: **Audio tracks — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `AudioTrack`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^105]: **Audio tracks — Vidstack**: yes. mechanical check: `@vidstack/react` exports `useAudioOptions`. Source: [vidstack.io](https://vidstack.io)
+[^105]: **Audio tracks — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `DefaultAudioTracksMenu`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
 
 [^106]: **Audio tracks — Media Chrome**: yes. mechanical check: `media-chrome/react/menu` exports `MediaAudioTrackMenu`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
@@ -283,9 +283,9 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^109]: **Chapters — Playdeck**: partial. A `Chapter` collection is published on player state; no chapters navigation UI primitive ships. mechanical check: `@playdeck/core` exports `deriveChapters`. Source: CONTEXT.md, the 'Chapter' entry; packages/core/dist/index.d.ts
 
-[^110]: **Chapters — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `hapter`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+[^110]: **Chapters — react-player**: no. Searched for `hapter`, which catches both `chapter` and `Chapter`. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `hapter`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^111]: **Chapters — Vidstack**: yes. mechanical check: `@vidstack/react` exports `useChapterOptions`. Source: [vidstack.io](https://vidstack.io)
+[^111]: **Chapters — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `DefaultChaptersMenu`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
 
 [^112]: **Chapters — Media Chrome**: partial. Shows the current chapter title while scrubbing; ships no chapters navigation menu. mechanical check: `media-chrome/react` exports `MediaPreviewChapterDisplay`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
@@ -297,7 +297,7 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^116]: **Thumbnails / preview on seek — react-player**: no. The `light` prop is a static startup poster fetched through oEmbed (`thumbnail_url` in `dist/Preview.js`), not a hover/scrub seek preview. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `thumbnails`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^117]: **Thumbnails / preview on seek — Vidstack**: yes. mechanical check: `@vidstack/react` exports `Thumbnail`. Source: [vidstack.io](https://vidstack.io)
+[^117]: **Thumbnails / preview on seek — Vidstack**: yes. mechanical check: `@vidstack/react` exports `Thumbnail`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^118]: **Thumbnails / preview on seek — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaPreviewThumbnail`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
@@ -315,7 +315,7 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^125]: **Playlists — Video.js**: plugin. No playlist component in core (the `Playlist` strings in `core.es.js` are HLS media-playlist parsing). Plugin `videojs-playlist`: npm `repository` github.com/brightcove/videojs-playlist, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `registerComponent('Playlist`. Source: [registry.npmjs.org/videojs-playlist](https://registry.npmjs.org/videojs-playlist)
 
-[^126]: **Playlists — Video.js 10 (beta)**: no. Its own migration guide lists playlists among the "genuinely missing features" that "need real work". mechanical check: no file of `@videojs/react` matching `**/*.js` or `**/*.d.ts` contains `Playlist`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`how-to/migrate-from-video-js-8.md`, "Plugins")
+[^126]: **Playlists — Video.js 10 (beta)**: no. Searched for `PlaylistProps`, the name a Playlist component would carry in a package that gives every component an `XProps` type: the bare word appears in `@videojs/media` for Google Cast queues and HLS media-playlist parsing. Its own migration guide lists playlists among the "genuinely missing features" that "need real work". mechanical check: no file of `@videojs/react` and `@videojs/core` and `@videojs/media` and `@videojs/spf` and `@videojs/store` and `@videojs/utils` matching `**/*.js` or `**/*.d.ts` contains `PlaylistProps`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`how-to/migrate-from-video-js-8.md`, "Plugins")
 
 [^127]: **Ads / IMA — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
 
@@ -325,9 +325,9 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^130]: **Ads / IMA — Media Chrome**: no. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
 
-[^131]: **Ads / IMA — Video.js**: plugin. No ad support in core; the ad-timeline framework is paired with Google's `videojs-ima`. Plugin `videojs-contrib-ads`: npm `repository` github.com/videojs/videojs-contrib-ads, org-published. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: [registry.npmjs.org/videojs-contrib-ads](https://registry.npmjs.org/videojs-contrib-ads)
+[^131]: **Ads / IMA — Video.js**: plugin. No ad support in core. The ad-timeline framework is usually paired with Google's `videojs-ima` (npm `repository` github.com/googleads/videojs-ima, third-party), which is not what this cell is anchored on. Plugin `videojs-contrib-ads`: npm `repository` github.com/videojs/videojs-contrib-ads, org-published. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: [registry.npmjs.org/videojs-contrib-ads](https://registry.npmjs.org/videojs-contrib-ads)
 
-[^132]: **Ads / IMA — Video.js 10 (beta)**: no. Its own migration guide says "If your player depends on an ads plugin, there's no v10 answer today". mechanical check: no file of `@videojs/react` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`how-to/migrate-from-video-js-8.md`, "Plugins")
+[^132]: **Ads / IMA — Video.js 10 (beta)**: no. Its own migration guide says "If your player depends on an ads plugin, there's no v10 answer today". mechanical check: no file of `@videojs/react` and `@videojs/core` and `@videojs/media` and `@videojs/spf` and `@videojs/store` and `@videojs/utils` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`how-to/migrate-from-video-js-8.md`, "Plugins")
 
 [^133]: **Analytics hooks — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `Analytics`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
 
@@ -343,7 +343,7 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^139]: **Plugin system — Playdeck**: no. Extensibility is React composition (compose primitives, pass props/render props), not a plugin registry. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `registerPlugin`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
 
-[^140]: **Plugin system — react-player**: yes. `ReactPlayer.addCustomPlayer` and `removeCustomPlayers` register and drop a custom player implementation. mechanical check: `react-player`'s `README.md` includes `addCustomPlayer`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package), the `addCustomPlayer` / `removeCustomPlayers` lines
+[^140]: **Plugin system — react-player**: yes. `ReactPlayer.addCustomPlayer` and `removeCustomPlayers` are assigned in the shipped code and typed in `dist/index.d.ts`; they register and drop a custom player implementation. mechanical check: `react-player`'s `dist/ReactPlayer.js` includes `ReactPlayer.addCustomPlayer =`. Source: react-player 3.4.0, node_modules/react-player/dist/ReactPlayer.js and README.md (installed package), the `addCustomPlayer` / `removeCustomPlayers` lines
 
 [^141]: **Plugin system — Vidstack**: no. mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `registerPlugin`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
 
@@ -351,13 +351,13 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^143]: **Plugin system — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `static registerPlugin(name, plugin)`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
 
-[^144]: **Plugin system — Video.js 10 (beta)**: no. Its own migration guide opens that section "v10 has no plugin system"; extension is composition, an ejected skin, or a swapped media component. mechanical check: no file of `@videojs/react` matching `**/*.js` or `**/*.d.ts` contains `registerPlugin`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`how-to/migrate-from-video-js-8.md`, "Plugins")
+[^144]: **Plugin system — Video.js 10 (beta)**: no. Its own migration guide opens that section "v10 has no plugin system"; extension is composition, an ejected skin, or a swapped media component. mechanical check: no file of `@videojs/react` and `@videojs/core` and `@videojs/media` and `@videojs/spf` and `@videojs/store` and `@videojs/utils` matching `**/*.js` or `**/*.d.ts` contains `registerPlugin`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`how-to/migrate-from-video-js-8.md`, "Plugins")
 
 [^145]: **Shipped skin / theme — Playdeck**: yes. `theme.css` and `docked.css` are exports entries the primitives never import themselves (see "requires an external stylesheet" below). mechanical check: `@playdeck/react`'s `package.json` includes `"./theme.css": "./theme.css"`. Source: packages/react/README.md
 
 [^146]: **Shipped skin / theme — react-player**: no. Ships no CSS file at all; visible controls are always the native `<video>` chrome or an iframe provider's own UI. mechanical check: `react-player` ships no file matching `**/*.css`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^147]: **Shipped skin / theme — Vidstack**: yes. mechanical check: `@vidstack/react/player/layouts/default` exports `DefaultVideoLayout`. Source: [vidstack.io](https://vidstack.io)
+[^147]: **Shipped skin / theme — Vidstack**: yes. mechanical check: `@vidstack/react/player/layouts/default` exports `DefaultVideoLayout`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/player/layouts/default (installed package)
 
 [^148]: **Shipped skin / theme — Media Chrome**: no. No stylesheet and no `dist/themes` directory ship. `MediaThemeElement` is a theming _engine_ for a consumer's own template, not a pre-built skin. mechanical check: `media-chrome` ships no file matching `**/*.css` or `dist/themes/**/*`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
 
@@ -369,11 +369,11 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^152]: **Headless, independently composable parts — react-player**: no. One configured component; controls are either the native chrome or an iframe provider's own UI, not independently importable parts. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `PlayButton`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^153]: **Headless, independently composable parts — Vidstack**: yes. mechanical check: `@vidstack/react` exports `PlayButton`. Source: [vidstack.io](https://vidstack.io)
+[^153]: **Headless, independently composable parts — Vidstack**: yes. mechanical check: `@vidstack/react` exports `PlayButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^154]: **Headless, independently composable parts — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaPlayButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
 
-[^155]: **Headless, independently composable parts — Video.js**: no. This pinned package ships no React integration at all, so it has no React parts to import; its own components are reachable imperatively (`player.controlBar.getChild(...)`). The videojs GitHub org publishes a separate React library, `@videojs/react`, which is the Video.js 10 (beta) column. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `jsx-runtime`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
+[^155]: **Headless, independently composable parts — Video.js**: no. Searched for `jsx-runtime` rather than a part name: the bundle does contain `bigPlayButton`, but as an internal component id, and the question this axis asks is whether React parts are importable at all. This pinned package ships no React integration, so it has none; its own components are reachable imperatively (`player.controlBar.getChild(...)`). The videojs GitHub org publishes a separate React library, `@videojs/react`, which is the Video.js 10 (beta) column. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `jsx-runtime`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
 
 [^156]: **Headless, independently composable parts — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `PlayButton`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
@@ -381,7 +381,7 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^158]: **Requires an external stylesheet for usable controls — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` contains `.css`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
-[^159]: **Requires an external stylesheet for usable controls — Vidstack**: yes. mechanical check: `@vidstack/react`'s `player/styles/default/theme.css` includes `Player`. Source: [vidstack.io](https://vidstack.io)
+[^159]: **Requires an external stylesheet for usable controls — Vidstack**: yes. mechanical check: `@vidstack/react`'s `player/styles/default/theme.css` includes `Player`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/player/styles/default/theme.css (installed package)
 
 [^160]: **Requires an external stylesheet for usable controls — Media Chrome**: no. Each custom element ships its own Shadow DOM styles. mechanical check: `media-chrome`'s `dist/media-chrome-button.js` includes `attachShadow`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
 
@@ -393,21 +393,21 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^164]: **Lazy / deferred provider loading — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `lazy(`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package)
 
-[^165]: **Lazy / deferred provider loading — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/vidstack.js` includes `import(`. Source: [vidstack.io](https://vidstack.io)
+[^165]: **Lazy / deferred provider loading — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/vidstack.js` includes `import(`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
 
 [^166]: **Lazy / deferred provider loading — Media Chrome**: n/a. The axis cannot apply: media-chrome ships no provider or engine module of its own to defer -- its controller wraps whatever media element a consumer slots in. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `hls`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
 
 [^167]: **Lazy / deferred provider loading — Video.js**: no. The HLS/DASH engine (videojs-http-streaming, mpd-parser, m3u8-parser) is a static import with no dynamic boundary. mechanical check: no file of `video.js` matching `**/*.js` contains `import(`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
 
-[^168]: **Lazy / deferred provider loading — Video.js 10 (beta)**: no. No dynamic `import()` in any shipped JavaScript; each media component is instead its own `@videojs/react/media/*` subpath a consumer imports statically, so a page pays only for the one it names. mechanical check: no file of `@videojs/react` matching `**/*.js` contains `import(`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)
+[^168]: **Lazy / deferred provider loading — Video.js 10 (beta)**: no. Searched across the two of the six packages that ship the providers and playback engines, because that is what this axis asks about. Each media component is its own `@videojs/react/media/*` subpath a consumer imports statically, so a page pays only for the one it names, and none is deferred. Dynamic `import()` does appear elsewhere in the six: `@videojs/core`'s `dist/*/core/i18n/load-locale.js` defers 53 translation packs, which are locales rather than providers. mechanical check: no file of `@videojs/react` and `@videojs/media` matching `**/*.js` contains `import(`. Source: @videojs/react 10.0.0-beta.32, every `.js` file in node_modules/@videojs/react and node_modules/@videojs/media (installed packages)
 
 [^169]: **React version supported — Playdeck**: yes. `>=19 <20` -- React 19 only. mechanical check: `@playdeck/react`'s `package.json` declares `peerDependencies.react`. Source: packages/react/package.json
 
 [^170]: **React version supported — react-player**: yes. `^17.0.2 || ^18 || ^19`. mechanical check: `react-player`'s `package.json` declares `peerDependencies.react`. Source: react-player 3.4.0, node_modules/react-player/package.json
 
-[^171]: **React version supported — Vidstack**: yes. `^18.0.0 || ^19.0.0`. mechanical check: `@vidstack/react`'s `package.json` declares `peerDependencies.react`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/package.json
+[^171]: **React version supported — Vidstack**: yes. `^18.0.0 || ^19.0.0`. mechanical check: `@vidstack/react`'s `package.json` declares `peerDependencies.react`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/package.json (installed package)
 
-[^172]: **React version supported — Media Chrome**: partial. No declared peer range; the React wrapper is generated at build time via `ce-la-react` (a runtime dependency), tested against React 19.2.2. mechanical check: `media-chrome`'s `package.json` has no `peerDependencies.react`. Source: media-chrome 4.19.2, node_modules/media-chrome/package.json
+[^172]: **React version supported — Media Chrome**: partial. Ships a React wrapper (generated at build time via `ce-la-react`, a runtime dependency) but declares no peer range for it; its `package.json` `devDependencies` pin `react` 19.2.2. mechanical check: `media-chrome`'s `package.json` has no `peerDependencies.react`. Source: media-chrome 4.19.2, node_modules/media-chrome/package.json
 
 [^173]: **React version supported — Video.js**: no. This pinned package ships no React integration, so it declares no React range. The videojs GitHub org publishes a separate React library, `@videojs/react`, which is the Video.js 10 (beta) column and declares `^18.0.0 || ^19.0.0`. mechanical check: `video.js`'s `package.json` has no `peerDependencies`. Source: video.js 8.24.0, node_modules/video.js/package.json (installed package)
 
@@ -429,7 +429,7 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^182]: **TypeScript types shipped — react-player**: yes. mechanical check: `react-player`'s `package.json` includes `"types": "./dist/index.d.ts"`. Source: react-player 3.4.0, node_modules/react-player/package.json
 
-[^183]: **TypeScript types shipped — Vidstack**: yes. mechanical check: `@vidstack/react`'s `package.json` declares `types`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/package.json
+[^183]: **TypeScript types shipped — Vidstack**: yes. mechanical check: `@vidstack/react`'s `package.json` declares `types`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/package.json (installed package)
 
 [^184]: **TypeScript types shipped — Media Chrome**: yes. mechanical check: `media-chrome`'s `package.json` includes `"types": "./dist/react/index.d.ts"`. Source: media-chrome 4.19.2, node_modules/media-chrome/package.json
 
@@ -437,11 +437,11 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^186]: **TypeScript types shipped — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react`'s `package.json` declares `types`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/package.json (installed package)
 
-[^187]: **ESM/CJS (dual build) — Playdeck**: partial. ESM-only; the `require` condition resolves to a stub that throws by name rather than leaving the failure to Node's own report. mechanical check: `@playdeck/react`'s `esm-only.cjs` includes `ESM only`. Source: packages/react/esm-only.cjs
+[^187]: **ESM/CJS (dual build) — Playdeck**: partial. ESM-only (`"type": "module"`); the `require` condition resolves to a stub that throws by name. mechanical check: `@playdeck/react`'s `esm-only.cjs` includes `ESM only`. Source: packages/react/esm-only.cjs
 
 [^188]: **ESM/CJS (dual build) — react-player**: partial. ESM-only (`"type": "module"`, no `require` export condition). mechanical check: no file of `react-player` matching `package.json` contains `"require":`. Source: react-player 3.4.0, node_modules/react-player/package.json
 
-[^189]: **ESM/CJS (dual build) — Vidstack**: partial. ESM-only (`"type": "module"`, no `require` export condition). mechanical check: no file of `@vidstack/react` matching `package.json` contains `"require":`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/package.json
+[^189]: **ESM/CJS (dual build) — Vidstack**: partial. ESM-only (`"type": "module"`, no `require` export condition). mechanical check: no file of `@vidstack/react` matching `package.json` contains `"require":`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/package.json (installed package)
 
 [^190]: **ESM/CJS (dual build) — Media Chrome**: yes. mechanical check: `media-chrome`'s `package.json` includes `"require":`. Source: media-chrome 4.19.2, node_modules/media-chrome/package.json
 

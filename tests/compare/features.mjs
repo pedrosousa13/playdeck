@@ -21,9 +21,19 @@
 //   not have carried the answer either way (`absent-in-tree`).
 // - Where the obvious token for an axis collides with an unrelated
 //   identifier in one library -- Vidstack's `PlaylistIcon` art, react-player's
-//   oEmbed `thumbnail_url` -- the anchor narrows to a token that does not, and
-//   the note names the collision rather than leaving a reader to wonder why
-//   this column's token differs.
+//   oEmbed `thumbnail_url`, video.js's `Fairplay` -- the anchor narrows to a
+//   token that does not, and the note names the collision rather than leaving
+//   a reader to wonder why this column's token differs.
+// - An `absent-in-tree` anchor searches every package a consumer of that
+//   column installs, not only the one the column is named after. Playdeck is
+//   `@playdeck/core` plus `@playdeck/react`; Video.js 10 (beta) is
+//   `@videojs/react` plus the five `@videojs/*` engine packages its own
+//   `dependencies` pin at the same version. Anything narrower would let one
+//   column's `no` cost less evidence than another's, which is the whole
+//   failure `absent-in-tree` exists to close. One cell narrows deliberately
+//   and says so in its note: "lazy provider loading" for Video.js 10 (beta)
+//   searches the two of those six that actually ship providers, because that
+//   is the question the axis asks.
 // - A status describes the library's own API and UI for its own file or
 //   native playback. It never encodes which of a library's providers can do
 //   the thing: a YouTube iframe cannot enter picture-in-picture under any
@@ -69,7 +79,14 @@ const REACT_PLAYER_TYPES =
   'react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)';
 const REACT_PLAYER_TREE =
   'react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)';
-const VIDSTACK_DOCS = '[vidstack.io](https://vidstack.io)';
+const REACT_PLAYER_CONTROLS_DOC =
+  'react-player 3.4.0, node_modules/react-player/README.md (installed package), its "Custom player controls" section, which composes Media Chrome parts around a `<ReactPlayer slot="media">`';
+const VIDSTACK_ENTRY =
+  '@vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)';
+const VIDSTACK_COMPONENTS =
+  '@vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)';
+const VIDSTACK_PKG =
+  '@vidstack/react 1.15.6, node_modules/@vidstack/react/package.json (installed package)';
 const VIDSTACK_TREE =
   '@vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)';
 const MEDIA_CHROME_README =
@@ -89,7 +106,9 @@ const VIDEOJS10_TYPES =
 const VIDEOJS10_PKG =
   '@videojs/react 10.0.0-beta.32, node_modules/@videojs/react/package.json (installed package)';
 const VIDEOJS10_TREE =
-  '@videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)';
+  '@videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)';
+const VIDEOJS10_OWN =
+  '@videojs/react 10.0.0-beta.32, node_modules/@videojs/react (installed package)';
 const VIDEOJS10_DOCS =
   '@videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation)';
 const PLAYDECK_REACT_README = 'packages/react/README.md';
@@ -129,7 +148,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'CaptionButton'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'yes',
@@ -190,11 +209,12 @@ export const axes = [
       Vidstack: {
         status: 'yes',
         anchor: {
-          kind: 'export',
+          kind: 'file',
           module: '@vidstack/react',
-          name: 'useVideoQualityOptions'
+          path: 'prod/player/vidstack-default-components.js',
+          includes: 'DefaultQualityMenu'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_COMPONENTS
       },
       'Media Chrome': {
         status: 'yes',
@@ -214,7 +234,7 @@ export const axes = [
           includes: "videojs.registerPlugin('qualityLevels'"
         },
         source: VIDEOJS_DIST,
-        note: 'The `qualityLevels()` API and `QualityLevelList` ship in core with no default UI button; the documented UI plugin is `videojs-http-source-selector`.'
+        note: 'The `qualityLevels()` API and `QualityLevelList` ship in core with no default UI button. A documented UI plugin exists (`videojs-http-source-selector`, npm `repository` github.com/jfujita/videojs-http-source-selector, third-party); the status reads the core API rather than that plugin.'
       },
       'Video.js 10 (beta)': {
         status: 'yes',
@@ -244,24 +264,30 @@ export const axes = [
         note: 'A `setPlaybackRate` command and capability exist; no dedicated playback-rate button or menu primitive ships.'
       },
       'react-player': {
-        status: 'partial',
+        status: 'plugin',
         anchor: {
-          kind: 'types',
+          kind: 'absent-in-tree',
           module: 'react-player',
-          path: 'dist/types.d.ts',
-          includes: 'playbackRate?: number;'
+          glob: ['**/*.js', '**/*.d.ts'],
+          includes: 'PlaybackRateButton'
         },
-        source: REACT_PLAYER_TYPES,
-        note: 'A `playbackRate` prop sets the rate; no playback-rate control of react-player\'s own ships. Provider limit, not a status: its own README says the prop is "Only supported by YouTube, Wistia, and file paths".'
+        source: REACT_PLAYER_CONTROLS_DOC,
+        note: 'A `playbackRate` prop sets the rate (`dist/types.d.ts`); no playback-rate control ships in react-player\'s own code, and its README\'s "Custom player controls" section composes `<MediaPlaybackRateButton>` for one. Provider limit, not a status: the same README says the prop is "Only supported by YouTube, Wistia, and file paths".',
+        plugin: {
+          name: 'media-chrome',
+          repository: 'github.com/muxinc/media-chrome',
+          provenance: 'third-party'
+        }
       },
       Vidstack: {
         status: 'yes',
         anchor: {
-          kind: 'export',
+          kind: 'file',
           module: '@vidstack/react',
-          name: 'usePlaybackRateOptions'
+          path: 'prod/player/vidstack-default-components.js',
+          includes: 'DefaultSpeedMenu'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_COMPONENTS
       },
       'Media Chrome': {
         status: 'yes',
@@ -325,7 +351,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'PIPButton'
         },
-        source: VIDSTACK_DOCS,
+        source: VIDSTACK_ENTRY,
         note: 'Provider limit, not a status: Vidstack publishes this as provider-dependent player state, which an embedded provider leaves unset.'
       },
       'Media Chrome': {
@@ -372,15 +398,20 @@ export const axes = [
         source: PLAYDECK_REACT_README
       },
       'react-player': {
-        status: 'no',
+        status: 'plugin',
         anchor: {
           kind: 'absent-in-tree',
           module: 'react-player',
           glob: ['**/*.js', '**/*.d.ts'],
           includes: 'fullscreen'
         },
-        source: REACT_PLAYER_TREE,
-        note: 'No fullscreen prop or method of its own; a fullscreen button appears only when the native `<video controls>` or an iframe provider (YouTube, Vimeo) supplies one.'
+        source: REACT_PLAYER_CONTROLS_DOC,
+        note: 'No fullscreen prop, method or button in its own shipped code; its README\'s "Custom player controls" section composes `<MediaFullscreenButton>` for one. Without that, a fullscreen button appears only when the native `<video controls>` or an iframe provider (YouTube, Vimeo) supplies its own.',
+        plugin: {
+          name: 'media-chrome',
+          repository: 'github.com/muxinc/media-chrome',
+          provenance: 'third-party'
+        }
       },
       Vidstack: {
         status: 'yes',
@@ -389,7 +420,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'FullscreenButton'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'yes',
@@ -444,7 +475,7 @@ export const axes = [
           includes: 'irplay'
         },
         source: REACT_PLAYER_TREE,
-        note: "Ships `disableRemotePlayback` (opts out of the browser's own remote-playback picker) but no AirPlay-specific API of its own."
+        note: "Searched for `irplay`, which catches `airplay`, `Airplay` and `AirPlay` alike. Ships `disableRemotePlayback` (opts out of the browser's own remote-playback picker) but no AirPlay-specific API of its own."
       },
       Vidstack: {
         status: 'yes',
@@ -453,7 +484,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'AirPlayButton'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'yes',
@@ -474,7 +505,7 @@ export const axes = [
         },
         source:
           '[registry.npmjs.org/videojs-airplay](https://registry.npmjs.org/videojs-airplay)',
-        note: 'No AirPlay button in core.',
+        note: "Searched for `AirPlay` rather than the broader `irplay` used in the react-player column: this bundle's only lower-case `airplay` string is inside the word `Fairplay`, a DRM key system, not an AirPlay control. No AirPlay button in core.",
         plugin: {
           name: 'videojs-airplay',
           repository: 'github.com/jgubman/videojs-airplay',
@@ -524,7 +555,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'GoogleCastButton'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'yes',
@@ -545,7 +576,7 @@ export const axes = [
         },
         source:
           '[registry.npmjs.org/videojs-chromecast](https://registry.npmjs.org/videojs-chromecast)',
-        note: 'Core only detects a Chromecast _receiver_ context (`IS_CHROMECAST_RECEIVER`), which is not a sender button.',
+        note: "Searched for `CastButton` rather than the broader `Cast` used in the Playdeck column: this bundle's only `Chromecast` string is `IS_CHROMECAST_RECEIVER`, a receiver-context flag, which is not a sender button.",
         plugin: {
           name: 'videojs-chromecast',
           repository: 'github.com/benjipott/video.js-chromecast',
@@ -570,23 +601,29 @@ export const axes = [
       Playdeck: {
         status: 'yes',
         anchor: {
-          kind: 'export',
+          kind: 'file',
           module: '@playdeck/react',
-          name: 'Controls'
+          path: 'dist/index.js',
+          includes: 'ArrowLeft'
         },
         source:
           'packages/react/README.md ("Controls is a focusable region that owns the media keyboard shortcuts")'
       },
       'react-player': {
-        status: 'no',
+        status: 'plugin',
         anchor: {
           kind: 'absent-in-tree',
           module: 'react-player',
           glob: ['**/*.js', '**/*.d.ts'],
           includes: 'keyboard'
         },
-        source: REACT_PLAYER_TREE,
-        note: "No media keyboard handling of its own (`dist/Preview.js` binds `onKeyDown` for the `light`-mode preview button alone); keyboard operation comes from the native `<video controls>` or an iframe provider's own player."
+        source: REACT_PLAYER_CONTROLS_DOC,
+        note: "No media keyboard handling in its own shipped code (`dist/Preview.js` binds `onKeyDown` for the `light`-mode preview button alone); its README's \"Custom player controls\" section composes `<MediaController>`, which owns the media hotkeys (`hotkeys`, `nohotkeys` and `keydown` in media-chrome's `dist/media-controller.js`). Without it, keyboard operation comes from the native `<video controls>` or an iframe provider's own player.",
+        plugin: {
+          name: 'media-chrome',
+          repository: 'github.com/muxinc/media-chrome',
+          provenance: 'third-party'
+        }
       },
       Vidstack: {
         status: 'yes',
@@ -595,7 +632,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'MEDIA_KEY_SHORTCUTS'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'yes',
@@ -650,7 +687,7 @@ export const axes = [
           includes: 'previewAriaLabel?: string;'
         },
         source: REACT_PLAYER_TYPES,
-        note: 'Only the `light`-mode preview button carries an authored `previewAriaLabel`; the native control set otherwise supplies its own accessible names.'
+        note: 'Only the `light`-mode preview button carries an authored `previewAriaLabel`; the native control set otherwise supplies its own accessible names. Not `plugin`, unlike the fullscreen, playback-rate and keyboard rows: react-player authors one label of its own, so the answer is not only a plugin.'
       },
       Vidstack: {
         status: 'yes',
@@ -660,7 +697,7 @@ export const axes = [
           path: 'prod/player/vidstack-default-components.js',
           includes: 'aria-label'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_COMPONENTS
       },
       'Media Chrome': {
         status: 'yes',
@@ -757,13 +794,14 @@ export const axes = [
       'Video.js 10 (beta)': {
         status: 'yes',
         anchor: {
-          kind: 'export',
+          kind: 'file',
           module: '@videojs/react',
-          name: 'KeySystems'
+          path: 'docs/reference/shaka-video.md',
+          includes: 'source.drm'
         },
         source:
           VIDEOJS10_DOCS + ' (`reference/shaka-video.md`, "Protected content")',
-        note: "A `source.drm` map of EME key-system ids on `ShakaVideo` and `HlsjsVideo`; the playback engine behind it (shaka-player, hls.js) is the consumer's own install."
+        note: "A `source.drm` map of EME key-system ids on `ShakaVideo` and `HlsjsVideo`; the key-system constants (`KeySystems`) are re-exported by `@videojs/react` from `@videojs/media`, whose `dist/default/core/drm.js` implements them. The playback engine behind it (shaka-player, hls.js) is the consumer's own install."
       }
     }
   },
@@ -800,7 +838,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'HLSProviderLoader'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'plugin',
@@ -872,7 +910,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'DASHProviderLoader'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'plugin',
@@ -883,7 +921,7 @@ export const axes = [
           includes: 'DashVideo'
         },
         source: MEDIA_CHROME_ELEMENTS_DOCS,
-        note: 'No provider or engine module of its own; the documented compatible element is `<dash-video>`.',
+        note: "Searched for `DashVideo` rather than the bare word: the package's only `dash` strings are its own `dashedToCamel` helper. No provider or engine module of its own; the documented compatible element is `<dash-video>`.",
         plugin: {
           name: 'dash-video-element',
           repository: 'github.com/muxinc/media-elements',
@@ -943,7 +981,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'LiveButton'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'yes',
@@ -1008,7 +1046,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'YouTubeProviderLoader'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'plugin',
@@ -1087,7 +1125,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'VimeoProviderLoader'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'plugin',
@@ -1164,9 +1202,10 @@ export const axes = [
           kind: 'absent-in-tree',
           module: '@vidstack/react',
           glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'Wistia'
+          includes: 'istia'
         },
-        source: VIDSTACK_TREE
+        source: VIDSTACK_TREE,
+        note: 'Searched for `istia`, which catches both `wistia` and `Wistia`; the same token is used in the Video.js and Video.js 10 (beta) columns.'
       },
       'Media Chrome': {
         status: 'plugin',
@@ -1190,7 +1229,7 @@ export const axes = [
           kind: 'absent-in-tree',
           module: 'video.js',
           glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'Wistia'
+          includes: 'istia'
         },
         source: VIDEOJS_TREE
       },
@@ -1198,7 +1237,14 @@ export const axes = [
         status: 'no',
         anchor: {
           kind: 'absent-in-tree',
-          module: '@videojs/react',
+          module: [
+            '@videojs/react',
+            '@videojs/core',
+            '@videojs/media',
+            '@videojs/spf',
+            '@videojs/store',
+            '@videojs/utils'
+          ],
           glob: ['**/*.js', '**/*.d.ts'],
           includes: 'istia'
         },
@@ -1252,7 +1298,7 @@ export const axes = [
           includes: 'cloudflare'
         },
         source: MEDIA_CHROME_ELEMENTS_DOCS,
-        note: 'Documented compatible elements also include Cloudflare (`<cloudflare-video>`), JW Player, Mux, Shaka Player and Spotify.',
+        note: 'The docs page lists 11 compatible elements. Beyond the HLS, DASH, YouTube, Vimeo and Wistia rows above, they are `<cloudflare-video>`, `<jwplayer-video>`, `<mux-video>`, `<shaka-video>`, `<spotify-audio>` and `<videojs-video>`.',
         plugin: {
           name: 'cloudflare-video-element',
           repository: 'github.com/muxinc/media-elements',
@@ -1308,11 +1354,12 @@ export const axes = [
       Vidstack: {
         status: 'yes',
         anchor: {
-          kind: 'export',
+          kind: 'file',
           module: '@vidstack/react',
-          name: 'useAudioOptions'
+          path: 'prod/player/vidstack-default-components.js',
+          includes: 'DefaultAudioTracksMenu'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_COMPONENTS
       },
       'Media Chrome': {
         status: 'yes',
@@ -1367,16 +1414,18 @@ export const axes = [
           glob: ['**/*.js', '**/*.d.ts'],
           includes: 'hapter'
         },
-        source: REACT_PLAYER_TREE
+        source: REACT_PLAYER_TREE,
+        note: 'Searched for `hapter`, which catches both `chapter` and `Chapter`.'
       },
       Vidstack: {
         status: 'yes',
         anchor: {
-          kind: 'export',
+          kind: 'file',
           module: '@vidstack/react',
-          name: 'useChapterOptions'
+          path: 'prod/player/vidstack-default-components.js',
+          includes: 'DefaultChaptersMenu'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_COMPONENTS
       },
       'Media Chrome': {
         status: 'partial',
@@ -1442,7 +1491,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'Thumbnail'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'yes',
@@ -1548,13 +1597,20 @@ export const axes = [
         status: 'no',
         anchor: {
           kind: 'absent-in-tree',
-          module: '@videojs/react',
+          module: [
+            '@videojs/react',
+            '@videojs/core',
+            '@videojs/media',
+            '@videojs/spf',
+            '@videojs/store',
+            '@videojs/utils'
+          ],
           glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'Playlist'
+          includes: 'PlaylistProps'
         },
         source:
           VIDEOJS10_DOCS + ' (`how-to/migrate-from-video-js-8.md`, "Plugins")',
-        note: 'Its own migration guide lists playlists among the "genuinely missing features" that "need real work".'
+        note: 'Searched for `PlaylistProps`, the name a Playlist component would carry in a package that gives every component an `XProps` type: the bare word appears in `@videojs/media` for Google Cast queues and HLS media-playlist parsing. Its own migration guide lists playlists among the "genuinely missing features" that "need real work".'
       }
     }
   },
@@ -1612,7 +1668,7 @@ export const axes = [
         },
         source:
           '[registry.npmjs.org/videojs-contrib-ads](https://registry.npmjs.org/videojs-contrib-ads)',
-        note: "No ad support in core; the ad-timeline framework is paired with Google's `videojs-ima`.",
+        note: "No ad support in core. The ad-timeline framework is usually paired with Google's `videojs-ima` (npm `repository` github.com/googleads/videojs-ima, third-party), which is not what this cell is anchored on.",
         plugin: {
           name: 'videojs-contrib-ads',
           repository: 'github.com/videojs/videojs-contrib-ads',
@@ -1623,7 +1679,14 @@ export const axes = [
         status: 'no',
         anchor: {
           kind: 'absent-in-tree',
-          module: '@videojs/react',
+          module: [
+            '@videojs/react',
+            '@videojs/core',
+            '@videojs/media',
+            '@videojs/spf',
+            '@videojs/store',
+            '@videojs/utils'
+          ],
           glob: ['**/*.js', '**/*.d.ts'],
           includes: 'AdBreak'
         },
@@ -1726,12 +1789,12 @@ export const axes = [
         anchor: {
           kind: 'file',
           module: 'react-player',
-          path: 'README.md',
-          includes: 'addCustomPlayer'
+          path: 'dist/ReactPlayer.js',
+          includes: 'ReactPlayer.addCustomPlayer ='
         },
         source:
-          'react-player 3.4.0, node_modules/react-player/README.md (installed package), the `addCustomPlayer` / `removeCustomPlayers` lines',
-        note: '`ReactPlayer.addCustomPlayer` and `removeCustomPlayers` register and drop a custom player implementation.'
+          'react-player 3.4.0, node_modules/react-player/dist/ReactPlayer.js and README.md (installed package), the `addCustomPlayer` / `removeCustomPlayers` lines',
+        note: '`ReactPlayer.addCustomPlayer` and `removeCustomPlayers` are assigned in the shipped code and typed in `dist/index.d.ts`; they register and drop a custom player implementation.'
       },
       Vidstack: {
         status: 'no',
@@ -1768,7 +1831,14 @@ export const axes = [
         status: 'no',
         anchor: {
           kind: 'absent-in-tree',
-          module: '@videojs/react',
+          module: [
+            '@videojs/react',
+            '@videojs/core',
+            '@videojs/media',
+            '@videojs/spf',
+            '@videojs/store',
+            '@videojs/utils'
+          ],
           glob: ['**/*.js', '**/*.d.ts'],
           includes: 'registerPlugin'
         },
@@ -1810,7 +1880,8 @@ export const axes = [
           module: '@vidstack/react/player/layouts/default',
           name: 'DefaultVideoLayout'
         },
-        source: VIDSTACK_DOCS
+        source:
+          '@vidstack/react 1.15.6, node_modules/@vidstack/react/player/layouts/default (installed package)'
       },
       'Media Chrome': {
         status: 'no',
@@ -1875,7 +1946,7 @@ export const axes = [
           module: '@vidstack/react',
           name: 'PlayButton'
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'yes',
@@ -1895,7 +1966,7 @@ export const axes = [
           includes: 'jsx-runtime'
         },
         source: VIDEOJS_TREE,
-        note: 'This pinned package ships no React integration at all, so it has no React parts to import; its own components are reachable imperatively (`player.controlBar.getChild(...)`). The videojs GitHub org publishes a separate React library, `@videojs/react`, which is the Video.js 10 (beta) column.'
+        note: 'Searched for `jsx-runtime` rather than a part name: the bundle does contain `bigPlayButton`, but as an internal component id, and the question this axis asks is whether React parts are importable at all. This pinned package ships no React integration, so it has none; its own components are reachable imperatively (`player.controlBar.getChild(...)`). The videojs GitHub org publishes a separate React library, `@videojs/react`, which is the Video.js 10 (beta) column.'
       },
       'Video.js 10 (beta)': {
         status: 'yes',
@@ -1941,7 +2012,8 @@ export const axes = [
           path: 'player/styles/default/theme.css',
           includes: 'Player'
         },
-        source: VIDSTACK_DOCS
+        source:
+          '@vidstack/react 1.15.6, node_modules/@vidstack/react/player/styles/default/theme.css (installed package)'
       },
       'Media Chrome': {
         status: 'no',
@@ -2009,7 +2081,7 @@ export const axes = [
           path: 'prod/vidstack.js',
           includes: 'import('
         },
-        source: VIDSTACK_DOCS
+        source: VIDSTACK_ENTRY
       },
       'Media Chrome': {
         status: 'n/a',
@@ -2037,12 +2109,13 @@ export const axes = [
         status: 'no',
         anchor: {
           kind: 'absent-in-tree',
-          module: '@videojs/react',
+          module: ['@videojs/react', '@videojs/media'],
           glob: ['**/*.js'],
           includes: 'import('
         },
-        source: VIDEOJS10_TREE,
-        note: 'No dynamic `import()` in any shipped JavaScript; each media component is instead its own `@videojs/react/media/*` subpath a consumer imports statically, so a page pays only for the one it names.'
+        source:
+          '@videojs/react 10.0.0-beta.32, every `.js` file in node_modules/@videojs/react and node_modules/@videojs/media (installed packages)',
+        note: "Searched across the two of the six packages that ship the providers and playback engines, because that is what this axis asks about. Each media component is its own `@videojs/react/media/*` subpath a consumer imports statically, so a page pays only for the one it names, and none is deferred. Dynamic `import()` does appear elsewhere in the six: `@videojs/core`'s `dist/*/core/i18n/load-locale.js` defers 53 translation packs, which are locales rather than providers."
       }
     }
   },
@@ -2077,8 +2150,7 @@ export const axes = [
           module: '@vidstack/react',
           field: 'peerDependencies.react'
         },
-        source:
-          '@vidstack/react 1.15.6, node_modules/@vidstack/react/package.json',
+        source: VIDSTACK_PKG,
         note: '`^18.0.0 || ^19.0.0`.'
       },
       'Media Chrome': {
@@ -2089,7 +2161,7 @@ export const axes = [
           field: 'peerDependencies.react'
         },
         source: 'media-chrome 4.19.2, node_modules/media-chrome/package.json',
-        note: 'No declared peer range; the React wrapper is generated at build time via `ce-la-react` (a runtime dependency), tested against React 19.2.2.'
+        note: 'Ships a React wrapper (generated at build time via `ce-la-react`, a runtime dependency) but declares no peer range for it; its `package.json` `devDependencies` pin `react` 19.2.2.'
       },
       'Video.js': {
         status: 'no',
@@ -2176,8 +2248,7 @@ export const axes = [
           module: '@videojs/react',
           expect: 'imports'
         },
-        source:
-          '@videojs/react 10.0.0-beta.32, node_modules/@videojs/react (installed package)'
+        source: VIDEOJS10_OWN
       }
     }
   },
@@ -2212,8 +2283,7 @@ export const axes = [
           module: '@vidstack/react',
           field: 'types'
         },
-        source:
-          '@vidstack/react 1.15.6, node_modules/@vidstack/react/package.json'
+        source: VIDSTACK_PKG
       },
       'Media Chrome': {
         status: 'yes',
@@ -2258,7 +2328,7 @@ export const axes = [
           includes: 'ESM only'
         },
         source: 'packages/react/esm-only.cjs',
-        note: "ESM-only; the `require` condition resolves to a stub that throws by name rather than leaving the failure to Node's own report."
+        note: 'ESM-only (`"type": "module"`); the `require` condition resolves to a stub that throws by name.'
       },
       'react-player': {
         status: 'partial',
@@ -2279,8 +2349,7 @@ export const axes = [
           glob: ['package.json'],
           includes: '"require":'
         },
-        source:
-          '@vidstack/react 1.15.6, node_modules/@vidstack/react/package.json',
+        source: VIDSTACK_PKG,
         note: 'ESM-only (`"type": "module"`, no `require` export condition).'
       },
       'Media Chrome': {
