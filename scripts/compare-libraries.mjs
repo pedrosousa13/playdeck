@@ -11,13 +11,31 @@
 //
 // ---- what "gzipped bytes" means here --------------------------------------
 //
-// Every library is bundled from one entry file under tests/compare/entries/
+// Every row is bundled from one entry file under tests/compare/entries/
 // through the same `vite build`, with React, ReactDOM and the JSX runtime
-// marked external for every one of them alike -- none of the five libraries
-// is charged for a dependency every one of them equally requires a consumer
-// to already have. `write: false` keeps the build in memory, the same way
+// marked external for every one of them alike -- none of them is charged for
+// a dependency every one of them equally requires a consumer to already
+// have. `write: false` keeps the build in memory, the same way
 // readme-bytes.mjs's `minifiedGzipKilobytes` does, so this never touches disk
 // and never risks measuring a stale dist/ left over from a previous run.
+// Two of the six rows are Playdeck, measuring the same entry point's worth of
+// primitives at two different control-bar compositions -- see the
+// `libraries` array below and docs/comparison/method.md's "Equivalent
+// composition per library" for which of the two is the fair comparison for
+// which other row.
+//
+// ---- the esbuild cross-check ------------------------------------------------
+//
+// Every row is also bundled a second time, independently, with `esbuild`
+// (`bundleEntryEsbuild`, normalised into this file's own `Chunk` shape by
+// `normalizeEsbuildOutputs`) -- the same entry, the same externals, the same
+// `reachableChunks` rule, a different bundler and a different minifier.
+// `results.md`'s "Gzipped (esbuild)" column is that second figure, printed
+// beside Vite's rather than instead of it: two independent tools agreeing on
+// a number is evidence the number belongs to the library being measured and
+// not to a quirk of one harness's own bundler, which is what
+// docs/comparison/method.md's "What is measured" argues at more length, and
+// is also where every row's actual Vite/esbuild delta is accounted for.
 //
 // A build without `build.lib` is used deliberately, and not the lib-mode
 // config every other measurement in this repo reaches for: lib mode exists to
@@ -69,7 +87,8 @@ import { build } from 'vite';
 import react from '@vitejs/plugin-react';
 import { gzipSync } from 'node:zlib';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { join, relative } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 const console = globalThis.console;
@@ -78,6 +97,18 @@ const process = globalThis.process;
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const fixtureRoot = join(repoRoot, 'tests/compare');
 const RESULTS_PATH = 'docs/comparison/results.md';
+
+// esbuild is a devDependency of tests/compare, not of the repository root
+// (deliberately -- see docs/comparison/method.md's "What is measured" for
+// why a second bundler lives there and not here), so it resolves from
+// tests/compare's own node_modules rather than from this file's. Resolved
+// through tests/compare's package.json rather than imported by bare
+// specifier for that reason: a bare `import 'esbuild'` from this file would
+// walk up from scripts/, past tests/compare, to this repository's own
+// node_modules, and fail to find it there.
+const esbuild = await import(
+  createRequire(join(fixtureRoot, 'package.json')).resolve('esbuild')
+);
 
 // Marked external for every library alike -- see the file header. `import()`
 // still resolves these names at runtime in a real page because the consumer's
@@ -91,11 +122,18 @@ const REACT_EXTERNALS = [
 ];
 
 /**
+ * One bundler-agnostic chunk. `imports` and `dynamicImports` both name other
+ * chunks by `fileName` (or an external specifier no chunk in the graph has,
+ * which every reader here drops rather than resolves): Vite's own `OutputChunk`
+ * already carries both under these names, so the Vite path uses it unchanged;
+ * `normalizeEsbuildOutputs` builds the esbuild equivalent from its metafile,
+ * splitting one `imports` array by `kind` into these same two.
  * @typedef {{
  *   fileName: string;
  *   code: string;
  *   isEntry: boolean;
  *   imports: readonly string[];
+ *   dynamicImports: readonly string[];
  *   moduleIds: readonly string[];
  * }} Chunk
  */
@@ -119,6 +157,15 @@ export const libraries = [
     package: '@playdeck/react',
     entry: 'entries/playdeck.tsx',
     composition: 'core + primitives + native provider',
+    requiredChunk: (chunk) =>
+      chunk.moduleIds.some((id) => id.includes('/provider-native/'))
+  },
+  {
+    name: 'Playdeck (control bar)',
+    package: '@playdeck/react',
+    entry: 'entries/playdeck-control-bar.tsx',
+    composition:
+      "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/'))
   },
@@ -154,12 +201,36 @@ export const libraries = [
 
 /**
  * The chunks a browser is guaranteed to fetch to run one library's fixture:
- * the entry's own static import closure, plus every chunk `isRequired`
- * accepts. See this file's header for what "guaranteed" is standing in for.
+ * the entry's own static import closure, plus the static closure of every
+ * dynamic-import target reachable from there whose own closure contains a
+ * chunk `isRequired` accepts. See this file's header for what "guaranteed"
+ * is standing in for.
  *
- * `imports` can name an external specifier (`"react"`) alongside chunk file
- * names -- `byFile` simply has no entry for those, and the walk drops them
- * rather than needing to tell the two apart itself.
+ * The second half is not "every chunk `isRequired` accepts" on its own,
+ * which is what an earlier version of this function did and which happened
+ * to hold only because Vite's chunker gave Playdeck's native provider one
+ * chunk that was both the dynamic-import target and the code. esbuild's
+ * chunker does not: it split the same provider into a tiny shim chunk that is
+ * the actual `import()` target (no module of its own, so `isRequired` never
+ * matches it) and a separate shared chunk holding the real code (which
+ * `isRequired` does match, but which nothing dynamically imports directly --
+ * only the shim does, and only the shim's own static import reaches it). A
+ * rule that added chunks by matching them in isolation would keep the code
+ * chunk and drop the shim that is the only thing standing between the entry
+ * and it, undercounting the figure by exactly the shim's weight. Walking
+ * dynamic-import targets and testing -- then keeping -- their whole static
+ * closure is what stays correct under either chunking shape.
+ *
+ * A candidate whose closure does not match `isRequired` contributes nothing
+ * and is not searched further: nothing downstream of a chunk this fixture
+ * never causes to load can load either, so its own dynamic imports (hls.js
+ * behind Playdeck's HLS adapter, say) are correctly left unreached without
+ * this function ever having to name them.
+ *
+ * `imports` and `dynamicImports` can each name an external specifier
+ * (`"react"`) alongside chunk file names -- `byFile` simply has no entry for
+ * those, and the walk drops them rather than needing to tell the two apart
+ * itself.
  * @param {readonly Chunk[]} chunks
  * @param {(chunk: Chunk) => boolean} isRequired
  * @returns {Chunk[]}
@@ -171,27 +242,90 @@ export const reachableChunks = (chunks, isRequired) => {
   }
   const byFile = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
 
-  /** @type {Set<string>} */
-  const reachable = new Set();
-  /** @param {string} fileName */
-  const visitStatic = (fileName) => {
-    if (reachable.has(fileName)) return;
-    const chunk = byFile.get(fileName);
-    if (!chunk) return;
-    reachable.add(fileName);
-    for (const imported of chunk.imports) visitStatic(imported);
-  };
-  visitStatic(entry.fileName);
+  /** @type {Map<string, Chunk>} */
+  const reachable = new Map();
 
-  for (const chunk of chunks) {
-    if (isRequired(chunk)) reachable.add(chunk.fileName);
+  /**
+   * The static closure of `fileName`, over chunks not already in
+   * `reachable` -- so a closure computed for one candidate never re-walks
+   * ground an earlier, accepted candidate already covered.
+   * @param {string} fileName
+   * @returns {Map<string, Chunk>}
+   */
+  const staticClosure = (fileName) => {
+    /** @type {Map<string, Chunk>} */
+    const closure = new Map();
+    /** @param {string} name */
+    const visit = (name) => {
+      if (closure.has(name) || reachable.has(name)) return;
+      const chunk = byFile.get(name);
+      if (!chunk) return;
+      closure.set(name, chunk);
+      for (const imported of chunk.imports) visit(imported);
+    };
+    visit(fileName);
+    return closure;
+  };
+
+  /**
+   * Whether loading `fileName` is what makes a chunk `isRequired` accepts
+   * load: judged on the chunk's own `moduleIds` first, and looked through
+   * only when it has none of its own -- a bundler's content-free re-export
+   * shim, whose identity for this purpose is whatever real chunk it
+   * statically wraps (esbuild splits Playdeck's native provider into exactly
+   * such a shim plus a separate shared chunk holding its real code; Vite
+   * does not, and gives the provider one chunk that is both).
+   *
+   * A chunk that DOES carry its own modules is judged on those alone and is
+   * never followed into what it imports here. That is load-bearing and not
+   * an optimisation: Playdeck's HLS adapter statically imports the native
+   * provider's own chunk to reuse a helper from it, and an earlier version
+   * of this function that tested a candidate's whole transitive closure
+   * against `isRequired` -- rather than the candidate's own modules first --
+   * accepted the HLS adapter on exactly that account, because the adapter it
+   * never chooses shared an edge with the provider it does. Two sibling
+   * dynamic imports sharing a static dependency is not enough on its own to
+   * make either one required; only a chunk's own modules, or an empty
+   * shim's one real target, say that.
+   * @param {string} fileName
+   * @param {Set<string>} [visited]
+   * @returns {boolean}
+   */
+  const isEffectivelyRequired = (fileName, visited = new Set()) => {
+    if (visited.has(fileName)) return false;
+    visited.add(fileName);
+    const chunk = byFile.get(fileName);
+    if (!chunk) return false;
+    if (chunk.moduleIds.length > 0) return isRequired(chunk);
+    return chunk.imports.some((imported) =>
+      isEffectivelyRequired(imported, visited)
+    );
+  };
+
+  for (const [name, chunk] of staticClosure(entry.fileName)) {
+    reachable.set(name, chunk);
   }
 
-  return [...reachable].map((fileName) => {
-    const chunk = byFile.get(fileName);
-    if (!chunk) throw new Error(`Unreachable: ${fileName} has no chunk.`);
-    return chunk;
-  });
+  /** @type {string[]} */
+  const frontier = [];
+  for (const chunk of reachable.values())
+    frontier.push(...chunk.dynamicImports);
+
+  const decided = new Set();
+  while (frontier.length > 0) {
+    const target = /** @type {string} */ (frontier.shift());
+    if (decided.has(target) || reachable.has(target)) continue;
+    decided.add(target);
+
+    if (!isEffectivelyRequired(target)) continue;
+
+    for (const [name, chunk] of staticClosure(target)) {
+      reachable.set(name, chunk);
+      frontier.push(...chunk.dynamicImports);
+    }
+  }
+
+  return [...reachable.values()];
 };
 
 /**
@@ -226,7 +360,7 @@ export const gzipBytes = (chunks) =>
  * @param {string} entryRelativePath Relative to tests/compare.
  * @returns {Promise<Chunk[]>}
  */
-const bundleEntry = async (entryRelativePath) => {
+const bundleEntryVite = async (entryRelativePath) => {
   const result = await build({
     configFile: false,
     logLevel: 'silent',
@@ -243,6 +377,11 @@ const bundleEntry = async (entryRelativePath) => {
     }
   });
   const bundles = Array.isArray(result) ? result : [result];
+  // Rollup's own `OutputChunk` already carries `fileName`, `code`, `isEntry`,
+  // `imports`, `dynamicImports` and `moduleIds` under exactly these names, so
+  // it is used as this file's `Chunk` unchanged -- unlike the esbuild path
+  // below, which builds one because esbuild's metafile does not already
+  // shape it this way.
   const chunks = bundles.flatMap((bundle) =>
     'output' in bundle
       ? bundle.output.flatMap((item) => (item.type === 'chunk' ? [item] : []))
@@ -251,6 +390,100 @@ const bundleEntry = async (entryRelativePath) => {
   if (chunks.length === 0) {
     throw new Error(
       `Building ${entryRelativePath} produced no chunk. Check that the entry still exists and still exports something a bundler cannot tree-shake away.`
+    );
+  }
+  return chunks;
+};
+
+/**
+ * @typedef {{ entryPoint?: string; imports: readonly { path: string; kind: string }[]; inputs: Record<string, unknown> }} EsbuildOutputMeta
+ */
+
+/**
+ * esbuild's metafile plus the code of each output it names, turned into this
+ * file's bundler-agnostic `Chunk` shape. Pure and independently testable,
+ * deliberately taking the metafile and a `fileName -> code` map rather than
+ * an esbuild `BuildResult` -- a test supplies a small fixture of both without
+ * invoking esbuild at all, the same way this file's Vite-shaped tests never
+ * call `vite build`.
+ *
+ * The only reasoning applied is splitting one esbuild `imports` array by
+ * `kind` into two: `'import-statement'` entries become `imports`,
+ * `'dynamic-import'` entries become `dynamicImports`. Everything downstream
+ * -- `reachableChunks`, `excludedChunks`, `gzipBytes` -- reads the result
+ * exactly as it reads a Vite chunk, which is the whole point of normalising
+ * here rather than teaching those functions a second shape.
+ *
+ * Non-JS outputs (esbuild can emit a `.css` bundle alongside the JS one) are
+ * dropped: neither bundler's byte figure counts CSS -- see
+ * `docs/comparison/method.md`'s "What is measured".
+ * @param {Record<string, EsbuildOutputMeta>} outputs `metafile.outputs`, keyed by output path.
+ * @param {Record<string, string>} codeByOutput Each of those same keys mapped to its bundled code.
+ * @param {string} entryOutput The key in `outputs` that is the entry chunk.
+ * @returns {Chunk[]}
+ */
+export const normalizeEsbuildOutputs = (outputs, codeByOutput, entryOutput) =>
+  Object.entries(outputs)
+    .filter(([fileName]) => fileName.endsWith('.js'))
+    .map(([fileName, meta]) => ({
+      fileName,
+      code: codeByOutput[fileName] ?? '',
+      isEntry: fileName === entryOutput,
+      imports: meta.imports
+        .filter((imported) => imported.kind === 'import-statement')
+        .map((imported) => imported.path),
+      dynamicImports: meta.imports
+        .filter((imported) => imported.kind === 'dynamic-import')
+        .map((imported) => imported.path),
+      moduleIds: Object.keys(meta.inputs)
+    }));
+
+/**
+ * @param {string} entryRelativePath Relative to tests/compare.
+ * @returns {Promise<Chunk[]>}
+ */
+const bundleEntryEsbuild = async (entryRelativePath) => {
+  const entryAbsolute = join(fixtureRoot, entryRelativePath);
+  const result = await esbuild.build({
+    entryPoints: [entryAbsolute],
+    bundle: true,
+    splitting: true,
+    format: 'esm',
+    minify: true,
+    write: false,
+    metafile: true,
+    outdir: 'out',
+    jsx: 'automatic',
+    absWorkingDir: fixtureRoot,
+    external: REACT_EXTERNALS,
+    logLevel: 'silent'
+  });
+
+  /** @type {Record<string, string>} */
+  const codeByOutput = {};
+  for (const file of result.outputFiles) {
+    if (!file.path.endsWith('.js')) continue;
+    codeByOutput[relative(fixtureRoot, file.path)] = file.text;
+  }
+
+  const entryInput = relative(fixtureRoot, entryAbsolute);
+  const entryOutput = Object.entries(result.metafile.outputs).find(
+    ([, meta]) => meta.entryPoint === entryInput
+  )?.[0];
+  if (entryOutput === undefined) {
+    throw new Error(
+      `Building ${entryRelativePath} with esbuild produced no output whose entryPoint is ${entryInput}.`
+    );
+  }
+
+  const chunks = normalizeEsbuildOutputs(
+    result.metafile.outputs,
+    codeByOutput,
+    entryOutput
+  );
+  if (chunks.length === 0) {
+    throw new Error(
+      `Building ${entryRelativePath} with esbuild produced no chunk.`
     );
   }
   return chunks;
@@ -305,11 +538,17 @@ export const notCounted = (count, bytes) =>
     : `${count} chunk${count === 1 ? '' : 's'}, ${kb(bytes)} KB`;
 
 /**
+ * `bytes` is Vite's figure and `esbuildBytes` is esbuild's, over the same
+ * reachability rule applied to each bundler's own chunk graph -- see
+ * `docs/comparison/method.md`'s "What is measured" for why a second, wholly
+ * independent bundler is run over every row rather than trusted on Vite's
+ * say-so alone.
  * @typedef {{
  *   name: string;
  *   version: string;
  *   composition: string;
  *   bytes: number;
+ *   esbuildBytes: number;
  *   notCountedChunks: number;
  *   notCountedBytes: number;
  * }} Row
@@ -328,7 +567,8 @@ export const renderTable = (rows) => {
     'Library',
     'Version',
     'Composition measured',
-    'Gzipped',
+    'Gzipped (Vite)',
+    'Gzipped (esbuild)',
     'Not counted'
   ];
   const body = rows.map(
@@ -337,6 +577,7 @@ export const renderTable = (rows) => {
       version,
       composition,
       bytes,
+      esbuildBytes,
       notCountedChunks,
       notCountedBytes
     }) => [
@@ -344,6 +585,7 @@ export const renderTable = (rows) => {
       version,
       composition,
       `${kb(bytes)} KB`,
+      `${kb(esbuildBytes)} KB`,
       notCounted(notCountedChunks, notCountedBytes)
     ]
   );
@@ -373,12 +615,19 @@ export const renderTable = (rows) => {
  * this script's `main` for why: a gate that fails on the calendar, or on
  * which Node this happens to run under, is a gate nobody can keep green, and
  * neither is what "re-running on unchanged inputs produces the same numbers"
- * asks for. The Vite version is not masked: it is a pinned input read from
- * the lockfile, not a fact about the machine running the check.
- * @param {{ date: string; nodeVersion: string; viteVersion: string; rows: readonly Row[] }} data
+ * asks for. The Vite and esbuild versions are not masked: both are pinned
+ * inputs read from the lockfile, not facts about the machine running the
+ * check.
+ * @param {{ date: string; nodeVersion: string; viteVersion: string; esbuildVersion: string; rows: readonly Row[] }} data
  * @returns {string}
  */
-export const renderResultsDoc = ({ date, nodeVersion, viteVersion, rows }) =>
+export const renderResultsDoc = ({
+  date,
+  nodeVersion,
+  viteVersion,
+  esbuildVersion,
+  rows
+}) =>
   `<!--
   Generated by \`pnpm compare:libraries\`. Do not edit by hand -- rerun the
   command instead, and see docs/comparison/method.md for what each column
@@ -387,14 +636,17 @@ export const renderResultsDoc = ({ date, nodeVersion, viteVersion, rows }) =>
 
 # React video library comparison: measured figures
 
-Measured ${date} on Node ${nodeVersion}, Vite ${viteVersion}, from
-\`tests/compare\`'s pinned installs. React, ReactDOM and the JSX runtime are
-marked external for every library alike and excluded from every figure below.
-"Gzipped" is the sum of each reachable chunk's own gzip size, not one gzip of
-their concatenation -- see \`scripts/compare-libraries.mjs\`'s header for why.
-"Not counted" is the chunks that same build produced but this fixture's fixed
-inputs cannot reach, gzipped the same way -- see
-\`docs/comparison/method.md\` for what each library's excluded chunks are.
+Measured ${date} on Node ${nodeVersion}, Vite ${viteVersion}, esbuild
+${esbuildVersion}, from \`tests/compare\`'s pinned installs. React, ReactDOM
+and the JSX runtime are marked external for every library alike and excluded
+from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
+sum of each reachable chunk's own gzip size from that bundler's own build, not
+one gzip of their concatenation -- see \`scripts/compare-libraries.mjs\`'s
+header for why, and its "What is measured" entry in \`docs/comparison/method.md\`
+for what the two bundlers agreeing, or not, is evidence of. "Not counted" is
+the chunks the Vite build produced but this fixture's fixed inputs cannot
+reach, gzipped the same way -- see \`docs/comparison/method.md\` for what each
+library's excluded chunks are.
 
 ${renderTable(rows)}
 
@@ -430,7 +682,7 @@ const readJson = async (path) =>
   JSON.parse(await readFile(join(repoRoot, path), 'utf8'));
 
 /**
- * @returns {Promise<{ date: string; nodeVersion: string; viteVersion: string; rows: Row[] }>}
+ * @returns {Promise<{ date: string; nodeVersion: string; viteVersion: string; esbuildVersion: string; rows: Row[] }>}
  */
 const measure = async () => {
   const manifest = /** @type {{ devDependencies?: Record<string, string> }} */ (
@@ -439,13 +691,28 @@ const measure = async () => {
   const viteManifest = /** @type {{ version: string }} */ (
     await readJson('node_modules/vite/package.json')
   );
+  const esbuildInstalled = /** @type {{ version: string }} */ (
+    await readJson('tests/compare/node_modules/esbuild/package.json')
+  ).version;
+  const esbuildVersion = pinnedVersion(
+    'esbuild',
+    manifest.devDependencies?.esbuild,
+    esbuildInstalled
+  );
 
   /** @type {Row[]} */
   const rows = [];
   for (const library of libraries) {
-    const chunks = await bundleEntry(library.entry);
-    const bytes = gzipBytes(reachableChunks(chunks, library.requiredChunk));
+    const chunks = await bundleEntryVite(library.entry);
+    const reachable = reachableChunks(chunks, library.requiredChunk);
+    const bytes = gzipBytes(reachable);
     const excluded = excludedChunks(chunks, library.requiredChunk);
+
+    const esbuildChunks = await bundleEntryEsbuild(library.entry);
+    const esbuildBytes = gzipBytes(
+      reachableChunks(esbuildChunks, library.requiredChunk)
+    );
+
     const installed = /** @type {{ version: string }} */ (
       await readJson(
         `tests/compare/node_modules/${library.package}/package.json`
@@ -461,6 +728,7 @@ const measure = async () => {
       version,
       composition: library.composition,
       bytes,
+      esbuildBytes,
       notCountedChunks: excluded.length,
       notCountedBytes: gzipBytes(excluded)
     });
@@ -468,6 +736,7 @@ const measure = async () => {
 
   return {
     date: new Date().toISOString().slice(0, 10),
+    esbuildVersion,
     nodeVersion: process.version,
     viteVersion: viteManifest.version,
     rows

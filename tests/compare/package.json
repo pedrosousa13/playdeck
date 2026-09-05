@@ -11,6 +11,7 @@
     "react-player": "3.4.0",
     "@vidstack/react": "1.15.6",
     "media-chrome": "4.19.2",
-    "video.js": "8.24.0"
+    "video.js": "8.24.0",
+    "esbuild": "0.28.1"
   }
 }

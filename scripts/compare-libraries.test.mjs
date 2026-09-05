@@ -6,6 +6,7 @@ import {
   gzipBytes,
   kb,
   maskVolatile,
+  normalizeEsbuildOutputs,
   notCounted,
   pinnedVersion,
   reachableChunks,
@@ -13,23 +14,23 @@ import {
   renderTable
 } from './compare-libraries.mjs';
 
-// Deliberately not a real `vite build`: this file runs in the `static` CI job
-// alongside `readme-bytes.test.mjs` and `bundle-budgets.test.mjs`, neither of
-// which builds anything either, and for the same reason those give -- a
-// fixture that has to be re-typed whenever a compared library's bundle moves
-// would be the same rot one level down. What is exercised here is the graph
-// logic and the rendering, against small hand-built chunk graphs shaped like
-// the real ones (an entry with a static import, and a dynamically-imported
-// provider chunk identified by its `moduleIds`) rather than the real
-// libraries.
+// Deliberately not a real `vite build` or `esbuild.build`: this file runs in
+// the `static` CI job alongside `readme-bytes.test.mjs` and
+// `bundle-budgets.test.mjs`, neither of which builds anything either, and for
+// the same reason those give -- a fixture that has to be re-typed whenever a
+// compared library's bundle moves would be the same rot one level down. What
+// is exercised here is the graph logic and the rendering, against small
+// hand-built chunk graphs and a small hand-built esbuild metafile, shaped
+// like the real ones rather than the real libraries.
 
 /**
- * @param {{ fileName: string; code?: string; isEntry?: boolean; imports?: string[]; moduleIds?: string[] }} overrides
+ * @param {{ fileName: string; code?: string; isEntry?: boolean; imports?: string[]; dynamicImports?: string[]; moduleIds?: string[] }} overrides
  */
 const chunk = (overrides) => ({
   code: '',
   isEntry: false,
   imports: [],
+  dynamicImports: [],
   moduleIds: [],
   ...overrides
 });
@@ -63,7 +64,11 @@ test('drops external specifiers from the static walk rather than throwing', () =
 
 test('drops a dynamically-imported chunk the fixture never needs', () => {
   const graph = [
-    chunk({ fileName: 'entry.js', isEntry: true, imports: [] }),
+    chunk({
+      fileName: 'entry.js',
+      isEntry: true,
+      dynamicImports: ['youtube-provider.js']
+    }),
     chunk({
       fileName: 'youtube-provider.js',
       moduleIds: ['/pkg/provider-youtube/dist/index.js']
@@ -80,7 +85,11 @@ test('drops a dynamically-imported chunk the fixture never needs', () => {
 
 test('keeps a dynamically-imported chunk requiredChunk names as unavoidable', () => {
   const graph = [
-    chunk({ fileName: 'entry.js', isEntry: true, imports: [] }),
+    chunk({
+      fileName: 'entry.js',
+      isEntry: true,
+      dynamicImports: ['native-provider.js', 'youtube-provider.js']
+    }),
     chunk({
       fileName: 'native-provider.js',
       moduleIds: ['/pkg/provider-native/dist/index.js']
@@ -97,6 +106,109 @@ test('keeps a dynamically-imported chunk requiredChunk names as unavoidable', ()
     'entry.js',
     'native-provider.js'
   ]);
+});
+
+test('looks through a content-free shim to the real chunk it statically wraps', () => {
+  // esbuild's own shape for Playdeck's native provider: the dynamic-import
+  // target is a shim with no module of its own, which statically imports the
+  // chunk esbuild actually put the provider's code in.
+  const graph = [
+    chunk({ fileName: 'entry.js', isEntry: true, dynamicImports: ['shim.js'] }),
+    chunk({ fileName: 'shim.js', imports: ['real-code.js'], moduleIds: [] }),
+    chunk({
+      fileName: 'real-code.js',
+      moduleIds: ['/pkg/provider-native/dist/index.js']
+    })
+  ];
+  const kept = reachableChunks(graph, (c) =>
+    c.moduleIds.some((id) => id.includes('/provider-native/'))
+  );
+  assert.deepEqual(kept.map((c) => c.fileName).sort(), [
+    'entry.js',
+    'real-code.js',
+    'shim.js'
+  ]);
+});
+
+test('does not accept a sibling merely because it shares a static dependency with a required chunk', () => {
+  // The bug this regression test is named for: Playdeck's HLS adapter
+  // statically imports the native provider's own chunk to reuse it, and an
+  // earlier version of this function accepted the HLS adapter on that
+  // account alone, because its transitive closure happened to contain the
+  // chunk isRequired was really asking about.
+  const graph = [
+    chunk({
+      fileName: 'entry.js',
+      isEntry: true,
+      dynamicImports: ['native-provider.js', 'hls-adapter.js']
+    }),
+    chunk({
+      fileName: 'native-provider.js',
+      moduleIds: ['/pkg/provider-native/dist/index.js']
+    }),
+    chunk({
+      fileName: 'hls-adapter.js',
+      // Reuses a helper from the native provider's own chunk -- a real static
+      // import, not a dynamic one, and not a shim: this chunk carries its own
+      // module too.
+      imports: ['native-provider.js'],
+      moduleIds: ['/pkg/provider-hls/dist/index.js']
+    })
+  ];
+  const kept = reachableChunks(graph, (c) =>
+    c.moduleIds.some((id) => id.includes('/provider-native/'))
+  );
+  assert.deepEqual(kept.map((c) => c.fileName).sort(), [
+    'entry.js',
+    'native-provider.js'
+  ]);
+});
+
+test('is order-independent: the same graph is decided the same way whichever sibling is queued first', () => {
+  const graphs = [
+    [
+      chunk({
+        fileName: 'entry.js',
+        isEntry: true,
+        dynamicImports: ['native-provider.js', 'hls-adapter.js']
+      }),
+      chunk({
+        fileName: 'native-provider.js',
+        moduleIds: ['/pkg/provider-native/dist/index.js']
+      }),
+      chunk({
+        fileName: 'hls-adapter.js',
+        imports: ['native-provider.js'],
+        moduleIds: ['/pkg/provider-hls/dist/index.js']
+      })
+    ],
+    [
+      chunk({
+        fileName: 'entry.js',
+        isEntry: true,
+        // Same graph, dynamic imports listed in the opposite order.
+        dynamicImports: ['hls-adapter.js', 'native-provider.js']
+      }),
+      chunk({
+        fileName: 'hls-adapter.js',
+        imports: ['native-provider.js'],
+        moduleIds: ['/pkg/provider-hls/dist/index.js']
+      }),
+      chunk({
+        fileName: 'native-provider.js',
+        moduleIds: ['/pkg/provider-native/dist/index.js']
+      })
+    ]
+  ];
+  const isRequired = (/** @type {{ moduleIds: readonly string[] }} */ c) =>
+    c.moduleIds.some((id) => id.includes('/provider-native/'));
+  const results = graphs.map((graph) =>
+    reachableChunks(graph, isRequired)
+      .map((c) => c.fileName)
+      .sort()
+  );
+  assert.deepEqual(results[0], results[1]);
+  assert.deepEqual(results[0], ['entry.js', 'native-provider.js']);
 });
 
 test('throws when the graph has no entry chunk', () => {
@@ -119,7 +231,15 @@ test('is empty when every chunk is reachable', () => {
 
 test('names exactly the chunks reachableChunks left out', () => {
   const graph = [
-    chunk({ fileName: 'entry.js', isEntry: true, imports: [] }),
+    chunk({
+      fileName: 'entry.js',
+      isEntry: true,
+      dynamicImports: [
+        'native-provider.js',
+        'youtube-provider.js',
+        'vimeo-provider.js'
+      ]
+    }),
     chunk({
       fileName: 'native-provider.js',
       moduleIds: ['/pkg/provider-native/dist/index.js']
@@ -144,6 +264,135 @@ test('names exactly the chunks reachableChunks left out', () => {
   // The two sets never overlap and never drop a chunk between them.
   const reachable = reachableChunks(graph, isRequired);
   assert.equal(reachable.length + excluded.length, graph.length);
+});
+
+// ---- normalizeEsbuildOutputs -------------------------------------------------
+
+test('splits one esbuild imports array by kind into imports and dynamicImports', () => {
+  const outputs = {
+    'out/entry.js': {
+      entryPoint: 'entries/playdeck.tsx',
+      imports: [
+        { path: 'out/core.js', kind: 'import-statement' },
+        { path: 'react', kind: 'import-statement' },
+        { path: 'out/shim.js', kind: 'dynamic-import' }
+      ],
+      inputs: { 'entries/playdeck.tsx': {} }
+    },
+    'out/core.js': {
+      imports: [],
+      inputs: { '../../packages/core/dist/index.js': {} }
+    },
+    'out/shim.js': {
+      imports: [{ path: 'out/core.js', kind: 'import-statement' }],
+      inputs: {}
+    }
+  };
+  const codeByOutput = {
+    'out/entry.js': 'ENTRY_CODE',
+    'out/core.js': 'CORE_CODE',
+    'out/shim.js': 'SHIM_CODE'
+  };
+  const chunks = normalizeEsbuildOutputs(outputs, codeByOutput, 'out/entry.js');
+  assert.deepEqual(chunks.map((c) => c.fileName).sort(), [
+    'out/core.js',
+    'out/entry.js',
+    'out/shim.js'
+  ]);
+
+  const entryChunk = chunks.find((c) => c.fileName === 'out/entry.js');
+  assert.equal(entryChunk?.isEntry, true);
+  assert.equal(entryChunk?.code, 'ENTRY_CODE');
+  assert.deepEqual(entryChunk?.imports, ['out/core.js', 'react']);
+  assert.deepEqual(entryChunk?.dynamicImports, ['out/shim.js']);
+  assert.deepEqual(entryChunk?.moduleIds, ['entries/playdeck.tsx']);
+
+  const coreChunk = chunks.find((c) => c.fileName === 'out/core.js');
+  assert.equal(coreChunk?.isEntry, false);
+  assert.deepEqual(coreChunk?.moduleIds, ['../../packages/core/dist/index.js']);
+
+  const shimChunk = chunks.find((c) => c.fileName === 'out/shim.js');
+  assert.deepEqual(shimChunk?.moduleIds, []);
+  assert.deepEqual(shimChunk?.imports, ['out/core.js']);
+});
+
+test('drops non-JS outputs, such as a CSS bundle esbuild emitted alongside', () => {
+  const outputs = {
+    'out/entry.js': {
+      entryPoint: 'entries/video-js.tsx',
+      imports: [],
+      inputs: { 'entries/video-js.tsx': {} }
+    },
+    'out/entry.css': {
+      imports: [],
+      inputs: { 'video.css': {} }
+    }
+  };
+  const chunks = normalizeEsbuildOutputs(
+    outputs,
+    { 'out/entry.js': 'CODE' },
+    'out/entry.js'
+  );
+  assert.deepEqual(
+    chunks.map((c) => c.fileName),
+    ['out/entry.js']
+  );
+});
+
+test('a normalized esbuild graph runs through reachableChunks exactly like a Vite one', () => {
+  // The same shim/shared-code shape esbuild gives Playdeck's native provider
+  // in the real build, expressed as a metafile fixture rather than a real
+  // esbuild invocation.
+  const outputs = {
+    'out/entry.js': {
+      entryPoint: 'entries/playdeck.tsx',
+      imports: [{ path: 'out/core.js', kind: 'import-statement' }],
+      inputs: { 'entries/playdeck.tsx': {} }
+    },
+    'out/core.js': {
+      imports: [],
+      inputs: { '../../packages/core/dist/index.js': {} }
+    },
+    'out/native-shim.js': {
+      // The direct dynamic-import target -- no module of its own.
+      imports: [
+        { path: 'out/native-code.js', kind: 'import-statement' },
+        { path: 'out/core.js', kind: 'import-statement' }
+      ],
+      inputs: {}
+    },
+    'out/native-code.js': {
+      imports: [],
+      inputs: { '../../packages/provider-native/dist/index.js': {} }
+    },
+    'out/youtube.js': {
+      imports: [],
+      inputs: { '../../packages/provider-youtube/dist/index.js': {} }
+    }
+  };
+  // The dynamic-import edges live on the entry's own `imports` array in
+  // esbuild's metafile shape (an `imports` entry can be either kind), so the
+  // fixture adds them there rather than inventing a separate field esbuild
+  // does not have.
+  outputs['out/entry.js'].imports.push(
+    { path: 'out/native-shim.js', kind: 'dynamic-import' },
+    { path: 'out/youtube.js', kind: 'dynamic-import' }
+  );
+
+  const chunks = normalizeEsbuildOutputs(
+    outputs,
+    Object.fromEntries(Object.keys(outputs).map((key) => [key, key])),
+    'out/entry.js'
+  );
+  const kept = reachableChunks(chunks, (c) =>
+    c.moduleIds.some((id) => id.includes('/provider-native/'))
+  );
+  assert.deepEqual(kept.map((c) => c.fileName).sort(), [
+    'out/core.js',
+    'out/entry.js',
+    'out/native-code.js',
+    'out/native-shim.js'
+  ]);
 });
 
 // ---- gzipBytes ---------------------------------------------------------------
@@ -216,6 +465,7 @@ test('pads every cell in a column to the widest, the way Prettier does', () => {
       version: '1.0.0',
       composition: 'core + native',
       bytes: 20430,
+      esbuildBytes: 21197,
       notCountedChunks: 6,
       notCountedBytes: 62976
     },
@@ -224,16 +474,17 @@ test('pads every cell in a column to the widest, the way Prettier does', () => {
       version: '8.24.0',
       composition: 'videojs()',
       bytes: 204390,
+      esbuildBytes: 210790,
       notCountedChunks: 0,
       notCountedBytes: 0
     }
   ]).split('\n');
 
   assert.deepEqual(lines, [
-    '| Library  | Version | Composition measured | Gzipped   | Not counted        |',
-    '| -------- | ------- | -------------------- | --------- | ------------------ |',
-    '| Playdeck | 1.0.0   | core + native        | 19.95 KB  | 6 chunks, 61.50 KB |',
-    '| Video.js | 8.24.0  | videojs()            | 199.60 KB | 0                  |'
+    '| Library  | Version | Composition measured | Gzipped (Vite) | Gzipped (esbuild) | Not counted        |',
+    '| -------- | ------- | -------------------- | -------------- | ----------------- | ------------------ |',
+    '| Playdeck | 1.0.0   | core + native        | 19.95 KB       | 20.70 KB          | 6 chunks, 61.50 KB |',
+    '| Video.js | 8.24.0  | videojs()            | 199.60 KB      | 205.85 KB         | 0                  |'
   ]);
 });
 
@@ -244,12 +495,14 @@ test('rendering the same input twice produces byte-identical output', () => {
     date: '2026-09-05',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: [
       {
         name: 'Playdeck',
         version: '1.0.0',
         composition: 'core + native',
         bytes: 20430,
+        esbuildBytes: 21197,
         notCountedChunks: 6,
         notCountedBytes: 62976
       }
@@ -258,14 +511,18 @@ test('rendering the same input twice produces byte-identical output', () => {
   assert.equal(renderResultsDoc(data), renderResultsDoc(data));
 });
 
-test('the date, Node and Vite versions each appear in the rendered document', () => {
+test('the date, Node, Vite and esbuild versions each appear in the rendered document', () => {
   const doc = renderResultsDoc({
     date: '2026-09-05',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: []
   });
-  assert.match(doc, /Measured 2026-09-05 on Node v24\.18\.1, Vite 8\.1\.5/);
+  assert.match(
+    doc,
+    /Measured 2026-09-05 on Node v24\.18\.1, Vite 8\.1\.5, esbuild\s+0\.28\.1/
+  );
 });
 
 test('changing only the date changes the rendered document', () => {
@@ -273,6 +530,7 @@ test('changing only the date changes the rendered document', () => {
     date: '2026-09-05',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: []
   };
   assert.notEqual(
@@ -288,12 +546,14 @@ test('masks the date so two renders taken on different days compare equal', () =
     date: '2026-09-05',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: [
       {
         name: 'Playdeck',
         version: '1.0.0',
         composition: 'core + native',
         bytes: 20430,
+        esbuildBytes: 21197,
         notCountedChunks: 6,
         notCountedBytes: 62976
       }
@@ -312,12 +572,14 @@ test('masks the Node version so two renders on different Node installs compare e
     date: '2026-09-05',
     nodeVersion: 'v22.14.0',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: [
       {
         name: 'Playdeck',
         version: '1.0.0',
         composition: 'core + native',
         bytes: 20430,
+        esbuildBytes: 21197,
         notCountedChunks: 6,
         notCountedBytes: 62976
       }
@@ -334,12 +596,14 @@ test('a checked-in document with an older date but identical content matches a f
     date: '2026-01-01',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: [
       {
         name: 'Video.js',
         version: '8.24.0',
         composition: 'videojs()',
         bytes: 204390,
+        esbuildBytes: 210790,
         notCountedChunks: 0,
         notCountedBytes: 0
       }
@@ -355,12 +619,14 @@ test('a changed byte figure still fails the masked comparison', () => {
     date: '2026-01-01',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: [
       {
         name: 'Video.js',
         version: '8.24.0',
         composition: 'videojs()',
         bytes: 204390,
+        esbuildBytes: 210790,
         notCountedChunks: 0,
         notCountedBytes: 0
       }
@@ -370,12 +636,52 @@ test('a changed byte figure still fails the masked comparison', () => {
     date: '2026-09-05',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: [
       {
         name: 'Video.js',
         version: '8.24.0',
         composition: 'videojs()',
         bytes: 210000,
+        esbuildBytes: 210790,
+        notCountedChunks: 0,
+        notCountedBytes: 0
+      }
+    ]
+  });
+  assert.notEqual(maskVolatile(checkedIn), maskVolatile(freshRun));
+});
+
+test('a changed esbuild figure alone still fails the masked comparison', () => {
+  const checkedIn = renderResultsDoc({
+    date: '2026-01-01',
+    nodeVersion: 'v24.18.1',
+    viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
+    rows: [
+      {
+        name: 'Video.js',
+        version: '8.24.0',
+        composition: 'videojs()',
+        bytes: 204390,
+        esbuildBytes: 210790,
+        notCountedChunks: 0,
+        notCountedBytes: 0
+      }
+    ]
+  });
+  const freshRun = renderResultsDoc({
+    date: '2026-09-05',
+    nodeVersion: 'v24.18.1',
+    viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
+    rows: [
+      {
+        name: 'Video.js',
+        version: '8.24.0',
+        composition: 'videojs()',
+        bytes: 204390,
+        esbuildBytes: 220000,
         notCountedChunks: 0,
         notCountedBytes: 0
       }
@@ -389,12 +695,14 @@ test('a changed "Not counted" figure still fails the masked comparison', () => {
     date: '2026-01-01',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: [
       {
         name: 'Vidstack',
         version: '1.15.6',
         composition: 'MediaPlayer + MediaProvider + DefaultVideoLayout',
         bytes: 92200,
+        esbuildBytes: 94000,
         notCountedChunks: 9,
         notCountedBytes: 62976
       }
@@ -404,12 +712,14 @@ test('a changed "Not counted" figure still fails the masked comparison', () => {
     date: '2026-09-05',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: [
       {
         name: 'Vidstack',
         version: '1.15.6',
         composition: 'MediaPlayer + MediaProvider + DefaultVideoLayout',
         bytes: 92200,
+        esbuildBytes: 94000,
         notCountedChunks: 10,
         notCountedBytes: 70000
       }
@@ -418,14 +728,16 @@ test('a changed "Not counted" figure still fails the masked comparison', () => {
   assert.notEqual(maskVolatile(checkedIn), maskVolatile(freshRun));
 });
 
-test('only the date and Node version are touched, so the Vite version still shows up', () => {
+test('only the date and Node version are touched, so the Vite and esbuild versions still show up', () => {
   const doc = renderResultsDoc({
     date: '2026-09-05',
     nodeVersion: 'v24.18.1',
     viteVersion: '8.1.5',
+    esbuildVersion: '0.28.1',
     rows: []
   });
   assert.equal(maskVolatile(doc).includes('2026-09-05'), false);
   assert.equal(maskVolatile(doc).includes('v24.18.1'), false);
   assert.equal(maskVolatile(doc).includes('8.1.5'), true);
+  assert.equal(maskVolatile(doc).includes('0.28.1'), true);
 });
