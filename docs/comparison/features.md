@@ -413,17 +413,17 @@ Measured 2026-09-05 against `tests/compare`'s pinned installs:
 
 [^174]: **React version supported — Video.js 10 (beta)**: yes. `^18.0.0 || ^19.0.0`. mechanical check: `@videojs/react`'s `package.json` declares `peerDependencies.react`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/package.json (installed package)
 
-[^175]: **Imports on a server (no DOM globals) — Playdeck**: yes. mechanical check: importing `@playdeck/react` in plain Node, with no DOM globals, succeeds. Source: packages/react/README.md
+[^175]: **Imports on a server (no DOM globals) — Playdeck**: yes. mechanical check: importing `@playdeck/react` in plain Node, with no DOM globals, succeeds. Source: packages/react, the built `@playdeck/react` this generator imports
 
-[^176]: **Imports on a server (no DOM globals) — react-player**: yes. mechanical check: importing `react-player` in plain Node, with no DOM globals, succeeds. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+[^176]: **Imports on a server (no DOM globals) — react-player**: yes. mechanical check: importing `react-player` in plain Node, with no DOM globals, succeeds. Source: react-player 3.4.0, node_modules/react-player (installed package)
 
-[^177]: **Imports on a server (no DOM globals) — Vidstack**: yes. Also ships a dedicated `server`/`worker` build condition (`server/vidstack.js`) alongside the `'use client'` entry. mechanical check: importing `@vidstack/react` in plain Node, with no DOM globals, succeeds. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
+[^177]: **Imports on a server (no DOM globals) — Vidstack**: yes. Also ships a dedicated `server`/`worker` build condition (`server/vidstack.js`) alongside the `'use client'` entry. mechanical check: importing `@vidstack/react` in plain Node, with no DOM globals, succeeds. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react (installed package)
 
-[^178]: **Imports on a server (no DOM globals) — Media Chrome**: yes. Renders as inert custom-element markup during SSR (guarded by `isServer`) without a `'use client'` boundary; behaviour attaches on hydration. mechanical check: importing `media-chrome` in plain Node, with no DOM globals, succeeds. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
+[^178]: **Imports on a server (no DOM globals) — Media Chrome**: yes. Renders as inert custom-element markup during SSR (guarded by `isServer`) without a `'use client'` boundary; behaviour attaches on hydration. mechanical check: importing `media-chrome` in plain Node, with no DOM globals, succeeds. Source: media-chrome 4.19.2, node_modules/media-chrome (installed package)
 
-[^179]: **Imports on a server (no DOM globals) — Video.js**: yes. The package Node loads for `import 'video.js'` is its CJS build (`main`, `dist/video.cjs.js`); it loads with no `window` or `document` present. It ships no React integration, so it carries no `'use client'` boundary either way. mechanical check: importing `video.js` in plain Node, with no DOM globals, succeeds. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
+[^179]: **Imports on a server (no DOM globals) — Video.js**: yes. The package Node loads for `import 'video.js'` is its CJS build (`main`, `dist/video.cjs.js`); it loads with no `window` or `document` present. It ships no React integration, so it carries no `'use client'` boundary either way. mechanical check: importing `video.js` in plain Node, with no DOM globals, succeeds. Source: video.js 8.24.0, node_modules/video.js (installed package)
 
-[^180]: **Imports on a server (no DOM globals) — Video.js 10 (beta)**: yes. mechanical check: importing `@videojs/react` in plain Node, with no DOM globals, succeeds. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react (installed package)
+[^180]: **Imports on a server (no DOM globals) — Video.js 10 (beta)**: yes. mechanical check: importing `@videojs/react` in plain Node, with no DOM globals, succeeds. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react (installed package)
 
 [^181]: **TypeScript types shipped — Playdeck**: yes. mechanical check: `@playdeck/react`'s `package.json` includes `"types": "./dist/index.d.ts"`. Source: packages/react/package.json
 

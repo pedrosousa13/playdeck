@@ -2124,7 +2124,8 @@ export const axes = [
           module: '@playdeck/react',
           expect: 'imports'
         },
-        source: PLAYDECK_REACT_README
+        source:
+          'packages/react, the built `@playdeck/react` this generator imports'
       },
       'react-player': {
         status: 'yes',
@@ -2133,7 +2134,8 @@ export const axes = [
           module: 'react-player',
           expect: 'imports'
         },
-        source: REACT_PLAYER_TREE
+        source:
+          'react-player 3.4.0, node_modules/react-player (installed package)'
       },
       Vidstack: {
         status: 'yes',
@@ -2142,7 +2144,8 @@ export const axes = [
           module: '@vidstack/react',
           expect: 'imports'
         },
-        source: VIDSTACK_TREE,
+        source:
+          '@vidstack/react 1.15.6, node_modules/@vidstack/react (installed package)',
         note: "Also ships a dedicated `server`/`worker` build condition (`server/vidstack.js`) alongside the `'use client'` entry."
       },
       'Media Chrome': {
@@ -2152,7 +2155,8 @@ export const axes = [
           module: 'media-chrome',
           expect: 'imports'
         },
-        source: MEDIA_CHROME_TREE,
+        source:
+          'media-chrome 4.19.2, node_modules/media-chrome (installed package)',
         note: "Renders as inert custom-element markup during SSR (guarded by `isServer`) without a `'use client'` boundary; behaviour attaches on hydration."
       },
       'Video.js': {
@@ -2162,7 +2166,7 @@ export const axes = [
           module: 'video.js',
           expect: 'imports'
         },
-        source: VIDEOJS_TREE,
+        source: 'video.js 8.24.0, node_modules/video.js (installed package)',
         note: "The package Node loads for `import 'video.js'` is its CJS build (`main`, `dist/video.cjs.js`); it loads with no `window` or `document` present. It ships no React integration, so it carries no `'use client'` boundary either way."
       },
       'Video.js 10 (beta)': {
@@ -2172,7 +2176,8 @@ export const axes = [
           module: '@videojs/react',
           expect: 'imports'
         },
-        source: VIDEOJS10_TREE
+        source:
+          '@videojs/react 10.0.0-beta.32, node_modules/@videojs/react (installed package)'
       }
     }
   },
