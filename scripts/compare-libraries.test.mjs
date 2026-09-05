@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   delta,
@@ -15,6 +20,8 @@ import {
   renderResultsDoc,
   renderTable
 } from './compare-libraries.mjs';
+
+const scriptsDir = dirname(fileURLToPath(import.meta.url));
 
 // Deliberately not a real `vite build` or `esbuild.build`: this file runs in
 // the `static` CI job alongside `readme-bytes.test.mjs` and
@@ -844,4 +851,112 @@ test('reports a line removed from the end as a pure deletion', () => {
   const before = 'a\nb\nc';
   const after = 'a\nb';
   assert.deepEqual(lineDiff(before, after), ['- c']);
+});
+
+// ---- the CLI's own `--check` exit path ----------------------------------------
+
+// Everything above tests a pure function. What no pure function reaches is the
+// thing CI actually depends on: that `node scripts/compare-libraries.mjs
+// --check` exits non-zero, and prints a diff, when the checked-in document is
+// stale. These two tests spawn the real CLI to cover that, through the
+// `PLAYDECK_COMPARE_DOC` / `PLAYDECK_COMPARE_STUB` seam that file's own
+// `testSeam` documents -- a real run measures seven bundles against a
+// `packages/*/dist` the `static` job never builds, which is neither fast nor
+// available here.
+
+/** @param {string} script @param {readonly string[]} args @param {Record<string, string>} env */
+const runCli = (script, args, env) =>
+  spawnSync(process.execPath, [join(scriptsDir, script), ...args], {
+    encoding: 'utf8',
+    env: { ...process.env, ...env }
+  });
+
+test('compare-libraries --check exits 0 on the document it just wrote', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'compare-libraries-cli-'));
+  try {
+    const doc = join(dir, 'results.md');
+    const env = { PLAYDECK_COMPARE_DOC: doc, PLAYDECK_COMPARE_STUB: '1' };
+    const written = runCli('compare-libraries.mjs', [], env);
+    assert.equal(written.status, 0, written.stderr);
+    const checked = runCli('compare-libraries.mjs', ['--check'], env);
+    assert.equal(checked.status, 0, checked.stderr);
+    assert.match(checked.stdout, /already matches a fresh run/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('compare-libraries --check exits non-zero and prints a diff when a figure is altered', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'compare-libraries-cli-'));
+  try {
+    const doc = join(dir, 'results.md');
+    const env = { PLAYDECK_COMPARE_DOC: doc, PLAYDECK_COMPARE_STUB: '1' };
+    runCli('compare-libraries.mjs', [], env);
+    const before = await readFile(doc, 'utf8');
+    await writeFile(doc, before.replace('1.00 KB', '9.99 KB'));
+    const checked = runCli('compare-libraries.mjs', ['--check'], env);
+    assert.notEqual(checked.status, 0);
+    assert.match(checked.stderr, /- .*9\.99 KB/);
+    assert.match(checked.stderr, /\+ .*1\.00 KB/);
+    assert.match(checked.stderr, /no longer matches a fresh measurement/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// ---- the control-bar row's own label ------------------------------------------
+
+// `results.md` and `docs/comparison/method.md` both say the Playdeck control-bar
+// row carries five of Media Chrome's seven controls. Nothing stopped that label
+// from drifting away from the fixture it describes, which is exactly the kind of
+// count `docs/agents/comments.md` warns goes stale in silence. This reads the
+// fixture and holds the three of them together.
+
+/**
+ * The `Player.<Part>` names used inside the fixture's `<Player.Controls>`,
+ * minus the icons a button swaps between and the `Time` displays -- what the
+ * label means by "controls".
+ * @param {string} source
+ * @returns {string[]}
+ */
+const controlBarParts = (source) => {
+  const open = source.indexOf('<Player.Controls>');
+  const close = source.indexOf('</Player.Controls>');
+  if (open === -1 || close === -1) {
+    throw new Error('playdeck-control-bar.tsx has no <Player.Controls> block.');
+  }
+  const names = new Set(
+    [...source.slice(open, close).matchAll(/<Player\.([A-Za-z]+)/g)].map(
+      (match) => match[1]
+    )
+  );
+  names.delete('Controls');
+  names.delete('Time');
+  return [...names].filter((name) => !name.endsWith('Icon')).sort();
+};
+
+test('the control-bar fixture still carries exactly the five parts both documents name', async () => {
+  const repoRoot = join(scriptsDir, '..');
+  const fixture = await readFile(
+    join(repoRoot, 'tests/compare/entries/playdeck-control-bar.tsx'),
+    'utf8'
+  );
+  assert.deepEqual(controlBarParts(fixture), [
+    'FullscreenButton',
+    'MuteButton',
+    'PlayButton',
+    'SeekSlider',
+    'VolumeSlider'
+  ]);
+
+  const harness = await readFile(
+    join(repoRoot, 'scripts/compare-libraries.mjs'),
+    'utf8'
+  );
+  assert.match(harness, /5 of Media Chrome's 7 controls/);
+  const method = await readFile(
+    join(repoRoot, 'docs/comparison/method.md'),
+    'utf8'
+  );
+  assert.match(method, /five of Media\s+Chrome's seven controls/);
 });

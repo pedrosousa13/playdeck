@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   describeAnchor,
@@ -20,6 +22,8 @@ import {
   resolveForNode,
   verifyAllAnchors
 } from './compare-features.mjs';
+
+const scriptsDir = dirname(fileURLToPath(import.meta.url));
 
 // Deliberately not the real installs: this file runs in the `static` CI job,
 // which never installs `tests/compare`'s pinned libraries or builds
@@ -798,4 +802,54 @@ test('a changed table does not mask equal to the original', () => {
     ...base
   });
   assert.notEqual(maskVolatile(before), maskVolatile(after));
+});
+
+// ---- the CLI's own `--check` exit path ----------------------------------------
+
+// The same gap `compare-libraries.test.mjs` closes at its own end, for the same
+// reason and through the same seam: no pure function reaches the CLI's exit
+// code, and a real run evaluates every anchor across six installed packages and
+// a `packages/*/dist` the `static` job never builds. `PLAYDECK_COMPARE_STUB`
+// renders one fixed axis instead, so these two tests are about the exit path and
+// nothing else.
+
+/** @param {readonly string[]} args @param {Record<string, string>} env */
+const runCli = (args, env) =>
+  spawnSync(
+    process.execPath,
+    [join(scriptsDir, 'compare-features.mjs'), ...args],
+    { encoding: 'utf8', env: { ...process.env, ...env } }
+  );
+
+test('compare-features --check exits 0 on the document it just wrote', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'compare-features-cli-'));
+  try {
+    const doc = join(dir, 'features.md');
+    const env = { PLAYDECK_COMPARE_DOC: doc, PLAYDECK_COMPARE_STUB: '1' };
+    const written = runCli([], env);
+    assert.equal(written.status, 0, written.stderr);
+    const checked = runCli(['--check'], env);
+    assert.equal(checked.status, 0, checked.stderr);
+    assert.match(checked.stdout, /already matches a fresh check/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('compare-features --check exits non-zero and prints a diff when a status is altered', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'compare-features-cli-'));
+  try {
+    const doc = join(dir, 'features.md');
+    const env = { PLAYDECK_COMPARE_DOC: doc, PLAYDECK_COMPARE_STUB: '1' };
+    runCli([], env);
+    const before = await readFile(doc, 'utf8');
+    await writeFile(doc, before.replace('yes[^1]', 'no[^1]'));
+    const checked = runCli(['--check'], env);
+    assert.notEqual(checked.status, 0);
+    assert.match(checked.stderr, /- .*no\[\^1\]/);
+    assert.match(checked.stderr, /\+ .*yes\[\^1\]/);
+    assert.match(checked.stderr, /no longer matches a fresh check/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
