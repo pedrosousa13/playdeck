@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  delta,
   excludedChunks,
   gzipBytes,
   kb,
+  lineDiff,
   maskVolatile,
   normalizeEsbuildOutputs,
   notCounted,
@@ -456,6 +458,20 @@ test('names the chunk count and its gzipped size when something was excluded', (
   assert.equal(notCounted(9, 62976), '9 chunks, 61.50 KB');
 });
 
+// ---- delta -----------------------------------------------------------------
+
+test('signs a positive delta and rounds to one decimal', () => {
+  assert.equal(delta(20430, 21197), '+3.8%');
+});
+
+test('signs a negative delta without a doubled minus', () => {
+  assert.equal(delta(2970, 2400), '-19.2%');
+});
+
+test('a delta of exactly zero carries the positive sign', () => {
+  assert.equal(delta(1000, 1000), '+0.0%');
+});
+
 // ---- renderTable ---------------------------------------------------------
 
 test('pads every cell in a column to the widest, the way Prettier does', () => {
@@ -481,10 +497,10 @@ test('pads every cell in a column to the widest, the way Prettier does', () => {
   ]).split('\n');
 
   assert.deepEqual(lines, [
-    '| Library  | Version | Composition measured | Gzipped (Vite) | Gzipped (esbuild) | Not counted        |',
-    '| -------- | ------- | -------------------- | -------------- | ----------------- | ------------------ |',
-    '| Playdeck | 1.0.0   | core + native        | 19.95 KB       | 20.70 KB          | 6 chunks, 61.50 KB |',
-    '| Video.js | 8.24.0  | videojs()            | 199.60 KB      | 205.85 KB         | 0                  |'
+    '| Library  | Version | Composition measured | Gzipped (Vite) | Gzipped (esbuild) | Delta | Not counted        |',
+    '| -------- | ------- | -------------------- | -------------- | ----------------- | ----- | ------------------ |',
+    '| Playdeck | 1.0.0   | core + native        | 19.95 KB       | 20.70 KB          | +3.8% | 6 chunks, 61.50 KB |',
+    '| Video.js | 8.24.0  | videojs()            | 199.60 KB      | 205.85 KB         | +3.1% | 0                  |'
   ]);
 });
 
@@ -740,4 +756,92 @@ test('only the date and Node version are touched, so the Vite and esbuild versio
   assert.equal(maskVolatile(doc).includes('v24.18.1'), false);
   assert.equal(maskVolatile(doc).includes('8.1.5'), true);
   assert.equal(maskVolatile(doc).includes('0.28.1'), true);
+});
+
+// ---- lineDiff: what --check prints on failure --------------------------------
+
+test('omits lines identical in both documents', () => {
+  const before = 'a\nb\nc';
+  const after = 'a\nb\nc';
+  assert.deepEqual(lineDiff(before, after), []);
+});
+
+test('names one changed line as a deletion and an addition, not the whole document', () => {
+  const before = 'a\nb\nc';
+  const after = 'a\nx\nc';
+  assert.deepEqual(lineDiff(before, after), ['- b', '+ x']);
+});
+
+test('one changed row in a table reports only that row, not the header or its neighbours', () => {
+  // The shape this is actually for: results.md is a table with a shared
+  // header and delimiter line above every row -- a positional diff would
+  // still report only what changed here, since nothing shifts position, but
+  // this pins the property an LCS diff is what buys back once a figure
+  // changing width re-pads a whole column (see the next test).
+  const before = [
+    '| Library  | Gzipped   |',
+    '| -------- | --------- |',
+    '| Playdeck | 19.94 KB  |',
+    '| Video.js | 199.64 KB |'
+  ].join('\n');
+  const after = [
+    '| Library  | Gzipped   |',
+    '| -------- | --------- |',
+    '| Playdeck | 20.01 KB  |',
+    '| Video.js | 199.64 KB |'
+  ].join('\n');
+  assert.deepEqual(lineDiff(before, after), [
+    '- | Playdeck | 19.94 KB  |',
+    '+ | Playdeck | 20.01 KB  |'
+  ]);
+});
+
+test('a figure widening a whole column still reports only the row that changed value', () => {
+  // Here the column genuinely re-pads (the header and delimiter widen too),
+  // so a positional (same-index) comparison would report all four lines as
+  // different. The LCS diff still finds the header, delimiter and untouched
+  // row as common lines wherever they recur unchanged, and reports only the
+  // one row whose value actually changed.
+  const before = [
+    'Intro line, unrelated to the table.',
+    '| Library  | Gzipped   |',
+    '| -------- | --------- |',
+    '| Playdeck | 19.94 KB  |',
+    '| Video.js | 199.64 KB |',
+    '| Library  | Gzipped   |',
+    '| -------- | --------- |',
+    'Outro line, unrelated to the table.'
+  ].join('\n');
+  const after = [
+    'Intro line, unrelated to the table.',
+    '| Library  | Gzipped    |',
+    '| -------- | ---------- |',
+    '| Playdeck | 1999.94 KB |',
+    '| Video.js | 199.64 KB  |',
+    '| Library  | Gzipped   |',
+    '| -------- | --------- |',
+    'Outro line, unrelated to the table.'
+  ].join('\n');
+  assert.deepEqual(lineDiff(before, after), [
+    '- | Library  | Gzipped   |',
+    '- | -------- | --------- |',
+    '- | Playdeck | 19.94 KB  |',
+    '- | Video.js | 199.64 KB |',
+    '+ | Library  | Gzipped    |',
+    '+ | -------- | ---------- |',
+    '+ | Playdeck | 1999.94 KB |',
+    '+ | Video.js | 199.64 KB  |'
+  ]);
+});
+
+test('reports a line added at the end as a pure addition', () => {
+  const before = 'a\nb';
+  const after = 'a\nb\nc';
+  assert.deepEqual(lineDiff(before, after), ['+ c']);
+});
+
+test('reports a line removed from the end as a pure deletion', () => {
+  const before = 'a\nb\nc';
+  const after = 'a\nb';
+  assert.deepEqual(lineDiff(before, after), ['- c']);
 });

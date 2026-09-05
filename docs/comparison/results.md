@@ -13,21 +13,24 @@ from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
 sum of each reachable chunk's own gzip size from that bundler's own build, not
 one gzip of their concatenation -- see `scripts/compare-libraries.mjs`'s
 header for why, and its "What is measured" entry in `docs/comparison/method.md`
-for what the two bundlers agreeing, or not, is evidence of. "Not counted" is
-the chunks the Vite build produced but this fixture's fixed inputs cannot
-reach, gzipped the same way -- see `docs/comparison/method.md` for what each
-library's excluded chunks are.
+for what the two bundlers agreeing, or not, is evidence of. "Delta" is
+esbuild's figure relative to Vite's, signed and rounded to one decimal.
+"Not counted" is the chunks the Vite build produced but this fixture's fixed
+inputs cannot reach, gzipped the same way -- see
+`docs/comparison/method.md` for what each library's excluded chunks are.
 
-| Library                | Version | Composition measured                                                               | Gzipped (Vite) | Gzipped (esbuild) | Not counted          |
-| ---------------------- | ------- | ---------------------------------------------------------------------------------- | -------------- | ----------------- | -------------------- |
-| Playdeck               | 1.0.0   | core + primitives + native provider                                                | 19.94 KB       | 20.70 KB          | 6 chunks, 180.59 KB  |
-| Playdeck (control bar) | 1.0.0   | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 23.61 KB       | 24.58 KB          | 6 chunks, 180.61 KB  |
-| react-player           | 3.4.0   | default export, `controls`, html5 fallback player                                  | 2.97 KB        | 2.40 KB           | 14 chunks, 556.09 KB |
-| Vidstack               | 1.15.6  | MediaPlayer + MediaProvider + DefaultVideoLayout                                   | 90.04 KB       | 91.83 KB          | 15 chunks, 22.27 KB  |
-| Media Chrome           | 4.19.2  | MediaController + a 7-button control bar                                           | 41.83 KB       | 43.70 KB          | 0                    |
-| Video.js               | 8.24.0  | videojs() with `controls: true`, hand-wrapped                                      | 199.64 KB      | 205.90 KB         | 0                    |
+| Library                | Version | Composition measured                                                               | Gzipped (Vite) | Gzipped (esbuild) | Delta  | Not counted          |
+| ---------------------- | ------- | ---------------------------------------------------------------------------------- | -------------- | ----------------- | ------ | -------------------- |
+| Playdeck               | 1.0.0   | core + primitives + native provider                                                | 20.01 KB       | 20.76 KB          | +3.8%  | 7 chunks, 282.18 KB  |
+| Playdeck (control bar) | 1.0.0   | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 23.73 KB       | 24.67 KB          | +4.0%  | 7 chunks, 282.21 KB  |
+| react-player           | 3.4.0   | default export, `controls`, html5 fallback player                                  | 2.97 KB        | 2.40 KB           | -19.4% | 14 chunks, 556.09 KB |
+| Vidstack               | 1.15.6  | MediaPlayer + MediaProvider + DefaultVideoLayout                                   | 90.04 KB       | 91.83 KB          | +2.0%  | 15 chunks, 22.27 KB  |
+| Media Chrome           | 4.19.2  | MediaController + a 7-button control bar                                           | 41.83 KB       | 43.70 KB          | +4.5%  | 0                    |
+| Video.js               | 8.24.0  | videojs() with `controls: true`, hand-wrapped                                      | 199.64 KB      | 205.90 KB         | +3.1%  | 0                    |
 
-Regenerate with `pnpm compare:libraries`. The date above records when this
-file was last regenerated; `pnpm compare:libraries:check` does not police
-how old it is, only whether the figures, versions and compositions below
-still match a fresh run. Re-run the command above to bring the date current.
+Regenerate with `pnpm compare:libraries` -- run `pnpm build` first; a
+stale `dist/` changes Playdeck's rows and nothing else. The date above
+records when this file was last regenerated; `pnpm compare:libraries:check`
+does not police how old it is, only whether the figures, versions and
+compositions below still match a fresh run. Re-run the command above to
+bring the date current.

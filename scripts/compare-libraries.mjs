@@ -538,6 +538,23 @@ export const notCounted = (count, bytes) =>
     : `${count} chunk${count === 1 ? '' : 's'}, ${kb(bytes)} KB`;
 
 /**
+ * esbuild's figure relative to Vite's for one row: `(esbuild - Vite) / Vite`,
+ * signed and rounded to one decimal place. Generated so that the story
+ * `docs/comparison/method.md` tells about the two bundlers agreeing, or not,
+ * cites a number `pnpm compare:libraries:check` actually enforces rather
+ * than one typed into prose the check cannot see -- see that document's
+ * "Cross-checked with a second bundler" section, which names this column
+ * rather than restating its own figures.
+ * @param {number} viteBytes
+ * @param {number} esbuildBytes
+ * @returns {string}
+ */
+export const delta = (viteBytes, esbuildBytes) => {
+  const percent = ((esbuildBytes - viteBytes) / viteBytes) * 100;
+  return `${percent >= 0 ? '+' : ''}${percent.toFixed(1)}%`;
+};
+
+/**
  * `bytes` is Vite's figure and `esbuildBytes` is esbuild's, over the same
  * reachability rule applied to each bundler's own chunk graph -- see
  * `docs/comparison/method.md`'s "What is measured" for why a second, wholly
@@ -569,6 +586,7 @@ export const renderTable = (rows) => {
     'Composition measured',
     'Gzipped (Vite)',
     'Gzipped (esbuild)',
+    'Delta',
     'Not counted'
   ];
   const body = rows.map(
@@ -586,6 +604,7 @@ export const renderTable = (rows) => {
       composition,
       `${kb(bytes)} KB`,
       `${kb(esbuildBytes)} KB`,
+      delta(bytes, esbuildBytes),
       notCounted(notCountedChunks, notCountedBytes)
     ]
   );
@@ -643,17 +662,20 @@ from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
 sum of each reachable chunk's own gzip size from that bundler's own build, not
 one gzip of their concatenation -- see \`scripts/compare-libraries.mjs\`'s
 header for why, and its "What is measured" entry in \`docs/comparison/method.md\`
-for what the two bundlers agreeing, or not, is evidence of. "Not counted" is
-the chunks the Vite build produced but this fixture's fixed inputs cannot
-reach, gzipped the same way -- see \`docs/comparison/method.md\` for what each
-library's excluded chunks are.
+for what the two bundlers agreeing, or not, is evidence of. "Delta" is
+esbuild's figure relative to Vite's, signed and rounded to one decimal.
+"Not counted" is the chunks the Vite build produced but this fixture's fixed
+inputs cannot reach, gzipped the same way -- see
+\`docs/comparison/method.md\` for what each library's excluded chunks are.
 
 ${renderTable(rows)}
 
-Regenerate with \`pnpm compare:libraries\`. The date above records when this
-file was last regenerated; \`pnpm compare:libraries:check\` does not police
-how old it is, only whether the figures, versions and compositions below
-still match a fresh run. Re-run the command above to bring the date current.
+Regenerate with \`pnpm compare:libraries\` -- run \`pnpm build\` first; a
+stale \`dist/\` changes Playdeck's rows and nothing else. The date above
+records when this file was last regenerated; \`pnpm compare:libraries:check\`
+does not police how old it is, only whether the figures, versions and
+compositions below still match a fresh run. Re-run the command above to
+bring the date current.
 `;
 
 /**
@@ -676,6 +698,66 @@ export const maskVolatile = (doc) =>
     /Measured \d{4}-\d{2}-\d{2} on Node v\d+\.\d+\.\d+,/,
     'Measured <date> on Node <node-version>,'
   );
+
+/**
+ * The minimal line-level difference between two documents, as an LCS
+ * (longest common subsequence) diff: a line present only in `before` is
+ * prefixed `-`, a line present only in `after` is prefixed `+`, and a line
+ * identical in both is omitted. LCS rather than a positional
+ * (line-by-line-at-the-same-index) comparison because this file's table is
+ * padded to the widest cell in each column -- one figure gaining a digit can
+ * shift every cell in that column, and a positional diff would then report
+ * every row as different instead of naming the one figure that actually
+ * changed.
+ * @param {string} before
+ * @param {string} after
+ * @returns {string[]}
+ */
+export const lineDiff = (before, after) => {
+  const a = before.split('\n');
+  const b = after.split('\n');
+  const n = a.length;
+  const m = b.length;
+
+  /** @type {number[][]} */
+  const lcs = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i][j] =
+        a[i] === b[j]
+          ? (lcs[i + 1]?.[j + 1] ?? 0) + 1
+          : Math.max(lcs[i + 1]?.[j] ?? 0, lcs[i]?.[j + 1] ?? 0);
+    }
+  }
+
+  /** @type {string[]} */
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    if ((lcs[i + 1]?.[j] ?? 0) >= (lcs[i]?.[j + 1] ?? 0)) {
+      out.push(`- ${a[i]}`);
+      i += 1;
+    } else {
+      out.push(`+ ${b[j]}`);
+      j += 1;
+    }
+  }
+  while (i < n) {
+    out.push(`- ${a[i]}`);
+    i += 1;
+  }
+  while (j < m) {
+    out.push(`+ ${b[j]}`);
+    j += 1;
+  }
+  return out;
+};
 
 /** @param {string} path @returns {Promise<Record<string, unknown>>} */
 const readJson = async (path) =>
@@ -762,11 +844,19 @@ const main = async () => {
   }
 
   if (check) {
-    if (maskVolatile(before) === maskVolatile(after)) {
+    const maskedBefore = maskVolatile(before);
+    const maskedAfter = maskVolatile(after);
+    if (maskedBefore === maskedAfter) {
       console.log(
         `${RESULTS_PATH} already matches a fresh run (ignoring the measurement date and Node version).`
       );
       return;
+    }
+    // Printed before the error below, not folded into its message: a thrown
+    // Error's message is one line by convention elsewhere in this repo's
+    // gate scripts, and the diff can be many.
+    for (const line of lineDiff(maskedBefore, maskedAfter)) {
+      console.error(line);
     }
     throw new Error(
       `${RESULTS_PATH} no longer matches a fresh measurement -- run \`pnpm compare:libraries\`.`

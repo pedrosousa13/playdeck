@@ -81,16 +81,11 @@ measured here are therefore independent on bundling, tree-shaking, chunk
 splitting and minification alike -- not, as it would be easy to assume, two
 runs of the same minifier under two different bundlers.
 
-Every row's actual delta, measured on 2026-09-05:
-
-| Library                | Vite      | esbuild   | Delta  |
-| ---------------------- | --------- | --------- | ------ |
-| Playdeck               | 19.94 KB  | 20.70 KB  | +3.8%  |
-| Playdeck (control bar) | 23.61 KB  | 24.58 KB  | +4.1%  |
-| react-player           | 2.97 KB   | 2.40 KB   | -19.2% |
-| Vidstack               | 90.04 KB  | 91.83 KB  | +2.0%  |
-| Media Chrome           | 41.83 KB  | 43.70 KB  | +4.5%  |
-| Video.js               | 199.64 KB | 205.90 KB | +3.1%  |
+Every row's actual delta is `results.md`'s own "Delta" column -- generated
+by `scripts/compare-libraries.mjs`'s `delta` function from the same two
+figures the "Gzipped" columns print, rather than typed here, so it can never
+disagree with them. What follows explains the _shape_ of that column, not
+its numbers: read the numbers from the table, not from this paragraph.
 
 **Media Chrome and Video.js** have no dynamic `import()` anywhere in their
 reachable code (confirmed from both build's own graphs: neither entry has a
@@ -98,9 +93,9 @@ reachable code (confirmed from both build's own graphs: neither entry has a
 reachability can explain their gap. What is left is exactly the two
 minifiers producing different bytes for the same input, which is expected of
 two different implementations and is the kind of disagreement this
-cross-check is supposed to surface as normal rather than hide: a few percent,
-on a row with nothing else that could move it, is minifier noise, not a
-finding.
+cross-check is supposed to surface as normal rather than hide: a small,
+one-directional gap, on a row with nothing else that could move it, is
+minifier noise, not a finding.
 
 **Playdeck, Playdeck (control bar), and Vidstack** carry the same kind of
 minifier noise plus one more, structural difference: their entry chunks
@@ -109,23 +104,20 @@ import in its own module-preload machinery by default -- a `__vite__mapDeps`
 table plus a small runtime that injects a `<link rel="modulepreload">` for
 each target's own static dependencies before resolving the import. esbuild's
 plain `import()` output carries no such wrapper. Confirmed directly rather
-than inferred: react-player's entry chunk (the smallest of the six, which is
-why this shows up there and nowhere else as more than a rounding error) still
-carries this same machinery, and isolating it in Vite's own output measures
-roughly 1.4 KB raw / on the order of 800 bytes gzipped by itself -- on the
-order of the entire 0.57 KB gap between the two bundlers' react-player
-figures. Every other row's entry is large enough that the same fixed cost is
-a few percent rather than the dominant term.
+than inferred, by isolating that machinery in Vite's own output for
+react-player's entry (the smallest of the six): it accounts for most of the
+gap its Delta cell reports. Every other row's entry is large enough that the
+same fixed cost reads as a few percent rather than the dominant term.
 
 **react-player** is therefore the one row where esbuild's figure is smaller
-than Vite's, and by far the largest proportional gap in the table, for a
-reason that has nothing to do with react-player's own code: its reachable
-bundle is small enough that Vite's own preload-helper overhead, which every
-row with a dynamic import carries, is no longer a rounding error next to it.
-Nothing here suggests either bundler is wrong -- both are reporting what a
-page built with that bundler would actually download, preload helper
-included for Vite's -- so the gap is reported as what it is rather than
-smoothed into agreement.
+than Vite's, and by a wide margin proportionally the largest gap in the
+table (see its Delta cell), for a reason that has nothing to do with
+react-player's own code: its reachable bundle is small enough that Vite's own
+preload-helper overhead, which every row with a dynamic import carries, is no
+longer a rounding error next to it. Nothing here suggests either bundler is
+wrong -- both are reporting what a page built with that bundler would
+actually download, preload helper included for Vite's -- so the gap is
+reported as what it is rather than smoothed into agreement.
 
 ## What is not measured, and why
 
@@ -265,8 +257,8 @@ harness, so this document cannot describe Playdeck's own minimal player any
 more generously than the fixture that gates its bundle budget already does.
 **This is one button, not a control bar** — Playdeck is headless by design and
 ships no built-in seek bar, volume control or time display; a consumer adds
-exactly the parts they use. Measured at 19.94 KB gzipped, smaller than
-`README.md`'s own 31.5 KB figure for the same row, because that figure
+exactly the parts they use. Its row in `results.md` is smaller than
+`README.md`'s own byte table figure for the same row, because that figure
 deliberately does not tree-shake (it measures the whole `@playdeck/react`
 package, to bound any selection a consumer might make) while this harness
 bundles this fixture's actual five imports through a real bundler. The two
@@ -285,8 +277,8 @@ correspond to Media Chrome's seven-button bar: `PlayButton` (swapping
 `FullscreenButton` (swapping `FullscreenEnterIcon`/`FullscreenExitIcon`) —
 every part and every prop shape copied from
 `apps/storybook/stories/reference/reference-player.tsx`'s own control bar
-rather than invented for this fixture. Measured at 23.61 KB gzipped. **This
-carries five of Media Chrome's seven controls, not seven**: Playdeck ships no
+rather than invented for this fixture. **This row carries five of Media
+Chrome's seven controls, not seven**: Playdeck ships no
 seek-backward or seek-forward button part. `SeekBackwardIcon` and
 `SeekForwardIcon` exist (`packages/react/src/icons.tsx`, re-exported from
 `packages/react/src/index.tsx`) with no `SeekBackwardButton` or
@@ -306,8 +298,8 @@ src="…mp4" controls />`. For a plain file, react-player's own `players.js`
 resolves to its `html` player — a thin wrapper around a native `<video>` — the
 only provider in that array that is not `React.lazy`-loaded, so `controls`
 here means the same thing it means on a bare `<video>` element: the browser's
-own native control set, not any UI react-player draws itself. Measured at
-2.97 KB gzipped — smaller than Playdeck's composition, and the honest reason
+own native control set, not any UI react-player draws itself. Its row in
+`results.md` is smaller than Playdeck's one-button row, and the honest reason
 is not that react-player is a smaller library; it is that this row draws no
 custom UI at all, while Playdeck's row draws one button.
 
@@ -316,30 +308,29 @@ custom UI at all, while Playdeck's row draws one button.
 Vidstack's own documented answer to "give me default controls", and the
 closest thing among the five to a full, off-the-shelf skin: a play button,
 seek bar, volume, fullscreen, and settings/captions/chapters menus, all drawn
-by the library. Measured at 90.04 KB gzipped, with `results.md`'s "Not
-counted" column naming 15 further chunks (22.27 KB gzipped) the same build
-produced. That count and that size are what the harness measures; what
-follows is a reading of those 15 chunks' `moduleIds` and code, taken on the
-measurement date (2026-09-05) and not re-verified by
-`pnpm compare:libraries:check` — only the count and the total size are. Eight
-are the caption/text-track pipeline the `media-captions` dependency brings in
-(VTT/SRT/SSA parsing and an error dialog), gated on a text track this fixture
-never adds; three are Google Cast support; one is an AirPlay button; one is
-thumbnail-preview support, gated on a source that publishes preview
-thumbnails, which this fixture's plain MP4 does not; and one is the
-chapters/quality/keyboard-shortcuts overlay. The remaining chunk this reading
-did not identify. None of the fifteen is reachable without a text track, a
-casting device, AirPlay, alternate quality or chapter tracks, or thumbnail
-previews — none of which this fixture's fixed MP4 provides — so none are
-counted in the 90.04 KB figure.
+by the library. `results.md`'s "Not counted" column names the further
+chunks the same build produced beyond that row's own figure. That count and
+size are what the harness measures; what follows is a reading of those
+chunks' `moduleIds` and code, taken on the measurement date and not
+re-verified by `pnpm compare:libraries:check` — only the count and the total
+size in that column are. Most are the caption/text-track pipeline the
+`media-captions` dependency brings in (VTT/SRT/SSA parsing and an error
+dialog), gated on a text track this fixture never adds; several are Google
+Cast support; one is an AirPlay button; one is thumbnail-preview support,
+gated on a source that publishes preview thumbnails, which this fixture's
+plain MP4 does not; one is the chapters/quality/keyboard-shortcuts overlay;
+and a remaining chunk this reading did not identify. None of them is
+reachable without a text track, a casting device, AirPlay, alternate quality
+or chapter tracks, or thumbnail previews — none of which this fixture's
+fixed MP4 provides — so none are counted in that row's own figure.
 
 **Media Chrome** (`entries/media-chrome.tsx`) has no single "default"
 composition to reuse — like Playdeck, it publishes a set of parts rather than
 a configured player — so this uses the control bar its own README teaches: a
 `<MediaController>` wrapping a native `<video>` on the `slot="media"`
 convention, with a `<MediaControlBar>` of seven buttons (play, seek back, seek
-forward, mute, volume, time range, fullscreen). Measured at 41.83 KB gzipped.
-One measured, not asserted, structural fact about this row: `media-chrome`'s
+forward, mute, volume, time range, fullscreen). One measured, not asserted,
+structural fact about this row: `media-chrome`'s
 React wrapper re-exports every custom element it has from one module
 (`media-chrome/react/index.js` does `import * as Modules from '../index.js'`
 and defines a React component for each), so importing any one control pulls
@@ -352,10 +343,11 @@ hand-writes the standard idiom: a `<video>` ref, and `videojs(videoRef.current,
 { controls: true, sources: […] })` called once after mount. `controls: true`
 is what turns on video.js's own default skin — the big play button and
 control bar drawn by its main bundle, with no separate package to opt into.
-Measured at 199.64 KB gzipped, close to gzipping `video.js`'s own published
-`dist/video.min.js` directly (≈196.6 KB), which is the check that this row is
-measuring the library and not this harness's four-line wrapper around it. The
-reason the figure is this large: `import videojs from 'video.js'` statically
+This row's own figure is close to gzipping `video.js`'s own published
+`dist/video.min.js` directly, which is the check that this row is measuring
+the library and not this harness's four-line wrapper around it. The reason
+the figure is the largest in the table: `import videojs from 'video.js'`
+statically
 pulls in `videojs-http-streaming`, `mux.js`, `mpd-parser` and `m3u8-parser` —
 video.js's own HLS/DASH engine — with no dynamic `import()` boundary around any
 of it, so it loads whether or not the page ever plays anything but the plain
@@ -368,8 +360,8 @@ so nothing about it depends on this harness's own reachability logic.
 The issue's fairness rule is not satisfied by a bytes table alone, and reading
 one number off `results.md` without this paragraph would misread it:
 
-- **react-player is smaller than Playdeck's one-button row here (2.97 KB vs.
-  19.94 KB)**, and the honest reason is that its row draws no UI at all —
+- **react-player's row is smaller than Playdeck's one-button row here** (see
+  `results.md`), and the honest reason is that its row draws no UI at all —
   native browser controls on a bare `<video>` — while Playdeck's row draws
   one styled button. A reader who wants zero custom UI gets it from
   react-player for less code than Playdeck's core, and the two are not
@@ -404,8 +396,9 @@ one number off `results.md` without this paragraph would misread it:
 - **Media Chrome's per-component React exports are not independently
   tree-shakeable** from the rest of its custom-element registry — a real
   reader who wants only a play button and a time display pays for the whole
-  set regardless, which this row's 41.83 KB already reflects but which
-  Playdeck's own per-primitive imports do not have as a constraint.
+  set regardless, which this row's own figure in `results.md` already
+  reflects but which Playdeck's own per-primitive imports do not have as a
+  constraint.
 - **None of the four alternatives distinguish "this capability will never
   work" from "this capability's answer is not known yet"** the way Playdeck's
   `Availability` union does — that is the axis this repository's `CONTEXT.md`
@@ -429,7 +422,9 @@ pnpm compare:libraries
 `pnpm build` first: the Playdeck entry imports `@playdeck/react`, whose
 `package.json` `exports` field points at its own `dist/`, gitignored and not
 rebuilt by `pnpm install` alone — the same reason CI's `docs:bytes:check` runs
-inside the `build` job rather than beside `docs:check` in `static`.
+inside the `build` job rather than beside `docs:check` in `static`. A stale
+`dist/` changes Playdeck's two rows and nothing else, silently, which is
+what makes it worth checking first rather than after `--check` fails.
 
 `pnpm compare:libraries:check` fails if a fresh run would produce different
 figures, versions or composition labels than the ones checked in; it ignores
