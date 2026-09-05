@@ -20,8 +20,7 @@ their concatenation -- see `scripts/compare-libraries.mjs`'s header for why.
 | Media Chrome | 4.19.2  | MediaController + a 7-button control bar          | 41.83 KB  |
 | Video.js     | 8.24.0  | videojs() with `controls: true`, hand-wrapped     | 199.64 KB |
 
-Regenerate with `pnpm compare:libraries`. `pnpm compare:libraries:check`
-fails if this file no longer matches a fresh run, which includes the date
-above going stale -- an undated benchmark is a claim with an expiry date
-(`docs/agents/comments.md`), and a dated one that nobody has re-run since is
-not much better.
+Regenerate with `pnpm compare:libraries`. The date above records when this
+file was last regenerated; `pnpm compare:libraries:check` does not police
+how old it is, only whether the figures, versions and compositions below
+still match a fresh run. Re-run the command above to bring the date current.

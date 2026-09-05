@@ -289,13 +289,10 @@ pnpm compare:libraries
 rebuilt by `pnpm install` alone — the same reason CI's `docs:bytes:check` runs
 inside the `build` job rather than beside `docs:check` in `static`.
 
-`pnpm compare:libraries:check` fails if a fresh run would produce a different
-`results.md` than the one checked in — including the date alone having gone
-stale, which is deliberate: an unrefreshed snapshot next to a claim that reads
-as current is exactly the failure `docs/agents/comments.md` warns a comment
-naming an open issue number can fall into, and a benchmark nobody has re-run
-since it was written is the same failure at a larger scale. There is no
-schedule that re-runs this automatically; it is current as of the date printed
-in `results.md` and not a moment later, and the next person to change a pinned
-version, add a library, or doubt a figure is expected to run the command
-above rather than trust last time's numbers.
+`pnpm compare:libraries:check` fails if a fresh run would produce different
+figures, versions or composition labels than the ones checked in; it ignores
+the date line on its own, so it never fails purely because the calendar
+moved. The date on `results.md`'s header records when the file was last
+regenerated, not a promise about how current it still is — re-run the command
+above whenever a pinned version changes, a library is added, or a figure is
+doubted.

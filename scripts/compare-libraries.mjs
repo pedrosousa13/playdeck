@@ -309,10 +309,11 @@ export const renderTable = (rows) => {
 /**
  * The whole generated file. A date the caller passes in rather than one this
  * function reads for itself, so the render stays pure and testable: the same
- * inputs always produce the same document, which is what `--check` and the
- * determinism check both rely on. A date that has simply gone stale since the
- * file was last generated is meant to fail `--check` -- see this script's
- * `main` for why that is a feature and not a bug here.
+ * inputs always produce the same document, which is what the determinism
+ * check relies on. `--check` additionally tolerates the date line differing
+ * on its own -- see `maskDate` and this script's `main` for why: a gate that
+ * fails on the calendar alone is a gate nobody can keep green, and it is not
+ * what "re-running on unchanged inputs produces the same numbers" asks for.
  * @param {{ date: string; nodeVersion: string; viteVersion: string; rows: readonly Row[] }} data
  * @returns {string}
  */
@@ -333,12 +334,24 @@ their concatenation -- see \`scripts/compare-libraries.mjs\`'s header for why.
 
 ${renderTable(rows)}
 
-Regenerate with \`pnpm compare:libraries\`. \`pnpm compare:libraries:check\`
-fails if this file no longer matches a fresh run, which includes the date
-above going stale -- an undated benchmark is a claim with an expiry date
-(\`docs/agents/comments.md\`), and a dated one that nobody has re-run since is
-not much better.
+Regenerate with \`pnpm compare:libraries\`. The date above records when this
+file was last regenerated; \`pnpm compare:libraries:check\` does not police
+how old it is, only whether the figures, versions and compositions below
+still match a fresh run. Re-run the command above to bring the date current.
 `;
+
+/**
+ * A rendered document with its "Measured <date> ..." line's date replaced by
+ * a fixed placeholder, so two renders taken on different days compare equal
+ * wherever every other line already does. Only \`--check\` reaches for this:
+ * the write path in \`main\` below still stamps the real date whenever it
+ * writes, and this is what keeps \`--check\` from failing on the one line
+ * that is expected to move between runs on otherwise unchanged inputs.
+ * @param {string} doc
+ * @returns {string}
+ */
+export const maskDate = (doc) =>
+  doc.replace(/Measured \d{4}-\d{2}-\d{2} on Node/, 'Measured <date> on Node');
 
 /** @param {string} path @returns {Promise<Record<string, unknown>>} */
 const readJson = async (path) =>
@@ -404,14 +417,21 @@ const main = async () => {
     }
   }
 
-  if (before === after) {
-    if (!check) console.log(`${RESULTS_PATH} already matches a fresh run.`);
-    return;
-  }
   if (check) {
+    if (maskDate(before) === maskDate(after)) {
+      console.log(
+        `${RESULTS_PATH} already matches a fresh run (ignoring the measurement date).`
+      );
+      return;
+    }
     throw new Error(
       `${RESULTS_PATH} no longer matches a fresh measurement -- run \`pnpm compare:libraries\`.`
     );
+  }
+
+  if (before === after) {
+    console.log(`${RESULTS_PATH} already matches a fresh run.`);
+    return;
   }
   await mkdir(join(repoRoot, 'docs/comparison'), { recursive: true });
   await writeFile(path, after);

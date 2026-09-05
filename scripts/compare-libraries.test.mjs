@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   gzipBytes,
   kb,
+  maskDate,
   pinnedVersion,
   reachableChunks,
   renderResultsDoc,
@@ -217,4 +218,87 @@ test('changing only the date changes the rendered document', () => {
     renderResultsDoc(base),
     renderResultsDoc({ ...base, date: '2026-09-06' })
   );
+});
+
+// ---- maskDate: what `--check` is allowed to ignore --------------------------
+
+test('masks the date so two renders taken on different days compare equal', () => {
+  const base = {
+    date: '2026-09-05',
+    nodeVersion: 'v24.18.1',
+    viteVersion: '8.1.5',
+    rows: [
+      {
+        name: 'Playdeck',
+        version: '1.0.0',
+        composition: 'core + native',
+        bytes: 20430
+      }
+    ]
+  };
+  const older = renderResultsDoc(base);
+  const later = renderResultsDoc({ ...base, date: '2026-09-12' });
+  assert.notEqual(older, later);
+  assert.equal(maskDate(older), maskDate(later));
+});
+
+test('a checked-in document with an older date but identical content matches a fresh render once masked', () => {
+  const data = {
+    date: '2026-01-01',
+    nodeVersion: 'v24.18.1',
+    viteVersion: '8.1.5',
+    rows: [
+      {
+        name: 'Video.js',
+        version: '8.24.0',
+        composition: 'videojs()',
+        bytes: 204390
+      }
+    ]
+  };
+  const checkedIn = renderResultsDoc(data);
+  const freshRun = renderResultsDoc({ ...data, date: '2026-09-05' });
+  assert.equal(maskDate(checkedIn), maskDate(freshRun));
+});
+
+test('a changed byte figure still fails the masked comparison', () => {
+  const checkedIn = renderResultsDoc({
+    date: '2026-01-01',
+    nodeVersion: 'v24.18.1',
+    viteVersion: '8.1.5',
+    rows: [
+      {
+        name: 'Video.js',
+        version: '8.24.0',
+        composition: 'videojs()',
+        bytes: 204390
+      }
+    ]
+  });
+  const freshRun = renderResultsDoc({
+    date: '2026-09-05',
+    nodeVersion: 'v24.18.1',
+    viteVersion: '8.1.5',
+    rows: [
+      {
+        name: 'Video.js',
+        version: '8.24.0',
+        composition: 'videojs()',
+        bytes: 210000
+      }
+    ]
+  });
+  assert.notEqual(maskDate(checkedIn), maskDate(freshRun));
+});
+
+test('only the date line is touched, so a version or figure change elsewhere still shows up', () => {
+  const doc = renderResultsDoc({
+    date: '2026-09-05',
+    nodeVersion: 'v24.18.1',
+    viteVersion: '8.1.5',
+    rows: []
+  });
+  assert.equal(maskDate(doc).includes('2026-09-05'), false);
+  assert.equal(maskDate(doc).includes('v24.18.1'), true);
+  assert.equal(maskDate(doc).includes('8.1.5'), true);
 });
