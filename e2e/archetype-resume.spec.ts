@@ -79,10 +79,11 @@ const seekedNearResume = (page: Page): Promise<boolean> =>
     { resumeAt: RESUME_AT, tolerance: TOLERANCE }
   );
 
+// `!= null` on purpose: a missing handle reads as `undefined`, and a strict
+// `!== null` would turn that into a refusal and pass the disjunction for a
+// story whose ref never fired.
 const commandRefused = (page: Page): Promise<boolean> =>
-  page.evaluate(
-    () => window.playdeckHandle?.getState().refusedCommand !== null
-  );
+  page.evaluate(() => window.playdeckHandle?.getState().refusedCommand != null);
 
 for (const { name, story, resumeButtonName } of cases) {
   test(`${name}: resume lands on the requested position or is refused, never silently dropped`, async ({
