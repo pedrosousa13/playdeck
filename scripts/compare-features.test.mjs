@@ -6,14 +6,18 @@ import test from 'node:test';
 
 import {
   describeAnchor,
+  describePlugin,
   evaluateAnchor,
   footnoteNumbers,
+  globToRegExp,
+  matchingFiles,
   maskVolatile,
   packageRoot,
   renderFeaturesDoc,
   renderFootnotes,
   renderTable,
   resolveExport,
+  resolveForNode,
   verifyAllAnchors
 } from './compare-features.mjs';
 
@@ -312,32 +316,207 @@ test('absent-by-field holds only when the dotted field is undefined', async () =
   }
 });
 
-test('absent-by-name holds only when the file does not contain the literal', async () => {
+test('absent-in-tree holds only when no matched file contains the literal', async () => {
   const { dir, roots } = await makeRoots();
   try {
     const root = join(roots.fixtureRoot, 'node_modules/maybe-text');
-    await mkdir(root, { recursive: true });
-    await writeFile(join(root, 'dist.js'), 'export const AirplayButton = 1;\n');
+    await mkdir(join(root, 'dist/nested'), { recursive: true });
+    await writeFile(join(root, 'dist/one.js'), 'export const A = 1;\n');
+    await writeFile(
+      join(root, 'dist/nested/two.js'),
+      'export const AirplayButton = 1;\n'
+    );
     const present = await evaluateAnchor(
       {
-        kind: 'absent',
+        kind: 'absent-in-tree',
         module: 'maybe-text',
-        name: 'AirplayButton',
-        path: 'dist.js'
+        glob: 'dist/**/*.js',
+        includes: 'AirplayButton'
       },
       roots
     );
     assert.equal(present.holds, false);
+    // The failure names the file the token was found in, not just that it
+    // was: a `no` that stops holding has to be actionable.
+    assert.match(present.detail, /dist\/nested\/two\.js/);
     const absent = await evaluateAnchor(
       {
-        kind: 'absent',
+        kind: 'absent-in-tree',
         module: 'maybe-text',
-        name: 'ChromecastButton',
-        path: 'dist.js'
+        glob: 'dist/**/*.js',
+        includes: 'ChromecastButton'
       },
       roots
     );
     assert.equal(absent.holds, true);
+    assert.match(absent.detail, /2 files/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('absent-in-tree searches every module it is given', async () => {
+  const { dir, roots } = await makeRoots();
+  try {
+    const first = join(roots.repoRoot, 'packages/core/dist');
+    const second = join(roots.repoRoot, 'packages/react/dist');
+    await mkdir(first, { recursive: true });
+    await mkdir(second, { recursive: true });
+    await writeFile(join(first, 'index.js'), 'export const A = 1;\n');
+    await writeFile(join(second, 'index.js'), 'export const Cast = 1;\n');
+    const result = await evaluateAnchor(
+      {
+        kind: 'absent-in-tree',
+        module: ['@playdeck/core', '@playdeck/react'],
+        glob: '**/*.js',
+        includes: 'Cast'
+      },
+      roots
+    );
+    assert.equal(result.holds, false);
+    assert.match(result.detail, /@playdeck\/react/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('absent-in-tree with no glob match throws rather than holding vacuously', async () => {
+  const { dir, roots } = await makeRoots();
+  try {
+    const root = join(roots.fixtureRoot, 'node_modules/empty-tree');
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, 'README.md'), 'nothing here\n');
+    await assert.rejects(
+      () =>
+        evaluateAnchor(
+          {
+            kind: 'absent-in-tree',
+            module: 'empty-tree',
+            glob: 'dist/**/*.js',
+            includes: 'Anything'
+          },
+          roots
+        ),
+      /absence nobody searched for/
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('absent-in-tree with no `includes` claims the glob matches nothing', async () => {
+  const { dir, roots } = await makeRoots();
+  try {
+    const root = join(roots.fixtureRoot, 'node_modules/no-css');
+    await mkdir(join(root, 'dist'), { recursive: true });
+    await writeFile(join(root, 'dist/index.js'), 'export const A = 1;\n');
+    const noStylesheet = await evaluateAnchor(
+      { kind: 'absent-in-tree', module: 'no-css', glob: '**/*.css' },
+      roots
+    );
+    assert.equal(noStylesheet.holds, true);
+    await writeFile(join(root, 'dist/theme.css'), ':root{}\n');
+    const nowHasOne = await evaluateAnchor(
+      { kind: 'absent-in-tree', module: 'no-css', glob: '**/*.css' },
+      roots
+    );
+    assert.equal(nowHasOne.holds, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('imports-in-node holds on the expected outcome, either way', async () => {
+  const { dir, roots } = await makeRoots();
+  try {
+    const loads = join(roots.fixtureRoot, 'node_modules/loads');
+    await mkdir(loads, { recursive: true });
+    await writeJson(join(loads, 'package.json'), {
+      type: 'module',
+      main: './index.js'
+    });
+    await writeFile(join(loads, 'index.js'), 'export const A = 1;\n');
+    const ok = await evaluateAnchor(
+      { kind: 'imports-in-node', module: 'loads', expect: 'imports' },
+      roots
+    );
+    assert.equal(ok.holds, true);
+
+    const breaks = join(roots.fixtureRoot, 'node_modules/breaks');
+    await mkdir(breaks, { recursive: true });
+    await writeJson(join(breaks, 'package.json'), {
+      type: 'module',
+      main: './index.js'
+    });
+    await writeFile(
+      join(breaks, 'index.js'),
+      'export const A = document.title;\n'
+    );
+    const threw = await evaluateAnchor(
+      { kind: 'imports-in-node', module: 'breaks', expect: 'imports' },
+      roots
+    );
+    assert.equal(threw.holds, false);
+    assert.match(threw.detail, /throws when imported in plain Node/);
+    const expectedToThrow = await evaluateAnchor(
+      { kind: 'imports-in-node', module: 'breaks', expect: 'throws' },
+      roots
+    );
+    assert.equal(expectedToThrow.holds, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// ---- globToRegExp and matchingFiles -------------------------------------------
+
+test('globToRegExp gives `*` one segment and `**/` any number', () => {
+  assert.equal(globToRegExp('dist/**/*.js').test('dist/index.js'), true);
+  assert.equal(globToRegExp('dist/**/*.js').test('dist/a/b/index.js'), true);
+  assert.equal(globToRegExp('dist/**/*.js').test('dist/index.d.ts'), false);
+  assert.equal(globToRegExp('dist/*.js').test('dist/a/index.js'), false);
+  // A `.` in the pattern is a literal, not "any character".
+  assert.equal(globToRegExp('**/*.d.ts').test('types/xdxts'), false);
+});
+
+test('matchingFiles walks the tree and never descends node_modules', async () => {
+  const { dir } = await makeRoots();
+  try {
+    const root = join(dir, 'tree');
+    await mkdir(join(root, 'dist/deep'), { recursive: true });
+    await mkdir(join(root, 'node_modules/inner'), { recursive: true });
+    await writeFile(join(root, 'dist/a.js'), '');
+    await writeFile(join(root, 'dist/deep/b.js'), '');
+    await writeFile(join(root, 'dist/deep/c.css'), '');
+    await writeFile(join(root, 'node_modules/inner/d.js'), '');
+    assert.deepEqual(await matchingFiles(root, ['**/*.js']), [
+      'dist/a.js',
+      'dist/deep/b.js'
+    ]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// ---- resolveForNode ------------------------------------------------------------
+
+test('resolveForNode falls back to "main", never to "module"', async () => {
+  const { dir, roots } = await makeRoots();
+  try {
+    const root = join(roots.fixtureRoot, 'node_modules/dual');
+    await mkdir(root, { recursive: true });
+    await writeJson(join(root, 'package.json'), {
+      module: './dist/esm.js',
+      main: './dist/cjs.js'
+    });
+    assert.equal(
+      await resolveExport('dual', roots),
+      join(root, './dist/esm.js')
+    );
+    assert.equal(
+      await resolveForNode('dual', roots),
+      join(root, './dist/cjs.js')
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -359,20 +538,20 @@ test('verifyAllAnchors names every failing axis and library, not just the first'
           One: {
             status: /** @type {const} */ ('no'),
             anchor: /** @type {const} */ ({
-              kind: 'absent',
+              kind: 'absent-in-tree',
               module: 'lib',
-              name: 'Real',
-              path: 'dist.js'
+              glob: '**/*.js',
+              includes: 'Real'
             }),
             source: 'x'
           },
           Two: {
             status: /** @type {const} */ ('no'),
             anchor: /** @type {const} */ ({
-              kind: 'absent',
+              kind: 'absent-in-tree',
               module: 'lib',
-              name: 'Fake',
-              path: 'dist.js'
+              glob: '**/*.js',
+              includes: 'Fake'
             }),
             source: 'x'
           }
@@ -393,6 +572,46 @@ test('verifyAllAnchors names every failing axis and library, not just the first'
   }
 });
 
+test('verifyAllAnchors refuses a plugin cell with no provenance, or an n/a cell with no note', async () => {
+  const { dir, roots } = await makeRoots();
+  try {
+    const root = join(roots.fixtureRoot, 'node_modules/lib');
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, 'dist.js'), 'export const Real = 1;\n');
+    const anchor = /** @type {const} */ ({
+      kind: 'absent-in-tree',
+      module: 'lib',
+      glob: '**/*.js',
+      includes: 'Fake'
+    });
+    const axes = [
+      {
+        id: 'axis-a',
+        label: 'Axis A',
+        entries: {
+          One: {
+            status: /** @type {const} */ ('plugin'),
+            anchor,
+            source: 'x'
+          },
+          Two: { status: /** @type {const} */ ('n/a'), anchor, source: 'x' }
+        }
+      }
+    ];
+    await assert.rejects(
+      () => verifyAllAnchors(axes, [{ name: 'One' }, { name: 'Two' }], roots),
+      (error) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /axis-a \/ One: a 'plugin' cell/);
+        assert.match(error.message, /axis-a \/ Two: an 'n\/a' cell/);
+        return true;
+      }
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 // ---- describeAnchor ------------------------------------------------------------
 
 test('describes each anchor kind in words', () => {
@@ -401,12 +620,42 @@ test('describes each anchor kind in words', () => {
     /`x` exports `Y`/
   );
   assert.match(
-    describeAnchor({ kind: 'absent', module: 'x', name: 'Y', path: 'z.js' }),
-    /`x`'s `z.js` has no `Y`/
+    describeAnchor({
+      kind: 'absent-in-tree',
+      module: 'x',
+      glob: ['**/*.js', '**/*.d.ts'],
+      includes: 'Y'
+    }),
+    /no file of `x` matching `\*\*\/\*\.js` or `\*\*\/\*\.d\.ts` contains `Y`/
+  );
+  assert.match(
+    describeAnchor({ kind: 'absent-in-tree', module: 'x', glob: '**/*.css' }),
+    /`x` ships no file matching `\*\*\/\*\.css`/
   );
   assert.match(
     describeAnchor({ kind: 'absent', module: 'x', field: 'style' }),
     /`x`'s `package.json` has no `style`/
+  );
+  assert.match(
+    describeAnchor({ kind: 'imports-in-node', module: 'x', expect: 'imports' }),
+    /importing `x` in plain Node, with no DOM globals, succeeds/
+  );
+});
+
+// ---- describePlugin ------------------------------------------------------------
+
+test('describePlugin prints the repository owner, or that none is published', () => {
+  assert.match(
+    describePlugin({
+      name: 'videojs-youtube',
+      repository: 'github.com/videojs/videojs-youtube',
+      provenance: 'org-published'
+    }),
+    /npm `repository` github\.com\/videojs\/videojs-youtube, org-published/
+  );
+  assert.match(
+    describePlugin({ name: 'videojs-mux', repository: null }),
+    /declares no `repository` field/
   );
 });
 
@@ -426,10 +675,10 @@ const sampleAxes = [
       Beta: {
         status: 'no',
         anchor: {
-          kind: 'absent',
+          kind: 'absent-in-tree',
           module: 'beta',
-          name: 'Thing',
-          path: 'dist.js'
+          glob: '**/*.js',
+          includes: 'Thing'
         },
         source: 'beta docs',
         note: 'Checked and absent.'

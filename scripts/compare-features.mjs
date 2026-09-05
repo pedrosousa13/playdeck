@@ -9,7 +9,7 @@
 //
 // The maintainer ruling repeated on #638 is "make sure data is 100% correct
 // and bias free", made concrete two ways: the axis list is the UNION of what
-// each of the five libraries advertises about itself (never Playdeck's own
+// each compared library advertises about itself (never Playdeck's own
 // feature list, which would make the table an argument for Playdeck before a
 // reader reaches row one), and every cell traces to something this script can
 // re-verify against the installed package, never a paraphrase of a doc page
@@ -21,24 +21,57 @@
 //
 // `tests/compare/features.mjs` encodes each axis as data, not prose: one
 // entry per library, each an anchor this script evaluates against the
-// installed package rather than trusting. Five kinds, matched to what a
+// installed package rather than trusting. The kinds, matched to what a
 // package can expose:
 //
-//   { kind: 'export',  module, name }           -- a named runtime export
-//   { kind: 'file',     module, path, includes } -- a built file's own text
-//   { kind: 'types',    module, path, includes } -- same check, over a .d.ts
-//   { kind: 'package',  module, field }          -- a package.json field
-//   { kind: 'absent',   module, name, path }     -- a name NOT in that file
-//   { kind: 'absent',   module, field }          -- a package.json field NOT set
+//   { kind: 'export',   module, name }            -- a named runtime export
+//   { kind: 'file',     module, path, includes }  -- a built file's own text
+//   { kind: 'types',    module, path, includes }  -- same check, over a .d.ts
+//   { kind: 'package',  module, field }           -- a package.json field
+//   { kind: 'absent',   module, field }           -- a package.json field NOT set
+//   { kind: 'absent-in-tree', module, glob, includes? }
+//                                                 -- a token in NO file the
+//                                                    glob matches, or (with no
+//                                                    `includes`) no matching
+//                                                    file at all
+//   { kind: 'imports-in-node', module, expect }   -- importing the package in
+//                                                    plain Node, no DOM
 //
 // A cell of 'yes', 'partial' or 'plugin' is anchored by one of the first
-// four: something the installed package still has to say for itself. A cell
-// of 'no' is anchored by 'absent', which the two forms above make into a
-// check rather than an assertion -- "no export found" without one of these is
-// exactly the bare impression #638 rules out. `file` and `types` run the same
-// check; the kind is kept distinct because a reader scanning the source
-// column benefits from knowing whether a claim rests on shipped code or on
-// its type declarations.
+// four: something the installed package still has to say for itself. `file`
+// and `types` run the same check; the kind is kept distinct because a reader
+// scanning the source column benefits from knowing whether a claim rests on
+// shipped code or on its type declarations.
+//
+// ---- why 'absent-in-tree' and not a single-file grep ----------------------
+//
+// A cell of 'no' is anchored by an absence, and an absence is only worth as
+// much as the ground it was searched over. An earlier version of this data
+// searched one file per `no` cell, which made the standard of evidence differ
+// by column without saying so: video.js's `no` cells were checked against its
+// whole 700 KB bundle, while several of Media Chrome's and Vidstack's were
+// checked against a barrel `index.d.ts` that is a list of import names and
+// nothing else -- a file the searched-for token could not have appeared in
+// whatever the library did. `absent-in-tree` removes that difference: it
+// walks every file a glob matches under the package and holds only if the
+// token is in none of them, so a `no` costs the same evidence in every
+// column, Playdeck's included. It refuses to hold vacuously in the other
+// direction too: a glob that matches no file at all throws rather than
+// reporting an absence nobody searched for.
+//
+// With no `includes`, the anchor's claim is the glob's own emptiness -- "this
+// package ships no file matching this pattern" -- which is what a cell like
+// "ships no stylesheet of its own" actually rests on.
+//
+// ---- why 'imports-in-node' -----------------------------------------------
+//
+// SSR is the one axis where a text search cannot answer the question it is
+// standing in for. Reading one library's shipped code for a `"use client"`
+// string and another's for an `isServer` helper is two different questions
+// wearing one axis label, and the answers are not comparable. This anchor
+// asks the property directly and identically for every column: import the
+// package in this plain Node process, which has no `window` and no
+// `document`, and record either that it loaded or the error it threw.
 //
 // `module` is resolved two ways. A `@playdeck/*` package is this repository's
 // own workspace source: `packages/<name>` relative to the repo root, built by
@@ -65,7 +98,7 @@
 // first: one library's version bump can move several axes in the same run,
 // and finding that out one `pnpm compare:features` at a time is the slow way.
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
 
@@ -90,7 +123,8 @@ export const libraries = [
   { name: 'react-player', module: 'react-player' },
   { name: 'Vidstack', module: '@vidstack/react' },
   { name: 'Media Chrome', module: 'media-chrome' },
-  { name: 'Video.js', module: 'video.js' }
+  { name: 'Video.js', module: 'video.js' },
+  { name: 'Video.js 10 (beta)', module: '@videojs/react' }
 ];
 
 /**
@@ -140,7 +174,7 @@ const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 
 /**
  * One condition tree from a package's `exports` map, walked to a file. Node's
- * own condition list is longer; these four are the ones the four measured
+ * own condition list is longer; these four are the ones the measured
  * packages' own maps actually use (`import`/`default` for the ordinary case,
  * `require` for a CJS-only reader, `node` as one more common fallback), tried
  * in the order a bundler resolving an ordinary `import` would prefer them.
@@ -166,16 +200,32 @@ const pickCondition = (node) => {
 /**
  * The file a bare `import(module)` resolves to, read from the package's own
  * `exports` map rather than a dist path this script guesses at -- see this
- * file's header. Falls back to the package's `module` (ESM) or `main` (CJS)
- * field for the one measured package (`video.js`) whose `package.json` has no
- * `exports` map at all; that fallback only ever applies to the bare package
- * (subpath `.`), because a package with no `exports` map publishes no
+ * file's header. Falls back to one of the package's own top-level entry
+ * fields for the one measured package (`video.js`) whose `package.json` has
+ * no `exports` map at all; that fallback only ever applies to the bare
+ * package (subpath `.`), because a package with no `exports` map publishes no
  * subpaths for Node to resolve either.
+ *
+ * `fallbackFields` is which of those top-level fields to try, in order, and
+ * it is a parameter rather than a constant because the two callers are asking
+ * two different questions. A bundler prefers `module` (the ESM build) and
+ * falls back to `main`, which is what every anchor that reads shipped code
+ * wants. Node itself has no `module` condition at all and reads `main` only,
+ * which is what `resolveForNode` -- and so the `imports-in-node` anchor --
+ * has to follow if its answer is to be about the package rather than about
+ * this script's own preferences. For `video.js` the two differ: `module` is
+ * `dist/video.es.js`, whose extensionless `import 'global/window'` only a
+ * bundler resolves, and `main` is the CJS build Node actually loads.
  * @param {string} module
  * @param {{ repoRoot?: string; fixtureRoot?: string }} [roots] See `packageRoot`.
+ * @param {readonly ('module' | 'main')[]} [fallbackFields]
  * @returns {Promise<string>}
  */
-export const resolveExport = async (module, roots = {}) => {
+export const resolveExport = async (
+  module,
+  roots = {},
+  fallbackFields = ['module', 'main']
+) => {
   const root = packageRoot(module, roots);
   const subpath = subpathOf(module);
   const manifest =
@@ -217,22 +267,139 @@ export const resolveExport = async (module, roots = {}) => {
       `${module} has no "exports" map, so its only resolvable specifier is the bare package -- not "${subpath}".`
     );
   }
-  const entry = manifest.module ?? manifest.main;
+  const entry = fallbackFields
+    .map((field) => manifest[field])
+    .find((value) => value !== undefined);
   if (entry === undefined) {
     throw new Error(
-      `${module}'s package.json has no "exports", "module" or "main" field to resolve.`
+      `${module}'s package.json has no "exports" map and none of ${fallbackFields.map((field) => `"${field}"`).join(', ')} to resolve.`
     );
   }
   return join(root, entry);
 };
 
 /**
+ * The file Node itself loads for `import(module)`: the same `exports` walk,
+ * but falling back to `main` alone, never `module`. See `resolveExport`'s
+ * `fallbackFields` for why the distinction is load-bearing rather than
+ * pedantic.
+ * @param {string} module
+ * @param {{ repoRoot?: string; fixtureRoot?: string }} [roots] See `packageRoot`.
+ * @returns {Promise<string>}
+ */
+export const resolveForNode = async (module, roots = {}) =>
+  resolveExport(module, roots, ['main']);
+
+/**
+ * One glob pattern as a regular expression over a `/`-separated relative
+ * path. Deliberately small: `**` crosses directory boundaries, `*` does not,
+ * and everything else is literal. That is the whole vocabulary
+ * `tests/compare/features.mjs` uses (`dist/**\/*.d.ts`, `**\/*.css`), and a
+ * fuller glob dialect here would be code no anchor exercises.
+ * @param {string} pattern
+ * @returns {RegExp}
+ */
+export const globToRegExp = (pattern) => {
+  let source = '';
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+    if (character === '*') {
+      if (pattern[index + 1] === '*') {
+        // `**/` also matches zero directories, so `dist/**/*.js` matches
+        // `dist/index.js` as well as `dist/react/index.js`.
+        if (pattern[index + 2] === '/') {
+          source += '(?:[^/]+/)*';
+          index += 2;
+        } else {
+          source += '.*';
+          index += 1;
+        }
+      } else {
+        source += '[^/]*';
+      }
+      continue;
+    }
+    source += character.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${source}$`);
+};
+
+/**
+ * Every file under `root` whose path relative to it matches one of
+ * `patterns`, as relative `/`-separated paths, sorted so a failure message
+ * names the same file on every run. `node_modules` is never descended into: a
+ * package's own nested install is a different package's shipped code, and
+ * charging it to this one would be the opposite of the evidentiary standard
+ * `absent-in-tree` exists to hold.
+ * @param {string} root
+ * @param {readonly string[]} patterns
+ * @returns {Promise<string[]>}
+ */
+export const matchingFiles = async (root, patterns) => {
+  const expressions = patterns.map(globToRegExp);
+  /** @type {string[]} */
+  const found = [];
+  /** @param {string} relativeDir */
+  const walk = async (relativeDir) => {
+    const entries = await readdir(join(root, relativeDir), {
+      withFileTypes: true
+    });
+    for (const entry of entries) {
+      if (entry.name === 'node_modules') continue;
+      const relativePath = relativeDir
+        ? `${relativeDir}/${entry.name}`
+        : entry.name;
+      if (entry.isDirectory()) {
+        await walk(relativePath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (expressions.some((expression) => expression.test(relativePath))) {
+        found.push(relativePath);
+      }
+    }
+  };
+  await walk('');
+  return found.sort();
+};
+
+/**
  * @typedef {{ kind: 'export'; module: string; name: string }} ExportAnchor
  * @typedef {{ kind: 'file' | 'types'; module: string; path: string; includes: string }} FileAnchor
  * @typedef {{ kind: 'package'; module: string; field: string }} PackageAnchor
- * @typedef {{ kind: 'absent'; module: string; name: string; path: string } | { kind: 'absent'; module: string; field: string }} AbsentAnchor
- * @typedef {ExportAnchor | FileAnchor | PackageAnchor | AbsentAnchor} Anchor
+ * @typedef {{ kind: 'absent'; module: string; field: string }} AbsentFieldAnchor
+ * @typedef {{ kind: 'absent-in-tree'; module: string | readonly string[]; glob: string | readonly string[]; includes?: string }} AbsentInTreeAnchor
+ * @typedef {{ kind: 'imports-in-node'; module: string; expect: 'imports' | 'throws' }} ImportsInNodeAnchor
+ * @typedef {ExportAnchor | FileAnchor | PackageAnchor | AbsentFieldAnchor | AbsentInTreeAnchor | ImportsInNodeAnchor} Anchor
  */
+
+/**
+ * An `absent-in-tree` anchor's `glob` as a list -- one pattern or several,
+ * written whichever way reads better at the call site.
+ * @param {AbsentInTreeAnchor} anchor
+ * @returns {readonly string[]}
+ */
+const globList = (anchor) =>
+  typeof anchor.glob === 'string' ? [anchor.glob] : anchor.glob;
+
+/**
+ * An `absent-in-tree` anchor's `module` as a list. More than one is what a
+ * claim about Playdeck needs: a consumer installs `@playdeck/react` and gets
+ * `@playdeck/core` with it, so "Playdeck has no X" is only searched where a
+ * reader would look for X if it were only searched in both.
+ * @param {AbsentInTreeAnchor} anchor
+ * @returns {readonly string[]}
+ */
+const moduleList = (anchor) =>
+  typeof anchor.module === 'string' ? [anchor.module] : anchor.module;
+
+/** @param {readonly string[]} globs @returns {string} */
+const describeGlobs = (globs) =>
+  globs.map((glob) => `\`${glob}\``).join(' or ');
+
+/** @param {readonly string[]} modules @returns {string} */
+const describeModules = (modules) =>
+  modules.map((module) => `\`${module}\``).join(' and ');
 
 /**
  * A dotted path (`peerDependencies.react`) walked through a plain object,
@@ -297,8 +464,7 @@ export const evaluateAnchor = async (anchor, roots = {}) => {
     };
   }
 
-  // anchor.kind === 'absent'
-  if ('field' in anchor) {
+  if (anchor.kind === 'absent') {
     const manifest = await readJson(
       join(packageRoot(anchor.module, roots), 'package.json')
     );
@@ -308,34 +474,108 @@ export const evaluateAnchor = async (anchor, roots = {}) => {
       detail: `\`${anchor.module}\`'s \`package.json\` ${value === undefined ? 'has no' : 'declares'} \`${anchor.field}\``
     };
   }
-  // Not narrowed automatically: `FileAnchor.kind` is itself a two-literal
-  // union, and checkJs does not subtract it from `Anchor` just because both
-  // of its literals were ruled out above. Everything else already has been.
-  const nameAnchor =
-    /** @type {{ kind: 'absent'; module: string; name: string; path: string }} */ (
-      anchor
-    );
-  const text = await readFile(
-    join(packageRoot(nameAnchor.module, roots), nameAnchor.path),
-    'utf8'
+
+  if (anchor.kind === 'imports-in-node') {
+    const entry = await resolveForNode(anchor.module, roots);
+    /** @type {string | undefined} */
+    let thrown;
+    try {
+      await import(pathToFileURL(entry).href);
+    } catch (error) {
+      thrown =
+        error instanceof Error ? error.message.split('\n')[0] : String(error);
+    }
+    const imported = thrown === undefined;
+    return {
+      holds: imported === (anchor.expect === 'imports'),
+      detail: imported
+        ? `\`${anchor.module}\` imports in plain Node with no DOM globals`
+        : `\`${anchor.module}\` throws when imported in plain Node with no DOM globals: ${thrown}`
+    };
+  }
+
+  // anchor.kind === 'absent-in-tree'
+  const treeAnchor = /** @type {AbsentInTreeAnchor} */ (
+    /** @type {unknown} */ (anchor)
   );
-  const holds = !text.includes(nameAnchor.name);
+  const globs = globList(treeAnchor);
+  const modules = moduleList(treeAnchor);
+  const named = describeModules(modules);
+  /** @type {{ module: string; root: string; file: string }[]} */
+  const files = [];
+  for (const module of modules) {
+    const root = packageRoot(module, roots);
+    for (const file of await matchingFiles(root, globs)) {
+      files.push({ module, root, file });
+    }
+  }
+
+  if (treeAnchor.includes === undefined) {
+    return {
+      holds: files.length === 0,
+      detail: `${named} ships ${files.length === 0 ? 'no file' : `${files.length} file${files.length === 1 ? '' : 's'}`} matching ${describeGlobs(globs)}`
+    };
+  }
+
+  // A glob that matches nothing would make every token "absent" from it --
+  // the vacuous hold this anchor kind exists to rule out. See the file
+  // header.
+  if (files.length === 0) {
+    throw new Error(
+      `${modules.join(' and ')} have no file matching ${globs.join(' or ')}, so an absence found in them would be an absence nobody searched for.`
+    );
+  }
+
+  /** @type {{ module: string; file: string } | undefined} */
+  let hit;
+  for (const found of files) {
+    const text = await readFile(join(found.root, found.file), 'utf8');
+    if (text.includes(treeAnchor.includes)) {
+      hit = found;
+      break;
+    }
+  }
   return {
-    holds,
-    detail: `\`${nameAnchor.module}\`'s \`${nameAnchor.path}\` ${holds ? 'has no' : 'has a'} \`${nameAnchor.name}\``
+    holds: hit === undefined,
+    detail:
+      hit === undefined
+        ? `none of ${named}'s ${files.length} file${files.length === 1 ? '' : 's'} matching ${describeGlobs(globs)} contains \`${treeAnchor.includes}\``
+        : `\`${hit.module}\`'s \`${hit.file}\` contains \`${treeAnchor.includes}\``
   };
 };
 
 /**
- * @typedef {{ status: 'yes' | 'partial' | 'no' | 'plugin'; anchor: Anchor; source: string; note?: string }} Cell
+ * @typedef {{ name: string; repository: string; provenance: 'org-published' | 'third-party' } | { name: string; repository: null }} PluginProvenance
+ * @typedef {{ status: 'yes' | 'partial' | 'no' | 'plugin' | 'n/a'; anchor: Anchor; source: string; note?: string; plugin?: PluginProvenance }} Cell
  * @typedef {{ id: string; label: string; entries: Record<string, Cell> }} Axis
  */
 
+/**
+ * The status vocabulary, defined once here and at length in
+ * `docs/comparison/method.md`'s "Features" section, so a reader and this
+ * generator cannot drift apart on what a cell means:
+ *
+ * - `yes`     -- the library ships a ready-made UI part for this axis.
+ * - `partial` -- the library exposes the axis in its own API or state, but
+ *                ships no UI part to drive it, or its UI part covers only
+ *                some of the axis. It never encodes provider-specific
+ *                unavailability: that a YouTube iframe cannot enter
+ *                picture-in-picture is true of every library that embeds
+ *                one, so it belongs in the cell's note, in every column
+ *                alike.
+ * - `no`      -- neither, and an absence this generator checked.
+ * - `plugin`  -- only through a documented plugin outside the package, whose
+ *                own npm `repository` owner the cell records.
+ * - `n/a`     -- the axis cannot apply to this library at all, with the note
+ *                saying why. Distinct from `no`, which is a library that
+ *                could have shipped the thing and did not.
+ */
 const STATUS_LABEL = /** @type {Record<Cell['status'], string>} */ ({
   yes: 'yes',
   partial: 'partial',
   no: 'no',
-  plugin: 'plugin'
+  plugin: 'plugin',
+  'n/a': 'n/a'
 });
 
 /**
@@ -396,16 +636,37 @@ export const describeAnchor = (anchor) => {
   if (anchor.kind === 'package') {
     return `mechanical check: \`${anchor.module}\`'s \`package.json\` declares \`${anchor.field}\``;
   }
-  if ('field' in anchor) {
+  if (anchor.kind === 'absent') {
     return `mechanical check: \`${anchor.module}\`'s \`package.json\` has no \`${anchor.field}\``;
   }
+  if (anchor.kind === 'imports-in-node') {
+    return `mechanical check: importing \`${anchor.module}\` in plain Node, with no DOM globals, ${anchor.expect === 'imports' ? 'succeeds' : 'throws'}`;
+  }
   // See the matching cast in `evaluateAnchor`: not narrowed automatically.
-  const nameAnchor =
-    /** @type {{ kind: 'absent'; module: string; name: string; path: string }} */ (
-      anchor
-    );
-  return `mechanical check: \`${nameAnchor.module}\`'s \`${nameAnchor.path}\` has no \`${nameAnchor.name}\``;
+  const treeAnchor = /** @type {AbsentInTreeAnchor} */ (
+    /** @type {unknown} */ (anchor)
+  );
+  const globs = globList(treeAnchor);
+  const named = describeModules(moduleList(treeAnchor));
+  return treeAnchor.includes === undefined
+    ? `mechanical check: ${named} ships no file matching ${describeGlobs(globs)}`
+    : `mechanical check: no file of ${named} matching ${describeGlobs(globs)} contains \`${treeAnchor.includes}\``;
 };
+
+/**
+ * A `plugin` cell's provenance, in one sentence and one vocabulary for every
+ * column: the plugin's name, the owner of the GitHub repository its own npm
+ * manifest points at, and one of two words derived from that owner -- never
+ * an adjective ("official", "community") a reader cannot check. Where the
+ * published manifest has no `repository` field at all, that is what the
+ * footnote says, rather than a guess at who stands behind it.
+ * @param {PluginProvenance} plugin
+ * @returns {string}
+ */
+export const describePlugin = (plugin) =>
+  plugin.repository === null
+    ? `Plugin \`${plugin.name}\`: its published npm manifest declares no \`repository\` field, so no owner is recorded here.`
+    : `Plugin \`${plugin.name}\`: npm \`repository\` ${plugin.repository}, ${plugin.provenance}.`;
 
 /**
  * The footnotes list, one entry per cell, in the same order the table numbers
@@ -422,7 +683,8 @@ export const renderFootnotes = (axes, columns, footnoteNumber) =>
         const cell = axis.entries[column.name];
         const n = footnoteNumber(axis.id, column.name);
         const note = cell.note ? ` ${cell.note}` : '';
-        return `[^${n}]: **${axis.label} — ${column.name}**: ${STATUS_LABEL[cell.status]}.${note} ${describeAnchor(cell.anchor)}. Source: ${cell.source}`;
+        const provenance = cell.plugin ? ` ${describePlugin(cell.plugin)}` : '';
+        return `[^${n}]: **${axis.label} — ${column.name}**: ${STATUS_LABEL[cell.status]}.${note}${provenance} ${describeAnchor(cell.anchor)}. Source: ${cell.source}`;
       })
     )
     .join('\n\n');
@@ -474,8 +736,20 @@ bundler and reads a number back, nothing here comes out of a build. Every cell
 is a claim \`tests/compare/features.mjs\` makes in writing, anchored to
 something this script re-verifies against the installed package on every run
 -- an export, a line in a shipped file, a type declaration, a \`package.json\`
-field, or a named absence. A claim whose anchor no longer holds fails
-\`pnpm compare:features:check\` rather than sitting here stale.
+field, a token found in none of the files a glob matches across the package,
+or importing the package in plain Node with no DOM globals. A claim whose
+anchor no longer holds fails \`pnpm compare:features:check\` rather than
+sitting here stale.
+
+A cell reads \`yes\` where the library ships a ready-made UI part for that
+axis, \`partial\` where it exposes the axis in its own API or state with no UI
+part to drive it, \`no\` where it does neither, \`plugin\` where a documented
+plugin outside the package is the answer, and \`n/a\` where the axis cannot
+apply to that library at all. A status never encodes which of a library's
+providers can do the thing -- a YouTube iframe cannot enter picture-in-picture
+under any of these libraries -- so that limit is written in the footnote
+instead, for every column alike. \`docs/comparison/method.md\`'s "Features"
+section has the full rule.
 
 Measured ${date} against \`tests/compare\`'s pinned installs:
 ${versions.map((v) => `\`${v.name}\` ${v.version}`).join(', ')}.
@@ -533,6 +807,16 @@ export const verifyAllAnchors = async (axes, columns, roots = {}) => {
       if (!cell) {
         failures.push(`  ${axis.id} / ${column.name}: no entry.`);
         continue;
+      }
+      if (cell.status === 'plugin' && !cell.plugin) {
+        failures.push(
+          `  ${axis.id} / ${column.name}: a 'plugin' cell must carry \`plugin\` provenance.`
+        );
+      }
+      if (cell.status === 'n/a' && !cell.note) {
+        failures.push(
+          `  ${axis.id} / ${column.name}: an 'n/a' cell must carry a \`note\` saying why the axis does not apply.`
+        );
       }
       try {
         const { holds, detail } = await evaluateAnchor(cell.anchor, roots);
