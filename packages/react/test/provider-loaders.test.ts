@@ -2,11 +2,19 @@
 
 import { expect, expectTypeOf, test, vi } from 'vitest';
 import type { ResolvedPlayerSource } from '@playdeck/core';
+import type { HlsProviderOptions } from '@playdeck/provider-hls';
 import type { VimeoProviderOptions } from '@playdeck/provider-vimeo';
 import type { WistiaProviderOptions } from '@playdeck/provider-wistia';
 import type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
-import type { PlayerProviderOptions } from '../src/provider-loaders';
+import type {
+  PlayerProviderOptions,
+  PrimitiveOptionBag
+} from '../src/provider-loaders';
 import { loadProvider } from '../src/provider-loaders';
+
+vi.mock('@playdeck/provider-hls', () => ({
+  createHlsProvider: vi.fn(() => ({ provider: 'hls' }))
+}));
 
 vi.mock('@playdeck/provider-native', () => ({
   createNativeProvider: vi.fn(() => ({ provider: 'native' }))
@@ -40,7 +48,7 @@ test('the per-provider option bags are the shape the CSP document describes', ()
   // Gaining or losing a provider key changes which rows of that document's
   // origins table are reachable through `Player.Root` at all.
   expectTypeOf<keyof PlayerProviderOptions>().toEqualTypeOf<
-    'vimeo' | 'wistia' | 'youtube'
+    'hls' | 'vimeo' | 'wistia' | 'youtube'
   >();
 
   // Vimeo's omissions are load-bearing for the document twice over: what stays
@@ -59,6 +67,28 @@ test('the per-provider option bags are the shape the CSP document describes', ()
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['wistia'], WistiaProviderOptions>
   >().toEqualTypeOf<'endTime' | 'loop' | 'startTime'>();
+
+  // `hls` keeps `loadHls`: a function cannot satisfy `PrimitiveOptionBag`
+  // (below), so `build` -- the primitive `loadHls` stands in for -- is the
+  // only key `Root` folds in, and reaching `loadHls` itself still means
+  // mounting `createHlsProvider` directly (#579).
+  expectTypeOf<
+    KeysRootOwns<PlayerProviderOptions['hls'], HlsProviderOptions>
+  >().toEqualTypeOf<'endTime' | 'loadHls' | 'loop' | 'startTime'>();
+});
+
+// The constraint itself, not merely a bag that happens not to declare a
+// function-valued key: `providerBagEqual` (`use-activation.ts`) compares bag
+// values with `Object.is`, so a bag typed through this can never again carry
+// one, whichever provider adds it next.
+test('PrimitiveOptionBag rejects a function-valued key at the type level', () => {
+  expectTypeOf<
+    // @ts-expect-error a bag whose value is a function cannot satisfy
+    // `PrimitiveOptionBag` -- this is the guard #579 adds so the next
+    // function-valued option (like `loadHls` almost was) fails to compile
+    // instead of quietly retiring an activation on every render.
+    PrimitiveOptionBag<{ loadHls: () => Promise<unknown> }>
+  >().toEqualTypeOf<{ loadHls: () => Promise<unknown> }>();
 });
 
 test('dispatches vimeo sources to the vimeo adapter with the mount and source', async () => {
@@ -127,6 +157,57 @@ test('rejects wistia sources without a media mount', async () => {
       source: { type: 'wistia', mediaId: 'oifkgmxnkb' }
     })
   ).rejects.toThrow('The Wistia provider requires a media mount.');
+});
+
+test('dispatches hls sources to the hls adapter with the mount, source and native options', async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  const media = document.createElement('video');
+  const source = { type: 'hls', src: '/master.m3u8' } as const;
+  const hlsNativeOptions = { endTime: 30, loop: true, startTime: 5 };
+
+  await expect(
+    loadProvider({ media, nativeOptions: hlsNativeOptions, source })
+  ).resolves.toMatchObject({ provider: 'hls' });
+  // No `hls` bag: the merge still runs, so `createHlsProvider` gets exactly
+  // the native options and nothing an absent `build` would have added.
+  expect(createHlsProvider).toHaveBeenCalledWith(
+    media,
+    source,
+    hlsNativeOptions
+  );
+});
+
+// #579: `build` is the primitive `PlayerProviderOptions.hls` carries through
+// `Player.Root`, merged alongside the native options `createHlsProvider`
+// already took -- not a second call, and not a replacement for them.
+test('forwards the hls build option to the hls adapter alongside native options', async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  const media = document.createElement('video');
+  const source = { type: 'hls', src: '/master.m3u8' } as const;
+  const hlsNativeOptions = { endTime: 30, loop: true, startTime: 5 };
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions: hlsNativeOptions,
+      providerOptions: { hls: { build: 'light' } },
+      source
+    })
+  ).resolves.toMatchObject({ provider: 'hls' });
+  expect(createHlsProvider).toHaveBeenCalledWith(media, source, {
+    ...hlsNativeOptions,
+    build: 'light'
+  });
+});
+
+test('rejects hls sources without a media mount', async () => {
+  await expect(
+    loadProvider({
+      media: null,
+      nativeOptions,
+      source: { type: 'hls', src: '/master.m3u8' }
+    })
+  ).rejects.toThrow('The HLS provider requires a media mount.');
 });
 
 test('requires a video element for native sources', async () => {

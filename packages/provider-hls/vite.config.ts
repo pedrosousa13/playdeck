@@ -4,7 +4,12 @@ export default defineConfig({
   build: {
     lib: { entry: 'src/index.ts', formats: ['es'], fileName: 'index' },
     rollupOptions: {
-      external: ['@playdeck/core', '@playdeck/provider-native', 'hls.js']
+      external: [
+        '@playdeck/core',
+        '@playdeck/provider-native',
+        'hls.js',
+        'hls.js/light'
+      ]
     },
     sourcemap: true,
     // tsc -b emits declarations into dist incrementally; letting Vite empty
