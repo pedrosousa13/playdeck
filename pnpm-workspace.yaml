@@ -6,6 +6,10 @@ packages:
   # Private test support, shared between packages. Private, so it never
   # enters the publishable set (#314).
   - tests/support
+  # The library-comparison fixture (#543): pinned devDependencies on the
+  # compared libraries, bundled by scripts/compare-libraries.mjs. Private for
+  # the same reason tests/support is.
+  - tests/compare
 # Advisories pinned forward here rather than left for `pnpm audit` to keep
 # reporting -- the alternative is re-triaging the same findings on every run.
 # Every floor names the advisory behind it, so a later reader can tell when an
