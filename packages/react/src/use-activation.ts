@@ -791,7 +791,7 @@ export const useActivation = (
     // reuse. Now the observer lives for the whole session, so it can go on
     // reporting exit and re-entry crossings for as long as the player is
     // mounted under this strategy -- what tears it down is the cleanup below,
-    // the unmount effect (`:1085` at time of writing) and `registerViewport`
+    // the unmount effect at the end of this hook and `registerViewport`
     // observing a new target, never this effect returning early. The
     // target/margin/threshold identity check further down (`currentObserver?.
     // target === viewport && ...`) is what still stops this from rebuilding an
