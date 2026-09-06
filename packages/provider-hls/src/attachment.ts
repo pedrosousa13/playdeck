@@ -25,6 +25,12 @@ export type HlsAttachmentDeps = {
   // Tears the engine down and publishes the fatal error state; owned by the
   // host because the error patch folds in cross-seam state.
   readonly surfaceFatal: (error: PlayerError) => void;
+  // Cancels the host's bounded hold on a raw media-element error that hls.js
+  // has not yet claimed. Called wherever this seam already knows hls.js has
+  // noticed the same failure (its own `ERROR` event) or the instance it was
+  // pending against is going away (engine restart or teardown), so a timer
+  // armed against one instance can never fire against, or outlive, another.
+  readonly cancelPendingElementError: () => void;
   // Records the authoritative hls.js liveness flag for the host's live
   // derivation.
   readonly setLiveHint: (live: boolean) => void;
@@ -66,6 +72,7 @@ export const createHlsAttachment = (
     qualityLevels,
     errorRecovery,
     surfaceFatal,
+    cancelPendingElementError,
     setLiveHint,
     emitLiveUpdate,
     unsubscribeNative,
@@ -80,6 +87,7 @@ export const createHlsAttachment = (
   let generation = 0;
 
   const teardownEngine = (): void => {
+    cancelPendingElementError();
     const instance = hls;
     hls = undefined;
     media.removeEventListener('timeupdate', textTracks.handlers.onTimeUpdate);
@@ -172,9 +180,15 @@ export const createHlsAttachment = (
     });
     hls = instance;
     media.addEventListener('timeupdate', textTracks.handlers.onTimeUpdate);
-    instance.on(HlsRuntime.Events.ERROR, (_event, data) =>
-      errorRecovery.handleError(instance, HlsRuntime, data)
-    );
+    instance.on(HlsRuntime.Events.ERROR, (_event, data) => {
+      // hls.js noticing anything, fatal or not, is what a pending
+      // element-error hold is waiting to see -- `handleError` below is the
+      // only caller of the three recovery entry points that hold also
+      // watches for, and it only runs from here, so cancelling first covers
+      // both.
+      cancelPendingElementError();
+      errorRecovery.handleError(instance, HlsRuntime, data);
+    });
     instance.on(HlsRuntime.Events.LEVEL_SWITCHED, (_event, data) => {
       if (destroyed || hls !== instance) return;
       qualityLevels.onLevelSwitched(instance, data);

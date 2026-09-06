@@ -4,6 +4,26 @@ import type { HlsConstructorLike, HlsInstanceLike } from './adapter-values.js';
 const MAX_FATAL_NETWORK_RECOVERIES = 2;
 const MAX_FATAL_MEDIA_RECOVERIES = 2;
 
+// How long a raw element `error` on the hls.js path is held, unpublished,
+// before it is treated as unowned and surfaced as the same errored/paused
+// state the embedded native adapter would have reported on its own. hls.js
+// does not listen for the media element's own `error` event at all -- it
+// detects and recovers from MSE failures through its own append/loader error
+// path -- so the two signals arrive independently, in no guaranteed order,
+// and this bound only has to outlast the gap before hls.js's own path would
+// react if it is going to. hls.js 1.6.16's shipped defaults
+// (`Hls.DefaultConfig`, `node_modules/hls.js/src/config.ts`) put
+// `fragLoadingRetryDelay`/`levelLoadingRetryDelay` -- the fastest cadence at
+// which hls.js's own loaders re-act to a failure -- at 1000ms, backing off
+// toward a `fragLoadingMaxRetryTimeout`/`levelLoadingMaxRetryTimeout` ceiling
+// of 64000ms across up to `fragLoadingMaxRetry` (6) / `levelLoadingMaxRetry`
+// (4) attempts. Three times that fastest cadence gives an hls.js path that is
+// actually going to notice and act on the same failure a couple of cycles'
+// worth of scheduling jitter to do so in, while staying two orders of
+// magnitude short of the 64000ms ceiling hls.js reserves for exhausting its
+// own retries outright.
+export const HLS_JS_ELEMENT_ERROR_TIMEOUT_MS = 3000;
+
 // The slice of the engine instance the recovery policy drives: the three
 // hls.js recovery entry points, nothing else.
 export type HlsRecoverableInstance = Pick<

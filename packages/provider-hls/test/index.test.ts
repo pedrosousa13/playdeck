@@ -8,6 +8,7 @@ import type {
 } from '@playdeck/core';
 import { createSeekingVideo } from '@playdeck/test-support/seeking-video';
 import { createHlsProvider } from '../src/index';
+import { HLS_JS_ELEMENT_ERROR_TIMEOUT_MS } from '../src/error-recovery';
 import { captureRethrows } from './fixtures/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 
@@ -20,6 +21,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 const stubNativeHlsSupport = (media: HTMLVideoElement): void => {
@@ -733,7 +735,8 @@ test('retry stays functional after recovery exhaustion', async () => {
   expect(patches).toHaveLength(patchCount);
 });
 
-test('suppresses raw media element errors while hls.js owns recovery', async () => {
+test('holds a raw media element error rather than discarding it while hls.js owns recovery', async () => {
+  vi.useFakeTimers();
   const { patches, provider, media } = createHarness(stubMseOnlySupport);
   await provider.attach();
   await provider.load();
@@ -747,6 +750,143 @@ test('suppresses raw media element errors while hls.js owns recovery', async () 
   expect(patches).not.toContainEqual(
     expect.objectContaining({ lifecycle: 'error' })
   );
+
+  // Still held, not yet expired.
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS - 1);
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+});
+
+// #636: nothing on the hls.js path ever surfaced a raw element error, and
+// playback stayed reported as playing on an element that could never
+// advance. Drives the embedded native adapter's own subscription with an
+// errored patch and never fires hls.js's own ERROR event, so the only way
+// this can go green is the bounded timer itself publishing the errored
+// state.
+test('surfaces a decode error when an hls.js-path element error goes unclaimed', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches.at(-1)).toMatchObject({
+    lifecycle: 'error',
+    activation: 'error',
+    playback: 'paused',
+    buffering: false,
+    seeking: false,
+    error: { category: 'decode', message: 'transient decode' }
+  });
+});
+
+test('cancels the pending element-error timer when hls.js reports its own error first', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+  hls.emit(FakeHls.Events.ERROR, {
+    type: FakeHls.ErrorTypes.NETWORK_ERROR,
+    details: 'fragLoadError',
+    fatal: false
+  });
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+});
+
+test('cancels the pending element-error timer when hls.js runs its own recovery', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+  hls.emitFatalError(FakeHls.ErrorTypes.NETWORK_ERROR);
+  expect(hls.startLoadCalls).toBe(1);
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+});
+
+test('cancels the pending element-error timer when playback progresses', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+  media.currentTime = 5;
+  media.dispatchEvent(new Event('timeupdate'));
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+});
+
+// #636's own failure mode, and the regression a weaker guard (cancelling on
+// any patch that merely carries `currentTime`, rather than one reporting a
+// position that actually moved) would let back in: `timeupdate` is not proof
+// of progress by itself. `provider-native`'s `onTimeUpdate` publishes
+// `currentTime` unconditionally on every firing, and the HTML spec lets
+// `timeupdate` keep firing while an element is "potentially playing" even
+// where the position never moves -- which is exactly what #636 reports:
+// `currentTime` pinned at one position while `playback` kept reading
+// `'playing'`. A `timeupdate` at the same position the error patch reported
+// must not cancel the hold.
+test('surfaces a decode error even when timeupdate keeps firing at an unchanged position', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+  media.dispatchEvent(new Event('timeupdate'));
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches.at(-1)).toMatchObject({
+    lifecycle: 'error',
+    activation: 'error',
+    playback: 'paused',
+    error: { category: 'decode', message: 'transient decode' }
+  });
 });
 
 test('passes native media element errors through on the native engine', async () => {
