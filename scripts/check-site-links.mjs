@@ -124,7 +124,17 @@ const servedAt = (page) => `${basePath}${page.replace(/index\.html$/, '')}`;
 const addressesIn = (html) => {
   /** @type {string[]} */
   const found = [];
-  for (const [, attribute, doubled, singled] of html.matchAll(urlAttributes)) {
+  // Code is text, not markup: a document that shows `<MediaPlayer src="…">`
+  // inside backticks renders it as the characters themselves, quotes and all,
+  // and the attribute pattern below cannot tell that `src="…"` from a real
+  // one. The comparison guide is the first page to print such a snippet, and
+  // nothing a reader can follow lives inside a code element, so those regions
+  // are dropped before the attributes are read. Bare media URLs are still
+  // read from the whole document by `mediaIn` below, code included.
+  const markup = html.replaceAll(/<(code|pre)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  for (const [, attribute, doubled, singled] of markup.matchAll(
+    urlAttributes
+  )) {
     const value = doubled ?? singled ?? '';
     // `&` is escaped in an attribute value, so a query string arrives as
     // `?a=1&amp;b=2` and would be requested with the entity in it.

@@ -94,6 +94,21 @@ available, then unknown, then unavailable. Colour carries domain meaning here, s
 it is never spent on decoration — and because colour alone is not a status, each
 state is always paired with its word or a shape, never shown as a bare dot.
 
+**A fifth vocabulary reads the same three colours rather than adding a fourth.**
+The comparison guide's feature table (`docs/comparison/features.md`, rendered at
+`/guides/comparison/`) answers `yes`, `partial`, `plugin`, `no` or `n/a` for
+each axis, and `src/comparison-icons.mjs` draws a small icon beside the word the
+source already prints, in front of it and never instead of it — the same rule
+as above, word or shape beside colour, never colour alone. `yes` reads
+`--color-available` and `no` reads `--color-unavailable`, the same two roles the
+paragraph above already spends on a capability that is or is not there.
+`partial` and `plugin` are both `--color-unknown`, on purpose: the palette has
+three capability colours and a fourth was not needed to tell two `--color-unknown`
+answers apart, which is what their two shapes — a half-filled circle, a plug —
+are for instead. `n/a` makes no capability claim at all, so it reads
+`--color-ink-subtle`, the muted role a caption or a label already uses, rather
+than a fourth member of the capability set.
+
 **Two line tokens, and the difference is obligation rather than weight.**
 `--color-line` separates things a reader can already see are separate, so it is
 free to be quiet and WCAG asks nothing of it. `--color-line-strong` is the
@@ -1394,52 +1409,54 @@ that already existed, and both still have two.
 
 ## Where things live
 
-| File                                   | What it is                                                |
-| -------------------------------------- | --------------------------------------------------------- |
-| `src/styles/tokens.css`                | Every value. The only stylesheet with hex literals        |
-| `src/styles/base.css`                  | Element defaults, spoken in tokens                        |
-| `src/styles/doc.css`                   | The shell and the prose of a rendered document            |
-| `src/styles/tailwind.css`              | Tailwind without preflight, layered so it cannot win      |
-| `src/layouts/Base.astro`               | The document, its stance, and the pre-paint theme script  |
-| `src/components/SiteHeader.astro`      | The shell above every page, and the site's navigation     |
-| `src/components/ThemeToggle.astro`     | Mounts the theme control                                  |
-| `src/components/DocsSearch.astro`      | Mounts search, and owns the `/` shortcut                  |
-| `src/components/Sweep.astro`           | The one gradient, and its two forms                       |
-| `src/components/sweep-id.ts`           | One `<linearGradient>` id per render, build-wide          |
-| `src/components/DocRail.astro`         | The rail beside a document, both sets of them             |
-| `src/components/Bench.astro`           | The bench's frame, the band on it, and the player theme   |
-| `src/components/BenchIsland.tsx`       | The bench's composition, and the site's only hydration    |
-| `src/components/BenchSwitches.tsx`     | Source and skin, as native radios in a `<fieldset>`       |
-| `src/components/CompositionPanel.tsx`  | The code the switches built, unhighlighted on purpose     |
-| `src/bench-sources.ts`                 | What each source position plays, bundled per provider     |
-| `src/bench-composition.ts`             | The switches' positions rendered as source to copy        |
-| `src/bench-quiet.ts`                   | What the page has fetched, and the sentence for it        |
-| `src/components/ProviderTruth.astro`   | The provider comparison, and its table                    |
-| `src/components/SearchCommand.tsx`     | Search's dialog and combobox, on `Command`                |
-| `src/components/SiteNavSheet.tsx`      | The header's collapse below 40rem, on `Sheet`             |
-| `src/components/ThemeToggleIsland.tsx` | The theme choice, on `DropdownMenu`                       |
-| `src/components/RailDisclosure.tsx`    | The rail's "Contents", on `Collapsible`                   |
-| `src/components/SourceDisclosure.tsx`  | An archetype's source well, on `Collapsible`              |
-| `src/components/ui/*.tsx`              | shadcn components, owned here rather than depended on     |
-| `src/lib/utils.ts`                     | `cn`, the class merge every shadcn component calls        |
-| `src/styles/shadcn-theme.css`          | shadcn's variable names, aliased onto this site's roles   |
-| `src/pages/index.astro`                | The landing page at `/`, and its links                    |
-| `src/pages/start.astro`                | The quickstart at `/start`, printed from `examples/`      |
-| `src/pages/design.astro`               | The specimen sheet, served at `/design`                   |
-| `src/pages/examples.astro`             | Two composed players, and the files they are              |
-| `src/pages/guides/index.astro`         | The guide index, served at `/guides`                      |
-| `src/pages/guides/[guide].astro`       | One guide per migrated workbench document                 |
-| `src/pages/reference/index.astro`      | The package index, served at `/reference`                 |
-| `src/pages/reference/[pkg].astro`      | One reference page per publishable package                |
-| `src/pages/providers/index.astro`      | The provider index, served at `/providers`                |
-| `src/pages/providers/[provider].astro` | A setup page per provider group                           |
-| `src/content.config.ts`                | The document collections, and their loaders               |
-| `src/reference-packages.mjs`           | Which packages get a page, and from where                 |
-| `src/provider-pages.mjs`               | Which providers get a page, and which sections            |
-| `src/guide-pages.mjs`                  | Which workbench documents get a page, and how they render |
-| `src/provider-asymmetry.mjs`           | What that same document says each provider can answer     |
-| `src/shiki.ts`                         | The two theme names and the five colours they repaint     |
-| `src/asset-url.d.ts`                   | The type for a `?url` import, which is how the skin loads |
+| File                                   | What it is                                                    |
+| -------------------------------------- | ------------------------------------------------------------- |
+| `src/styles/tokens.css`                | Every value. The only stylesheet with hex literals            |
+| `src/styles/base.css`                  | Element defaults, spoken in tokens                            |
+| `src/styles/doc.css`                   | The shell and the prose of a rendered document                |
+| `src/styles/tailwind.css`              | Tailwind without preflight, layered so it cannot win          |
+| `src/layouts/Base.astro`               | The document, its stance, and the pre-paint theme script      |
+| `src/components/SiteHeader.astro`      | The shell above every page, and the site's navigation         |
+| `src/components/ThemeToggle.astro`     | Mounts the theme control                                      |
+| `src/components/DocsSearch.astro`      | Mounts search, and owns the `/` shortcut                      |
+| `src/components/Sweep.astro`           | The one gradient, and its two forms                           |
+| `src/components/sweep-id.ts`           | One `<linearGradient>` id per render, build-wide              |
+| `src/components/DocRail.astro`         | The rail beside a document, both sets of them                 |
+| `src/components/Bench.astro`           | The bench's frame, the band on it, and the player theme       |
+| `src/components/BenchIsland.tsx`       | The bench's composition, and the site's only hydration        |
+| `src/components/BenchSwitches.tsx`     | Source and skin, as native radios in a `<fieldset>`           |
+| `src/components/CompositionPanel.tsx`  | The code the switches built, unhighlighted on purpose         |
+| `src/bench-sources.ts`                 | What each source position plays, bundled per provider         |
+| `src/bench-composition.ts`             | The switches' positions rendered as source to copy            |
+| `src/bench-quiet.ts`                   | What the page has fetched, and the sentence for it            |
+| `src/components/ProviderTruth.astro`   | The provider comparison, and its table                        |
+| `src/components/SearchCommand.tsx`     | Search's dialog and combobox, on `Command`                    |
+| `src/components/SiteNavSheet.tsx`      | The header's collapse below 40rem, on `Sheet`                 |
+| `src/components/ThemeToggleIsland.tsx` | The theme choice, on `DropdownMenu`                           |
+| `src/components/RailDisclosure.tsx`    | The rail's "Contents", on `Collapsible`                       |
+| `src/components/SourceDisclosure.tsx`  | An archetype's source well, on `Collapsible`                  |
+| `src/components/ui/*.tsx`              | shadcn components, owned here rather than depended on         |
+| `src/lib/utils.ts`                     | `cn`, the class merge every shadcn component calls            |
+| `src/styles/shadcn-theme.css`          | shadcn's variable names, aliased onto this site's roles       |
+| `src/pages/index.astro`                | The landing page at `/`, and its links                        |
+| `src/pages/start.astro`                | The quickstart at `/start`, printed from `examples/`          |
+| `src/pages/design.astro`               | The specimen sheet, served at `/design`                       |
+| `src/pages/examples.astro`             | Two composed players, and the files they are                  |
+| `src/pages/guides/index.astro`         | The guide index, served at `/guides`                          |
+| `src/pages/guides/[guide].astro`       | One guide per migrated workbench document                     |
+| `src/pages/reference/index.astro`      | The package index, served at `/reference`                     |
+| `src/pages/reference/[pkg].astro`      | One reference page per publishable package                    |
+| `src/pages/providers/index.astro`      | The provider index, served at `/providers`                    |
+| `src/pages/providers/[provider].astro` | A setup page per provider group                               |
+| `src/content.config.ts`                | The document collections, and their loaders                   |
+| `src/reference-packages.mjs`           | Which packages get a page, and from where                     |
+| `src/provider-pages.mjs`               | Which providers get a page, and which sections                |
+| `src/guide-pages.mjs`                  | Which workbench documents get a page, and how they render     |
+| `src/comparison-page.mjs`              | Composes the library comparison guide, and rewrites its links |
+| `src/comparison-icons.mjs`             | The feature table's status icons, drawn on its rendered HTML  |
+| `src/provider-asymmetry.mjs`           | What that same document says each provider can answer         |
+| `src/shiki.ts`                         | The two theme names and the five colours they repaint         |
+| `src/asset-url.d.ts`                   | The type for a `?url` import, which is how the skin loads     |
 
 Two of the rows this table used to carry, `HeroPlayer.astro` and
 `HeroPlayerIsland.tsx`, are deleted. Nine files replace them, and the split
