@@ -22,7 +22,10 @@ import {
   type HlsModuleLoader
 } from './adapter-values.js';
 import { createHlsAttachment } from './attachment.js';
-import { createHlsErrorRecovery } from './error-recovery.js';
+import {
+  createHlsErrorRecovery,
+  HLS_JS_ELEMENT_ERROR_TIMEOUT_MS
+} from './error-recovery.js';
 import { createHlsPlayback } from './playback.js';
 import { createHlsQualityLevels } from './quality-levels.js';
 import { createHlsTextTracks } from './text-tracks.js';
@@ -174,6 +177,23 @@ export const createHlsProvider = (
   let hlsLiveHint: boolean | undefined;
   let liveState: PlayerLiveState = null;
   let liveSeekMeaningful = true;
+  // The bounded hold for a raw element error on the hls.js path -- see
+  // `HLS_JS_ELEMENT_ERROR_TIMEOUT_MS`. Set only while one is pending, and
+  // cleared by whichever comes first: hls.js claiming the failure, the
+  // engine restarting or tearing down, playback actually progressing, or
+  // this timer expiring on its own.
+  let pendingElementErrorTimer: ReturnType<typeof setTimeout> | undefined;
+  // `media.currentTime` at the moment the hold above was armed, so a later
+  // patch can be told apart from real progress -- see where it is compared,
+  // below.
+  let pendingElementErrorAtTime: number | undefined;
+
+  const cancelPendingElementError = (): void => {
+    if (pendingElementErrorTimer === undefined) return;
+    clearTimeout(pendingElementErrorTimer);
+    pendingElementErrorTimer = undefined;
+    pendingElementErrorAtTime = undefined;
+  };
 
   const emit = (patch: ProviderStatePatch, event?: ProviderEvent): void => {
     if (attachment.isDestroyed()) return;
@@ -290,9 +310,47 @@ export const createHlsProvider = (
   const unsubscribeNative = native.subscribe((patch, event) => {
     if (attachment.isDestroyed()) return;
     if (engine === 'hls.js' && patch.lifecycle === 'error') {
-      // hls.js owns error recovery and surfacing on the MSE path; raw media
-      // element errors would preempt its bounded recovery table.
+      // hls.js owns error recovery and surfacing on the MSE path, so a raw
+      // element error is held rather than published outright -- publishing
+      // it immediately would preempt hls.js's own bounded recovery table,
+      // which triggers transient element errors of its own during normal
+      // recovery. But hls.js only ever reports what it decides is a fatal
+      // `ERROR` event; an element error it does not itself surface would
+      // otherwise vanish with nothing to say playback stalled. The timer
+      // below is what stands in for that: if hls.js hasn't claimed the
+      // failure (its own `ERROR` event, fatal or not, or a recovery entry
+      // point call -- both only ever happen from inside the `ERROR`
+      // listener in `attachment.ts`, so cancelling there covers both) or
+      // playback hasn't otherwise progressed by the time it expires,
+      // nothing on this path was ever going to surface it.
+      const { error } = patch;
+      if (error) {
+        cancelPendingElementError();
+        pendingElementErrorAtTime = media.currentTime;
+        pendingElementErrorTimer = setTimeout(() => {
+          pendingElementErrorTimer = undefined;
+          pendingElementErrorAtTime = undefined;
+          if (attachment.isDestroyed()) return;
+          surfaceFatal(error);
+        }, HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+      }
       return;
+    }
+    if (
+      pendingElementErrorTimer !== undefined &&
+      patch.currentTime !== undefined &&
+      patch.currentTime !== pendingElementErrorAtTime
+    ) {
+      // A `timeupdate` fires on this same unmoved position too -- both
+      // `onTimeUpdate` and the attach/`canplay`/`loadedmetadata` snapshots in
+      // `provider-native` publish `currentTime` unconditionally, with no
+      // comparison against the last published value, and the HTML spec lets
+      // `timeupdate` keep firing while "potentially playing" even where the
+      // position never moves. That is the exact failure #636 describes: the
+      // element pinned at one position while `playback` keeps reading
+      // `'playing'`. So the signal the hold is waiting for is the position
+      // actually changing, not merely another patch mentioning one.
+      cancelPendingElementError();
     }
     if (patch.capabilities) lastCapabilities = patch.capabilities;
     const merged = syncLive(
@@ -338,6 +396,7 @@ export const createHlsProvider = (
     qualityLevels,
     errorRecovery,
     surfaceFatal,
+    cancelPendingElementError,
     setLiveHint: (live) => {
       hlsLiveHint = live;
     },
