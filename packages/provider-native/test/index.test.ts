@@ -540,6 +540,359 @@ test('reports a start position the element did not move to', async () => {
   ]);
 });
 
+// Models the mechanism the poll below depends on: the setter answers the
+// value it was just given while the seek is in flight, and `media.seeking`
+// reads true for exactly that long -- both cleared together on a task
+// scheduled `resolveAfterMs` after the write, which is what lets a test place
+// the resolution before or after however many of the poll's own ticks it
+// wants. `resolveAfterMs` of `undefined` models a seek that never concludes:
+// `seeking` stays true forever, which is what a stalled seek looks like from
+// outside. `outcome` decides what `currentTime` is once a scheduled
+// resolution runs: the value just written (completion), or reverted to 0 (the
+// abort #418's own shape produces, against an empty `seekable`). A write that
+// lands while one is already in flight (a command run by a test, below)
+// updates `currentTime` but does not start a resolution of its own, because
+// the seek already running is the one the engine is deciding.
+const trackSeekingRace = (
+  media: HTMLVideoElement,
+  position: number,
+  resolveAfterMs: number | undefined,
+  outcome: (written: number) => number
+): { rewind: () => void; writes: number[] } => {
+  const writes: number[] = [];
+  let inFlight = false;
+  Object.defineProperty(media, 'currentTime', {
+    configurable: true,
+    get: () => position,
+    set: (value: number) => {
+      writes.push(value);
+      position = value;
+      if (inFlight) return;
+      inFlight = true;
+      if (resolveAfterMs === undefined) return;
+      setTimeout(() => {
+        inFlight = false;
+        position = outcome(value);
+      }, resolveAfterMs);
+    }
+  });
+  Object.defineProperty(media, 'seeking', {
+    configurable: true,
+    get: () => inFlight
+  });
+  return {
+    // Same reason `trackPosition`'s `rewind` exists: `media.load()` is a stub
+    // in this DOM, so a test that reloads has to put the playhead back at 0,
+    // and the seek in flight, itself. A real load aborts whatever seek was
+    // running the way an empty `seekable` does, which is why this also drops
+    // `inFlight` rather than leaving the reload waiting on the load it replaced.
+    rewind: () => {
+      position = 0;
+      inFlight = false;
+    },
+    writes
+  };
+};
+
+// Mirrors `playback.ts`'s own `SEEKING_POLL_INTERVAL_MS`, not imported
+// because it is a private implementation detail of the poll rather than part
+// of this package's surface (the same reason `native-start-time.spec.ts`
+// hardcodes its own copy of `SETTLED_POSITION_TOLERANCE_SECONDS`). Chosen so
+// a seek this repo's fakes resolve after `SEEK_RESOLVES_AFTER_MS` spans
+// several of the poll's own ticks, which is what lets a test below observe
+// the poll finding `seeking` still true more than once before it settles.
+const SEEKING_POLL_INTERVAL_MS = 50;
+const SEEK_RESOLVES_AFTER_MS = SEEKING_POLL_INTERVAL_MS * 3;
+
+// The shape CI measured on WebKit and the reason the synchronous check above
+// cannot be the only one: the setter answers the write it was just given, so
+// `playheadAfterMovingTo`'s same-tick read reports success, and only later --
+// once `media.seeking` clears -- does the abort show the engine never moved
+// the playhead. Fake timers drive the poll deterministically past several
+// ticks that still find `seeking` true before the one that finds it cleared.
+test('reports a start position WebKit abandoned after answering the write', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    expect(errors).toEqual([]);
+
+    // Several ticks land while the seek is still in flight, and none of them
+    // may publish early.
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS - SEEKING_POLL_INTERVAL_MS
+    );
+    expect(errors).toEqual([]);
+
+    // The tick after the abort is the one that reads the settled refusal.
+    await vi.advanceTimersByTimeAsync(SEEKING_POLL_INTERVAL_MS * 2);
+    expect(errors).toEqual([
+      expect.objectContaining({ category: 'configuration', fatal: false })
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// The same race with the opposite outcome: the engine's seek concludes rather
+// than aborts, so `currentTime` is still at the offset once `seeking` clears.
+// No notice, on either read.
+test('publishes no notice when a later read confirms a delayed start position', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([[0, 10]])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, (written) => written);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(errors).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Asymmetric on purpose: a playhead the deferred read finds ahead of the
+// target is playback that started, not a refusal, and only a refusal is
+// reported.
+test('publishes no notice when a later read finds the playhead ahead of the start position', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([[0, 10]])
+    });
+    trackSeekingRace(
+      media,
+      0,
+      SEEK_RESOLVES_AFTER_MS,
+      (written) => written + 1
+    );
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(errors).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// The poll touches the element on every tick, so it has to check the provider
+// is still there to touch. Without the guard this would keep reading
+// `media.seeking` and `media.currentTime` after `destroy()` let go of the
+// element, and could still publish a refusal for a load nobody can see the
+// state of any more.
+test('publishes no notice from a deferred read after destroy', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await provider.destroy();
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(errors).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// A seek run before the poll settles means the playhead the deferred read
+// would see is no longer the one the initial write produced -- the player has
+// moved on, and the stale check must not publish a refusal for a position
+// nobody is asking about any more.
+test('publishes no notice when a seek runs before the deferred read', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([[0, 10]])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await provider.seekTo?.(8);
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(errors).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// A retry reloads the source before the poll settles, the same shape as the
+// destroy and seek guards above but for the third way a load stops being the
+// one a deferred check was scheduled for. The reload gets a fresh decision of
+// its own -- via its own `loadedmetadata` and its own poll, not the stale
+// one -- so this also confirms that decision still happens, and correctly,
+// rather than the retry silencing initial positioning altogether.
+test('publishes no notice from a deferred read a retry ran before, and the reload gets its own decision', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    vi.spyOn(media, 'load').mockImplementation(() => undefined);
+    const { rewind, writes } = trackSeekingRace(
+      media,
+      0,
+      SEEK_RESOLVES_AFTER_MS,
+      () => 0
+    );
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await provider.retry?.();
+    rewind();
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+    expect(errors).toEqual([]);
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(writes).toEqual([5, 5]);
+    expect(errors).toEqual([
+      expect.objectContaining({ category: 'configuration', fatal: false })
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// A seek that never settles is stalled media, not a refusal this provider has
+// decided on, and the consumer already sees the pending position on
+// `PlayerState.currentTime` -- so the deadline drops the check rather than
+// reporting one. `getTimerCount` after the deadline confirms the poll actually
+// stopped rather than merely declining to publish on every future tick.
+test('stops polling and publishes nothing once a seek never settles by the deadline', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    trackSeekingRace(media, 0, undefined, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(15_100);
+
+    expect(errors).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// The deferred confirmation is the second read of one decision, not a second
+// decision: a load that already reported the refusal must not report it
+// again once further polls arrive.
+test('reports a WebKit refusal exactly once even after the deferred read', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(15_100);
+
+    expect(errors).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 // The same check catching a clamp rather than a refusal: the element takes the
 // write and settles somewhere short of it. This is the shape #465 measured on
 // firefox — `startTime: 9` against a window ending at 5.84 came to rest at

@@ -112,14 +112,15 @@ export const play = (): Promise<unknown> => controller.play();
   The notice is how you tell any of that apart from a setting you mis-wired. It
   does not make the offset apply.
 
-  **The read-back is not yet reliable on WebKit.** It reads `currentTime` in the
-  same tick as the write, and WebKit sometimes clamps before that read and
-  sometimes answers with the value it was just given — so an offset it declines
-  is reported on some loads and dropped in silence on others, leaving the
-  playhead at its load position with no notice. It is a race, measured across
-  two CI runs; chromium and firefox report it correctly on every attempt.
-  Tracked as #567. Treat the refusal notice as a guarantee on chromium and
-  firefox, and as a race on WebKit, until that lands.
+  **The playhead is confirmed on the same tick, and again once the element
+  reports it is no longer seeking, which is what makes the notice reliable on
+  WebKit too.** The first read is in the same tick as the write; chromium and
+  firefox clamp before the write's setter returns, so that read already sees a
+  refusal there. Where it does not, the provider watches `media.seeking`, the
+  same flag the HTML seek algorithm itself clears once a seek concludes,
+  refusal or not, and takes its deferred read the moment that flag reads
+  false -- catching an engine whose setter answers the write before its own
+  seek has finished deciding.
 
 - **`selectQuality`** is `unavailable` with reason `source`: the browser picks
   its own rendition for native HLS and there is nothing to enumerate. It is not

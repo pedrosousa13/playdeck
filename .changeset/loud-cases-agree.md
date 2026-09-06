@@ -28,9 +28,9 @@ as it already did for the offsets that never got written.
 The notice's message no longer names the seekable window, since that is no
 longer the only thing that can refuse an offset.
 
-The read-back is a same-tick read, and that is not enough on WebKit, which
-sometimes clamps before the read and sometimes answers `currentTime` with the
-value it was just given. An offset WebKit declines is therefore reported on some
-loads and still dropped in silence on others — a race, measured across two CI
-runs. Treat the refusal notice as a guarantee on chromium and firefox and as a
-race on WebKit until #567 lands.
+The read-back is a same-tick read, and a same-tick read alone is not enough on
+WebKit, which sometimes clamps before it and sometimes answers `currentTime`
+with the value it was just given. So the playhead is read back a second time
+too, on a later turn, and the notice is published there instead if the engine
+still has not moved by then — which is what makes the guarantee hold on WebKit
+as well as on chromium and firefox.
