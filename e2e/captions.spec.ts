@@ -33,6 +33,11 @@ import { playButton } from './locators';
 // chromium-only. `--workers=6` oversubscribes deliberately: contention is what
 // surfaces this, so an idle run is a poor test of it.
 const play = async (page: Page) => {
+  // Attach first, separately from the assertion below: a locator wait draws on
+  // the test's wide timeout, so it is what absorbs the story's cold compile and
+  // mount, leaving the assertion's own 5s default to cover only the
+  // provider-attach precondition documented above.
+  await playButton(page).waitFor({ state: 'attached' });
   await expect(playButton(page)).toHaveAttribute('data-provider');
   await playButton(page).click();
 };

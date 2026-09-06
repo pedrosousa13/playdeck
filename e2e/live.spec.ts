@@ -20,6 +20,16 @@ const recordRequests = (page: Page): string[] => {
 // load-bearing) is still detected through the hls.js live flag or an infinite
 // duration.
 
+// Wait for the engine readout to attach before asserting its text: a locator
+// wait draws on the test's wide timeout, so it absorbs the story's cold
+// compile and mount, leaving the assertion that follows on its own 5s
+// default.
+const mountedHlsEngine = async (page: Page) => {
+  const engine = page.getByTestId('hls-engine');
+  await engine.waitFor({ state: 'attached' });
+  return engine;
+};
+
 test('detects a live stream and adapts controls on the hls.js engine', async ({
   browserName,
   page
@@ -31,7 +41,8 @@ test('detects a live stream and adapts controls on the hls.js engine', async ({
     '/iframe.html?id=fixtures-playerfixture--live-hls-js&viewMode=story'
   );
 
-  await expect(page.getByTestId('hls-engine')).toHaveText('hls.js');
+  const engine = await mountedHlsEngine(page);
+  await expect(engine).toHaveText('hls.js');
 
   // Live status is derived, not guessed from the URL.
   const panel = page.getByTestId('live-panel');
@@ -59,7 +70,8 @@ test('surfaces a behind-edge seek within the live window on the hls.js engine', 
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--live-hls-js&viewMode=story'
   );
-  await expect(page.getByTestId('hls-engine')).toHaveText('hls.js');
+  const engine = await mountedHlsEngine(page);
+  await expect(engine).toHaveText('hls.js');
 
   const panel = page.getByTestId('live-panel');
   await expect(panel).toHaveAttribute('data-live-status', 'live');
@@ -105,7 +117,8 @@ test('applies a start offset inside the live window on the hls.js engine', async
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--live-hls-js-start-time&viewMode=story'
   );
-  await expect(page.getByTestId('hls-engine')).toHaveText('hls.js');
+  const engine = await mountedHlsEngine(page);
+  await expect(engine).toHaveText('hls.js');
 
   const panel = page.getByTestId('live-panel');
   await expect(panel).toHaveAttribute('data-live-status', 'live');
@@ -150,7 +163,8 @@ test('detects a live stream and never shows a fixed duration on native HLS', asy
     '/iframe.html?id=fixtures-playerfixture--live-native&viewMode=story'
   );
 
-  await expect(page.getByTestId('hls-engine')).toHaveText('native');
+  const engine = await mountedHlsEngine(page);
+  await expect(engine).toHaveText('native');
   await playButton(page).click();
 
   const panel = page.getByTestId('live-panel');

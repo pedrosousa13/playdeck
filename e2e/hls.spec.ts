@@ -14,6 +14,16 @@ const recordRequests = (page: Page): string[] => {
   return requests;
 };
 
+// Wait for the engine readout to attach before asserting its text, or the
+// value it precedes: a locator wait draws on the test's wide timeout, so it
+// absorbs the story's cold compile and mount, leaving whichever assertion
+// comes first on its own 5s default.
+const mountedHlsEngine = async (page: Page) => {
+  const engine = page.getByTestId('hls-engine');
+  await engine.waitFor({ state: 'attached' });
+  return engine;
+};
+
 const playToCompletion = async (page: Page): Promise<void> => {
   await playButton(page).click();
   await expect(playButton(page)).toHaveAttribute('data-state', 'playing');
@@ -32,7 +42,8 @@ test('plays the local hls fixture to completion with the hls.js engine', async (
     '/iframe.html?id=fixtures-playerfixture--hls-hls-js&viewMode=story'
   );
 
-  await expect(page.getByTestId('hls-engine')).toHaveText('hls.js');
+  const engine = await mountedHlsEngine(page);
+  await expect(engine).toHaveText('hls.js');
   await playToCompletion(page);
 
   expect(requests).toContain('/hls/master.m3u8');
@@ -58,7 +69,8 @@ test('plays the local hls fixture natively without downloading hls.js', async ({
     '/iframe.html?id=fixtures-playerfixture--hls-native&viewMode=story'
   );
 
-  await expect(page.getByTestId('hls-engine')).toHaveText('native');
+  const engine = await mountedHlsEngine(page);
+  await expect(engine).toHaveText('native');
   await playToCompletion(page);
 
   expect(requests).toContain('/hls/master.m3u8');
@@ -78,6 +90,9 @@ test('surfaces a clear unsupported error for an impossible forced hls engine', a
     '/iframe.html?id=fixtures-playerfixture--hls-native&viewMode=story'
   );
 
+  // The engine readout gates the error readout too: the fixture's `StateProbes`
+  // renders both spans in one pass, so one attached means the other is.
+  const engine = await mountedHlsEngine(page);
   await expect(page.getByTestId('error-category')).toHaveText('unsupported');
-  await expect(page.getByTestId('hls-engine')).toHaveText('none');
+  await expect(engine).toHaveText('none');
 });
