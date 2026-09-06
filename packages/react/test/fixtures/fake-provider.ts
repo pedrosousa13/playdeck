@@ -2,6 +2,7 @@ import type {
   CommandResult,
   PlayerProvider,
   ProviderAdapter,
+  ProviderEvent,
   ProviderStateListener,
   ProviderStatePatch
 } from '@playdeck/core';
@@ -89,8 +90,14 @@ export const createFakeProvider = ({
       unmuteCount,
       volumeCount
     }),
-    emit: (patch: ProviderStatePatch) => {
-      listeners.forEach((listener) => listener(patch));
+    // `event` is optional and forwarded as-is, matching `ProviderStateListener`
+    // itself: most callers only ever need the patch, but a controller only
+    // ever synthesizes a `PlayerEvent` -- and so only ever calls a
+    // `controller.on(...)` listener -- for a patch delivered alongside its own
+    // `ProviderEvent` (`player-controller.ts`'s `originatingEvent`, built only
+    // `if (event)`). A test asserting on an event's `origin` has to supply one.
+    emit: (patch: ProviderStatePatch, event?: ProviderEvent) => {
+      listeners.forEach((listener) => listener(patch, event));
     }
   };
 };
