@@ -17,3 +17,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
 ### Comments
 
 Durable rationale belongs in source; investigation narrative belongs on the issue. A comment naming an open issue number is a claim with an expiry date. See `docs/agents/comments.md`.
+
+### Demonstrated red
+
+A new assertion does not count until it has been shown failing against the unfixed code, with the real output recorded in the PR body, the commit message, or a comment beside the test. Where the code cannot be un-written, name the substitute mutation used and record its output instead. See `docs/agents/demonstrated-red.md`.
