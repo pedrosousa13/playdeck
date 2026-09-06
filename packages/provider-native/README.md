@@ -103,14 +103,14 @@ export const play = (): Promise<unknown> => controller.play();
   bounds.
 - **A `startTime` the source cannot be positioned at** publishes a non-fatal
   `configuration` notice on `PlayerState.error` rather than disappearing. The
-  offset is applied once, when metadata arrives; it is bounded by the media's
-  own duration, so an offset past the end of the clip is still refused, and the
-  element's `seekable` ranges decide whether the element will move at all rather
-  than where it lands — a window that does not reach the offset is a refusal,
-  never a nudge onto its nearest edge. The playhead is then read back to confirm
-  it arrived, so an element that takes the write and stays put is reported too.
-  The notice is how you tell any of that apart from a setting you mis-wired. It
-  does not make the offset apply.
+  offset is considered exactly once per load, at the first `loadedmetadata`;
+  it is bounded by the media's own duration, so an offset past the end of the
+  clip is still refused, and the element's `seekable` ranges decide whether the
+  element will move at all rather than where it lands — a window that does not
+  reach the offset is a refusal, never a nudge onto its nearest edge. The
+  playhead is then read back to confirm it arrived, so an element that takes
+  the write and stays put is reported too. The notice is how you tell any of
+  that apart from a setting you mis-wired. It does not make the offset apply.
 
   **The playhead is confirmed on the same tick, and again once the element
   reports it is no longer seeking, which is what makes the notice reliable on
@@ -121,6 +121,14 @@ export const play = (): Promise<unknown> => controller.play();
   refusal or not, and takes its deferred read the moment that flag reads
   false -- catching an engine whose setter answers the write before its own
   seek has finished deciding.
+
+  **A refusal at that single attempt is permanent for the load.** Nothing
+  reconsiders it afterward — not a `seekable` window that later widens past
+  the requested offset, not any other change of state before the next load.
+  The `configuration` notice above is the record of the refusal: once it has
+  fired for a load, nothing re-applies the offset or retracts the notice for
+  that same load. Only a fresh load — a new source, or an explicit `retry` —
+  gives the offset another attempt.
 
 - **`selectQuality`** is `unavailable` with reason `source`: the browser picks
   its own rendition for native HLS and there is nothing to enumerate. It is not
