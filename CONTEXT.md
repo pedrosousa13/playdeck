@@ -178,8 +178,8 @@ wins, and whichever of the two is in force is the **effective step**, which the
 echo tolerance takes half of. A window with no extent to divide — one that has
 not arrived, a zero-length one, or the infinity a live source publishes for its
 duration — steps by that same second. Distinct from the shortcut layer's seek
-distance, which is a fixed five seconds through `seekBy` and is not derived from
-anything (ADR-0005).
+distances: `seekSeconds` fixes two, five seconds and ten, both issued through
+`seekBy` and neither derived from anything (ADR-0005).
 _Avoid_: granularity, resolution, increment, tick
 
 **Requested origin**:
@@ -319,8 +319,13 @@ a viewer asked for something and got nothing. Others already gate themselves,
 so the window is not uniform across the library. No control presents it.
 
 A play refused this way is also a **Refused play**, deliberately, because the
-two end at different moments. `retry` raises the same reason from a guard that
-has a provider in hand, so it is not one of these.
+two end at different moments. `retry` with no provider is refused by the same
+no-provider path in `#command` as every other command, but silently. It has a
+second, separate refusal site in `retry` itself, once a provider exists, when
+the provider or the generation moves under the attempt. Publishing one of the
+pair while the other stayed silent would make the field's absence mean two
+different things, which is why neither publishes and `retry` is left out of the
+`PlayerCommand` vocabulary.
 _Avoid_: dropped command, swallowed click, queued command
 
 ### Adapters
