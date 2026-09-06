@@ -4,10 +4,12 @@ Framework-neutral player state, commands, events and the provider contract that
 [Playdeck](https://github.com/pedrosousa13/playdeck) is built on. No DOM rendering, no
 React, no provider SDKs.
 
-Use it directly if you are wiring a player into something other than React, or
-writing a provider adapter. If you are building UI in React, use
-[`@playdeck/react`](https://github.com/pedrosousa13/playdeck/blob/main/packages/react/README.md),
-which owns a controller for you.
+If you are building UI in React, start with
+[`@playdeck/react`](https://github.com/pedrosousa13/playdeck/blob/main/packages/react/README.md)
+— it owns a controller for you and loads providers on demand, and it is the
+only renderer Playdeck ships. Use this package directly when you are writing a
+provider adapter, or hosting a player outside React: the same state, commands
+and provider contract, with nothing rendered for you.
 
 ```sh
 pnpm add @playdeck/core
