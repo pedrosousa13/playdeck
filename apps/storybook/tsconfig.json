@@ -20,7 +20,14 @@
     "paths": {
       "@playdeck/core": ["../../packages/core/dist/index.d.ts"],
       "@playdeck/provider-hls": ["../../packages/provider-hls/dist/index.d.ts"],
-      "@playdeck/react": ["../../packages/react/dist/index.d.ts"]
+      "@playdeck/react": ["../../packages/react/dist/index.d.ts"],
+      // `apps/site`'s own alias, so `seek-slider-order.contract.test.ts` can
+      // typecheck its import of `BenchIsland.tsx` the same way it resolves at
+      // runtime (`vitest.config.ts` declares the matching `@` alias for that
+      // app's `src`). Mapped to source rather than to a built declaration,
+      // unlike the packages above: `apps/site` publishes nothing, so there is
+      // no `dist/*.d.ts` to point at.
+      "@/*": ["../site/src/*"]
     },
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
@@ -41,6 +48,24 @@
     "stories/**/*",
     "vitest.config.ts",
     "../../examples/archetype-streaming-service.tsx",
-    "../../examples/archetype-course-platform.tsx"
-  ]
+    "../../examples/archetype-course-platform.tsx",
+    // `seek-slider-order.contract.test.ts` imports `BenchIsland.tsx` (via the
+    // `@/*` mapping above), and project references can't stand in for the
+    // rest of that module's transitive `@/...` imports here the way they do
+    // for `@playdeck/react` and `@playdeck/core`: `apps/site` cannot be a
+    // project reference (`noEmit`, TS6310, same restriction `e2e`'s own
+    // reference in the root `tsconfig.json` runs into), so `tsc -b` has to see
+    // every file that import chain reaches or it refuses each one as outside
+    // this project's file list (TS6307). `apps/site/tsconfig.json` already
+    // type-checks the same files on its own; this is a second, cheap check of
+    // the same source, not a second source of truth -- the same trade the two
+    // archetype examples above already make against the `examples` project.
+    "../site/src/**/*.ts",
+    "../site/src/**/*.tsx"
+  ],
+  // The one file under `apps/site/src` that `apps/site/tsconfig.json` itself
+  // excludes, for the same reason: it imports `astro:content`, a virtual
+  // module whose declarations exist only in Astro's generated `.astro/`
+  // directory, which this project does not read either.
+  "exclude": ["../site/src/content.config.ts"]
 }

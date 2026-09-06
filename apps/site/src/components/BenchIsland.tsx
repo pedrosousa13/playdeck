@@ -943,3 +943,12 @@ const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
  * what React reports in a stack trace and in the devtools tree.
  */
 export default BenchIsland;
+
+/*
+ * Test-visibility export, not part of the island's public surface: nothing
+ * else in production code imports it. It exists so the composition-order test
+ * (`apps/storybook/stories/seek-slider-order.contract.test.ts`) can render the
+ * site's control bar on its own, under a mock player, without pulling in the
+ * bench sources and the rest of `BenchIsland`'s DOM.
+ */
+export { ControlBar };

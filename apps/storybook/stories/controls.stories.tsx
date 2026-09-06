@@ -47,10 +47,10 @@ const meta = {
   render: () => (
     <Player.Viewport style={{ width: 640, height: 360, background: '#0b0e13' }}>
       <Player.Controls aria-label="Video player controls" style={barStyle}>
+        <Player.SeekSlider style={{ flex: 1 }} />
         <Player.PlayButton />
         <Player.MuteButton />
         <Player.VolumeSlider />
-        <Player.SeekSlider style={{ flex: 1 }} />
         <Player.Time type="current" />
         <Player.FullscreenButton />
         <Player.PipButton />
@@ -93,7 +93,8 @@ export const AssembledBar: Story = {
 /**
  * Focus behavior: the controls region is itself focusable (it is the scope for
  * keyboard shortcuts), so the first Tab lands on the region and the next Tab
- * enters the individual controls, in order.
+ * enters the individual controls, in order -- the seek slider first, per the
+ * composed order above.
  */
 export const KeyboardTraversal: Story = {
   parameters: fullyCapable,
@@ -104,8 +105,8 @@ export const KeyboardTraversal: Story = {
     await userEvent.tab();
     await expect(region).toHaveFocus();
     await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: 'Play' })).toHaveFocus();
+    await expect(canvas.getByRole('slider', { name: 'Seek' })).toHaveFocus();
     await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: 'Mute' })).toHaveFocus();
+    await expect(canvas.getByRole('button', { name: 'Play' })).toHaveFocus();
   }
 };
