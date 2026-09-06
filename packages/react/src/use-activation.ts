@@ -147,12 +147,11 @@ const nativeOptionsEqual = (
 // is a new object on every render, and a reference compare would tear the embed
 // down and rebuild it each time. Own keys rather than each declared field, so
 // this stays correct as a provider's options grow, and shallow because every
-// option a provider bag declares is meant to be a primitive -- `youtube`'s
-// pre-existing `loadIframeApi` is the one bag that is not, a gap
-// `PrimitiveOptionBag` (`provider-loaders.ts`) found rather than closed. Every
-// other bag is guarded by it: a field that stopped being a primitive fails to
-// compile there (#579), which is what let `hls` add a `build` option without
-// this comparison needing to change.
+// option a provider bag declares is meant to be a primitive: every bag is
+// guarded by `PrimitiveOptionBag` (`provider-loaders.ts`), so a field that
+// stopped being one fails to compile there (#579) rather than needing this
+// comparison to change -- which is what let `hls` add a `build` option, and
+// `youtube` lose its `loadIframeApi` one, without either touching this file.
 //
 // Every key either side declares, compared as a value: a key set to `undefined`
 // therefore equals that key being absent, and an absent bag equals an empty one.
