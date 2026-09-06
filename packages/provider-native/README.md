@@ -9,8 +9,57 @@ pnpm add @playdeck/provider-native
 
 `@playdeck/react` loads this for you when the source resolves to `video` — an
 `.mp4` or `.webm` path, or an explicit `{ type: 'video' }` source; see
-[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers). Install
-it directly only if you are driving a `PlayerController` yourself.
+[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers).
+See "Without React" below for driving a `PlayerController` yourself.
+
+<!-- example:provider-setup-native -->
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// A native source is an `.mp4`/`.webm` URL in the `source` prop.
+// `loop`, `startTime` and `endTime` are `Player.Root`'s own props on every
+// provider (ADR-0004), never keys in a provider's option bag — native takes no
+// `providerOptions` key of its own at all.
+export const ClipWithCaptions = () => (
+  <Player.Root
+    loop
+    startTime={30}
+    endTime={45}
+    source="https://example.com/clip.mp4"
+  >
+    <Player.Viewport>
+      {/* `textTracks` reaches native playback directly, unlike the embed
+          providers, where only captions a provider discovers for itself are
+          available. */}
+      <Player.Media
+        textTracks={[
+          { src: '/captions.en.vtt', srcLang: 'en', label: 'English' }
+        ]}
+      />
+      <Player.Captions />
+      <Player.Controls>
+        <Player.PlayButton />
+        <Player.SeekSlider />
+        <Player.Time type="current" />
+        <Player.CaptionsButton />
+        <Player.PipButton />
+        {/* Renders only where there is a receiver to cast to. */}
+        <Player.AirPlayButton />
+        <Player.FullscreenButton />
+      </Player.Controls>
+      <Player.ErrorDisplay />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+<!-- /example -->
+
+## Without React
+
+Reach for this package directly when you are writing a provider adapter, or
+hosting a player somewhere other than React.
 
 <!-- example:provider-native -->
 
