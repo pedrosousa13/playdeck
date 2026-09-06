@@ -48,10 +48,10 @@ Notes, per row:
   `packages/provider-youtube/src/index.ts:88`, and is resolved at `:119-131`; the
   value reaches the iframe as the origin of the embed url the adapter builds,
   `packages/provider-youtube/src/attachment.ts:231`). A
-  `Player.Root` consumer **can** change `host`: `provider-loaders.ts` passes
-  `providerOptions?.youtube` straight to `createYouTubeProvider`, so every key
-  `YouTubeProviderOptions` declares — `host` and the `loadIframeApi` injection
-  hook among them — is reachable as
+  `Player.Root` consumer **can** change `host`: `provider-loaders.ts` folds
+  `providerOptions?.youtube` into what it hands `createYouTubeProvider`, and
+  `host` is the one key of `YouTubeProviderOptions` the `youtube` bag still
+  declares (as of #628; see the loader note below), so it is reachable as
   `providerOptions={{ youtube: { host: '…' } }}`. What that consumer can reach
   is bounded, as of SIDEPRO-216: `host` is matched on its parsed origin against
   `https://www.youtube.com` and `https://www.youtube-nocookie.com`, and any
@@ -92,7 +92,7 @@ Notes, per row:
   `options.dnt === false ? '0' : '1'`) — and asks Vimeo not to track the
   session. It is a separate switch and has no effect on whether Playdeck's probe
   runs. `PlayerProviderOptions` carries a `vimeo` key
-  (`packages/react/src/provider-loaders.ts:55`), so `dnt`, `customControls` and
+  (`packages/react/src/provider-loaders.ts:103`), so `dnt`, `customControls` and
   `suppressSeoMetadata` are reachable through `Player.Root` as
   `providerOptions={{ vimeo: {...} }}`; `controls`, `loop`, `startTime` and
   `endTime` are omitted from that bag because `Root` owns them as its own props
@@ -395,7 +395,7 @@ Notes, per row:
   `playerColor`, `swatch`, `poster`, `transparentLetterbox`) are reachable from
   `Player.Root` via `providerOptions={{ wistia: {...} }}`, as YouTube's and
   Vimeo's are through their own bags
-  (`packages/react/src/provider-loaders.ts:46-59`). Three of Wistia's options
+  (`packages/react/src/provider-loaders.ts:93-107`). Three of Wistia's options
   are omitted from that bag rather than reachable through it — `loop`
   (SIDEPRO-210) and `startTime` and `endTime` (#214) — because `Root`'s own
   props write them (ADR-0004). None of the three changes which origin is
@@ -752,27 +752,30 @@ those pages and Playdeck's own attach coexist.
 Both providers do offer a seam for replacing the load, and self-hosting the
 script is what either seam is for: the vendor's own engine, configuration and
 media-data requests still go to the vendor's CDN, so only `script-src` changes.
-But the two are not equally reachable, and the difference matters most to the
-consumer this project leads with — the one who installs `@playdeck/react` and never
-calls a provider factory:
+Both are construction-only now, and for the same reason:
 
-- **YouTube's is reachable through `Player.Root`.**
-  `YouTubeProviderOptions.loadIframeApi`
+- **YouTube's.** `YouTubeProviderOptions.loadIframeApi`
   (`packages/provider-youtube/src/index.ts:81`, defaulted to the built-in loader
-  at `:308`, called at `packages/provider-youtube/src/attachment.ts:220`) is a
-  provider option, and the `youtube` bag omits only `controls`, `endTime`,
-  `loop` and `startTime` (`packages/react/src/provider-loaders.ts:51-54`) — so
-  `providerOptions={{ youtube: { loadIframeApi } }}` reaches it.
-- **Wistia's is not.** `WistiaScriptInjector`
+  at `:308`, called at `packages/provider-youtube/src/attachment.ts:220`) was a
+  `Player.Root` option until #628 — the `youtube` bag admitted it alongside
+  `host`, and `providerOptions={{ youtube: { loadIframeApi: () => … } }}`
+  written inline was a fresh function every render, so the bag never compared
+  equal and the activation was retired on every render, the same hazard #579
+  had already closed for `hls`'s `loadHls`. `PlayerProviderOptions['youtube']`
+  (`packages/react/src/provider-loaders.ts`) now omits `loadIframeApi` beside
+  `controls`, `endTime`, `loop` and `startTime`, so reaching it means calling
+  `createYouTubeProvider` yourself and driving the load — the
+  direct-construction path this document describes at the YouTube row above.
+- **Wistia's.** `WistiaScriptInjector`
   (`packages/provider-wistia/src/loader.ts:166`) is a parameter of
   `loadWistiaPlayer`, not a key of `WistiaProviderOptions`, so no `wistia` bag
-  carries it. Reaching it means calling `createWistiaProvider` yourself and
-  driving the load, which is the direct-construction path this document
-  describes at the Wistia row above — not something `Player.Root` exposes.
+  ever carried it. Reaching it has always meant calling `createWistiaProvider`
+  yourself and driving the load, the same path YouTube's now takes — not
+  something `Player.Root` exposes.
 
-So for a `Player.Root` consumer today, `fast.wistia.com` in `script-src` is not
-negotiable, while `www.youtube.com` is. That asymmetry is a gap in this
-provider's options surface rather than a property of Wistia's CDN.
+So for a `Player.Root` consumer today, neither `fast.wistia.com` nor
+`www.youtube.com` in `script-src` is negotiable: both loads are pinned to
+their default CDN unless the caller constructs the provider directly.
 
 ## The Vimeo sandbox bargain
 

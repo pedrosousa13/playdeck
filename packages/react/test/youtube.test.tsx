@@ -203,7 +203,7 @@ test('re-attaches the YouTube adapter when the youtube option bag changes', asyn
   expect(harness.fakes[0]!.counts().destroyCount).toBe(1);
 });
 
-test('keeps the installed adapter when a value-equal youtube option bag is passed again', async () => {
+test('keeps the installed YouTube adapter when Root re-renders with an unchanged controls prop', async () => {
   const { rerender } = render(
     <Player.Root
       controls
@@ -226,6 +226,49 @@ test('keeps the installed adapter when a value-equal youtube option bag is passe
     <Player.Root
       controls
       loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+  await act(async () => undefined);
+
+  expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1);
+});
+
+// #628: the trap the design guards against, mirrored from `hls.test.tsx`'s own
+// version of this test. `providerOptions={{ youtube: { host: '...' } }}`
+// written inline is a new object every render, exactly as a consumer writing
+// it in JSX would produce. Without `providerBagEqual` comparing the bag by
+// value, this looks like a change on every render and tears the embed down
+// and rebuilds it, losing playback position -- the same hazard `loadIframeApi`
+// caused before #628 removed it from this bag, only now impossible to
+// reintroduce because every remaining key is a `PrimitiveOptionBag` primitive.
+test('keeps the installed YouTube adapter when a value-equal provider option bag is passed again', async () => {
+  const { rerender } = render(
+    <Player.Root
+      loading="eager"
+      providerOptions={{ youtube: { host: 'https://www.youtube.com' } }}
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+
+  // A fresh object literal with the same value, as an inline prop produces on
+  // every render.
+  rerender(
+    <Player.Root
+      loading="eager"
+      providerOptions={{ youtube: { host: 'https://www.youtube.com' } }}
       source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
     >
       <Player.Viewport>

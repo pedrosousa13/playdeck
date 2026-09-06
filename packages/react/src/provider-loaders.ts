@@ -7,27 +7,30 @@ import type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
 
 export type PlayerMediaMount = HTMLVideoElement | HTMLDivElement;
 
-// Every bag below is guarded to this except `youtube`'s: fields whose value is
-// a string, a number, a boolean, or absent. `providerBagEqual`
-// (`use-activation.ts`) compares a bag's own keys with `Object.is`, which is
-// only meaningful for a value that is itself its own identity -- a function or
-// another object compares unequal to a value equal to it in every way that
-// matters, so a bag holding one would retire the provider's activation
-// identity, and rebuild its engine, on every render that passes it inline
-// (#579). `PrimitiveOptionBag` turns a bag that stops being able to promise
-// that into a compile error at the bag's own declaration below, rather than a
-// rebuilt engine and a lost playback position discovered by a consumer.
+// Every bag below is guarded to this: fields whose value is a string, a
+// number, a boolean, or absent. `providerBagEqual` (`use-activation.ts`)
+// compares a bag's own keys with `Object.is`, which is only meaningful for a
+// value that is itself its own identity -- a function or another object
+// compares unequal to a value equal to it in every way that matters, so a bag
+// holding one would retire the provider's activation identity, and rebuild
+// its engine, on every render that passes it inline (#579).
+// `PrimitiveOptionBag` turns a bag that stops being able to promise that into
+// a compile error at the bag's own declaration below, rather than a rebuilt
+// engine and a lost playback position discovered by a consumer.
 //
-// `youtube` cannot take it as written. `loadIframeApi` is a function, and a
-// documented one: `docs/third-party-requests.md`'s "YouTube's is reachable
-// through `Player.Root`" names it as the deliberate, CSP-motivated exception
-// to Wistia's script injector staying construction-only. It already carries
-// the exact hazard this guard exists to catch -- an inline
-// `providerOptions={{ youtube: { loadIframeApi: () => ... } }}` retires the
-// YouTube activation every render today, and nothing says so -- but that is a
-// pre-existing gap this guard turned up while adding `hls`'s, not one #579
-// closes on the way past; it wants its own design decision, the way this
-// issue's own did.
+// `youtube` was the one bag that could not take it as written (#579):
+// `loadIframeApi` is a function, and it already carried the exact hazard this
+// guard exists to catch -- an inline `providerOptions={{ youtube: {
+// loadIframeApi: () => ... } }}` retired the YouTube activation every render,
+// undocumented. #628 closes that the way `hls` keeps `loadHls` out of its own
+// bag: `loadIframeApi` is omitted below rather than admitted, and stays
+// reachable only on `YouTubeProviderOptions` itself, the provider's own
+// documented test seam (mounting `createYouTubeProvider` directly, the way
+// `packages/provider-youtube/test/index.test.ts` does). There is no
+// `build`-shaped primitive standing in for it here, unlike `hls`'s selector,
+// because nothing in `youtube`'s own options names a choice for one to select
+// between; a consumer-facing, data-shaped loading option remains open should
+// that need turn up.
 type PrimitiveOptionValue = string | number | boolean | undefined;
 
 // Exported for `provider-loaders.test.ts` alone, to prove the constraint
@@ -49,6 +52,13 @@ export type PrimitiveOptionBag<
  * else -- still means mounting `createHlsProvider` directly, the way
  * `apps/storybook/stories/hls-build.stories.tsx` does. The native provider
  * still waits on its own issue, so its absence here remains deliberate.
+ *
+ * `youtube` joined the same guard in #628, for the same reason and by the same
+ * means: its `loadIframeApi` is a function too, so it is omitted here and
+ * reached only through `YouTubeProviderOptions` itself, exactly as `loadHls`
+ * is. There is no `build`-shaped selector standing in for it -- `host` is the
+ * bag's one remaining key -- because nothing in `youtube`'s own options names
+ * a choice to select between.
  *
  * `controls`, `loop`, `startTime` and `endTime` are cross-provider concepts and
  * live on `Root` as its own props (ADR-0004). Each is omitted here from the bags
@@ -84,11 +94,11 @@ export type PlayerProviderOptions = {
   readonly wistia?: PrimitiveOptionBag<
     Omit<WistiaProviderOptions, 'endTime' | 'loop' | 'startTime'>
   >;
-  // Not `PrimitiveOptionBag`-wrapped: see the comment above it for why
-  // `loadIframeApi` keeps this bag out of the guard for now.
-  readonly youtube?: Omit<
-    YouTubeProviderOptions,
-    'controls' | 'endTime' | 'loop' | 'startTime'
+  readonly youtube?: PrimitiveOptionBag<
+    Omit<
+      YouTubeProviderOptions,
+      'controls' | 'endTime' | 'loadIframeApi' | 'loop' | 'startTime'
+    >
   >;
   readonly vimeo?: PrimitiveOptionBag<
     Omit<VimeoProviderOptions, 'controls' | 'endTime' | 'loop' | 'startTime'>

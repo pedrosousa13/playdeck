@@ -58,9 +58,16 @@ test('the per-provider option bags are the shape the CSP document describes', ()
     KeysRootOwns<PlayerProviderOptions['vimeo'], VimeoProviderOptions>
   >().toEqualTypeOf<'controls' | 'endTime' | 'loop' | 'startTime'>();
 
+  // `youtube` keeps `loadIframeApi` too, as of #628, for the same reason `hls`
+  // keeps `loadHls` just below: a function cannot satisfy `PrimitiveOptionBag`,
+  // so `host` is the only key of its own `Root` folds in, and reaching
+  // `loadIframeApi` itself still means mounting `createYouTubeProvider`
+  // directly.
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['youtube'], YouTubeProviderOptions>
-  >().toEqualTypeOf<'controls' | 'endTime' | 'loop' | 'startTime'>();
+  >().toEqualTypeOf<
+    'controls' | 'endTime' | 'loadIframeApi' | 'loop' | 'startTime'
+  >();
 
   // Wistia keeps `controls`: it has the concept but no fold writes it, so the
   // bag key is still the only way to reach it (ADR-0004's Consequences).
@@ -89,6 +96,21 @@ test('PrimitiveOptionBag rejects a function-valued key at the type level', () =>
     // instead of quietly retiring an activation on every render.
     PrimitiveOptionBag<{ loadHls: () => Promise<unknown> }>
   >().toEqualTypeOf<{ loadHls: () => Promise<unknown> }>();
+});
+
+// Not just the constraint in the abstract: the real `youtube` bag itself
+// (#628) has to reject the one function-valued key it used to declare, the
+// same way `PlayerProviderOptions['hls']` already cannot compile `loadHls`
+// into its own bag above.
+test('the youtube bag rejects a function-valued loadIframeApi at the type level', () => {
+  const youtubeBag: PlayerProviderOptions['youtube'] = {
+    // @ts-expect-error `loadIframeApi` is a function; #628 removed it from
+    // this bag so it can no longer compile here -- it stays reachable only on
+    // `YouTubeProviderOptions` itself, `hls`'s `loadHls` precedent applied to
+    // the provider #579 left aside.
+    loadIframeApi: () => Promise.resolve({} as never)
+  };
+  void youtubeBag;
 });
 
 test('dispatches vimeo sources to the vimeo adapter with the mount and source', async () => {

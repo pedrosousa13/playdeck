@@ -35,6 +35,5 @@ reaching it still means mounting `createHlsProvider` directly.
 function-valued option the same way — a bag typed through the new (internal)
 `PrimitiveOptionBag` constraint fails to compile if a future option is a
 function, rather than shipping the same hazard `build` was added to avoid.
-`youtube`'s existing `loadIframeApi` predates the guard and is not yet covered
-by it; see the comment above `PlayerProviderOptions` in
-`packages/react/src/provider-loaders.ts`.
+`youtube`'s existing `loadIframeApi` predated the guard; #628 closes that gap
+the same way, and its own changeset in this release describes it.

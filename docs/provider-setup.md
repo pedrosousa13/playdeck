@@ -113,17 +113,20 @@ Refused, because the shape is not one of the five above:
 - `https://www.youtube.com/watch?v=<a>&v=<b>` — two `v` parameters are
   ambiguous, so it fails here rather than in the provider.
 
-`providerOptions.youtube` accepts `host` and `loadIframeApi`. `host` moves the
-embed off the privacy-enhanced `https://www.youtube-nocookie.com` default, which
-is a privacy trade to make deliberately; only `https://www.youtube.com` and that
-default are honoured, and any other value falls back rather than throwing. A
-source URL never chooses that origin — a detected YouTube source is a video id
-and nothing else — so a `youtube-nocookie.com` source URL is not a second way to
-set `host`. It does not need to be: the default embed origin already _is_ the
+`providerOptions.youtube` accepts `host`, which moves the embed off the
+privacy-enhanced `https://www.youtube-nocookie.com` default, which is a privacy
+trade to make deliberately; only `https://www.youtube.com` and that default are
+honoured, and any other value falls back rather than throwing. A source URL
+never chooses that origin — a detected YouTube source is a video id and nothing
+else — so a `youtube-nocookie.com` source URL is not a second way to set
+`host`. It does not need to be: the default embed origin already _is_ the
 no-cookie one, so a source copied from that host loads from that host unless
 `host` moves it.
-`loadIframeApi` supplies the iframe API yourself instead of fetching
-`https://www.youtube.com/iframe_api`. See
+`YouTubeProviderOptions` also accepts `loadIframeApi`, to supply the iframe API
+yourself instead of fetching `https://www.youtube.com/iframe_api`, but that
+option is not reachable through `Player.Root`'s `providerOptions.youtube` the
+way `host` is — mounting `createYouTubeProvider` directly is the only way to
+reach it. See
 [Third-party requests and CSP](third-party-requests.md) for what a page's CSP
 has to allow, and [`@playdeck/provider-youtube`](../packages/provider-youtube)
 for what the adapter reports.
