@@ -226,6 +226,17 @@ separates nothing has no gate at all. It holds back autoplay only — a viewer
 who presses play is never made to wait.
 _Avoid_: play threshold gate, autoplay lock
 
+**Playback ownership**:
+Whether the viewport itself, rather than a viewer or an API caller, is
+responsible for the playback currently running (or last stopped) under
+`loading: 'viewport'`. Read off the `'autoplay'` origin `#playWithOrigin` and
+`#pauseWithOrigin` already carry: only a `play` reporting that origin makes the
+viewport's exit-crossing free to pause it, and only a `pause` reporting it
+makes a later re-entry free to resume it. A viewer's or an API caller's own
+play or pause is ownership released, not ownership taken, so a scroll crossing
+never touches it either way (#309).
+_Avoid_: autoplay flag, ownership flag, playback flag
+
 **Buffered window**:
 What `PlayerState.buffered` reports — the ranges a provider has said are
 loaded, and deliberately not an instantaneous mirror of what its media element

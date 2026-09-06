@@ -922,7 +922,7 @@ export const useActivation = (
             // Only playback this hook itself started is this hook's to pause:
             // `playbackOwnership` reads `'autoplaying'` only after a `play`
             // event confirmed with the `'autoplay'` origin, which is set by
-            // the controller-event listener effect above and never by a
+            // the controller-event listener effect below and never by a
             // viewer's or an API caller's own play (#309).
             if (
               !meetsThreshold(latest, options.playThreshold) &&

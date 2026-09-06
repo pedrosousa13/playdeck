@@ -86,13 +86,13 @@ one of these sources it is large. Gzip, excluding React itself and the optional
 
 | Playing                                           | Downloads                                                          | Total        |
 | ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
-| MP4 or WebM                                       | core 7.8 + primitives 17.9 + native 5.9                            | **31.6 KB**  |
-| HLS on Safari and iOS                             | the above + HLS adapter 5.0                                        | **36.6 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **205.8 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 36.6 + hls.js light 113.0 | **149.6 KB** |
-| YouTube                                           | core 7.8 + primitives 17.9 + adapter 6.1                           | **31.8 KB**  |
-| Vimeo                                             | core 7.8 + primitives 17.9 + adapter 7.8 + `@vimeo/player` 8.5     | **42.0 KB**  |
-| Wistia                                            | core 7.8 + primitives 17.9 + adapter 5.3                           | **31.0 KB**  |
+| MP4 or WebM                                       | core 7.8 + primitives 18.1 + native 5.9                            | **31.8 KB**  |
+| HLS on Safari and iOS                             | the above + HLS adapter 5.0                                        | **36.8 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **206.0 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 36.8 + hls.js light 113.0 | **149.8 KB** |
+| YouTube                                           | core 7.8 + primitives 18.1 + adapter 6.1                           | **32.0 KB**  |
+| Vimeo                                             | core 7.8 + primitives 18.1 + adapter 7.8 + `@vimeo/player` 8.5     | **42.2 KB**  |
+| Wistia                                            | core 7.8 + primitives 18.1 + adapter 5.3                           | **31.2 KB**  |
 
 <!-- /bytes -->
 
