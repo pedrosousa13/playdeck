@@ -96,7 +96,8 @@ const withSelectTextTrack = (status: Availability): PlayerCapabilities => ({
   fullscreen: notReadyAvailability,
   pictureInPicture: notReadyAvailability,
   airPlay: notReadyAvailability,
-  customControls: notReadyAvailability
+  customControls: notReadyAvailability,
+  providerPoster: notReadyAvailability
 });
 
 const track = (

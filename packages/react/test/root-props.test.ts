@@ -36,6 +36,7 @@ test('Root accepts exactly the props it accepted as an intersection', () => {
     | 'onVolumeChange'
     | 'playThreshold'
     | 'playbackRate'
+    | 'poster'
     | 'preload'
     | 'providerOptions'
     | 'ref'

@@ -89,10 +89,20 @@ export type PrimitiveOptionBag<
  * a YouTube, Vimeo or Wistia source. Each provider now declares both and
  * enforces the boundary itself, `Root` folds both into the active provider's bag
  * beside `loop`, and the keys are omitted here for the same one-home reason.
+ *
+ * `resolvePoster` joins the fold for the same reason (#556): `Root`'s `poster`
+ * prop is what a consumer sets, `poster="provider"` is what asks Vimeo and
+ * Wistia to resolve their own still, and `root.tsx`'s `resolvedProviderOptions`
+ * writes that opt-in into whichever of the two bags is active. Omitted from
+ * `vimeo` and `wistia` here and absent from `youtube` altogether: YouTube's own
+ * poster is derivable from the id and needs no opt-in to resolve.
  */
 export type PlayerProviderOptions = {
   readonly wistia?: PrimitiveOptionBag<
-    Omit<WistiaProviderOptions, 'endTime' | 'loop' | 'startTime'>
+    Omit<
+      WistiaProviderOptions,
+      'endTime' | 'loop' | 'resolvePoster' | 'startTime'
+    >
   >;
   readonly youtube?: PrimitiveOptionBag<
     Omit<
@@ -101,7 +111,10 @@ export type PlayerProviderOptions = {
     >
   >;
   readonly vimeo?: PrimitiveOptionBag<
-    Omit<VimeoProviderOptions, 'controls' | 'endTime' | 'loop' | 'startTime'>
+    Omit<
+      VimeoProviderOptions,
+      'controls' | 'endTime' | 'loop' | 'resolvePoster' | 'startTime'
+    >
   >;
   readonly hls?: PrimitiveOptionBag<{ readonly build?: HlsBuild }>;
 };

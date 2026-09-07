@@ -117,6 +117,36 @@ test(
   }
 );
 
+// #556: the poster oEmbed request is a second, independent probe from the
+// chromeless one above -- opted into on its own through `poster="provider"` --
+// so this proves it resolves on the real endpoint rather than merely that the
+// two share a request. The thumbnail fetch is what proves the resolved url is
+// real: asserting on a computed string would only restate the oEmbed record's
+// own `thumbnail_url` field back at itself.
+test(
+  "vimeo's resolved poster is a real, fetchable thumbnail",
+  { tag: '@real' },
+  async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto(
+      '/iframe.html?id=fixtures-playerfixture--vimeo-interaction-resolve-poster&viewMode=story'
+    );
+    await page.getByRole('button', { name: 'Play video', exact: true }).click();
+    await expect
+      .poll(() => capability(page, 'providerPoster'), { timeout: 60_000 })
+      .toEqual({ status: 'available' });
+
+    const providerPosterUrl = await page.evaluate(
+      () => window.playdeckHandle?.getState().providerPosterUrl
+    );
+    expect(providerPosterUrl).toMatch(/^https:\/\//);
+
+    const response = await page.request.get(providerPosterUrl!);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['content-type']).toMatch(/^image\//);
+  }
+);
+
 // #82: the ids Playdeck publishes are Vimeo's own rung keys under a prefix, and
 // the SDK never settles a `setQuality` for an id it did not offer — so an id
 // that drifts out of shape does not fail, it hangs. Every published rung is

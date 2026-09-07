@@ -56,7 +56,9 @@ test('the per-provider option bags are the shape the CSP document describes', ()
   // why `vimeo.com` belongs in `connect-src`.
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['vimeo'], VimeoProviderOptions>
-  >().toEqualTypeOf<'controls' | 'endTime' | 'loop' | 'startTime'>();
+  >().toEqualTypeOf<
+    'controls' | 'endTime' | 'loop' | 'resolvePoster' | 'startTime'
+  >();
 
   // `youtube` keeps `loadIframeApi` too, as of #628, for the same reason `hls`
   // keeps `loadHls` just below: a function cannot satisfy `PrimitiveOptionBag`,
@@ -73,7 +75,7 @@ test('the per-provider option bags are the shape the CSP document describes', ()
   // bag key is still the only way to reach it (ADR-0004's Consequences).
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['wistia'], WistiaProviderOptions>
-  >().toEqualTypeOf<'endTime' | 'loop' | 'startTime'>();
+  >().toEqualTypeOf<'endTime' | 'loop' | 'resolvePoster' | 'startTime'>();
 
   // `hls` keeps `loadHls`: a function cannot satisfy `PrimitiveOptionBag`
   // (below), so `build` -- the primitive `loadHls` stands in for -- is the

@@ -107,7 +107,8 @@ const allNotReady = (): PlayerCapabilities => ({
   fullscreen: notReady,
   pictureInPicture: notReady,
   airPlay: notReady,
-  customControls: notReady
+  customControls: notReady,
+  providerPoster: notReady
 });
 
 const capabilities = (
