@@ -606,15 +606,25 @@ test('reports providerPoster unavailable/source when the record carries no thumb
   expect(ready.providerPosterUrl).toBeNull();
 });
 
-test('requests the poster and the chromeless plan as two independent requests', async () => {
+test('resolves the poster and the chromeless plan from one shared oEmbed request (#556)', async () => {
   fetchMock.mockResolvedValue(
     Response.json({
       account_type: 'pro',
       thumbnail_url: 'https://i.vimeocdn.com/video/example.jpg'
     })
   );
-  await setup({ options: { customControls: true, resolvePoster: true } });
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  const { patches } = await setup({
+    options: { customControls: true, resolvePoster: true }
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    customControls: { status: 'available' },
+    providerPoster: { status: 'available' }
+  });
+  expect(ready.providerPosterUrl).toBe(
+    'https://i.vimeocdn.com/video/example.jpg'
+  );
 });
 
 test('reports text-track selection unavailable when the video has no tracks', async () => {

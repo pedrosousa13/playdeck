@@ -19,6 +19,7 @@ import { createVimeoAttachment } from './attachment.js';
 import { createVimeoBoundary } from './boundary.js';
 import { createVimeoChapters } from './chapters.js';
 import { createVimeoChromelessAvailability } from './chromeless-availability.js';
+import { createVimeoOembedRequest } from './oembed-availability.js';
 import { createVimeoPlayback } from './playback.js';
 import { createVimeoPosterAvailability } from './poster-availability.js';
 import { createVimeoPresentation } from './presentation.js';
@@ -227,8 +228,19 @@ export const createVimeoProvider = (
   ): void =>
     listeners.forEach((listener) => notifySafely(listener, patch, event));
 
-  const chromeless = createVimeoChromelessAvailability({ source, options });
-  const posterAvailability = createVimeoPosterAvailability({ source, options });
+  // Shared so a source opting into both `customControls` and `resolvePoster`
+  // pays for one oEmbed GET, not two (#556).
+  const oembedRequest = createVimeoOembedRequest(source);
+  const chromeless = createVimeoChromelessAvailability({
+    source,
+    options,
+    oembedRequest
+  });
+  const posterAvailability = createVimeoPosterAvailability({
+    source,
+    options,
+    oembedRequest
+  });
 
   const boundary = createVimeoBoundary(options);
 

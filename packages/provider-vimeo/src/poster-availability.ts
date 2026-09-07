@@ -1,6 +1,10 @@
 import type { Availability, VimeoSource } from '@playdeck/core';
 import { available, providerCheck } from './adapter-values.js';
-import { vimeoWatchUrl } from './chromeless-availability.js';
+import {
+  createVimeoOembedRequest,
+  type VimeoOembedOutcome,
+  type VimeoOembedRequest
+} from './oembed-availability.js';
 
 // What a poster probe settled on: the capability verdict for
 // `PlayerCapabilities.providerPoster` and the still it found, together, since
@@ -20,46 +24,25 @@ const unresolved: VimeoPosterProbe = { availability: providerCheck, url: null };
 // endpoint and are well inside it on a live request.
 export const POSTER_PROBE_TIMEOUT_MS = 4000;
 
-const resolveVimeoPoster = async (
-  source: Pick<VimeoSource, 'videoId' | 'hash'>,
-  signal: AbortSignal
-): Promise<VimeoPosterProbe> => {
-  try {
-    const response = await fetch(
-      `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(
-        vimeoWatchUrl(source)
-      )}`,
-      // Same policy the chromeless probe declares, and for the same reason:
-      // this keeps the origin an unrestricted embed's domain check reads while
-      // dropping the path and query a wider page policy would otherwise leak
-      // (#334, see "What referrer each embed sends" in
-      // docs/third-party-requests.md).
-      { signal, referrerPolicy: 'strict-origin-when-cross-origin' }
-    );
-    if (!response.ok) return unresolved;
-    const data: unknown = await response.json();
-    const thumbnailUrl =
-      typeof data === 'object' &&
-      data !== null &&
-      'thumbnail_url' in data &&
-      typeof data.thumbnail_url === 'string' &&
-      data.thumbnail_url.length > 0
-        ? data.thumbnail_url
-        : undefined;
-    if (!thumbnailUrl) {
-      return {
-        availability: { status: 'unavailable', reason: 'source' },
-        url: null
-      };
-    }
-    return { availability: available, url: thumbnailUrl };
-  } catch {
-    // A request that never produced an answer -- rejected, or aborted by
-    // `cancel()` below -- reports the same as never having asked: `unknown`
-    // rather than a false `unavailable`, so a later attempt is still free to
-    // resolve it.
-    return unresolved;
+// Reads the shared oEmbed outcome the way this capability cares about it: a
+// request that never answered -- whatever the cause -- reports the same as
+// never having asked, since a later attempt is still free to resolve it, and
+// only a record Vimeo actually returned can say there is no thumbnail.
+const posterFromOutcome = (outcome: VimeoOembedOutcome): VimeoPosterProbe => {
+  if (!outcome.responded || outcome.record === undefined) return unresolved;
+  const thumbnailUrl =
+    'thumbnail_url' in outcome.record &&
+    typeof outcome.record.thumbnail_url === 'string' &&
+    outcome.record.thumbnail_url.length > 0
+      ? outcome.record.thumbnail_url
+      : undefined;
+  if (!thumbnailUrl) {
+    return {
+      availability: { status: 'unavailable', reason: 'source' },
+      url: null
+    };
   }
+  return { availability: available, url: thumbnailUrl };
 };
 
 export type VimeoPosterAvailabilityDeps = {
@@ -70,13 +53,21 @@ export type VimeoPosterAvailabilityDeps = {
   readonly options: {
     readonly resolvePoster?: boolean;
   };
+  // The oEmbed request to probe through. Shared with
+  // `chromeless-availability.ts` by `createVimeoProvider` so a source opting
+  // into both `resolvePoster` and `customControls` pays for one GET, not two
+  // (#556, `oembed-availability.ts`). Standalone construction (this package's
+  // own tests) omits it and gets a private instance, which behaves exactly as
+  // this probe always has.
+  readonly oembedRequest?: VimeoOembedRequest;
 };
 
 // The poster-availability seam: whether this embed can supply its own still,
-// and what it is. Modelled on `chromeless-availability.ts` -- a dedicated
-// oEmbed request rather than the customControls probe's response, because
-// that probe only fires when `customControls` is opted into and a consumer
-// asking for the poster alone must not depend on that.
+// and what it is. Modelled on `chromeless-availability.ts` -- an oEmbed probe
+// rather than the customControls probe's response, because a consumer asking
+// for the poster alone must not depend on `customControls` also being opted
+// into; the two now share the same request when both are, through
+// `oembedRequest`.
 export type VimeoPosterAvailability = {
   // Starts the probe. Resolves immediately, without a request, unless
   // `resolvePoster` was opted into.
@@ -94,40 +85,23 @@ export type VimeoPosterAvailability = {
 
 export const createVimeoPosterAvailability = ({
   source,
-  options
+  options,
+  oembedRequest = createVimeoOembedRequest(source)
 }: VimeoPosterAvailabilityDeps): VimeoPosterAvailability => {
   let availability: Availability = providerCheck;
   let url: string | null = null;
-  let activeRequest: AbortController | undefined;
 
   return {
     probe: () => {
       if (options.resolvePoster !== true) return Promise.resolve(unresolved);
-      activeRequest?.abort();
-      const controller = new AbortController();
-      activeRequest = controller;
-      const request = resolveVimeoPoster(source, controller.signal).finally(
-        () => {
-          if (activeRequest === controller) activeRequest = undefined;
-        }
-      );
-      return new Promise((resolve) => {
-        const timer = setTimeout(() => {
-          controller.abort();
-          resolve(unresolved);
-        }, POSTER_PROBE_TIMEOUT_MS);
-        request.then((result) => {
-          clearTimeout(timer);
-          resolve(result);
-        });
-      });
+      return oembedRequest.request('poster').then(posterFromOutcome);
     },
     adopt: (probe) => {
       availability = probe.availability;
       url = probe.url;
     },
     cancel: () => {
-      activeRequest?.abort();
+      oembedRequest.cancel();
     },
     availability: () => availability,
     url: () => url

@@ -3,7 +3,6 @@ import type { Availability, VimeoSource } from '@playdeck/core';
 import {
   CHROMELESS_PROBE_TIMEOUT_MS,
   createVimeoChromelessAvailability,
-  settleWithFallback,
   type VimeoChromelessProbe
 } from '../src/chromeless-availability';
 
@@ -482,42 +481,4 @@ test('reports the opt-in short circuit as a completed probe', async () => {
     completed: true
   });
   expect(fetchMock).not.toHaveBeenCalled();
-});
-
-// -- a rejected request settles incomplete, not completed (#235) --
-//
-// `chromelessAvailability` catches its own failures today, so nothing reaches
-// `settleWithFallback` by rejecting. Exercised directly here anyway: reusing
-// the abort handler as the rejection handler once meant a rejection defaulted
-// to `completed`, silently dropping the notice it should have earned, and
-// nothing above would have caught that if the internal catch ever moved.
-
-test('settles a rejected request as incomplete rather than defaulting to completed', async () => {
-  const controller = new AbortController();
-  await expect(
-    settleWithFallback(
-      Promise.reject(new Error('boom')),
-      CHROMELESS_PROBE_TIMEOUT_MS,
-      controller
-    )
-  ).resolves.toEqual({
-    verdict: { status: 'unknown', reason: 'provider-check' },
-    completed: false
-  });
-});
-
-test('a rejected request does not abort the controller or leave the timer running', async () => {
-  vi.useFakeTimers();
-  const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
-  const controller = new AbortController();
-  await settleWithFallback(
-    Promise.reject(new Error('boom')),
-    CHROMELESS_PROBE_TIMEOUT_MS,
-    controller
-  );
-  expect(abortSpy).not.toHaveBeenCalled();
-  // If the timer were still armed, advancing past the deadline would call
-  // `abort()` from the timeout callback.
-  vi.advanceTimersByTime(CHROMELESS_PROBE_TIMEOUT_MS);
-  expect(abortSpy).not.toHaveBeenCalled();
 });

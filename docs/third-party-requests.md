@@ -71,7 +71,7 @@ Notes, per row:
   because the API reads neither `videoId` nor `playerVars` on this path.
 
 - **YouTube**'s `poster="provider"` still is derived from the video id alone
-  (`youTubePosterUrl` in `provider-youtube/src/adapter-values.js`) — no request
+  (`youTubePosterUrl` in `provider-youtube/src/adapter-values.ts`) — no request
   discovers it, only the `<img>` a `Player.Poster` with no children renders
   fetches `i.ytimg.com/vi/<id>/hqdefault.jpg`, and only once `Player.Root`'s
   `poster` prop is set to `'provider'`. `hqdefault.jpg`, never
@@ -344,16 +344,17 @@ Notes, per row:
   whether a Playdeck embed can reach that state at all has not been established
   here. So it is offered as a lever rather than pulled on a consumer's behalf.
 
-- **Vimeo**'s `poster="provider"` still is resolved through a second, separate
-  oEmbed request (`provider-vimeo/src/poster-availability.js`) rather than the
-  `customControls` probe's own response above: that probe only fires when
-  `VimeoProviderOptions.customControls === true`, so a page that opts into the
-  poster alone would see no thumbnail if this reused it. Both probes reach
-  `vimeo.com/api/oembed.json`, both are opt-in, and setting both options on the
-  same source costs two requests to the same endpoint rather than one — a
-  known trade for keeping the two options independent (#556). The `<img>` a
-  `Player.Poster` with no children renders is what actually fetches the still,
-  from `thumbnail_url` in the oEmbed record, typically an `i.vimeocdn.com` url.
+- **Vimeo**'s `poster="provider"` still is resolved from the same oEmbed
+  record the `customControls` probe above reads, not a second request:
+  `provider-vimeo/src/oembed-availability.ts`'s shared probe fires the one GET
+  either capability's opt-in asks for, and whichever of
+  `chromeless-availability.ts` and `poster-availability.ts` asks second joins
+  the request the other already started rather than sending its own (#556).
+  A page opting into only one of `customControls` or `poster="provider"`
+  still costs exactly one request, as it always has; a page opting into both
+  now also costs one, not two. The `<img>` a `Player.Poster` with no children
+  renders is what actually fetches the still, from `thumbnail_url` in the
+  oEmbed record, typically an `i.vimeocdn.com` url.
 
 - **Wistia**'s player bundle is fetched from
   `https://fast.wistia.com/player.js` (`packages/provider-wistia/src/loader.ts:158`,
@@ -476,7 +477,7 @@ Notes, per row:
   that embed came from, so add the canary host if that describes your page.
 
 - **Wistia**'s `poster="provider"` still is resolved through its own oEmbed
-  request (`provider-wistia/src/poster-availability.js`), opt-in the same way
+  request (`provider-wistia/src/poster-availability.ts`), opt-in the same way
   the options above are, to `fast.wistia.com/oembed` — the same host `player.js`
   is fetched from, so this adds no new `connect-src` origin, only a second
   reason to reach one already there. The `<img>` a `Player.Poster` with no
