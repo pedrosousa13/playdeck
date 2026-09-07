@@ -274,11 +274,6 @@ diagnosed entry, not an ignored one:
   first. Every correctly-built `aria-haspopup` + `aria-controls` menu trips
   this — a permanent axe-core limitation for the pattern, not something fixable
   here.
-- **`captions-menu-open` — `color-contrast`.** Both radio items come back
-  needs-review because axe cannot resolve a background for them: the settings
-  menu gets `.playdeck-example-menu` from this example and `CaptionsMenu` takes
-  no `className`. Filed as #467, which decides whether the example should supply
-  one; the entry goes when it does.
 
 `idle` and `error` used to carry a `color-contrast` entry each, because
 `ActivationButton` and `ErrorDisplay` are real full-viewport surfaces while
@@ -288,6 +283,19 @@ rather than in the primitives — content under a pointer-capturing overlay is
 unreachable but still tabbable — so the row is no longer rendered in those
 states. The focus-reachability tests are what pin that; the entries going away
 is the consequence.
+
+`captions-menu-open` used to carry a `color-contrast` entry too: both radio
+items came back needs-review because axe could not resolve a background for
+them, since the settings menu got `.playdeck-example-menu` and `CaptionsMenu`'s
+default content got no `className` at all. #467 ruled that a composition
+defect and gave the captions menu paint plus placement instead of that class —
+why paint alone was not enough is measured and recorded next to the fix
+itself, at `.playdeck-example-captions` in `reference-player.tsx`. Axe now
+resolves a background and the entry is gone. The same issue separately
+confirmed that the radio items measuring side by side on one row, rather than
+stacked, is correct for an unstyled `menuitemradio` group in a headless
+library, not a defect — the themed stylesheet stacking them is the theme's
+own choice, not something the primitive owes unstyled.
 
 The other seven states assert both buckets empty.
 
