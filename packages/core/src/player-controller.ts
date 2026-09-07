@@ -142,7 +142,8 @@ const initialCapabilities = (): PlayerCapabilities =>
     fullscreen: notReady,
     pictureInPicture: notReady,
     airPlay: notReady,
-    customControls: notReady
+    customControls: notReady,
+    providerPoster: notReady
   });
 
 export const createInitialPlayerState = (): PlayerState =>
@@ -178,7 +179,8 @@ export const createInitialPlayerState = (): PlayerState =>
     chapters: Object.freeze([]),
     selectedTextTrackId: null,
     captionRendering: 'unavailable',
-    commandsReady: false
+    commandsReady: false,
+    providerPosterUrl: null
   });
 
 export class PlayerController {

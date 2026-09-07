@@ -190,6 +190,14 @@ export type PlayerCapabilities = {
   readonly pictureInPicture: Availability;
   readonly airPlay: Availability;
   readonly customControls: Availability;
+  // Whether the provider can supply its own still for `PlayerState.providerPosterUrl`,
+  // told apart the same way `chapters` is: `'provider-check'` means asking costs
+  // a round trip whose answer has not landed yet, `unavailable` with `source`
+  // means the media itself has no such still (a native file, an HLS manifest),
+  // and `available` means the URL on the snapshot is good to use. YouTube
+  // answers `available` immediately -- its still is derivable from the video id
+  // alone, no request required.
+  readonly providerPoster: Availability;
 };
 
 // A play command that was turned down, as `PlayerState.refusedPlay` publishes
@@ -390,6 +398,11 @@ export type PlayerState = {
   readonly chapters: readonly Chapter[];
   readonly selectedTextTrackId: string | null;
   readonly captionRendering: CaptionRendering;
+  // The provider's own still, and `null` both while `capabilities.providerPoster`
+  // has not resolved to `available` and once it has settled on `unavailable` --
+  // the capability is what tells those two apart, the same pairing
+  // `capabilities.chapters` and `chapters` already are.
+  readonly providerPosterUrl: string | null;
   // Declared by the provider adapter, not derived here: it means a command
   // issued now is accepted *and* will not be undone by a load that has yet to
   // run. Core cannot compute it — the four adapters open their command guards
