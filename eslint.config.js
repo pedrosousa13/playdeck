@@ -31,6 +31,12 @@ export default tseslint.config(
       // files a session writes are linted as project source and fail that
       // session's own gate (#410).
       '.scratch/**',
+      // Gitignored, same reason as `.scratch/**` above: flat config does not
+      // read .gitignore, so a developer with a sibling git worktree checked
+      // out here lints that worktree's files too, and a violation on
+      // whatever branch it holds fails a run that named no file of theirs
+      // (#607).
+      '.worktrees/**',
       '.superpowers/**',
       'docs/superpowers/plans/**',
       // MPEG-TS media segments share the .ts extension with TypeScript.
