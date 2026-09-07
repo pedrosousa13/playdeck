@@ -66,7 +66,8 @@ const incomplete: VimeoChromelessProbe = {
 const chromelessVerdictFromOutcome = (
   outcome: VimeoOembedOutcome
 ): VimeoChromelessProbe => {
-  if (!outcome.responded) return outcome.withdrawn ? completed(providerCheck) : incomplete;
+  if (!outcome.responded)
+    return outcome.withdrawn ? completed(providerCheck) : incomplete;
   const accountType =
     outcome.record !== undefined &&
     'account_type' in outcome.record &&

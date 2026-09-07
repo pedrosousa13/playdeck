@@ -26,7 +26,10 @@ const OEMBED_REQUEST_TIMEOUT_MS = 4000;
 // simply no longer wanted. `poster-availability.ts` reports the same
 // `unresolved` either way, so it never needs to ask.
 export type VimeoOembedOutcome =
-  | { readonly responded: true; readonly record: Record<string, unknown> | undefined }
+  | {
+      readonly responded: true;
+      readonly record: Record<string, unknown> | undefined;
+    }
   | { readonly responded: false; readonly withdrawn: boolean };
 
 const fetchOembedRecord = async (
