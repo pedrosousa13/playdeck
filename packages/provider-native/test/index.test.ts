@@ -1365,6 +1365,11 @@ test('reports quality selection as unavailable rather than pending forever', asy
   expect(provider.selectQuality).toBeUndefined();
 });
 
+// Red: with `sourceHasNoPoster` (adapter-values.ts) mutated to
+// `{ status: 'available' }`, this failed with `providerPoster:
+// { status: 'available' }` received where `{ status: 'unavailable', reason:
+// 'source' }` was expected. The same mutation also failed provider-hls's
+// equivalent test, since that adapter wraps this one.
 test('reports providerPoster as unavailable immediately -- a media element has no still of its own', async () => {
   const media = document.createElement('video');
   const patches: Array<Record<string, unknown>> = [];

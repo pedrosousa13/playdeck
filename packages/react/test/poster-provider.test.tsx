@@ -1,4 +1,20 @@
 // @vitest-environment happy-dom
+//
+// Red, for `Player.Poster`'s default-image precedence: with `Poster`'s render
+// mutated to `(defaultPoster && <PosterImage {...defaultPoster} />) ??
+// children`, "a consumer-supplied poster wins over the resolved provider
+// still" failed (`src` stayed the resolved YouTube thumbnail rather than the
+// consumer's own). With it mutated further to plain `children`, "poster=
+// \"provider\" renders the resolved still as Player.Poster's default image"
+// and "a literal poster URL populates the default image without any provider
+// request" both failed on a `null`/`undefined` `posterImage()`.
+//
+// Red, for `Root`'s `resolvePoster` fold: with `poster === 'provider'`
+// (root.tsx) mutated to the constant `false`, "folds poster=\"provider\" into
+// the vimeo bag as resolvePoster" failed (`resolvePoster: false` received).
+// Mutated instead to the constant `true`, "leaves the vimeo bag opted out of
+// resolvePoster when Root has no poster prop" failed the same way, and so did
+// every `resolvePoster: false` assertion in vimeo.test.tsx.
 
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';

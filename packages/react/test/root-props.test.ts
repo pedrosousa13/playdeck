@@ -12,6 +12,12 @@ import type { RootProps } from '../src/root';
 // These are type-level claims, so they fail `pnpm typecheck` rather than the
 // runtime run -- the same way `provider-loaders.test.ts` states a claim about
 // the per-provider option bags.
+//
+// Red, for the added `poster` key: with `RootProps`'s `poster` field renamed
+// to `posterX` (root.tsx), `pnpm typecheck` failed here with TS2344 -- the
+// literal-union constraint named `"Expected: literal string: poster, Actual:
+// literal string: posterX"` among its members, alongside cascading TS2339/
+// TS2322 errors everywhere `poster` is set or read.
 test('Root accepts exactly the props it accepted as an intersection', () => {
   // The accepted surface itself. Adding a prop to `Root` or removing one is a
   // change to the published API, and this is the line that says so.

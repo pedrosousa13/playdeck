@@ -566,6 +566,16 @@ test('emits confirmed ready state from the embedded player', async () => {
 });
 
 // --- provider-supplied poster (#556) ---
+//
+// Red: with the `options.resolvePoster !== true` guard removed from
+// `poster-availability.ts`'s `probe()`, this failed on `fetchMock` having
+// been called (and, because the shared oEmbed request now fired for poster
+// on every attach, "sends no oEmbed request when custom controls were not
+// requested" further down failed the same way). With `posterFromOutcome`
+// mutated to always answer unavailable/source, "resolves its own poster from
+// the oEmbed thumbnail once resolvePoster is requested" below failed on
+// `providerPoster` (`{ status: 'available' }` expected, `{ status:
+// 'unavailable', reason: 'source' }` received).
 
 test('sends no oEmbed request for a poster when resolvePoster was not requested', async () => {
   fetchMock.mockImplementation(() => {
@@ -606,6 +616,10 @@ test('reports providerPoster unavailable/source when the record carries no thumb
   expect(ready.providerPosterUrl).toBeNull();
 });
 
+// Red: with `createVimeoProvider`'s two probes reverted to each building its
+// own private `createVimeoOembedRequest` instance instead of sharing one,
+// this failed with "expected \"vi.fn()\" to be called 1 times, but got 2
+// times".
 test('resolves the poster and the chromeless plan from one shared oEmbed request (#556)', async () => {
   fetchMock.mockResolvedValue(
     Response.json({

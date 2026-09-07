@@ -5,6 +5,16 @@ import {
   POSTER_PROBE_TIMEOUT_MS
 } from '../src/poster-availability';
 
+// Red: with `resolveWistiaPoster`'s `thumbnailUrl` extraction replaced by a
+// straight `{ status: 'unavailable', reason: 'source' }` answer once a
+// response arrives, "reads the thumbnail url from the oEmbed record for the
+// media id" failed on the received `availability`/`url` (`{ status:
+// 'available' }` and the thumbnail expected, `{ status: 'unavailable',
+// reason: 'source' }` and `null` received), "adopt records the probed
+// verdict, read back through availability() and url()" failed the same way,
+// and index.test.ts's "resolves its own poster from the oEmbed thumbnail once
+// resolvePoster is requested" failed on `providerPoster`.
+
 const source: WistiaSource = { type: 'wistia', mediaId: 'e4a27b971d' };
 
 const oembedResponse = (body: unknown): Response => Response.json(body);

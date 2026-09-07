@@ -5,6 +5,20 @@ import {
   POSTER_PROBE_TIMEOUT_MS
 } from '../src/poster-availability';
 
+// Red, for the resolution tests below: with `posterFromOutcome` mutated to
+// always answer `{ status: 'unavailable', reason: 'source' }` once a record
+// arrives, "reads the thumbnail url from the oEmbed record for the watch url"
+// failed on the received `availability`/`url` (`{ status: 'available' }`
+// and the thumbnail expected; `{ status: 'unavailable', reason: 'source' }`
+// and `null` received), and so did "adopt records the probed verdict, read
+// back through availability() and url()" the same way.
+//
+// Red, for the opt-in tests: with the `options.resolvePoster !== true` guard
+// removed from `probe()`, "never asks Vimeo unless resolvePoster is opted
+// into" failed with the resolved thumbnail where `unknown`/`null` was
+// expected, and "sends no oEmbed request for a poster when resolvePoster was
+// not requested" (index.test.ts) failed on `fetchMock` having been called.
+
 const publicSource: VimeoSource = { type: 'vimeo', videoId: '76979871' };
 
 const oembedResponse = (body: unknown): Response => Response.json(body);

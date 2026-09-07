@@ -612,6 +612,13 @@ test('reports policy-restricted custom controls before the player is ready', asy
   );
 });
 
+// Red: with `youTubePosterUrl` mutated to emit `maxresdefault.jpg` and
+// `fixedCapabilities.providerPoster` (adapter-values.ts) mutated to
+// `notReady`, this failed on `providerPosterUrl` ("...hqdefault.jpg" expected,
+// "...maxresdefault.jpg" received), and "maps player ready onto confirmed
+// state and honest capabilities" below failed on `providerPoster`
+// (`{ status: 'available' }` expected, `{ status: 'unknown', reason:
+// 'not-ready' }` received).
 test('resolves its own poster from the video id, before the player is ready', async () => {
   const { patches, provider } = createAdapter('dQw4w9WgXcQ');
 

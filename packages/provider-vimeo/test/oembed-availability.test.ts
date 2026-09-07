@@ -24,6 +24,10 @@ const probeInit = (call = 0): RequestInit =>
 const probeSignal = (call = 0): AbortSignal => probeInit(call).signal!;
 
 // --- sharing (#556) ---
+//
+// Red: with the join branch in `request()` removed (every ask starts fresh
+// rather than checking `inFlight` first), both of the next two tests failed
+// with "expected \"vi.fn()\" to be called 1 times, but got 2 times".
 
 test('a poster ask that arrives while a chromeless ask is in flight joins the same GET', async () => {
   const oembedRequest = createVimeoOembedRequest(publicSource);
