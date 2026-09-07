@@ -70,7 +70,23 @@ type Session = {
   started: boolean;
   playGateOpen: boolean;
   queuedPlay: boolean;
+  playbackOwnership: PlaybackOwnership;
 };
+
+// Who is responsible for the playback currently running (or last stopped) on
+// this session, read by the observer callback to decide whether an exit or a
+// re-entry is this hook's to act on (#309). `'none'` covers both "nothing is
+// playing" and "a viewer or an API caller is driving it" -- the two cases
+// this hook must never touch on a crossing, so they share the value that
+// tells the observer to leave playback alone. `'autoplaying'` is set only by
+// a `play` event whose origin is `'autoplay'`, which only this hook's own
+// `controller.playWithOrigin('autoplay')` and `Root`'s own autoplay attempt
+// ever issue -- so seeing it back is proof the viewport (or the autoplay
+// configuration it armed) started this playback, not a viewer. `'auto-paused'`
+// is set only by the pause this hook itself issues on exit, and is what tells
+// a later re-entry there is something of its own to resume rather than a
+// viewer's deliberate pause to leave alone.
+type PlaybackOwnership = 'none' | 'autoplaying' | 'auto-paused';
 
 type ActivationConfiguration =
   'valid' | 'invalid-interaction-autoplay' | 'invalid-play-threshold';
@@ -479,7 +495,8 @@ export const useActivation = (
     sourceKey: currentKey,
     started: false,
     playGateOpen: false,
-    queuedPlay: false
+    queuedPlay: false,
+    playbackOwnership: 'none'
   });
   const latestInputsRef = useRef<ActivationInputs>({
     configuration: currentConfiguration,
@@ -542,6 +559,7 @@ export const useActivation = (
       active.started = false;
       active.playGateOpen = false;
       active.queuedPlay = false;
+      active.playbackOwnership = 'none';
       loadingGeneration.current = undefined;
       disconnectObserver(observerRef.current);
       observerRef.current = undefined;
@@ -766,14 +784,18 @@ export const useActivation = (
 
   useEffect(() => {
     if (options.loading !== 'viewport') return;
-    // The observer is kept until *both* gates have been crossed, not until the
-    // provider has been activated: under a deferred `playThreshold` the same
-    // observer still owes a play crossing after it has reported the load one.
-    // So the settled test is both, and while only one has landed this effect
-    // stays willing to rebuild -- otherwise a re-run for any other reason would
-    // run its cleanup, disconnect the observer and leave the play threshold
-    // with nothing watching for it.
-    if (session.current.started && session.current.playGateOpen) return;
+    // No longer bails out once both gates have been crossed (#309): a
+    // `loading: 'viewport'` observer used to exist only long enough to report
+    // the load and play crossings, after which the callback below
+    // self-disconnected and nothing this effect could rebuild remained to
+    // reuse. Now the observer lives for the whole session, so it can go on
+    // reporting exit and re-entry crossings for as long as the player is
+    // mounted under this strategy -- what tears it down is the cleanup below,
+    // the unmount effect at the end of this hook and `registerViewport`
+    // observing a new target, never this effect returning early. The
+    // target/margin/threshold identity check further down (`currentObserver?.
+    // target === viewport && ...`) is what still stops this from rebuilding an
+    // observer that has nothing new to watch for.
     if (refusedMessage !== undefined) {
       options.controller.setActivation({
         activation: 'error',
@@ -880,14 +902,45 @@ export const useActivation = (
           ) {
             openPlayGate();
           }
-          // Both gates, so a deferred `playThreshold` keeps the observer that
-          // reported the load crossing. Where the two thresholds are equal --
-          // every consumer who set at most one of them -- the same entry meets
-          // both, so this disconnects in the callback that activated, exactly
-          // as it did before there were two gates to cross.
-          if (!active.started || !active.playGateOpen) return;
-          disconnectObserver(registration);
-          observerRef.current = undefined;
+          // Both gates crossing no longer disconnects the observer (#309): a
+          // player that scrolled into view and started playing needs this
+          // still watching for the exit that should pause it, and the
+          // re-entry that should resume it, for as long as the session lasts.
+          //
+          // Exit and re-entry are read from the *latest* entry a batch
+          // carries for this target, not from `entries.some(...)` the way the
+          // two crossings above are. A single callback can report an enter
+          // immediately followed by an exit -- the browser coalesces rapid
+          // scroll-throughs into one batch -- and `some(meetsThreshold)` would
+          // read that batch as "still in view" because the enter entry is in
+          // there too. The latest entry is the target's most recent reported
+          // state, which is the one exit and re-entry have to agree with.
+          const latest = entries
+            .filter((entry) => entry.target === viewport)
+            .at(-1);
+          if (latest) {
+            // Only playback this hook itself started is this hook's to pause:
+            // `playbackOwnership` reads `'autoplaying'` only after a `play`
+            // event confirmed with the `'autoplay'` origin, which is set by
+            // the controller-event listener effect below and never by a
+            // viewer's or an API caller's own play (#309).
+            if (
+              !meetsThreshold(latest, options.playThreshold) &&
+              active.playbackOwnership === 'autoplaying'
+            ) {
+              void options.controller.pauseWithOrigin('autoplay');
+            }
+            // Symmetrically, only a pause this hook itself issued -- recorded
+            // as `'auto-paused'` by the same listener effect -- is resumed on
+            // re-entry. A viewer's own deliberate pause reads `'none'` and is
+            // never overridden here.
+            if (
+              meetsThreshold(latest, options.playThreshold) &&
+              active.playbackOwnership === 'auto-paused'
+            ) {
+              void options.controller.playWithOrigin('autoplay');
+            }
+          }
         },
         {
           rootMargin: options.loadMargin,
@@ -950,6 +1003,52 @@ export const useActivation = (
     refusedMessage,
     viewportVersion
   ]);
+
+  // Tracks whose playback is currently running (or last stopped), read by the
+  // observer callback above to decide whether an exit or a re-entry is this
+  // hook's to act on (#309). Only under `loading: 'viewport'`: the observer
+  // that reads `playbackOwnership` is only ever built under that strategy, so
+  // a listener installed under any other one would update a session field
+  // nothing consults. An effect of its own rather than folded into the
+  // viewport effect above, because it does not participate in that effect's
+  // rebuild conditions -- it has nothing to rebuild, only to subscribe and
+  // unsubscribe -- and tying it to the same dependency array would tear the
+  // listeners down and reinstall them on every observer rebuild for no
+  // reason.
+  //
+  // `event.origin === 'autoplay'` is the seam the issue names: `'autoplay'`
+  // is set only by this hook's own `controller.playWithOrigin('autoplay')`
+  // (the re-entry resume below) and by `Root`'s own autoplay attempt, which is
+  // what a `loading: 'viewport'` session with `autoplay` set arms in the first
+  // place. Any other origin -- `'user'`, `'api'`, `'provider'`, `'system'` --
+  // means a viewer or a caller took the wheel, and ownership drops to
+  // `'none'` so a later exit leaves that playback alone. `pause` is the mirror
+  // image: only a pause carrying the `'autoplay'` origin is this hook's own,
+  // recorded as `'auto-paused'` so a later re-entry knows there is something
+  // of its own to resume; every other pause -- a viewer pressing the button
+  // included -- is a deliberate stop that re-entry must never override.
+  // `ended` always returns to `'none'`: there is nothing left running for a
+  // later exit to pause, and nothing paused for a later re-entry to resume.
+  useEffect(() => {
+    if (options.loading !== 'viewport') return;
+    const controller = options.controller;
+    const unsubscribePlay = controller.on('play', (event) => {
+      session.current.playbackOwnership =
+        event.origin === 'autoplay' ? 'autoplaying' : 'none';
+    });
+    const unsubscribePause = controller.on('pause', (event) => {
+      session.current.playbackOwnership =
+        event.origin === 'autoplay' ? 'auto-paused' : 'none';
+    });
+    const unsubscribeEnded = controller.on('ended', () => {
+      session.current.playbackOwnership = 'none';
+    });
+    return () => {
+      unsubscribePlay();
+      unsubscribePause();
+      unsubscribeEnded();
+    };
+  }, [options.controller, options.loading]);
 
   useEffect(() => {
     const active = session.current;

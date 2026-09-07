@@ -14,6 +14,7 @@ import {
   detectSource,
   PlayerController,
   type CommandResult,
+  type PlayerEventOrigin,
   type ProviderAdapter,
   type ProviderStateListener
 } from '@playdeck/core';
@@ -81,6 +82,31 @@ class ControlledIntersectionObserver implements IntersectionObserver {
           ...entry
         }
       ],
+      this
+    );
+  }
+
+  /**
+   * Reports every one of `entries` for the observed target in a single
+   * callback invocation, as a browser coalescing several crossings into one
+   * batch would (#309) -- `intersect` above only ever reports one entry per
+   * call, which cannot model that. Each partial is defaulted the same way
+   * `intersect`'s is.
+   */
+  intersectBatch(entries: readonly Partial<IntersectionObserverEntry>[]) {
+    const target = this.target!;
+    const rect = target.getBoundingClientRect();
+    this.callback(
+      entries.map((entry) => ({
+        boundingClientRect: rect,
+        intersectionRatio: 1,
+        intersectionRect: rect,
+        isIntersecting: true,
+        rootBounds: null,
+        target,
+        time: 0,
+        ...entry
+      })),
       this
     );
   }
@@ -263,7 +289,28 @@ test('viewport uses the default margin and does not load before intersection', a
   act(() => observer.intersect());
 
   await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
-  expect(observer.disconnect).toHaveBeenCalledOnce();
+  // No longer self-disconnects once activated (#309): a `loading: 'viewport'`
+  // observer now stays connected for the whole session, watching for the
+  // exit that should pause a viewport-started playback and the re-entry that
+  // should resume it.
+  //
+  // Demonstrated red: this assertion and the three other `disconnect`
+  // assertions #309 flipped from `toHaveBeenCalled(Once)` to
+  // `not.toHaveBeenCalled()` -- in "with neither threshold set, the first
+  // visible pixel both loads and plays", "with only loadThreshold set, the
+  // load crossing is still the play crossing" and "loads at the first pixel
+  // and plays once playThreshold is reached" -- were run with the observer
+  // callback's exit/re-entry block in `use-activation.ts` temporarily
+  // reverted to its pre-#309 shape (the old `if (!active.started ||
+  // !active.playGateOpen) return; disconnectObserver(registration);
+  // observerRef.current = undefined;`, restoring the self-disconnect). All
+  // four failed identically against that revert:
+  //
+  //   AssertionError: expected "vi.fn()" to not be called at all, but
+  //   actually been called 1 times
+  //
+  // All four pass again with the revert undone (this file's actual state).
+  expect(observer.disconnect).not.toHaveBeenCalled();
 });
 
 test('viewport uses a custom margin', () => {
@@ -421,7 +468,14 @@ test('with neither threshold set, the first visible pixel both loads and plays',
   await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
   act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
-  expect(observer.disconnect).toHaveBeenCalledOnce();
+  // No longer self-disconnects once activated and played (#309): the
+  // observer stays connected for the whole session under `loading:
+  // 'viewport'`, watching for the exit and re-entry crossings that come
+  // after this one.
+  //
+  // Demonstrated red: see the note above "viewport uses the default margin
+  // and does not load before intersection"'s `disconnect` assertion.
+  expect(observer.disconnect).not.toHaveBeenCalled();
 });
 
 // The same claim for the consumer who set `loadThreshold` alone: raising it
@@ -456,7 +510,12 @@ test('with only loadThreshold set, the load crossing is still the play crossing'
   await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
   act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
-  expect(observer.disconnect).toHaveBeenCalledOnce();
+  // No longer self-disconnects once activated and played (#309): see the
+  // same assertion above.
+  //
+  // Demonstrated red: see the note above "viewport uses the default margin
+  // and does not load before intersection"'s `disconnect` assertion.
+  expect(observer.disconnect).not.toHaveBeenCalled();
 });
 
 // The configuration the issue was opened for: prefetch at the first pixel so
@@ -500,7 +559,13 @@ test('loads at the first pixel and plays once playThreshold is reached', async (
 
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
   expect(mockedLoadProvider).toHaveBeenCalledOnce();
-  expect(observer.disconnect).toHaveBeenCalled();
+  // No longer self-disconnects once both gates are crossed (#309): the
+  // observer that reported both crossings is the one that goes on watching
+  // for the exit and re-entry that follow, so it stays connected.
+  //
+  // Demonstrated red: see the note above "viewport uses the default margin
+  // and does not load before intersection"'s `disconnect` assertion.
+  expect(observer.disconnect).not.toHaveBeenCalled();
 });
 
 // `targetExceedsObserverRoot` in the new place. A `playThreshold` a target can
@@ -524,6 +589,285 @@ test('an oversized target reaches an unreachable play threshold', async () => {
   await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
   act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+});
+
+// `createFakeProvider`'s `emit` mirrors `ProviderStateListener` and forwards
+// an event only where one is supplied: `PlayerController` only ever
+// synthesizes a `PlayerEvent` -- and so only ever calls a `controller.on(...)`
+// listener -- for a patch delivered alongside its own `ProviderEvent`
+// (`player-controller.ts`'s `originatingEvent`, built only `if (event)`).
+// Every test below reads `event.origin` off a `controller.on('play' | 'pause',
+// ...)` listener, so every `emit` in this suite has to carry one of these.
+// `origin: 'provider'` is a placeholder, not the answer under test: the
+// controller overrides it with whatever origin is still pending from the
+// `playWithOrigin`/`pauseWithOrigin` call that patch is confirming
+// (`#consumePendingOrigin`), which is the origin these tests actually assert
+// on. `type` is what has to be right for the confirmation to land at all --
+// `confirmsPlayback` in `player-controller.ts` pairs a `'play'` event only
+// with a `playback: 'playing'` patch and a `'pause'` event only with a
+// `playback: 'paused'` one.
+const playEvent = {
+  type: 'play',
+  detail: undefined,
+  origin: 'provider'
+} as const;
+const pauseEvent = {
+  type: 'pause',
+  detail: undefined,
+  origin: 'provider'
+} as const;
+
+// Shared setup for the exit/re-entry tests below (#309): activates a viewport
+// session at the default (single, unseparated) threshold and installs a
+// provider whose commands this suite can label by origin. `createFakeProvider`
+// leaves `pause` unset, the same way a real adapter that cannot pause would
+// (`ProviderAdapter.pause` is optional) -- but an unset `pause` makes
+// `PlayerController#pauseWithOrigin` refuse the command as `'unsupported'`
+// before it ever reaches a listener (`player-controller.ts`'s
+// `#providerCommand`), which would make every pause in this suite refuse
+// silently rather than exercise the origin-labelling this suite is about. So
+// `pause` is given a resolving implementation here, the same way
+// `packages/core/test/autoplay.test.ts`'s own pause-origin test does it
+// (`fake.provider.pause = async () => ({ ok: true });`).
+//
+// `playWithOrigin` and `pauseWithOrigin` are spied on rather than read off
+// `fake`'s own call counts, because a call count cannot distinguish *which*
+// origin issued it -- and origin is the entire question these tests ask. Spied
+// rather than mocked: `vi.spyOn` still calls through by default, so the
+// commands this hook issues still reach the fake provider and still produce
+// the `play`/`pause` events the ownership-tracking listener (`use-activation.ts`)
+// reacts to.
+const setUpViewportPlayback = async () => {
+  const fake = createFakeProvider();
+  fake.adapter.pause = vi.fn(
+    async () => ({ ok: true }) satisfies CommandResult
+  );
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const controller = new PlayerController();
+  const playWithOrigin = vi.spyOn(controller, 'playWithOrigin');
+  const pauseWithOrigin = vi.spyOn(controller, 'pauseWithOrigin');
+
+  render(<ActivationProbe controller={controller} loading="viewport" />);
+  const observer = ControlledIntersectionObserver.instances[0]!;
+  act(() => observer.intersect());
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(controller.getState().provider).not.toBeNull());
+
+  return { controller, fake, observer, playWithOrigin, pauseWithOrigin };
+};
+
+// Issues a play under `origin` and settles it the way the fake provider's own
+// `play()` -- which never patches state itself -- needs a caller to: this
+// hook's own listener only reacts to the resulting `play` event, and that
+// event only fires once a patch reports `playback: 'playing'`, per
+// `confirmsPlayback` in `player-controller.ts`.
+const playAs = async (
+  controller: PlayerController,
+  fake: ReturnType<typeof createFakeProvider>,
+  origin: PlayerEventOrigin
+) => {
+  await act(() => controller.playWithOrigin(origin));
+  act(() => fake.emit({ playback: 'playing' }, playEvent));
+};
+
+// This exercises `use-activation.ts`'s reaction to the `'autoplay'` origin,
+// not how a play comes to carry it. `playWithOrigin('autoplay')` is called
+// directly rather than through `Root`'s own `configureAutoplay` machinery,
+// which `packages/core/test/autoplay.test.ts`'s "labels confirmed autoplay
+// as autoplay" already pins as producing exactly this origin for a
+// viewport-and-`autoplay` player.
+//
+// Demonstrated red (#309): every assertion below was run against
+// `use-activation.ts` as it stood before this commit -- no `playbackOwnership`
+// field, no controller-event listener effect, and the observer callback still
+// ending at the two `entries.some(...)` crossings with no exit/re-entry
+// commands after them (`git stash` of just that file, tests run against the
+// stashed tree, then popped back). Four of the seven failed there, real red:
+//
+//   × viewport-autoplayed playback pauses when the player leaves the
+//     viewport (1040ms)
+//   × auto-paused playback resumes when the player re-enters the viewport
+//     (1006ms)
+//   × an intersection batch carrying an enter then an exit still pauses
+//     (1011ms)
+//   × a second exit pauses again after a resume (1006ms)
+//
+// All four failed identically, each at its first `vi.waitFor(() =>
+// expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay'))`:
+//
+//   AssertionError: expected "pauseWithOrigin" to be called once with
+//   arguments: [ 'autoplay' ]
+//   Number of calls: 0
+//
+// The other three -- "viewer-pressed playback keeps playing", "viewer-paused
+// playback does not resume" and "a later exit does not pause once a viewer
+// has taken over" -- passed on that same unfixed run (3 passed, 4 failed, of
+// the 7). That is the shape `docs/agents/demonstrated-red.md` warns about:
+// "did not pause" and "did not resume" read the same whether the guard is
+// there or the feature does not exist at all, so a pass on the unfixed run
+// proves nothing on its own for these three. They are the fallback case: the
+// exit/re-entry guards they pin (`active.playbackOwnership === 'autoplaying'`
+// and `active.playbackOwnership === 'auto-paused'` in the observer callback)
+// did not exist pre-fix for them to fail against, so each was instead run
+// against a small, deliberate inversion of the fixed guard -- both
+// `===` swapped for `!==` -- and each failed there, for real:
+//
+//   viewer-pressed playback keeps playing when the player leaves the viewport
+//     AssertionError: expected "pauseWithOrigin" to not be called at all, but
+//     actually been called 1 times
+//     1st pauseWithOrigin call: [ "autoplay" ]
+//
+//   viewer-paused playback does not resume when the player re-enters the
+//   viewport
+//     AssertionError: expected "playWithOrigin" to be called 1 times, but
+//     got 3 times
+//
+//   a later exit does not pause once a viewer has taken over playback
+//     AssertionError: expected "pauseWithOrigin" to not be called with
+//     arguments: [ 'autoplay' ]
+//     Number of calls: 1
+//
+// All 7 pass again with the inversion reverted (this file's actual state).
+test('viewport-autoplayed playback pauses when the player leaves the viewport', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+  expect(controller.getState().playback).toBe('playing');
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+});
+
+test('viewer-pressed playback keeps playing when the player leaves the viewport', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'user');
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await act(async () => undefined);
+
+  expect(pauseWithOrigin).not.toHaveBeenCalled();
+  expect(controller.getState().playback).toBe('playing');
+});
+
+test('auto-paused playback resumes when the player re-enters the viewport', async () => {
+  const { controller, fake, observer, playWithOrigin, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+  act(() => fake.emit({ playback: 'paused' }, pauseEvent));
+
+  act(() => observer.intersect());
+
+  await vi.waitFor(() =>
+    expect(playWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay')
+  );
+});
+
+test('viewer-paused playback does not resume when the player re-enters the viewport', async () => {
+  const { controller, fake, observer, playWithOrigin, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+  await act(() => controller.pauseWithOrigin('user'));
+  act(() => fake.emit({ playback: 'paused' }, pauseEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  act(() => observer.intersect());
+  await act(async () => undefined);
+
+  // Exactly the one play from the setup above -- re-entry issued no second one.
+  expect(playWithOrigin).toHaveBeenCalledTimes(1);
+  expect(pauseWithOrigin).not.toHaveBeenCalledWith('autoplay');
+});
+
+// The trap the brief names directly: a single callback batch can carry an
+// enter entry immediately followed by an exit entry -- the browser coalescing
+// a fast scroll-through into one delivery -- and deciding exit from
+// `entries.some(meetsThreshold(...))`, the way the two existing load/play
+// crossings do, would read that batch as "still in view" because the enter
+// entry is in there too. This is the one test in the suite that a
+// `some(...)`-based decision would get backwards rather than merely fail to
+// exercise.
+test('an intersection batch carrying an enter then an exit still pauses', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+
+  act(() =>
+    observer.intersectBatch([
+      { isIntersecting: true, intersectionRatio: 1 },
+      { isIntersecting: false, intersectionRatio: 0 }
+    ])
+  );
+
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+});
+
+// `playbackOwnership` has to survive a full exit/resume round trip, not just
+// answer the first exit: a session that forgot it owned playback again after
+// resuming it would leave the second pass over the same player running
+// forever, the exact bug #309 reports for the first pass.
+test('a second exit pauses again after a resume', async () => {
+  const { controller, fake, observer, playWithOrigin, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+  act(() => fake.emit({ playback: 'paused' }, pauseEvent));
+
+  act(() => observer.intersect());
+  await vi.waitFor(() =>
+    expect(playWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay')
+  );
+  act(() => fake.emit({ playback: 'playing' }, playEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay')
+  );
+});
+
+// The mirror of the "viewer-pressed" case above, but reached mid-cycle rather
+// than from the start: a viewer who takes over playback the viewport itself
+// started has to be respected from that point on, not only when they were
+// first to press play.
+test('a later exit does not pause once a viewer has taken over playback', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+
+  await playAs(controller, fake, 'user');
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await act(async () => undefined);
+
+  expect(pauseWithOrigin).not.toHaveBeenCalledWith('autoplay');
 });
 
 // Named rather than clamped, and reported the way the interaction/autoplay

@@ -21,8 +21,8 @@ inputs cannot reach, gzipped the same way -- see
 
 | Library                | Version        | Composition measured                                                               | Gzipped (Vite) | Gzipped (esbuild) | Delta  | Not counted          |
 | ---------------------- | -------------- | ---------------------------------------------------------------------------------- | -------------- | ----------------- | ------ | -------------------- |
-| Playdeck               | 1.0.0          | core + primitives + native provider                                                | 20.12 KB       | 20.89 KB          | +3.8%  | 7 chunks, 282.30 KB  |
-| Playdeck (control bar) | 1.0.0          | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 23.83 KB       | 24.79 KB          | +4.0%  | 7 chunks, 282.32 KB  |
+| Playdeck               | 1.0.0          | core + primitives + native provider                                                | 20.26 KB       | 21.04 KB          | +3.9%  | 7 chunks, 282.30 KB  |
+| Playdeck (control bar) | 1.0.0          | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 23.98 KB       | 24.95 KB          | +4.0%  | 7 chunks, 282.32 KB  |
 | react-player           | 3.4.0          | default export, `controls`, html5 fallback player                                  | 2.97 KB        | 2.40 KB           | -19.4% | 14 chunks, 556.09 KB |
 | Vidstack               | 1.15.6         | MediaPlayer + MediaProvider + DefaultVideoLayout                                   | 90.04 KB       | 91.83 KB          | +2.0%  | 15 chunks, 22.27 KB  |
 | Media Chrome           | 4.19.2         | MediaController + a 7-button control bar                                           | 41.83 KB       | 43.70 KB          | +4.5%  | 0                    |

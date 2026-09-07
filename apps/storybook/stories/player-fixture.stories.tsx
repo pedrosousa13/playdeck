@@ -41,7 +41,19 @@ type PlayerFixtureProps = {
   // the bench sets, to cover the chrome its embed draws over an idle iframe
   // while paused).
   readonly posterShowWhilePaused?: boolean;
+  // Wraps the fixture in a tall scroll page -- a spacer above, the player,
+  // a spacer below -- so `e2e/activation.spec.ts` can scroll it out of and
+  // back into view under `loading: 'viewport'` (#309). The spacers are sized
+  // in `SCROLL_SPACER_HEIGHT` below.
+  readonly scrollPage?: boolean;
 };
+
+// Tall enough that the player starts fully outside the observer's root even
+// with `loadMargin`'s default `'200px 0px'` added to Playwright's default
+// 1280x720 iframe: 720 (viewport height) + 200 (margin) = 920 is the furthest
+// the player's top edge can sit and still be reported as intersecting, so
+// this clears it with headroom to spare in both directions.
+const SCROLL_SPACER_HEIGHT = '1400px';
 
 const PresentationControls = ({
   airplayDemo
@@ -253,7 +265,8 @@ const PlayerFixture = ({
   endTime,
   vimeoCustomControls,
   vimeoSuppressSeoMetadata,
-  posterShowWhilePaused
+  posterShowWhilePaused,
+  scrollPage
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -306,7 +319,7 @@ const PlayerFixture = ({
   // real <track>; every other story keeps the plain <video> it had before.
   const textTracks = captionRenderer ? captionTextTracks : undefined;
 
-  return (
+  const fixture = (
     <>
       <Player.Root
         autoplay={autoplay}
@@ -389,6 +402,16 @@ const PlayerFixture = ({
       ) : null}
     </>
   );
+
+  if (!scrollPage) return fixture;
+
+  return (
+    <>
+      <div style={{ height: SCROLL_SPACER_HEIGHT }} />
+      {fixture}
+      <div style={{ height: SCROLL_SPACER_HEIGHT }} />
+    </>
+  );
 };
 
 const YouTubeExample = () => (
@@ -448,7 +471,8 @@ const meta: Meta<PlayerFixtureProps> = {
     },
     startTime: { control: 'number' },
     endTime: { control: 'number' },
-    posterShowWhilePaused: { control: 'boolean' }
+    posterShowWhilePaused: { control: 'boolean' },
+    scrollPage: { control: 'boolean' }
   },
   parameters: {
     docs: {
@@ -533,6 +557,17 @@ export const LiveNative: Story = {
 
 export const AutoplayMuted: Story = {
   args: { autoplay: 'muted' }
+};
+
+// A tall scroll page around the player (#309), so `e2e/activation.spec.ts`
+// can scroll it out of and back into view under the default `loading:
+// 'viewport'` strategy: auto-pause on exit, resume on re-entry, and both
+// viewer-gesture overrides. Muted so a headless engine actually plays it, and
+// sourced from the local `long` tracer (10s, `assetUrl('tracer-10s.mp4')`)
+// rather than the 1s default -- the spec's several scroll-and-click steps
+// need the clip to outlast them, and still needs no network.
+export const ViewportAutoplayScrollMuted: Story = {
+  args: { source: 'long', autoplay: 'muted', scrollPage: true }
 };
 
 export const AutoplayAudible: Story = {
